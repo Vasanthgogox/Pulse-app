@@ -87,14 +87,14 @@ const useCleartextTraffic = typeof supabaseUrl === 'string' && supabaseUrl.start
 
 module.exports = {
   ...config,
-  extra: {
-    supabaseUrl,
-    supabaseAnonKey,
-    geminiApiKey: safeGeminiApiKey,
-    opsAgentProxyUrl: process.env.EXPO_PUBLIC_OPS_AGENT_PROXY_URL || undefined,
-  },
   expo: {
     ...config.expo,
+    extra: {
+      supabaseUrl,
+      supabaseAnonKey,
+      geminiApiKey: safeGeminiApiKey,
+      opsAgentProxyUrl: process.env.EXPO_PUBLIC_OPS_AGENT_PROXY_URL || undefined,
+    },
     scheme: config.expo?.scheme ?? 'qmobile',
     android: {
       ...config.expo?.android,
