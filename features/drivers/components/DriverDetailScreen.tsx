@@ -20,7 +20,7 @@ import {
   averageScore,
   getRatingsForDriver,
   type RatingRow,
-} from "@/features/ratings";
+} from "@/features/ratings/services/ratings.service";
 import {
   getTripDisplayNumber,
   getTripsByOrganization,

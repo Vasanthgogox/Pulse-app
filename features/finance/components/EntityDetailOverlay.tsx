@@ -10,7 +10,7 @@ import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { ClientRiskBadge } from "@/features/ai";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
-import { getRatingsForDriver, type RatingRow } from "@/features/ratings";
+import { getRatingsForDriver, type RatingRow } from "@/features/ratings/services/ratings.service";
 import { getTripDisplayNumber, type TripRow } from "@/features/trips";
 import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import {
