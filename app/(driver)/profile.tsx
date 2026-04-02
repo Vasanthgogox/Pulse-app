@@ -16,6 +16,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     Image,
     KeyboardAvoidingView,
     Modal,
@@ -112,6 +113,17 @@ export default function DriverProfileScreen() {
   };
 
   const handleSignOut = async () => {
+    if (typeof window !== 'undefined' && window.confirm) {
+      if (!window.confirm('Are you sure you want to sign out?')) return;
+    } else {
+      const confirmed = await new Promise((resolve) => {
+        Alert.alert('Sign out', 'Are you sure you want to sign out?', [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Sign out', style: 'destructive', onPress: () => resolve(true) },
+        ]);
+      });
+      if (!confirmed) return;
+    }
     await signOut();
     router.replace('/sign-in');
   };

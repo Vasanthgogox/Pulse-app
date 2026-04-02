@@ -7,7 +7,7 @@ import Theme from '@/constants/Theme';
 import { useLanguage } from '@/contexts/LanguageContext';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import { useEffect } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -36,7 +36,7 @@ function AnimatedTabIcon({ selected, children }: { selected: boolean; children: 
     transform: [{ scale: scale.value }],
   }));
   return (
-    <Animated.View style={[animatedStyle, styles.animatedIconWrap]}>
+    <Animated.View style={[animatedStyle, styles.animatedIconWrap, Platform.OS === 'web' && styles.animatedIconWrapWeb]}>
       {children}
     </Animated.View>
   );
@@ -61,6 +61,7 @@ export function DemoTabBar({
 }: DemoTabBarProps) {
   const insets = useSafeAreaInsets();
   const { t } = useLanguage();
+  const isWeb = Platform.OS === 'web';
   const isFiscal = activeTab === 'finance';
   const isTrips = activeTab === 'trips';
   const isNetwork = activeTab === 'network';
@@ -68,98 +69,116 @@ export function DemoTabBar({
   const dockBottom = insets.bottom;
   const verticalPad = Math.max(dockBottom / 4, 4);
   const bottomPad = verticalPad + 6;
+  const topPad = isWeb ? Math.max(insets.top, 16) : verticalPad;
+  
   return (
-    <View style={[styles.footerWrap, { paddingTop: verticalPad, paddingBottom: bottomPad }]}>
-      <View style={styles.glassDock}>
-        {/* Column 1: Fiscal — pill behind when active */}
-        <View style={styles.dockColumn}>
-          <View style={[styles.activePill, isFiscal && styles.activePillVisible]}>
-            <View style={styles.activePillAccent} />
+    <View style={[styles.footerWrap, isWeb ? { paddingTop: 0, paddingBottom: 0, paddingHorizontal: 0 } : { paddingTop: verticalPad, paddingBottom: bottomPad }]}>
+      <View style={[styles.glassDock, isWeb && styles.glassDockWeb]}>
+        
+        {isWeb && (
+          <View style={styles.webLogoWrap}>
+            <Text style={styles.webLogoText}>Q MOBILE</Text>
           </View>
-          <TouchableOpacity
-            style={styles.dockButton}
-            onPress={() => onTabChange('finance')}
-            activeOpacity={0.9}
-            hitSlop={{
-              top: Layout.touchTargetHitSlop,
-              bottom: Layout.touchTargetHitSlop,
-              left: Layout.touchTargetHitSlop,
-              right: Layout.touchTargetHitSlop,
-            }}
-          >
-            <AnimatedTabIcon selected={isFiscal}>
-              <FontAwesome5
-                name="credit-card"
-                size={16}
-                color={isFiscal ? Theme.textOnPrimary : Theme.textMutedDemo}
-                solid={isFiscal}
-              />
-              <Text style={[styles.dockLabel, isFiscal && styles.dockLabelActive]}>
-                {t('fiscal').toUpperCase()}
-              </Text>
-            </AnimatedTabIcon>
-          </TouchableOpacity>
+        )}
+
+        <View style={[styles.tabsRow, isWeb && styles.tabsRowWeb]}>
+          {/* Column 1: Fiscal — pill behind when active */}
+          <View style={[styles.dockColumn, isWeb && styles.dockColumnWeb]}>
+            <View style={[styles.activePill, isWeb && styles.activePillWeb, isFiscal && styles.activePillVisible]}>
+              <View style={[styles.activePillAccent, isWeb && styles.activePillAccentWeb]} />
+            </View>
+            <TouchableOpacity
+              style={styles.dockButton}
+              onPress={() => onTabChange('finance')}
+              activeOpacity={0.9}
+              hitSlop={{
+                top: Layout.touchTargetHitSlop,
+                bottom: Layout.touchTargetHitSlop,
+                left: Layout.touchTargetHitSlop,
+                right: Layout.touchTargetHitSlop,
+              }}
+            >
+              <AnimatedTabIcon selected={isFiscal}>
+                <FontAwesome5
+                  name="credit-card"
+                  size={16}
+                  color={isFiscal ? Theme.textOnPrimary : Theme.textMutedDemo}
+                  solid={isFiscal}
+                />
+                <Text style={[styles.dockLabel, isFiscal && styles.dockLabelActive]}>
+                  {t('fiscal').toUpperCase()}
+                </Text>
+              </AnimatedTabIcon>
+            </TouchableOpacity>
+          </View>
+
+          {/* Column 2: Trips — route icon (voyage/fleet) */}
+          <View style={[styles.dockColumn, isWeb && styles.dockColumnWeb]}>
+            <View style={[styles.activePill, isWeb && styles.activePillWeb, isTrips && styles.activePillVisible]}>
+              <View style={[styles.activePillAccent, isWeb && styles.activePillAccentWeb]} />
+            </View>
+            <TouchableOpacity
+              style={styles.dockButton}
+              onPress={() => onTabChange('trips')}
+              activeOpacity={0.9}
+              hitSlop={{
+                top: Layout.touchTargetHitSlop,
+                bottom: Layout.touchTargetHitSlop,
+                left: Layout.touchTargetHitSlop,
+                right: Layout.touchTargetHitSlop,
+              }}
+            >
+              <AnimatedTabIcon selected={isTrips}>
+                <FontAwesome5
+                  name="route"
+                  size={16}
+                  color={isTrips ? Theme.textOnPrimary : Theme.textMutedDemo}
+                  solid={isTrips}
+                />
+                <Text style={[styles.dockLabel, isTrips && styles.dockLabelActive]}>
+                  {t('trips').toUpperCase()}
+                </Text>
+              </AnimatedTabIcon>
+            </TouchableOpacity>
+          </View>
+
+          {/* Column 3: Network */}
+          <View style={[styles.dockColumn, isWeb && styles.dockColumnWeb]}>
+            <View style={[styles.activePill, isWeb && styles.activePillWeb, isNetwork && styles.activePillVisible]}>
+              <View style={[styles.activePillAccent, isWeb && styles.activePillAccentWeb]} />
+            </View>
+            <TouchableOpacity
+              style={styles.dockButton}
+              onPress={() => onTabChange('network')}
+              activeOpacity={0.9}
+              hitSlop={{
+                top: Layout.touchTargetHitSlop,
+                bottom: Layout.touchTargetHitSlop,
+                left: Layout.touchTargetHitSlop,
+                right: Layout.touchTargetHitSlop,
+              }}
+            >
+              <AnimatedTabIcon selected={isNetwork}>
+                <FontAwesome5
+                  name="users"
+                  size={16}
+                  color={isNetwork ? Theme.textOnPrimary : Theme.textMutedDemo}
+                  solid={isNetwork}
+                />
+                <Text style={[styles.dockLabel, isNetwork && styles.dockLabelActive]}>
+                  {t('network').toUpperCase()}
+                </Text>
+              </AnimatedTabIcon>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Column 2: Trips — route icon (voyage/fleet) */}
-        <View style={styles.dockColumn}>
-          <View style={[styles.activePill, isTrips && styles.activePillVisible]}>
-            <View style={styles.activePillAccent} />
+        {isWeb && (
+          <View style={styles.webRightWrap}>
+            {/* Optional right side content for web navbar */}
           </View>
-          <TouchableOpacity
-            style={styles.dockButton}
-            onPress={() => onTabChange('trips')}
-            activeOpacity={0.9}
-            hitSlop={{
-              top: Layout.touchTargetHitSlop,
-              bottom: Layout.touchTargetHitSlop,
-              left: Layout.touchTargetHitSlop,
-              right: Layout.touchTargetHitSlop,
-            }}
-          >
-            <AnimatedTabIcon selected={isTrips}>
-              <FontAwesome5
-                name="route"
-                size={16}
-                color={isTrips ? Theme.textOnPrimary : Theme.textMutedDemo}
-                solid={isTrips}
-              />
-              <Text style={[styles.dockLabel, isTrips && styles.dockLabelActive]}>
-                {t('trips').toUpperCase()}
-              </Text>
-            </AnimatedTabIcon>
-          </TouchableOpacity>
-        </View>
+        )}
 
-        {/* Column 3: Network */}
-        <View style={styles.dockColumn}>
-          <View style={[styles.activePill, isNetwork && styles.activePillVisible]}>
-            <View style={styles.activePillAccent} />
-          </View>
-          <TouchableOpacity
-            style={styles.dockButton}
-            onPress={() => onTabChange('network')}
-            activeOpacity={0.9}
-            hitSlop={{
-              top: Layout.touchTargetHitSlop,
-              bottom: Layout.touchTargetHitSlop,
-              left: Layout.touchTargetHitSlop,
-              right: Layout.touchTargetHitSlop,
-            }}
-          >
-            <AnimatedTabIcon selected={isNetwork}>
-              <FontAwesome5
-                name="users"
-                size={16}
-                color={isNetwork ? Theme.textOnPrimary : Theme.textMutedDemo}
-                solid={isNetwork}
-              />
-              <Text style={[styles.dockLabel, isNetwork && styles.dockLabelActive]}>
-                {t('network').toUpperCase()}
-              </Text>
-            </AnimatedTabIcon>
-          </TouchableOpacity>
-        </View>
       </View>
     </View>
   );
@@ -169,6 +188,10 @@ const styles = StyleSheet.create({
   animatedIconWrap: {
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 3,
+  },
+  animatedIconWrapWeb: {
+    flexDirection: 'column',
     gap: 3,
   },
   footerWrap: {
@@ -193,12 +216,64 @@ const styles = StyleSheet.create({
     elevation: 10,
     overflow: 'hidden',
   },
+  glassDockWeb: {
+    height: Layout.tabBarHeight + 20,
+    borderRadius: 0,
+    borderTopWidth: 0,
+    borderLeftWidth: 0,
+    borderRightWidth: 0,
+    borderBottomWidth: 1,
+    borderColor: 'rgba(15,23,42,0.08)',
+    shadowOffset: { width: 0, height: 4 },
+    backgroundColor: '#fff',
+    elevation: 4,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    justifyContent: 'space-between', // Changed to space-between
+  },
+  webLogoWrap: {
+    width: 200,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    paddingLeft: 24,
+  },
+  webLogoText: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: Theme.primary,
+    letterSpacing: 2,
+  },
+  tabsRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    justifyContent: 'space-between',
+  },
+  tabsRowWeb: {
+    flex: 1,
+    maxWidth: 600,
+    justifyContent: 'center',
+    alignItems: 'stretch',
+    backgroundColor: 'rgba(15,23,42,0.05)',
+    borderRadius: 24,
+    marginVertical: 6,
+    padding: 2,
+  },
+  webRightWrap: {
+    width: 200,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    paddingRight: 24,
+  },
   dockColumn: {
     flex: 1,
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 0,
+  },
+  dockColumnWeb: {
+    flex: 1, // distribute evenly in the fixed width 400 container
   },
   activePill: {
     position: 'absolute',
@@ -215,6 +290,12 @@ const styles = StyleSheet.create({
   activePillVisible: {
     opacity: 1,
   },
+  activePillWeb: {
+    borderRadius: 18,
+    backgroundColor: Theme.darkBackground,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.12)',
+  },
   activePillAccent: {
     position: 'absolute',
     bottom: 0,
@@ -223,6 +304,13 @@ const styles = StyleSheet.create({
     height: 3,
     borderRadius: 999,
     backgroundColor: Theme.teslaRed,
+  },
+  activePillAccentWeb: {
+    bottom: 0,
+    left: '28%',
+    right: '28%',
+    height: 3,
+    borderRadius: 999,
   },
   dockButton: {
     flex: 1,
@@ -240,5 +328,13 @@ const styles = StyleSheet.create({
   },
   dockLabelActive: {
     color: Theme.textOnPrimary,
+  },
+  dockLabelActiveWeb: {
+    color: Theme.textPrimaryDark,
+  },
+  dockLabelWeb: {
+    fontSize: 12,
+    letterSpacing: 2,
+    marginTop: 0,
   },
 });

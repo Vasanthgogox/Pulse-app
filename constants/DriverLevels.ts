@@ -5,6 +5,7 @@
  */
 
 import { Image } from 'react-native';
+import { Asset } from 'expo-asset';
 
 export const LEVELS_CONFIG = [
   { level: 1, name: 'Initiate', goalText: 'Complete Signup', type: 'signup', target: 1, reward: 'Access Hub', tier: 'Bronze' },
@@ -50,8 +51,33 @@ export const ALL_PRESET_AVATARS: PresetAvatar[] = DRIVER_PRESET_AVATARS;
 
 /** URI for a preset (from bundled asset). */
 export function getPresetAvatarUri(av: PresetAvatar): string {
-  const resolved = Image.resolveAssetSource(av.image);
-  return resolved?.uri ?? '';
+  if (!av.image) return '';
+  
+  // 1. Fallback for static bundler configurations on web where require returns an object or string
+  if (typeof av.image === 'object' && 'uri' in av.image) {
+    return (av.image as any).uri;
+  }
+  if (typeof av.image === 'string') {
+    return av.image;
+  }
+
+  try {
+    // 2. Try resolving using Expo's Asset, which works natively and on web for opaque asset IDs (numbers)
+    const asset = Asset.fromModule(av.image);
+    if (asset && asset.uri) {
+      return asset.uri;
+    }
+  } catch (e) {
+    // Ignore error
+  }
+
+  // 3. Try Image.resolveAssetSource, works in React Native but may be missing on web
+  if (Image && typeof Image.resolveAssetSource === 'function') {
+    const resolved = Image.resolveAssetSource(av.image);
+    return resolved?.uri ?? '';
+  }
+
+  return '';
 }
 
 /** Resolve stored avatarSeed to display URI. */

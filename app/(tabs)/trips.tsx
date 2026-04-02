@@ -204,7 +204,7 @@ export default function TripsScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top + Layout.tabBarHeight + 20 }]}>
       <TeslaHeader
         title={tr("tripsControl")}
         subtitle={tr("logisticNodes")}

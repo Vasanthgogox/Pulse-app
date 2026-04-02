@@ -1025,7 +1025,7 @@ export function FinanceScreen() {
 
   if (isOrgLoading) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top + Layout.tabBarHeight + 20 }]}>
         <View style={[styles.darkBlock, { paddingTop: 0 }]}>
           <TeslaHeader
             title={t("treasury")}
@@ -1035,7 +1035,7 @@ export function FinanceScreen() {
             onProfileClick={() => router.push("/(tabs)/profile")}
           />
         </View>
-        <View style={[styles.centered, { flex: 1, paddingTop: insets.top + 24 }]}>
+        <View style={[styles.centered, { flex: 1, paddingTop: 24 }]}>
           <ActivityIndicator size="large" color={Theme.primary} />
         </View>
       </View>
@@ -1044,7 +1044,7 @@ export function FinanceScreen() {
 
   if (!orgId) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top + Layout.tabBarHeight + 20 }]}>
         <View style={[styles.darkBlock, { paddingTop: 0 }]}>
           <TeslaHeader
             title={t("treasury")}
@@ -1055,7 +1055,7 @@ export function FinanceScreen() {
           />
         </View>
         <View
-          style={[styles.centered, { flex: 1, paddingTop: insets.top + 24 }]}
+          style={[styles.centered, { flex: 1, paddingTop: 24 }]}
         >
           <Text style={styles.message}>{t("noOrganization")}</Text>
           <Text
@@ -1072,7 +1072,7 @@ export function FinanceScreen() {
   }
 
   return (
-    <View style={styles.container} testID="finance-tab-screen">
+    <View style={[styles.container, { paddingTop: insets.top + Layout.tabBarHeight + 20 }]} testID="finance-tab-screen">
       <FinanceSummarySection
         title={t("treasury")}
         subtitle={t("fiscalMatrix")}

@@ -1,15 +1,17 @@
 /**
- * Demo layout: 3 tabs (FISCAL | TRIPS | NETWORK) + custom footer. Ops Agent via floating icon.
+ * Demo layout: 3 tabs (FISCAL | TRIPS | NETWORK) + custom header. Ops Agent via floating icon.
  */
 import React from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import { DemoTabBar, type DemoTabId } from '@/components/demo';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function DemoCustomTabBar(props: BottomTabBarProps) {
   const router = useRouter();
   const { state, navigation } = props;
+  const insets = useSafeAreaInsets();
   const routeName = state.routes[state.index]?.name;
   const activeTab: DemoTabId =
     routeName === 'finance' ? 'finance'
@@ -30,8 +32,11 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
     return null;
   }
 
+  // Web rendering: use absolute positioning at the top to simulate top nav
+  const isWeb = Platform.OS === 'web';
+
   return (
-    <View style={styles.tabBarWrap}>
+    <View style={[styles.tabBarWrap, isWeb && { position: 'absolute', top: 0, zIndex: 10, width: '100%' }]}>
       <DemoTabBar
         activeTab={activeTab}
         onTabChange={onTabChange}
@@ -45,6 +50,7 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
 export const unstable_settings = { initialRouteName: 'index' };
 
 export default function TabLayout() {
+  const isWeb = Platform.OS === 'web';
   return (
     <Tabs
       tabBar={(props) => <DemoCustomTabBar {...props} />}

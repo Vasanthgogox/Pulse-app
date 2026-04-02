@@ -3,6 +3,7 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
+    "dev": "npm run start",
     "postinstall": "patch-package",
     "start": "DOTENV_CONFIG_QUIET=true node -r dotenv/config node_modules/.bin/expo start --go",
     "start:dev-client": "DOTENV_CONFIG_QUIET=true node -r dotenv/config node_modules/.bin/expo start",

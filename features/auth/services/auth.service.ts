@@ -197,7 +197,20 @@ export async function signInWithPassword(
 }
 
 export async function signOut(): Promise<void> {
-  await supabase().auth.signOut();
+  try {
+    const { error } = await supabase().auth.signOut();
+    if (error) {
+      console.warn("Sign out server error:", error);
+      await supabase().auth.signOut({ scope: "local" });
+    }
+  } catch (e) {
+    console.error("Sign out exception:", e);
+    try {
+      await supabase().auth.signOut({ scope: "local" });
+    } catch (localErr) {
+      // ignore
+    }
+  }
 }
 
 /** Detect auth errors that mean the session is invalid (e.g. refresh token not found, user deleted). */
