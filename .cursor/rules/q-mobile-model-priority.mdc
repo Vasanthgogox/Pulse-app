@@ -1,0 +1,10 @@
+---
+description: Force top-tier models (Claude 3.7 Sonnet / Grok 4.1 / GPT-4.1) in Auto mode for your React Native/Expo logistics app. Matches 1% top-tier repos (Airbnb/RevenueCat). Overrides Cursor's cheap model switching.
+globs: ["**/*.ts","**/*.tsx","**/*.js","**/*.jsx","**/package.json"]
+alwaysApply: true
+---
+
+# 🚀 MODEL PRIORITY (AUTO MODE OVERRIDE)
+## ALWAYS use top models - NO cheap/fast switching
+
+When working on this codebase, prioritize correctness, architecture alignment, and production-quality output. This React Native/Expo logistics app follows Q-unified-base standards and enterprise microservices patterns—use top-tier model behavior (Claude 3.7 Sonnet / Grok 4.1 / GPT-4.1) in Auto mode. Do not degrade to cheaper or faster models for these files; match the bar of top-tier repos (e.g. Airbnb, RevenueCat).

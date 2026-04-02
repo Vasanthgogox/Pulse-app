@@ -1,0 +1,129 @@
+/**
+ * Driver salary requests — single source of truth for driver_salary_requests table.
+ * Driver requests salary from the org (fleet); org can Approve & Pay or Reject.
+ * DB: public.driver_salary_requests (RLS: driver INSERT/SELECT own; org members manage by org).
+ */
+import { supabase } from '@/lib/supabase';
+
+export type SalaryRequestType = 'monthly' | 'advance' | 'trip_based';
+
+/** Max amount (₹) to avoid typos; DB allows numeric(12,2). */
+const MAX_AMOUNT = 99_99_99_999;
+
+export interface SalaryRequestRow {
+  id: string;
+  organization_id: string;
+  driver_id: string;
+  request_type: string;
+  amount: number;
+  currency: string;
+  status: string;
+  note: string | null;
+  trip_ids: string[];
+  cash_entry_id: string | null;
+  /** For request_type 'monthly': first day of month (ISO date string from DB). */
+  salary_month: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
+/**
+ * Create a salary request. Persists to driver_salary_requests; RLS enforces driver can insert own.
+ * For request_type 'trip_based', pass options.tripIds. For 'monthly', pass options.salaryMonth (ISO date, first day of month).
+ */
+export async function createSalaryRequest(
+  driverId: string,
+  organizationId: string,
+  requestType: SalaryRequestType,
+  amount: number,
+  options?: { note?: string | null; createdBy?: string | null; tripIds?: string[]; salaryMonth?: string }
+): Promise<{ error: Error | null; request: SalaryRequestRow | null }> {
+  const num = Number(amount);
+  if (!Number.isFinite(num) || num <= 0) {
+    return { error: new Error('Amount must be greater than 0'), request: null };
+  }
+  if (num > MAX_AMOUNT) {
+    return { error: new Error(`Amount cannot exceed ₹${MAX_AMOUNT.toLocaleString('en-IN')}`), request: null };
+  }
+  const payload: Record<string, unknown> = {
+    driver_id: driverId,
+    organization_id: organizationId,
+    request_type: requestType,
+    amount: num,
+    currency: 'INR',
+    status: 'pending' as const,
+    note: options?.note?.trim() || null,
+    created_by: options?.createdBy ?? null,
+  };
+  if (requestType === 'trip_based' && options?.tripIds?.length) {
+    payload.trip_ids = options.tripIds;
+  }
+  if (requestType === 'monthly' && options?.salaryMonth) {
+    payload.salary_month = options.salaryMonth;
+  }
+  const { data, error } = await supabase()
+    .from('driver_salary_requests')
+    .insert(payload as Record<string, unknown>)
+    .select()
+    .single();
+  if (error) return { error: new Error(error.message), request: null };
+  return { error: null, request: data as SalaryRequestRow };
+}
+
+/**
+ * List salary requests for the given driver ids (driver app). RLS: driver can read own.
+ */
+export async function getSalaryRequestsByDriverIds(
+  driverIds: string[]
+): Promise<{ error: Error | null; requests: SalaryRequestRow[] }> {
+  if (driverIds.length === 0) return { error: null, requests: [] };
+  const { data, error } = await supabase()
+    .from('driver_salary_requests')
+    .select('*')
+    .in('driver_id', driverIds)
+    .order('created_at', { ascending: false });
+  if (error) return { error: new Error(error.message), requests: [] };
+  return { error: null, requests: (data ?? []) as SalaryRequestRow[] };
+}
+
+/** Row returned for org: request + driver name from join. */
+export interface SalaryRequestWithDriverRow extends SalaryRequestRow {
+  drivers?: { name: string | null } | null;
+}
+
+/**
+ * List salary requests for an organization (fleet/dispatcher view). RLS: org members can read for their org.
+ */
+export async function getSalaryRequestsByOrganization(
+  organizationId: string,
+  status?: 'pending' | 'approved' | 'rejected' | 'paid'
+): Promise<{ error: Error | null; requests: SalaryRequestWithDriverRow[] }> {
+  let q = supabase()
+    .from('driver_salary_requests')
+    .select('*, drivers(name)')
+    .eq('organization_id', organizationId)
+    .order('created_at', { ascending: false });
+  if (status) q = q.eq('status', status);
+  const { data, error } = await q;
+  if (error) return { error: new Error(error.message), requests: [] };
+  return { error: null, requests: (data ?? []) as SalaryRequestWithDriverRow[] };
+}
+
+/**
+ * Update salary request status (org side: approve & pay or reject). RLS: org members can update for their org.
+ */
+export async function updateSalaryRequestStatus(
+  requestId: string,
+  status: 'approved' | 'rejected' | 'paid',
+  options?: { cashEntryId?: string | null }
+): Promise<{ error: Error | null }> {
+  const payload: Record<string, unknown> = { status };
+  if (options?.cashEntryId !== undefined) payload.cash_entry_id = options.cashEntryId;
+  const { error } = await supabase()
+    .from('driver_salary_requests')
+    .update(payload)
+    .eq('id', requestId);
+  if (error) return { error: new Error(error.message) };
+  return { error: null };
+}

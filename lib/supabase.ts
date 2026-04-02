@@ -1,0 +1,240 @@
+/**
+ * Supabase client for React Native (Expo).
+ * Session persistence: expo-secure-store on iOS/Android when the native module
+ * is available (e.g. dev/production build); falls back to AsyncStorage on web or
+ * when ExpoSecureStore is not available (e.g. some Expo Go). Same DB as Q-unified-base.
+ * RLS applies; do not use service_role key in the app.
+ */
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
+
+// Lazy-load SecureStore so we can fall back to AsyncStorage if native module is missing (Expo Go, etc.)
+let SecureStore: typeof import('expo-secure-store') | null = null;
+try {
+  SecureStore = require('expo-secure-store');
+} catch {
+  SecureStore = null;
+}
+
+const REQUEST_TIMEOUT_MS = 25_000;
+const RETRY_DELAY_MS = 2_000;
+const MAX_RETRIES = 1;
+
+/** Fetch with timeout and one retry to cope with flaky home WiFi / DNS. */
+async function fetchWithTimeoutAndRetry(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<Response> {
+  const doFetch = (signal?: AbortSignal) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const combinedSignal = signal
+      ? abortSignalAny(controller.signal, signal)
+      : controller.signal;
+    const merged: RequestInit = {
+      ...init,
+      signal: combinedSignal,
+    };
+    return fetch(input, merged).finally(() => clearTimeout(timeoutId));
+  };
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await doFetch(init?.signal ?? undefined);
+      return res;
+    } catch (e) {
+      lastError = e instanceof Error ? e : new Error(String(e));
+      const isRetryable =
+        attempt < MAX_RETRIES &&
+        (lastError.name === 'AbortError' ||
+          lastError.message === 'Network request failed' ||
+          /timeout|network|failed/i.test(lastError.message));
+      if (!isRetryable) throw lastError;
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+    }
+  }
+  throw lastError ?? new Error('Network request failed');
+}
+
+/** Combine two AbortSignals so aborting either aborts the result. */
+function abortSignalAny(...signals: AbortSignal[]): AbortSignal {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  signals.forEach((s) => {
+    if (s.aborted) abort();
+    else s.addEventListener('abort', abort);
+  });
+  return controller.signal;
+}
+
+/** SecureStore byte limit (exceeding causes warnings / failure). Use AsyncStorage for larger values. */
+const SECURE_STORE_MAX_BYTES = 2048;
+
+function byteLength(str: string): number {
+  if (typeof Buffer !== 'undefined') return Buffer.byteLength(str, 'utf8');
+  try {
+    return new TextEncoder().encode(str).length;
+  } catch {
+    return str.length * 2;
+  }
+}
+
+/** Auth storage: SecureStore when value ≤2KB; else AsyncStorage. No in-memory state so session survives Metro reload. */
+function createAuthStorage(): {
+  getItem: (key: string) => Promise<string | null>;
+  setItem: (key: string, value: string) => Promise<void>;
+  removeItem: (key: string) => Promise<void>;
+} {
+  if (Platform.OS === 'web') {
+    return AsyncStorage;
+  }
+  if (!SecureStore) {
+    return AsyncStorage;
+  }
+
+  let useAsyncStorageForAll = false;
+
+  return {
+    getItem: async (key: string) => {
+      if (useAsyncStorageForAll) return AsyncStorage.getItem(key);
+
+      try {
+        const secureValue = await SecureStore!.getItemAsync(key);
+        if (secureValue !== null) return secureValue;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/native module|ExpoSecureStore|not found/i.test(msg)) {
+          useAsyncStorageForAll = true;
+        } else if (__DEV__) {
+          console.warn('[q-mobile] SecureStore read error:', msg);
+        }
+      }
+
+      return AsyncStorage.getItem(key);
+    },
+
+    setItem: async (key: string, value: string) => {
+      if (useAsyncStorageForAll) return AsyncStorage.setItem(key, value);
+
+      if (byteLength(value) > SECURE_STORE_MAX_BYTES) {
+        await SecureStore!.deleteItemAsync(key).catch(() => {});
+        return AsyncStorage.setItem(key, value);
+      }
+
+      try {
+        await AsyncStorage.removeItem(key).catch(() => {});
+        return await SecureStore!.setItemAsync(key, value);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/native module|ExpoSecureStore|not found/i.test(msg)) {
+          useAsyncStorageForAll = true;
+          return AsyncStorage.setItem(key, value);
+        }
+        throw e;
+      }
+    },
+
+    removeItem: async (key: string) => {
+      if (!useAsyncStorageForAll) {
+        await SecureStore!.deleteItemAsync(key).catch(() => {});
+      }
+      await AsyncStorage.removeItem(key).catch(() => {});
+    },
+  };
+}
+
+const extra = Constants.expoConfig?.extra as {
+  supabaseUrl?: string;
+  supabaseAnonKey?: string;
+} | undefined;
+
+// extra = from app.config.js (loads .env from project root when server starts)
+// process.env.EXPO_PUBLIC_* = fallback if Metro injected them into the bundle
+function pickNonEmpty(...values: (string | undefined)[]): string | undefined {
+  for (const v of values) {
+    const s = typeof v === 'string' ? v.trim() : '';
+    if (s) return s;
+  }
+  return undefined;
+}
+const supabaseUrl = pickNonEmpty(extra?.supabaseUrl, process.env.EXPO_PUBLIC_SUPABASE_URL);
+const supabaseAnonKey = pickNonEmpty(extra?.supabaseAnonKey, process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
+
+/** Use before any Supabase call to show a config screen instead of throwing or failing network. */
+export function hasSupabaseConfig(): boolean {
+  return Boolean(supabaseUrl && supabaseAnonKey);
+}
+
+/** Base URL for the Supabase project (same as used by the client). Use for building Edge Function URLs, e.g. ops-agent-chat. */
+export function getSupabaseBaseUrl(): string | undefined {
+  return supabaseUrl ?? undefined;
+}
+
+/** Anon key for the Supabase project. Use for Edge Function Authorization header so the gateway accepts the request; send user JWT in X-User-Token. */
+export function getSupabaseAnonKey(): string | undefined {
+  return supabaseAnonKey ?? undefined;
+}
+
+/** Fresh user access token for API/proxy calls. Call before each request that requires auth. Returns null if no session (user not signed in). */
+export async function getAccessToken(): Promise<string | null> {
+  const client = supabase();
+  await client.auth.getUser(); // refresh session if needed
+  const { data } = await client.auth.getSession();
+  const token = data.session?.access_token ?? null;
+  return token;
+}
+
+export const SUPABASE_CONFIG_MISSING_MESSAGE =
+  'Missing Supabase config. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to .env in the project root, then restart: npx expo start';
+
+function getSupabase(): SupabaseClient {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error(SUPABASE_CONFIG_MISSING_MESSAGE);
+  }
+  if (__DEV__) {
+    try {
+      const host = new URL(supabaseUrl).hostname;
+      console.log('[q-mobile] Supabase URL host:', host);
+    } catch {
+      console.warn('[q-mobile] Supabase URL invalid:', supabaseUrl?.slice(0, 50));
+    }
+  }
+  // SecureStore when available (native build); else AsyncStorage (web or Expo Go without native module)
+  const authStorage = createAuthStorage();
+
+
+  const c = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      storage: authStorage,
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+    },
+    global: {
+      fetch: fetchWithTimeoutAndRetry,
+    },
+  });
+
+  // Global auth error recovery: when token refresh fails (e.g. stale token from another device),
+  // clear local session so the app shows sign-in instead of surfacing an error.
+  c.auth.onAuthStateChange((event, session) => {
+    if (event === 'TOKEN_REFRESHED' && !session) {
+      void c.auth.signOut({ scope: 'local' });
+    }
+  });
+
+  return c;
+}
+
+let client: SupabaseClient | null = null;
+
+export function supabase(): SupabaseClient {
+  if (!client) {
+    client = getSupabase();
+  }
+  return client;
+}
+
+export type { SupabaseClient };

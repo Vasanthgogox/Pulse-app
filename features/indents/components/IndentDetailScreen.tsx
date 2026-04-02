@@ -1,0 +1,1323 @@
+/**
+ * Indent detail — single indent view. UI matches reference design:
+ * Route card with MapPin boxes, freight card with gradient, Shipment Profile,
+ * Live Bids section, light footer, and Broadcast modal.
+ */
+import { CenteredLoadingView } from '@/components/CenteredLoadingView';
+import Layout from '@/constants/Layout';
+import Theme from '@/constants/Theme';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import {
+  cancelIndent,
+  getVisibleIndentById,
+  getIndentDisplayNumber,
+  updateIndent,
+  type IndentRow,
+} from '@/features/indents/services/indents.service';
+import {
+  updateDirectQuoteStatus,
+  type DirectQuoteRow,
+} from '@/features/indents/services/direct-quotes.service';
+import { formatINR } from '@/lib/format';
+import { useIndentDirectQuotesQuery, useInvalidateIndents } from '@/lib/queries/useIndentsQuery';
+import { BidReceivedHammer } from '@/features/indents/components/BidReceivedHammer';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+export interface IndentDetailScreenProps {
+  indentId: string;
+  onBack: () => void;
+  /** Optional: called when Edit or Edit All is pressed. */
+  onEditPress?: (indent: IndentRow) => void;
+}
+
+function normalizeStatus(value: string | null | undefined): string {
+  return (value ?? '').trim().toLowerCase();
+}
+
+const LOCKED_INDENT_STATUSES = new Set([
+  'awarded',
+  'assigned',
+  'deployed',
+  'completed',
+  'cancelled',
+  'closed',
+  'expired',
+]);
+
+function formatIndentDate(pickupDate: string | null, createdAt: string): string {
+  const source = pickupDate?.trim() || createdAt;
+  try {
+    const d = new Date(source);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  } catch {
+    return source.slice(0, 10) || '—';
+  }
+}
+
+/** Abbreviate client name for display (e.g. "KABIL ORGANIZATION" → "Kabil Org.") */
+function abbreviateClientName(name: string, maxLen = 14): string {
+  const t = (name || '').trim();
+  if (!t) return '—';
+  if (t.length <= maxLen) return t;
+  const words = t.split(/\s+/);
+  if (words.length >= 2) {
+    const first = words[0].charAt(0).toUpperCase() + words[0].slice(1).toLowerCase();
+    const last = words[words.length - 1];
+    const abbr = last.length > 3 ? last.slice(0, 3) + '.' : last;
+    return `${first} ${abbr}`;
+  }
+  return t.slice(0, maxLen - 2) + '…';
+}
+
+export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDetailScreenProps) {
+  const insets = useSafeAreaInsets();
+  const { currentOrganization } = useOrganization();
+  const orgId = currentOrganization?.id ?? null;
+  const queryClient = useQueryClient();
+  const invalidateIndents = useInvalidateIndents();
+  const [indent, setIndent] = useState<IndentRow | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
+  const [awarding, setAwarding] = useState(false);
+  const isRefreshingRef = useRef(false);
+
+  const { data: quotes = [], refetch: refetchQuotes } = useIndentDirectQuotesQuery(indentId);
+
+  const load = useCallback(async () => {
+    if (!indentId) {
+      setLoading(false);
+      return;
+    }
+    if (!isRefreshingRef.current) setLoading(true);
+    setError(null);
+    const { error: err, indent: row } = await getVisibleIndentById(orgId, indentId);
+    setLoading(false);
+    isRefreshingRef.current = false;
+    setRefreshing(false);
+    if (err) {
+      setError(err.message);
+      setIndent(null);
+      return;
+    }
+    setIndent(row);
+  }, [indentId, orgId]);
+
+  const handleRefresh = useCallback(() => {
+    isRefreshingRef.current = true;
+    setRefreshing(true);
+    load();
+    refetchQuotes();
+  }, [load, refetchQuotes]);
+
+  const handleBroadcast = useCallback(() => {
+    setIsBroadcasting(true);
+    // Simulate broadcast; close after 2s. Wire to actual API when available.
+    setTimeout(() => setIsBroadcasting(false), 2000);
+  }, []);
+
+  const handleEditAll = useCallback(() => {
+    if (indent && onEditPress) onEditPress(indent);
+    else Alert.alert('Edit', 'Edit indent flow coming soon.');
+  }, [indent, onEditPress]);
+
+  const handleAwardQuote = useCallback(async () => {
+    if (!indentId || !indent || !selectedQuoteId) return;
+    const pendingQuotes = quotes.filter((q) => (q.status || '').toLowerCase() === 'pending');
+    const winner = pendingQuotes.find((q) => q.id === selectedQuoteId);
+    if (!winner) {
+      Alert.alert('Invalid selection', 'Please select a pending offer to award.');
+      return;
+    }
+    const indentStatus = normalizeStatus(indent.status);
+    if (indentStatus === 'awarded' || indentStatus === 'completed') {
+      Alert.alert('Already awarded', 'This load has already been awarded.');
+      return;
+    }
+    try {
+      setAwarding(true);
+      const { error: acceptErr } = await updateDirectQuoteStatus(winner.id, 'accepted');
+      if (acceptErr) {
+        Alert.alert('Could not award', acceptErr.message);
+        return;
+      }
+      await Promise.allSettled(
+        pendingQuotes
+          .filter((q) => q.id !== winner.id)
+          .map((q) => updateDirectQuoteStatus(q.id, 'rejected')),
+      );
+      const { error: indentErr } = await updateIndent(indentId, {
+        status: 'awarded',
+      });
+      if (indentErr) {
+        Alert.alert(
+          'Quote accepted but status update failed',
+          indentErr.message +
+            '\n\nThe quote was accepted. The supplier can assign and deploy from Secured.',
+        );
+      }
+      setSelectedQuoteId(null);
+      if (orgId) invalidateIndents(orgId);
+      queryClient.invalidateQueries({
+        queryKey: ['indents', indentId, 'direct-quotes'],
+      });
+      await load();
+      refetchQuotes();
+      Alert.alert(
+        'Load awarded',
+        `${winner.bidder_organization_name ?? 'Supplier'} can assign driver and vehicle from Secured, then deploy.`,
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error.';
+      Alert.alert('Could not award', msg);
+    } finally {
+      setAwarding(false);
+    }
+  }, [indentId, indent, selectedQuoteId, quotes, orgId, invalidateIndents, queryClient, load, refetchQuotes]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (loading && !indent) {
+    return <CenteredLoadingView message="Loading indent…" />;
+  }
+
+  if (error || !indent) {
+    return (
+      <View style={styles.container}>
+        <View
+          style={[
+            styles.header,
+            { paddingTop: insets.top + Layout.headerPaddingBelowInset },
+          ]}
+        >
+          <TouchableOpacity onPress={onBack} style={styles.headerIconBtn} activeOpacity={0.8} accessibilityLabel="Back">
+            <FontAwesome name="chevron-left" size={20} color={Theme.textOnDark} />
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerId} numberOfLines={1}>INDENT</Text>
+            <Text style={styles.headerSubtitle}>Review Hub • Indent</Text>
+          </View>
+          <View style={styles.headerIconBtnPlaceholder} />
+        </View>
+        <View style={styles.errorStateBody}>
+          <Text style={styles.errorText}>{error ?? 'Indent not found.'}</Text>
+        </View>
+      </View>
+    );
+  }
+
+  const displayNumber = getIndentDisplayNumber(indent);
+  const origin = indent.pickup_area || '—';
+  const destination = indent.drop_location || '—';
+  const status = (indent.status || 'OPEN').toUpperCase();
+  const statusLower = normalizeStatus(indent.status);
+  const isDirect = (indent.circulation_target || '').toLowerCase() !== 'marketplace';
+  const clientName = abbreviateClientName(indent.client_name || '—');
+  const freight = formatINR(Number(indent.client_price ?? 0));
+  const supplierRate = formatINR(Number(indent.supplier_target ?? 0));
+  const vehicleType = indent.vehicle_type || '—';
+  const material = indent.load_type || '—';
+  const weight =
+    indent.weight != null && indent.weight > 0
+      ? `${indent.weight} kg`
+      : '—';
+  const dateLabel = formatIndentDate(indent.pickup_date ?? null, indent.created_at);
+
+  // Margin % for supplier rate vs client price (simplified)
+  const clientPriceNum = Number(indent.client_price ?? 0);
+  const supplierNum = Number(indent.supplier_target ?? 0);
+  const marginPct =
+    clientPriceNum > 0 && supplierNum > 0
+      ? Math.round(((clientPriceNum - supplierNum) / clientPriceNum) * 100)
+      : null;
+  const isOwner = !!orgId && indent.organization_id === orgId;
+  const isLockedStatus = LOCKED_INDENT_STATUSES.has(statusLower);
+  const canCancelLoad = isOwner && !isLockedStatus;
+  const canEditLoad = isOwner && !isLockedStatus;
+  const canBroadcast = isOwner && !isLockedStatus;
+  const canAward = statusLower !== 'awarded' && statusLower !== 'completed' && statusLower !== 'deployed';
+
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <View
+        style={[
+          styles.header,
+          { paddingTop: insets.top + Layout.headerPaddingBelowInset },
+        ]}
+      >
+        <TouchableOpacity
+          onPress={onBack}
+          style={styles.headerIconBtn}
+          activeOpacity={0.8}
+          accessibilityLabel="Back"
+          hitSlop={Layout.touchTargetHitSlop}
+        >
+          <FontAwesome name="chevron-left" size={20} color={Theme.textOnDark} />
+        </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerId} numberOfLines={1}>
+            {displayNumber}
+          </Text>
+          <View style={styles.headerSubtitleRow}>
+            <View style={styles.headerStatusDot} />
+            <Text style={styles.headerSubtitle}>
+              Review Hub • {status === 'OPEN' ? 'Active' : status} Indent
+            </Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          style={styles.headerIconBtn}
+          activeOpacity={0.8}
+          accessibilityLabel="More actions"
+          hitSlop={Layout.touchTargetHitSlop}
+        >
+          <FontAwesome name="ellipsis-h" size={20} color={Theme.textOnDark} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Scrollable content */}
+      <ScrollView
+        style={[styles.scroll, { backgroundColor: Theme.surface }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: 16 + 72 + insets.bottom },
+        ]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={Theme.darkBackground}
+          />
+        }
+      >
+        {/* Route Card */}
+        <View style={styles.routeCard}>
+          <View style={styles.routeCardHeader}>
+            <View style={styles.routePillsRow}>
+              <View style={styles.statusPill}>
+                <View style={styles.statusDot} />
+                <Text style={styles.statusText}>{status}</Text>
+              </View>
+              {isDirect && (
+                <View style={styles.directPill}>
+                  <Text style={styles.directPillText}>Direct</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.dateRow}>
+              <FontAwesome name="clock-o" size={10} color={Theme.textSecondary} />
+              <Text style={styles.dateText}>{dateLabel}</Text>
+            </View>
+          </View>
+
+          <View style={styles.routeEndpointsRow}>
+            <View style={styles.routeEndpoint}>
+              <View style={styles.mapPinBoxOrigin}>
+                <FontAwesome name="map-marker" size={16} color={Theme.teslaRed} />
+              </View>
+              <Text style={styles.routeEndpointName} numberOfLines={1}>
+                {origin}
+              </Text>
+              <Text style={styles.routeEndpointLabel}>Origin</Text>
+            </View>
+
+            <View style={styles.routeDashedLine} />
+
+            <View style={[styles.routeEndpoint, styles.routeEndpointRight]}>
+              <View style={styles.mapPinBoxDest}>
+                <FontAwesome name="map-marker" size={16} color={Theme.darkGreen} />
+              </View>
+              <Text style={styles.routeEndpointName} numberOfLines={1}>
+                {destination}
+              </Text>
+              <Text style={styles.routeEndpointLabel}>Destination</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Freight Card with gradient */}
+        <LinearGradient
+          colors={[Theme.darkSurface, Theme.darkBackground]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.freightCard}
+        >
+          <View style={styles.freightGlow} />
+          <View style={styles.freightContent}>
+            <View style={styles.freightHeaderRow}>
+              <View>
+                <Text style={styles.freightLabel}>EST. MARKET FREIGHT</Text>
+                <View style={styles.freightValueRow}>
+                  <Text style={styles.freightCurrency}>₹</Text>
+                  <Text style={styles.freightValue}>{freight.replace(/^[^\d,.-]+/, '').trim() || freight}</Text>
+                </View>
+              </View>
+              <View style={styles.freightChartIcon}>
+                <FontAwesome name="line-chart" size={18} color={Theme.positive} />
+              </View>
+            </View>
+
+            <View style={styles.freightDivider} />
+
+            <View style={styles.freightGrid}>
+              <View style={styles.freightGridItem}>
+                <Text style={styles.freightGridLabel}>SUPPLIER RATE</Text>
+                <View style={styles.freightGridValueRow}>
+                  <Text style={styles.freightGridValue}>{supplierRate}</Text>
+                  {marginPct != null && (
+                    <Text style={styles.freightMarginPct}> ({marginPct}%)</Text>
+                  )}
+                </View>
+              </View>
+              <View style={[styles.freightGridItem, styles.freightGridItemRight]}>
+                <Text style={styles.freightGridLabel}>CLIENT ENTITY</Text>
+                <Text style={styles.freightGridValue} numberOfLines={1}>
+                  {clientName}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </LinearGradient>
+
+        {/* Shipment Profile */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>SHIPMENT PROFILE</Text>
+          {canEditLoad ? (
+            <TouchableOpacity onPress={handleEditAll} hitSlop={Layout.touchTargetHitSlop}>
+              <Text style={styles.editAllText}>Edit All</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.editAllTextDisabled}>Locked</Text>
+          )}
+        </View>
+        <View style={styles.requirementsRow}>
+          <View style={styles.requirementCard}>
+            <FontAwesome name="truck" size={16} color={Theme.darkBackground} />
+            <Text style={styles.requirementLabel}>VEHICLE</Text>
+            <Text style={styles.requirementValue} numberOfLines={2}>
+              {vehicleType}
+            </Text>
+          </View>
+          <View style={styles.requirementCard}>
+            <FontAwesome name="archive" size={16} color={Theme.iconSlate} />
+            <Text style={styles.requirementLabel}>MATERIAL</Text>
+            <Text style={styles.requirementValue} numberOfLines={2}>
+              {material}
+            </Text>
+          </View>
+          <View style={styles.requirementCard}>
+            <FontAwesome name="anchor" size={16} color={Theme.textSecondary} />
+            <Text style={styles.requirementLabel}>WEIGHT</Text>
+            <Text style={styles.requirementValue} numberOfLines={2}>
+              {weight}
+            </Text>
+          </View>
+        </View>
+
+        {/* Live Bids */}
+        <View style={styles.sectionHeader}>
+          <View style={styles.liveBidsTitleRow}>
+            <Text style={styles.sectionTitle}>LIVE BIDS</Text>
+            {statusLower === 'awarded' || statusLower === 'completed' || statusLower === 'deployed' ? (
+              <FontAwesome name="trophy" size={14} color={Theme.driverGold} />
+            ) : (
+              <BidReceivedHammer visible={quotes.length > 0} />
+            )}
+            <View style={styles.bidsCountBadge}>
+              <Text style={styles.bidsCountText}>{quotes.length}</Text>
+            </View>
+          </View>
+        </View>
+
+        {quotes.length === 0 ? (
+          <View style={styles.bidsEmptyCard}>
+            <View style={styles.bidsEmptyIconWrap}>
+              <FontAwesome name="inbox" size={22} color={Theme.textMuted} />
+            </View>
+            <Text style={styles.bidsEmptyTitle}>No Bids Received</Text>
+            <Text style={styles.bidsEmptyBody}>
+              Ready to find the best rate? Broadcast this indent to your logistics network.
+            </Text>
+            {canBroadcast ? (
+              <TouchableOpacity
+                style={styles.broadcastBtn}
+                onPress={handleBroadcast}
+                activeOpacity={0.9}
+                disabled={isBroadcasting}
+              >
+                {isBroadcasting ? (
+                  <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                ) : (
+                  <>
+                    <FontAwesome name="share" size={14} color={Theme.textOnPrimary} style={styles.broadcastBtnIcon} />
+                    <Text style={styles.broadcastBtnText}>BROADCAST NOW</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.broadcastLockedPill}>
+                <FontAwesome name="lock" size={12} color={Theme.textMuted} />
+                <Text style={styles.broadcastLockedText}>Broadcast unavailable for current status</Text>
+              </View>
+            )}
+          </View>
+        ) : (
+          <View style={styles.offersListWrap}>
+            {quotes.map((q: DirectQuoteRow) => {
+              const isPending = (q.status || '').toLowerCase() === 'pending';
+              const isSelected = selectedQuoteId === q.id;
+              return (
+                <TouchableOpacity
+                  key={q.id}
+                  style={[
+                    styles.quoteRow,
+                    isSelected && styles.quoteRowSelected,
+                    !isPending && styles.quoteRowDisabled,
+                  ]}
+                  onPress={() =>
+                    canAward && isPending && setSelectedQuoteId(isSelected ? null : q.id)
+                  }
+                  activeOpacity={0.8}
+                  disabled={!canAward || !isPending}
+                >
+                  <Text style={styles.quoteRowName} numberOfLines={1}>
+                    {q.bidder_organization_name ?? '—'}
+                  </Text>
+                  <Text style={styles.quoteRowAmount}>{formatINR(Number(q.amount ?? 0))}</Text>
+                  <Text style={styles.quoteRowStatus}>{(q.status || '').toUpperCase()}</Text>
+                </TouchableOpacity>
+              );
+            })}
+            {canAward &&
+              quotes.some((q) => normalizeStatus(q.status) === 'pending') && (
+                <TouchableOpacity
+                  style={[
+                    styles.awardSelectedBtn,
+                    (awarding || !selectedQuoteId ||
+                      !quotes.some(
+                        (q) =>
+                          q.id === selectedQuoteId && (q.status || '').toLowerCase() === 'pending'
+                      )) && styles.awardSelectedBtnDisabled,
+                  ]}
+                  onPress={handleAwardQuote}
+                  disabled={
+                    awarding ||
+                    !selectedQuoteId ||
+                    !quotes.some(
+                      (q) =>
+                        q.id === selectedQuoteId && (q.status || '').toLowerCase() === 'pending'
+                    )
+                  }
+                  activeOpacity={0.9}
+                >
+                  {awarding ? (
+                    <ActivityIndicator size="small" color={Theme.textOnDark} />
+                  ) : (
+                    <Text style={styles.awardSelectedBtnText}>Award selected</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Fixed footer (light style) */}
+      <View
+        style={[
+          styles.footer,
+          {
+            paddingBottom: 16 + insets.bottom,
+          },
+        ]}
+      >
+        <TouchableOpacity
+          style={styles.footerEditBtn}
+          onPress={canEditLoad ? handleEditAll : undefined}
+          activeOpacity={0.85}
+          accessibilityLabel="Edit indent"
+          hitSlop={Layout.touchTargetHitSlop}
+          disabled={!canEditLoad}
+        >
+          <FontAwesome name="pencil" size={18} color={canEditLoad ? Theme.textSecondary : Theme.textMuted} />
+        </TouchableOpacity>
+        {canCancelLoad ? (
+          <TouchableOpacity
+            style={styles.footerCancelBtn}
+            onPress={() => {
+              if (cancelling) return;
+              Alert.alert(
+                'Cancel load',
+                'Are you sure you want to cancel this load? Connected suppliers will no longer see it under Find Work.',
+                [
+                  { text: 'Keep load', style: 'cancel' },
+                  {
+                    text: 'Cancel load',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        setCancelling(true);
+                        const { error: cancelError } = await cancelIndent(indent.id);
+                        setCancelling(false);
+                        if (cancelError) {
+                          Alert.alert('Could not cancel', cancelError.message);
+                          return;
+                        }
+                        await load();
+                      } catch (e) {
+                        setCancelling(false);
+                        const msg = e instanceof Error ? e.message : 'Unknown error';
+                        Alert.alert('Could not cancel', msg);
+                      }
+                    },
+                  },
+                ],
+              );
+            }}
+            activeOpacity={0.9}
+            accessibilityLabel="Cancel load"
+            hitSlop={Layout.touchTargetHitSlop}
+          >
+            <FontAwesome name="ban" size={16} color={Theme.buttonDestructiveText} />
+            <Text style={styles.footerCancelText}>
+              {cancelling ? 'CANCELLING…' : 'CANCEL LOAD'}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.footerLockedPill}>
+            <FontAwesome name="lock" size={14} color={Theme.textMuted} />
+            <Text style={styles.footerLockedText}>LOAD LOCKED</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Broadcast modal */}
+      <Modal
+        visible={isBroadcasting}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsBroadcasting(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setIsBroadcasting(false)}
+        >
+          <Pressable
+            style={[styles.modalContent, { paddingBottom: 24 + insets.bottom }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.modalHandle} />
+            <View style={styles.modalBody}>
+              <View style={styles.modalIconWrap}>
+                <FontAwesome name="bullhorn" size={28} color={Theme.darkBackground} />
+              </View>
+              <Text style={styles.modalTitle}>Broadcasting Live</Text>
+              <Text style={styles.modalSubtitle}>
+                Your indent {displayNumber} is now visible to verified transporters in your network.
+              </Text>
+              <TouchableOpacity
+                style={styles.modalDoneBtn}
+                onPress={() => setIsBroadcasting(false)}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.modalDoneText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Theme.darkBackground,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 10,
+    backgroundColor: Theme.darkBackground,
+    zIndex: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderOnDark,
+  },
+  headerIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: Theme.driverWhiteMutedStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerIconBtnPlaceholder: {
+    width: 40,
+    height: 40,
+  },
+  headerCenter: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  headerId: {
+    fontSize: 14,
+    fontWeight: '800',
+    fontStyle: 'italic',
+    color: Theme.textOnDark,
+    letterSpacing: 1,
+  },
+  headerSubtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 6,
+  },
+  headerStatusDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Theme.darkBackground,
+  },
+  headerSubtitle: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: Theme.textOnDarkMuted,
+    textTransform: 'uppercase',
+  },
+  errorStateBody: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    backgroundColor: Theme.darkBackground,
+  },
+  errorText: {
+    fontSize: 15,
+    color: Theme.textOnDarkMuted,
+    textAlign: 'center',
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 12,
+    backgroundColor: Theme.surface,
+  },
+
+  // Route card (compact, matches DetailPageLayout section density)
+  routeCard: {
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  routeCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  routePillsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: Theme.positiveMuted,
+    borderWidth: 1,
+    borderColor: Theme.positiveMutedDarkBorder,
+    gap: 5,
+  },
+  statusDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: Theme.positive,
+  },
+  statusText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: Theme.positive,
+    letterSpacing: 0.8,
+  },
+  directPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+  },
+  directPillText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: Theme.darkBackground,
+    letterSpacing: 0.8,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  dateText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: Theme.textMutedDemo,
+  },
+  routeEndpointsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    position: 'relative',
+  },
+  routeEndpoint: {
+    flex: 1,
+    alignItems: 'flex-start',
+    zIndex: 1,
+    backgroundColor: Theme.screenBackground,
+  },
+  routeEndpointRight: {
+    alignItems: 'flex-end',
+  },
+  mapPinBoxOrigin: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  mapPinBoxDest: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  routeEndpointName: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+  },
+  routeEndpointLabel: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: Theme.textMutedDemo,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    marginTop: 2,
+  },
+  routeDashedLine: {
+    position: 'absolute',
+    left: '15%',
+    right: '15%',
+    top: 16,
+    height: 2,
+    borderStyle: 'dashed',
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    zIndex: 0,
+  },
+
+  // Freight card (compact dark card)
+  freightCard: {
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    overflow: 'hidden',
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  freightGlow: {
+    position: 'absolute',
+    top: -30,
+    right: -30,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: Theme.driverWhiteMuted,
+  },
+  freightContent: {
+    zIndex: 1,
+  },
+  freightHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 4,
+  },
+  freightLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1,
+    color: Theme.textOnDarkMuted,
+    textTransform: 'uppercase',
+  },
+  freightValueRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+  },
+  freightCurrency: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Theme.textOnDark,
+    opacity: 0.8,
+  },
+  freightValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: Theme.textOnDark,
+    letterSpacing: -0.3,
+  },
+  freightChartIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: Theme.positiveMutedDark,
+    borderWidth: 1,
+    borderColor: Theme.positiveMutedDarkBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  freightDivider: {
+    height: 1,
+    backgroundColor: Theme.separatorDark,
+    marginVertical: 12,
+  },
+  freightGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  freightGridItem: {
+    flex: 1,
+  },
+  freightGridItemRight: {
+    alignItems: 'flex-end',
+  },
+  freightGridLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: Theme.textOnDarkMuted,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  freightGridValue: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Theme.textOnDark,
+  },
+  freightGridValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  freightMarginPct: {
+    fontSize: 10,
+    fontWeight: '400',
+    color: Theme.positive,
+  },
+
+  // Shipment Profile (matches DetailSection)
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingHorizontal: 0,
+  },
+  sectionTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: Theme.textMutedDemo,
+    textTransform: 'uppercase',
+  },
+  editAllText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Theme.darkBackground,
+  },
+  editAllTextDisabled: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+  },
+  requirementsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  requirementCard: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  requirementLabel: {
+    marginTop: 8,
+    fontSize: 8,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    color: Theme.textMutedDemo,
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  requirementValue: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Theme.textBody,
+  },
+
+  // Live Bids
+  liveBidsTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  bidsCountBadge: {
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    backgroundColor: Theme.surfaceGray,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bidsCountText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+  },
+  bidsEmptyCard: {
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 12,
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    marginBottom: 16,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  bidsEmptyIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: Theme.surfaceLight,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  bidsEmptyTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+    marginBottom: 4,
+  },
+  bidsEmptyBody: {
+    fontSize: 11,
+    color: Theme.textMuted,
+    textAlign: 'center',
+    marginBottom: 14,
+    lineHeight: 16,
+  },
+  broadcastBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.buttonPrimary,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    minHeight: 40,
+  },
+  broadcastBtnIcon: {
+    marginRight: 8,
+  },
+  broadcastBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Theme.buttonPrimaryText,
+    letterSpacing: 1,
+  },
+  broadcastLockedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: Theme.surfaceLight,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  broadcastLockedText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: Theme.textMuted,
+  },
+
+  // Quote rows
+  offersListWrap: {
+    marginBottom: 16,
+  },
+  quoteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 10,
+    marginBottom: 6,
+  },
+  quoteRowSelected: {
+    borderLeftWidth: 4,
+    borderLeftColor: Theme.darkGreen,
+  },
+  quoteRowDisabled: { opacity: 0.6 },
+  quoteRowName: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '700',
+    color: Theme.textBody,
+    marginRight: 8,
+  },
+  quoteRowAmount: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: Theme.textBody,
+    marginRight: 8,
+  },
+  quoteRowStatus: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: Theme.textMutedDemo,
+    textTransform: 'uppercase',
+  },
+  awardSelectedBtn: {
+    marginTop: 10,
+    paddingVertical: 12,
+    backgroundColor: Theme.darkBackground,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  awardSelectedBtnDisabled: { opacity: 0.5 },
+  awardSelectedBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Theme.textOnDark,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+
+  // Footer (light)
+  footer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 8,
+    backgroundColor: Theme.screenBackground,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: -1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  footerEditBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  footerCancelBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: Theme.buttonDestructive,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  footerCancelText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: Theme.buttonDestructiveText,
+    textTransform: 'uppercase',
+  },
+  footerLockedPill: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  footerLockedText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+  },
+
+  // Broadcast modal
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: Theme.overlayBackdrop,
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: Theme.screenBackground,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 48,
+  },
+  modalHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Theme.borderMedium,
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 16,
+  },
+  modalBody: {
+    alignItems: 'center',
+  },
+  modalIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: Theme.aggregatePillBg,
+    borderWidth: 1,
+    borderColor: Theme.aggregatePillBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+    marginBottom: 6,
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: Theme.textMuted,
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 18,
+  },
+  modalDoneBtn: {
+    width: '100%',
+    paddingVertical: 14,
+    backgroundColor: Theme.darkBackground,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalDoneText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Theme.textOnPrimary,
+  },
+});

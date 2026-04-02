@@ -1,0 +1,4989 @@
+/**
+ * Entity detail overlay — TeslaHeader, summary bar, toolbar (search + report + filter), "Entity Ledger protocol" table.
+ * Report fetches ledger at client/entity level and offers download.
+ */
+import { ALL_LEDGER_CATEGORY_VALUES } from "@/components/AddTransactionModal";
+import { FinanceFAB } from "@/components/FinanceFAB";
+import { TeslaHeader } from "@/components/TeslaHeader";
+import Layout from "@/constants/Layout";
+import Theme from "@/constants/Theme";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { ClientRiskBadge } from "@/features/ai";
+import type { DriverRow } from "@/features/drivers/services/drivers.service";
+import { getRatingsForDriver, type RatingRow } from "@/features/ratings";
+import { getTripDisplayNumber, type TripRow } from "@/features/trips";
+import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
+import {
+  getExpenseGroupedForTrip,
+  getExpenseLinesForTripPnL,
+} from "@/features/vehicles/pnl";
+import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
+import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
+import { isAggregateTrip } from "@/lib/driverUtils";
+import {
+  formatINR,
+  formatIndianVehicleNumber,
+  formatLedgerAmount,
+  formatLedgerDate,
+  formatLedgerDateTime,
+  formatRelative,
+} from "@/lib/format";
+import type { SalaryRequestWithDriverRow } from "@/services/salaryRequestsService";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { useRouter } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Alert,
+  FlatList,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
+} from "react-native";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
+import type { DriverOfferForAggregation } from "../aggregation";
+import {
+  buildMonthlyDriverStatement,
+  computeDriverCommissionForTrip,
+  type DriverLedgerEntryForStatement,
+  type TripForStatement,
+} from "../aggregation";
+import type { LedgerRow } from "../services/finance.service";
+import { MIN_FISCAL_TAB_WIDTH } from "../types";
+import { EntityCompareVerifyView } from "./EntityCompareVerifyView";
+import {
+  FinancialRow,
+  type FinancialRowData,
+  type FinancialRowType,
+} from "./FinancialRow";
+import { LedgerReportModal } from "./LedgerReportModal";
+import { LedgerTransactionListView } from "./LedgerTransactionListView";
+import { TreasurySummaryCard } from "./TreasurySummaryCard";
+
+/** Pulsing icon for summary row to match home TreasurySummaryCard. */
+function SummaryPulseIcon({
+  name,
+  size,
+  color,
+  style,
+}: {
+  name: React.ComponentProps<typeof FontAwesome>["name"];
+  size: number;
+  color: string;
+  style?: object;
+}) {
+  const pulseScale = useSharedValue(1);
+  useEffect(() => {
+    pulseScale.value = withRepeat(
+      withSequence(
+        withTiming(1.06, { duration: 800, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 800, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      true
+    );
+  }, [pulseScale]);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulseScale.value }],
+  }));
+  return (
+    <Animated.View style={[animatedStyle, style]}>
+      <FontAwesome name={name} size={size} color={color} />
+    </Animated.View>
+  );
+}
+
+export type EntityType = "CLIENT" | "SUPPLIER" | "VEHICLE" | "DRIVER";
+
+/** Context when opening add-transaction from the trip P&L statement (inline). */
+export type TripEntryIntent =
+  | "client_receivable"
+  | "supplier_payable"
+  | "driver_payable"
+  | "trip_expense";
+
+export interface TripEntryContext {
+  tripId: string;
+  intent: TripEntryIntent;
+}
+
+/** Build LedgerRow[] from entity protocol rows so report preview shows same data as ENTITY LEDGER PROTOCOL. */
+function protocolRowsToLedger(
+  entity: FinancialRowData,
+  entityType: EntityType,
+  protocolRows: Array<{
+    id: string;
+    missionId: string;
+    dest: string;
+    col1: number;
+    col2: number;
+    col3: number;
+  }>,
+  trips: TripRow[],
+): LedgerRow[] {
+  const tripMap = new Map(trips.map((t) => [t.id, t]));
+  const partyName = entity.name ?? entity.id ?? "—";
+  return protocolRows.map((r) => {
+    const trip = tripMap.get(r.id);
+    const date =
+      (trip?.pickup_date ?? trip?.created_at ?? "").slice(0, 10) || "—";
+    const isVehicle = entityType === "VEHICLE";
+    const isDriver = entityType === "DRIVER";
+    return {
+      id: r.id,
+      organization_id: "",
+      trip_id: r.id,
+      trip_number: r.missionId,
+      party_name: partyName,
+      description: r.dest,
+      amount_in: isVehicle ? r.col2 : isDriver ? r.col2 : r.col1,
+      amount_out: isVehicle ? r.col1 : isDriver ? r.col3 : r.col2,
+      transaction_date: date,
+      created_at: trip?.created_at ?? "",
+    };
+  });
+}
+
+/** Summary card labels: from trip details — sale value, received/paid, pending to receive / due to pay. */
+const SUMMARY_LABELS: Record<FinancialRowType, { in: string; out: string }> = {
+  ledger: { in: "Total Received", out: "Total Paid" },
+  customers: { in: "Total Sales", out: "Pending" },
+  suppliers: { in: "Contract value", out: "Due to pay" },
+  garage: { in: "Sales", out: "Profit" },
+  drivers: { in: "To pay", out: "Due" },
+};
+
+export interface EntityDetailOverlayProps {
+  entity: FinancialRowData;
+  entityType: EntityType;
+  subTab: FinancialRowType;
+  trips: TripRow[];
+  /** When provided for CLIENT/SUPPLIER, aggregated into trip rows (PAID/DUE) so trip rows stay visible and due updates. */
+  transactions?: LedgerRow[] | null;
+  /** When provided, trip P&L panel uses this (filtered by trip) so expense entries and full ledger show; omit to use only transactions. */
+  allLedgerTransactions?: LedgerRow[] | null;
+  /** When entityType is DRIVER, offer terms to compute commission from trip client_price / distance. */
+  driverOffer?: DriverOfferForAggregation | null;
+  /** When entityType is DRIVER, ledger entries for monthly statement (paid from driver_ledger). */
+  driverLedgerEntries?: DriverLedgerEntryForStatement[] | null;
+  onBack: () => void;
+  /** When provided, shows an ADD TRANSACTION button that calls this. Can be called with optional context when opening from trip statement (Record cash in / Record payment / Add expense). */
+  onAddTransaction?: (context?: TripEntryContext) => void;
+  /** Required for ledger report (client-level fetch). */
+  organizationId?: string | null;
+  /** When provided, Compare & Verify can call after Update My Book / Accept / Decline / Submit Dispute to refetch ledger. */
+  onRefresh?: () => void;
+  /** When entityType is VEHICLE, optional full vehicle row for type label and age (from created_at). */
+  vehicle?: VehicleRow | null;
+  /** When entityType is DRIVER, full driver row for PROFILE (phone, email, status, created_at). */
+  driverProfile?: DriverRow | null;
+  /** When entityType is DRIVER, pending salary requests for this driver (Pay Now / Reject). */
+  driverSalaryRequests?: SalaryRequestWithDriverRow[];
+  /** When entityType is DRIVER, called when user taps Pay Now on a request; caller opens transaction modal with prefill. */
+  onPayDriverRequest?: (req: SalaryRequestWithDriverRow) => void;
+  /** When entityType is DRIVER, called when user rejects a request; caller updates status and refreshes list. */
+  onRejectDriverRequest?: (requestId: string) => void;
+  /** When entityType is DRIVER, list of vehicles for assign-vehicle picker. */
+  vehicles?: VehicleRow[];
+  /** When entityType is DRIVER, called when user assigns or clears vehicle; caller updates driver and refreshes. */
+  onAssignVehicle?: (driverId: string, vehicleId: string | null) => void | Promise<void>;
+  /** When entityType is VEHICLE, list of drivers for assign-driver picker. */
+  drivers?: DriverRow[];
+  /** When entityType is VEHICLE, called when user assigns or clears driver; caller updates driver's assigned_vehicle_id and refreshes. */
+  onAssignDriver?: (vehicleId: string, driverId: string | null) => void | Promise<void>;
+}
+
+/** Same labels as DriverDetailScreen and finance DRIVERS for consistency. */
+function getSalaryRequestTypeLabel(requestType: string): string {
+  return requestType === "monthly"
+    ? "Monthly salary"
+    : requestType === "advance"
+      ? "Advance"
+      : "Trip-based";
+}
+
+/** Latest payment captured date for a trip from ledger (transaction_date or created_at). Used when trip has no pickup_date. */
+function getLatestPaymentDateForTrip(
+  tripId: string,
+  txs: LedgerRow[] | null | undefined,
+): string | null {
+  if (!txs || !tripId) return null;
+  const normId = (id: string | null | undefined) =>
+    id == null ? "" : String(id).trim().toLowerCase();
+  const key = normId(tripId);
+  const dates = txs
+    .filter((tx) => normId(tx.trip_id) === key)
+    .map((tx) => (tx.transaction_date ?? tx.created_at ?? "").slice(0, 10))
+    .filter((s) => s.length === 10);
+  if (dates.length === 0) return null;
+  dates.sort();
+  return dates[dates.length - 1];
+}
+
+/** Aging label from a date string (YYYY-MM-DD): "5 days ago", "Overdue 3 days", etc. */
+function getAgingLabel(
+  iso: string | null | undefined,
+  dueAmount?: number,
+): string {
+  if (!iso) return "—";
+  try {
+    const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+    const entry = new Date(y, m - 1, d);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    entry.setHours(0, 0, 0, 0);
+    const diffMs = today.getTime() - entry.getTime();
+    const days = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+    if (days < 0) return `In ${-days} days`;
+    if (days === 0)
+      return dueAmount != null && dueAmount > 0 ? "Due today" : "Today";
+    if (days === 1)
+      return dueAmount != null && dueAmount > 0 ? "1 day overdue" : "1 day ago";
+    if (dueAmount != null && dueAmount > 0 && days <= 90)
+      return `${days} days overdue`;
+    if (dueAmount != null && dueAmount > 0 && days > 90)
+      return `${Math.floor(days / 30)} mo overdue`;
+    if (days <= 30) return `${days} days ago`;
+    if (days <= 365) return `${Math.floor(days / 30)} mo ago`;
+    return `${Math.floor(days / 365)} yr ago`;
+  } catch {
+    return "—";
+  }
+}
+
+/** Inline trip P&L panel (statement-style, same pattern as monthly statement expand). */
+function TripPnLInlinePanel({
+  trip,
+  transactions,
+  formatINR: fmt,
+  styles: s,
+  onAddEntry,
+  entityType,
+}: {
+  trip: TripRow;
+  transactions: LedgerRow[] | null;
+  formatINR: (n: number) => string;
+  styles: Record<string, object>;
+  onAddEntry?: (context: TripEntryContext) => void;
+  entityType?: EntityType;
+}) {
+  const { t } = useLanguage();
+  const tripLedgerEntries = useMemo(() => {
+    return getTripLedgerEntries(transactions, trip.id);
+  }, [transactions, trip.id]);
+  const grouped = useMemo(
+    () => getExpenseGroupedForTrip(trip, tripLedgerEntries),
+    [trip, tripLedgerEntries],
+  );
+  const revenueLines = useMemo(
+    () => [{ label: "Client Billing", amount: Number(trip.client_price ?? 0) }],
+    [trip],
+  );
+  const expenseLines = useMemo(
+    () => getExpenseLinesForTripPnL(trip, tripLedgerEntries),
+    [trip, tripLedgerEntries],
+  );
+
+  const sales = Number(trip.client_price ?? 0);
+  const totalExpense = grouped?.total ?? 0;
+  const net = sales - totalExpense;
+  const margin = sales > 0 ? (net / sales) * 100 : totalExpense > 0 ? -100 : 0;
+  const missionId = getTripDisplayNumber(trip);
+  const clientName = trip.client_name ?? "—";
+  const route = `${trip.pickup_area ?? "—"} → ${trip.drop_location ?? "—"}`;
+
+  return (
+    <View style={s.monthDetailWrap}>
+      <Text style={s.monthDetailTitle}>TRIP P&L STATEMENT · {missionId}</Text>
+      <View style={s.earningsSummaryBlock}>
+        <View style={s.earningsSummaryRow}>
+          <Text style={s.earningsSummaryLabel} numberOfLines={1}>
+            Client
+          </Text>
+          <Text style={s.earningsSummaryValue} numberOfLines={1}>
+            {clientName}
+          </Text>
+        </View>
+        <View style={s.earningsSummaryRow}>
+          <Text style={s.earningsSummaryLabel} numberOfLines={1}>
+            Route
+          </Text>
+          <Text style={s.earningsSummaryValue} numberOfLines={1}>
+            {route}
+          </Text>
+        </View>
+        {revenueLines.map((line, i) => (
+          <View key={`rev-${i}`} style={s.earningsSummaryRow}>
+            <Text style={s.earningsSummaryLabel} numberOfLines={1}>
+              {line.label}
+            </Text>
+            <Text style={s.earningsSummaryValue} numberOfLines={1}>
+              {fmt(line.amount)}
+            </Text>
+          </View>
+        ))}
+        <View style={[s.earningsSummaryRow, s.earningsSummaryRowTotal]}>
+          <Text style={s.earningsSummaryLabelBold} numberOfLines={1}>
+            Total Revenue
+          </Text>
+          <Text
+            style={[s.earningsSummaryValueBold, s.tdGreen]}
+            numberOfLines={1}
+          >
+            {fmt(sales)}
+          </Text>
+        </View>
+        {expenseLines.map((line, i) => (
+          <View key={`exp-${i}`} style={s.earningsSummaryRow}>
+            <Text style={s.earningsSummaryLabel} numberOfLines={1}>
+              {line.label}
+            </Text>
+            <Text style={s.earningsSummaryValue} numberOfLines={1}>
+              {fmt(line.amount)}
+            </Text>
+          </View>
+        ))}
+        <View style={[s.earningsSummaryRow, s.earningsSummaryRowTotal]}>
+          <Text style={s.earningsSummaryLabelBold} numberOfLines={1}>
+            Total Expenses
+          </Text>
+          <Text style={[s.earningsSummaryValueBold, s.tdRed]} numberOfLines={1}>
+            {fmt(totalExpense)}
+          </Text>
+        </View>
+        <View style={[s.earningsSummaryRow, s.earningsSummaryRowBalance]}>
+          <Text style={s.earningsSummaryLabelBold} numberOfLines={1}>
+            Net Profit / Loss
+          </Text>
+          <Text
+            style={[
+              s.earningsSummaryValueBold,
+              net > 0 ? s.tdGreen : net < 0 ? s.tdRed : undefined,
+            ]}
+            numberOfLines={1}
+          >
+            {net > 0 ? "+" : ""}
+            {fmt(net)}
+          </Text>
+        </View>
+        <View style={s.earningsSummaryRow}>
+          <Text style={s.earningsSummaryLabel}>Margin</Text>
+          <Text
+            style={[
+              s.earningsSummaryValue,
+              net > 0 ? s.tdGreen : net < 0 ? s.tdRed : undefined,
+            ]}
+            numberOfLines={1}
+          >
+            {margin > 0 ? "+" : ""}
+            {margin.toFixed(1)}%
+          </Text>
+        </View>
+      </View>
+      {onAddEntry != null && entityType != null && (
+        <View style={s.tripStatementActionsWrap}>
+          <Text style={s.tripStatementActionsLabel}>Quick actions</Text>
+          <View style={s.tripStatementActionsRow}>
+            {entityType === "CLIENT" && (
+              <TouchableOpacity
+                style={[
+                  s.tripStatementActionBtn,
+                  s.tripStatementActionBtnPrimary,
+                ]}
+                onPress={() =>
+                  onAddEntry({ tripId: trip.id, intent: "client_receivable" })
+                }
+                activeOpacity={0.8}
+              >
+                <FontAwesome
+                  name="arrow-down"
+                  size={12}
+                  color={Theme.textOnPrimary}
+                />
+                <Text style={s.tripStatementActionBtnPrimaryText}>
+                  Record cash in
+                </Text>
+              </TouchableOpacity>
+            )}
+            {entityType === "SUPPLIER" && (
+              <TouchableOpacity
+                style={[
+                  s.tripStatementActionBtn,
+                  s.tripStatementActionBtnPrimary,
+                ]}
+                onPress={() =>
+                  onAddEntry({ tripId: trip.id, intent: "supplier_payable" })
+                }
+                activeOpacity={0.8}
+              >
+                <FontAwesome
+                  name="rupee"
+                  size={12}
+                  color={Theme.textOnPrimary}
+                />
+                <Text style={s.tripStatementActionBtnPrimaryText}>
+                  Record payment
+                </Text>
+              </TouchableOpacity>
+            )}
+            {entityType === "DRIVER" && (
+              <TouchableOpacity
+                style={[
+                  s.tripStatementActionBtn,
+                  s.tripStatementActionBtnPrimary,
+                ]}
+                onPress={() =>
+                  onAddEntry({ tripId: trip.id, intent: "driver_payable" })
+                }
+                activeOpacity={0.8}
+              >
+                <FontAwesome
+                  name="rupee"
+                  size={12}
+                  color={Theme.textOnPrimary}
+                />
+                <Text style={s.tripStatementActionBtnPrimaryText}>
+                  Record payment
+                </Text>
+              </TouchableOpacity>
+            )}
+            {(entityType === "VEHICLE" ||
+              entityType === "CLIENT" ||
+              entityType === "SUPPLIER" ||
+              entityType === "DRIVER") && (
+              <TouchableOpacity
+                style={[
+                  s.tripStatementActionBtn,
+                  s.tripStatementActionBtnSecondary,
+                ]}
+                onPress={() =>
+                  onAddEntry({ tripId: trip.id, intent: "trip_expense" })
+                }
+                activeOpacity={0.8}
+              >
+                <FontAwesome
+                  name="minus-circle"
+                  size={12}
+                  color={Theme.primary}
+                />
+                <Text style={s.tripStatementActionBtnSecondaryText}>
+                  Add expense
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
+      <View style={s.monthDetailPaymentsBlock}>
+        <Text style={s.monthDetailTitle}>
+          LEDGER ENTRIES ({tripLedgerEntries.length})
+        </Text>
+        <View style={s.monthDetailHeaderRow}>
+          <Text style={s.monthDetailHeaderCellWide} numberOfLines={1}>
+            DESC / DATE
+          </Text>
+          <Text
+            style={[s.monthDetailHeaderCell, s.tdRightLast]}
+            numberOfLines={1}
+          >
+            IN · OUT
+          </Text>
+        </View>
+        {tripLedgerEntries.length === 0 ? (
+          <Text style={s.monthDetailEmptyPayments}>
+            {t("noLedgerEntriesForTrip")}
+          </Text>
+        ) : (
+          tripLedgerEntries.map((tx) => {
+            const inAmt = Number(tx.amount_in ?? 0);
+            const outAmt = Number(tx.amount_out ?? 0);
+            const date = formatLedgerDate(
+              tx.transaction_date ?? tx.created_at ?? "",
+            );
+            return (
+              <View key={tx.id} style={s.monthDetailRow}>
+                <Text style={s.monthDetailCellWide} numberOfLines={1}>
+                  {tx.description || "ENTRY"} · {date}
+                </Text>
+                <Text
+                  style={[s.monthDetailCell, s.tdRightLast]}
+                  numberOfLines={1}
+                >
+                  {inAmt > 0 ? fmt(inAmt) : "—"} ·{" "}
+                  {outAmt > 0 ? fmt(outAmt) : "—"}
+                </Text>
+              </View>
+            );
+          })
+        )}
+      </View>
+    </View>
+  );
+}
+
+const DRIVER_STATEMENT_MONTHS = 12;
+
+export function EntityDetailOverlay({
+  entity,
+  entityType,
+  subTab,
+  trips,
+  transactions,
+  allLedgerTransactions,
+  driverOffer,
+  driverLedgerEntries,
+  onBack,
+  onAddTransaction,
+  organizationId,
+  onRefresh,
+  vehicle,
+  driverProfile,
+  driverSalaryRequests = [],
+  onPayDriverRequest,
+  onRejectDriverRequest,
+  vehicles = [],
+  onAssignVehicle,
+  drivers = [],
+  onAssignDriver,
+}: EntityDetailOverlayProps) {
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const { t } = useLanguage();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [detailTab, setDetailTab] = useState<
+    "main" | "ledger" | "shared_ledger"
+  >("main");
+  /** Driver-only: PROFILE | LEDGER | STATEMENT. */
+  const [driverDetailTab, setDriverDetailTab] = useState<
+    "profile" | "ledger" | "statement"
+  >("profile");
+  const [expandedMonthKey, setExpandedMonthKey] = useState<string | null>(null);
+  const [expandedDriverLedgerRowId, setExpandedDriverLedgerRowId] = useState<
+    string | null
+  >(null);
+  /** Client/Supplier: expanded row in RECEIVABLES BY TRIP / PAYABLES BY TRIP table. */
+  const [expandedEntityLedgerRowId, setExpandedEntityLedgerRowId] = useState<
+    string | null
+  >(null);
+  const [entityLedgerViewMode, setEntityLedgerViewMode] = useState<
+    "table" | "transaction"
+  >("table");
+  const [driverRatings, setDriverRatings] = useState<RatingRow[]>([]);
+  const [showVehiclePicker, setShowVehiclePicker] = useState(false);
+  const [showDriverPicker, setShowDriverPicker] = useState(false);
+  const isDriver = entityType === "DRIVER";
+  const assignedVehicle =
+    isDriver && driverProfile?.assigned_vehicle_id && vehicles.length > 0
+      ? vehicles.find((v) => v.id === driverProfile.assigned_vehicle_id)
+      : null;
+
+  /** When driver has no assigned_vehicle_id, show vehicle from most recent trip (asset-based or assigned vehicle). */
+  const assignedVehicleDisplayFromTrips = useMemo(() => {
+    if (!isDriver || !trips.length) return null;
+    const withVehicle = trips.filter(
+      (t) =>
+        t.vehicle_id != null || ((t.vehicle_display_number ?? "").trim() !== ""),
+    );
+    if (withVehicle.length === 0) return null;
+    const sorted = [...withVehicle].sort((a, b) => {
+      const dateA = (a.pickup_date ?? a.created_at ?? "").toString();
+      const dateB = (b.pickup_date ?? b.created_at ?? "").toString();
+      return dateB.localeCompare(dateA);
+    });
+    const latest = sorted[0];
+    if (!latest) return null;
+    if (latest.vehicle_id && vehicles.length > 0) {
+      const v = vehicles.find((ve) => ve.id === latest.vehicle_id);
+      if (v?.vehicle_number)
+        return formatIndianVehicleNumber(v.vehicle_number);
+    }
+    const num = (latest.vehicle_display_number ?? "").trim();
+    return num ? formatIndianVehicleNumber(num) : null;
+  }, [isDriver, trips, vehicles]);
+
+  useEffect(() => {
+    if (!isDriver || !entity.id) return;
+    getRatingsForDriver(entity.id).then((res) => {
+      setDriverRatings(res.error ? [] : (res.ratings ?? []));
+    });
+  }, [isDriver, entity.id]);
+  const isVehicle = entityType === "VEHICLE";
+  /** When entityType is VEHICLE, driver currently assigned to this vehicle (drivers.assigned_vehicle_id === entity.id). */
+  const assignedDriverForVehicle =
+    isVehicle && entity.id && drivers.length > 0
+      ? drivers.find((d) => d.assigned_vehicle_id === entity.id) ?? null
+      : null;
+  const isCustomerOrSupplier =
+    entityType === "CLIENT" || entityType === "SUPPLIER";
+  const labels = useMemo(() => {
+    const map: Record<FinancialRowType, { in: string; out: string }> = {
+      ledger: { in: t("totalCashIn"), out: t("totalCashOut") },
+      customers: { in: t("totalBilling"), out: t("totalBalance") },
+      suppliers: { in: t("contractValue"), out: t("dueToPay") },
+      garage: { in: t("sales"), out: t("profit") },
+      drivers: { in: t("toPay"), out: t("due") },
+    };
+    return map[subTab] ?? { in: t("totalLabel"), out: t("due") };
+  }, [subTab, t]);
+  /** From trip details: sale value / supplier cost; received or paid; pending to receive or due to pay */
+  const colLabels = isVehicle
+    ? ["SALES", "EXPENSES", "PROFIT"]
+    : isDriver
+      ? ["TO PAY", "PAID", "DUE"]
+      : entityType === "CLIENT"
+        ? ["SALE VALUE", "RECEIVED", "PENDING"]
+        : ["SUPPLIER COST", "PAID", "DUE"];
+
+  const amountIn = isDriver
+    ? (entity.paid ?? 0)
+    : isVehicle
+      ? (entity.sales ?? 0)
+      : subTab === "suppliers"
+        ? (entity.payables ?? entity.due ?? 0)
+        : (entity.billed ?? entity.received ?? 0);
+  const amountOut = isVehicle
+    ? Math.max(0, (entity.sales ?? 0) - (entity.expense ?? 0))
+    : subTab === "suppliers"
+      ? (entity.due ?? 0)
+      : (entity.pending ?? entity.due ?? 0);
+
+  const n = Math.max(1, trips.length);
+
+  // CLIENT/SUPPLIER: always one row per trip; aggregate transactions into PAID/DUE so trip rows stay visible and due updates
+  const rowsFromCustomerSupplier =
+    isCustomerOrSupplier && trips.length > 0
+      ? (() => {
+          const norm = (id: string | null | undefined) =>
+            id == null ? "" : String(id).trim().toLowerCase();
+          const linkedTripIds = new Set(trips.map((t) => norm(t.id)));
+          const paidByTripId: Record<string, number> = {};
+          const outByTripId: Record<string, number> = {};
+          const firstTripKey = norm(trips[0].id);
+          const contactType = entityType === "CLIENT" ? "client" : "supplier";
+          const isEntityLinked = (tx: LedgerRow) =>
+            tx.contact_type === contactType &&
+            tx.contact_id != null &&
+            tx.contact_id === entity.id;
+
+          for (const t of trips) {
+            const key = norm(t.id);
+            paidByTripId[key] = Number(t.amount_paid ?? 0);
+            outByTripId[key] = 0;
+          }
+          const txs = transactions ?? [];
+          const linkedTxIds = new Set<string>();
+          for (const tx of txs) {
+            let key: string | undefined =
+              norm(tx.trip_id) && linkedTripIds.has(norm(tx.trip_id))
+                ? norm(tx.trip_id)
+                : undefined;
+            if (key === undefined && isEntityLinked(tx) && firstTripKey) {
+              key = firstTripKey;
+            }
+            if (key !== undefined) {
+              paidByTripId[key] =
+                (paidByTripId[key] ?? 0) + Number(tx.amount_in ?? 0);
+              outByTripId[key] =
+                (outByTripId[key] ?? 0) + Number(tx.amount_out ?? 0);
+              linkedTxIds.add(tx.id);
+            }
+          }
+
+          const linkedOrgId =
+            (entity as { linked_organization_id?: string | null })
+              .linked_organization_id ?? null;
+          const tripRows = trips.map((t) => {
+            const key = norm(t.id);
+            // SUPPLIER: use client_price only when we are the client (trip from tripsWhereOrgIsClient); else supplier_rate (align with aggregateSuppliers)
+            const isTripWhereWeAreClient =
+              linkedOrgId != null &&
+              isLoadBasedTrip(t) &&
+              t.organization_id != null &&
+              t.organization_id === linkedOrgId;
+            const entityNameKey = toNameKey(entity.name ?? "");
+            const isOwnerClient =
+              entityType === "CLIENT" &&
+              (t.client_id === entity.id ||
+                toNameKey(t.client_name || "") === entityNameKey);
+            const isIntegratedShipperClient =
+              entityType === "CLIENT" &&
+              (entity as { is_integrated?: boolean }).is_integrated === true &&
+              linkedOrgId != null &&
+              isLoadBasedTrip(t) &&
+              t.organization_id != null &&
+              t.organization_id === linkedOrgId &&
+              !isOwnerClient;
+            const sales = Number(
+              entityType === "CLIENT"
+                ? isIntegratedShipperClient
+                  ? (t.supplier_rate ?? 0)
+                  : (t.client_price ?? 0)
+                : entityType === "SUPPLIER"
+                  ? isTripWhereWeAreClient
+                    ? (t.client_price ?? t.supplier_rate ?? 0)
+                    : (t.supplier_rate ?? 0)
+                  : (t.client_price ?? t.supplier_rate ?? 0),
+            );
+            const outByTrip = outByTripId[key] ?? 0;
+            const inByTrip = paidByTripId[key] ?? 0;
+            // CLIENT: received = only cash from client (inByTrip); pending = sale - received. Expenses (outByTrip) do not reduce received. SUPPLIER: paid = amount paid to supplier (out); due = sales - paid.
+            const paid = entityType === "SUPPLIER" ? outByTrip : inByTrip;
+            const due =
+              entityType === "SUPPLIER"
+                ? Math.max(0, sales - outByTrip)
+                : Math.max(0, sales - inByTrip);
+            const tripDateIso =
+              (t.pickup_date ?? t.created_at ?? "").slice(0, 10) || null;
+            const tripDate = tripDateIso ? formatLedgerDate(tripDateIso) : "—";
+            const agingLabel = getAgingLabel(tripDateIso, due);
+            const route =
+              [t.pickup_area, t.drop_location].filter(Boolean).join(" → ") ||
+              null;
+            return {
+              id: t.id,
+              missionId: getTripDisplayNumber(t),
+              dest: t.drop_location || "—",
+              col1: sales,
+              col2: paid,
+              col3: due,
+              tripDate,
+              agingLabel,
+              route: route ?? undefined,
+              clientName: t.client_name ?? undefined,
+            };
+          });
+
+          const unlinkedTx = txs.filter((tx) => !linkedTxIds.has(tx.id));
+          for (const tx of unlinkedTx) {
+            const amountIn = Number(tx.amount_in ?? 0);
+            const amountOut = Number(tx.amount_out ?? 0);
+            const txDate = (tx.transaction_date ?? "").slice(0, 10) || null;
+            tripRows.push({
+              id: `adj-${tx.id}`,
+              missionId: tx.trip_number ?? "ADJ",
+              dest:
+                tx.description && tx.description !== "ENTRY"
+                  ? tx.description
+                  : "—",
+              col1: amountIn,
+              col2: amountIn,
+              col3: amountOut,
+              tripDate: txDate ? formatLedgerDate(txDate) : "—",
+              agingLabel: getAgingLabel(txDate, amountOut),
+              route: undefined,
+              clientName: "",
+            });
+          }
+          return tripRows;
+        })()
+      : null;
+
+  const rowsFromTrips =
+    rowsFromCustomerSupplier == null && trips.length > 0
+      ? (() => {
+          if (isVehicle) {
+            const outByTripId: Record<string, number> = {};
+            for (const t of trips)
+              outByTripId[t.id] = Number(t.supplier_rate ?? 0);
+            for (const tx of transactions ?? []) {
+              if (tx.trip_id && outByTripId.hasOwnProperty(tx.trip_id)) {
+                outByTripId[tx.trip_id] =
+                  (outByTripId[tx.trip_id] ?? 0) + Number(tx.amount_out ?? 0);
+              }
+            }
+            return trips.map((t) => {
+              const sales = Number(t.client_price ?? 0);
+              const exp = outByTripId[t.id] ?? 0;
+              const profit = sales - exp;
+              const margin =
+                sales > 0 ? (profit / sales) * 100 : exp > 0 ? -100 : 0;
+              const tripDateIso =
+                (t.pickup_date ?? t.created_at ?? "").slice(0, 10) || null;
+              return {
+                id: t.id,
+                missionId: getTripDisplayNumber(t),
+                dest: t.drop_location || "—",
+                clientName: t.client_name ?? "—",
+                col1: exp,
+                col2: profit,
+                col3: 0,
+                sales,
+                expense: exp,
+                net: profit,
+                margin,
+                tripDate: tripDateIso ? formatLedgerDate(tripDateIso) : "—",
+                agingLabel: getAgingLabel(tripDateIso),
+              };
+            });
+          }
+          if (isDriver) {
+            const entityPaid = entity.paid ?? 0;
+            const entityPending = entity.pending ?? 0;
+            const normId = (id: string | null | undefined) =>
+              id == null ? "" : String(id).trim();
+            const paidByTripId: Record<string, number> = {};
+            for (const t of trips) paidByTripId[normId(t.id)] = 0;
+            for (const tx of transactions ?? []) {
+              const txTripKey = normId(tx.trip_id);
+              if (
+                tx.contact_type === "driver" &&
+                tx.contact_id != null &&
+                normId(tx.contact_id) === normId(entity.id) &&
+                txTripKey !== "" &&
+                txTripKey in paidByTripId
+              ) {
+                paidByTripId[txTripKey] =
+                  (paidByTripId[txTripKey] ?? 0) + Number(tx.amount_out ?? 0);
+              }
+            }
+            const totalPaidLinked = trips.reduce(
+              (sum, t) => sum + (paidByTripId[normId(t.id)] ?? 0),
+              0,
+            );
+            const tripRows = trips.map((t) => {
+              const commission = computeDriverCommissionForTrip(
+                {
+                  ...t,
+                  client_price: t.client_price ?? null,
+                  distance: t.distance ?? null,
+                },
+                driverOffer ?? undefined,
+              );
+              const paid = paidByTripId[normId(t.id)] ?? 0;
+              const due = Math.max(0, commission - paid);
+              const tripDateIso =
+                (
+                  t.pickup_date ??
+                  t.created_at ??
+                  getLatestPaymentDateForTrip(t.id, transactions ?? null) ??
+                  ""
+                )
+                  .toString()
+                  .slice(0, 10) || null;
+              const route =
+                t.pickup_area?.trim() && t.drop_location?.trim()
+                  ? `${t.pickup_area.trim()} → ${t.drop_location.trim()}`
+                  : t.drop_location?.trim() || "—";
+              const dateTimeIso = (
+                t.pickup_date ??
+                t.created_at ??
+                ""
+              ).toString();
+              return {
+                id: t.id,
+                missionId: getTripDisplayNumber(t),
+                dest: route,
+                col1: commission,
+                col2: paid,
+                col3: due,
+                tripDate: tripDateIso ? formatLedgerDate(tripDateIso) : "—",
+                tripDateIso: dateTimeIso || undefined,
+                agingLabel: getAgingLabel(tripDateIso, due),
+              };
+            });
+            tripRows.push({
+              id: "ledger-adjustment",
+              missionId: "—",
+              dest: "Other / Ledger",
+              col1: 0,
+              col2: entityPaid - totalPaidLinked,
+              col3: entityPending,
+              tripDate: "—",
+              tripDateIso: undefined,
+              agingLabel: "",
+            });
+            return tripRows;
+          }
+          return [];
+        })()
+      : null;
+
+  const fallbackCol2 = isVehicle
+    ? (entity.expense ?? 0)
+    : isDriver
+      ? (entity.paid ?? 0)
+      : (entity.received ?? entity.paid ?? amountIn);
+
+  const fallbackRow = isVehicle
+    ? {
+        id: "none",
+        missionId: "—",
+        dest: "—",
+        col1: entity.expense ?? 0,
+        col2: amountOut,
+        col3: 0,
+        tripDate: "—",
+        agingLabel: "",
+      }
+    : {
+        id: "none",
+        missionId: "—",
+        dest: "—",
+        col1: amountIn,
+        col2: fallbackCol2,
+        col3: amountOut,
+        tripDate: "—",
+        agingLabel: "",
+      };
+
+  const allRows = rowsFromCustomerSupplier ?? rowsFromTrips ?? [fallbackRow];
+
+  const q = searchQuery.trim().toLowerCase();
+  const rows = useMemo(() => {
+    if (!q) return allRows;
+    return allRows.filter(
+      (r) =>
+        (r.missionId ?? "").toLowerCase().includes(q) ||
+        (r.dest ?? "").toLowerCase().includes(q),
+    );
+  }, [allRows, q]);
+
+  const protocolLedgerRows = useMemo(
+    () => protocolRowsToLedger(entity, entityType, rows, trips),
+    [entity, entityType, rows, trips],
+  );
+
+  /** Ledger entries for this entity (party or vehicle's trips) for the Ledger tab. */
+  const selectedEntityTransactions = useMemo((): LedgerRow[] | null => {
+    const allTx = transactions ?? [];
+    if (!entity?.id) return null;
+    if (entityType === "VEHICLE") {
+      const tripIds = new Set(trips.map((t) => t.id));
+      return allTx.filter(
+        (tx) => tx.trip_id != null && tripIds.has(tx.trip_id),
+      );
+    }
+    if (entityType === "DRIVER") {
+      return allTx.filter(
+        (tx) =>
+          tx.contact_type === "driver" &&
+          tx.contact_id != null &&
+          String(tx.contact_id).trim() === String(entity.id).trim(),
+      );
+    }
+    if (entityType === "CLIENT") {
+      const tripIds = new Set(trips.map((t) => t.id));
+      const partyNameKey = (entity.name ?? "").trim().toLowerCase();
+      return allTx.filter(
+        (tx) =>
+          (tx.contact_type === "client" && tx.contact_id === entity.id) ||
+          (tx.trip_id != null && tripIds.has(tx.trip_id)) ||
+          (partyNameKey &&
+            (tx.party_name ?? "").trim().toLowerCase() === partyNameKey),
+      );
+    }
+    if (entityType === "SUPPLIER") {
+      const tripIds = new Set(trips.map((t) => t.id));
+      const partyNameKey = (entity.name ?? "").trim().toLowerCase();
+      return allTx.filter(
+        (tx) =>
+          (tx.contact_type === "supplier" && tx.contact_id === entity.id) ||
+          (tx.trip_id != null && tripIds.has(tx.trip_id)) ||
+          (partyNameKey &&
+            (tx.party_name ?? "").trim().toLowerCase() === partyNameKey),
+      );
+    }
+    return null;
+  }, [entity, entityType, trips, transactions]);
+
+  /** Header summary (black block): totals and labels for main vs ledger tab. */
+  const headerSummary = useMemo(() => {
+    if (detailTab === "ledger" && selectedEntityTransactions != null) {
+      const cashIn = selectedEntityTransactions.reduce(
+        (s, tx) => s + Number(tx.amount_in ?? 0),
+        0,
+      );
+      const cashOut = selectedEntityTransactions.reduce(
+        (s, tx) => s + Number(tx.amount_out ?? 0),
+        0,
+      );
+      return {
+        labelIn: t("totalCashIn") ?? "TOTAL RECEIVED",
+        labelOut: t("totalCashOut") ?? "TOTAL PAID",
+        valueIn: cashIn,
+        valueOut: cashOut,
+      };
+    }
+    return {
+      labelIn: labels.in,
+      labelOut: labels.out,
+      valueIn: amountIn,
+      valueOut: amountOut,
+    };
+  }, [
+    detailTab,
+    labels.in,
+    labels.out,
+    amountIn,
+    amountOut,
+    selectedEntityTransactions,
+    t,
+  ]);
+
+  /** Map trip_id -> detail for Ledger tab SOURCE column and expanded card (same shape as main finance Ledger). */
+  const ledgerTripDetailsMap = useMemo(() => {
+    const map: Record<
+      string,
+      {
+        trip_number: string;
+        drop_location?: string;
+        pickup_area?: string;
+        client_name?: string;
+        pickup_date?: string | null;
+        vehicle_number?: string | null;
+        client_price?: number | null;
+        supplier_rate?: number | null;
+        driver_commission?: number | null;
+      }
+    > = {};
+    for (const t of trips) {
+      map[t.id] = {
+        trip_number: getTripDisplayNumber(t),
+        drop_location: t.drop_location || undefined,
+        pickup_area: t.pickup_area || undefined,
+        client_name: t.client_name || undefined,
+        pickup_date: t.pickup_date ?? undefined,
+        client_price: t.client_price ?? null,
+        supplier_rate: t.supplier_rate ?? null,
+        driver_commission: t.driver_commission ?? null,
+      };
+    }
+    return map;
+  }, [trips]);
+
+  const monthlyStatement = useMemo(() => {
+    if (entityType !== "DRIVER" || !entity.id) return null;
+    const ledger = driverLedgerEntries ?? [];
+    const tripsForStatement: TripForStatement[] = trips.map((t) => ({
+      ...t,
+      missionId: getTripDisplayNumber(t),
+    }));
+    const offer = driverOffer
+      ? {
+          payableAmount: driverOffer.payableAmount ?? null,
+          commissionPercent: driverOffer.commissionPercent ?? null,
+          commissionPerKm: driverOffer.commissionPerKm ?? null,
+        }
+      : null;
+    return buildMonthlyDriverStatement(
+      entity.id,
+      tripsForStatement,
+      ledger as DriverLedgerEntryForStatement[],
+      offer,
+      { maxMonths: DRIVER_STATEMENT_MONTHS },
+    );
+  }, [entityType, entity.id, trips, driverLedgerEntries, driverOffer]);
+
+  const monthlyRowsReversed =
+    monthlyStatement?.rows != null ? [...monthlyStatement.rows].reverse() : [];
+
+  const handleReportPress = useCallback(() => {
+    setShowReportModal(true);
+  }, []);
+
+  const handleLoadBoard = useCallback(() => {
+    onBack();
+    router.push("/load-board");
+  }, [onBack, router]);
+
+  const handleNetwork = useCallback(() => {
+    onBack();
+    router.push("/(tabs)/network");
+  }, [onBack, router]);
+
+  const handleProfile = useCallback(() => {
+    onBack();
+    router.push("/(tabs)/profile");
+  }, [onBack, router]);
+
+  const handleNotification = useCallback(() => {
+    onBack();
+    router.push("/milestone");
+  }, [onBack, router]);
+
+  const vehicleSubtitle =
+    isVehicle && vehicle
+      ? [
+          vehicle.vehicle_type,
+          vehicle.vehicle_brand,
+          vehicle.vehicle_model,
+          vehicle.vehicle_body_type,
+        ]
+          .filter(Boolean)
+          .join(" ") ||
+        entity.model ||
+        entityType
+      : isDriver && entity.rating != null && entity.rating > 0
+        ? `${entityType} · ${entity.rating.toFixed(1)} ★${entity.ratingCount != null && entity.ratingCount > 0 ? ` (${entity.ratingCount})` : ""}`
+        : entityType;
+
+  const { width: screenWidth } = useWindowDimensions();
+  const detailTabsContent = isCustomerOrSupplier ? (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={[
+        styles.entityTabRow,
+        {
+          minWidth: Math.max(screenWidth, 3 * MIN_FISCAL_TAB_WIDTH),
+        },
+      ]}
+    >
+      <TouchableOpacity
+        style={[
+          styles.entityTab,
+          detailTab === "main" && styles.entityTabActive,
+        ]}
+        onPress={() => setDetailTab("main")}
+        activeOpacity={0.8}
+      >
+        <Text
+          style={[
+            styles.entityTabText,
+            detailTab === "main" && styles.entityTabTextActive,
+          ]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {entityType === "CLIENT" ? "RECEIVABLES" : "PAYABLE"}
+        </Text>
+        {detailTab === "main" && <View style={styles.entityTabUnderline} />}
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[
+          styles.entityTab,
+          detailTab === "ledger" && styles.entityTabActive,
+        ]}
+        onPress={() => setDetailTab("ledger")}
+        activeOpacity={0.8}
+      >
+        <Text
+          style={[
+            styles.entityTabText,
+            detailTab === "ledger" && styles.entityTabTextActive,
+          ]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          CASH
+        </Text>
+        {detailTab === "ledger" && <View style={styles.entityTabUnderline} />}
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[
+          styles.entityTab,
+          detailTab === "shared_ledger" && styles.entityTabActive,
+        ]}
+        onPress={() => setDetailTab("shared_ledger")}
+        activeOpacity={0.8}
+      >
+        <FontAwesome
+          name="link"
+          size={10}
+          color={
+            detailTab === "shared_ledger"
+              ? Theme.textOnDark
+              : Theme.textSecondary
+          }
+          style={styles.detailTabIcon}
+        />
+        <Text
+          style={[
+            styles.entityTabText,
+            detailTab === "shared_ledger" && styles.entityTabTextActive,
+          ]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          SHARED CASH
+        </Text>
+        {detailTab === "shared_ledger" && (
+          <View style={styles.entityTabUnderline} />
+        )}
+      </TouchableOpacity>
+    </ScrollView>
+  ) : isVehicle ? (
+    <View style={styles.entityTabRow}>
+      <TouchableOpacity
+        style={[
+          styles.entityTab,
+          detailTab === "main" && styles.entityTabActive,
+        ]}
+        onPress={() => setDetailTab("main")}
+        activeOpacity={0.8}
+      >
+        <Text
+          style={[
+            styles.entityTabText,
+            detailTab === "main" && styles.entityTabTextActive,
+          ]}
+        >
+          P&L SUMMARY
+        </Text>
+        {detailTab === "main" && <View style={styles.entityTabUnderline} />}
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[
+          styles.entityTab,
+          detailTab === "ledger" && styles.entityTabActive,
+        ]}
+        onPress={() => setDetailTab("ledger")}
+        activeOpacity={0.8}
+      >
+        <Text
+          style={[
+            styles.entityTabText,
+            detailTab === "ledger" && styles.entityTabTextActive,
+          ]}
+        >
+          CASH
+        </Text>
+        {detailTab === "ledger" && <View style={styles.entityTabUnderline} />}
+      </TouchableOpacity>
+    </View>
+  ) : isDriver ? (
+    <View style={styles.entityTabRow}>
+      <TouchableOpacity
+        style={[
+          styles.entityTab,
+          driverDetailTab === "profile" && styles.entityTabActive,
+        ]}
+        onPress={() => setDriverDetailTab("profile")}
+        activeOpacity={0.8}
+      >
+        <Text
+          style={[
+            styles.entityTabText,
+            driverDetailTab === "profile" && styles.entityTabTextActive,
+          ]}
+        >
+          PROFILE
+        </Text>
+        {driverDetailTab === "profile" && (
+          <View style={styles.entityTabUnderline} />
+        )}
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[
+          styles.entityTab,
+          driverDetailTab === "ledger" && styles.entityTabActive,
+        ]}
+        onPress={() => setDriverDetailTab("ledger")}
+        activeOpacity={0.8}
+      >
+        <Text
+          style={[
+            styles.entityTabText,
+            driverDetailTab === "ledger" && styles.entityTabTextActive,
+          ]}
+        >
+          LEDGER
+        </Text>
+        {driverDetailTab === "ledger" && (
+          <View style={styles.entityTabUnderline} />
+        )}
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[
+          styles.entityTab,
+          driverDetailTab === "statement" && styles.entityTabActive,
+        ]}
+        onPress={() => setDriverDetailTab("statement")}
+        activeOpacity={0.8}
+      >
+        <Text
+          style={[
+            styles.entityTabText,
+            driverDetailTab === "statement" && styles.entityTabTextActive,
+          ]}
+        >
+          STATEMENT
+        </Text>
+        {driverDetailTab === "statement" && (
+          <View style={styles.entityTabUnderline} />
+        )}
+      </TouchableOpacity>
+    </View>
+  ) : null;
+
+  return (
+    <View style={styles.wrapper}>
+      <View style={styles.darkBlock}>
+        <TeslaHeader
+          title={entity.name ?? entity.id}
+          subtitle={isVehicle ? vehicleSubtitle : entityType}
+          showBack
+          onBack={onBack}
+          onLoadClick={handleLoadBoard}
+          onNetworkClick={handleNetwork}
+          onNotificationClick={handleNotification}
+          onProfileClick={handleProfile}
+        />
+        {(isCustomerOrSupplier || isVehicle || isDriver) && (
+          <View style={styles.darkBlockTabRow}>{detailTabsContent}</View>
+        )}
+        {(isCustomerOrSupplier || isVehicle) && (
+          <View style={styles.darkBlockSummaryRow}>
+            <View style={styles.darkBlockSummaryCell}>
+              <View style={styles.darkBlockSummaryLabelRow}>
+                <SummaryPulseIcon
+                  name="arrow-circle-up"
+                  size={14}
+                  color={Theme.darkGreen}
+                  style={styles.darkBlockSummaryIcon}
+                />
+                <Text style={styles.darkBlockSummaryLabel}>
+                  {headerSummary.labelIn}
+                </Text>
+              </View>
+              <Text
+                style={[
+                  styles.darkBlockSummaryAmount,
+                  styles.darkBlockSummaryAmountIn,
+                ]}
+              >
+                {formatINR(headerSummary.valueIn)}
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.darkBlockSummaryCell,
+                styles.darkBlockSummaryCellRight,
+                styles.darkBlockSummaryCellBorder,
+              ]}
+            >
+              <View style={styles.darkBlockSummaryLabelRowRight}>
+                <Text style={styles.darkBlockSummaryLabel}>
+                  {headerSummary.labelOut}
+                </Text>
+                <SummaryPulseIcon
+                  name="arrow-circle-down"
+                  size={14}
+                  color={Theme.teslaRed}
+                  style={styles.darkBlockSummaryIcon}
+                />
+              </View>
+              <Text
+                style={[
+                  styles.darkBlockSummaryAmount,
+                  styles.darkBlockSummaryAmountOut,
+                ]}
+              >
+                {formatINR(headerSummary.valueOut)}
+              </Text>
+            </View>
+          </View>
+        )}
+      </View>
+
+      {(isCustomerOrSupplier || isVehicle) && detailTab === "ledger" ? (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: 24 + insets.bottom },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.ledgerViewModeRow}>
+            <TouchableOpacity
+              style={[
+                styles.ledgerViewModePill,
+                entityLedgerViewMode === "table" && styles.ledgerViewModePillActive,
+              ]}
+              onPress={() => setEntityLedgerViewMode("table")}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.ledgerViewModePillText,
+                  entityLedgerViewMode === "table" && styles.ledgerViewModePillTextActive,
+                ]}
+              >
+                {t("tableView")}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.ledgerViewModePill,
+                entityLedgerViewMode === "transaction" && styles.ledgerViewModePillActive,
+              ]}
+              onPress={() => setEntityLedgerViewMode("transaction")}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.ledgerViewModePillText,
+                  entityLedgerViewMode === "transaction" && styles.ledgerViewModePillTextActive,
+                ]}
+              >
+                {t("transactionView")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {entityLedgerViewMode === "transaction" ? (
+            selectedEntityTransactions && selectedEntityTransactions.length > 0 ? (
+              <LedgerTransactionListView
+                transactions={selectedEntityTransactions}
+                highlightId={expandedEntityLedgerRowId}
+                showTitle={false}
+              />
+            ) : (
+              <View style={styles.ledgerEmptyRow}>
+                <Text style={styles.ledgerEmptyText} numberOfLines={3}>
+                  {t("noLedgerEntriesForEntity")}
+                </Text>
+              </View>
+            )
+          ) : (
+          <View style={styles.tableWrap}>
+            <View style={styles.ledgerTableHeaderWrap}>
+              <View style={styles.ledgerTableHeader}>
+                <Text
+                  style={[styles.ledgerTh, styles.ledgerThNode]}
+                  numberOfLines={1}
+                >
+                  PARTY
+                </Text>
+                <Text
+                  style={[
+                    styles.ledgerTh,
+                    styles.ledgerThMission,
+                    styles.ledgerThBorderLeft,
+                  ]}
+                  numberOfLines={1}
+                >
+                  TRIP
+                </Text>
+                <Text
+                  style={[
+                    styles.ledgerTh,
+                    styles.ledgerThCredit,
+                    styles.ledgerThBorderLeft,
+                  ]}
+                  numberOfLines={1}
+                >
+                  RECEIVED
+                </Text>
+                <Text
+                  style={[
+                    styles.ledgerTh,
+                    styles.ledgerThDebit,
+                    styles.ledgerThBorderLeft,
+                  ]}
+                  numberOfLines={1}
+                >
+                  PAID
+                </Text>
+                <View style={styles.ledgerThSpacer} />
+              </View>
+            </View>
+            <View style={styles.ledgerTableBodyWrap}>
+              {!selectedEntityTransactions ||
+              selectedEntityTransactions.length === 0 ? (
+                <View style={styles.ledgerEmptyRow}>
+                  <Text style={styles.ledgerEmptyText} numberOfLines={3}>
+                    {t("noLedgerEntriesForEntity")}
+                  </Text>
+                </View>
+              ) : (
+                selectedEntityTransactions.map((tx) => {
+                  const desc = tx.description ?? "";
+                  const categoryLabel = ALL_LEDGER_CATEGORY_VALUES.includes(
+                    desc,
+                  )
+                    ? desc
+                    : "GENERAL";
+                  const isDriverPayment =
+                    tx.contact_type === "driver" ||
+                    (tx.driver_name ?? "").trim() !== "";
+                  const isClientOrSupplier =
+                    tx.contact_type === "client" ||
+                    tx.contact_type === "supplier";
+                  const vehicleNum = tx.vehicle_number ?? null;
+                  // Party column: show person name for client/supplier/driver; show vehicle only for vehicle expense (no contact).
+                  const entityName = isDriverPayment
+                    ? tx.driver_name || tx.party_name || "—"
+                    : isClientOrSupplier
+                      ? tx.party_name || "—"
+                      : vehicleNum
+                        ? vehicleNum
+                        : (tx.party_name ?? "—");
+                  const tripDisplay = (tx.trip_number ?? "").trim() || null;
+                  const entryDateStr = formatLedgerDate(
+                    tx.transaction_date ?? tx.created_at ?? "",
+                  );
+                  const restSublineDriver =
+                    isDriverPayment && tripDisplay
+                      ? `${tripDisplay} · ${categoryLabel}`
+                      : (tx.description ?? "");
+                  const restSublineTrip =
+                    tripDisplay != null
+                      ? `${tripDisplay} · ${tx.description || categoryLabel}`
+                      : (tx.description ?? "");
+                  const sublineForDriver =
+                    entryDateStr === "—"
+                      ? restSublineDriver
+                      : restSublineDriver
+                        ? `${entryDateStr} · ${restSublineDriver}`
+                        : entryDateStr;
+                  const sublineWithTrip =
+                    entryDateStr === "—"
+                      ? restSublineTrip
+                      : restSublineTrip
+                        ? `${entryDateStr} · ${restSublineTrip}`
+                        : entryDateStr;
+                  const tripDetail =
+                    tx.trip_id != null && ledgerTripDetailsMap[tx.trip_id]
+                      ? ledgerTripDetailsMap[tx.trip_id]
+                      : null;
+                  const sameTrip =
+                    tx.trip_id != null
+                      ? selectedEntityTransactions.filter(
+                          (r) => r.trip_id != null && r.trip_id === tx.trip_id,
+                        )
+                      : [];
+                  const tripPaymentSummary =
+                    sameTrip.length > 0
+                      ? {
+                          received: sameTrip.reduce(
+                            (s, r) => s + (r.amount_in ?? 0),
+                            0,
+                          ),
+                          paid: sameTrip.reduce(
+                            (s, r) => s + (r.amount_out ?? 0),
+                            0,
+                          ),
+                          entryCount: sameTrip.length,
+                        }
+                      : undefined;
+                  const sameTripTransactions =
+                    sameTrip.length > 0
+                      ? sameTrip.map((r) => {
+                          const isDr =
+                            r.contact_type === "driver" ||
+                            (r.driver_name ?? "").trim() !== "";
+                          const isCS =
+                            r.contact_type === "client" ||
+                            r.contact_type === "supplier";
+                          const party = isDr
+                            ? r.driver_name || r.party_name || "—"
+                            : isCS
+                              ? r.party_name || "—"
+                              : r.vehicle_number
+                                ? r.vehicle_number
+                                : (r.party_name ?? "—");
+                          return {
+                            id: r.id,
+                            date: formatLedgerDate(
+                              r.transaction_date ?? r.created_at ?? "",
+                            ),
+                            typeLabel: getDoubleEntryDisplayLabel(r) ?? "—",
+                            in: r.amount_in ?? 0,
+                            out: r.amount_out ?? 0,
+                            party,
+                          };
+                        })
+                      : undefined;
+                  const ledgerPartyType =
+                    tx.contact_type === "client"
+                      ? "client"
+                      : tx.contact_type === "supplier"
+                        ? "supplier"
+                        : tx.contact_type === "driver"
+                          ? "driver"
+                          : "vehicle";
+                  const data: FinancialRowData = {
+                    id: tx.id,
+                    name: entityName,
+                    subline: isDriverPayment
+                      ? sublineForDriver
+                      : sublineWithTrip,
+                    category: categoryLabel,
+                    desc: tx.description,
+                    tripId: tx.trip_id ?? null,
+                    msn:
+                      (tx.trip_number ?? "").trim() ||
+                      (tx.trip_id ? "Trip" : "General"),
+                    tripDetail: tripDetail ?? undefined,
+                    vehicleNumber: isDriverPayment ? null : vehicleNum,
+                    driverName: tx.driver_name ?? undefined,
+                    ledgerPartyType,
+                    in: tx.amount_in ?? 0,
+                    out: tx.amount_out ?? 0,
+                    transaction_date: tx.transaction_date,
+                    transactionTypeLabel:
+                      getDoubleEntryDisplayLabel(tx) ?? undefined,
+                    tripPaymentSummary: tripPaymentSummary ?? undefined,
+                    sameTripTransactions: sameTripTransactions ?? undefined,
+                  };
+                  return <FinancialRow key={tx.id} type="ledger" data={data} />;
+                })
+              )}
+            </View>
+          </View>
+          )}
+        </ScrollView>
+      ) : isCustomerOrSupplier && detailTab === "shared_ledger" ? (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingBottom: 24 + 40 + (insets?.bottom ?? 0),
+            },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          <EntityCompareVerifyView
+            entity={{
+              id: entity.id,
+              name: entity.name ?? "—",
+              linked_organization_id:
+                entity.linked_organization_id ?? undefined,
+            }}
+            entityType={entityType}
+            trips={trips}
+            transactions={transactions}
+            organizationId={organizationId ?? null}
+            integrated={entity.is_integrated ?? false}
+            onRefresh={onRefresh}
+            viewAsPartner={false}
+            embeddedInOverlay
+          />
+        </ScrollView>
+      ) : isDriver && driverDetailTab === "profile" ? (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: 24 + insets.bottom },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          {driverSalaryRequests.length > 0 && (
+            <View style={styles.driverRequestCardsWrap}>
+              {driverSalaryRequests.map((req) => {
+                const typeLabel = getSalaryRequestTypeLabel(
+                  req.request_type ?? "",
+                );
+                const dateStr = req.created_at
+                  ? formatLedgerDate(req.created_at)
+                  : "";
+                const metaLine = dateStr
+                  ? `${typeLabel} · ${dateStr}`
+                  : typeLabel;
+                return (
+                  <View key={req.id} style={styles.driverRequestCard}>
+                    <View style={styles.driverRequestCardInner}>
+                      <View style={styles.driverRequestIconWrap}>
+                        <FontAwesome
+                          name="info-circle"
+                          size={20}
+                          color={Theme.primary}
+                        />
+                      </View>
+                      <View style={styles.driverRequestCardBody}>
+                        <Text style={styles.driverRequestCardLabel}>
+                          DRIVER REQUEST
+                        </Text>
+                        <Text style={styles.driverRequestCardAmount}>
+                          Needs {formatINR(Number(req.amount))}
+                        </Text>
+                        <Text
+                          style={styles.driverRequestCardReason}
+                          numberOfLines={1}
+                        >
+                          {metaLine}
+                        </Text>
+                        {req.note?.trim() ? (
+                          <Text
+                            style={[
+                              styles.driverRequestCardReason,
+                              { marginTop: 2 },
+                            ]}
+                            numberOfLines={2}
+                          >
+                            {req.note.trim()}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+                    <View style={styles.driverRequestCardActions}>
+                      <TouchableOpacity
+                        style={[
+                          styles.driverRequestBtn,
+                          styles.driverRequestBtnPay,
+                        ]}
+                        onPress={() => onPayDriverRequest?.(req)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.driverRequestBtnPayText}>
+                          Pay Now
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.driverRequestBtn,
+                          styles.driverRequestBtnReject,
+                        ]}
+                        onPress={() => onRejectDriverRequest?.(req.id)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.driverRequestBtnRejectText}>
+                          Reject
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+          {driverProfile ? (
+            <>
+              <View style={styles.driverMetricsGrid}>
+                <View style={styles.driverMetricCard}>
+                  <FontAwesome
+                    name="shield"
+                    size={16}
+                    color={
+                      driverProfile.status === "online" ||
+                      driverProfile.status === "on_trip"
+                        ? Theme.darkGreen
+                        : Theme.textMuted
+                    }
+                    style={styles.driverMetricIcon}
+                  />
+                  <Text style={styles.driverMetricLabel}>STATUS</Text>
+                  <Text
+                    style={[
+                      styles.driverMetricValue,
+                      (driverProfile.status === "online" ||
+                        driverProfile.status === "on_trip") &&
+                        styles.driverMetricValueActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {driverProfile.status === "on_trip"
+                      ? "On trip"
+                      : driverProfile.status === "online"
+                        ? "Online"
+                        : driverProfile.left_at
+                          ? "Disconnected"
+                          : "Offline"}
+                  </Text>
+                </View>
+                <View style={styles.driverMetricCard}>
+                  <FontAwesome
+                    name="clock-o"
+                    size={16}
+                    color={Theme.primary}
+                    style={styles.driverMetricIcon}
+                  />
+                  <Text style={styles.driverMetricLabel}>JOINED</Text>
+                  <Text style={styles.driverMetricValue} numberOfLines={1}>
+                    {driverProfile.created_at
+                      ? formatRelative(driverProfile.created_at)
+                      : "—"}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.driverContactCard}>
+                <View style={styles.driverContactRow}>
+                  <View style={styles.driverContactIconWrap}>
+                    <FontAwesome name="phone" size={14} color={Theme.primary} />
+                  </View>
+                  <View style={styles.driverContactTextWrap}>
+                    <Text style={styles.driverContactLabel}>PHONE NUMBER</Text>
+                    <Text style={styles.driverContactValue}>
+                      {driverProfile.phone ?? "—"}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.driverContactDivider} />
+                <View style={styles.driverContactRow}>
+                  <View
+                    style={[
+                      styles.driverContactIconWrap,
+                      styles.driverContactIconWrapPurple,
+                    ]}
+                  >
+                    <FontAwesome
+                      name="envelope"
+                      size={14}
+                      color={Theme.primary}
+                    />
+                  </View>
+                  <View style={styles.driverContactTextWrap}>
+                    <Text style={styles.driverContactLabel}>EMAIL ADDRESS</Text>
+                    <Text style={styles.driverContactValue}>
+                      {driverProfile.email ?? "—"}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              {vehicles.length > 0 && onAssignVehicle && (
+                <View style={styles.driverContactCard}>
+                  <View style={styles.driverContactRow}>
+                    <View
+                      style={[
+                        styles.driverContactIconWrap,
+                        styles.driverContactIconWrapPurple,
+                      ]}
+                    >
+                      <FontAwesome
+                        name="truck"
+                        size={14}
+                        color={Theme.primary}
+                      />
+                    </View>
+                    <View style={styles.driverContactTextWrap}>
+                      <Text style={styles.driverContactLabel}>
+                        ASSIGNED VEHICLE
+                      </Text>
+                      <Text style={styles.driverContactValue}>
+                        {assignedVehicle
+                          ? formatIndianVehicleNumber(assignedVehicle.vehicle_number)
+                          : assignedVehicleDisplayFromTrips ?? "—"}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.driverAssignVehicleBtn}
+                      onPress={() => setShowVehiclePicker(true)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.driverAssignVehicleBtnText}>
+                        {assignedVehicle || assignedVehicleDisplayFromTrips
+                          ? "Reassign"
+                          : "Assign"}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+              <View style={styles.driverCompensationCard}>
+                <View style={styles.driverCompensationHeader}>
+                  <FontAwesome
+                    name="money"
+                    size={14}
+                    color={Theme.primary}
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={styles.driverCompensationHeaderText}>
+                    COMPENSATION TERMS
+                  </Text>
+                </View>
+                <View style={styles.driverCompensationBody}>
+                  <View style={styles.driverCompensationRow}>
+                    <Text style={styles.driverCompensationLabel}>
+                      Base Salary (Payable)
+                    </Text>
+                    <Text style={styles.driverCompensationValue}>
+                      {driverOffer?.payableAmount != null &&
+                      Number(driverOffer.payableAmount) > 0
+                        ? `${formatINR(Number(driverOffer.payableAmount))} / mo`
+                        : "—"}
+                    </Text>
+                  </View>
+                  <View style={styles.driverCompensationDivider} />
+                  <View style={styles.driverCompensationRow}>
+                    <Text style={styles.driverCompensationLabel}>
+                      Trip Commission
+                    </Text>
+                    <Text style={styles.driverCompensationValue}>
+                      {driverOffer?.commissionPercent != null &&
+                      Number(driverOffer.commissionPercent) > 0
+                        ? `${driverOffer.commissionPercent}%`
+                        : "—"}
+                    </Text>
+                  </View>
+                  <View style={styles.driverCompensationDivider} />
+                  <View style={styles.driverCompensationRow}>
+                    <Text style={styles.driverCompensationLabel}>
+                      Per-KM Rate
+                    </Text>
+                    <Text style={styles.driverCompensationValue}>
+                      {driverOffer?.commissionPerKm != null &&
+                      Number(driverOffer.commissionPerKm) > 0
+                        ? `₹${driverOffer.commissionPerKm} / km`
+                        : "—"}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              {driverRatings.length > 0 && (
+                <View style={styles.driverRatingsSection}>
+                  <Text style={styles.driverRatingsSectionTitle}>
+                    RECENT RATINGS
+                  </Text>
+                  {driverRatings.slice(0, 5).map((r) => (
+                    <View key={r.id} style={styles.driverRatingRow}>
+                      <View style={styles.driverRatingIconWrap}>
+                        <FontAwesome
+                          name="star"
+                          size={14}
+                          color={Theme.driverGold}
+                        />
+                      </View>
+                      <View style={styles.driverRatingBody}>
+                        <Text style={styles.driverRatingScore}>
+                          {r.score.toFixed(1)}{" "}
+                          <Text style={styles.driverRatingScoreMax}>/ 5.0</Text>
+                        </Text>
+                        <Text style={styles.driverRatingDate}>
+                          {r.created_at ? formatRelative(r.created_at) : ""}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </>
+          ) : isDriver ? (
+            <View style={styles.driverContactCard}>
+              <View style={styles.driverMetricsGrid}>
+                <View style={styles.driverMetricCard}>
+                  <FontAwesome
+                    name="shield"
+                    size={16}
+                    color={Theme.textMuted}
+                    style={styles.driverMetricIcon}
+                  />
+                  <Text style={styles.driverMetricLabel}>STATUS</Text>
+                  <Text style={styles.driverMetricValue} numberOfLines={1}>
+                    {entity.status === "ACTIVE"
+                      ? "Online"
+                      : entity.status === "DISCONNECTED" || entity.left_at
+                        ? "Disconnected"
+                        : entity.status ?? "Offline"}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.driverContactLabel}>
+                {entity.name ?? entity.id ?? "—"}
+              </Text>
+              <Text style={[styles.driverContactValue, { marginTop: 4 }]}>
+                Phone and email are shown when the driver profile is loaded. Use Ledger and Statement tabs for payments and trips.
+              </Text>
+            </View>
+          ) : null}
+        </ScrollView>
+      ) : isDriver && driverDetailTab === "ledger" ? (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: 24 + insets.bottom },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.tableWrap}>
+            {rows.length > 0 ? (
+              <View style={styles.ledgerSummaryRow}>
+                <View style={styles.ledgerSummaryCell}>
+                  <Text style={styles.ledgerSummaryLabel}>TOTAL EARNED</Text>
+                  <Text style={styles.ledgerSummaryAmount}>
+                    {formatINR(
+                      rows.reduce((s, r) => s + Number(r.col1 ?? 0), 0),
+                    )}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.ledgerSummaryCell,
+                    styles.ledgerSummaryCellBorder,
+                  ]}
+                >
+                  <Text style={styles.ledgerSummaryLabel}>
+                    {t("totalPaid")}
+                  </Text>
+                  <Text
+                    style={[styles.ledgerSummaryAmount, styles.ledgerSummaryIn]}
+                  >
+                    {formatINR(
+                      rows.reduce((s, r) => s + Number(r.col2 ?? 0), 0),
+                    )}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.ledgerSummaryCell,
+                    styles.ledgerSummaryCellBorder,
+                  ]}
+                >
+                  <Text style={styles.ledgerSummaryLabel}>{t("toPay")}</Text>
+                  <Text
+                    style={[
+                      styles.ledgerSummaryAmount,
+                      styles.ledgerSummaryOut,
+                    ]}
+                  >
+                    {formatINR(
+                      rows.reduce((s, r) => s + Number(r.col3 ?? 0), 0),
+                    )}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+            <View style={styles.ledgerTableHeaderWrap}>
+              <View style={styles.ledgerTableHeader}>
+                <Text
+                  style={[styles.ledgerTh, styles.driverLedgerThColRouteDate]}
+                  numberOfLines={1}
+                >
+                  TRIP
+                </Text>
+                <Text
+                  style={[
+                    styles.ledgerTh,
+                    styles.driverLedgerThCol,
+                    styles.driverLedgerThColRight,
+                    styles.ledgerThBorderLeft,
+                  ]}
+                  numberOfLines={1}
+                >
+                  EARNED
+                </Text>
+                <Text
+                  style={[
+                    styles.ledgerTh,
+                    styles.driverLedgerThCol,
+                    styles.driverLedgerThColRight,
+                    styles.ledgerThBorderLeft,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {t("paid")}
+                </Text>
+                <Text
+                  style={[
+                    styles.ledgerTh,
+                    styles.driverLedgerThCol,
+                    styles.driverLedgerThColRight,
+                    styles.ledgerThBorderLeft,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {t("toPay")}
+                </Text>
+                <View style={styles.ledgerThSpacer} />
+              </View>
+            </View>
+            <View style={styles.ledgerTableBodyWrap}>
+              {rows.length === 0 ? (
+                <View style={styles.ledgerEmptyRow}>
+                  <Text style={styles.ledgerEmptyText} numberOfLines={3}>
+                    {t("noLedgerEntriesDriver")}
+                  </Text>
+                </View>
+              ) : (
+                rows.map((r) => {
+                  const rowWithDate = r as {
+                    tripDate?: string;
+                    tripDateIso?: string;
+                    agingLabel?: string;
+                  };
+                  const category =
+                    r.id === "ledger-adjustment" || (r.missionId ?? "") === "—"
+                      ? "GENERAL"
+                      : "TRIP";
+                  const expanded = expandedDriverLedgerRowId === r.id;
+                  return (
+                    <View key={r.id} style={styles.ledgerRowWrapper}>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.tableRow,
+                          pressed && styles.ledgerRowPressed,
+                        ]}
+                        onPress={() =>
+                          setExpandedDriverLedgerRowId((id) =>
+                            id === r.id ? null : r.id,
+                          )
+                        }
+                        android_ripple={undefined}
+                      >
+                        <View
+                          style={[
+                            styles.driverLedgerTdColRouteDate,
+                            styles.driverLedgerTdColRouteDateContent,
+                          ]}
+                        >
+                          <Text style={styles.tdMissionId} numberOfLines={1}>
+                            {r.missionId ?? "—"}
+                          </Text>
+                          <Text
+                            style={styles.ledgerCellSubCategory}
+                            numberOfLines={1}
+                          >
+                            {category}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.ledgerRouteText,
+                              styles.ledgerRouteTextBlock,
+                            ]}
+                            numberOfLines={2}
+                          >
+                            {r.dest?.trim() || "—"}
+                          </Text>
+                          <Text
+                            style={styles.ledgerCellSubDate}
+                            numberOfLines={1}
+                          >
+                            {formatLedgerDateTime(rowWithDate.tripDateIso) ||
+                              "—"}
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.driverLedgerTdColAmount,
+                            styles.ledgerTdBorderLeft,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.td,
+                              (r.col1 ?? 0) > 0
+                                ? styles.tdDark
+                                : styles.tdMuted,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {(r.col1 ?? 0) > 0
+                              ? formatLedgerAmount(r.col1)
+                              : "—"}
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.driverLedgerTdColAmount,
+                            styles.ledgerTdBorderLeft,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.td,
+                              (r.col2 ?? 0) > 0
+                                ? styles.tdGreen
+                                : styles.tdMuted,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {(r.col2 ?? 0) > 0
+                              ? formatLedgerAmount(r.col2)
+                              : "—"}
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.driverLedgerTdColAmount,
+                            styles.ledgerTdBorderLeft,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.td,
+                              (r.col3 ?? 0) > 0 ? styles.tdRed : styles.tdMuted,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {(r.col3 ?? 0) > 0
+                              ? formatLedgerAmount(r.col3)
+                              : "—"}
+                          </Text>
+                        </View>
+                        <View style={styles.ledgerRowActionHint}>
+                          <FontAwesome
+                            name={expanded ? "chevron-down" : "chevron-right"}
+                            size={10}
+                            color={Theme.textMutedDemo}
+                          />
+                        </View>
+                      </Pressable>
+                      {expanded ? (
+                        <View style={styles.ledgerExpandedDetail}>
+                          <View style={styles.ledgerExpandedBlock}>
+                            <Text style={styles.ledgerExpandedBlockTitle}>
+                              TRIP
+                            </Text>
+                            <View style={styles.ledgerExpandedBlockContent}>
+                              <View style={[styles.ledgerExpandedRowDouble, rowWithDate.agingLabel ? undefined : styles.ledgerExpandedRowLast]}>
+                                <View style={styles.ledgerExpandedHalf}>
+                                  <Text style={styles.ledgerExpandedLabelSmall}>
+                                    Mission
+                                  </Text>
+                                  <Text
+                                    style={styles.ledgerExpandedValue}
+                                    numberOfLines={1}
+                                  >
+                                    {r.missionId ?? "—"}
+                                  </Text>
+                                </View>
+                                <View style={[styles.ledgerExpandedHalf, !rowWithDate.agingLabel && styles.ledgerExpandedHalfLast]}>
+                                  <Text style={styles.ledgerExpandedLabelSmall}>
+                                    Date
+                                  </Text>
+                                  <Text style={styles.ledgerExpandedValue}>
+                                    {formatLedgerDateTime(
+                                      rowWithDate.tripDateIso,
+                                    ) || "—"}
+                                  </Text>
+                                </View>
+                              </View>
+                              <View style={[styles.ledgerExpandedRow, !rowWithDate.agingLabel && styles.ledgerExpandedRowLast]}>
+                                <Text style={styles.ledgerExpandedLabelSmall}>
+                                  Route
+                                </Text>
+                                <Text
+                                  style={styles.ledgerExpandedValue}
+                                  numberOfLines={2}
+                                >
+                                  {r.dest?.trim() || "—"}
+                                </Text>
+                              </View>
+                              {rowWithDate.agingLabel ? (
+                                <View style={[styles.ledgerExpandedRow, styles.ledgerExpandedRowLast]}>
+                                  <Text style={styles.ledgerExpandedLabelSmall}>
+                                    Aging
+                                  </Text>
+                                  <Text style={styles.ledgerExpandedValue}>
+                                    {rowWithDate.agingLabel}
+                                  </Text>
+                                </View>
+                              ) : null}
+                            </View>
+                          </View>
+                          <View style={styles.ledgerExpandedBlock}>
+                            <Text style={styles.ledgerExpandedBlockTitle}>
+                              PAYMENT
+                            </Text>
+                            <View style={styles.ledgerExpandedBlockContent}>
+                              <View style={styles.ledgerExpandedPaymentDark}>
+                                <View style={styles.ledgerExpandedRowTriple}>
+                                  <View style={styles.ledgerExpandedTripleCell}>
+                                    <Text style={styles.ledgerExpandedLabelOnDark}>
+                                      Earned
+                                    </Text>
+                                    <Text
+                                      style={styles.ledgerExpandedValueOnDark}
+                                      numberOfLines={1}
+                                    >
+                                      {(r.col1 ?? 0) > 0 ? formatINR(r.col1) : "—"}
+                                    </Text>
+                                  </View>
+                                  <View
+                                    style={[
+                                      styles.ledgerExpandedTripleCell,
+                                      styles.ledgerExpandedTripleCellAmount,
+                                    ]}
+                                  >
+                                    <Text style={styles.ledgerExpandedLabelOnDark}>
+                                      Paid
+                                    </Text>
+                                    <Text
+                                      style={[
+                                        styles.ledgerExpandedValueOnDark,
+                                        (r.col2 ?? 0) > 0 &&
+                                          styles.ledgerExpandedValueOnDarkGreen,
+                                      ]}
+                                      numberOfLines={1}
+                                    >
+                                      {(r.col2 ?? 0) > 0 ? formatINR(r.col2) : "—"}
+                                    </Text>
+                                  </View>
+                                  <View
+                                    style={[
+                                      styles.ledgerExpandedTripleCell,
+                                      styles.ledgerExpandedTripleCellAmount,
+                                    ]}
+                                  >
+                                    <Text style={styles.ledgerExpandedLabelOnDark}>
+                                      To pay
+                                    </Text>
+                                    <Text
+                                      style={[
+                                        styles.ledgerExpandedValueOnDark,
+                                        (r.col3 ?? 0) > 0 &&
+                                          styles.ledgerExpandedValueOnDarkRed,
+                                      ]}
+                                      numberOfLines={1}
+                                    >
+                                      {(r.col3 ?? 0) > 0 ? formatINR(r.col3) : "—"}
+                                    </Text>
+                                  </View>
+                                </View>
+                              </View>
+                            </View>
+                          </View>
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          </View>
+        </ScrollView>
+      ) : isDriver && driverDetailTab === "statement" ? (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: 24 + insets.bottom },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.cardWrap}>
+            <TreasurySummaryCard
+              fullWidth
+              totalIn={amountIn}
+              totalOut={amountOut}
+              labelIn={labels.in}
+              labelOut={labels.out}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              searchPlaceholder="Search month…"
+              onReportPress={handleReportPress}
+            />
+          </View>
+          <View style={styles.tableWrap}>
+            <Text style={styles.sectionTitle}>
+              {t("monthlySalaryStatement")}
+            </Text>
+            <View style={styles.table}>
+              <View style={styles.tableHeader}>
+                <Text style={[styles.th, styles.thMonth]} numberOfLines={1}>
+                  {t("month").toUpperCase()}
+                </Text>
+                <Text style={[styles.th, styles.thCol]} numberOfLines={1}>
+                  {t("salaryShort")}
+                </Text>
+                <Text style={[styles.th, styles.thCol]} numberOfLines={1}>
+                  {t("commShort")}
+                </Text>
+                <Text style={[styles.th, styles.thColLast]} numberOfLines={1}>
+                  {t("paid")}
+                </Text>
+              </View>
+              {monthlyRowsReversed.length === 0 ? (
+                <View style={styles.tableRow}>
+                  <Text style={[styles.td, styles.tdMission]} numberOfLines={1}>
+                    {t("noStatementDataYet")}
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  {monthlyRowsReversed.map((row) => {
+                    const isExpanded = expandedMonthKey === row.monthKey;
+                    const detail =
+                      monthlyStatement?.detailsByMonth[row.monthKey];
+                    return (
+                      <View key={row.monthKey}>
+                        <TouchableOpacity
+                          style={[
+                            styles.tableRow,
+                            isExpanded && styles.tableRowExpanded,
+                          ]}
+                          onPress={() =>
+                            setExpandedMonthKey((k) =>
+                              k === row.monthKey ? null : row.monthKey,
+                            )
+                          }
+                          activeOpacity={0.8}
+                        >
+                          <View style={styles.tdMonth}>
+                            <Text style={styles.tdMissionId} numberOfLines={1}>
+                              {row.label}
+                            </Text>
+                            <Text style={styles.tdDest} numberOfLines={1}>
+                              {row.tripCount} trips, {row.ledgerEntryCount}{" "}
+                              payments
+                            </Text>
+                          </View>
+                          <View style={styles.tdCol}>
+                            <Text
+                              style={[
+                                styles.td,
+                                row.fixedSalary > 0
+                                  ? styles.tdDark
+                                  : styles.tdMuted,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {row.fixedSalary > 0
+                                ? formatINR(row.fixedSalary)
+                                : "₹0"}
+                            </Text>
+                          </View>
+                          <View style={styles.tdCol}>
+                            <Text
+                              style={[
+                                styles.td,
+                                row.tripCommission > 0
+                                  ? styles.tdDark
+                                  : styles.tdMuted,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {row.tripCommission > 0
+                                ? formatINR(row.tripCommission)
+                                : "₹0"}
+                            </Text>
+                          </View>
+                          <View style={styles.tdColLast}>
+                            <Text
+                              style={[
+                                styles.td,
+                                row.paidTotal > 0
+                                  ? styles.tdGreen
+                                  : styles.tdMuted,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {row.paidTotal > 0
+                                ? formatINR(row.paidTotal)
+                                : "₹0"}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.tdBalance,
+                                row.balanceAfter === 0
+                                  ? styles.tdGreen
+                                  : styles.tdRed,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {formatINR(row.balanceAfter)}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                        {isExpanded && detail && (
+                          <View style={styles.monthDetailWrap}>
+                            <View style={styles.monthDetailSectionCard}>
+                            <Text style={styles.monthDetailDarkBarTitle}>
+                              Earnings & balance
+                            </Text>
+                            <View style={styles.monthDetailSectionContent}>
+                              <View style={styles.earningsSummaryRow}>
+                                <Text
+                                  style={styles.earningsSummaryLabel}
+                                  numberOfLines={1}
+                                >
+                                  Salary
+                                </Text>
+                                <Text
+                                  style={styles.earningsSummaryValue}
+                                  numberOfLines={1}
+                                >
+                                  {formatINR(row.fixedSalary)}
+                                </Text>
+                              </View>
+                              <View style={styles.earningsSummaryRow}>
+                                <Text
+                                  style={styles.earningsSummaryLabel}
+                                  numberOfLines={1}
+                                >
+                                  Trip-based commission
+                                </Text>
+                                <Text
+                                  style={styles.earningsSummaryValue}
+                                  numberOfLines={1}
+                                >
+                                  {formatINR(row.tripCommission)}
+                                </Text>
+                              </View>
+                              {row.otherEarnings > 0 && (
+                                <View style={styles.earningsSummaryRow}>
+                                  <Text
+                                    style={styles.earningsSummaryLabel}
+                                    numberOfLines={1}
+                                  >
+                                    Other earnings
+                                  </Text>
+                                  <Text
+                                    style={styles.earningsSummaryValue}
+                                    numberOfLines={1}
+                                  >
+                                    {formatINR(row.otherEarnings)}
+                                  </Text>
+                                </View>
+                              )}
+                              <View
+                                style={[
+                                  styles.earningsSummaryRow,
+                                  styles.earningsSummaryRowTotal,
+                                ]}
+                              >
+                                <Text
+                                  style={styles.earningsSummaryLabelBold}
+                                  numberOfLines={1}
+                                >
+                                  Total earnings (due)
+                                </Text>
+                                <Text
+                                  style={styles.earningsSummaryValueBold}
+                                  numberOfLines={1}
+                                >
+                                  {formatINR(row.totalEarnings)}
+                                </Text>
+                              </View>
+                              <View style={styles.earningsSummaryRow}>
+                                <Text
+                                  style={styles.earningsSummaryLabel}
+                                  numberOfLines={1}
+                                >
+                                  Paid
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.earningsSummaryValue,
+                                    styles.tdGreen,
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  {formatINR(row.paidTotal)}
+                                </Text>
+                              </View>
+                              <View
+                                style={[
+                                  styles.earningsSummaryRow,
+                                  styles.earningsSummaryRowBalance,
+                                ]}
+                              >
+                                <Text
+                                  style={styles.earningsSummaryLabelBold}
+                                  numberOfLines={1}
+                                >
+                                  Balance (still to pay)
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.earningsSummaryValueBold,
+                                    row.balanceAfter < 0 && styles.tdRed,
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  {formatINR(row.balanceAfter)}
+                                  {row.balanceAfter < 0
+                                    ? ` ${t("overpaymentAdvance")}`
+                                    : ""}
+                                </Text>
+                              </View>
+                            </View>
+                            </View>
+                            <View style={styles.monthDetailTripsBlock}>
+                              <Text style={styles.monthDetailDarkBarTitle}>
+                                {t("tripsCount")} ({detail.trips.length})
+                              </Text>
+                              <View style={styles.monthDetailSectionContent}>
+                              <View style={styles.monthDetailHeaderRow}>
+                                <Text
+                                  style={styles.monthDetailHeaderCell}
+                                  numberOfLines={1}
+                                >
+                                  TRIP ID
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.monthDetailHeaderCell,
+                                    styles.tdRight,
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  COMMISSION
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.monthDetailHeaderCell,
+                                    styles.tdRight,
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  PAID
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.monthDetailHeaderCell,
+                                    styles.tdRightLast,
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  DUE
+                                </Text>
+                              </View>
+                              {detail.trips.length === 0
+                                ? null
+                                : detail.trips.map((t) => (
+                                    <View
+                                      key={t.id}
+                                      style={styles.monthDetailRow}
+                                    >
+                                      <Text
+                                        style={styles.monthDetailCell}
+                                        numberOfLines={1}
+                                      >
+                                        {t.missionId}
+                                      </Text>
+                                      <Text
+                                        style={[
+                                          styles.monthDetailCell,
+                                          styles.tdRight,
+                                        ]}
+                                        numberOfLines={1}
+                                      >
+                                        {formatINR(t.commission)}
+                                      </Text>
+                                      <Text
+                                        style={[
+                                          styles.monthDetailCell,
+                                          styles.tdRight,
+                                          styles.tdGreen,
+                                        ]}
+                                        numberOfLines={1}
+                                      >
+                                        {formatINR(t.paid)}
+                                      </Text>
+                                      <Text
+                                        style={[
+                                          styles.monthDetailCell,
+                                          styles.tdRightLast,
+                                          styles.tdRed,
+                                        ]}
+                                        numberOfLines={1}
+                                      >
+                                        {formatINR(t.due)}
+                                      </Text>
+                                    </View>
+                                  ))}
+                              </View>
+                            </View>
+                            <View style={styles.monthDetailPaymentsBlock}>
+                              <Text style={styles.monthDetailDarkBarTitle}>
+                                Payments ({detail.ledgerEntries.length})
+                              </Text>
+                              <View style={styles.monthDetailSectionContent}>
+                              <View style={styles.monthDetailHeaderRow}>
+                                <Text
+                                  style={styles.monthDetailHeaderCellWide}
+                                  numberOfLines={1}
+                                >
+                                  DATE / TYPE
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.monthDetailHeaderCell,
+                                    styles.tdRightLast,
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  AMOUNT
+                                </Text>
+                              </View>
+                              {detail.ledgerEntries.length === 0 ? (
+                                <Text style={styles.monthDetailEmptyPayments}>
+                                  No general payments recorded
+                                </Text>
+                              ) : (
+                                detail.ledgerEntries.map((e) => (
+                                  <View
+                                    key={e.id}
+                                    style={styles.monthDetailRow}
+                                  >
+                                    <Text
+                                      style={styles.monthDetailCellWide}
+                                      numberOfLines={1}
+                                    >
+                                      {e.date} {e.type}
+                                    </Text>
+                                    <Text
+                                      style={[
+                                        styles.monthDetailCell,
+                                        styles.tdRightLast,
+                                      ]}
+                                      numberOfLines={1}
+                                    >
+                                      {formatINR(e.amount)}
+                                    </Text>
+                                  </View>
+                                ))
+                              )}
+                              </View>
+                            </View>
+                            {detail.trips.length === 0 &&
+                              detail.ledgerEntries.length === 0 && (
+                                <View style={styles.monthDetailSectionCard}>
+                                  <Text style={styles.monthDetailDarkBarTitle}>
+                                    No entries this month
+                                  </Text>
+                                </View>
+                              )}
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                </>
+              )}
+            </View>
+          </View>
+        </ScrollView>
+      ) : (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: insets.bottom },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          {isVehicle && drivers.length > 0 && onAssignDriver && (
+            <View style={styles.driverContactCard}>
+              <View style={styles.driverContactRow}>
+                <View
+                  style={[
+                    styles.driverContactIconWrap,
+                    styles.driverContactIconWrapPurple,
+                  ]}
+                >
+                  <FontAwesome
+                    name="user"
+                    size={14}
+                    color={Theme.primary}
+                  />
+                </View>
+                <View style={styles.driverContactTextWrap}>
+                  <Text style={styles.driverContactLabel}>
+                    ASSIGNED DRIVER
+                  </Text>
+                  <Text style={styles.driverContactValue}>
+                    {assignedDriverForVehicle?.name ?? "—"}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.driverAssignVehicleBtn}
+                  onPress={() => setShowDriverPicker(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.driverAssignVehicleBtnText}>
+                    {assignedDriverForVehicle ? "Change" : "Assign"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+          {/* Search + report only; summary is in the black header above. */}
+          <View style={styles.cardWrap}>
+            <TreasurySummaryCard
+              fullWidth
+              labelIn={undefined}
+              labelOut={undefined}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              searchPlaceholder="Search mission, destination…"
+              onReportPress={handleReportPress}
+            />
+          </View>
+          <>
+            {entityType === "CLIENT" && organizationId && (
+              <View style={styles.riskBadgeWrap}>
+                <ClientRiskBadge
+                  organizationId={organizationId}
+                  clientId={entity.id}
+                />
+              </View>
+            )}
+            {/* Entity table: Client = receivables, Supplier = payables, Vehicle = P&L, Driver = commission/salary */}
+            <View style={styles.tableWrap}>
+              <Text style={styles.sectionTitle}>
+                {isVehicle
+                  ? "TRIP P&L"
+                  : entityType === "CLIENT"
+                    ? "RECEIVABLES BY TRIP"
+                    : entityType === "SUPPLIER"
+                      ? "PAYABLES BY TRIP"
+                      : isDriver
+                        ? "COMMISSION BY TRIP"
+                        : "ENTITY LEDGER PROTOCOL"}
+              </Text>
+              {(entityType === "CLIENT" || entityType === "SUPPLIER") && (
+                <Text style={styles.sectionSubtitle} numberOfLines={2}>
+                  {entityType === "CLIENT"
+                    ? "From trip details: sale value (client billing), received, pending from client."
+                    : "From trip details: supplier cost, paid, amount due to pay."}
+                </Text>
+              )}
+              <View style={styles.table}>
+                <View style={styles.tableHeader}>
+                  <Text style={[styles.th, styles.thMission]} numberOfLines={1}>
+                    TRIP ID
+                  </Text>
+                  <Text style={[styles.th, styles.thRight]} numberOfLines={1}>
+                    {isVehicle ? "SALES" : colLabels[0]}
+                  </Text>
+                  <Text style={[styles.th, styles.thRight]} numberOfLines={1}>
+                    {isVehicle ? "EXPENSES" : colLabels[1]}
+                  </Text>
+                  <Text
+                    style={[styles.th, styles.thRightLast]}
+                    numberOfLines={1}
+                  >
+                    {isVehicle ? "PROFIT" : colLabels[2]}
+                  </Text>
+                  {(entityType === "CLIENT" || entityType === "SUPPLIER") && (
+                    <View style={styles.entityLedgerChevronTh} />
+                  )}
+                </View>
+                {rows.map((r) => {
+                  const rv = r as typeof r & {
+                    sales?: number;
+                    expense?: number;
+                    net?: number;
+                    margin?: number;
+                    clientName?: string;
+                    tripDate?: string;
+                    agingLabel?: string;
+                    route?: string;
+                  };
+                  const isVehicleRow =
+                    isVehicle &&
+                    rv.sales != null &&
+                    r.id !== "none" &&
+                    r.id !== "ledger-adjustment";
+                  const isExpandableTrip =
+                    r.id !== "none" && r.id !== "ledger-adjustment";
+                  const hasTripDetail =
+                    (rv.tripDate && rv.tripDate !== "—") ||
+                    (rv.agingLabel && rv.agingLabel !== "—");
+                  const isPartyLedger =
+                    entityType === "CLIENT" || entityType === "SUPPLIER";
+                  const isTripRow =
+                    isExpandableTrip &&
+                    typeof r.id === "string" &&
+                    !r.id.startsWith("adj-");
+                  const expanded =
+                    isPartyLedger && expandedEntityLedgerRowId === r.id;
+                  const tripForRow =
+                    isTripRow && trips.length > 0
+                      ? trips.find((t) => t.id === r.id)
+                      : null;
+                  const detailForRow =
+                    isTripRow && ledgerTripDetailsMap[r.id]
+                      ? ledgerTripDetailsMap[r.id]
+                      : null;
+                  const sameTripTx =
+                    isTripRow && selectedEntityTransactions
+                      ? selectedEntityTransactions.filter(
+                          (tx) => tx.trip_id === r.id,
+                        )
+                      : [];
+                  const RowWrapper =
+                    isPartyLedger && isExpandableTrip ? Pressable : TouchableOpacity;
+                  const rowPressProps =
+                    isPartyLedger && isExpandableTrip
+                      ? {
+                          onPress: () =>
+                            setExpandedEntityLedgerRowId((id) =>
+                              id === r.id ? null : r.id,
+                            ),
+                        }
+                      : {
+                          onPress: () => {
+                            if (isExpandableTrip) {
+                              router.push(`/trip/${r.id}` as const);
+                            }
+                          },
+                          activeOpacity: r.id === "none" ? 1 : 0.7,
+                          disabled: r.id === "none",
+                        };
+                  return (
+                    <View key={r.id}>
+                      <RowWrapper
+                        style={[
+                          styles.tableRow,
+                          isPartyLedger && expanded && styles.ledgerRowPressed,
+                        ]}
+                        {...rowPressProps}
+                      >
+                        <View style={styles.tdMission}>
+                          <Text style={styles.tdMissionId} numberOfLines={1}>
+                            {r.missionId}
+                          </Text>
+                          <Text style={styles.tdDest} numberOfLines={1}>
+                            {isVehicleRow ? (rv.clientName ?? r.dest) : r.dest}
+                          </Text>
+                          {hasTripDetail && (
+                            <Text style={styles.tdTripMeta} numberOfLines={2}>
+                              {[rv.tripDate, rv.agingLabel]
+                                .filter(Boolean)
+                                .join(" · ")}
+                              {rv.route ? ` · ${rv.route}` : ""}
+                            </Text>
+                          )}
+                        </View>
+                        <Text
+                          style={[styles.td, styles.tdRight]}
+                          numberOfLines={1}
+                        >
+                          {isVehicleRow
+                            ? formatINR(rv.sales ?? 0)
+                            : formatINR(r.col1)}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.td,
+                            styles.tdRight,
+                            isVehicleRow ? undefined : styles.tdGreen,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {isVehicleRow
+                            ? formatINR(rv.expense ?? 0)
+                            : formatINR(r.col2)}
+                        </Text>
+                        {isVehicleRow ? (
+                          <View style={[styles.tdRightLast, styles.tdNetWrap]}>
+                            <Text
+                              style={[
+                                styles.td,
+                                (rv.net ?? 0) > 0
+                                  ? styles.tdGreen
+                                  : (rv.net ?? 0) < 0
+                                    ? styles.tdRed
+                                    : undefined,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {formatINR(rv.net ?? 0)}
+                            </Text>
+                            {rv.margin != null &&
+                              (rv.margin !== 0 || (rv.net ?? 0) !== 0) && (
+                                <Text
+                                  style={[
+                                    styles.tdMargin,
+                                    rv.margin > 0
+                                      ? styles.tdGreen
+                                      : rv.margin < 0
+                                        ? styles.tdRed
+                                        : undefined,
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  {rv.margin > 0 ? "+" : ""}
+                                  {rv.margin.toFixed(0)}%
+                                </Text>
+                              )}
+                          </View>
+                        ) : (
+                          <Text
+                            style={[
+                              styles.td,
+                              styles.tdRightLast,
+                              styles.tdRed,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {formatINR(r.col3)}
+                          </Text>
+                        )}
+                        {isPartyLedger && (
+                          <View style={styles.entityLedgerChevronTd}>
+                            <FontAwesome
+                              name={expanded ? "chevron-down" : "chevron-right"}
+                              size={10}
+                              color={Theme.textMutedDemo}
+                            />
+                          </View>
+                        )}
+                      </RowWrapper>
+                      {isPartyLedger && expanded && isTripRow && tripForRow && (
+                        <View style={styles.ledgerExpandedDetail}>
+                          <View style={styles.ledgerExpandedBlock}>
+                            <Text style={styles.ledgerExpandedBlockTitle}>
+                              {t("associatedTrip")}
+                            </Text>
+                            <View style={styles.ledgerExpandedBlockContent}>
+                              <View
+                                style={[
+                                  styles.ledgerExpandedRowDouble,
+                                ]}
+                              >
+                                <View style={styles.ledgerExpandedHalf}>
+                                  <Text
+                                    style={styles.ledgerExpandedLabelSmall}
+                                  >
+                                    TRIP
+                                  </Text>
+                                  <Text
+                                    style={styles.ledgerExpandedValue}
+                                    numberOfLines={1}
+                                  >
+                                    {detailForRow?.trip_number ?? r.missionId ?? "—"}
+                                  </Text>
+                                </View>
+                                <View
+                                  style={[
+                                    styles.ledgerExpandedHalf,
+                                    styles.ledgerExpandedHalfLast,
+                                  ]}
+                                >
+                                  <Text
+                                    style={styles.ledgerExpandedLabelSmall}
+                                  >
+                                    {t("tripDate")}
+                                  </Text>
+                                  <Text
+                                    style={styles.ledgerExpandedValue}
+                                    numberOfLines={1}
+                                  >
+                                    {rv.tripDate ?? "—"}
+                                  </Text>
+                                </View>
+                              </View>
+                              <View
+                                style={[
+                                  styles.ledgerExpandedRowDouble,
+                                ]}
+                              >
+                                <View style={styles.ledgerExpandedHalf}>
+                                  <Text
+                                    style={styles.ledgerExpandedLabelSmall}
+                                  >
+                                    {t("route")}
+                                  </Text>
+                                  <Text
+                                    style={styles.ledgerExpandedValue}
+                                    numberOfLines={2}
+                                  >
+                                    {detailForRow?.pickup_area && detailForRow?.drop_location
+                                      ? `${detailForRow.pickup_area} → ${detailForRow.drop_location}`
+                                      : rv.route ?? "—"}
+                                  </Text>
+                                </View>
+                                <View
+                                  style={[
+                                    styles.ledgerExpandedHalf,
+                                    styles.ledgerExpandedHalfLast,
+                                  ]}
+                                >
+                                  <Text
+                                    style={styles.ledgerExpandedLabelSmall}
+                                  >
+                                    {t("client")}
+                                  </Text>
+                                  <Text
+                                    style={styles.ledgerExpandedValue}
+                                    numberOfLines={1}
+                                  >
+                                    {detailForRow?.client_name ?? rv.clientName ?? "—"}
+                                  </Text>
+                                </View>
+                              </View>
+                              {(() => {
+                                const clientPrice = Number(
+                                  tripForRow?.client_price ??
+                                    detailForRow?.client_price ??
+                                    0,
+                                );
+                                const costValue = Number(
+                                  tripForRow?.supplier_rate ??
+                                    detailForRow?.supplier_rate ??
+                                    0,
+                                );
+                                const isAggregate = isAggregateTrip(tripForRow);
+                                const marginValue = clientPrice - costValue;
+                                const marginPct =
+                                  clientPrice > 0
+                                    ? (marginValue / clientPrice) * 100
+                                    : 0;
+                                return (
+                                  <>
+                                    <View
+                                      style={[
+                                        styles.ledgerExpandedRowDouble,
+                                      ]}
+                                    >
+                                      <View style={styles.ledgerExpandedHalf}>
+                                        <Text
+                                          style={
+                                            styles.ledgerExpandedLabelSmall
+                                          }
+                                        >
+                                          {(t("saleValue") || t("totalBilling") || "Client price")}
+                                        </Text>
+                                        <Text
+                                          style={styles.ledgerExpandedValue}
+                                          numberOfLines={1}
+                                        >
+                                          {formatINR(clientPrice)}
+                                        </Text>
+                                      </View>
+                                      <View
+                                        style={[
+                                          styles.ledgerExpandedHalf,
+                                          styles.ledgerExpandedHalfLast,
+                                        ]}
+                                      >
+                                        <Text
+                                          style={
+                                            styles.ledgerExpandedLabelSmall
+                                          }
+                                        >
+                                          {isAggregate
+                                            ? t("supplierCost")
+                                            : (t("totalExpense") || "Total expense")}
+                                        </Text>
+                                        <Text
+                                          style={styles.ledgerExpandedValue}
+                                          numberOfLines={1}
+                                        >
+                                          {formatINR(costValue)}
+                                        </Text>
+                                      </View>
+                                    </View>
+                                    <View
+                                      style={[
+                                        styles.ledgerExpandedRowDouble,
+                                      ]}
+                                    >
+                                      <View style={styles.ledgerExpandedHalf}>
+                                        <Text
+                                          style={
+                                            styles.ledgerExpandedLabelSmall
+                                          }
+                                        >
+                                          {t("margin") ?? "Margin"}
+                                        </Text>
+                                        <Text
+                                          style={[
+                                            styles.ledgerExpandedValue,
+                                            marginValue > 0 && styles.ledgerExpandedValueGreen,
+                                            marginValue < 0 && styles.ledgerExpandedValueRed,
+                                          ]}
+                                          numberOfLines={1}
+                                        >
+                                          {formatINR(marginValue)}
+                                        </Text>
+                                      </View>
+                                      <View
+                                        style={[
+                                          styles.ledgerExpandedHalf,
+                                          styles.ledgerExpandedHalfLast,
+                                        ]}
+                                      >
+                                        <Text
+                                          style={
+                                            styles.ledgerExpandedLabelSmall
+                                          }
+                                        >
+                                          {t("margin") ?? "Margin"} %
+                                        </Text>
+                                        <Text
+                                          style={[
+                                            styles.ledgerExpandedValue,
+                                            marginPct > 0 && styles.ledgerExpandedValueGreen,
+                                            marginPct < 0 && styles.ledgerExpandedValueRed,
+                                          ]}
+                                          numberOfLines={1}
+                                        >
+                                          {marginPct > 0 ? "+" : ""}
+                                          {marginPct.toFixed(1)}%
+                                        </Text>
+                                      </View>
+                                    </View>
+                                  </>
+                                );
+                              })()}
+                              <View
+                                style={[
+                                  styles.ledgerExpandedRowDouble,
+                                  styles.ledgerExpandedRowDoubleLast,
+                                ]}
+                              >
+                                <View style={styles.ledgerExpandedHalf}>
+                                  <Text
+                                    style={styles.ledgerExpandedLabelSmall}
+                                  >
+                                    {t("truck")}
+                                  </Text>
+                                  <Text
+                                    style={styles.ledgerExpandedValue}
+                                    numberOfLines={1}
+                                  >
+                                    {tripForRow?.vehicle_display_number?.trim()
+                                      ? formatIndianVehicleNumber(
+                                          tripForRow.vehicle_display_number.trim(),
+                                        )
+                                      : "—"}
+                                  </Text>
+                                </View>
+                                <View
+                                  style={[
+                                    styles.ledgerExpandedHalf,
+                                    styles.ledgerExpandedHalfLast,
+                                  ]}
+                                >
+                                  <Text
+                                    style={styles.ledgerExpandedLabelSmall}
+                                  >
+                                    {t("driver")}
+                                  </Text>
+                                  <Text
+                                    style={styles.ledgerExpandedValue}
+                                    numberOfLines={1}
+                                  >
+                                    —
+                                  </Text>
+                                </View>
+                              </View>
+                            </View>
+                          </View>
+                          <View style={styles.ledgerExpandedBlock}>
+                            <View style={styles.ledgerExpandedPaymentDark}>
+                              <View style={styles.ledgerExpandedRowTriple}>
+                                <View style={styles.ledgerExpandedTripleCell}>
+                                  <Text
+                                    style={styles.ledgerExpandedLabelOnDark}
+                                    numberOfLines={1}
+                                  >
+                                    {entityType === "CLIENT"
+                                      ? (t("saleValue") || "Sale")
+                                      : t("supplierCost")}
+                                  </Text>
+                                  <Text
+                                    style={styles.ledgerExpandedValueOnDark}
+                                    numberOfLines={1}
+                                  >
+                                    {formatINR(r.col1 ?? 0)}
+                                  </Text>
+                                </View>
+                                <View
+                                  style={[
+                                    styles.ledgerExpandedTripleCell,
+                                    styles.ledgerExpandedTripleCellAmount,
+                                  ]}
+                                >
+                                  <Text
+                                    style={styles.ledgerExpandedLabelOnDark}
+                                    numberOfLines={1}
+                                  >
+                                    {entityType === "CLIENT"
+                                      ? t("received") || "Received"
+                                      : t("paid")}
+                                  </Text>
+                                  <Text
+                                    style={[
+                                      styles.ledgerExpandedValueOnDark,
+                                      entityType === "CLIENT"
+                                        ? styles.ledgerExpandedValueOnDarkGreen
+                                        : styles.ledgerExpandedValueOnDarkRed,
+                                    ]}
+                                    numberOfLines={1}
+                                  >
+                                    {formatINR(r.col2 ?? 0)}
+                                  </Text>
+                                </View>
+                                <View
+                                  style={[
+                                    styles.ledgerExpandedTripleCell,
+                                    styles.ledgerExpandedTripleCellAmount,
+                                  ]}
+                                >
+                                  <Text
+                                    style={styles.ledgerExpandedLabelOnDark}
+                                    numberOfLines={1}
+                                  >
+                                    {t("due")}
+                                  </Text>
+                                  <Text
+                                    style={[
+                                      styles.ledgerExpandedValueOnDark,
+                                      (r.col3 ?? 0) > 0 &&
+                                        styles.ledgerExpandedValueOnDarkRed,
+                                    ]}
+                                    numberOfLines={1}
+                                  >
+                                    {formatINR(r.col3 ?? 0)}
+                                  </Text>
+                                </View>
+                              </View>
+                            </View>
+                          </View>
+                          <Text
+                            style={styles.ledgerExpandedAssociatedLabel}
+                            numberOfLines={1}
+                          >
+                            {t("associatedTransactions")}
+                          </Text>
+                          {sameTripTx.length === 0 ? (
+                            <Text
+                              style={styles.ledgerExpandedAssociatedEmpty}
+                              numberOfLines={2}
+                            >
+                              {t("noAssociatedTransactions")}
+                            </Text>
+                          ) : (
+                            <View style={styles.ledgerExpandedTxHistoryWrap}>
+                              <Text style={styles.ledgerExpandedTxHistoryTitle}>
+                                {t("transactionHistory") || "Transaction history"}
+                              </Text>
+                              <View style={styles.ledgerExpandedTxHistoryList}>
+                                {sameTripTx.map((tx, idx) => {
+                                  const txDate = (tx.transaction_date ?? tx.created_at ?? "").slice(0, 10);
+                                  const dateStr = txDate ? formatLedgerDate(txDate) : "—";
+                                  const typeLabel = getDoubleEntryDisplayLabel(tx) ?? tx.description ?? tx.party_name ?? "—";
+                                  const party = (tx.party_name ?? entity.name ?? "—").trim() || "—";
+                                  const amtIn = Number(tx.amount_in ?? 0);
+                                  const amtOut = Number(tx.amount_out ?? 0);
+                                  const isIn = amtIn > 0;
+                                  const amount = isIn ? amtIn : amtOut;
+                                  const isLast = idx === sameTripTx.length - 1;
+                                  return (
+                                    <View
+                                      key={tx.id}
+                                      style={[
+                                        styles.ledgerExpandedTxHistoryRow,
+                                        isLast && styles.ledgerExpandedTxHistoryRowLast,
+                                      ]}
+                                    >
+                                      <View
+                                        style={[
+                                          styles.ledgerExpandedTxHistoryIconWrap,
+                                          isIn ? styles.ledgerExpandedTxHistoryIconIn : styles.ledgerExpandedTxHistoryIconOut,
+                                        ]}
+                                      >
+                                        <FontAwesome
+                                          name={isIn ? "chevron-down" : "chevron-up"}
+                                          size={8}
+                                          color={isIn ? Theme.darkGreen : Theme.teslaRed}
+                                        />
+                                      </View>
+                                      <View style={styles.ledgerExpandedTxHistoryBody}>
+                                        <Text style={styles.ledgerExpandedTxHistoryRowTitle} numberOfLines={1}>
+                                          {typeLabel}
+                                        </Text>
+                                        <Text style={styles.ledgerExpandedTxHistoryRowSubtitle} numberOfLines={1}>
+                                          {dateStr} · {party}
+                                        </Text>
+                                      </View>
+                                      <Text
+                                        style={[
+                                          styles.ledgerExpandedTxHistoryAmount,
+                                          isIn ? styles.ledgerExpandedTxHistoryAmountIn : styles.ledgerExpandedTxHistoryAmountOut,
+                                        ]}
+                                        numberOfLines={1}
+                                      >
+                                        {isIn ? "+" : "−"} ₹{formatLedgerAmount(amount)}
+                                      </Text>
+                                    </View>
+                                  );
+                                })}
+                              </View>
+                            </View>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          </>
+        </ScrollView>
+      )}
+
+      {onAddTransaction != null &&
+        !(isCustomerOrSupplier && detailTab === "shared_ledger") && (
+          <View
+            style={[
+              styles.entityFabWrap,
+              { bottom: Layout.fabBottomOffset + insets.bottom },
+            ]}
+          >
+            <FinanceFAB
+              onPress={onAddTransaction}
+              accessibilityLabel={t("addTransaction")}
+              icon="receipt-text"
+            />
+          </View>
+        )}
+
+      <LedgerReportModal
+        visible={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        transactions={protocolLedgerRows}
+        title={
+          entity.name ? `${t("ledgerFor")}${entity.name}` : t("ledgerReport")
+        }
+      />
+
+      {isDriver && (
+        <Modal
+          visible={showVehiclePicker}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowVehiclePicker(false)}
+        >
+          <TouchableOpacity
+            style={styles.vehiclePickerBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowVehiclePicker(false)}
+          >
+            <View style={styles.vehiclePickerSheet}>
+              <TouchableOpacity
+                activeOpacity={1}
+                onPress={(e) => e.stopPropagation()}
+              >
+                <Text style={styles.vehiclePickerTitle}>Assign vehicle</Text>
+                <FlatList
+                  data={[{ id: "__none__", vehicle_number: "— None —" }, ...vehicles]}
+                  keyExtractor={(item) => item.id}
+                  renderItem={({ item }) => {
+                    const isNone = item.id === "__none__";
+                    const alreadyAssigned =
+                      !isNone &&
+                      drivers.some(
+                        (d) => d.id !== entity.id && d.assigned_vehicle_id === item.id,
+                      );
+                    return (
+                      <TouchableOpacity
+                        style={[
+                          styles.vehiclePickerItem,
+                          alreadyAssigned && styles.vehiclePickerItemDisabled,
+                        ]}
+                        onPress={() => {
+                          if (alreadyAssigned) return;
+                          const driverName = entity.name ?? "this driver";
+                          if (isNone) {
+                            Alert.alert(
+                              "Unassign vehicle",
+                              `Remove vehicle assignment from ${driverName}?`,
+                              [
+                                { text: "Cancel", style: "cancel" },
+                                {
+                                  text: "Unassign",
+                                  onPress: () => {
+                                    onAssignVehicle?.(entity.id, null);
+                                    setShowVehiclePicker(false);
+                                  },
+                                },
+                              ],
+                            );
+                          } else {
+                            const vehicleLabel = formatIndianVehicleNumber(item.vehicle_number) || item.vehicle_number;
+                            Alert.alert(
+                              "Assign vehicle",
+                              `Assign vehicle ${vehicleLabel} to ${driverName}?`,
+                              [
+                                { text: "Cancel", style: "cancel" },
+                                {
+                                  text: "Assign",
+                                  onPress: () => {
+                                    onAssignVehicle?.(entity.id, item.id);
+                                    setShowVehiclePicker(false);
+                                  },
+                                },
+                              ],
+                            );
+                          }
+                        }}
+                        activeOpacity={alreadyAssigned ? 1 : 0.7}
+                        disabled={alreadyAssigned}
+                      >
+                        <Text
+                          style={[
+                            styles.vehiclePickerItemText,
+                            alreadyAssigned && styles.vehiclePickerItemTextAssigned,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {isNone ? "— None —" : formatIndianVehicleNumber(item.vehicle_number)}
+                        </Text>
+                        {alreadyAssigned && (
+                          <Text style={styles.vehiclePickerItemSubtext} numberOfLines={1}>
+                            Already assigned
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  }}
+                />
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
+
+      {isVehicle && (
+        <Modal
+          visible={showDriverPicker}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowDriverPicker(false)}
+        >
+          <TouchableOpacity
+            style={styles.vehiclePickerBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowDriverPicker(false)}
+          >
+            <View style={styles.vehiclePickerSheet}>
+              <TouchableOpacity
+                activeOpacity={1}
+                onPress={(e) => e.stopPropagation()}
+              >
+                <Text style={styles.vehiclePickerTitle}>Assign driver</Text>
+                <FlatList
+                  data={[{ id: "__none__", name: "— None —" }, ...drivers]}
+                  keyExtractor={(item) => item.id}
+                  renderItem={({ item }) => {
+                    const isNone = item.id === "__none__";
+                    const driver = item as DriverRow;
+                    const alreadyAssigned =
+                      !isNone &&
+                      driver.assigned_vehicle_id != null &&
+                      driver.assigned_vehicle_id !== entity.id;
+                    return (
+                      <TouchableOpacity
+                        style={[
+                          styles.vehiclePickerItem,
+                          alreadyAssigned && styles.vehiclePickerItemDisabled,
+                        ]}
+                        onPress={() => {
+                          if (alreadyAssigned) return;
+                          const vehicleLabel =
+                            vehicle?.vehicle_number != null
+                              ? formatIndianVehicleNumber(vehicle.vehicle_number)
+                              : entity.name ?? entity.id ?? "this vehicle";
+                          if (isNone) {
+                            Alert.alert(
+                              "Unassign driver",
+                              `Remove driver assignment from vehicle ${vehicleLabel}?`,
+                              [
+                                { text: "Cancel", style: "cancel" },
+                                {
+                                  text: "Unassign",
+                                  onPress: () => {
+                                    onAssignDriver?.(entity.id, null);
+                                    setShowDriverPicker(false);
+                                  },
+                                },
+                              ],
+                            );
+                          } else {
+                            const driverName = driver.name ?? "this driver";
+                            Alert.alert(
+                              "Assign driver",
+                              `Assign driver ${driverName} to vehicle ${vehicleLabel}?`,
+                              [
+                                { text: "Cancel", style: "cancel" },
+                                {
+                                  text: "Assign",
+                                  onPress: () => {
+                                    onAssignDriver?.(entity.id, item.id);
+                                    setShowDriverPicker(false);
+                                  },
+                                },
+                              ],
+                            );
+                          }
+                        }}
+                        activeOpacity={alreadyAssigned ? 1 : 0.7}
+                        disabled={alreadyAssigned}
+                      >
+                        <Text
+                          style={[
+                            styles.vehiclePickerItemText,
+                            alreadyAssigned && styles.vehiclePickerItemTextAssigned,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {isNone ? "— None —" : driver.name ?? "—"}
+                        </Text>
+                        {alreadyAssigned && (
+                          <Text style={styles.vehiclePickerItemSubtext} numberOfLines={1}>
+                            Already assigned
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  }}
+                />
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  cardWrap: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
+  },
+  darkBlockTabRow: {
+    paddingHorizontal: 18,
+    marginTop: 2,
+  },
+  darkBlockSummaryRow: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 2,
+    gap: 0,
+  },
+  darkBlockSummaryCell: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 2,
+    paddingRight: 12,
+  },
+  darkBlockSummaryCellRight: {
+    alignItems: "flex-end",
+    paddingRight: 0,
+    paddingLeft: 12,
+  },
+  darkBlockSummaryCellBorder: {
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.separatorDark,
+  },
+  darkBlockSummaryLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 4,
+  },
+  darkBlockSummaryLabelRowRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 4,
+  },
+  darkBlockSummaryLabel: {
+    fontSize: 7,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+  },
+  darkBlockSummaryIcon: {
+    marginRight: 0,
+  },
+  darkBlockSummaryAmount: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    letterSpacing: -0.3,
+  },
+  darkBlockSummaryAmountIn: {
+    color: Theme.darkGreen,
+  },
+  darkBlockSummaryAmountOut: {
+    color: Theme.teslaRed,
+  },
+  entityCardShell: {
+    backgroundColor: Theme.darkBackground,
+    marginHorizontal: 0,
+    marginBottom: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.separatorDark,
+    overflow: "hidden",
+    padding: 12,
+    paddingBottom: 10,
+  },
+  entityTabRow: {
+    flexDirection: "row",
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.separatorDark,
+  },
+  entityTab: {
+    flex: 1,
+    minWidth: MIN_FISCAL_TAB_WIDTH,
+    position: "relative" as const,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 6,
+  },
+  tdNetWrap: {
+    flex: 0.21,
+    alignItems: "flex-end",
+  },
+  tdMargin: {
+    fontSize: 7,
+    fontWeight: "700",
+    marginTop: 2,
+  },
+  riskBadgeWrap: {
+    paddingHorizontal: 8,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  darkBlock: {
+    backgroundColor: "#000000",
+    width: "100%",
+    paddingBottom: 4,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+    zIndex: 10,
+  },
+  entityTabActive: {},
+  detailTabIcon: {
+    marginRight: 6,
+  },
+  entityTabText: {
+    fontSize: 8,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 2,
+    color: Theme.textSecondary,
+  },
+  entityTabTextActive: {
+    color: Theme.textOnDark,
+  },
+  entityTabUnderline: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 1.5,
+    backgroundColor: Theme.teslaRed,
+  },
+  wrapper: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: Theme.screenBackground,
+    zIndex: 200,
+  },
+  entityFabWrap: {
+    position: "absolute",
+    right: Layout.fabRightOffset,
+    zIndex: 210,
+    elevation: 10,
+  },
+  scroll: { flex: 1 },
+  scrollContent: {},
+  summaryBar: {
+    flexDirection: "row",
+    backgroundColor: Theme.buttonPrimary,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.separatorDark,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  summaryCell: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 8,
+  },
+  summaryCellBorder: {
+    borderRightWidth: 1,
+    borderRightColor: Theme.separatorDark,
+  },
+  summaryRight: { alignItems: "flex-end" },
+  summaryLabel: {
+    fontSize: 6,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 2,
+    marginBottom: 2,
+  },
+  summaryAmount: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+  },
+  tableWrap: { paddingHorizontal: 16, paddingTop: 6 },
+  /** Ledger tab: title + short subtitle in one row; summary: 2 metrics in one row. */
+  ledgerSectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  ledgerSummaryRow: {
+    flexDirection: "row",
+    backgroundColor: Theme.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    paddingVertical: 12,
+    paddingHorizontal: 0,
+    marginBottom: 14,
+    gap: 0,
+  },
+  ledgerSummaryCell: {
+    flex: 1,
+    minWidth: 0,
+  },
+  ledgerSummaryCellBorder: {
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 10,
+  },
+  ledgerSummaryLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textMutedDemo,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  ledgerSummaryAmount: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  ledgerSummaryIn: { color: Theme.positive ?? Theme.darkGreen },
+  ledgerSummaryOut: { color: Theme.teslaRed },
+  /** Ledger tab: same layout as main finance Ledger (ENTITY/DESC | LINK | RECEIVED | PAID). Aligns with tab row. */
+  ledgerViewModeRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 12,
+  },
+  ledgerViewModePill: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: Theme.surfaceLight ?? "rgba(0,0,0,0.06)",
+    borderWidth: 1,
+    borderColor: Theme.borderLight ?? "rgba(0,0,0,0.08)",
+  },
+  ledgerViewModePillActive: {
+    backgroundColor: Theme.teslaRed,
+    borderColor: Theme.teslaRed,
+  },
+  ledgerViewModePillText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textMuted,
+  },
+  ledgerViewModePillTextActive: {
+    color: "#fff",
+  },
+  ledgerTableHeaderWrap: {
+    width: "100%",
+    backgroundColor: Theme.surface,
+    paddingHorizontal: 0,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderTopWidth: 1,
+    borderColor: Theme.borderLight,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  ledgerTableHeader: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    minWidth: 0,
+  },
+  ledgerTh: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.3,
+    paddingVertical: 10,
+  },
+  /** Ledger tab: 25, 25, 25, 25 — first column (PARTY) with left padding so content doesn’t touch the border. */
+  ledgerThNode: {
+    flex: 0.25,
+    minWidth: 0,
+    paddingLeft: 12,
+    paddingRight: 8,
+    paddingVertical: 10,
+    justifyContent: "center",
+  },
+  ledgerThMission: {
+    flex: 0.25,
+    minWidth: 0,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ledgerThBorderLeft: {
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 8,
+    paddingRight: 6,
+    paddingVertical: 10,
+    justifyContent: "center",
+  },
+  ledgerThCredit: {
+    flex: 0.25,
+    minWidth: 0,
+    paddingVertical: 10,
+    paddingRight: 8,
+    textAlign: "right",
+  },
+  ledgerThDebit: {
+    flex: 0.25,
+    minWidth: 0,
+    paddingVertical: 10,
+    paddingRight: 8,
+    textAlign: "right",
+  },
+  ledgerThSpacer: { width: 22, minWidth: 22 },
+  /** Driver LEDGER tab body: same 4-column layout as client ledger (0.25 each). */
+  ledgerTdNode: {
+    flex: 0.25,
+    minWidth: 0,
+    paddingLeft: 12,
+    paddingRight: 8,
+  },
+  ledgerTdMission: {
+    flex: 0.25,
+    minWidth: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ledgerTdCredit: {
+    flex: 0.25,
+    minWidth: 0,
+    alignItems: "flex-end",
+    paddingRight: 8,
+  },
+  ledgerTdDebit: {
+    flex: 0.25,
+    minWidth: 0,
+    alignItems: "flex-end",
+    paddingRight: 8,
+  },
+  /** Driver ledger PARTY/ITEM: category line (e.g. TRIP, GENERAL) — match client ledger. */
+  ledgerCellSubCategory: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+    letterSpacing: 0.05,
+    marginTop: 2,
+    textTransform: "uppercase",
+  },
+  /** Driver ledger PARTY/ITEM: date line — match client ledger. */
+  ledgerCellSubDate: {
+    fontSize: 9,
+    fontWeight: "400",
+    color: Theme.textMuted,
+    letterSpacing: 0.03,
+    marginTop: 2,
+  },
+  /** Chevron at end of driver ledger row (match client FinancialRow). */
+  ledgerRowActionHint: {
+    paddingLeft: 6,
+    paddingRight: 4,
+    justifyContent: "center",
+    alignItems: "center",
+    alignSelf: "stretch",
+    width: 22,
+    minWidth: 22,
+  },
+  ledgerRowWrapper: {
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
+  ledgerRowPressed: { backgroundColor: Theme.surface },
+  /** Ledger expanded detail — compact, aligned with table row density. */
+  ledgerExpandedDetail: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6,
+    overflow: "hidden",
+  },
+  ledgerExpandedBlock: {
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 6,
+    overflow: "hidden",
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  ledgerExpandedBlockTitle: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textOnDark,
+    letterSpacing: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: Theme.darkBackground,
+    textTransform: "uppercase",
+  },
+  ledgerExpandedBlockContent: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  ledgerExpandedRowDouble: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 10,
+    minWidth: 0,
+    marginBottom: 8,
+  },
+  ledgerExpandedRowDoubleLast: {
+    marginBottom: 0,
+  },
+  ledgerExpandedHalf: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 4,
+    paddingRight: 6,
+    justifyContent: "flex-start",
+    alignItems: "flex-start",
+    borderRightWidth: 1,
+    borderRightColor: Theme.surfaceBorder,
+  },
+  ledgerExpandedHalfLast: {
+    borderRightWidth: 0,
+    paddingRight: 0,
+  },
+  ledgerExpandedRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.surfaceBorder,
+  },
+  ledgerExpandedRowLast: {
+    borderBottomWidth: 0,
+  },
+  ledgerExpandedLabelSmall: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.6,
+    marginBottom: 2,
+    textTransform: "uppercase",
+  },
+  ledgerExpandedValue: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    minWidth: 0,
+  },
+  ledgerExpandedValueGreen: {
+    color: Theme.darkGreen,
+  },
+  ledgerExpandedValueRed: {
+    color: Theme.teslaRed,
+  },
+  ledgerExpandedPaymentDark: {
+    backgroundColor: Theme.darkBackground,
+    marginHorizontal: 0,
+    marginTop: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
+  },
+  ledgerExpandedRowTriple: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+  },
+  ledgerExpandedTripleCell: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "flex-start",
+    justifyContent: "center",
+    paddingVertical: 2,
+  },
+  ledgerExpandedTripleCellAmount: {
+    alignItems: "flex-end",
+  },
+  ledgerExpandedLabelOnDark: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 0.6,
+    marginBottom: 3,
+    textTransform: "uppercase",
+  },
+  ledgerExpandedValueOnDark: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textOnDark,
+  },
+  ledgerExpandedValueOnDarkGreen: {
+    color: Theme.darkGreen,
+    fontWeight: "700",
+  },
+  ledgerExpandedValueOnDarkRed: {
+    color: Theme.teslaRed,
+    fontWeight: "700",
+  },
+  ledgerExpandedAmountPillGreen: {
+    backgroundColor: Theme.positiveMuted,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  ledgerExpandedAmountPillRed: {
+    backgroundColor: Theme.negativeMuted,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  ledgerExpandedValueOnGreen: {
+    color: Theme.darkGreen,
+    fontWeight: "600",
+  },
+  ledgerExpandedValueOnRed: {
+    color: Theme.teslaRed,
+    fontWeight: "600",
+  },
+  ledgerExpandedAssociatedLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    letterSpacing: 1,
+    marginTop: 8,
+    marginBottom: 6,
+    textTransform: "uppercase",
+  },
+  ledgerExpandedAssociatedEmpty: {
+    fontSize: 11,
+    color: Theme.textMuted,
+    marginBottom: 6,
+    fontStyle: "italic",
+  },
+  ledgerExpandedTxCard: {
+    backgroundColor: Theme.screenBackground,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  ledgerExpandedTxCardLine1: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    marginBottom: 2,
+  },
+  ledgerExpandedTxCardLine2: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textMuted,
+  },
+  ledgerExpandedTxCardLine2Red: {
+    color: Theme.teslaRed,
+  },
+  /** Google Pay–style transaction history (same trip) */
+  ledgerExpandedTxHistoryWrap: { marginTop: 4 },
+  ledgerExpandedTxHistoryTitle: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    marginBottom: 6,
+  },
+  ledgerExpandedTxHistoryList: {
+    backgroundColor: Theme.darkSurface,
+    borderRadius: 6,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
+  },
+  ledgerExpandedTxHistoryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderOnDark,
+    gap: 8,
+  },
+  ledgerExpandedTxHistoryRowLast: {
+    borderBottomWidth: 0,
+  },
+  ledgerExpandedTxHistoryIconWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+    borderWidth: 1.5,
+  },
+  ledgerExpandedTxHistoryIconIn: { borderColor: Theme.darkGreen },
+  ledgerExpandedTxHistoryIconOut: { borderColor: Theme.teslaRed },
+  ledgerExpandedTxHistoryBody: { flex: 1, minWidth: 0 },
+  ledgerExpandedTxHistoryRowTitle: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textOnDark,
+  },
+  ledgerExpandedTxHistoryRowSubtitle: {
+    fontSize: 9,
+    color: Theme.textOnDarkMuted,
+    marginTop: 1,
+  },
+  ledgerExpandedTxHistoryAmount: { fontSize: 11, fontWeight: "700" },
+  ledgerExpandedTxHistoryAmountIn: { color: Theme.darkGreen },
+  ledgerExpandedTxHistoryAmountOut: { color: Theme.teslaRed },
+  entityLedgerChevronTh: {
+    width: 22,
+    minWidth: 22,
+  },
+  entityLedgerChevronTd: {
+    width: 22,
+    minWidth: 22,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  /** Driver ledger: TRIP/ROUTE/DATE (combined), EARNED, PAID, TO PAY. */
+  driverLedgerThCol: {
+    flex: 0.2,
+    minWidth: 0,
+    paddingVertical: 10,
+    paddingRight: 6,
+    justifyContent: "center",
+  },
+  driverLedgerThColRouteDate: {
+    flex: 0.45,
+    minWidth: 0,
+    paddingVertical: 10,
+    paddingLeft: 10,
+    paddingRight: 8,
+    justifyContent: "center",
+  },
+  driverLedgerThColRight: { textAlign: "right" },
+  driverLedgerTdCol: {
+    flex: 0.2,
+    minWidth: 0,
+    paddingRight: 6,
+  },
+  driverLedgerTdColRouteDate: {
+    flex: 0.45,
+    minWidth: 0,
+    paddingLeft: 10,
+    paddingRight: 8,
+    paddingVertical: 10,
+  },
+  driverLedgerTdColRouteDateContent: {
+    justifyContent: "center",
+  },
+  driverLedgerTdRoute: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  /** TRIP/ROUTE column: muted text to match client ledger (other tabs). */
+  ledgerRouteText: {
+    fontSize: 10,
+    fontWeight: "400",
+    color: Theme.textMutedDemo,
+    letterSpacing: 0.05,
+    textAlign: "center",
+  },
+  ledgerRouteTextBlock: {
+    textAlign: "left",
+    marginTop: 2,
+  },
+  ledgerTdBorderLeft: {
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 8,
+  },
+  driverLedgerTdColAmount: {
+    flex: 0.2,
+    minWidth: 0,
+    alignItems: "flex-end",
+    paddingRight: 6,
+  },
+  driverProtocolThFirst: {
+    flex: 0.42,
+    minWidth: 0,
+    paddingVertical: 10,
+    paddingRight: 8,
+  },
+  driverProtocolThCol: {
+    flex: 0.24,
+    minWidth: 0,
+    paddingVertical: 10,
+    paddingRight: 8,
+    textAlign: "right" as const,
+  },
+  driverProtocolThColLast: {
+    flex: 0.24,
+    minWidth: 0,
+    paddingVertical: 10,
+    paddingRight: 8,
+    textAlign: "right" as const,
+  },
+  ledgerTableBodyWrap: {
+    paddingHorizontal: 0,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    borderRightColor: Theme.borderLight,
+    borderBottomColor: Theme.borderLight,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+    backgroundColor: Theme.screenBackground,
+    marginTop: -1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  ledgerEmptyRow: {
+    paddingVertical: 24,
+    paddingHorizontal: 12,
+  },
+  ledgerEmptyText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textMutedDemo,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    textAlign: "center",
+  },
+  sectionTitle: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.textMutedDemo,
+    letterSpacing: 2,
+    marginBottom: 4,
+    paddingHorizontal: 4,
+  },
+  sectionSubtitle: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  table: {
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  tableHeader: {
+    flexDirection: "row",
+    backgroundColor: Theme.screenBackground,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
+  th: {
+    fontSize: 6,
+    fontWeight: "800",
+    color: Theme.textMutedDemo,
+    textTransform: "uppercase",
+    letterSpacing: 2,
+  },
+  thMission: { flex: 0.42 },
+  thRight: { flex: 0.2, textAlign: "right" as const },
+  thRightLast: { flex: 0.18, textAlign: "right" as const },
+  thMonth: { flex: 0.28 },
+  thCol: { flex: 0.24, textAlign: "right" as const },
+  thColLast: { flex: 0.24, textAlign: "right" as const },
+  tableRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.surfaceLight,
+  },
+  tableRowExpanded: {
+    backgroundColor: Theme.screenBackground,
+  },
+  tdMonth: { flex: 0.28 },
+  tdCol: { flex: 0.24, alignItems: "flex-end" as const },
+  tdColLast: { flex: 0.24, alignItems: "flex-end" as const },
+  tdBalance: {
+    fontSize: 9,
+    fontWeight: "800",
+    marginTop: 2,
+  },
+  tdDark: { color: Theme.textPrimaryDark },
+  tdMuted: { color: Theme.textMuted },
+  td: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+  },
+  tdMission: { flex: 0.42 },
+  tdMissionWrap: { flex: 0.42, minWidth: 0 },
+  tdMissionId: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+  },
+  tdDest: {
+    fontSize: 6,
+    color: Theme.textMutedDemo,
+    marginTop: 2,
+  },
+  tdTripMeta: {
+    fontSize: 9,
+    color: Theme.textSecondary,
+    marginTop: 3,
+    fontWeight: "500",
+  },
+  tdRight: { flex: 0.2, textAlign: "right" as const },
+  tdRightLast: { flex: 0.18, textAlign: "right" as const },
+  tdGreen: { color: Theme.darkGreen },
+  tdRed: { color: Theme.teslaRed },
+  monthDetailWrap: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: Theme.surfaceLight,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
+  monthDetailTitle: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textMutedDemo,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 6,
+    marginTop: 4,
+  },
+  earningsSummaryBlock: {
+    marginBottom: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  earningsSummaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 4,
+    paddingHorizontal: 0,
+  },
+  earningsSummaryRowTotal: {
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+    marginTop: 4,
+    paddingTop: 8,
+  },
+  earningsSummaryRowBalance: {
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+    marginTop: 2,
+    paddingTop: 6,
+  },
+  earningsSummaryLabel: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
+  },
+  earningsSummaryValue: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+  },
+  earningsSummaryLabelBold: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  earningsSummaryValueBold: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  monthDetailHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    marginBottom: 2,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
+  monthDetailHeaderCell: {
+    flex: 0.25,
+    fontSize: 7,
+    fontWeight: "800",
+    color: Theme.textMutedDemo,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  monthDetailHeaderCellWide: {
+    flex: 1,
+    fontSize: 7,
+    fontWeight: "800",
+    color: Theme.textMutedDemo,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  monthDetailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
+  monthDetailCell: {
+    flex: 0.25,
+    fontSize: 9,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
+  },
+  monthDetailCellWide: {
+    flex: 1,
+    fontSize: 9,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
+  },
+  monthDetailSectionCard: {
+    marginTop: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    overflow: "hidden",
+  },
+  monthDetailDarkBarTitle: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    letterSpacing: 1,
+    backgroundColor: Theme.darkBackground,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    textTransform: "uppercase",
+  },
+  monthDetailSectionContent: {
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+  },
+  monthDetailTripsBlock: {
+    marginTop: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    overflow: "hidden",
+  },
+  monthDetailPaymentsBlock: {
+    marginTop: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    overflow: "hidden",
+  },
+  monthDetailEmptyPayments: {
+    paddingVertical: 16,
+    textAlign: "center",
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textMuted,
+  },
+  tripStatementActionsWrap: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+  },
+  tripStatementActionsLabel: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    letterSpacing: 0.5,
+    marginBottom: 10,
+    textTransform: "uppercase",
+  },
+  tripStatementActionsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  tripStatementActionBtn: {
+    flex: 1,
+    minWidth: 100,
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  tripStatementActionBtnPrimary: {
+    backgroundColor: Theme.primary,
+    borderWidth: 0,
+  },
+  tripStatementActionBtnPrimaryText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textOnPrimary,
+  },
+  tripStatementActionBtnSecondary: {
+    backgroundColor: Theme.surface,
+    borderWidth: 1.5,
+    borderColor: Theme.borderMedium,
+  },
+  tripStatementActionBtnSecondaryText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.primary,
+  },
+  driverRequestCardsWrap: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 16,
+    gap: 12,
+  },
+  driverRequestCard: {
+    backgroundColor: Theme.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    padding: 16,
+  },
+  driverRequestCardInner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  driverRequestIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Theme.surfaceGray,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  driverRequestCardBody: { flex: 1, minWidth: 0 },
+  driverRequestCardLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.primary,
+    letterSpacing: 1.5,
+    marginBottom: 4,
+  },
+  driverRequestCardAmount: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  driverRequestCardReason: {
+    fontSize: 11,
+    color: Theme.textSecondary,
+    marginTop: 4,
+  },
+  driverRequestCardActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+  },
+  driverRequestBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  driverRequestBtnPay: {
+    backgroundColor: Theme.primary,
+  },
+  driverRequestBtnPayText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textOnPrimary,
+    letterSpacing: 1,
+  },
+  driverRequestBtnReject: {
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+  },
+  driverRequestBtnRejectText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.primary,
+    letterSpacing: 1,
+  },
+  driverMetricsGrid: {
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 16,
+    marginBottom: 16,
+  },
+  driverMetricCard: {
+    flex: 1,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 16,
+    alignItems: "center",
+  },
+  driverMetricIcon: { marginBottom: 8 },
+  driverMetricLabel: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  driverMetricValue: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  driverMetricValueActive: { color: Theme.darkGreen },
+  driverContactCard: {
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 16,
+    marginHorizontal: Layout.screenPaddingHorizontal,
+    marginBottom: 16,
+  },
+  driverContactRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  driverContactIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Theme.surfaceGray,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  driverContactIconWrapPurple: {
+    backgroundColor: Theme.surfaceForm,
+  },
+  driverContactTextWrap: { flex: 1, minWidth: 0 },
+  driverContactLabel: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 1,
+    marginBottom: 2,
+  },
+  driverContactValue: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  driverContactDivider: {
+    height: 1,
+    backgroundColor: Theme.borderLight,
+    marginVertical: 12,
+    marginLeft: 48,
+  },
+  driverCompensationCard: {
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    marginHorizontal: Layout.screenPaddingHorizontal,
+    marginBottom: 16,
+    overflow: "hidden",
+  },
+  driverCompensationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: Theme.surfaceLight,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
+  driverCompensationHeaderText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 1,
+  },
+  driverCompensationBody: { padding: 16 },
+  driverCompensationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 4,
+  },
+  driverCompensationLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+  },
+  driverCompensationValue: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  driverCompensationDivider: {
+    height: 1,
+    backgroundColor: Theme.surfaceLight,
+    marginVertical: 8,
+  },
+  driverAssignVehicleBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    backgroundColor: Theme.primary,
+  },
+  driverAssignVehicleBtnText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#fff",
+    letterSpacing: 0.5,
+  },
+  vehiclePickerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  vehiclePickerSheet: {
+    backgroundColor: Theme.screenBackground,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: "50%",
+    paddingBottom: 24,
+  },
+  vehiclePickerTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  vehiclePickerItem: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+  },
+  vehiclePickerItemDisabled: {
+    opacity: 0.9,
+    backgroundColor: Theme.surfaceGray,
+  },
+  vehiclePickerItemText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
+  },
+  vehiclePickerItemTextAssigned: {
+    color: Theme.teslaRed,
+  },
+  vehiclePickerItemSubtext: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.teslaRed,
+    marginTop: 2,
+  },
+  driverRatingsSection: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 24,
+  },
+  driverRatingsSectionTitle: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    letterSpacing: 1.5,
+    marginBottom: 12,
+  },
+  driverRatingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    marginBottom: 8,
+  },
+  driverRatingIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Theme.surfaceLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  driverRatingBody: { flex: 1, minWidth: 0 },
+  driverRatingScore: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  driverRatingScoreMax: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textMuted,
+  },
+  driverRatingDate: {
+    fontSize: 8,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    marginTop: 2,
+  },
+});

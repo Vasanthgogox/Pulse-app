@@ -1,0 +1,53 @@
+---
+description: Q Mobile — align with Q-unified-base standards; same Supabase, capabilities, env-based config
+alwaysApply: true
+---
+
+# Q Mobile: Standards
+
+**This app is the mobile version of Q-unified-base.** Follow Q-unified-base standards where they apply; see `Q-unified-base/docs/ENTERPRISE_MICROSERVICES_STANDARDS.md` and `Q-unified-base/.cursor/rules/enterprise-microservices-standards.mdc`.
+
+## Quick reference (mobile)
+
+- **Folderization:** Use `lib/` for shared logic (supabase, capabilities), `services/` for API/backend (authService, tripsService, etc.), `contexts/` for React context, `app/` for screens (Expo Router). Use `@/` path alias. No business logic in screens; no hardcoded backend URLs in components.
+
+- **Services = microservices (one per domain):** When adding or editing backend/API logic, use **one service file per bounded context**. Example: `tripsService.ts` (trips only), `clientsService.ts` (clients only), `driversService.ts` (drivers only). Do not combine multiple domains in a single service (e.g. no `tripsAndClientsService.ts`). Each service in `services/` should own a single domain: its types, Supabase table(s), and functions for that entity. New features that need API access get a new `*Service.ts` in `services/` (e.g. `invoicesService.ts`, `paymentsService.ts`).
+- **Colors:** All UI colors come from `@/constants/Theme`. Import `Theme` and use e.g. `Theme.primary`, `Theme.textSecondary`, `Theme.screenBackground`. Do not hardcode hex/rgba in components; add new keys to `Theme` if needed so changing a color in one place updates the app globally.
+- **Backend:** Same Supabase project as Q-unified-base. All API base URLs from env: `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`. Document in `.env.example`.
+- **Permissions:** Use capability-based access from `lib/capabilities.ts` only (aligned with Q-unified-base). Unified dispatcher & fleet owner: same user, `profiles.aggregated` / `profiles.asset`; do not treat dispatcher and fleet owner as separate roles.
+- **Schema/RLS:** Do not add migrations in this repo. Schema lives in Q-unified-base `supabase/migrations/`; this app is a client of the same DB.
+
+- **Navigation:** Bottom tab bar has only **Home** and **Resources**. Home uses top tabs (same UI as reference): **Customers**, **Suppliers**, **Trips**. Resources uses top tabs: **Drivers**, **Vehicles**, **More**. Use `TopTabsHeader` from `@/components/TopTabsHeader` for this styling; list content below with `ListBody` from `@/components/ListBody`. Trips, Indents, Finance, Settings, etc. are reachable via these tabs or from Resources > More.
+
+## Screens & safe area (responsive, all devices)
+
+All screens must respect safe area (notch, status bar, home indicator) so layout works on iOS, Android, and all device sizes. Use `react-native-safe-area-context`: root is wrapped in `SafeAreaProvider` in `app/_layout.tsx`.
+
+**Screens (16 routes) and how they show:**
+
+| Route / screen | Layout / pattern | Safe area |
+|----------------|-------------------|-----------|
+| `app/index.tsx` | Root redirect + spinner | `useSafeAreaInsets()` on container |
+| `app/sign-in.tsx` | Custom form | Insets on container + offline banner |
+| `app/(tabs)/index.tsx` | Home – top tabs Customers/Suppliers/Trips (`TopTabsHeader` + `ListBody`) | Safe area in `TopTabsHeader` |
+| `app/(tabs)/resources.tsx` | Resources – top tabs Drivers/Vehicles/More | Safe area in `TopTabsHeader` |
+| `app/(tabs)/trips.tsx` | List | `ListScreenLayout` (has insets); no-access view uses `paddingTop: insets.top` |
+| `app/(tabs)/indents.tsx` | List | Same as trips |
+| `app/(tabs)/finance.tsx` | Custom blue header + content | Header insets; no-access uses top inset |
+| `app/(tabs)/settings.tsx` | Custom content | `paddingTop: insets.top + 24` |
+| `app/modal.tsx` | Modal content | `paddingTop: insets.top`, `paddingBottom: insets.bottom` |
+| `app/+not-found.tsx` | Centered message | Insets on container |
+| ErrorBoundary (in `_layout.tsx`) | Full-screen error | `paddingTop/Bottom` from `useSafeAreaInsets()` |
+
+**When adding a new page:**
+
+1. **List screen (search + list + optional FAB):** Use `ListScreenLayout` from `@/components/ListScreenLayout` — it already applies top inset on the blue header and bottom inset on scroll content.
+2. **Screen with custom blue header:** Use `useSafeAreaInsets()` and set the header container to `paddingTop: insets.top + 16` (remove any fixed `paddingTop: 48`).
+3. **Full-screen or centered content:** Add `paddingTop: insets.top` (and `paddingBottom: insets.bottom` if needed) to the root container, or use `SafeAreaView` from `react-native-safe-area-context`.
+4. **FAB or fixed bottom UI:** Use `bottom: base + insets.bottom` (e.g. FAB uses `24 + insets.bottom`).
+5. **Loading states:** Use `CenteredLoadingView` from `@/components/CenteredLoadingView` so full-screen spinners respect safe area.
+6. **Layout constants:** Prefer `Layout` from `@/constants/Layout` for spacing (e.g. `Layout.screenPaddingHorizontal`, `Layout.fabBottomOffset`).
+
+This keeps every screen responsive and consistent across devices. Full checklist and device matrix: `docs/RESPONSIVE_AND_SAFE_AREA.md`. Cursor rule: `.cursor/rules/q-mobile-responsive.mdc`.
+
+When in doubt, open Q-unified-base docs and apply the relevant section.

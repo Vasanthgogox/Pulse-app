@@ -1,0 +1,141 @@
+/**
+ * Trip assignment audit — optional. Used for Private Book vs Shared Network.
+ * Table trip_assignment_audit lives in Q-unified-base (consolidated schema); if missing, calls no-op.
+ * changed_by references profiles(id); in Q-unified-base profiles.id = auth.uid().
+ */
+import { supabase } from '@/lib/supabase';
+
+export type AssignmentEventType = 'assignment' | 'reassignment' | 'completed';
+
+export interface InsertTripAssignmentAuditParams {
+  trip_id: string;
+  event_type: AssignmentEventType;
+  driver_id_prev: string | null;
+  driver_id_new: string | null;
+  vehicle_id_prev: string | null;
+  vehicle_id_new: string | null;
+  /** profiles.id (same as auth.uid() in Q-unified-base) */
+  changed_by: string | null;
+}
+
+/**
+ * Insert one audit row. No-op if table does not exist or RLS denies.
+ */
+export async function insertTripAssignmentAudit(
+  params: InsertTripAssignmentAuditParams
+): Promise<{ error: Error | null }> {
+  try {
+    const { error } = await supabase()
+      .from('trip_assignment_audit')
+      .insert({
+        trip_id: params.trip_id,
+        event_type: params.event_type,
+        driver_id_prev: params.driver_id_prev ?? null,
+        driver_id_new: params.driver_id_new ?? null,
+        vehicle_id_prev: params.vehicle_id_prev ?? null,
+        vehicle_id_new: params.vehicle_id_new ?? null,
+        changed_by: params.changed_by ?? null,
+      } as Record<string, unknown>);
+
+    if (error) {
+      const msg = error.message ?? '';
+      const isMissingTable =
+        error.code === '42P01' ||
+        msg.includes('does not exist') ||
+        msg.includes('schema cache') ||
+        msg.includes('Could not find the table');
+      if (isMissingTable) return { error: null };
+      return { error: new Error(error.message) };
+    }
+    return { error: null };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)) };
+  }
+}
+
+export interface LatestAssignmentByTrip {
+  trip_id: string;
+  changed_by: string | null;
+  changed_at: string;
+}
+
+export interface TripAssignmentAuditRow {
+  id: string;
+  trip_id: string;
+  event_type: AssignmentEventType;
+  driver_id_prev: string | null;
+  driver_id_new: string | null;
+  vehicle_id_prev: string | null;
+  vehicle_id_new: string | null;
+  driver_name_prev?: string | null;
+  driver_name_new?: string | null;
+  vehicle_number_prev?: string | null;
+  vehicle_number_new?: string | null;
+  changed_at: string;
+  changed_by: string | null;
+}
+
+/**
+ * Get latest assignment/reassignment event per trip. Returns map trip_id -> { changed_by, changed_at }.
+ * If table does not exist, returns empty map (all trips treated as private).
+ */
+export async function getLatestAssignmentAuditByTripIds(
+  tripIds: string[]
+): Promise<{ error: Error | null; byTripId: Map<string, { changed_by: string | null; changed_at: string }> }> {
+  const byTripId = new Map<string, { changed_by: string | null; changed_at: string }>();
+  if (tripIds.length === 0) return { error: null, byTripId };
+
+  try {
+    const { data, error } = await supabase()
+      .from('trip_assignment_audit')
+      .select('trip_id, changed_by, changed_at')
+      .in('trip_id', tripIds)
+      .in('event_type', ['assignment', 'reassignment'])
+      .order('changed_at', { ascending: false });
+
+    if (error) {
+      if (error.code === '42P01' || error.message?.includes('does not exist')) return { error: null, byTripId };
+      return { error: new Error(error.message), byTripId };
+    }
+
+    const rows = (data ?? []) as LatestAssignmentByTrip[];
+    for (const row of rows) {
+      if (!byTripId.has(row.trip_id)) {
+        byTripId.set(row.trip_id, { changed_by: row.changed_by ?? null, changed_at: row.changed_at });
+      }
+    }
+    return { error: null, byTripId };
+  } catch {
+    return { error: null, byTripId };
+  }
+}
+
+/**
+ * Get full assignment / reassignment history for a trip (newest first).
+ * If table does not exist, returns empty list.
+ */
+export async function getTripAssignmentAuditHistory(
+  tripId: string,
+  limit = 20,
+): Promise<{ error: Error | null; rows: TripAssignmentAuditRow[] }> {
+  try {
+    const { data, error } = await supabase()
+      .from("trip_assignment_audit")
+      .select(
+        "id, trip_id, event_type, driver_id_prev, driver_id_new, vehicle_id_prev, vehicle_id_new, changed_at, changed_by",
+      )
+      .eq("trip_id", tripId)
+      .in("event_type", ["assignment", "reassignment"])
+      .order("changed_at", { ascending: false })
+      .limit(Math.max(1, Math.min(50, limit)));
+
+    if (error) {
+      if (error.code === "42P01" || error.message?.includes("does not exist"))
+        return { error: null, rows: [] };
+      return { error: new Error(error.message), rows: [] };
+    }
+    return { error: null, rows: (data ?? []) as TripAssignmentAuditRow[] };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), rows: [] };
+  }
+}

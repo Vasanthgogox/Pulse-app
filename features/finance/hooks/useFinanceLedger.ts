@@ -1,0 +1,450 @@
+/**
+ * Ledger state and derived data for the Finance screen. Uses TanStack Query cache.
+ */
+import type { TripRow } from "@/features/trips";
+import { getTripDisplayNumber } from "@/features/trips";
+import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
+import { useTransactionsQuery } from "@/lib/queries";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { filterLedgerByPeriod } from "../lib/filterLedgerByPeriod";
+import { ledgerTotals } from "../lib/ledgerTotals";
+import type { LedgerRow } from "../services/finance.service";
+import {
+    LEDGER_CATEGORIES,
+    LEDGER_CATEGORY_STORAGE_KEY,
+    type FinancePeriodFilter,
+    type LedgerCategory,
+} from "../types";
+
+export type LedgerSortKey =
+  | "entity"
+  | "source"
+  | "cash_in"
+  | "cash_out"
+  | "date";
+
+export interface UseFinanceLedgerArgs {
+  organizationId: string | null;
+  canAccess: boolean;
+  tripRows: TripRow[];
+  vehicleRows: VehicleRow[];
+}
+
+export interface UseFinanceLedgerResult {
+  ledgerTransactions: LedgerRow[] | null;
+  ledgerLoading: boolean;
+  ledgerRefreshKey: number;
+  setLedgerTransactions: React.Dispatch<
+    React.SetStateAction<LedgerRow[] | null>
+  >;
+  setLedgerRefreshKey: (fn: (k: number) => number) => void;
+  /** Refetch ledger and return a promise so callers can await and clear refresh state. */
+  refetchLedger: () => Promise<unknown>;
+  financePeriodFilter: FinancePeriodFilter;
+  setFinancePeriodFilter: (v: FinancePeriodFilter) => void;
+  sourceSupplyFilter: "all" | "asset" | "aggregate";
+  setSourceSupplyFilter: (v: "all" | "asset" | "aggregate") => void;
+  ledgerSortKey: LedgerSortKey;
+  setLedgerSortKey: (v: LedgerSortKey) => void;
+  ledgerSortDir: "asc" | "desc";
+  setLedgerSortDir: (v: "asc" | "desc") => void;
+  selectedLedgerCategory: LedgerCategory;
+  setSelectedLedgerCategory: (v: LedgerCategory) => void;
+  cashDirectionFilter: "all" | "in" | "out";
+  setCashDirectionFilter: (v: "all" | "in" | "out") => void;
+  searchQuery: string;
+  setSearchQuery: (v: string) => void;
+  filteredLedger: LedgerRow[];
+  filteredLedgerBySource: LedgerRow[];
+  filteredLedgerForDisplay: LedgerRow[];
+  ledgerTotalsData: { totalIn: number; totalOut: number };
+  ledgerCategoryCounts: Record<LedgerCategory, number>;
+  selectedEntityTotals: {
+    totalIn: number;
+    totalOut: number;
+    count: number;
+  } | null;
+  tripCountByParty: Record<string, number>;
+  tripById: Map<string, TripRow>;
+  getVehicleNumberForTripId: (tripId: string | null) => string | null;
+  tripPartyMap: Record<
+    string,
+    {
+      client_id?: string | null;
+      supplier_id?: string | null;
+      driver_id?: string | null;
+    }
+  >;
+  tripDetailsMap: Record<
+    string,
+    {
+      trip_number: string;
+      drop_location?: string;
+      pickup_area?: string;
+      client_name?: string;
+      pickup_date?: string | null;
+      vehicle_number?: string | null;
+      vehicle_type?: string | null;
+      vehicle_body_type?: string | null;
+      client_price?: number | null;
+      supplier_rate?: number | null;
+      /** Driver commission for driver statement (To pay). */
+      driver_commission?: number | null;
+    }
+  >;
+}
+
+export function useFinanceLedger({
+  organizationId,
+  canAccess,
+  tripRows,
+  vehicleRows,
+}: UseFinanceLedgerArgs): UseFinanceLedgerResult {
+  const orgId = canAccess ? organizationId : null;
+  const {
+    data: ledgerData,
+    isPending: ledgerLoading,
+    refetch,
+  } = useTransactionsQuery(orgId);
+  const ledgerTransactions = ledgerData ?? null;
+
+  const [ledgerRefreshKey, setLedgerRefreshKeyState] = useState(0);
+  const setLedgerRefreshKey = useCallback(
+    (fn: (k: number) => number) => {
+      setLedgerRefreshKeyState((prev) => fn(prev));
+      refetch();
+    },
+    [refetch],
+  );
+
+  const refetchLedger = useCallback(() => refetch(), [refetch]);
+
+  const [financePeriodFilter, setFinancePeriodFilter] =
+    useState<FinancePeriodFilter>("RANGE");
+  const [sourceSupplyFilter, setSourceSupplyFilter] = useState<
+    "all" | "asset" | "aggregate"
+  >("all");
+  const [ledgerSortKey, setLedgerSortKey] = useState<LedgerSortKey>("date");
+  const [ledgerSortDir, setLedgerSortDir] = useState<"asc" | "desc">("desc");
+  const [selectedLedgerCategory, setSelectedLedgerCategory] =
+    useState<LedgerCategory>("all");
+  const [cashDirectionFilter, setCashDirectionFilter] = useState<
+    "all" | "in" | "out"
+  >("all");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    AsyncStorage.getItem(LEDGER_CATEGORY_STORAGE_KEY).then((saved) => {
+      if (
+        saved != null &&
+        (LEDGER_CATEGORIES as readonly string[]).includes(saved)
+      ) {
+        setSelectedLedgerCategory(saved as LedgerCategory);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.setItem(LEDGER_CATEGORY_STORAGE_KEY, selectedLedgerCategory);
+  }, [selectedLedgerCategory]);
+
+  // When viewing Suppliers or Driver category, show all (in + out) so payouts are visible
+  useEffect(() => {
+    if (
+      selectedLedgerCategory === "suppliers" ||
+      selectedLedgerCategory === "driver"
+    ) {
+      setCashDirectionFilter("all");
+    }
+  }, [selectedLedgerCategory]);
+
+  const filteredLedger = useMemo(
+    () => filterLedgerByPeriod(ledgerTransactions ?? [], financePeriodFilter),
+    [ledgerTransactions, financePeriodFilter],
+  );
+
+  const tripCountByParty = useMemo(() => {
+    const tripIdsByKey = new Map<string, Set<string>>();
+    const txs = ledgerTransactions ?? [];
+    for (const row of txs) {
+      const key =
+        row.contact_type &&
+        (row.contact_type === "client" || row.contact_type === "supplier") &&
+        row.contact_id
+          ? row.contact_id
+          : (row.party_name ?? "").trim().toLowerCase() || "—";
+      if (!tripIdsByKey.has(key)) tripIdsByKey.set(key, new Set());
+      if (row.trip_id) tripIdsByKey.get(key)!.add(row.trip_id);
+    }
+    const out: Record<string, number> = {};
+    tripIdsByKey.forEach((set, k) => {
+      out[k] = set.size;
+    });
+    return out;
+  }, [ledgerTransactions]);
+
+  const ledgerSearchLower = searchQuery.trim().toLowerCase();
+  const tripById = useMemo(
+    () => new Map(tripRows.map((t) => [t.id, t])),
+    [tripRows],
+  );
+  const vehicleById = useMemo(
+    () => new Map(vehicleRows.map((v) => [v.id, v])),
+    [vehicleRows],
+  );
+  const tripVehicleNumberByTripId = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const trip of tripRows) {
+      const vehicleNumber = trip.vehicle_id
+        ? vehicleById.get(trip.vehicle_id)?.vehicle_number ?? null
+        : null;
+      map.set(trip.id, vehicleNumber);
+    }
+    return map;
+  }, [tripRows, vehicleById]);
+
+  const getVehicleNumberForTripId = useCallback(
+    (tripId: string | null): string | null => {
+      if (!tripId) return null;
+      return tripVehicleNumberByTripId.get(tripId) ?? null;
+    },
+    [tripVehicleNumberByTripId],
+  );
+
+  const tripPartyMap = useMemo(() => {
+    const map: Record<
+      string,
+      {
+        client_id?: string | null;
+        supplier_id?: string | null;
+        driver_id?: string | null;
+      }
+    > = {};
+    for (let i = 0; i < tripRows.length; i++) {
+      const t = tripRows[i];
+      map[t.id] = {
+        client_id: t.client_id ?? null,
+        supplier_id: t.supplier_id ?? null,
+        driver_id: t.driver_id ?? null,
+      };
+    }
+    return map;
+  }, [tripRows]);
+
+  const filteredLedgerBySource = useMemo(() => {
+    if (sourceSupplyFilter === "all") return filteredLedger;
+    return filteredLedger.filter((r) => {
+      if (!r.trip_id) return true;
+      const trip = tripById.get(r.trip_id);
+      if (!trip) return true;
+      const isAggregate = !!trip.supplier_id;
+      return sourceSupplyFilter === "aggregate" ? isAggregate : !isAggregate;
+    });
+  }, [filteredLedger, sourceSupplyFilter, tripById]);
+
+  const ledgerRowsByCategory = useMemo(() => {
+    const match = (
+      r: { contact_type?: "client" | "supplier" | "driver" | null },
+      cat: LedgerCategory,
+    ): boolean => {
+      if (cat === "all") return true;
+      const ct = r.contact_type;
+      if (cat === "customers") return ct === "client";
+      if (cat === "suppliers") return ct === "supplier";
+      if (cat === "driver") return ct === "driver";
+      if (cat === "vehicle") return ct != null ? false : true;
+      return true;
+    };
+    return (base: LedgerRow[], cat: LedgerCategory) =>
+      cat === "all" ? base : base.filter((r) => match(r, cat));
+  }, []);
+
+  const filteredLedgerForDisplay = useMemo(() => {
+    let base = ledgerRowsByCategory(
+      filteredLedgerBySource,
+      selectedLedgerCategory,
+    );
+    if (cashDirectionFilter === "in") {
+      base = base.filter((r) => (r.amount_in ?? 0) > 0);
+    } else if (cashDirectionFilter === "out") {
+      base = base.filter((r) => (r.amount_out ?? 0) > 0);
+    }
+    if (ledgerSearchLower) {
+      base = base.filter(
+        (r) =>
+          (r.party_name || "").toLowerCase().includes(ledgerSearchLower) ||
+          (r.description || "").toLowerCase().includes(ledgerSearchLower) ||
+          (r.trip_number || "").toLowerCase().includes(ledgerSearchLower) ||
+          (getVehicleNumberForTripId(r.trip_id ?? null) || "")
+            .toLowerCase()
+            .includes(ledgerSearchLower),
+      );
+    }
+    const sorted = [...base].sort((a, b) => {
+      const mult = ledgerSortDir === "asc" ? 1 : -1;
+      if (ledgerSortKey === "entity") {
+        const entityFor = (r: LedgerRow) =>
+          (r.amount_out ?? 0) > 0
+            ? getVehicleNumberForTripId(r.trip_id ?? null) || r.party_name || ""
+            : r.party_name || "";
+        const nameA = entityFor(a);
+        const nameB = entityFor(b);
+        const nameCmp = nameA.localeCompare(nameB, undefined, {
+          sensitivity: "base",
+        });
+        if (nameCmp !== 0) return mult * nameCmp;
+        return mult * (a.description || "").localeCompare(b.description || "");
+      }
+      if (ledgerSortKey === "source") {
+        const sourceA =
+          a.trip_number || getVehicleNumberForTripId(a.trip_id ?? null) || "";
+        const sourceB =
+          b.trip_number || getVehicleNumberForTripId(b.trip_id ?? null) || "";
+        return mult * sourceA.localeCompare(sourceB);
+      }
+      if (ledgerSortKey === "cash_in") {
+        return mult * ((a.amount_in ?? 0) - (b.amount_in ?? 0));
+      }
+      if (ledgerSortKey === "cash_out") {
+        return mult * ((a.amount_out ?? 0) - (b.amount_out ?? 0));
+      }
+      const dateA = a.transaction_date || a.created_at || "";
+      const dateB = b.transaction_date || b.created_at || "";
+      return mult * dateA.localeCompare(dateB);
+    });
+    return sorted;
+  }, [
+    filteredLedgerBySource,
+    ledgerRowsByCategory,
+    selectedLedgerCategory,
+    cashDirectionFilter,
+    ledgerSearchLower,
+    ledgerSortKey,
+    ledgerSortDir,
+    getVehicleNumberForTripId,
+  ]);
+
+  const ledgerTotalsData = useMemo(
+    () => ledgerTotals(filteredLedgerBySource),
+    [filteredLedgerBySource],
+  );
+
+  const ledgerCategoryCounts = useMemo(() => {
+    const base = filteredLedgerBySource;
+    const match = (
+      r: { contact_type?: "client" | "supplier" | "driver" | null },
+      cat: LedgerCategory,
+    ): boolean => {
+      if (cat === "all") return true;
+      const ct = r.contact_type;
+      if (cat === "customers") return ct === "client";
+      if (cat === "suppliers") return ct === "supplier";
+      if (cat === "driver") return ct === "driver";
+      if (cat === "vehicle") return ct == null;
+      return true;
+    };
+    return {
+      all: base.length,
+      customers: base.filter((r) => match(r, "customers")).length,
+      suppliers: base.filter((r) => match(r, "suppliers")).length,
+      vehicle: base.filter((r) => match(r, "vehicle")).length,
+      driver: base.filter((r) => match(r, "driver")).length,
+    };
+  }, [filteredLedgerBySource]);
+
+  const selectedEntityTotals = useMemo(() => {
+    if (selectedLedgerCategory === "all") return null;
+    return {
+      totalIn: filteredLedgerForDisplay.reduce(
+        (s, r) => s + (r.amount_in ?? 0),
+        0,
+      ),
+      totalOut: filteredLedgerForDisplay.reduce(
+        (s, r) => s + (r.amount_out ?? 0),
+        0,
+      ),
+      count: filteredLedgerForDisplay.length,
+    };
+  }, [selectedLedgerCategory, filteredLedgerForDisplay]);
+
+  const tripDetailsMap = useMemo(() => {
+    const map: Record<
+      string,
+      {
+        trip_number: string;
+        drop_location?: string;
+        pickup_area?: string;
+        client_name?: string;
+        pickup_date?: string | null;
+        vehicle_number?: string | null;
+        vehicle_type?: string | null;
+        vehicle_body_type?: string | null;
+        client_price?: number | null;
+        supplier_rate?: number | null;
+        driver_commission?: number | null;
+        supplier_id?: string | null;
+      }
+    > = {};
+    for (const t of tripRows) {
+      const vehicle = t.vehicle_id ? vehicleById.get(t.vehicle_id) ?? null : null;
+      const vehicleNumber = vehicle?.vehicle_number ?? null;
+      map[t.id] = {
+        trip_number: getTripDisplayNumber(t),
+        drop_location: t.drop_location || undefined,
+        pickup_area: t.pickup_area || undefined,
+        client_name: t.client_name || undefined,
+        pickup_date: t.pickup_date ?? t.created_at ?? undefined,
+        vehicle_number: vehicleNumber ?? undefined,
+        vehicle_type: vehicle?.vehicle_type ?? undefined,
+        vehicle_body_type: vehicle?.vehicle_body_type ?? undefined,
+        client_price: t.client_price ?? null,
+        supplier_rate: t.supplier_rate ?? null,
+        driver_commission: t.driver_commission ?? null,
+        supplier_id: t.supplier_id ?? null,
+      };
+    }
+    return map;
+  }, [tripRows, vehicleById]);
+
+  const setLedgerTransactionsNoop = useCallback(
+    (_action: React.SetStateAction<LedgerRow[] | null>) => {
+      refetch();
+    },
+    [refetch],
+  );
+
+  return {
+    ledgerTransactions,
+    ledgerLoading,
+    ledgerRefreshKey,
+    setLedgerTransactions: setLedgerTransactionsNoop,
+    setLedgerRefreshKey,
+    refetchLedger,
+    financePeriodFilter,
+    setFinancePeriodFilter,
+    sourceSupplyFilter,
+    setSourceSupplyFilter,
+    ledgerSortKey,
+    setLedgerSortKey,
+    ledgerSortDir,
+    setLedgerSortDir,
+    selectedLedgerCategory,
+    setSelectedLedgerCategory,
+    cashDirectionFilter,
+    setCashDirectionFilter,
+    searchQuery,
+    setSearchQuery,
+    filteredLedger,
+    filteredLedgerBySource,
+    filteredLedgerForDisplay,
+    ledgerTotalsData,
+    ledgerCategoryCounts,
+    selectedEntityTotals,
+    tripCountByParty,
+    tripById,
+    getVehicleNumberForTripId,
+    tripPartyMap,
+    tripDetailsMap,
+  };
+}

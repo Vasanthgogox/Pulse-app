@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Method 2: Android SMS parsing — paste into android/app/src/main/AndroidManifest.xml.
+
+  1. Add (top-level, next to other uses-permission):
+     <uses-permission android:name="android.permission.RECEIVE_SMS" />
+
+  2. Add this <receiver> inside <application>. Replace YOUR_PACKAGE with your app package (e.g. com.qmobile.app).
+-->
+<receiver
+    android:name=".SmsReceiver"
+    android:exported="true"
+    android:permission="android.permission.BROADCAST_SMS">
+  <intent-filter android:priority="999">
+    <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+  </intent-filter>
+</receiver>

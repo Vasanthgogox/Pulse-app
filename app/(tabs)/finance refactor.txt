@@ -1,0 +1,100 @@
+my-logistics-app/
+├── apps/
+│   ├── mobile/                    # Expo app (your main)
+│   │   ├── app/                   # Expo Router
+│   │   │   ├── (tabs)/
+│   │   │   │   └── finance.tsx    # ← Main screen (50 LOC)
+│   │   │   ├── modals/
+│   │   │   │   └── ledger-sync.tsx # AddTransactionModal wrapper
+│   │   │   └── +not-found.tsx
+│   │   ├── package.json
+│   │   └── expo-env.d.ts
+│   └── web-admin/                 # Optional Next.js dashboard
+├── packages/
+│   ├── config/                    # Shared ESLint/TS/Prettier
+│   │   ├── eslint-config/
+│   │   ├── tsconfig/
+│   │   └── prettier.config.js
+│   ├── ui/                        # Reusable TeslaHeader/FabButton (40+ components)
+│   │   ├── src/
+│   │   │   ├── components/
+│   │   │   │   ├── TeslaHeader/
+│   │   │   │   │   ├── index.tsx  # Export
+│   │   │   │   │   └── TeslaHeader.tsx
+│   │   │   │   ├── FabButton/
+│   │   │   │   │   ├── index.tsx
+│   │   │   │   │   └── FabButton.tsx
+│   │   │   │   └── EntityDetailOverlay/
+│   │   │   │       └── ... (modals/overlays)
+│   │   │   ├── hooks/
+│   │   │   └── styles/
+│   │   └── package.json
+│   ├── features/                  # Domain slices (finance/clients/etc.)
+│   │   ├── src/
+│   │   │   ├── finance/           # ← Core refactor target
+│   │   │   │   ├── components/
+│   │   │   │   │   ├── FinanceScreen.tsx     # Main (imports hooks/selectors)
+│   │   │   │   │   ├── TreasurySummaryCard/
+│   │   │   │   │   ├── LedgerTab/
+│   │   │   │   │   ├── LedgerReportModal/
+│   │   │   │   │   └── TripPnLDetailSheet/
+│   │   │   │   ├── hooks/
+│   │   │   │   │   ├── useFinanceLedger.ts   # useLedgerTransactions, filterLedgerByPeriod
+│   │   │   │   │   ├── useFinanceEntities.ts # Clients/Drivers/Vehicles
+│   │   │   │   │   └── useLedgerSorting.ts   # sort/filter logic
+│   │   │   │   ├── lib/              # Pure utils
+│   │   │   │   │   ├── filterLedgerByPeriod.ts
+│   │   │   │   │   ├── ledgerTotals.ts
+│   │   │   │   │   └── tripDetailsMap.ts
+│   │   │   │   ├── selectors/        # Memoized derived state
+│   │   │   │   │   ├── ledgerRowsByCategory.ts
+│   │   │   │   │   └── selectedEntityTransactions.ts
+│   │   │   │   ├── types.ts          # LedgerRow, FinanceSubTab, etc.
+│   │   │   │   └── index.ts          # Barrel export
+│   │   │   ├── clients/
+│   │   │   │   ├── components/       # AddClientModal, CustomersTab
+│   │   │   │   ├── hooks/
+│   │   │   │   └── services/         # createClient, getClientsByOrganization
+│   │   │   ├── drivers/
+│   │   │   │   └── ... (DriversTab, salary requests)
+│   │   │   ├── suppliers/
+│   │   │   └── vehicles/             # GarrageTab
+│   │   └── package.json
+│   ├── services/                    # API layer (Supabase queries)
+│   │   ├── src/
+│   │   │   ├── finance/
+│   │   │   │   ├── createLedgerEntry.ts
+│   │   │   │   ├── getTransactionsByOrganization.ts
+│   │   │   │   └── updateLedgerEntry.ts
+│   │   │   ├── drivers/
+│   │   │   │   ├── createDriverLedgerEntry.ts
+│   │   │   │   └── getDriverLedgerByDriver.ts
+│   │   │   ├── clients.ts
+│   │   │   └── trips.ts              # getTripsByOrganization
+│   │   └── package.json
+│   ├── lib/                         # Shared utils (no deps)
+│   │   ├── src/
+│   │   │   ├── format.ts             # formatLedgerDate
+│   │   │   ├── capabilities.ts       # canAccessFinance
+│   │   │   └── validation.ts         # Duplicate checks
+│   │   └── package.json
+│   └── constants/                   # Static data
+│       ├── src/
+│       │   ├── theme.ts
+│       │   └── tabs.ts              # FinanceSubTab
+│       └── package.json
+├── tools/
+│   ├── scripts/
+│   │   └── refactor-file.ts         # Node script to split file.txt
+│   └── lint-staged.config.js
+├── README.md                       # Setup: pnpm i --filter=...
+├── turbo.json                      # Turborepo for monorepo
+└── pnpm-workspace.yaml
+
+
+	1.	Extract Types:  packages/features/src/finance/types.ts  → All  type LedgerRow = ... 
+	2.	Pure Utils: Move  filterLedgerByPeriod ,  ledgerTotals  to  lib/  → Testable, no React.
+	3.	Hooks:  useFinanceLedger  → Combines  useRealtimeTransactions , memos (useMemo → useCallback).
+	4.	Components: Atomic split:  LedgerTab.tsx  (table),  FinanceScreen.tsx  (orchestrator, 50 LOC).
+	5.	Services: Supabase queries →  services/finance/  (error handling, typesafe).
+	6.	Run:  pnpm add -w turbo eslint-config-airbnb-typescript @types/node  → Lint all.

@@ -1,0 +1,729 @@
+/**
+ * Live tracking map rendered with react-native-maps using recorded trip points
+ * and the latest live driver location.
+ */
+
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
+import Theme from "@/constants/Theme";
+import type { DriverLocationRow } from "@/services/driverLocationService";
+import { getOptimalRoute, type RouteResult } from "@/services/routingService";
+import MapView, { Callout, Marker, Polyline } from "react-native-maps";
+
+type MapCoordinate = {
+  latitude: number;
+  longitude: number;
+};
+
+type MarkerKind = "origin" | "past" | "current" | "destination";
+
+type TrackingMarker = {
+  id: string;
+  coordinate: MapCoordinate;
+  kind: MarkerKind;
+  title: string;
+  subtitle?: string;
+};
+
+const DEFAULT_MAP_REGION = {
+  latitude: 20.5937,
+  longitude: 78.9629,
+  latitudeDelta: 8,
+  longitudeDelta: 8,
+};
+
+const CARD_BG = Theme.cardWhite;
+
+function isFiniteCoordinate(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isValidCoordinate(point: Partial<MapCoordinate> | null | undefined): point is MapCoordinate {
+  return !!point && isFiniteCoordinate(point.latitude) && isFiniteCoordinate(point.longitude);
+}
+
+function areCoordinatesClose(a: MapCoordinate, b: MapCoordinate) {
+  return (
+    Math.abs(a.latitude - b.latitude) < 0.0001 &&
+    Math.abs(a.longitude - b.longitude) < 0.0001
+  );
+}
+
+function dedupeCoordinates(points: MapCoordinate[]) {
+  const unique: MapCoordinate[] = [];
+  for (const point of points) {
+    if (!unique.some((existing) => areCoordinatesClose(existing, point))) {
+      unique.push(point);
+    }
+  }
+  return unique;
+}
+
+function selectHistoryWaypoint(points: MapCoordinate[], ratio: number) {
+  if (points.length < 4) return null;
+  const maxIndex = points.length - 1;
+  const index = Math.min(Math.max(Math.round(maxIndex * ratio), 1), maxIndex - 1);
+  return points[index] ?? null;
+}
+
+const styles = StyleSheet.create({
+  trackingPageMapArea: {
+    width: "100%",
+    backgroundColor: Theme.surface,
+    overflow: "hidden",
+    position: "relative",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Theme.border,
+  },
+  map: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  trackingRouteHalo: {
+    position: "absolute",
+    top: 16,
+    left: 16,
+    right: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: 1,
+    borderColor: Theme.border,
+  },
+  trackingRouteHaloLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.primary,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  trackingRouteHaloText: {
+    marginTop: 4,
+    fontSize: 12,
+    color: Theme.textPrimary,
+  },
+  mapLoadingOverlay: {
+    position: "absolute",
+    inset: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.55)",
+  },
+  mapEmptyState: {
+    position: "absolute",
+    justifyContent: "center",
+    alignItems: "center",
+    inset: 0,
+    paddingHorizontal: 32,
+  },
+  mapEmptyTitle: {
+    marginTop: 12,
+    fontSize: 16,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  mapEmptySubtitle: {
+    marginTop: 6,
+    fontSize: 13,
+    color: Theme.textMuted,
+    textAlign: "center",
+  },
+  mapMarkerOuter: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: Theme.textOnPrimary,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  mapMarkerOrigin: {
+    backgroundColor: Theme.negative,
+  },
+  mapMarkerPast: {
+    backgroundColor: Theme.primaryLight,
+  },
+  mapMarkerCurrent: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: Theme.primary,
+  },
+  mapMarkerDestination: {
+    backgroundColor: Theme.positive,
+  },
+  mapCallout: {
+    minWidth: 140,
+    maxWidth: 220,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: Theme.border,
+  },
+  mapCalloutTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  mapCalloutSubtitle: {
+    marginTop: 4,
+    fontSize: 11,
+    color: Theme.textMuted,
+  },
+  // Vehicle card (inline variant — used below map in TripDetailScreen)
+  vehicleCardInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderRadius: 20,
+    backgroundColor: CARD_BG,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  trackingPageMapCardLeft: {
+    marginRight: 14,
+    justifyContent: "center",
+  },
+  trackingMapNodeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: Theme.textPrimaryDark,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  trackingPageMapCardCenter: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+    paddingRight: 10,
+  },
+  trackingMapNodeTitle: {
+    fontSize: 13,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    lineHeight: 18,
+  },
+  trackingPageMapCardSyncing: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.driverEmerald,
+    letterSpacing: 1.8,
+    marginTop: 8,
+    textTransform: "uppercase",
+    fontStyle: "italic",
+    lineHeight: 12,
+  },
+  trackingMapNodeVerified: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    marginTop: 10,
+    letterSpacing: 0.6,
+    lineHeight: 14,
+  },
+  trackingPageMapCardRight: {
+    marginLeft: 14,
+    minWidth: 72,
+  },
+  trackingMapNodeSpeed: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: Theme.primary,
+    letterSpacing: 0.5,
+    fontStyle: "italic",
+    textTransform: "uppercase",
+  },
+  // Driver variant: full width, dark surface, no horizontal margin
+  vehicleCardDriver: {
+    marginHorizontal: 0,
+    marginTop: 0,
+    marginBottom: 0,
+    borderRadius: 12,
+    backgroundColor: Theme.driverSurfaceElevated,
+    borderColor: Theme.driverBorder,
+    borderWidth: 1,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  trackingMapNodeTitleDriver: {
+    color: Theme.textOnDark,
+  },
+  trackingPageMapCardSyncingDriver: {
+    color: Theme.driverEmerald,
+  },
+  trackingMapNodeVerifiedDriver: {
+    color: Theme.driverTextMuted,
+  },
+  trackingMapNodeSpeedDriver: {
+    color: Theme.driverGold,
+  },
+});
+
+/** [origin, pastLocation1, pastLocation2, currentLive, destination] */
+export type TrackingMapLocationLabels = [string, string, string, string, string];
+
+/** Format "Updated X min ago" from ISO recorded_at. */
+function formatLocationUpdatedAt(recordedAt: string): string {
+  const then = new Date(recordedAt).getTime();
+  const now = Date.now();
+  const diffMs = now - then;
+  const diffM = Math.floor(diffMs / 60000);
+  if (diffM < 1) return "Updated just now";
+  if (diffM === 1) return "Updated 1 min ago";
+  if (diffM < 60) return `Updated ${diffM} min ago`;
+  const diffH = Math.floor(diffM / 60);
+  if (diffH === 1) return "Updated 1 hr ago";
+  return `Updated ${diffH} hr ago`;
+}
+
+export interface TrackingMapBlockProps {
+  mapHeight: number;
+  vehicleLabel: string | null;
+  locationLabels?: TrackingMapLocationLabels;
+  originCoordinate?: MapCoordinate | null;
+  destinationCoordinate?: MapCoordinate | null;
+  /** Latest driver location from DB (Live Tracking). */
+  latestLocation?: DriverLocationRow | null;
+  /** True while fetching driver location. */
+  driverLocationLoading?: boolean;
+  /** Trip location history points (pickup/drop proxy). */
+  tripLocationPoints?: { latitude: number; longitude: number; recorded_at: string }[];
+  /** Reverse-geocoded address for latest location. */
+  locationAddress?: string | null;
+}
+
+const DEFAULT_LOCATION_LABELS: TrackingMapLocationLabels = [
+  "Start",
+  "Past location 1",
+  "Past location 2",
+  "Current",
+  "Destination",
+];
+
+export function TrackingMapBlock({
+  mapHeight,
+  vehicleLabel,
+  locationLabels = DEFAULT_LOCATION_LABELS,
+  originCoordinate,
+  destinationCoordinate,
+  latestLocation,
+  driverLocationLoading = false,
+  tripLocationPoints = [],
+  locationAddress,
+}: TrackingMapBlockProps) {
+  const [origin, past1, past2, current, destination] = locationLabels;
+  const mapRef = useRef<MapView | null>(null);
+  const [fallbackRoute, setFallbackRoute] = useState<RouteResult | null>(null);
+
+  const historyCoordinates = useMemo(
+    () =>
+      dedupeCoordinates(
+        tripLocationPoints
+          .map((point) => ({ latitude: point.latitude, longitude: point.longitude }))
+          .filter(isValidCoordinate)
+      ),
+    [tripLocationPoints]
+  );
+
+  const latestCoordinate = useMemo<MapCoordinate | null>(() => {
+    if (!latestLocation) return null;
+    const point = {
+      latitude: latestLocation.latitude,
+      longitude: latestLocation.longitude,
+    };
+    return isValidCoordinate(point) ? point : null;
+  }, [latestLocation]);
+
+  const normalizedOriginCoordinate = useMemo(
+    () => (isValidCoordinate(originCoordinate) ? originCoordinate : null),
+    [originCoordinate]
+  );
+
+  const normalizedDestinationCoordinate = useMemo(
+    () => (isValidCoordinate(destinationCoordinate) ? destinationCoordinate : null),
+    [destinationCoordinate]
+  );
+
+  useEffect(() => {
+    if (!normalizedOriginCoordinate || !normalizedDestinationCoordinate) {
+      setFallbackRoute(null);
+      return;
+    }
+    let cancelled = false;
+    getOptimalRoute(normalizedOriginCoordinate, normalizedDestinationCoordinate)
+      .then((result) => {
+        if (!cancelled) {
+          setFallbackRoute(result ?? null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFallbackRoute(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [normalizedDestinationCoordinate, normalizedOriginCoordinate]);
+
+  const routeCoordinates = useMemo(() => {
+    const points = [...historyCoordinates];
+    if (latestCoordinate) {
+      const lastPoint = points[points.length - 1];
+      if (!lastPoint || !areCoordinatesClose(lastPoint, latestCoordinate)) {
+        points.push(latestCoordinate);
+      }
+    }
+    return dedupeCoordinates(points);
+  }, [historyCoordinates, latestCoordinate]);
+
+  const displayedRouteCoordinates = useMemo(() => {
+    if (routeCoordinates.length > 1) return routeCoordinates;
+    if (fallbackRoute?.coordinates?.length) {
+      return dedupeCoordinates(fallbackRoute.coordinates.filter(isValidCoordinate));
+    }
+    if (normalizedOriginCoordinate && normalizedDestinationCoordinate) {
+      return dedupeCoordinates([normalizedOriginCoordinate, normalizedDestinationCoordinate]);
+    }
+    return routeCoordinates;
+  }, [
+    fallbackRoute?.coordinates,
+    normalizedDestinationCoordinate,
+    normalizedOriginCoordinate,
+    routeCoordinates,
+  ]);
+
+  const markers = useMemo(() => {
+    const nextMarkers: TrackingMarker[] = [];
+
+    const pushMarker = (marker: TrackingMarker | null) => {
+      if (!marker) return;
+      if (
+        nextMarkers.some((existing) =>
+          areCoordinatesClose(existing.coordinate, marker.coordinate)
+        )
+      ) {
+        return;
+      }
+      nextMarkers.push(marker);
+    };
+
+    const originPoint = normalizedOriginCoordinate ?? historyCoordinates[0] ?? latestCoordinate;
+    const destinationPoint =
+      normalizedDestinationCoordinate ??
+      (historyCoordinates.length > 1
+        ? historyCoordinates[historyCoordinates.length - 1]
+        : null);
+    const pastOnePoint = selectHistoryWaypoint(historyCoordinates, 0.33);
+    const pastTwoPoint = selectHistoryWaypoint(historyCoordinates, 0.66);
+    const currentPoint = latestCoordinate ?? historyCoordinates[historyCoordinates.length - 1] ?? null;
+
+    pushMarker(
+      originPoint
+        ? {
+            id: "origin",
+            coordinate: originPoint,
+            kind: "origin",
+            title: origin,
+            subtitle: "Trip origin",
+          }
+        : null
+    );
+    pushMarker(
+      pastOnePoint
+        ? {
+            id: "past-1",
+            coordinate: pastOnePoint,
+            kind: "past",
+            title: past1,
+            subtitle: "Recorded route point",
+          }
+        : null
+    );
+    pushMarker(
+      pastTwoPoint
+        ? {
+            id: "past-2",
+            coordinate: pastTwoPoint,
+            kind: "past",
+            title: past2,
+            subtitle: "Recorded route point",
+          }
+        : null
+    );
+    pushMarker(
+      destinationPoint
+        ? {
+            id: "destination",
+            coordinate: destinationPoint,
+            kind: "destination",
+            title: destination,
+            subtitle: "Latest recorded trip point",
+          }
+        : null
+    );
+    pushMarker(
+      currentPoint
+        ? {
+            id: "current",
+            coordinate: currentPoint,
+            kind: "current",
+            title: current,
+            subtitle:
+              locationAddress?.trim() ||
+              vehicleLabel?.trim() ||
+              (latestLocation ? formatLocationUpdatedAt(latestLocation.recorded_at) : "Live driver location"),
+          }
+        : null
+    );
+
+    return nextMarkers;
+  }, [
+    current,
+    destination,
+    historyCoordinates,
+    latestCoordinate,
+    latestLocation,
+    locationAddress,
+    normalizedDestinationCoordinate,
+    normalizedOriginCoordinate,
+    origin,
+    past1,
+    past2,
+    vehicleLabel,
+  ]);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    if (displayedRouteCoordinates.length > 1) {
+      const timer = setTimeout(() => {
+        mapRef.current?.fitToCoordinates(displayedRouteCoordinates, {
+          edgePadding: { top: 72, right: 48, bottom: 48, left: 48 },
+          animated: true,
+        });
+      }, 120);
+      return () => clearTimeout(timer);
+    }
+    const focusPoint =
+      displayedRouteCoordinates[0] ??
+      latestCoordinate ??
+      normalizedOriginCoordinate ??
+      normalizedDestinationCoordinate;
+    if (!focusPoint) return;
+    const timer = setTimeout(() => {
+      mapRef.current?.animateToRegion(
+        {
+          ...focusPoint,
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        },
+        300
+      );
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [
+    displayedRouteCoordinates,
+    latestCoordinate,
+    normalizedDestinationCoordinate,
+    normalizedOriginCoordinate,
+  ]);
+
+  const statusLabel = driverLocationLoading
+    ? "Syncing live location"
+    : latestLocation
+      ? "Live tracking active"
+      : displayedRouteCoordinates.length > 1
+        ? "Showing trip route"
+        : routeCoordinates.length > 0
+          ? "Showing recorded route"
+          : "Waiting for driver location";
+
+  return (
+    <View style={[styles.trackingPageMapArea, { height: mapHeight }]}>
+      <MapView
+        ref={(instance) => {
+          mapRef.current = instance;
+        }}
+        style={styles.map}
+        initialRegion={DEFAULT_MAP_REGION}
+        mapType={Platform.OS === "ios" ? ("mutedStandard" as const) : "standard"}
+        showsCompass
+        showsTraffic={false}
+        rotateEnabled
+        pitchEnabled
+        toolbarEnabled={false}
+        moveOnMarkerPress={false}
+      >
+        {displayedRouteCoordinates.length > 1 ? (
+          <>
+            <Polyline
+              coordinates={displayedRouteCoordinates}
+              strokeColor={`${Theme.primary}33`}
+              strokeWidth={8}
+              lineCap="round"
+              lineJoin="round"
+            />
+            <Polyline
+              coordinates={displayedRouteCoordinates}
+              strokeColor={Theme.primary}
+              strokeWidth={4}
+              lineCap="round"
+              lineJoin="round"
+            />
+          </>
+        ) : null}
+
+        {markers.map((marker) => {
+          const markerStyle =
+            marker.kind === "origin"
+              ? styles.mapMarkerOrigin
+              : marker.kind === "destination"
+                ? styles.mapMarkerDestination
+                : marker.kind === "current"
+                  ? styles.mapMarkerCurrent
+                  : styles.mapMarkerPast;
+
+          const iconName =
+            marker.kind === "origin"
+              ? "map-marker"
+              : marker.kind === "destination"
+                ? "flag"
+                : marker.kind === "current"
+                  ? "location-arrow"
+                  : "circle";
+
+          const iconSize = marker.kind === "current" ? 15 : 12;
+
+          return (
+            <Marker key={marker.id} coordinate={marker.coordinate} anchor={{ x: 0.5, y: 0.5 }}>
+              <View style={[styles.mapMarkerOuter, markerStyle]}>
+                <FontAwesome name={iconName} size={iconSize} color={Theme.textOnPrimary} />
+              </View>
+              <Callout tooltip>
+                <View style={styles.mapCallout}>
+                  <Text style={styles.mapCalloutTitle}>{marker.title}</Text>
+                  {marker.subtitle ? (
+                    <Text style={styles.mapCalloutSubtitle}>{marker.subtitle}</Text>
+                  ) : null}
+                </View>
+              </Callout>
+            </Marker>
+          );
+        })}
+      </MapView>
+
+      <View style={styles.trackingRouteHalo} pointerEvents="none">
+        <Text style={styles.trackingRouteHaloLabel}>{statusLabel}</Text>
+        <Text style={styles.trackingRouteHaloText} numberOfLines={2}>
+          {locationAddress?.trim() ||
+            vehicleLabel?.trim() ||
+            "Trip route and live driver movement appear here."}
+        </Text>
+      </View>
+
+      {driverLocationLoading ? (
+        <View style={styles.mapLoadingOverlay} pointerEvents="none">
+          <ActivityIndicator size="small" color={Theme.primary} />
+        </View>
+      ) : null}
+
+      {!driverLocationLoading && displayedRouteCoordinates.length === 0 ? (
+        <View style={styles.mapEmptyState} pointerEvents="none">
+          <FontAwesome name="map-o" size={28} color={Theme.textMuted} />
+          <Text style={styles.mapEmptyTitle}>No route points yet</Text>
+          <Text style={styles.mapEmptySubtitle}>
+            Driver location will appear here after the app starts sending trip updates.
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/** Vehicle + location + speed card for use below the map (above Driver's Activity Timeline). */
+export function VehicleTrackingCard({
+  vehicleLabel,
+  cardStatusText,
+  cardSubtext,
+  speedKmh,
+  variant = "default",
+}: {
+  vehicleLabel: string | null;
+  cardStatusText: string;
+  cardSubtext: string;
+  /** When provided (number), show speed; when null/undefined, hide speed to avoid showing fake data when no location. */
+  speedKmh?: number | null;
+  /** "driver" = dark surface, full width, driver theme colors; "default" = light card with margin. */
+  variant?: "default" | "driver";
+}) {
+  const isDriver = variant === "driver";
+  const showSpeed = speedKmh != null && !Number.isNaN(speedKmh);
+  return (
+    <View style={[styles.vehicleCardInline, isDriver && styles.vehicleCardDriver]}>
+      <View style={styles.trackingPageMapCardLeft}>
+        <View style={styles.trackingMapNodeIcon}>
+          <FontAwesome name="truck" size={18} color="#ffffff" />
+        </View>
+      </View>
+      <View style={styles.trackingPageMapCardCenter}>
+        <Text
+          style={[styles.trackingMapNodeTitle, isDriver && styles.trackingMapNodeTitleDriver]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {vehicleLabel?.trim() || "—"}
+        </Text>
+        <Text
+          style={[styles.trackingPageMapCardSyncing, isDriver && styles.trackingPageMapCardSyncingDriver]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {cardStatusText}
+        </Text>
+        <Text
+          style={[styles.trackingMapNodeVerified, isDriver && styles.trackingMapNodeVerifiedDriver]}
+          numberOfLines={2}
+          ellipsizeMode="tail"
+        >
+          {cardSubtext}
+        </Text>
+      </View>
+      {showSpeed && (
+        <View style={styles.trackingPageMapCardRight}>
+          <Text style={[styles.trackingMapNodeSpeed, isDriver && styles.trackingMapNodeSpeedDriver]}>
+            {Math.round(speedKmh)} KM/H
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}

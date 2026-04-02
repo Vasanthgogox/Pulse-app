@@ -1,0 +1,35 @@
+---
+description: Q Mobile — responsive layout and safe area compliance for all devices
+alwaysApply: true
+---
+
+# Q Mobile: Responsive & Safe Area
+
+All screens and modals must respect **safe area** (notch, status bar, home indicator) and work across **device sizes** (compact phones, standard/large phones, tablets). See `docs/RESPONSIVE_AND_SAFE_AREA.md` for the full guide.
+
+## Rules
+
+1. **Safe area**
+   - Use `useSafeAreaInsets()` from `react-native-safe-area-context` on every screen that draws to the edges.
+   - Apply `paddingTop: insets.top` (or `insets.top + 16` for headers) and `paddingBottom: insets.bottom` on scroll content and fixed bottom UI.
+   - For **loading states** that take the full screen, use `CenteredLoadingView` from `@/components/CenteredLoadingView` (do not use a plain `View` + `ActivityIndicator` without insets).
+
+2. **Layout components (prefer these)**
+   - List screens: `ListScreenLayout` (header + list + optional FAB; insets built-in).
+   - Detail screens: `DetailPageLayout` (back, title, scroll; insets built-in).
+   - FAB: `FAB` from `@/components/FAB` (uses `24 + insets.bottom`).
+   - Custom headers that need top inset: use a header that applies `paddingTop: insets.top + 16` (e.g. `@/components/TeslaHeader`) or wrap the screen with `paddingTop: insets.top`.
+
+3. **Constants**
+   - Spacing/layout: use `Layout` from `@/constants/Layout` (e.g. `Layout.screenPaddingHorizontal`, `Layout.fabBottomOffset`) instead of magic numbers where it makes sense.
+   - Colors: always from `Theme` (`@/constants/Theme`).
+
+4. **New screens**
+   - Before merging, confirm: top inset on container/header, bottom inset on scroll/fixed bottom UI, loading state uses `CenteredLoadingView` or manual insets.
+   - No fixed status bar or home indicator heights; no `paddingTop: 48`-style constants for “safe” area.
+
+5. **Touch and readability**
+   - Interactive elements: at least 44pt touch target (use padding or `hitSlop` if the visible control is smaller).
+   - Prefer flex and percentage for width; use `minWidth: 0` on flex children that contain text to avoid overflow.
+
+When adding a new route or modal, open `docs/RESPONSIVE_AND_SAFE_AREA.md` and follow the checklist.

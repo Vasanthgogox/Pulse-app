@@ -1,0 +1,40 @@
+---
+description: Q Mobile — core accounting model; double-entry logic for ledger and finance
+alwaysApply: false
+globs: app/(tabs)/finance.tsx, features/finance/**/*.ts, features/finance/**/*.tsx, components/AddTransactionModal.tsx
+---
+
+# Q Mobile: Core Accounting Model
+
+All ledger and in/out entry logic must follow the **double-entry accounting model**. Full spec: `docs/CORE_ACCOUNTING_MODEL.md`.
+
+## Core accounts (every transaction hits ≥ 2)
+
+- **Accounts Receivable (Customer)** — AR  
+- **Accounts Payable (Supplier)** — AP  
+- **Driver Payable**  
+- **Vehicle Expense**  
+- **Revenue** · **Cash/Bank** · **Commission Expense**
+
+## Mapping: current `transactions` row → double entry
+
+| UI / payload | Stored as | Double entry (logical) |
+|--------------|-----------|-------------------------|
+| Cash IN, party = client | amount_in > 0, contact_type client | Dr Cash/Bank · Cr AR (customer payment) |
+| Cash OUT, party = supplier | amount_out > 0, contact_type supplier | Dr AP · Cr Cash/Bank (supplier payment) |
+| Cash OUT, party = driver | amount_out > 0, contact_type driver, description e.g. Monthly salary | Dr Driver Payable · Cr Cash/Bank (driver payment) |
+| Cash OUT, vehicle expense (Fuel/Maintenance/Toll etc.) | amount_out > 0, no contact, party_name/description = expense type | Dr Vehicle Expense · Cr Cash/Bank |
+
+Trip creation (asset): AR + Revenue; Commission Expense + Driver Payable; vehicle revenue allocation.  
+Trip creation (aggregation): AR + Revenue; Cost of Service + AP; no vehicle.
+
+## Rules
+
+- **Balance is always computed** from transaction history; no direct balance editing.
+- Trip rate edit → auto-adjust receivable; supplier rate edit → auto-adjust payable; trip cancellation → reverse entries.
+- Ledger edit after 7 days → require admin approval (when implemented).
+- Use `features/finance/accounting/accountingModel.ts` for consistent debit/credit account interpretation of a row.
+
+## UI
+
+Do not change existing Finance tab layout. Customers, Suppliers, Garage, Drivers, Ledger and entity details already align with the model; new work should preserve current UI and only adjust data flow and entry logic.

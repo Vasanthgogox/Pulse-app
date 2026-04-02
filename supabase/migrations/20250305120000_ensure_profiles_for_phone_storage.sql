@@ -1,0 +1,4 @@
+-- Reverted: no new profiles table. Phone (and full_name, company_name, avatar_url) are stored only in
+-- auth.users.raw_user_meta_data on sign-up and profile edit. Connection invite-by-phone uses
+-- get_invitee_by_phone() which reads from auth.users. Org resolved via organization_members or organizations.owner_id.
+-- This migration is a no-op to preserve migration history.
