@@ -725,12 +725,10 @@ const styles = StyleSheet.create({
     marginHorizontal: 0,
     marginBottom: 0,
     borderRadius: 0,
-    borderLeftWidth: 0,
-    borderRightWidth: 0,
+    borderWidth: 0,
     borderColor: 'transparent',
     paddingHorizontal: 16,
     paddingVertical: 4,
-    borderBottomWidth: 0,
   },
   cardFullWidthToolbarOnly: {
     paddingTop: 0,
@@ -792,8 +790,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     paddingRight: 0,
     paddingLeft: 12,
-    borderLeftWidth: 1,
-    borderLeftColor: Theme.separatorDark,
   },
   summaryCellThird: {
     flex: 1,
@@ -804,8 +800,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingLeft: 12,
     paddingRight: 0,
-    borderLeftWidth: 1,
-    borderLeftColor: Theme.separatorDark,
   },
   summaryCellActive: {
     backgroundColor: 'rgba(255,255,255,0.08)',

@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, RefreshControl, Alert, Platform } from 'react-native';
 import { useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -19,6 +19,19 @@ export default function DriverSettingsScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const handleSignOut = async () => {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm) {
+        if (!window.confirm('Are you sure you want to sign out?')) return;
+      }
+    } else {
+      const confirmed = await new Promise((resolve) => {
+        Alert.alert('Sign out', 'Are you sure you want to sign out?', [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Sign out', style: 'destructive', onPress: () => resolve(true) },
+        ]);
+      });
+      if (!confirmed) return;
+    }
     await signOut();
     router.replace('/sign-in');
   };

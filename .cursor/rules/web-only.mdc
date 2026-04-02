@@ -1,0 +1,13 @@
+# 🌐 WEB-ONLY PROJECT (STRICT)
+
+## IMPORTANT CONTEXT
+**This project (`q-web`) is STRICTLY for the web platform.**
+There is a separate repository/folder for the mobile application.
+
+## RULES
+- **Web First & Only:** Always assume the code is running on the web (`Platform.OS === 'web'`). Do not add mobile-only native modules, libraries, or configurations unless they are fully compatible with `react-native-web`.
+- **UI/UX:** Optimize for web interactions. Consider hover states, cursor styles (`cursor: 'pointer'`), keyboard navigation, and responsive layouts for desktop and mobile web browsers.
+- **APIs & Features:** If a React Native feature or Expo module is not supported on the web, do not use it. Always look for the web equivalent (e.g., using `window.confirm` or custom modals instead of React Native's `Alert.alert` if behavior differs or isn't well-supported, using `localStorage` or `sessionStorage` conceptually if needed, though `AsyncStorage` works on web).
+- **Styling:** Be mindful of web-specific CSS properties if using `react-native-web` escapes or specific web styles.
+
+When suggesting solutions, debugging errors, or writing new code, **strictly prioritize web compatibility and behavior.**

@@ -433,13 +433,13 @@ export default function NetworkScreen() {
   if (subTab === "load") {
     return (
       <View
-        style={[styles.container, { backgroundColor: Theme.darkBackground }]}
+        style={[styles.container, { backgroundColor: Theme.darkBackground, paddingTop: insets.top + Layout.tabBarHeight + 20 }]}
       >
         <View
           style={[
             styles.blackBlock,
             styles.blackBlockLoad,
-            { paddingTop: insets.top + 12 },
+            { paddingTop: 12 },
           ]}
         >
           <View style={styles.darkHeaderRow}>
@@ -506,7 +506,7 @@ export default function NetworkScreen() {
   const MANAGE_CONTENT_BG = "#f4f5f7";
 
   return (
-    <View style={[styles.container, { backgroundColor: Theme.darkBackground }]}>
+    <View style={[styles.container, { backgroundColor: Theme.darkBackground, paddingTop: insets.top + Layout.tabBarHeight + 20 }]}>
       {/* Sync toast — small animated pill, non-blocking */}
       {showSuccess && (
         <Animated.View
@@ -528,7 +528,7 @@ export default function NetworkScreen() {
       )}
 
       {/* Single black block: title, Manage|Load tabs, segment tabs, search (finance-style) */}
-      <View style={[styles.blackBlock, { paddingTop: insets.top + 12 }]}>
+      <View style={[styles.blackBlock, { paddingTop: 12 }]}>
         <View style={styles.darkHeaderRow}>
           <View style={styles.darkHeaderLeft}>
             <View style={styles.darkHeaderTitleWrap}>

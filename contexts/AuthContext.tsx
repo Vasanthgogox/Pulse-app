@@ -241,7 +241,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     signOutRequestedRef.current = true;
-    await authService.signOut();
+    try {
+      await authService.signOut();
+    } catch (error) {
+      console.error("Error during signOut in AuthContext:", error);
+    }
     setSessionExpired(false);
     setUser(null);
     setProfile(null);

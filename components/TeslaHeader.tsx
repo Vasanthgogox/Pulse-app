@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   },
   wrapperDark: {
     backgroundColor: "#000000",
-    borderBottomColor: Theme.separatorDark,
+    borderBottomWidth: 0,
   },
   titleDark: { color: Theme.textOnDark, fontSize: 11, letterSpacing: 0.8 },
   subtitleDark: {

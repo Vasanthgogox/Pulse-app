@@ -1,16 +1,15 @@
 /**
  * Shared email validation for forms (sign-up, driver sign-up, Add Driver, etc.).
- * Format: local-part @ gmail.com only; max length 255.
+ * Format: max length 255.
  */
 
 const MAX_EMAIL_LENGTH = 255;
-const ALLOWED_DOMAIN = 'gmail.com';
 
 /** Basic format: something @ something . something (no spaces, has @ and dot in domain). */
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * Validates an email address string. Only @gmail.com addresses are accepted.
+ * Validates an email address string.
  * @param email - Raw input (trimmed internally).
  * @returns Error message if invalid, or null if valid.
  */
@@ -22,11 +21,7 @@ export function validateEmail(email: string): string | null {
     return `Email must be at most ${MAX_EMAIL_LENGTH} characters.`;
   }
   if (!EMAIL_REGEX.test(trimmed)) {
-    return 'Enter a valid email address (e.g. you@gmail.com).';
-  }
-  const domain = trimmed.slice(trimmed.indexOf('@') + 1).toLowerCase();
-  if (domain !== ALLOWED_DOMAIN) {
-    return 'Only Gmail addresses are allowed (e.g. you@gmail.com).';
+    return 'Enter a valid email address (e.g. name@example.com).';
   }
   return null;
 }

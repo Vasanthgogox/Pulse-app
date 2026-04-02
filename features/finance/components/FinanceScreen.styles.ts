@@ -36,8 +36,6 @@ export const styles = StyleSheet.create({
     marginTop: 2,
     marginBottom: 6,
     paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.separatorDark,
   },
   fiscalTab: {
     flex: 1,
