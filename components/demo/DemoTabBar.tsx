@@ -7,7 +7,7 @@ import Theme from '@/constants/Theme';
 import { useLanguage } from '@/contexts/LanguageContext';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import { useEffect } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -77,7 +77,13 @@ export function DemoTabBar({
         
         {isWeb && (
           <View style={styles.webLogoWrap}>
-            <Text style={styles.webLogoText}>Q MOBILE</Text>
+            <Image
+              source={require('../../assets/images/icon.png')}
+              style={styles.webLogoImage}
+              resizeMode="contain"
+              accessibilityLabel="Q web"
+            />
+            <Text style={styles.webLogoText}>Q WEB</Text>
           </View>
         )}
 
@@ -228,20 +234,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     elevation: 4,
     flexDirection: 'row',
-    alignItems: 'stretch',
+    alignItems: 'center',
     justifyContent: 'space-between', // Changed to space-between
   },
   webLogoWrap: {
     width: 200,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
+    height: '100%',
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'flex-start',
+    alignItems: 'center',
     paddingLeft: 24,
   },
   webLogoText: {
-    fontSize: 16,
+    fontSize: 14,
+    lineHeight: 16,
     fontWeight: '900',
     color: Theme.primary,
     letterSpacing: 2,
+  },
+  webLogoImage: {
+    width: 48,
+    height: 48,
   },
   tabsRow: {
     flex: 1,
@@ -261,6 +275,7 @@ const styles = StyleSheet.create({
   },
   webRightWrap: {
     width: 200,
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'flex-end',
     paddingRight: 24,
