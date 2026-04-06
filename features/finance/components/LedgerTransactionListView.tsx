@@ -1218,7 +1218,11 @@ export function LedgerTransactionListView({
             const ScrollWrapper = embedInParentScroll ? View : ScrollView;
             const scrollWrapperProps = embedInParentScroll
               ? {}
-              : { showsVerticalScrollIndicator: false };
+              : {
+                  showsVerticalScrollIndicator: false,
+                  style: styles.ledgerMainScroll,
+                  contentContainerStyle: styles.ledgerMainScrollContent,
+                };
             return (
               <ScrollWrapper {...scrollWrapperProps}>
                 {groups.map(({ key, rows: sectionRows }) => {
@@ -2212,6 +2216,18 @@ export function LedgerTransactionListView({
 const styles = StyleSheet.create({
   wrap: {
     marginBottom: 12,
+    width: '100%',
+    alignSelf: 'stretch',
+  },
+  /** Web: ScrollView content must stretch to viewport width (avoids centered narrow column). */
+  ledgerMainScroll: {
+    width: '100%',
+    flex: 1,
+    minHeight: 0,
+  },
+  ledgerMainScrollContent: {
+    width: '100%',
+    flexGrow: 1,
   },
   emptyState: {
     alignItems: "center",
@@ -2391,8 +2407,12 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.primary,
     borderRadius: 1,
   },
-  tableViewScroll: { flex: 1 },
-  tableViewScrollContent: { paddingBottom: Layout.sectionSpacing + 8 },
+  tableViewScroll: { flex: 1, width: '100%', minHeight: 0 },
+  tableViewScrollContent: {
+    width: '100%',
+    flexGrow: 1,
+    paddingBottom: Layout.sectionSpacing + 8,
+  },
   scrollBottomSpacer: { height: Layout.sectionSpacing },
   tableViewSection: { marginBottom: 16 },
   tableViewDateBar: {

@@ -280,6 +280,13 @@ export function TripRatingsBlock({
     ]).start();
   }, [submitSuccess, successOpacity, successScale]);
 
+  const nextFlowAfterSuccess: RateFlow =
+    flow?.type === 'client_supplier'
+      ? (canRateDriver && !hasRatedDriver ? { type: 'supplier_driver' } : null)
+      : flow?.type === 'supplier_driver'
+        ? (canRateSupplier && !hasRatedSupplier ? { type: 'client_supplier' } : null)
+        : null;
+
   useEffect(() => {
     if (!submitSuccess) return;
     const timeout = setTimeout(() => {
@@ -416,12 +423,6 @@ export function TripRatingsBlock({
   const activeRoleLabel = flow?.type === 'client_supplier' ? 'Supplier' : 'Driver';
   const activePrompt = flow?.type === 'client_supplier' ? 'How was the supplier?' : 'How was your trip?';
   const activeQuickTags = flow?.type === 'client_supplier' ? SUPPLIER_RATING_TAGS : DRIVER_RATING_TAGS;
-  const nextFlowAfterSuccess: RateFlow =
-    flow?.type === 'client_supplier'
-      ? (canRateDriver && !hasRatedDriver ? { type: 'supplier_driver' } : null)
-      : flow?.type === 'supplier_driver'
-        ? (canRateSupplier && !hasRatedSupplier ? { type: 'client_supplier' } : null)
-        : null;
 
   if (!isCompleted) return null;
   if (!canRateSupplier && !canRateDriver && ratings.length === 0) {

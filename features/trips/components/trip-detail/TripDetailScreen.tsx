@@ -62,8 +62,8 @@ import {
     clearInitialTripForDetail,
     getInitialTripForDetail,
 } from "../../initialTripForDetail";
-import { TripRatingsBlock } from "@/features/ratings";
-import { getRatingsForTrip, averageScore } from "@/features/ratings";
+import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
+import { averageScore, getRatingsForTrip } from "@/features/ratings/services/ratings.service";
 import {
     TripAssignmentBlock,
     type AssignmentSource,

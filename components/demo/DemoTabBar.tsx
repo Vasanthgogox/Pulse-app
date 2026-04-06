@@ -7,7 +7,7 @@ import Theme from '@/constants/Theme';
 import { useLanguage } from '@/contexts/LanguageContext';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import { useEffect } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View, Platform, useWindowDimensions } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -60,8 +60,10 @@ export function DemoTabBar({
   onLoadBoardPress,
 }: DemoTabBarProps) {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const { t } = useLanguage();
   const isWeb = Platform.OS === 'web';
+  const webCompact = isWeb && windowWidth < 640;
   const isFiscal = activeTab === 'finance';
   const isTrips = activeTab === 'trips';
   const isNetwork = activeTab === 'network';
@@ -76,12 +78,26 @@ export function DemoTabBar({
       <View style={[styles.glassDock, isWeb && styles.glassDockWeb]}>
         
         {isWeb && (
-          <View style={styles.webLogoWrap}>
-            <Text style={styles.webLogoText}>Q MOBILE</Text>
+          <View style={[styles.webLogoWrap, webCompact && styles.webLogoWrapCompact]}>
+            <Image
+              source={require('../../assets/images/icon.png')}
+              style={[styles.webLogoImage, webCompact && styles.webLogoImageCompact]}
+              resizeMode="contain"
+              accessibilityLabel="Q web"
+            />
+            <Text style={[styles.webLogoText, webCompact && styles.webLogoTextCompact]} numberOfLines={1}>
+              Q WEB
+            </Text>
           </View>
         )}
 
-        <View style={[styles.tabsRow, isWeb && styles.tabsRowWeb]}>
+        <View
+          style={[
+            styles.tabsRow,
+            isWeb && styles.tabsRowWeb,
+            isWeb && !webCompact && styles.tabsRowWebMax,
+          ]}
+        >
           {/* Column 1: Fiscal — pill behind when active */}
           <View style={[styles.dockColumn, isWeb && styles.dockColumnWeb]}>
             <View style={[styles.activePill, isWeb && styles.activePillWeb, isFiscal && styles.activePillVisible]}>
@@ -174,7 +190,7 @@ export function DemoTabBar({
         </View>
 
         {isWeb && (
-          <View style={styles.webRightWrap}>
+          <View style={[styles.webRightWrap, webCompact && styles.webRightWrapCompact]}>
             {/* Optional right side content for web navbar */}
           </View>
         )}
@@ -228,20 +244,44 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     elevation: 4,
     flexDirection: 'row',
-    alignItems: 'stretch',
+    alignItems: 'center',
     justifyContent: 'space-between', // Changed to space-between
   },
   webLogoWrap: {
     width: 200,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
+    height: '100%',
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'flex-start',
+    alignItems: 'center',
     paddingLeft: 24,
+    flexShrink: 0,
+  },
+  webLogoWrapCompact: {
+    width: 'auto',
+    minWidth: 0,
+    maxWidth: 148,
+    paddingLeft: 12,
+    flexShrink: 1,
   },
   webLogoText: {
-    fontSize: 16,
+    fontSize: 14,
+    lineHeight: 16,
     fontWeight: '900',
     color: Theme.primary,
     letterSpacing: 2,
+  },
+  webLogoImage: {
+    width: 48,
+    height: 48,
+  },
+  webLogoImageCompact: {
+    width: 36,
+    height: 36,
+  },
+  webLogoTextCompact: {
+    fontSize: 11,
+    letterSpacing: 1,
   },
   tabsRow: {
     flex: 1,
@@ -251,7 +291,7 @@ const styles = StyleSheet.create({
   },
   tabsRowWeb: {
     flex: 1,
-    maxWidth: 600,
+    minWidth: 0,
     justifyContent: 'center',
     alignItems: 'stretch',
     backgroundColor: 'rgba(15,23,42,0.05)',
@@ -259,11 +299,21 @@ const styles = StyleSheet.create({
     marginVertical: 6,
     padding: 2,
   },
+  /** Cap width on large web viewports only; omitted on narrow/mobile web so tabs use full width. */
+  tabsRowWebMax: {
+    maxWidth: 600,
+  },
   webRightWrap: {
     width: 200,
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'flex-end',
     paddingRight: 24,
+    flexShrink: 0,
+  },
+  webRightWrapCompact: {
+    width: 48,
+    paddingRight: 12,
   },
   dockColumn: {
     flex: 1,
