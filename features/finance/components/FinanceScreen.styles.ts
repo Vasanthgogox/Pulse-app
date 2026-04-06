@@ -37,7 +37,7 @@ export const styles = StyleSheet.create({
   },
   fiscalTabRow: {
     flexDirection: "row",
-    paddingHorizontal: 14,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
     marginTop: 2,
     marginBottom: 6,
     paddingBottom: 8,
@@ -109,7 +109,9 @@ export const styles = StyleSheet.create({
     color: "#fff",
   },
 
-  tableScroll: { flex: 1, width: '100%', minWidth: 0 },
+  /** minHeight: 0 lets flex children shrink so inner ScrollView can scroll (web + native). */
+  tableScroll: { flex: 1, width: '100%', minWidth: 0, minHeight: 0 },
+  tableScrollInner: { flex: 1, minHeight: 0, minWidth: 0 },
   tableContent: {
     paddingHorizontal: 0,
     paddingTop: 0,

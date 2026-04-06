@@ -5,7 +5,7 @@
 import Theme from '@/constants/Theme';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View, useWindowDimensions } from 'react-native';
 import Animated, {
   Easing,
   runOnJS,
@@ -229,6 +229,9 @@ export function TreasurySummaryCard({
   filterRowRight,
 }: TreasurySummaryCardProps) {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  /** Stack search + filters; horizontal scroll for filters on narrow widths */
+  const compactToolbar = windowWidth < 560;
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [showPeriodDropdown, setShowPeriodDropdown] = useState(false);
   const [showSourceDropdown, setShowSourceDropdown] = useState(false);
@@ -398,9 +401,8 @@ export function TreasurySummaryCard({
         </>
       )}
 
-      <View style={styles.toolbarRow}>
-        <View style={styles.toolbarLeft}>
-          <View style={styles.searchWrap}>
+      <View style={[styles.toolbarRow, compactToolbar && styles.toolbarRowStacked]}>
+          <View style={[styles.searchWrap, compactToolbar && styles.searchWrapStacked]}>
             <AnimatedIcon
               name="search"
               size={11}
@@ -420,6 +422,12 @@ export function TreasurySummaryCard({
             />
           </View>
 
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={[styles.toolbarFiltersScroll, compactToolbar && styles.toolbarFiltersScrollStacked]}
+            contentContainerStyle={styles.toolbarFiltersContent}
+          >
           {filterLabel != null && (
             <View ref={refPeriodFilter} style={styles.filterBlock} collapsable={false}>
               <TouchableOpacity
@@ -688,7 +696,6 @@ export function TreasurySummaryCard({
               </TouchableOpacity>
             </View>
           )}
-        </View>
 
         {!hideReportInToolbar && (
           <PressableIcon
@@ -700,6 +707,7 @@ export function TreasurySummaryCard({
             style={styles.reportIconBtn}
           />
         )}
+          </ScrollView>
       </View>
     </View>
   );
@@ -856,12 +864,28 @@ const styles = StyleSheet.create({
     gap: 6,
     minHeight: 36,
   },
-  toolbarLeft: {
-    flex: 1,
+  /** Narrow screens: search full width, filters in horizontal row below */
+  toolbarRowStacked: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 10,
+  },
+  toolbarFiltersScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+    minWidth: 0,
+    maxWidth: '100%',
+  },
+  toolbarFiltersScrollStacked: {
+    width: '100%',
+    maxWidth: '100%',
+  },
+  toolbarFiltersContent: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    minWidth: 0,
+    paddingVertical: 2,
+    paddingRight: 4,
   },
   searchWrap: {
     flex: 1,
@@ -875,6 +899,11 @@ const styles = StyleSheet.create({
     paddingLeft: 10,
     paddingRight: 10,
     paddingVertical: 6,
+  },
+  searchWrapStacked: {
+    flex: 0,
+    width: '100%',
+    alignSelf: 'stretch',
   },
   searchIcon: {
     marginRight: 6,

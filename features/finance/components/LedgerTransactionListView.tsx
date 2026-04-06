@@ -588,6 +588,17 @@ export function LedgerTransactionListView({
   const effectiveFiscalSubTab = showFiscalSubTabs
     ? fiscalSubTab
     : "transaction";
+
+  /** Render "Secured" inside scroll so it does not sit fixed over the list on mobile */
+  const showSecuredFooterInScroll =
+    showGridFooter &&
+    !(
+      showHistoryHeader &&
+      useTimelineLayout &&
+      (effectiveFiscalSubTab === "analytics" ||
+        effectiveFiscalSubTab === "table")
+    );
+
   /** Timeline: which date sections are expanded. When undefined, all sections are expanded (opened) by default. */
   const [expandedSectionsByKey, setExpandedSectionsByKey] = useState<
     Record<string, boolean>
@@ -1211,6 +1222,12 @@ export function LedgerTransactionListView({
                 </View>
               );
             })}
+            {showSecuredFooterInScroll && (
+              <View style={styles.gridFooter}>
+                <FontAwesome name="shield" size={28} color={Theme.textMuted} />
+                <Text style={styles.gridFooterText}>Secured</Text>
+              </View>
+            )}
             <View style={styles.scrollBottomSpacer} />
           </ScrollView>
         ) : (
@@ -2132,22 +2149,17 @@ export function LedgerTransactionListView({
                     </View>
                   );
                 })}
+                {showSecuredFooterInScroll && (
+                  <View style={styles.gridFooter}>
+                    <FontAwesome name="shield" size={28} color={Theme.textMuted} />
+                    <Text style={styles.gridFooterText}>Secured</Text>
+                  </View>
+                )}
+                <View style={styles.scrollBottomSpacer} />
               </ScrollWrapper>
             );
           })()
         )}
-        {showGridFooter &&
-          !(
-            showHistoryHeader &&
-            useTimelineLayout &&
-            (effectiveFiscalSubTab === "analytics" ||
-              effectiveFiscalSubTab === "table")
-          ) && (
-            <View style={styles.gridFooter}>
-              <FontAwesome name="shield" size={40} color={Theme.textMuted} />
-              <Text style={styles.gridFooterText}>Secured</Text>
-            </View>
-          )}
       </View>
       {tripPickerRowId &&
         (() => {
@@ -2214,8 +2226,10 @@ export function LedgerTransactionListView({
 }
 
 const styles = StyleSheet.create({
+  /** Fill parent so ScrollView gets a bounded height (required for Cash tab scroll on web). */
   wrap: {
-    marginBottom: 12,
+    flex: 1,
+    minHeight: 0,
     width: '100%',
     alignSelf: 'stretch',
   },
@@ -2225,9 +2239,9 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
   },
+  /** Do not use flexGrow here — it breaks vertical scrolling on web (content fills viewport). */
   ledgerMainScrollContent: {
     width: '100%',
-    flexGrow: 1,
   },
   emptyState: {
     alignItems: "center",
@@ -2410,7 +2424,6 @@ const styles = StyleSheet.create({
   tableViewScroll: { flex: 1, width: '100%', minHeight: 0 },
   tableViewScrollContent: {
     width: '100%',
-    flexGrow: 1,
     paddingBottom: Layout.sectionSpacing + 8,
   },
   scrollBottomSpacer: { height: Layout.sectionSpacing },
@@ -3547,6 +3560,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   list: {
+    flex: 1,
+    minHeight: 0,
     gap: 0,
   },
   section: {
@@ -3978,9 +3993,10 @@ const styles = StyleSheet.create({
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 48,
-    gap: 16,
-    opacity: 0.4,
+    paddingVertical: 24,
+    paddingTop: 32,
+    gap: 10,
+    opacity: 0.45,
   },
   gridFooterText: {
     fontSize: 9,

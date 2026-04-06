@@ -1153,7 +1153,7 @@ export function FinanceScreen() {
         onLedgerViewModeChange={undefined}
       />
       <View style={styles.tableScroll}>
-        <View style={{ flex: 1 }}>
+        <View style={styles.tableScrollInner}>
           <View style={styles.ledgerCardWrap}>
             <FinanceTabBody
               financeSubTab={financeSubTab}
