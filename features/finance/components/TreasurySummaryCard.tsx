@@ -4,9 +4,10 @@
  */
 import Theme from '@/constants/Theme';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View, useWindowDimensions } from 'react-native';
 import Animated, {
+  cancelAnimation,
   Easing,
   runOnJS,
   useAnimatedReaction,
@@ -64,6 +65,11 @@ export interface TreasurySummaryCardProps {
   onCashOutPress?: () => void;
   /** When entity filter row is shown, optional content to render on the right (e.g. view mode icons). */
   filterRowRight?: ReactNode;
+  /**
+   * When set (e.g. Finance sub-tab id), changing this restarts the summary amount count-up from 0.
+   * Without it, amounts only animate when the numeric total changes (entity detail / other embeds).
+   */
+  amountAnimationResetKey?: string;
 }
 
 const ENTITY_FILTER_LABELS: Record<EntityListFilter, string> = {
@@ -86,20 +92,54 @@ const springConfig = { damping: 14, stiffness: 180 };
 
 const AMOUNT_ANIMATION_DURATION = 420;
 
-function AnimatedAmount({ value, style }: { value: number; style?: object }) {
-  const [displayValue, setDisplayValue] = useState(value);
-  const shared = useSharedValue(value);
+function AnimatedAmount({
+  value,
+  style,
+  animationResetKey,
+}: {
+  value: number;
+  style?: object;
+  /** When defined, a change restarts the count from 0 (e.g. switching Finance sub-tabs). */
+  animationResetKey?: string;
+}) {
+  const target = Number.isFinite(value) ? Math.round(value) : 0;
+  const [displayValue, setDisplayValue] = useState(0);
+  const shared = useSharedValue(0);
+  const prevResetKeyRef = useRef<string | undefined>(undefined);
+
+  const syncDisplay = useCallback((n: number) => {
+    setDisplayValue(n);
+  }, []);
 
   useEffect(() => {
-    shared.value = withTiming(value, { duration: AMOUNT_ANIMATION_DURATION, easing: Easing.out(Easing.cubic) });
-  }, [value, shared]);
+    cancelAnimation(shared);
+
+    const useResetKey = animationResetKey !== undefined;
+    const segmentChanged =
+      useResetKey && prevResetKeyRef.current !== animationResetKey;
+
+    if (useResetKey) {
+      prevResetKeyRef.current = animationResetKey;
+    }
+
+    if (segmentChanged) {
+      shared.value = 0;
+      setDisplayValue(0);
+    }
+
+    shared.value = withTiming(target, {
+      duration: AMOUNT_ANIMATION_DURATION,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [target, animationResetKey, shared]);
 
   useAnimatedReaction(
-    () => shared.value,
-    (v) => {
-      runOnJS(setDisplayValue)(Math.round(v));
+    () => Math.round(shared.value),
+    (current, previous) => {
+      if (current !== previous) {
+        runOnJS(syncDisplay)(current);
+      }
     },
-    [shared]
   );
 
   return <Text style={[styles.summaryValue, style]}>{formatAmount(displayValue)}</Text>;
@@ -227,6 +267,7 @@ export function TreasurySummaryCard({
   onCashInPress,
   onCashOutPress,
   filterRowRight,
+  amountAnimationResetKey,
 }: TreasurySummaryCardProps) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
@@ -325,7 +366,7 @@ export function TreasurySummaryCard({
                   />
                   <Text style={styles.summaryLabel}>{labelIn}</Text>
                 </View>
-                <AnimatedAmount value={totalIn} />
+                <AnimatedAmount value={totalIn} animationResetKey={amountAnimationResetKey} />
               </Pressable>
             ) : (
               <View style={[styles.summaryCell, marginPercent != null && !Number.isNaN(marginPercent) && styles.summaryCellThird]}>
@@ -338,7 +379,7 @@ export function TreasurySummaryCard({
                   />
                   <Text style={styles.summaryLabel}>{labelIn}</Text>
                 </View>
-                <AnimatedAmount value={totalIn} />
+                <AnimatedAmount value={totalIn} animationResetKey={amountAnimationResetKey} />
               </View>
             )}
             {marginPercent != null && !Number.isNaN(marginPercent) && (
@@ -376,7 +417,7 @@ export function TreasurySummaryCard({
                     pulse
                   />
                 </View>
-                <AnimatedAmount value={totalOut} />
+                <AnimatedAmount value={totalOut} animationResetKey={amountAnimationResetKey} />
               </Pressable>
             ) : (
               <View style={[
@@ -393,7 +434,7 @@ export function TreasurySummaryCard({
                     pulse
                   />
                 </View>
-                <AnimatedAmount value={totalOut} />
+                <AnimatedAmount value={totalOut} animationResetKey={amountAnimationResetKey} />
               </View>
             )}
           </View>
