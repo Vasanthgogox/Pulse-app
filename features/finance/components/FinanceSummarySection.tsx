@@ -1,17 +1,17 @@
 /**
  * Treasury header + tab row + summary card (totals, search, filters).
  */
-import { useRouter } from "expo-router";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { TeslaHeader } from "@/components/TeslaHeader";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { useRouter } from "expo-router";
 import { Text, TouchableOpacity, View } from "react-native";
-import { TeslaHeader } from "@/components/TeslaHeader";
+import type { FinanceSubTab } from "../types";
+import { styles } from "./FinanceScreen.styles";
+import { FinanceTabRow } from "./FinanceTabRow";
 import type { EntityListFilter } from "./TreasurySummaryCard";
 import { TreasurySummaryCard } from "./TreasurySummaryCard";
-import { FinanceTabRow } from "./FinanceTabRow";
-import { styles } from "./FinanceScreen.styles";
-import type { FinanceSubTab } from "../types";
 
 export type LedgerViewMode = "table" | "transaction";
 
@@ -232,7 +232,11 @@ export function FinanceSummarySection({
           sourceFilter={sourceFilter}
           onSourceFilterChange={onSourceFilterChange}
           amountAnimationResetKey={activeTab}
-          cashNetworkLayout={activeTab === "cash" || activeTab === "customers"}
+          cashNetworkLayout={
+            activeTab === "cash" ||
+            activeTab === "customers" ||
+            activeTab === "suppliers"
+          }
         />
       </View>
     </View>

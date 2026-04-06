@@ -306,9 +306,13 @@ export function TreasurySummaryCard({
     transform: [{ scale: filterBtnScale.value }],
   }));
 
+  /** Entity filter is shown as Network-style chips in the toolbar; skip duplicate dropdown. */
+  const hideEntityFilterDropdown =
+    cashNetworkToolbar && onEntityFilterChange != null;
+
   const periodAndSourceFilters = (
     <>
-      {filterLabel != null && (
+      {filterLabel != null && !hideEntityFilterDropdown && (
         <View ref={refPeriodFilter} style={styles.filterBlock} collapsable={false}>
           <TouchableOpacity
             activeOpacity={0.8}
@@ -752,47 +756,56 @@ export function TreasurySummaryCard({
           ]}
         >
           <View style={[styles.toolbarLeft, styles.toolbarLeftNetwork]}>
-            <View style={[styles.searchWrap, styles.searchWrapNetwork]}>
-              <AnimatedIcon
-                name="search"
-                size={14}
-                color={Theme.textOnDarkMuted}
-                style={styles.searchIcon}
-              />
-              <TextInput
-                style={[styles.searchInput, styles.searchInputNetwork]}
-                value={searchQuery}
-                onChangeText={onSearchChange}
-                placeholder={searchPlaceholder}
-                placeholderTextColor={Theme.textOnDarkMuted}
-                returnKeyType="search"
-                autoCorrect={false}
-                spellCheck={false}
-                autoComplete="off"
-              />
-            </View>
+            <View style={styles.networkSearchRow}>
+              <View style={[styles.searchWrap, styles.searchWrapNetwork]}>
+                <AnimatedIcon
+                  name="search"
+                  size={14}
+                  color={Theme.textOnDarkMuted}
+                  style={styles.searchIcon}
+                />
+                <TextInput
+                  style={[styles.searchInput, styles.searchInputNetwork]}
+                  value={searchQuery}
+                  onChangeText={onSearchChange}
+                  placeholder={searchPlaceholder}
+                  placeholderTextColor={Theme.textOnDarkMuted}
+                  returnKeyType="search"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+              </View>
 
-            {onEntityFilterChange != null && (
-              <View style={styles.networkEntityChipsWrap}>
-                <View style={[styles.statusPillRow, styles.statusPillRowInWrap, styles.statusPillRowNetwork]}>
+              {onEntityFilterChange != null && (
+                <View style={styles.networkEntityChipsWrap}>
                   {(['all', 'has_due', 'no_due'] as const).map((f) => (
                     <TouchableOpacity
                       key={f}
-                      style={[styles.statusPill, styles.statusPillNetwork, entityFilter === f && styles.statusPillActive]}
+                      style={[
+                        styles.networkTypeChip,
+                        entityFilter === f && styles.networkTypeChipActive,
+                      ]}
                       onPress={() => onEntityFilterChange(f)}
                       activeOpacity={0.8}
                     >
-                      <Text style={[styles.statusPillText, styles.statusPillTextNetwork, entityFilter === f && styles.statusPillTextActive]}>
+                      <Text
+                        style={[
+                          styles.networkTypeChipText,
+                          entityFilter === f && styles.networkTypeChipTextActive,
+                        ]}
+                      >
                         {effectiveEntityFilterLabels[f]}
                       </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
-                {filterRowRight != null && (
-                  <View style={styles.filterRowRight}>{filterRowRight}</View>
-                )}
-              </View>
-            )}
+              )}
+
+              {filterRowRight != null && (
+                <View style={styles.filterRowRight}>{filterRowRight}</View>
+              )}
+            </View>
 
             {periodAndSourceFilters}
           </View>
@@ -911,7 +924,15 @@ const styles = StyleSheet.create({
   toolbarLeftNetwork: {
     gap: 8,
   },
-  /** Network: entity status tags next to search (like type chips). */
+  /** Same row as Network hub: search (flex) + pill group + optional trailing actions. */
+  networkSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    width: '100%',
+    minWidth: 0,
+  },
+  /** Network `typeFilterWrapDark`: single pill rail for ALL / … filters. */
   networkEntityChipsWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -922,7 +943,26 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.1)',
     paddingHorizontal: 6,
     paddingVertical: 4,
-    gap: 6,
+    gap: 3,
+  },
+  /** Matches `app/(tabs)/network.tsx` typeFilterChipDark. */
+  networkTypeChip: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  networkTypeChipActive: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  networkTypeChipText: {
+    fontSize: 8,
+    fontWeight: '500',
+    color: Theme.textOnDarkMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  networkTypeChipTextActive: {
+    color: Theme.textOnDark,
   },
   statusPillRowNetwork: {
     marginBottom: 0,
