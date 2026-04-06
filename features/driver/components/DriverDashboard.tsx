@@ -2710,8 +2710,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 4,
     marginTop: 4,
-    maxWidth: '80%',
+    maxWidth: '100%',
     flexShrink: 1,
+    minWidth: 0,
   },
   locationStatusDot: {
     width: 8,
@@ -2758,12 +2759,13 @@ const styles = StyleSheet.create({
   centerCardWrap: {
     width: '100%',
     marginBottom: 16,
-    alignSelf: 'center', // Add this for proper centering
+    alignSelf: 'stretch',
   },
   centerCardConstraint: {
     width: '100%',
-    maxWidth: 400, // Add max width for better centering on larger screens
-    alignSelf: 'center', // Add this for proper centering
+    maxWidth: 600,
+    alignSelf: 'stretch',
+    minWidth: 0,
   },
   titleRow: {
     flexDirection: 'row',
@@ -2800,12 +2802,13 @@ const styles = StyleSheet.create({
   },
   noDriverWrap: {
     width: '100%',
-    maxWidth: 400, // Add max width for better layout
+    maxWidth: 600,
     padding: 28,
     borderRadius: 20,
     borderWidth: 1,
     alignItems: 'center',
-    alignSelf: 'center', // Add this for proper centering
+    alignSelf: 'stretch',
+    minWidth: 0,
   },
   invitesScroll: { width: '100%', maxHeight: 400 },
   invitesScrollContent: { paddingVertical: 16, gap: 16 },
@@ -3017,19 +3020,21 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     letterSpacing: 0.3,
     textAlign: 'center',
-    alignSelf: 'center', // Changed from 'stretch' to 'center'
-    paddingHorizontal: 16, // Add horizontal padding for better text wrapping
+    alignSelf: 'stretch',
+    paddingHorizontal: 16,
   },
   offlineCardSubtitle: {
     fontSize: 13,
     fontWeight: '600',
     color: Theme.textMuted,
     textAlign: 'center',
-    alignSelf: 'center', // Changed from 'stretch' to 'center'
+    alignSelf: 'stretch',
     marginBottom: 28,
     lineHeight: 20,
-    paddingHorizontal: 16, // Increased from 8 for better text wrapping
-    maxWidth: 320, // Add max width for better readability
+    paddingHorizontal: 16,
+    width: '100%',
+    maxWidth: '100%',
+    minWidth: 0,
   },
   offlineTripIdBadge: {
     alignSelf: 'center',
@@ -3181,25 +3186,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
-    alignSelf: 'center', // Changed from 'stretch' to 'center'
+    alignSelf: 'stretch',
     marginBottom: 16,
-    paddingHorizontal: 16, // Increased from 8 for consistency
+    paddingHorizontal: 16,
     lineHeight: 18,
     color: Theme.textMuted,
-    maxWidth: 320, // Add max width for consistency
+    width: '100%',
+    maxWidth: '100%',
+    minWidth: 0,
   },
   goOnlineBtn: {
     width: '100%',
-    maxWidth: 320, // Add max width for better proportions
+    maxWidth: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    paddingVertical: 18, // Increased from 16 for better touch area
-    paddingHorizontal: 24, // Add horizontal padding
+    paddingVertical: 18,
+    paddingHorizontal: 24,
     backgroundColor: Theme.driverEmerald,
     borderRadius: 12,
-    alignSelf: 'center', // Add this for proper centering
+    alignSelf: 'stretch',
+    minWidth: 0,
   },
   goOnlineBtnIcon: {
     opacity: 1,

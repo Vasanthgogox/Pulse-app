@@ -2529,7 +2529,13 @@ const LOAD_BROADCAST_BG = "#eef1f6";
 const LOAD_BROADCAST_MUTED = "#829ab1";
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Theme.darkBackground },
+  container: {
+    flex: 1,
+    width: "100%",
+    minWidth: 0,
+    alignSelf: "stretch",
+    backgroundColor: Theme.darkBackground,
+  },
   loadDarkHeader: {
     backgroundColor: Theme.darkBackground,
     paddingHorizontal: Layout.screenPaddingHorizontal,
@@ -2695,6 +2701,8 @@ const styles = StyleSheet.create({
   },
   loadContentWrap: {
     flex: 1,
+    width: "100%",
+    minWidth: 0,
     backgroundColor: LOAD_CONTENT_BG,
     borderTopLeftRadius: 0,
     borderTopRightRadius: 0,
@@ -2704,10 +2712,12 @@ const styles = StyleSheet.create({
   loadContentWrapSecured: {
     marginTop: 0,
   },
-  scroll: { flex: 1 },
+  scroll: { flex: 1, width: "100%", minWidth: 0 },
   scrollContent: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 16,
+    flexGrow: 1,
+    width: "100%",
   },
   scrollContentSecured: {
     paddingTop: 12,
@@ -3090,8 +3100,11 @@ const styles = StyleSheet.create({
     color: "#A0A0A0",
     marginTop: 12,
     textAlign: "center",
-    paddingHorizontal: 40,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
     lineHeight: 20,
+    alignSelf: "stretch",
+    width: "100%",
+    maxWidth: "100%",
   },
   successOverlay: {
     ...StyleSheet.absoluteFillObject,

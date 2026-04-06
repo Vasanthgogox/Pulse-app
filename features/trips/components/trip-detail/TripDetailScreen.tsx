@@ -2467,8 +2467,10 @@ const styles = StyleSheet.create({
   },
   driverOfflineContent: {
     alignItems: "center",
-    maxWidth: 320,
-    alignSelf: "center",
+    width: "100%",
+    maxWidth: "100%",
+    alignSelf: "stretch",
+    minWidth: 0,
   },
   driverOfflineIconWrap: {
     width: 96,
