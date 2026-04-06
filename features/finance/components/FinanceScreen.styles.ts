@@ -109,7 +109,7 @@ export const styles = StyleSheet.create({
     color: "#fff",
   },
 
-  tableScroll: { flex: 1, width: '100%', minWidth: 0 },
+  tableScroll: { flex: 1, minHeight: 0, width: '100%', minWidth: 0 },
   tableContent: {
     paddingHorizontal: 0,
     paddingTop: 0,

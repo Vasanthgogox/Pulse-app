@@ -2144,7 +2144,7 @@ export function LedgerTransactionListView({
               effectiveFiscalSubTab === "table")
           ) && (
             <View style={styles.gridFooter}>
-              <FontAwesome name="shield" size={40} color={Theme.textMuted} />
+              <FontAwesome name="shield" size={14} color={Theme.textMuted} />
               <Text style={styles.gridFooterText}>Secured</Text>
             </View>
           )}
@@ -2215,6 +2215,9 @@ export function LedgerTransactionListView({
 
 const styles = StyleSheet.create({
   wrap: {
+    flex: 1,
+    minHeight: 0,
+    minWidth: 0,
     marginBottom: 12,
     width: '100%',
     alignSelf: 'stretch',
@@ -2227,7 +2230,6 @@ const styles = StyleSheet.create({
   },
   ledgerMainScrollContent: {
     width: '100%',
-    flexGrow: 1,
   },
   emptyState: {
     alignItems: "center",
@@ -2410,7 +2412,6 @@ const styles = StyleSheet.create({
   tableViewScroll: { flex: 1, width: '100%', minHeight: 0 },
   tableViewScrollContent: {
     width: '100%',
-    flexGrow: 1,
     paddingBottom: Layout.sectionSpacing + 8,
   },
   scrollBottomSpacer: { height: Layout.sectionSpacing },
@@ -3547,6 +3548,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   list: {
+    flex: 1,
+    minHeight: 0,
+    minWidth: 0,
     gap: 0,
   },
   section: {
@@ -3975,19 +3979,19 @@ const styles = StyleSheet.create({
     maxWidth: 56,
   },
   gridFooter: {
-    flexDirection: "column",
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 48,
-    gap: 16,
+    paddingVertical: 4,
+    gap: 5,
     opacity: 0.4,
   },
   gridFooterText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "500",
     color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: 0.35,
   },
   gridFooterSubtext: {
     fontSize: 9,
