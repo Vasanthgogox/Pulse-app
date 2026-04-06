@@ -2230,6 +2230,8 @@ const styles = StyleSheet.create({
   wrap: {
     flex: 1,
     minHeight: 0,
+    minWidth: 0,
+    marginBottom: 12,
     width: '100%',
     alignSelf: 'stretch',
   },
@@ -3562,6 +3564,7 @@ const styles = StyleSheet.create({
   list: {
     flex: 1,
     minHeight: 0,
+    minWidth: 0,
     gap: 0,
   },
   section: {
@@ -3990,7 +3993,7 @@ const styles = StyleSheet.create({
     maxWidth: 56,
   },
   gridFooter: {
-    flexDirection: "column",
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 24,
@@ -3999,11 +4002,11 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   gridFooterText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "500",
     color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: 0.35,
   },
   gridFooterSubtext: {
     fontSize: 9,
