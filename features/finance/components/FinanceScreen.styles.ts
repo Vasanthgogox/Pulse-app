@@ -5,7 +5,12 @@ import { CUSTOMERS_SUPPLIERS, LEDGER } from '@/features/finance/constants/tableC
 import { MIN_FISCAL_TAB_WIDTH } from '../types';
 
 export const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Theme.screenBackground },
+  container: {
+    flex: 1,
+    width: '100%',
+    minWidth: 0,
+    backgroundColor: Theme.screenBackground,
+  },
   centered: {
     flex: 1,
     justifyContent: "center",
@@ -17,6 +22,8 @@ export const styles = StyleSheet.create({
   darkBlock: {
     backgroundColor: "#000000",
     width: "100%",
+    minWidth: 0,
+    alignSelf: "stretch",
     paddingBottom: 4,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 2 },
@@ -104,7 +111,7 @@ export const styles = StyleSheet.create({
     color: "#fff",
   },
 
-  tableScroll: { flex: 1 },
+  tableScroll: { flex: 1, width: '100%', minWidth: 0 },
   tableContent: {
     paddingHorizontal: 0,
     paddingTop: 0,
@@ -114,6 +121,9 @@ export const styles = StyleSheet.create({
   ledgerCardWrap: {
     flex: 1,
     minHeight: 0,
+    width: '100%',
+    minWidth: 0,
+    alignSelf: 'stretch',
     marginHorizontal: 0,
     marginBottom: 8,
   },

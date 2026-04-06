@@ -351,7 +351,7 @@ export function LedgerTab({
       tripDetailsMap={tripDetailsMap}
       tripOptions={tripOptions}
       onMissionChange={onMissionChange}
-      fullWidth={false}
+      fullWidth
     />
   );
 
