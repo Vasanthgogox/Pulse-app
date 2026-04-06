@@ -64,6 +64,8 @@ export interface TreasurySummaryCardProps {
   onCashOutPress?: () => void;
   /** When entity filter row is shown, optional content to render on the right (e.g. view mode icons). */
   filterRowRight?: ReactNode;
+  /** Cash tab: match Network hub — fiscal tabs, then search row, then totals (flex order; same controls). */
+  cashNetworkLayout?: boolean;
 }
 
 const ENTITY_FILTER_LABELS: Record<EntityListFilter, string> = {
@@ -227,6 +229,7 @@ export function TreasurySummaryCard({
   onCashInPress,
   onCashOutPress,
   filterRowRight,
+  cashNetworkLayout = false,
 }: TreasurySummaryCardProps) {
   const insets = useSafeAreaInsets();
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
@@ -264,8 +267,12 @@ export function TreasurySummaryCard({
       fullWidth && styles.cardFullWidth,
       toolbarOnly && styles.cardFullWidthToolbarOnly,
     ]}>
-      {topContent != null && <View style={styles.topContent}>{topContent}</View>}
-      {showSummary && onEntityFilterChange != null &&
+      {topContent != null && (
+        <View style={[styles.topContent, cashNetworkLayout && styles.topContentNetwork]}>
+          {topContent}
+        </View>
+      )}
+      {!cashNetworkLayout && showSummary && onEntityFilterChange != null &&
         (filterRowRight != null ? (
           <View style={styles.filterRowWrap}>
             <View style={[styles.statusPillRow, styles.statusPillRowInWrap]}>
@@ -300,9 +307,21 @@ export function TreasurySummaryCard({
             ))}
           </View>
         ))}
+      <View
+        style={[
+          styles.summaryToolbarStack,
+          cashNetworkLayout && showSummary && styles.cashNetworkOrderedWrap,
+        ]}
+      >
       {showSummary && (
         <>
-          <View style={styles.summaryRow}>
+          <View
+            style={[
+              styles.summaryRow,
+              cashNetworkLayout && showSummary && styles.summaryRowNetwork,
+              cashNetworkLayout && showSummary && styles.summaryOrderAfterToolbar,
+            ]}
+          >
             {onCashInPress != null ? (
               <Pressable
                 style={[
@@ -394,31 +413,66 @@ export function TreasurySummaryCard({
               </View>
             )}
           </View>
-          <View style={[styles.divider, fullWidth && styles.dividerInFullWidth]} />
+          <View
+            style={[
+              styles.divider,
+              fullWidth && styles.dividerInFullWidth,
+              cashNetworkLayout && showSummary && styles.dividerCashNetwork,
+              cashNetworkLayout && showSummary && styles.dividerOrderBetween,
+            ]}
+          />
         </>
       )}
 
-      <View style={styles.toolbarRow}>
-        <View style={styles.toolbarLeft}>
-          <View style={styles.searchWrap}>
+      <View
+        style={[
+          styles.toolbarRow,
+          cashNetworkLayout && showSummary && styles.toolbarRowNetwork,
+          cashNetworkLayout && showSummary && styles.toolbarOrderFirst,
+        ]}
+      >
+        <View style={[styles.toolbarLeft, cashNetworkLayout && showSummary && styles.toolbarLeftNetwork]}>
+          <View style={[styles.searchWrap, cashNetworkLayout && showSummary && styles.searchWrapNetwork]}>
             <AnimatedIcon
               name="search"
-              size={11}
-              color={Theme.textMutedDemo}
+              size={cashNetworkLayout && showSummary ? 14 : 11}
+              color={cashNetworkLayout && showSummary ? Theme.textOnDarkMuted : Theme.textMutedDemo}
               style={styles.searchIcon}
             />
             <TextInput
-              style={styles.searchInput}
+              style={[styles.searchInput, cashNetworkLayout && showSummary && styles.searchInputNetwork]}
               value={searchQuery}
               onChangeText={onSearchChange}
               placeholder={searchPlaceholder}
-              placeholderTextColor={Theme.textMutedDemo}
+              placeholderTextColor={cashNetworkLayout && showSummary ? Theme.textOnDarkMuted : Theme.textMutedDemo}
               returnKeyType="search"
               autoCorrect={false}
               spellCheck={false}
               autoComplete="off"
             />
           </View>
+
+          {cashNetworkLayout && showSummary && onEntityFilterChange != null && (
+            <View style={styles.networkEntityChipsWrap}>
+              <View style={[styles.statusPillRow, styles.statusPillRowInWrap, styles.statusPillRowNetwork]}>
+                {(['all', 'has_due', 'no_due'] as const).map((f) => (
+                  <TouchableOpacity
+                    key={f}
+                    style={[styles.statusPill, styles.statusPillNetwork, entityFilter === f && styles.statusPillActive]}
+                    onPress={() => onEntityFilterChange(f)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.statusPillText, styles.statusPillTextNetwork, entityFilter === f && styles.statusPillTextActive]}>
+                      {effectiveEntityFilterLabels[f]}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {filterRowRight != null && (
+                <View style={styles.filterRowRight}>{filterRowRight}</View>
+              )}
+            </View>
+          )}
 
           {filterLabel != null && (
             <View ref={refPeriodFilter} style={styles.filterBlock} collapsable={false}>
@@ -701,6 +755,7 @@ export function TreasurySummaryCard({
           />
         )}
       </View>
+      </View>
     </View>
   );
 }
@@ -735,6 +790,84 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     marginHorizontal: -12,
   },
+  /** Network hub: spacing under horizontal segment tabs (fiscal tabs). */
+  topContentNetwork: {
+    marginBottom: 8,
+    paddingTop: 8,
+  },
+  /** Wraps summary + divider + toolbar so Cash can reorder like Network (search before totals). */
+  summaryToolbarStack: {
+    flexDirection: 'column',
+  },
+  cashNetworkOrderedWrap: {},
+  summaryOrderAfterToolbar: {
+    order: 1,
+  },
+  dividerOrderBetween: {
+    order: 2,
+  },
+  toolbarOrderFirst: {
+    order: 3,
+  },
+  /** Network searchRowDark-style toolbar row */
+  toolbarRowNetwork: {
+    paddingTop: 10,
+    gap: 8,
+  },
+  toolbarLeftNetwork: {
+    gap: 8,
+  },
+  /** Network: entity status tags next to search (like type chips). */
+  networkEntityChipsWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+    backgroundColor: Theme.darkSurface,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    gap: 6,
+  },
+  statusPillRowNetwork: {
+    marginBottom: 0,
+    gap: 3,
+  },
+  statusPillNetwork: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  statusPillTextNetwork: {
+    fontSize: 8,
+    fontWeight: '500',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  /** Network searchWrapDark */
+  searchWrapNetwork: {
+    minHeight: 38,
+    borderRadius: 11,
+    backgroundColor: Theme.darkSurface,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 0,
+  },
+  searchInputNetwork: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: Theme.textOnDark,
+  },
+  /** Totals band sits below search (Network: content below black block). */
+  summaryRowNetwork: {
+    marginTop: 0,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Theme.separatorDark,
+  },
+  dividerCashNetwork: {},
   filterRowWrap: {
     flexDirection: 'row',
     alignItems: 'center',
