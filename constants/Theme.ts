@@ -76,6 +76,16 @@ export const Theme = {
   /** Liquid fill pill container (gray-100 / gray-200 to match reference) */
   liquidPillBg: "#f3f4f6",
   liquidPillBorder: "#e5e7eb",
+  /** LiquidFillPill wave layers by band (bad / warn / good) — tied to semantic hues, not generated HSL */
+  liquidBadBack: "#7f1d1d",
+  liquidBadMiddle: "#b91c1c",
+  liquidBadFront: "#dc2626",
+  liquidWarnBack: "#78350f",
+  liquidWarnMiddle: "#b45309",
+  liquidWarnFront: "#d97706",
+  liquidGoodBack: "#14532d",
+  liquidGoodMiddle: "#166534",
+  liquidGoodFront: "#15803D",
 
   // ---- Icons ----
   iconMuted: "#999999",
