@@ -229,6 +229,7 @@ export function FinanceSummarySection({
           onPeriodFilterChange={onPeriodFilterChange}
           sourceFilter={sourceFilter}
           onSourceFilterChange={onSourceFilterChange}
+          cashNetworkLayout={activeTab === "cash" || activeTab === "customers"}
         />
       </View>
     </View>
