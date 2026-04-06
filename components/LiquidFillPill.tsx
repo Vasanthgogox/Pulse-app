@@ -1,6 +1,5 @@
 /**
  * Liquid-fill pill: fill level driven by percentage with animated "wave" surface.
- * Dynamic liquid color: Red (low %) → Yellow → Green (high %) via HSL.
  * Text flips dark/white at ~45% fill for readability (no mix-blend-mode).
  */
 import Theme from "@/constants/Theme";
@@ -13,42 +12,6 @@ import Animated, {
   withRepeat,
   withTiming,
 } from "react-native-reanimated";
-
-/** HSL to hex for RN compatibility (0=red, 120=green) */
-function hslToHex(h: number, s: number, l: number): string {
-  s /= 100;
-  l /= 100;
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = l - c / 2;
-  let r = 0,
-    g = 0,
-    b = 0;
-  if (h < 60) {
-    r = c;
-    g = x;
-  } else if (h < 120) {
-    r = x;
-    g = c;
-  } else if (h < 180) {
-    g = c;
-    b = x;
-  } else if (h < 240) {
-    g = x;
-    b = c;
-  } else if (h < 300) {
-    r = x;
-    b = c;
-  } else {
-    r = c;
-    b = x;
-  }
-  const toHex = (v: number) =>
-    Math.round((v + m) * 255)
-      .toString(16)
-      .padStart(2, "0");
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-}
 
 /** Match reference: wave top at surface, 300px waves, 4% back offset */
 const PILL_HEIGHT = 68;
@@ -63,6 +26,38 @@ const WAVE_SPIN_MIDDLE_MS = 9500;
 const WAVE_SPIN_BACK_MS = 11000;
 /** Flip text to white when fill is above this (0–100) for readability over colored liquid */
 const TEXT_COLOR_FLIP_THRESHOLD = 45;
+
+function getLiquidPalette(clampedPercentage: number): {
+  back: string;
+  middle: string;
+  front: string;
+  glow: string;
+} {
+  // Theme-aligned: avoid neon HSL generation; use semantic tokens.
+  // Thresholds are intentionally simple and stable for consistent UI.
+  if (clampedPercentage < 40) {
+    return {
+      back: Theme.liquidBadBack,
+      middle: Theme.liquidBadMiddle,
+      front: Theme.liquidBadFront,
+      glow: Theme.liquidBadFront,
+    };
+  }
+  if (clampedPercentage < 70) {
+    return {
+      back: Theme.liquidWarnBack,
+      middle: Theme.liquidWarnMiddle,
+      front: Theme.liquidWarnFront,
+      glow: Theme.liquidWarnFront,
+    };
+  }
+  return {
+    back: Theme.liquidGoodBack,
+    middle: Theme.liquidGoodMiddle,
+    front: Theme.liquidGoodFront,
+    glow: Theme.liquidGoodFront,
+  };
+}
 
 export type LiquidFillPillProps = {
   /** 0–100; fill level (clamped). Use displayValue for text when different (e.g. negative margin). */
@@ -85,14 +80,19 @@ export function LiquidFillPill({
   displayValue,
 }: LiquidFillPillProps) {
   const clamped = Math.min(100, Math.max(0, percentage));
-  const textValue = displayValue !== undefined ? Math.round(displayValue) : Math.round(clamped);
+  const textValue =
+    displayValue !== undefined ? Math.round(displayValue) : Math.round(clamped);
   const rotation1 = useSharedValue(0);
   const rotation2 = useSharedValue(0);
   const rotation3 = useSharedValue(0);
   const initialTop = PILL_HEIGHT * (1 - clamped / 100);
   const waveFrontTop = useSharedValue(initialTop);
-  const waveMiddleTop = useSharedValue(initialTop - PILL_HEIGHT * (BACK_WAVE_OFFSET_PERCENT * 0.5));
-  const waveBackTop = useSharedValue(initialTop - PILL_HEIGHT * BACK_WAVE_OFFSET_PERCENT);
+  const waveMiddleTop = useSharedValue(
+    initialTop - PILL_HEIGHT * (BACK_WAVE_OFFSET_PERCENT * 0.5),
+  );
+  const waveBackTop = useSharedValue(
+    initialTop - PILL_HEIGHT * BACK_WAVE_OFFSET_PERCENT,
+  );
 
   useEffect(() => {
     const nextFrontTop = PILL_HEIGHT * (1 - clamped / 100);
@@ -100,55 +100,65 @@ export function LiquidFillPill({
       duration: FILL_DURATION_MS,
       easing: Easing.bezier(0.4, 0, 0.2, 1),
     });
-    waveMiddleTop.value = withTiming(nextFrontTop - PILL_HEIGHT * (BACK_WAVE_OFFSET_PERCENT * 0.5), {
-      duration: FILL_DURATION_MS,
-      easing: Easing.bezier(0.4, 0, 0.2, 1),
-    });
-    waveBackTop.value = withTiming(nextFrontTop - PILL_HEIGHT * BACK_WAVE_OFFSET_PERCENT, {
-      duration: FILL_DURATION_MS,
-      easing: Easing.bezier(0.4, 0, 0.2, 1),
-    });
+    waveMiddleTop.value = withTiming(
+      nextFrontTop - PILL_HEIGHT * (BACK_WAVE_OFFSET_PERCENT * 0.5),
+      {
+        duration: FILL_DURATION_MS,
+        easing: Easing.bezier(0.4, 0, 0.2, 1),
+      },
+    );
+    waveBackTop.value = withTiming(
+      nextFrontTop - PILL_HEIGHT * BACK_WAVE_OFFSET_PERCENT,
+      {
+        duration: FILL_DURATION_MS,
+        easing: Easing.bezier(0.4, 0, 0.2, 1),
+      },
+    );
   }, [clamped, waveFrontTop, waveMiddleTop, waveBackTop]);
 
   useEffect(() => {
     rotation1.value = withRepeat(
       withTiming(360, { duration: WAVE_SPIN_FRONT_MS, easing: Easing.linear }),
-      -1
+      -1,
     );
     rotation2.value = withRepeat(
       withTiming(360, { duration: WAVE_SPIN_MIDDLE_MS, easing: Easing.linear }),
-      -1
+      -1,
     );
     rotation3.value = withRepeat(
       withTiming(360, { duration: WAVE_SPIN_BACK_MS, easing: Easing.linear }),
-      -1
+      -1,
     );
   }, [rotation1, rotation2, rotation3]);
 
   const waveBackStyle = useAnimatedStyle(() => ({
     top: waveBackTop.value,
-    transform: [{ translateX: -WAVE_SIZE / 2 }, { rotate: `${rotation3.value}deg` }],
+    transform: [
+      { translateX: -WAVE_SIZE / 2 },
+      { rotate: `${rotation3.value}deg` },
+    ],
   }));
 
   const waveMiddleStyle = useAnimatedStyle(() => ({
     top: waveMiddleTop.value,
-    transform: [{ translateX: -WAVE_SIZE / 2 }, { rotate: `${rotation2.value}deg` }],
+    transform: [
+      { translateX: -WAVE_SIZE / 2 },
+      { rotate: `${rotation2.value}deg` },
+    ],
   }));
 
   const waveFrontStyle = useAnimatedStyle(() => ({
     top: waveFrontTop.value,
-    transform: [{ translateX: -WAVE_SIZE / 2 }, { rotate: `${rotation1.value}deg` }],
+    transform: [
+      { translateX: -WAVE_SIZE / 2 },
+      { rotate: `${rotation1.value}deg` },
+    ],
   }));
 
-  // HSL gradient: back darkest, middle mid, front brightest for natural depth
-  const hue = (clamped / 100) * 120;
-  const liquidBackHex = hslToHex(hue, 85, 32);
-  const liquidMiddleHex = hslToHex(hue, 88, 40);
-  const liquidFrontHex = hslToHex(hue, 88, 48);
-  // Dynamic glow matching current liquid color (red / yellow / green)
-  const glowColor = liquidFrontHex;
+  const palette = getLiquidPalette(clamped);
+  const glowColor = palette.glow;
   const textOnLiquid = clamped > TEXT_COLOR_FLIP_THRESHOLD;
-  const textColor = textOnLiquid ? "#FFFFFF" : Theme.primaryText;
+  const textColor = textOnLiquid ? Theme.textOnPrimary : Theme.primaryText;
 
   return (
     <View
@@ -165,18 +175,28 @@ export function LiquidFillPill({
       pointerEvents="none"
     >
       <Animated.View
-        style={[styles.wave, styles.waveBack, { backgroundColor: liquidBackHex }, waveBackStyle]}
+        style={[
+          styles.wave,
+          styles.waveBack,
+          { backgroundColor: palette.back },
+          waveBackStyle,
+        ]}
       />
       <Animated.View
         style={[
           styles.wave,
           styles.waveMiddle,
-          { backgroundColor: liquidMiddleHex },
+          { backgroundColor: palette.middle },
           waveMiddleStyle,
         ]}
       />
       <Animated.View
-        style={[styles.wave, styles.waveFront, { backgroundColor: liquidFrontHex }, waveFrontStyle]}
+        style={[
+          styles.wave,
+          styles.waveFront,
+          { backgroundColor: palette.front },
+          waveFrontStyle,
+        ]}
       />
       <View style={styles.textWrap}>
         <Text
@@ -197,7 +217,9 @@ export function LiquidFillPill({
           ]}
           numberOfLines={1}
         >
-          {valuePrefix}{textValue}{valueSuffix}
+          {valuePrefix}
+          {textValue}
+          {valueSuffix}
         </Text>
       </View>
     </View>

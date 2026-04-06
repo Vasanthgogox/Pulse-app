@@ -115,7 +115,9 @@ export function FinanceSummarySection({
                 onTabPress={onTabPress}
                 screenWidth={screenWidth}
               />
-              {activeTab === "ledger" && onLedgerViewModeChange != null && ledgerViewMode != null && (
+              {(activeTab as FinanceSubTab | "ledger") === "ledger" &&
+                onLedgerViewModeChange != null &&
+                ledgerViewMode != null && (
                 <View style={styles.ledgerViewModeRow}>
                   <TouchableOpacity
                     style={[
@@ -230,6 +232,7 @@ export function FinanceSummarySection({
           sourceFilter={sourceFilter}
           onSourceFilterChange={onSourceFilterChange}
           amountAnimationResetKey={activeTab}
+          cashNetworkLayout={activeTab === "cash" || activeTab === "customers"}
         />
       </View>
     </View>

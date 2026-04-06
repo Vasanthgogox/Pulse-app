@@ -70,6 +70,8 @@ export interface TreasurySummaryCardProps {
    * Without it, amounts only animate when the numeric total changes (entity detail / other embeds).
    */
   amountAnimationResetKey?: string;
+  /** Cash tab: match Network hub — fiscal tabs, then search row, then totals (flex order; same controls). */
+  cashNetworkLayout?: boolean;
 }
 
 const ENTITY_FILTER_LABELS: Record<EntityListFilter, string> = {
@@ -268,6 +270,7 @@ export function TreasurySummaryCard({
   onCashOutPress,
   filterRowRight,
   amountAnimationResetKey,
+  cashNetworkLayout = false,
 }: TreasurySummaryCardProps) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
@@ -282,6 +285,8 @@ export function TreasurySummaryCard({
 
   const effectiveEntityFilterLabels = { ...ENTITY_FILTER_LABELS, ...entityFilterLabels };
   const showSummary = labelIn != null && labelOut != null;
+  /** Cash tab: Network-style toolbar (search above totals, entity chips in toolbar). */
+  const cashNetworkToolbar = cashNetworkLayout && showSummary;
   const filterLabel =
     onEntityFilterChange != null
       ? effectiveEntityFilterLabels[entityFilter]
@@ -301,231 +306,65 @@ export function TreasurySummaryCard({
     transform: [{ scale: filterBtnScale.value }],
   }));
 
-  const toolbarOnly = fullWidth && !showSummary;
-  return (
-    <View style={[
-      styles.card,
-      fullWidth && styles.cardFullWidth,
-      toolbarOnly && styles.cardFullWidthToolbarOnly,
-    ]}>
-      {topContent != null && <View style={styles.topContent}>{topContent}</View>}
-      {showSummary && onEntityFilterChange != null &&
-        (filterRowRight != null ? (
-          <View style={styles.filterRowWrap}>
-            <View style={[styles.statusPillRow, styles.statusPillRowInWrap]}>
-              {(['all', 'has_due', 'no_due'] as const).map((f) => (
-                <TouchableOpacity
-                  key={f}
-                  style={[styles.statusPill, entityFilter === f && styles.statusPillActive]}
-                  onPress={() => onEntityFilterChange(f)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.statusPillText, entityFilter === f && styles.statusPillTextActive]}>
-                    {effectiveEntityFilterLabels[f]}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={styles.filterRowRight}>{filterRowRight}</View>
-          </View>
-        ) : (
-          <View style={styles.statusPillRow}>
-            {(['all', 'has_due', 'no_due'] as const).map((f) => (
-              <TouchableOpacity
-                key={f}
-                style={[styles.statusPill, entityFilter === f && styles.statusPillActive]}
-                onPress={() => onEntityFilterChange(f)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.statusPillText, entityFilter === f && styles.statusPillTextActive]}>
-                  {effectiveEntityFilterLabels[f]}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        ))}
-      {showSummary && (
-        <>
-          <View style={styles.summaryRow}>
-            {onCashInPress != null ? (
-              <Pressable
-                style={[
-                  styles.summaryCell,
-                  marginPercent != null && !Number.isNaN(marginPercent) && styles.summaryCellThird,
-                  cashDirectionFilter === 'in' && styles.summaryCellActive,
-                ]}
-                onPress={onCashInPress}
-                android_ripple={undefined}
-              >
-                <View style={styles.labelRow}>
-                  <AnimatedIcon
-                    name="arrow-circle-up"
-                    size={14}
-                    color={Theme.darkGreen}
-                    pulse
-                  />
-                  <Text style={styles.summaryLabel}>{labelIn}</Text>
-                </View>
-                <AnimatedAmount value={totalIn} animationResetKey={amountAnimationResetKey} />
-              </Pressable>
-            ) : (
-              <View style={[styles.summaryCell, marginPercent != null && !Number.isNaN(marginPercent) && styles.summaryCellThird]}>
-                <View style={styles.labelRow}>
-                  <AnimatedIcon
-                    name="arrow-circle-up"
-                    size={14}
-                    color={Theme.darkGreen}
-                    pulse
-                  />
-                  <Text style={styles.summaryLabel}>{labelIn}</Text>
-                </View>
-                <AnimatedAmount value={totalIn} animationResetKey={amountAnimationResetKey} />
-              </View>
-            )}
-            {marginPercent != null && !Number.isNaN(marginPercent) && (
-              <View style={[styles.summaryCell, styles.summaryCellCenter]}>
-                <Text style={styles.summaryLabel}>Margin</Text>
-                <Text
-                  style={[
-                    styles.summaryValue,
-                    styles.marginValue,
-                    marginPercent > 0 && styles.marginValuePositive,
-                    marginPercent < 0 && styles.marginValueNegative,
-                  ]}
-                >
-                  {marginPercent > 0 ? '+' : ''}{marginPercent.toFixed(1)}%
-                </Text>
-              </View>
-            )}
-            {onCashOutPress != null ? (
-              <Pressable
-                style={[
-                  styles.summaryCell,
-                  styles.summaryCellRight,
-                  marginPercent != null && !Number.isNaN(marginPercent) && styles.summaryCellThird,
-                  cashDirectionFilter === 'out' && styles.summaryCellActive,
-                ]}
-                onPress={onCashOutPress}
-                android_ripple={undefined}
-              >
-                <View style={styles.labelRowRight}>
-                  <Text style={styles.summaryLabel}>{labelOut}</Text>
-                  <AnimatedIcon
-                    name="arrow-circle-down"
-                    size={14}
-                    color={Theme.teslaRed}
-                    pulse
-                  />
-                </View>
-                <AnimatedAmount value={totalOut} animationResetKey={amountAnimationResetKey} />
-              </Pressable>
-            ) : (
-              <View style={[
-                styles.summaryCell,
-                styles.summaryCellRight,
-                marginPercent != null && !Number.isNaN(marginPercent) && styles.summaryCellThird,
-              ]}>
-                <View style={styles.labelRowRight}>
-                  <Text style={styles.summaryLabel}>{labelOut}</Text>
-                  <AnimatedIcon
-                    name="arrow-circle-down"
-                    size={14}
-                    color={Theme.teslaRed}
-                    pulse
-                  />
-                </View>
-                <AnimatedAmount value={totalOut} animationResetKey={amountAnimationResetKey} />
-              </View>
-            )}
-          </View>
-          <View style={[styles.divider, fullWidth && styles.dividerInFullWidth]} />
-        </>
-      )}
-
-      <View style={[styles.toolbarRow, compactToolbar && styles.toolbarRowStacked]}>
-          <View style={[styles.searchWrap, compactToolbar && styles.searchWrapStacked]}>
-            <AnimatedIcon
-              name="search"
-              size={11}
-              color={Theme.textMutedDemo}
-              style={styles.searchIcon}
-            />
-            <TextInput
-              style={styles.searchInput}
-              value={searchQuery}
-              onChangeText={onSearchChange}
-              placeholder={searchPlaceholder}
-              placeholderTextColor={Theme.textMutedDemo}
-              returnKeyType="search"
-              autoCorrect={false}
-              spellCheck={false}
-              autoComplete="off"
-            />
-          </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={[styles.toolbarFiltersScroll, compactToolbar && styles.toolbarFiltersScrollStacked]}
-            contentContainerStyle={styles.toolbarFiltersContent}
-          >
-          {filterLabel != null && (
-            <View ref={refPeriodFilter} style={styles.filterBlock} collapsable={false}>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => {
-                  refPeriodFilter.current?.measureInWindow((_x, y, _w, h) => {
-                    setDropdownAnchorY(y + h + 6);
-                    if (onEntityFilterChange) {
-                      setShowPeriodDropdown(false);
-                      setShowSourceDropdown(false);
-                      setShowFilterDropdown((v) => !v);
-                    } else if (onPeriodFilterChange) {
-                      setShowFilterDropdown(false);
-                      setShowSourceDropdown(false);
-                      setShowPeriodDropdown((v) => !v);
-                    }
-                  });
-                }}
-                onPressIn={() => {
-                  filterBtnScale.value = withSpring(0.92, springConfig);
-                }}
-                onPressOut={() => {
-                  filterBtnScale.value = withSpring(1, springConfig);
-                }}
-                style={styles.filterTrigger}
-              >
-                <Animated.View style={[styles.filterTriggerInner, filterAnimatedStyle]}>
-                  <FontAwesome name="filter" size={11} color={Theme.textOnDark} />
-                  <Text style={styles.filterTriggerText} numberOfLines={1}>
-                    {filterLabel}
-                  </Text>
-                  <FontAwesome name="chevron-down" size={11} color={Theme.textOnDark} />
-                </Animated.View>
-              </TouchableOpacity>
-            {showFilterDropdownOpen && (
-              <Modal
-                visible
-                transparent
-                animationType="fade"
-                onRequestClose={() => {
-                  setShowFilterDropdown(false);
+  const periodAndSourceFilters = (
+    <>
+      {filterLabel != null && (
+        <View ref={refPeriodFilter} style={styles.filterBlock} collapsable={false}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => {
+              refPeriodFilter.current?.measureInWindow((_x, y, _w, h) => {
+                setDropdownAnchorY(y + h + 6);
+                if (onEntityFilterChange) {
                   setShowPeriodDropdown(false);
                   setShowSourceDropdown(false);
-                }}
-              >
-                <View style={styles.filterModalOverlay}>
-                  <TouchableWithoutFeedback
-                    onPress={() => {
-                      setShowFilterDropdown(false);
-                      setShowPeriodDropdown(false);
-                      setShowSourceDropdown(false);
-                    }}
-                  >
-                    <View style={StyleSheet.absoluteFill} />
-                  </TouchableWithoutFeedback>
-                  <View style={[styles.filterModalCardWrap, { top: dropdownAnchorY > 0 ? dropdownAnchorY : insets.top + 100 }]}>
-                    <View style={styles.filterModalCard}>
+                  setShowFilterDropdown((v) => !v);
+                } else if (onPeriodFilterChange) {
+                  setShowFilterDropdown(false);
+                  setShowSourceDropdown(false);
+                  setShowPeriodDropdown((v) => !v);
+                }
+              });
+            }}
+            onPressIn={() => {
+              filterBtnScale.value = withSpring(0.92, springConfig);
+            }}
+            onPressOut={() => {
+              filterBtnScale.value = withSpring(1, springConfig);
+            }}
+            style={styles.filterTrigger}
+          >
+            <Animated.View style={[styles.filterTriggerInner, filterAnimatedStyle]}>
+              <FontAwesome name="filter" size={11} color={Theme.textOnDark} />
+              <Text style={styles.filterTriggerText} numberOfLines={1}>
+                {filterLabel}
+              </Text>
+              <FontAwesome name="chevron-down" size={11} color={Theme.textOnDark} />
+            </Animated.View>
+          </TouchableOpacity>
+          {showFilterDropdownOpen && (
+            <Modal
+              visible
+              transparent
+              animationType="fade"
+              onRequestClose={() => {
+                setShowFilterDropdown(false);
+                setShowPeriodDropdown(false);
+                setShowSourceDropdown(false);
+              }}
+            >
+              <View style={styles.filterModalOverlay}>
+                <TouchableWithoutFeedback
+                  onPress={() => {
+                    setShowFilterDropdown(false);
+                    setShowPeriodDropdown(false);
+                    setShowSourceDropdown(false);
+                  }}
+                >
+                  <View style={StyleSheet.absoluteFill} />
+                </TouchableWithoutFeedback>
+                <View style={[styles.filterModalCardWrap, { top: dropdownAnchorY > 0 ? dropdownAnchorY : insets.top + 100 }]}>
+                  <View style={styles.filterModalCard}>
                     <View style={styles.filterModalHandle} />
                     {onEntityFilterChange && showFilterDropdown && (
                       <>
@@ -700,55 +539,312 @@ export function TreasurySummaryCard({
                         ))}
                       </>
                     )}
-                    </View>
                   </View>
                 </View>
-              </Modal>
+              </View>
+            </Modal>
+          )}
+        </View>
+      )}
+      {sourceFilterLabel != null && (
+        <View ref={refSourceFilter} style={styles.filterBlock} collapsable={false}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => {
+              refSourceFilter.current?.measureInWindow((_x, y, _w, h) => {
+                setDropdownAnchorY(y + h + 6);
+                setShowFilterDropdown(false);
+                setShowPeriodDropdown(false);
+                setShowSourceDropdown((v) => !v);
+              });
+            }}
+            onPressIn={() => {
+              filterBtnScale.value = withSpring(0.92, springConfig);
+            }}
+            onPressOut={() => {
+              filterBtnScale.value = withSpring(1, springConfig);
+            }}
+            style={styles.filterTrigger}
+          >
+            <Animated.View style={[styles.filterTriggerInner, filterAnimatedStyle]}>
+              <FontAwesome name="database" size={11} color={Theme.textOnDark} />
+              <Text style={styles.filterTriggerText} numberOfLines={1}>
+                {sourceFilterLabel}
+              </Text>
+              <FontAwesome name="chevron-down" size={11} color={Theme.textOnDark} />
+            </Animated.View>
+          </TouchableOpacity>
+        </View>
+      )}
+    </>
+  );
+
+  const toolbarOnly = fullWidth && !showSummary;
+  return (
+    <View style={[
+      styles.card,
+      fullWidth && styles.cardFullWidth,
+      toolbarOnly && styles.cardFullWidthToolbarOnly,
+    ]}>
+      {topContent != null && (
+        <View style={[styles.topContent, cashNetworkLayout && styles.topContentNetwork]}>
+          {topContent}
+        </View>
+      )}
+      {!cashNetworkLayout && showSummary && onEntityFilterChange != null &&
+        (filterRowRight != null ? (
+          <View style={styles.filterRowWrap}>
+            <View style={[styles.statusPillRow, styles.statusPillRowInWrap]}>
+              {(['all', 'has_due', 'no_due'] as const).map((f) => (
+                <TouchableOpacity
+                  key={f}
+                  style={[styles.statusPill, entityFilter === f && styles.statusPillActive]}
+                  onPress={() => onEntityFilterChange(f)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.statusPillText, entityFilter === f && styles.statusPillTextActive]}>
+                    {effectiveEntityFilterLabels[f]}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.filterRowRight}>{filterRowRight}</View>
+          </View>
+        ) : (
+          <View style={styles.statusPillRow}>
+            {(['all', 'has_due', 'no_due'] as const).map((f) => (
+              <TouchableOpacity
+                key={f}
+                style={[styles.statusPill, entityFilter === f && styles.statusPillActive]}
+                onPress={() => onEntityFilterChange(f)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.statusPillText, entityFilter === f && styles.statusPillTextActive]}>
+                  {effectiveEntityFilterLabels[f]}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ))}
+      <View
+        style={[
+          styles.summaryToolbarStack,
+          cashNetworkLayout && showSummary && styles.cashNetworkOrderedWrap,
+        ]}
+      >
+      {showSummary && (
+        <>
+          <View
+            style={[
+              styles.summaryRow,
+              cashNetworkLayout && showSummary && styles.summaryRowNetwork,
+              cashNetworkLayout && showSummary && styles.summaryOrderAfterToolbar,
+            ]}
+          >
+            {onCashInPress != null ? (
+              <Pressable
+                style={[
+                  styles.summaryCell,
+                  marginPercent != null && !Number.isNaN(marginPercent) && styles.summaryCellThird,
+                  cashDirectionFilter === 'in' && styles.summaryCellActive,
+                ]}
+                onPress={onCashInPress}
+                android_ripple={undefined}
+              >
+                <View style={styles.labelRow}>
+                  <AnimatedIcon
+                    name="arrow-circle-up"
+                    size={14}
+                    color={Theme.darkGreen}
+                    pulse
+                  />
+                  <Text style={styles.summaryLabel}>{labelIn}</Text>
+                </View>
+                <AnimatedAmount value={totalIn} animationResetKey={amountAnimationResetKey} />
+              </Pressable>
+            ) : (
+              <View style={[styles.summaryCell, marginPercent != null && !Number.isNaN(marginPercent) && styles.summaryCellThird]}>
+                <View style={styles.labelRow}>
+                  <AnimatedIcon
+                    name="arrow-circle-up"
+                    size={14}
+                    color={Theme.darkGreen}
+                    pulse
+                  />
+                  <Text style={styles.summaryLabel}>{labelIn}</Text>
+                </View>
+                <AnimatedAmount value={totalIn} animationResetKey={amountAnimationResetKey} />
+              </View>
+            )}
+            {marginPercent != null && !Number.isNaN(marginPercent) && (
+              <View style={[styles.summaryCell, styles.summaryCellCenter]}>
+                <Text style={styles.summaryLabel}>Margin</Text>
+                <Text
+                  style={[
+                    styles.summaryValue,
+                    styles.marginValue,
+                    marginPercent > 0 && styles.marginValuePositive,
+                    marginPercent < 0 && styles.marginValueNegative,
+                  ]}
+                >
+                  {marginPercent > 0 ? '+' : ''}{marginPercent.toFixed(1)}%
+                </Text>
+              </View>
+            )}
+            {onCashOutPress != null ? (
+              <Pressable
+                style={[
+                  styles.summaryCell,
+                  styles.summaryCellRight,
+                  marginPercent != null && !Number.isNaN(marginPercent) && styles.summaryCellThird,
+                  cashDirectionFilter === 'out' && styles.summaryCellActive,
+                ]}
+                onPress={onCashOutPress}
+                android_ripple={undefined}
+              >
+                <View style={styles.labelRowRight}>
+                  <Text style={styles.summaryLabel}>{labelOut}</Text>
+                  <AnimatedIcon
+                    name="arrow-circle-down"
+                    size={14}
+                    color={Theme.teslaRed}
+                    pulse
+                  />
+                </View>
+                <AnimatedAmount value={totalOut} animationResetKey={amountAnimationResetKey} />
+              </Pressable>
+            ) : (
+              <View style={[
+                styles.summaryCell,
+                styles.summaryCellRight,
+                marginPercent != null && !Number.isNaN(marginPercent) && styles.summaryCellThird,
+              ]}>
+                <View style={styles.labelRowRight}>
+                  <Text style={styles.summaryLabel}>{labelOut}</Text>
+                  <AnimatedIcon
+                    name="arrow-circle-down"
+                    size={14}
+                    color={Theme.teslaRed}
+                    pulse
+                  />
+                </View>
+                <AnimatedAmount value={totalOut} animationResetKey={amountAnimationResetKey} />
+              </View>
             )}
           </View>
-        )}
-          {sourceFilterLabel != null && (
-            <View ref={refSourceFilter} style={styles.filterBlock} collapsable={false}>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => {
-                  refSourceFilter.current?.measureInWindow((_x, y, _w, h) => {
-                    setDropdownAnchorY(y + h + 6);
-                    setShowFilterDropdown(false);
-                    setShowPeriodDropdown(false);
-                    setShowSourceDropdown((v) => !v);
-                  });
-                }}
-                onPressIn={() => {
-                  filterBtnScale.value = withSpring(0.92, springConfig);
-                }}
-                onPressOut={() => {
-                  filterBtnScale.value = withSpring(1, springConfig);
-                }}
-                style={styles.filterTrigger}
-              >
-                <Animated.View style={[styles.filterTriggerInner, filterAnimatedStyle]}>
-                  <FontAwesome name="database" size={11} color={Theme.textOnDark} />
-                  <Text style={styles.filterTriggerText} numberOfLines={1}>
-                    {sourceFilterLabel}
-                  </Text>
-                  <FontAwesome name="chevron-down" size={11} color={Theme.textOnDark} />
-                </Animated.View>
-              </TouchableOpacity>
-            </View>
-          )}
-
-        {!hideReportInToolbar && (
-          <PressableIcon
-            name="file-text-o"
-            size={11}
-            color={Theme.textOnDark}
-            onPress={onReportPress}
-            pulse
-            style={styles.reportIconBtn}
+          <View
+            style={[
+              styles.divider,
+              fullWidth && styles.dividerInFullWidth,
+              cashNetworkLayout && showSummary && styles.dividerCashNetwork,
+              cashNetworkLayout && showSummary && styles.dividerOrderBetween,
+            ]}
           />
-        )}
+        </>
+      )}
+
+      {cashNetworkToolbar ? (
+        <View
+          style={[
+            styles.toolbarRow,
+            styles.toolbarRowNetwork,
+            styles.toolbarOrderFirst,
+          ]}
+        >
+          <View style={[styles.toolbarLeft, styles.toolbarLeftNetwork]}>
+            <View style={[styles.searchWrap, styles.searchWrapNetwork]}>
+              <AnimatedIcon
+                name="search"
+                size={14}
+                color={Theme.textOnDarkMuted}
+                style={styles.searchIcon}
+              />
+              <TextInput
+                style={[styles.searchInput, styles.searchInputNetwork]}
+                value={searchQuery}
+                onChangeText={onSearchChange}
+                placeholder={searchPlaceholder}
+                placeholderTextColor={Theme.textOnDarkMuted}
+                returnKeyType="search"
+                autoCorrect={false}
+                spellCheck={false}
+                autoComplete="off"
+              />
+            </View>
+
+            {onEntityFilterChange != null && (
+              <View style={styles.networkEntityChipsWrap}>
+                <View style={[styles.statusPillRow, styles.statusPillRowInWrap, styles.statusPillRowNetwork]}>
+                  {(['all', 'has_due', 'no_due'] as const).map((f) => (
+                    <TouchableOpacity
+                      key={f}
+                      style={[styles.statusPill, styles.statusPillNetwork, entityFilter === f && styles.statusPillActive]}
+                      onPress={() => onEntityFilterChange(f)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.statusPillText, styles.statusPillTextNetwork, entityFilter === f && styles.statusPillTextActive]}>
+                        {effectiveEntityFilterLabels[f]}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                {filterRowRight != null && (
+                  <View style={styles.filterRowRight}>{filterRowRight}</View>
+                )}
+              </View>
+            )}
+
+            {periodAndSourceFilters}
+          </View>
+
+          {!hideReportInToolbar && (
+            <PressableIcon
+              name="file-text-o"
+              size={11}
+              color={Theme.textOnDark}
+              onPress={onReportPress}
+              pulse
+              style={styles.reportIconBtn}
+            />
+          )}
+        </View>
+      ) : (
+        <View style={[styles.toolbarRow, compactToolbar && styles.toolbarRowStacked]}>
+          <View style={[styles.searchWrap, compactToolbar && styles.searchWrapStacked]}>
+            <AnimatedIcon name="search" size={11} color={Theme.textMutedDemo} style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              value={searchQuery}
+              onChangeText={onSearchChange}
+              placeholder={searchPlaceholder}
+              placeholderTextColor={Theme.textMutedDemo}
+              returnKeyType="search"
+              autoCorrect={false}
+              spellCheck={false}
+              autoComplete="off"
+            />
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={[styles.toolbarFiltersScroll, compactToolbar && styles.toolbarFiltersScrollStacked]}
+            contentContainerStyle={styles.toolbarFiltersContent}
+          >
+            {periodAndSourceFilters}
+            {!hideReportInToolbar && (
+              <PressableIcon
+                name="file-text-o"
+                size={11}
+                color={Theme.textOnDark}
+                onPress={onReportPress}
+                pulse
+                style={styles.reportIconBtn}
+              />
+            )}
           </ScrollView>
+        </View>
+      )}
       </View>
     </View>
   );
@@ -784,6 +880,88 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     marginHorizontal: -12,
   },
+  /** Network hub: spacing under horizontal segment tabs (fiscal tabs). */
+  topContentNetwork: {
+    marginBottom: 8,
+    paddingTop: 8,
+  },
+  /** Wraps summary + divider + toolbar so Cash can reorder like Network (search before totals). */
+  summaryToolbarStack: {
+    flexDirection: 'column',
+  },
+  cashNetworkOrderedWrap: {},
+  summaryOrderAfterToolbar: {
+    order: 1,
+  },
+  dividerOrderBetween: {
+    order: 2,
+  },
+  toolbarOrderFirst: {
+    order: 3,
+  },
+  /** Network searchRowDark-style toolbar row */
+  toolbarRowNetwork: {
+    paddingTop: 10,
+    gap: 8,
+  },
+  toolbarLeft: {
+    flex: 1,
+    minWidth: 0,
+  },
+  toolbarLeftNetwork: {
+    gap: 8,
+  },
+  /** Network: entity status tags next to search (like type chips). */
+  networkEntityChipsWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+    backgroundColor: Theme.darkSurface,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    gap: 6,
+  },
+  statusPillRowNetwork: {
+    marginBottom: 0,
+    gap: 3,
+  },
+  statusPillNetwork: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  statusPillTextNetwork: {
+    fontSize: 8,
+    fontWeight: '500',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  /** Network searchWrapDark */
+  searchWrapNetwork: {
+    minHeight: 38,
+    borderRadius: 11,
+    backgroundColor: Theme.darkSurface,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 0,
+  },
+  searchInputNetwork: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: Theme.textOnDark,
+  },
+  /** Totals band sits below search (Network: content below black block). */
+  summaryRowNetwork: {
+    marginTop: 0,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Theme.separatorDark,
+  },
+  dividerCashNetwork: {},
   filterRowWrap: {
     flexDirection: 'row',
     alignItems: 'center',
