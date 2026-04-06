@@ -11,30 +11,32 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
-  TripExpandableCard,
-  type TripRow
+    TripExpandableCard,
+    type TripRow
 } from "@/features/trips";
 import { canAccessTrips, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatLedgerDate } from "@/lib/format";
 import {
-  useAssignmentAuditQuery,
-  useRealtimeTransactionsInvalidation,
-  useRealtimeTripsInvalidation,
-  useShipperDisplayNamesQuery,
-  useTransactionsQuery,
-  useTripsQuery,
+    useAssignmentAuditQuery,
+    useRealtimeTransactionsInvalidation,
+    useRealtimeTripsInvalidation,
+    useShipperDisplayNamesQuery,
+    useTransactionsQuery,
+    useTripsQuery,
 } from "@/lib/queries";
 import { useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+    useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -42,6 +44,8 @@ type ActiveStatusTab = "all" | "unassigned" | "assigned" | "in_transit";
 type SupplyFilter = "all" | "asset" | "aggregated";
 
 export default function TripsScreen() {
+  const { width } = useWindowDimensions();
+  const isLargeScreen = Platform.OS === "web" && width >= 1024;
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t: tr } = useLanguage();
@@ -383,7 +387,7 @@ export default function TripsScreen() {
                 : tr("noTripsYet")}
             </Text>
           ) : (
-            <>
+            <View style={isLargeScreen ? styles.gridContainer : undefined}>
               {filtered.map((t) => {
                 const stage =
                   t.driver_id == null
@@ -393,20 +397,21 @@ export default function TripsScreen() {
                 const tripLedgerEntries = transactionsByTripId.get(t.id) ?? [];
                 const displayClientName = shipperNameByTripId[t.id] ?? t.client_name ?? undefined;
                 return (
-                  <TripExpandableCard
-                    key={t.id}
-                    trip={t}
-                    tripLedgerEntries={tripLedgerEntries}
-                    cardDate={getTripCardDate(t)}
-                    stage={stage}
-                    isAggregate={isAggregate}
-                    displayClientName={displayClientName}
-                    onAssignmentUpdated={onRefresh}
-                    onPress={() => router.push(`/trip/${t.id}` as const)}
-                  />
+                  <View key={t.id} style={isLargeScreen ? styles.gridItem : undefined}>
+                    <TripExpandableCard
+                      trip={t}
+                      tripLedgerEntries={tripLedgerEntries}
+                      cardDate={getTripCardDate(t)}
+                      stage={stage}
+                      isAggregate={isAggregate}
+                      displayClientName={displayClientName}
+                      onAssignmentUpdated={onRefresh}
+                      onPress={() => router.push(`/trip/${t.id}` as const)}
+                    />
+                  </View>
                 );
               })}
-            </>
+            </View>
           )}
         </ScrollView>
       )}
@@ -531,6 +536,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Theme.textPrimaryDark,
     minHeight: 0,
+  },
+  gridContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginHorizontal: -8,
+  },
+  gridItem: {
+    width: "33.333%",
+    paddingHorizontal: 8,
   },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingTop: 12 },
