@@ -687,7 +687,7 @@ export function TripAssignmentBlock({
         <View style={[styles.assignRow, styles.assignRowLast]}>
           <View style={styles.assignRowLeft}>
             <View style={[styles.assignIcon, hasVehicle ? styles.assignIconVehicleActive : styles.assignIconInactive]}>
-              <FontAwesome name="truck" size={18} color={hasVehicle ? Theme.textPrimaryDark : Theme.textMuted} />
+              <FontAwesome name="truck" size={18} color={hasVehicle ? "#ffffff" : Theme.textMuted} />
             </View>
             <View style={styles.assignRowText}>
               <Text style={styles.assignRowLabel}>Vehicle Registry</Text>
@@ -957,7 +957,7 @@ export function TripAssignmentBlock({
                       >
                       <View style={styles.assignRegistryCardLeft}>
                         <View style={styles.assignVehicleIconWrapRegistry}>
-                          <FontAwesome name="truck" size={16} color={Theme.textMuted} />
+                          <FontAwesome name="truck" size={16} color="#ffffff" />
                         </View>
                         <View style={styles.assignCardBody}>
                           <Text style={styles.assignCardTitle} numberOfLines={1}>
@@ -1204,8 +1204,8 @@ const styles = StyleSheet.create({
     borderColor: Theme.primary,
   },
   assignIconVehicleActive: {
-    backgroundColor: Theme.surfaceGray,
-    borderColor: Theme.borderLight,
+    backgroundColor: Theme.primary,
+    borderColor: Theme.primary,
   },
   assignRowText: { flex: 1, minWidth: 0 },
   assignRowLabel: {
@@ -1873,10 +1873,10 @@ const styles = StyleSheet.create({
   assignVehicleIconWrapRegistry: {
     width: 36,
     height: 36,
-    borderRadius: 10,
-    backgroundColor: Theme.surfaceGray,
+    borderRadius: 18,
+    backgroundColor: Theme.primary,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.primary,
     alignItems: "center",
     justifyContent: "center",
   },
