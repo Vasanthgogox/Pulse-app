@@ -802,12 +802,15 @@ export function TreasurySummaryCard({
                 </View>
               )}
 
+              {/* When no entity filter (Cash tab), show period/source filters in-line like Network chips */}
+              {onEntityFilterChange == null && periodAndSourceFilters}
+
               {filterRowRight != null && (
                 <View style={styles.filterRowRight}>{filterRowRight}</View>
               )}
             </View>
 
-            {periodAndSourceFilters}
+            {onEntityFilterChange != null && periodAndSourceFilters}
           </View>
 
           {!hideReportInToolbar && (
