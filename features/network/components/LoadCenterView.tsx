@@ -2119,9 +2119,9 @@ export function LoadCenterView({
         <View style={[styles.assignModalPage, { paddingTop: insets.top }]}>
           <View style={styles.assignModalHeader}>
             <View style={styles.assignModalHeaderText}>
-              <Text style={styles.assignModalTitle}>Staff Handshake</Text>
+              <Text style={styles.assignModalTitle}>Allocations</Text>
               <Text style={styles.assignModalSubtitle}>
-                Network Node Selection
+                Assign Drivers and Vehicles
               </Text>
             </View>
             <TouchableOpacity
@@ -2295,8 +2295,7 @@ export function LoadCenterView({
                   </TouchableOpacity>
                   <Text style={styles.sourceOfSupplySectionTitle}>Asset</Text>
                   <Text style={styles.modalHint}>
-                    Assign driver and vehicle from your org, then authorize
-                    voyage.
+                    Assign driver and vehicle from your org, then authorize the trip
                   </Text>
                   {(() => {
                     const selectedDriver = activeDrivers.find(
