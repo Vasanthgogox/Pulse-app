@@ -184,6 +184,8 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
 
   if (!trip) return null;
 
+  const amount = trip?.total_client_value ?? 0;
+
   const content = (
     <>
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -202,9 +204,9 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>Trip Details</Text>
           <View style={styles.infoCard}>
-            <InfoRow label="Client" value={trip.client_name} />
-            <InfoRow label="Route" value={`${trip.pp_location} ➔ ${trip.drop_point}`} />
-            <InfoRow label="Amount" value={`₹${trip.total_client_value.toLocaleString()}`} />
+            <InfoRow label="Client" value={trip.client_name || ''} />
+            <InfoRow label="Route" value={`${trip.pp_location || ''} ➔ ${trip.drop_point || ''}`} />
+            <InfoRow label="Amount" value={`₹${amount.toLocaleString()}`} />
           </View>
         </View>
 
