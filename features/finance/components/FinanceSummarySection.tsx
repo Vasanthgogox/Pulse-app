@@ -235,7 +235,9 @@ export function FinanceSummarySection({
           cashNetworkLayout={
             activeTab === "cash" ||
             activeTab === "customers" ||
-            activeTab === "suppliers"
+            activeTab === "suppliers" ||
+            activeTab === "garage" ||
+            activeTab === "drivers"
           }
         />
       </View>

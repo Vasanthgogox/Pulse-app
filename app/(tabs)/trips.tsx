@@ -501,6 +501,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.separatorDark,
   },
+  tabRowScroll: {
+    flexGrow: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.separatorDark,
+  },
   tabRowScrollContent: {
     flexDirection: "row",
     alignItems: "center",
