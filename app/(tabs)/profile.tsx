@@ -230,6 +230,27 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {hasDispatcherOrFleetAccess ? (
+          <View style={styles.menuCard}>
+            <TouchableOpacity
+              style={styles.menuRow}
+              onPress={() => router.push('/log-incoming-pods')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.menuLeft}>
+                <View style={styles.menuIconWrap}>
+                  <FontAwesome name="archive" size={16} color={Theme.textPrimaryDark} />
+                </View>
+                <View style={styles.menuTextWrap}>
+                  <Text style={styles.menuValue}>Log incoming PODs</Text>
+                  <Text style={styles.menuLabel}>Record courier PODs against trips and LRs</Text>
+                </View>
+              </View>
+              <FontAwesome name="chevron-right" size={14} color={Theme.textMuted} />
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         <View style={styles.menuCard}>
           <TouchableOpacity
             style={styles.menuRow}
