@@ -9,7 +9,7 @@ import { InvoicePreviewPanel } from '@/features/invoicing/components/InvoicePrev
 export interface InvoicePreviewModalProps {
   visible: boolean;
   onClose: () => void;
-  onFinalize: (internalIds: string[]) => Promise<void>;
+  onFinalize: (internalIds: string[], payload?: any) => Promise<void>;
   isFinalizing: boolean;
   activeClient: string | null;
   selectedTrips: InvoicingTripView[];
