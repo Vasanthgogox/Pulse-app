@@ -1,6 +1,5 @@
 import type { DriverPaymentType, PartyOption, TripOption } from "@/components/AddTransactionModal";
 import { FinanceFAB } from "@/components/FinanceFAB";
-import { TeslaHeader } from "@/components/TeslaHeader";
 import { Layout } from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1026,15 +1025,6 @@ export function FinanceScreen() {
   if (isOrgLoading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top + Layout.tabBarHeight + 20 }]}>
-        <View style={[styles.darkBlock, { paddingTop: 0 }]}>
-          <TeslaHeader
-            title={t("treasury")}
-            subtitle={t("fiscalMatrix")}
-            onLoadClick={() => router.push("/load-board")}
-            onNetworkClick={() => router.push("/(tabs)/network")}
-            onProfileClick={() => router.push("/(tabs)/profile")}
-          />
-        </View>
         <View style={[styles.centered, { flex: 1, paddingTop: 24 }]}>
           <ActivityIndicator size="large" color={Theme.primary} />
         </View>
@@ -1045,15 +1035,6 @@ export function FinanceScreen() {
   if (!orgId) {
     return (
       <View style={[styles.container, { paddingTop: insets.top + Layout.tabBarHeight + 20 }]}>
-        <View style={[styles.darkBlock, { paddingTop: 0 }]}>
-          <TeslaHeader
-            title={t("treasury")}
-            subtitle={t("fiscalMatrix")}
-            onLoadClick={() => router.push("/load-board")}
-            onNetworkClick={() => router.push("/(tabs)/network")}
-            onProfileClick={() => router.push("/(tabs)/profile")}
-          />
-        </View>
         <View
           style={[styles.centered, { flex: 1, paddingTop: 24 }]}
         >
