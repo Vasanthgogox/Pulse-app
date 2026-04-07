@@ -1,4 +1,5 @@
 export async function compressImage(fileOrBlob: Blob, maxWidth = 1200): Promise<Blob> {
+  if (typeof document === 'undefined') return fileOrBlob; // Skip on native
   if (!fileOrBlob.type.startsWith('image/')) {
     return fileOrBlob;
   }

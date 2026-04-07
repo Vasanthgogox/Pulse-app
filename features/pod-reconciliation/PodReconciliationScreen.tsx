@@ -69,7 +69,8 @@ export function PodReconciliationScreen() {
   const { data: summaryData } = usePodReconciliationSummaryQuery(orgId);
 
   const { width } = useWindowDimensions();
-  const isMediumScreen = width >= 768;
+  const isLargeScreen = width >= 1024;
+  const isSideBySide = width >= 768;
   const allowed = canAccessPodManagement(profile);
 
   const regions = ["All", "HYDERABAD", "CHENNAI", "BANGALORE", "PONDICHERRY", "Gummidipondi", "MUMBAI", "KOLKATA", "DELHI", "AHMEDABAD"];
@@ -95,8 +96,11 @@ export function PodReconciliationScreen() {
   if (orgLoading || !orgId) return <CenteredLoadingView message={orgLoading ? 'Loading...' : 'No organization'} />;
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top, flexDirection: isMediumScreen ? 'row' : 'column' }]}>
-      <View style={[styles.mainColumn, isMediumScreen && { flex: 0.4, borderRightWidth: 1, borderColor: Theme.borderLight }]}>
+    <View style={[styles.root, { paddingTop: insets.top, flexDirection: isSideBySide ? 'row' : 'column' }]}>
+      <View style={[
+        styles.mainColumn, 
+        isSideBySide && { width: 420, flexShrink: 0, flex: undefined, borderRightWidth: 1, borderColor: Theme.borderLight }
+      ]}>
         <View style={styles.topBar}>
         <View style={styles.topBarLeft}>
           <Pressable style={styles.iconBtn} onPress={() => router.back()} hitSlop={12}>
@@ -106,9 +110,9 @@ export function PodReconciliationScreen() {
             <View style={styles.iconBox}>
               <FontAwesome name="tasks" size={20} color={Theme.primary} />
             </View>
-            <View>
-              <Text style={styles.topTitle}>POD Management</Text>
-              <Text style={styles.topSub}>Streamline your AR cycle and PODs</Text>
+            <View style={{ flexShrink: 1 }}>
+              <Text style={styles.topTitle} numberOfLines={1}>POD Management</Text>
+              <Text style={styles.topSub} numberOfLines={1}>Streamline your AR cycle and PODs</Text>
             </View>
           </View>
         </View>
@@ -229,7 +233,7 @@ export function PodReconciliationScreen() {
                 }} 
               />
             )}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[styles.listContent, { paddingBottom: Math.max(40, insets.bottom + 20) }]}
             refreshing={isRefetching}
             onRefresh={refetch}
             ListEmptyComponent={
@@ -242,7 +246,7 @@ export function PodReconciliationScreen() {
           />
         )}
       </View>
-      {isMediumScreen && (
+      {isSideBySide && (
         <View style={styles.tabletRightPanel}>
           {selectedTrip ? (
             <PodValidationView
@@ -251,7 +255,7 @@ export function PodReconciliationScreen() {
               onClose={() => setSelectedTrip(null)}
             />
           ) : (
-            <View style={styles.empty}>
+            <View style={styles.emptyRight}>
               <FontAwesome name="file-text-o" size={48} color={Theme.borderMedium} />
               <Text style={styles.emptyTitle}>No trip selected</Text>
               <Text style={styles.emptySub}>Select a trip from the list to validate.</Text>
@@ -261,7 +265,7 @@ export function PodReconciliationScreen() {
       )}
       </View>
 
-      {!isMediumScreen && validationModalOpen && (
+      {!isSideBySide && validationModalOpen && (
         <PodValidationView
           trip={selectedTrip}
           onClose={() => {
@@ -374,9 +378,9 @@ function TripRowItem({ trip, onPress }: { trip: PodReconciliationTripView; onPre
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Theme.screenBackground },
-  mainColumn: { flex: 1, flexDirection: 'column' },
-  tabletRightPanel: { flex: 0.6, backgroundColor: Theme.screenBackground },
+  root: { flex: 1, backgroundColor: Theme.screenBackground, ...Platform.select({ web: { overflow: 'hidden' } }) },
+  mainColumn: { flexDirection: 'column', height: '100%', flex: 1, width: '100%' },
+  tabletRightPanel: { flex: 1, backgroundColor: Theme.screenBackground },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -386,14 +390,17 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
+    flexWrap: 'wrap',
+    gap: 12,
+    width: '100%',
   },
-  topBarLeft: { flexDirection: 'row', alignItems: 'center' },
+  topBarLeft: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },
   iconBtn: { padding: 8, marginLeft: -8 },
-  topTitleWrap: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 8, gap: 12 },
-  iconBox: { width: 36, height: 36, borderRadius: 8, backgroundColor: 'rgba(26,35,126,0.1)', alignItems: 'center', justifyContent: 'center' },
+  topTitleWrap: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 8, gap: 12, flexShrink: 1 },
+  iconBox: { width: 36, height: 36, borderRadius: 8, backgroundColor: 'rgba(26,35,126,0.1)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   topTitle: { fontSize: 17, fontWeight: '800', color: Theme.textPrimaryDark },
-  topSub: { fontSize: 11, color: Theme.textMuted, marginTop: 2 },
-  topBarRight: { flexDirection: 'row', alignItems: 'center' },
+  topSub: { fontSize: 11, color: Theme.textMuted, marginTop: 2, flexShrink: 1 },
+  topBarRight: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 },
   logPodsBtn: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -410,7 +417,7 @@ const styles = StyleSheet.create({
   },
   logPodsBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
 
-  metricsContainer: { paddingVertical: 16 },
+  metricsContainer: { paddingVertical: 16, width: '100%' },
   metricsScroll: { paddingHorizontal: 16, gap: 12 },
   metricCard: {
     width: 150,
@@ -429,14 +436,14 @@ const styles = StyleSheet.create({
   metricValue: { fontSize: 16, fontWeight: '900', marginBottom: 2 },
   metricCount: { fontSize: 10, color: Theme.textSecondary, fontWeight: '600' },
 
-  tabsContainer: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Theme.borderLight },
+  tabsContainer: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Theme.borderLight, width: '100%' },
   tabsScroll: { paddingHorizontal: 16, paddingBottom: 12, gap: 8 },
   tabBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: Theme.surfaceGray },
   tabBtnActive: { backgroundColor: Theme.primary },
   tabBtnText: { fontSize: 12, fontWeight: '700', color: Theme.textSecondary },
   tabBtnTextActive: { color: '#fff' },
 
-  filtersArea: { flexDirection: 'row', padding: 16, gap: 12 },
+  filtersArea: { flexDirection: 'row', padding: 16, gap: 12, width: '100%', flexWrap: 'wrap' },
   searchBox: { 
     flex: 1, 
     flexDirection: 'row', 
@@ -461,7 +468,7 @@ const styles = StyleSheet.create({
   },
   regionFilterText: { fontSize: 12, fontWeight: '700', color: Theme.textPrimaryDark },
 
-  contentArea: { flex: 1, backgroundColor: '#f8f9fa' },
+  contentArea: { flex: 1, backgroundColor: '#f8f9fa', width: '100%' },
   listContent: { padding: 16, gap: 12, paddingBottom: 40 },
   tripRow: {
     backgroundColor: Theme.cardWhite,
@@ -491,6 +498,7 @@ const styles = StyleSheet.create({
   lrText: { fontSize: 10, fontWeight: '700', color: Theme.textPrimaryDark },
 
   empty: { alignItems: 'center', marginTop: 80, paddingHorizontal: 40 },
+  emptyRight: { alignItems: 'center', justifyContent: 'center', flex: 1, paddingHorizontal: 40 },
   emptyTitle: { fontSize: 16, fontWeight: '800', color: Theme.textPrimaryDark, marginTop: 16 },
   emptySub: { fontSize: 14, color: Theme.textMuted, marginTop: 8, textAlign: 'center' },
 

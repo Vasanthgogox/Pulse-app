@@ -12,11 +12,15 @@ import {
   Image,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
 import { supabase } from '@/lib/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { runOCR } from '@/lib/pod/ocr';
+import { chatWithDocument } from '@/lib/pod/chat';
+import { compressImage } from '@/lib/pod/imageCompression';
 import type { PodReconciliationTripView } from '../services/podReconciliationService';
 
 interface PodValidationViewProps {
@@ -26,12 +30,21 @@ interface PodValidationViewProps {
 }
 
 export function PodValidationView({ trip, onClose, isTablet }: PodValidationViewProps) {
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [shortage, setShortage] = useState('0');
   const [damage, setDamage] = useState('0');
   const [penalty, setPenalty] = useState('0');
   const [remarks, setRemarks] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState(0);
+  const [chatMessages, setChatMessages] = useState<{role: 'user' | 'assistant', content: string}[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'audit' | 'chat'>('audit');
+
 
   const { data: attachments = [], isLoading: isLoadingAttachments } = useQuery({
     queryKey: ['pod-attachments', trip?.internal_id],
@@ -50,6 +63,65 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
 
   const getFileUrl = (path: string) => {
     return supabase().storage.from('pod-documents').getPublicUrl(path).data.publicUrl;
+  };
+
+  
+  const handleScanWithAI = async (docPath: string, fileName: string) => {
+    try {
+      setIsScanning(true);
+      setScanProgress(5);
+      
+      const url = getFileUrl(docPath);
+      const response = await fetch(url);
+      const blob = await response.blob();
+      
+      setScanProgress(15);
+      const finalFile = await compressImage(blob, 1200);
+      
+      setScanProgress(30);
+      const result = await runOCR(finalFile, fileName, setScanProgress);
+      
+      if (result.extraction.financials) {
+        if (result.extraction.financials.shortage_amount?.value) {
+          setShortage(String(result.extraction.financials.shortage_amount.value));
+        }
+        if (result.extraction.financials.damage_amount?.value) {
+          setDamage(String(result.extraction.financials.damage_amount.value));
+        }
+      }
+      Alert.alert('AI Scan Complete', `Extracted data in ${result.processingTime.toFixed(1)}s`);
+    } catch (err) {
+      console.error(err);
+      Alert.alert('Scan Failed', err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setIsScanning(false);
+      setScanProgress(0);
+    }
+  };
+
+  const handleChatSubmit = async () => {
+    if (!chatInput.trim() || attachments.length === 0) return;
+    
+    const userMessage = chatInput.trim();
+    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setChatInput('');
+    setIsChatLoading(true);
+
+    try {
+      const doc = attachments[0]; // chat with the first attachment for now
+      const url = getFileUrl(doc.file_path);
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const finalFile = await compressImage(blob, 1200);
+
+      const reply = await chatWithDocument(await finalFile.arrayBuffer(), doc.file_type || 'image/jpeg', chatMessages, userMessage);
+      setChatMessages(prev => [...prev, { role: 'assistant', content: reply }]);
+    } catch (err) {
+      console.error(err);
+      setChatMessages(prev => [...prev, { role: 'assistant', content: "Sorry, I couldn't process that request." }]);
+    } finally {
+      setIsChatLoading(false);
+    }
   };
 
   const handleValidate = async () => {
@@ -115,8 +187,20 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
   const content = (
     <>
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Trip Details</Text>
+
+      <View style={styles.tabContainer}>
+        <Pressable style={[styles.tab, activeTab === 'audit' && styles.tabActive]} onPress={() => setActiveTab('audit')}>
+          <Text style={[styles.tabText, activeTab === 'audit' && styles.tabTextActive]}>Audit</Text>
+        </Pressable>
+        <Pressable style={[styles.tab, activeTab === 'chat' && styles.tabActive]} onPress={() => setActiveTab('chat')}>
+          <Text style={[styles.tabText, activeTab === 'chat' && styles.tabTextActive]}>AI Chat</Text>
+        </Pressable>
+      </View>
+
+        {activeTab === 'audit' && (
+          <>
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Trip Details</Text>
           <View style={styles.infoCard}>
             <InfoRow label="Client" value={trip.client_name} />
             <InfoRow label="Route" value={`${trip.pp_location} ➔ ${trip.drop_point}`} />
@@ -164,14 +248,63 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
                     <FontAwesome name="file-pdf-o" size={40} color={Theme.primary} />
                   )}
                   <Text style={styles.attachmentName} numberOfLines={1}>{att.file_name}</Text>
+                  
+                  <Pressable 
+                    style={styles.scanBtn} 
+                    onPress={() => handleScanWithAI(att.file_path, att.file_name)}
+                    disabled={isScanning}
+                  >
+                    {isScanning ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <FontAwesome name="magic" size={12} color="#fff" />
+                        <Text style={styles.scanBtnText}>Scan</Text>
+                      </>
+                    )}
+                  </Pressable>
                 </Pressable>
               ))}
             </View>
           )}
         </View>
+        </>
+      )}
+
+      {activeTab === 'chat' && (
+        <View style={styles.chatSection}>
+          <ScrollView style={styles.chatHistory}>
+            {chatMessages.length === 0 && (
+              <Text style={styles.emptyText}>Ask questions about the attached PODs (e.g. "Why is there a delay penalty?").</Text>
+            )}
+            {chatMessages.map((m, i) => (
+              <View key={i} style={[styles.chatBubble, m.role === 'user' ? styles.chatBubbleUser : styles.chatBubbleAssistant]}>
+                <Text style={m.role === 'user' ? styles.chatText : styles.chatTextAssistant}>{m.content}</Text>
+              </View>
+            ))}
+            {isChatLoading && (
+              <View style={[styles.chatBubble, styles.chatBubbleAssistant]}>
+                <ActivityIndicator size="small" color={Theme.primary} />
+              </View>
+            )}
+          </ScrollView>
+          <View style={styles.chatInputWrapper}>
+            <TextInput
+              style={styles.chatInput}
+              value={chatInput}
+              onChangeText={setChatInput}
+              placeholder="Ask AI..."
+              placeholderTextColor={Theme.textMuted}
+            />
+            <Pressable style={styles.chatSendBtn} onPress={handleChatSubmit} disabled={isChatLoading || !chatInput.trim()}>
+              <FontAwesome name="send" size={16} color="#fff" />
+            </Pressable>
+          </View>
+        </View>
+      )}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: Math.max(20, insets.bottom + 8) }]}>
         <Pressable 
           style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]} 
           onPress={handleValidate}
@@ -286,7 +419,7 @@ const styles = StyleSheet.create({
   inputLabel: { fontSize: 12, fontWeight: '700', color: Theme.textPrimaryDark, marginBottom: 8 },
   textArea: { backgroundColor: '#f8f9fa', borderRadius: 8, padding: 12, fontSize: 13, color: Theme.textPrimaryDark, height: 80, textAlignVertical: 'top', borderWidth: 1, borderColor: Theme.borderInput },
   attachmentGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  attachmentItem: { width: '47%', backgroundColor: Theme.cardWhite, borderRadius: 12, padding: 16, alignItems: 'center', gap: 8, borderWidth: 1, borderColor: Theme.borderLight },
+  attachmentItem: { width: 150, backgroundColor: Theme.cardWhite, borderRadius: 12, padding: 16, alignItems: 'center', gap: 8, borderWidth: 1, borderColor: Theme.borderLight },
   attachmentName: { fontSize: 10, color: Theme.textPrimaryDark, fontWeight: '600' },
   emptyText: { fontSize: 13, color: Theme.textMuted, fontStyle: 'italic' },
   footer: { padding: 20, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Theme.borderLight },
@@ -294,4 +427,22 @@ const styles = StyleSheet.create({
   submitBtnDisabled: { opacity: 0.5 },
   submitBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
   tabletContainer: { flex: 1, backgroundColor: Theme.screenBackground },
+  tabContainer: { flexDirection: 'row', gap: 12, marginBottom: 16, borderBottomWidth: 1, borderBottomColor: Theme.borderLight },
+  tab: { paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabActive: { borderBottomColor: Theme.primary },
+  tabText: { fontSize: 13, fontWeight: '700', color: Theme.textMuted, textTransform: 'uppercase' },
+  tabTextActive: { color: Theme.primary },
+  scanBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: Theme.textPrimaryDark, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, width: '100%', marginTop: 8 },
+  scanBtnText: { color: '#fff', fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
+  chatSection: { flex: 1, minHeight: 300, paddingBottom: 24 },
+  chatHistory: { flex: 1, marginBottom: 16 },
+  chatBubble: { padding: 12, borderRadius: 12, maxWidth: '85%', marginBottom: 12 },
+  chatBubbleUser: { backgroundColor: Theme.primary, alignSelf: 'flex-end', borderBottomRightRadius: 2 },
+  chatBubbleAssistant: { backgroundColor: Theme.cardWhite, alignSelf: 'flex-start', borderBottomLeftRadius: 2, borderWidth: 1, borderColor: Theme.borderLight },
+  chatText: { fontSize: 13, color: '#fff', fontWeight: '500' },
+  chatTextAssistant: { fontSize: 13, color: Theme.textPrimaryDark, fontWeight: '500' },
+  chatInputWrapper: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  chatInput: { flex: 1, backgroundColor: Theme.cardWhite, borderWidth: 1, borderColor: Theme.borderInput, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14 },
+  chatSendBtn: { backgroundColor: Theme.primary, width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+
 });
