@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -382,6 +383,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     fontSize: 16,
     color: Theme.textPrimary,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   dropdownScroll: {
     maxHeight: 300,

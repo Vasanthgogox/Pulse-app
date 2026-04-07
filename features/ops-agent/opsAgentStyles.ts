@@ -616,6 +616,11 @@ export function getOpsAgentStyles(ref: OpsRef) {
       paddingLeft: SP.xs,
       maxHeight: 88,
       letterSpacing: 0.1,
+      ...Platform.select({
+        web: {
+          outlineStyle: "none",
+        } as any,
+      }),
     },
     quInputActionBtn: {
       width: 32,

@@ -38,6 +38,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Alert,
     Modal,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -1784,6 +1785,11 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     paddingLeft: 28,
     paddingVertical: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   assignRegistryCard: {
     flexDirection: "row",

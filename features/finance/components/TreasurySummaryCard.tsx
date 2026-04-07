@@ -5,7 +5,7 @@
 import Theme from '@/constants/Theme';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View, useWindowDimensions } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View, useWindowDimensions } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -996,6 +996,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 14,
     color: Theme.textOnDark,
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      } as any,
+    }),
   },
   /** Totals band sits below search (Network: content below black block). */
   summaryRowNetwork: {
@@ -1177,6 +1182,11 @@ const styles = StyleSheet.create({
     color: Theme.textOnDark,
     paddingVertical: 0,
     minWidth: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      } as any,
+    }),
   },
   reportIconBtn: {
     width: 32,
