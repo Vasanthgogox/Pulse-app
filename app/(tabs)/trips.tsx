@@ -11,35 +11,35 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
-    TripExpandableCard,
-    type TripRow
+  TripExpandableCard,
+  type TripRow
 } from "@/features/trips";
 import { canAccessTrips, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatLedgerDate } from "@/lib/format";
 import {
-    useAssignmentAuditQuery,
-    useRealtimeTransactionsInvalidation,
-    useRealtimeTripsInvalidation,
-    useShipperDisplayNamesQuery,
-    useTransactionsQuery,
-    useTripsQuery,
+  useAssignmentAuditQuery,
+  useRealtimeTransactionsInvalidation,
+  useRealtimeTripsInvalidation,
+  useShipperDisplayNamesQuery,
+  useTransactionsQuery,
+  useTripsQuery,
 } from "@/lib/queries";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
-    Platform,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-    type TextStyle,
-    type ViewStyle,
-    useWindowDimensions,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+  type TextStyle,
+  type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -304,12 +304,7 @@ export default function TripsScreen() {
           ))}
         </ScrollView>
 
-        <View
-          style={[
-            styles.tripsToolbar,
-            isLargeScreen && styles.tripsToolbarRow,
-          ]}
-        >
+        <View style={styles.tripsToolbar}>
           <View
             style={[
               styles.tripsSearchWrap,
@@ -505,6 +500,8 @@ const styles = StyleSheet.create({
   },
   /** Network / Treasury-style: search + supply chips (stacked narrow, row on wide web). */
   tripsToolbar: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 10,
     paddingBottom: 12,
@@ -521,7 +518,7 @@ const styles = StyleSheet.create({
   tripsSearchWrap: {
     flexDirection: "row",
     alignItems: "center",
-    minHeight: 40,
+    minHeight: 32,
     borderRadius: 12,
     backgroundColor: Theme.darkSurface,
     borderWidth: 1,
@@ -544,7 +541,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     fontSize: 11,
     lineHeight: 14,
-    paddingVertical: 10,
+    paddingVertical: 6,
     color: Theme.textOnDark,
   },
   tripsSearchInputWeb: {
