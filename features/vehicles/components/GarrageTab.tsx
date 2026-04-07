@@ -4,8 +4,9 @@
  */
 import { LiquidFillPill } from "@/components/LiquidFillPill";
 import Theme from "@/constants/Theme";
-import { DriverStatusDot } from "@/features/finance/components/FinancialRow";
+import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import type { EntityListFilter, FinancialRowData, LedgerRow } from "@/features/finance";
+import { DriverStatusDot } from "@/features/finance/components/FinancialRow";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { getTripDisplayNumber } from "@/features/trips/services/trips.service";
 import { formatIndianVehicleNumber } from "@/lib/format";
@@ -18,13 +19,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
     buildTripPnLListForPeriod,
     buildVehiclePnLList,
+    resolveVehicleIdForTrip,
     type GarragePeriodValue,
     type TripPnLRow,
     type VehiclePnLRow,
-    resolveVehicleIdForTrip,
 } from "../pnl";
 import type { VehicleRow } from "../services/vehicles.service";
-import type { DriverRow } from "@/features/drivers/services/drivers.service";
 
 export type GarrageViewTab = "vehicle" | "trips" | "revenue" | "profit";
 

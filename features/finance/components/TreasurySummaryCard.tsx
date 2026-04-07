@@ -4,9 +4,10 @@
  */
 import Theme from '@/constants/Theme';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View, useWindowDimensions } from 'react-native';
 import Animated, {
+  cancelAnimation,
   Easing,
   runOnJS,
   useAnimatedReaction,
@@ -64,6 +65,11 @@ export interface TreasurySummaryCardProps {
   onCashOutPress?: () => void;
   /** When entity filter row is shown, optional content to render on the right (e.g. view mode icons). */
   filterRowRight?: ReactNode;
+  /**
+   * When set (e.g. Finance sub-tab id), changing this restarts the summary amount count-up from 0.
+   * Without it, amounts only animate when the numeric total changes (entity detail / other embeds).
+   */
+  amountAnimationResetKey?: string;
   /** Cash tab: match Network hub — fiscal tabs, then search row, then totals (flex order; same controls). */
   cashNetworkLayout?: boolean;
 }
@@ -88,20 +94,54 @@ const springConfig = { damping: 14, stiffness: 180 };
 
 const AMOUNT_ANIMATION_DURATION = 420;
 
-function AnimatedAmount({ value, style }: { value: number; style?: object }) {
-  const [displayValue, setDisplayValue] = useState(value);
-  const shared = useSharedValue(value);
+function AnimatedAmount({
+  value,
+  style,
+  animationResetKey,
+}: {
+  value: number;
+  style?: object;
+  /** When defined, a change restarts the count from 0 (e.g. switching Finance sub-tabs). */
+  animationResetKey?: string;
+}) {
+  const target = Number.isFinite(value) ? Math.round(value) : 0;
+  const [displayValue, setDisplayValue] = useState(0);
+  const shared = useSharedValue(0);
+  const prevResetKeyRef = useRef<string | undefined>(undefined);
+
+  const syncDisplay = useCallback((n: number) => {
+    setDisplayValue(n);
+  }, []);
 
   useEffect(() => {
-    shared.value = withTiming(value, { duration: AMOUNT_ANIMATION_DURATION, easing: Easing.out(Easing.cubic) });
-  }, [value, shared]);
+    cancelAnimation(shared);
+
+    const useResetKey = animationResetKey !== undefined;
+    const segmentChanged =
+      useResetKey && prevResetKeyRef.current !== animationResetKey;
+
+    if (useResetKey) {
+      prevResetKeyRef.current = animationResetKey;
+    }
+
+    if (segmentChanged) {
+      shared.value = 0;
+      setDisplayValue(0);
+    }
+
+    shared.value = withTiming(target, {
+      duration: AMOUNT_ANIMATION_DURATION,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [target, animationResetKey, shared]);
 
   useAnimatedReaction(
-    () => shared.value,
-    (v) => {
-      runOnJS(setDisplayValue)(Math.round(v));
+    () => Math.round(shared.value),
+    (current, previous) => {
+      if (current !== previous) {
+        runOnJS(syncDisplay)(current);
+      }
     },
-    [shared]
   );
 
   return <Text style={[styles.summaryValue, style]}>{formatAmount(displayValue)}</Text>;
@@ -229,6 +269,7 @@ export function TreasurySummaryCard({
   onCashInPress,
   onCashOutPress,
   filterRowRight,
+  amountAnimationResetKey,
   cashNetworkLayout = false,
 }: TreasurySummaryCardProps) {
   const insets = useSafeAreaInsets();
@@ -265,9 +306,13 @@ export function TreasurySummaryCard({
     transform: [{ scale: filterBtnScale.value }],
   }));
 
+  /** Entity filter is shown as Network-style chips in the toolbar; skip duplicate dropdown. */
+  const hideEntityFilterDropdown =
+    cashNetworkToolbar && onEntityFilterChange != null;
+
   const periodAndSourceFilters = (
     <>
-      {filterLabel != null && (
+      {filterLabel != null && !hideEntityFilterDropdown && (
         <View ref={refPeriodFilter} style={styles.filterBlock} collapsable={false}>
           <TouchableOpacity
             activeOpacity={0.8}
@@ -619,7 +664,7 @@ export function TreasurySummaryCard({
                   />
                   <Text style={styles.summaryLabel}>{labelIn}</Text>
                 </View>
-                <AnimatedAmount value={totalIn} />
+                <AnimatedAmount value={totalIn} animationResetKey={amountAnimationResetKey} />
               </Pressable>
             ) : (
               <View style={[styles.summaryCell, marginPercent != null && !Number.isNaN(marginPercent) && styles.summaryCellThird]}>
@@ -632,7 +677,7 @@ export function TreasurySummaryCard({
                   />
                   <Text style={styles.summaryLabel}>{labelIn}</Text>
                 </View>
-                <AnimatedAmount value={totalIn} />
+                <AnimatedAmount value={totalIn} animationResetKey={amountAnimationResetKey} />
               </View>
             )}
             {marginPercent != null && !Number.isNaN(marginPercent) && (
@@ -670,7 +715,7 @@ export function TreasurySummaryCard({
                     pulse
                   />
                 </View>
-                <AnimatedAmount value={totalOut} />
+                <AnimatedAmount value={totalOut} animationResetKey={amountAnimationResetKey} />
               </Pressable>
             ) : (
               <View style={[
@@ -687,7 +732,7 @@ export function TreasurySummaryCard({
                     pulse
                   />
                 </View>
-                <AnimatedAmount value={totalOut} />
+                <AnimatedAmount value={totalOut} animationResetKey={amountAnimationResetKey} />
               </View>
             )}
           </View>
@@ -711,47 +756,56 @@ export function TreasurySummaryCard({
           ]}
         >
           <View style={[styles.toolbarLeft, styles.toolbarLeftNetwork]}>
-            <View style={[styles.searchWrap, styles.searchWrapNetwork]}>
-              <AnimatedIcon
-                name="search"
-                size={14}
-                color={Theme.textOnDarkMuted}
-                style={styles.searchIcon}
-              />
-              <TextInput
-                style={[styles.searchInput, styles.searchInputNetwork]}
-                value={searchQuery}
-                onChangeText={onSearchChange}
-                placeholder={searchPlaceholder}
-                placeholderTextColor={Theme.textOnDarkMuted}
-                returnKeyType="search"
-                autoCorrect={false}
-                spellCheck={false}
-                autoComplete="off"
-              />
-            </View>
+            <View style={styles.networkSearchRow}>
+              <View style={[styles.searchWrap, styles.searchWrapNetwork]}>
+                <AnimatedIcon
+                  name="search"
+                  size={14}
+                  color={Theme.textOnDarkMuted}
+                  style={styles.searchIcon}
+                />
+                <TextInput
+                  style={[styles.searchInput, styles.searchInputNetwork]}
+                  value={searchQuery}
+                  onChangeText={onSearchChange}
+                  placeholder={searchPlaceholder}
+                  placeholderTextColor={Theme.textOnDarkMuted}
+                  returnKeyType="search"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+              </View>
 
-            {onEntityFilterChange != null && (
-              <View style={styles.networkEntityChipsWrap}>
-                <View style={[styles.statusPillRow, styles.statusPillRowInWrap, styles.statusPillRowNetwork]}>
+              {onEntityFilterChange != null && (
+                <View style={styles.networkEntityChipsWrap}>
                   {(['all', 'has_due', 'no_due'] as const).map((f) => (
                     <TouchableOpacity
                       key={f}
-                      style={[styles.statusPill, styles.statusPillNetwork, entityFilter === f && styles.statusPillActive]}
+                      style={[
+                        styles.networkTypeChip,
+                        entityFilter === f && styles.networkTypeChipActive,
+                      ]}
                       onPress={() => onEntityFilterChange(f)}
                       activeOpacity={0.8}
                     >
-                      <Text style={[styles.statusPillText, styles.statusPillTextNetwork, entityFilter === f && styles.statusPillTextActive]}>
+                      <Text
+                        style={[
+                          styles.networkTypeChipText,
+                          entityFilter === f && styles.networkTypeChipTextActive,
+                        ]}
+                      >
                         {effectiveEntityFilterLabels[f]}
                       </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
-                {filterRowRight != null && (
-                  <View style={styles.filterRowRight}>{filterRowRight}</View>
-                )}
-              </View>
-            )}
+              )}
+
+              {filterRowRight != null && (
+                <View style={styles.filterRowRight}>{filterRowRight}</View>
+              )}
+            </View>
 
             {periodAndSourceFilters}
           </View>
@@ -870,7 +924,15 @@ const styles = StyleSheet.create({
   toolbarLeftNetwork: {
     gap: 8,
   },
-  /** Network: entity status tags next to search (like type chips). */
+  /** Same row as Network hub: search (flex) + pill group + optional trailing actions. */
+  networkSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    width: '100%',
+    minWidth: 0,
+  },
+  /** Network `typeFilterWrapDark`: single pill rail for ALL / … filters. */
   networkEntityChipsWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -881,7 +943,26 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.1)',
     paddingHorizontal: 6,
     paddingVertical: 4,
-    gap: 6,
+    gap: 3,
+  },
+  /** Matches `app/(tabs)/network.tsx` typeFilterChipDark. */
+  networkTypeChip: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  networkTypeChipActive: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  networkTypeChipText: {
+    fontSize: 8,
+    fontWeight: '500',
+    color: Theme.textOnDarkMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  networkTypeChipTextActive: {
+    color: Theme.textOnDark,
   },
   statusPillRowNetwork: {
     marginBottom: 0,

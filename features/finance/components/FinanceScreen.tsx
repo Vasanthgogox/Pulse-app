@@ -1,16 +1,19 @@
 import type { DriverPaymentType, PartyOption, TripOption } from "@/components/AddTransactionModal";
+import { FinanceFAB } from "@/components/FinanceFAB";
 import { TeslaHeader } from "@/components/TeslaHeader";
+import { Layout } from "@/constants/Layout";
+import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { AIInsightsPanel } from "@/features/ai";
-import { aggregateCustomers, aggregateDrivers, aggregateSuppliers, type DriverOfferForAggregation } from "@/features/finance/aggregation";
 import type { ClientRow, UpdateClientData } from "@/features/clients/services/clients.service";
 import { updateClient } from "@/features/clients/services/clients.service";
 import {
-  getDriverLedgerByDriver,
-  type DriverLedgerRow
+    getDriverLedgerByDriver,
+    type DriverLedgerRow
 } from "@/features/drivers/services/drivers.service";
+import { aggregateCustomers, aggregateDrivers, aggregateSuppliers, type DriverOfferForAggregation } from "@/features/finance/aggregation";
 import type { SupplierRow, UpdateSupplierData } from "@/features/suppliers/services/suppliers.service";
 import { updateSupplier } from "@/features/suppliers/services/suppliers.service";
 import { getTripDisplayNumber, type TripRow } from "@/features/trips";
@@ -19,26 +22,23 @@ import type { GarrageViewTab } from "@/features/vehicles/components/GarrageTab";
 import type { GarragePeriodValue } from "@/features/vehicles/pnl";
 import { buildTripPnLListForPeriod, buildVehiclePnLList, resolveVehicleIdForTrip } from "@/features/vehicles/pnl";
 import {
-  canAccessFinance,
-  getCapabilitiesFromProfile,
+    canAccessFinance,
+    getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
-import { Layout } from "@/constants/Layout";
-import Theme from "@/constants/Theme";
 import { formatIndianVehicleNumber, formatLedgerDate } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import {
-  updateSalaryRequestStatus
+    updateSalaryRequestStatus
 } from "@/services/salaryRequestsService";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Text,
-  View,
-  useWindowDimensions,
-  ActivityIndicator
+    ActivityIndicator,
+    Text,
+    View,
+    useWindowDimensions
 } from "react-native";
-import { FinanceFAB } from "@/components/FinanceFAB";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFinanceAddEntityHandlers } from "../hooks/useFinanceAddEntityHandlers";
 import { useFinanceEntities } from "../hooks/useFinanceEntities";
@@ -1107,7 +1107,9 @@ export function FinanceScreen() {
         searchPlaceholder={
           financeSubTab === "cash"
             ? t("searchPartyDescription")
-            : t("searchEntities")
+            : financeSubTab === "customers" || financeSubTab === "suppliers"
+              ? "Find by name..."
+              : t("searchEntities")
         }
         onReportPress={() => setShowReportModal(true)}
         entityFilter={

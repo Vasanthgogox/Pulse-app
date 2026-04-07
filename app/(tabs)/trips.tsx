@@ -11,32 +11,35 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
-    TripExpandableCard,
-    type TripRow
+  TripExpandableCard,
+  type TripRow
 } from "@/features/trips";
 import { canAccessTrips, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatLedgerDate } from "@/lib/format";
 import {
-    useAssignmentAuditQuery,
-    useRealtimeTransactionsInvalidation,
-    useRealtimeTripsInvalidation,
-    useShipperDisplayNamesQuery,
-    useTransactionsQuery,
-    useTripsQuery,
+  useAssignmentAuditQuery,
+  useRealtimeTransactionsInvalidation,
+  useRealtimeTripsInvalidation,
+  useShipperDisplayNamesQuery,
+  useTransactionsQuery,
+  useTripsQuery,
 } from "@/lib/queries";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
-    Platform,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-    useWindowDimensions,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+  type TextStyle,
+  type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -55,8 +58,7 @@ export default function TripsScreen() {
   const [tripFilter, setTripFilter] = useState<"Active" | "Completed">(
     "Active",
   );
-  const [clientQuery, setClientQuery] = useState("");
-  const [locationQuery, setLocationQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [activeStatusTab, setActiveStatusTab] =
     useState<ActiveStatusTab>("all");
   const [supplyFilter, setSupplyFilter] = useState<SupplyFilter>("all");
@@ -159,28 +161,31 @@ export default function TripsScreen() {
         return !aggregateTrip;
       });
     }
-    const cq = clientQuery.trim().toLowerCase();
-    if (cq) {
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
       list = list.filter((t) => {
-        const displayName = shipperNameByTripId[t.id] ?? t.client_name ?? "";
-        return displayName.toLowerCase().includes(cq);
+        const displayName = (
+          shipperNameByTripId[t.id] ?? t.client_name ?? ""
+        ).toLowerCase();
+        const pickup = (t.pickup_area ?? "").toLowerCase();
+        const drop = (t.drop_location ?? "").toLowerCase();
+        const tripRef = `${t.trip_number ?? ""} ${t.display_trip_id ?? ""}`
+          .trim()
+          .toLowerCase();
+        return (
+          displayName.includes(q) ||
+          pickup.includes(q) ||
+          drop.includes(q) ||
+          tripRef.includes(q)
+        );
       });
-    }
-    const lq = locationQuery.trim().toLowerCase();
-    if (lq) {
-      list = list.filter(
-        (t) =>
-          (t.pickup_area ?? "").toLowerCase().includes(lq) ||
-          (t.drop_location ?? "").toLowerCase().includes(lq),
-      );
     }
     return list;
   }, [
     tripsByStatus,
     activeStatusTab,
     supplyFilter,
-    clientQuery,
-    locationQuery,
+    searchQuery,
     shipperNameByTripId,
     showCompletedList,
   ]);
@@ -199,6 +204,54 @@ export default function TripsScreen() {
     return map;
   }, [transactions]);
 
+  const statusTabs = useMemo(
+    () => [
+      {
+        id: "all" as const,
+        label: tr("active"),
+        isActive: tripFilter === "Active" && activeStatusTab === "all",
+        onPress: () => {
+          setTripFilter("Active");
+          setActiveStatusTab("all");
+        },
+      },
+      {
+        id: "unassigned" as const,
+        label: tr("unassigned"),
+        isActive: tripFilter === "Active" && activeStatusTab === "unassigned",
+        onPress: () => {
+          setTripFilter("Active");
+          setActiveStatusTab("unassigned");
+        },
+      },
+      {
+        id: "assigned" as const,
+        label: tr("tripAssigned"),
+        isActive: tripFilter === "Active" && activeStatusTab === "assigned",
+        onPress: () => {
+          setTripFilter("Active");
+          setActiveStatusTab("assigned");
+        },
+      },
+      {
+        id: "in_transit" as const,
+        label: tr("tripInTransit"),
+        isActive: tripFilter === "Active" && activeStatusTab === "in_transit",
+        onPress: () => {
+          setTripFilter("Active");
+          setActiveStatusTab("in_transit");
+        },
+      },
+      {
+        id: "history" as const,
+        label: tr("history"),
+        isActive: tripFilter === "Completed",
+        onPress: () => setTripFilter("Completed"),
+      },
+    ],
+    [tr, tripFilter, activeStatusTab],
+  );
+
   if (!canAccess) {
     return (
       <View style={[styles.centered, { paddingTop: insets.top }]}>
@@ -208,155 +261,147 @@ export default function TripsScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + Layout.tabBarHeight + 20 }]}>
+    <View
+      style={[
+        styles.container,
+        { paddingTop: insets.top + Layout.tabBarHeight + 20 },
+      ]}
+    >
       <TeslaHeader
         title={tr("tripsControl")}
         subtitle={tr("logisticNodes")}
+        skipSafeAreaTop
         onLoadClick={() => router.push("/load-board")}
         onNetworkClick={() => router.push("/(tabs)/network")}
         onProfileClick={() => router.push("/(tabs)/profile")}
       />
       <View style={styles.headerBlock}>
-        <View style={styles.tabSection}>
-          <View style={styles.tabRow}>
-            <TouchableOpacity
-              style={[
-                styles.tab,
-                tripFilter === "Active" &&
-                  activeStatusTab === "all" &&
-                  styles.tabActive,
-              ]}
-              onPress={() => {
-                setTripFilter("Active");
-                setActiveStatusTab("all");
-              }}
-              activeOpacity={0.7}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  tripFilter === "Active" &&
-                    activeStatusTab === "all" &&
-                    styles.tabTextActive,
-                ]}
-              >
-                {tr("active")}
-              </Text>
-              {tripFilter === "Active" && activeStatusTab === "all" && (
-                <View style={styles.tabUnderline} />
-              )}
-            </TouchableOpacity>
-            {(
-              [
-                { id: "unassigned" as const, label: tr("unassigned") },
-                { id: "assigned" as const, label: "Assigned" },
-                { id: "in_transit" as const, label: "In Transit" },
-              ] as const
-            ).map(({ id, label }) => (
+        {Platform.OS === "web" ? (
+          <View style={styles.tabRowWeb}>
+            {statusTabs.map((tab) => (
               <TouchableOpacity
-                key={id}
-                style={[
-                  styles.tab,
-                  tripFilter === "Active" &&
-                    activeStatusTab === id &&
-                    styles.tabActive,
-                ]}
-                onPress={() => {
-                  setTripFilter("Active");
-                  setActiveStatusTab(id);
-                }}
+                key={tab.id}
+                style={[styles.tabWeb, tab.isActive && styles.tabActive]}
+                onPress={tab.onPress}
                 activeOpacity={0.7}
               >
                 <Text
                   style={[
                     styles.tabText,
-                    tripFilter === "Active" &&
-                      activeStatusTab === id &&
-                      styles.tabTextActive,
+                    tab.isActive && styles.tabTextActive,
                   ]}
                 >
-                  {label}
+                  {tab.label}
                 </Text>
-                {tripFilter === "Active" && activeStatusTab === id && (
+                {tab.isActive ? (
                   <View style={styles.tabUnderline} />
-                )}
+                ) : null}
               </TouchableOpacity>
             ))}
-            <TouchableOpacity
-              style={[
-                styles.tab,
-                tripFilter === "Completed" && styles.tabActive,
-              ]}
-              onPress={() => setTripFilter("Completed")}
-              activeOpacity={0.7}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  tripFilter === "Completed" && styles.tabTextActive,
-                ]}
-              >
-                {tr("history")}
-              </Text>
-              {tripFilter === "Completed" && (
-                <View style={styles.tabUnderline} />
-              )}
-            </TouchableOpacity>
           </View>
-        </View>
-
-        <View style={styles.filterWrap}>
+        ) : (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterPillRow}
+            contentContainerStyle={styles.tabRowScrollContent}
+            style={styles.tabRowScroll}
           >
-            {(
-              [
-                { id: "all" as const, label: tr("all") },
-                { id: "asset" as const, label: "Asset" },
-                { id: "aggregated" as const, label: "Aggregated" },
-              ] as const
-            ).map(({ id, label }) => (
+            {statusTabs.map((tab) => (
               <TouchableOpacity
-                key={id}
-                style={[
-                  styles.filterPill,
-                  supplyFilter === id && styles.filterPillActive,
-                ]}
-                onPress={() => setSupplyFilter(id)}
-                activeOpacity={0.8}
+                key={tab.id}
+                style={[styles.tab, tab.isActive && styles.tabActive]}
+                onPress={tab.onPress}
+                activeOpacity={0.7}
               >
                 <Text
                   style={[
-                    styles.filterPillText,
-                    supplyFilter === id && styles.filterPillTextActive,
+                    styles.tabText,
+                    tab.isActive && styles.tabTextActive,
                   ]}
-                  numberOfLines={1}
                 >
-                  {label}
+                  {tab.label}
                 </Text>
+                {tab.isActive ? (
+                  <View style={styles.tabUnderline} />
+                ) : null}
               </TouchableOpacity>
             ))}
           </ScrollView>
-          <View style={styles.filterInputRow}>
-            <TextInput
-              style={styles.filterInput}
-              placeholder={tr("client") || "Client"}
-              placeholderTextColor={Theme.textMuted}
-              value={clientQuery}
-              onChangeText={setClientQuery}
-              maxLength={80}
+        )}
+
+        <View style={styles.tripsToolbar}>
+          <View
+            style={[
+              styles.tripsSearchWrap,
+              Platform.OS === "web" && styles.tripsSearchWrapWeb,
+              isLargeScreen && styles.tripsSearchWrapRow,
+            ]}
+          >
+            <FontAwesome
+              name="search"
+              size={14}
+              color={Theme.textOnDarkMuted}
+              style={styles.tripsSearchIcon}
             />
             <TextInput
-              style={styles.filterInput}
-              placeholder={tr("location") || "Location"}
-              placeholderTextColor={Theme.textMuted}
-              value={locationQuery}
-              onChangeText={setLocationQuery}
-              maxLength={80}
+              style={[
+                styles.tripsSearchInput,
+                Platform.OS === "web" && styles.tripsSearchInputWeb,
+              ]}
+              placeholder={tr("searchTripsPlaceholder")}
+              placeholderTextColor={Theme.textOnDarkMuted}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              returnKeyType="search"
+              autoCorrect={false}
+              spellCheck={false}
+              autoComplete="off"
+              maxLength={120}
             />
           </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={[
+              styles.tripsSupplyChipsScroll,
+              isLargeScreen && styles.tripsSupplyChipsScrollRow,
+            ]}
+            contentContainerStyle={[
+              styles.tripsSupplyChipsScrollInner,
+              { flexGrow: isLargeScreen ? 0 : 1 },
+            ]}
+          >
+            <View style={styles.tripsSupplyChipsRail}>
+              {(
+                [
+                  { id: "all" as const, label: tr("all") },
+                  { id: "asset" as const, label: tr("tripAsset") },
+                  { id: "aggregated" as const, label: tr("tripAggregate") },
+                ] as const
+              ).map(({ id, label }) => (
+                <TouchableOpacity
+                  key={id}
+                  style={[
+                    styles.tripsSupplyChip,
+                    supplyFilter === id && styles.tripsSupplyChipActive,
+                    Platform.OS === "web" && styles.tripsSupplyChipWeb,
+                  ]}
+                  onPress={() => setSupplyFilter(id)}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.tripsSupplyChipText,
+                      supplyFilter === id && styles.tripsSupplyChipTextActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
         </View>
       </View>
 
@@ -434,7 +479,7 @@ export default function TripsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Theme.screenBackground },
+  container: { flex: 1, backgroundColor: Theme.darkBackground },
   centered: {
     flex: 1,
     justifyContent: "center",
@@ -444,29 +489,47 @@ const styles = StyleSheet.create({
   message: { fontSize: 16, color: Theme.textSecondary },
   headerBlock: {
     backgroundColor: Theme.darkBackground,
+    width: "100%",
+  },
+  tabRowWeb: {
+    flexDirection: "row",
+    justifyContent: "center",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    marginTop: 2,
+    marginBottom: 4,
+    paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: Theme.separatorDark,
-    paddingBottom: 8,
   },
-  tabSection: {
-    backgroundColor: Theme.darkBackground,
-    width: "100%",
+  tabRowScroll: {
+    flexGrow: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.separatorDark,
+  },
+  tabRowScrollContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 4,
     paddingBottom: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.separatorDark,
   },
-  tabRow: {
-    flexDirection: "row",
-    gap: 16,
-    marginHorizontal: 20,
-    marginTop: 0,
-    marginBottom: 0,
-    paddingBottom: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.separatorDark,
+  tab: {
+    position: "relative" as const,
+    minWidth: 72,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  tab: { position: "relative" as const, paddingVertical: 4 },
+  tabWeb: {
+    flex: 1,
+    minWidth: 56,
+    position: "relative" as const,
+    paddingVertical: 6,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   tabActive: {},
   tabText: {
     fontSize: 8,
@@ -483,59 +546,104 @@ const styles = StyleSheet.create({
     right: 0,
     height: 1.5,
     backgroundColor: Theme.teslaRed,
+    borderRadius: 1,
   },
-  filterPillRow: {
+  /** Network / Treasury-style: search + supply chips (stacked narrow, row on wide web). */
+  tripsToolbar: {
     flexDirection: "row",
-    gap: 8,
-    paddingBottom: 10,
-  },
-  filterPill: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-  },
-  filterPillActive: {
+    alignItems: "center",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 6,
+    paddingBottom: 12,
     backgroundColor: Theme.darkBackground,
-    borderColor: Theme.darkBackground,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.separatorDark,
+    gap: 10,
   },
-  filterPillText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textMuted,
+  tripsToolbarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  tripsSearchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    minWidth: 0,
+    minHeight: 38,
+    borderRadius: 11,
+    backgroundColor: Theme.darkSurface,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    paddingHorizontal: 12,
+    paddingVertical: 0,
+  },
+  tripsSearchWrapRow: {
+    minWidth: 220,
+  },
+  /** Web: avoid default focus ring clashing with dark field (RN web). */
+  tripsSearchWrapWeb: {
+    outlineStyle: "none",
+    outlineWidth: 0,
+  } as unknown as ViewStyle,
+  tripsSearchIcon: { marginRight: 8 },
+  tripsSearchInput: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 11,
+    fontWeight: "600",
+    lineHeight: 14,
+    paddingVertical: 0,
+    color: Theme.textOnDark,
+  },
+  tripsSearchInputWeb: {
+    outlineStyle: "none",
+    outlineWidth: 0,
+  } as unknown as TextStyle,
+  tripsSupplyChipsScroll: {
+    flexGrow: 1,
+    paddingBottom: 2,
+  },
+  tripsSupplyChipsScrollRow: {
+    flexGrow: 0,
+    flexShrink: 0,
+    alignSelf: "center",
+  },
+  tripsSupplyChipsScrollInner: {
+    paddingBottom: 2,
+    justifyContent: "flex-start",
+  },
+  tripsSupplyChipsRail: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 0,
+    alignSelf: "flex-start",
+    backgroundColor: Theme.darkSurface,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    gap: 3,
+  },
+  tripsSupplyChip: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  tripsSupplyChipWeb: { cursor: "pointer" } as ViewStyle,
+  tripsSupplyChipActive: {
+    backgroundColor: "rgba(255,255,255,0.15)",
+  },
+  tripsSupplyChipText: {
+    fontSize: 8,
+    fontWeight: "500",
+    color: Theme.textOnDarkMuted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  filterPillTextActive: {
+  tripsSupplyChipTextActive: {
     color: Theme.textOnDark,
-  },
-  filterWrap: {
-    marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 8,
-    backgroundColor: Theme.surfaceGray,
-    borderRadius: 20,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-  },
-  filterInputRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  filterInput: {
-    flex: 1,
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 12,
-    color: Theme.textPrimaryDark,
-    minHeight: 0,
   },
   gridContainer: {
     flexDirection: "row",
@@ -546,9 +654,18 @@ const styles = StyleSheet.create({
     width: "33.333%",
     paddingHorizontal: 8,
   },
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 12 },
-  empty: { padding: 24, textAlign: "center", color: Theme.textSecondary },
+  scroll: { flex: 1, backgroundColor: Theme.darkBackground },
+  scrollContent: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 12,
+    flexGrow: 1,
+    backgroundColor: Theme.darkBackground,
+  },
+  empty: {
+    padding: 24,
+    textAlign: "center",
+    color: Theme.textOnDarkMuted,
+  },
   fabWrap: {
     position: "absolute",
     right: Layout.fabRightOffset,
