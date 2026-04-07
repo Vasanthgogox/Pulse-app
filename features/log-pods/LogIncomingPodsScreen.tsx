@@ -162,34 +162,73 @@ export function LogIncomingPodsScreen() {
     [selectedLRs],
   );
 
+  const [autoSelectedSupplier, setAutoSelectedSupplier] = useState<boolean>(false);
+
   const toggleTrip = useCallback((internalId: string, lrNumbers: string[]) => {
     setSelectedLRs((prev) => {
       const next = { ...prev };
-      if (next[internalId] && next[internalId].length === lrNumbers.length) {
+      const isSelecting = !(next[internalId] && next[internalId].length === lrNumbers.length);
+      
+      if (!isSelecting) {
         delete next[internalId];
+        // If we are unselecting the last trip, and we auto-selected the supplier, revert it.
+        if (Object.keys(next).length === 0 && autoSelectedSupplier) {
+          setTimeout(() => {
+            setSelectedSupplier("");
+            setAutoSelectedSupplier(false);
+          }, 0);
+        }
       } else {
         next[internalId] = [...lrNumbers];
+        // Auto-select supplier if currently "All suppliers"
+        if (!selectedSupplier) {
+          const trip = allTrips.find((t) => t.internal_id === internalId);
+          if (trip && trip.supplier_name) {
+            setTimeout(() => {
+              setSelectedSupplier(trip.supplier_name);
+              setAutoSelectedSupplier(true);
+            }, 0);
+          }
+        }
       }
       return next;
     });
-  }, []);
+  }, [selectedSupplier, autoSelectedSupplier, allTrips]);
 
   const toggleLR = useCallback((internalId: string, lr: string) => {
     setSelectedLRs((prev) => {
       const next = { ...prev };
       const current = next[internalId] || [];
-      if (current.includes(lr)) {
+      const isSelecting = !current.includes(lr);
+
+      if (!isSelecting) {
         next[internalId] = current.filter((l) => l !== lr);
         if (next[internalId].length === 0) delete next[internalId];
+        
+        if (Object.keys(next).length === 0 && autoSelectedSupplier) {
+          setTimeout(() => {
+            setSelectedSupplier("");
+            setAutoSelectedSupplier(false);
+          }, 0);
+        }
       } else {
         next[internalId] = [...current, lr];
+        if (!selectedSupplier) {
+          const trip = allTrips.find((t) => t.internal_id === internalId);
+          if (trip && trip.supplier_name) {
+            setTimeout(() => {
+              setSelectedSupplier(trip.supplier_name);
+              setAutoSelectedSupplier(true);
+            }, 0);
+          }
+        }
       }
       return next;
     });
-  }, []);
+  }, [selectedSupplier, autoSelectedSupplier, allTrips]);
 
   const handleSelectAll = useCallback(() => {
-    const isAllSelected = supplierTrips.every((t) => {
+    const isAllSelected = supplierTrips.length > 0 && supplierTrips.every((t) => {
       const pendingLRs =
         t.lrNumbers.length > 0
           ? t.lrNumbers.filter((lr) => !t.receivedLRs.includes(lr))
@@ -203,18 +242,32 @@ export function LogIncomingPodsScreen() {
 
     if (isAllSelected) {
       setSelectedLRs({});
+      if (autoSelectedSupplier) {
+        setSelectedSupplier("");
+        setAutoSelectedSupplier(false);
+      }
     } else {
       const next: Record<string, string[]> = {};
+      const uniqueSuppliers = new Set<string>();
+      
       supplierTrips.forEach((t) => {
         const pendingLRs =
           t.lrNumbers.length > 0
             ? t.lrNumbers.filter((lr) => !t.receivedLRs.includes(lr))
             : ["N/A"];
-        if (pendingLRs.length > 0) next[t.internal_id] = [...pendingLRs];
+        if (pendingLRs.length > 0) {
+          next[t.internal_id] = [...pendingLRs];
+          if (t.supplier_name) uniqueSuppliers.add(t.supplier_name);
+        }
       });
       setSelectedLRs(next);
+
+      if (!selectedSupplier && uniqueSuppliers.size === 1) {
+        setSelectedSupplier(Array.from(uniqueSuppliers)[0]);
+        setAutoSelectedSupplier(true);
+      }
     }
-  }, [supplierTrips, selectedLRs]);
+  }, [supplierTrips, selectedLRs, autoSelectedSupplier, selectedSupplier]);
 
   const runLog = useCallback(
     async (mappedAttachments: MappedPodAttachment[]) => {
@@ -506,8 +559,8 @@ export function LogIncomingPodsScreen() {
                   : ["N/A"];
               return (
                 pendingLRs.length === 0 ||
-                (selectedLRs[t.id] &&
-                  selectedLRs[t.id].length === pendingLRs.length)
+                (selectedLRs[t.internal_id] &&
+                  selectedLRs[t.internal_id].length === pendingLRs.length)
               );
             }) ? (
               <FontAwesome name="check" size={10} color={Theme.primary} />
@@ -723,6 +776,7 @@ export function LogIncomingPodsScreen() {
                   style={styles.modalRow}
                   onPress={() => {
                     setSelectedSupplier(item);
+                    setAutoSelectedSupplier(false);
                     setSelectedLRs({});
                     setSupplierModalOpen(false);
                     setSupplierSearch("");
