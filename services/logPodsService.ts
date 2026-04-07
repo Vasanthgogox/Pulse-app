@@ -96,7 +96,8 @@ function mapRowToView(
   lrByTripId: Map<string, TripLrRow[]>,
 ): LogPodsTripView {
   const tripKey = getTripStringId(t);
-  const lrs = lrByTripId.get(tripKey) ?? [];
+  const internalId = str(t.id);
+  const lrs = lrByTripId.get(internalId) ?? [];
 
   const lrNo = str((t as { lr_no?: string | null }).lr_no);
   const allLrNumbers =
@@ -206,14 +207,14 @@ export async function fetchTripsForLogPods(
       passesLogPodsRow,
     );
 
-    const stringIds = merged.map(getTripStringId).filter(Boolean);
+    const internalIds = merged.map(t => str(t.id)).filter(Boolean);
     let lrByTripId = new Map<string, TripLrRow[]>();
 
-    if (stringIds.length > 0) {
+    if (internalIds.length > 0) {
       const { data: lrData, error: lrErr } = await supabase()
         .from("trip_lrs")
         .select("trip_id, lr_number, pod_received, pod_status")
-        .in("trip_id", stringIds);
+        .in("trip_id", internalIds);
 
       if (lrErr) {
         console.warn("[logPods] trip_lrs fetch:", lrErr.message);
