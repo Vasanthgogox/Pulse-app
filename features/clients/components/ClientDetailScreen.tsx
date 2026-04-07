@@ -35,6 +35,7 @@ import {
   Modal,
   RefreshControl,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -96,6 +97,7 @@ export default function ClientDetailScreen({
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash" | "shared">("trips");
   const [showSuccess, setShowSuccess] = useState(false);
+  const [successTitle, setSuccessTitle] = useState("NODE_SYNCED");
   const [isLinked, setIsLinked] = useState(false);
   const insets = useSafeAreaInsets();
   const [profileEditMode, setProfileEditMode] = useState(false);
@@ -352,7 +354,8 @@ export default function ClientDetailScreen({
     };
   };
 
-  const triggerSuccess = useCallback(() => {
+  const triggerSuccess = useCallback((title = "NODE_SYNCED") => {
+    setSuccessTitle(title);
     setShowSuccess(true);
     const t = setTimeout(() => setShowSuccess(false), 1500);
     return () => clearTimeout(t);
@@ -826,9 +829,17 @@ export default function ClientDetailScreen({
               integrated={Boolean(client.is_integrated || client.linked_organization_id)}
               embeddedInOverlay={true}
               onRefresh={load}
-              onRequestInvite={() => {
+              onRequestConnection={() => {
                 setIsLinked(true);
-                triggerSuccess();
+                triggerSuccess("CONNECTION_REQUESTED");
+              }}
+              onInviteToApp={() => {
+                const message = `Join me on Q to sync our ledger and compare books with ${clientName}. Download the Q app to get started.`;
+                Share.share({ message, title: "Invite to Q" })
+                  .then(() => {
+                    triggerSuccess("INVITE_SENT");
+                  })
+                  .catch(() => {});
               }}
             />
           </View>
@@ -840,9 +851,9 @@ export default function ClientDetailScreen({
         <View style={styles.successOverlay}>
           <View style={styles.successCard}>
             <View style={styles.successIconWrap}>
-              <FontAwesome name="check" size={32} color={Theme.textOnPrimary} />
+              <FontAwesome name="check" size={24} color={Theme.textOnPrimary} />
             </View>
-            <Text style={styles.successTitle}>NODE_SYNCED</Text>
+            <Text style={styles.successTitle}>{successTitle}</Text>
           </View>
         </View>
       )}
@@ -1739,26 +1750,32 @@ const styles = StyleSheet.create({
   },
   successCard: {
     backgroundColor: Theme.darkBackground,
-    paddingVertical: 48,
-    paddingHorizontal: 48,
-    borderRadius: 40,
+    paddingVertical: 24,
+    paddingHorizontal: 32,
+    borderRadius: 24,
     alignItems: "center",
-    minWidth: 200,
+    minWidth: 160,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 12,
   },
   successIconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: Theme.darkGreen,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   successTitle: {
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 14,
+    fontWeight: "900",
     fontStyle: "italic",
     color: Theme.textOnPrimary,
-    letterSpacing: -0.5,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
   },
 });

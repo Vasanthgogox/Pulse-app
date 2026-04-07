@@ -69,6 +69,10 @@ export interface EntityCompareVerifyViewProps {
   embeddedInOverlay?: boolean;
   /** Callback to trigger connection invitation logic. */
   onRequestInvite?: () => void;
+  /** Optional callback to trigger a connection request for a partner already in the app. */
+  onRequestConnection?: () => void;
+  /** Optional callback to trigger an invitation to join the app for a partner not yet in the app. */
+  onInviteToApp?: () => void;
 }
 
 type ReconStatus = "VERIFIED" | "PENDING" | "MISMATCH" | "UNRECOGNIZED";
@@ -316,6 +320,8 @@ export function SharedLedgerContent({
   viewAsPartner = false,
   embeddedInOverlay = false,
   onRequestInvite,
+  onRequestConnection,
+  onInviteToApp,
 }: EntityCompareVerifyViewProps) {
   const resolutionOptions = entityType === "CLIENT" ? [
     "Partner needs to update Sales amount",
@@ -986,11 +992,11 @@ export function SharedLedgerContent({
             ) : (
               <TouchableOpacity
                 style={styles.notIntegratedBtn}
-                onPress={onRequestInvite ?? handleRequestConnection}
-                disabled={requestInviteLoading && !onRequestInvite}
+                onPress={onRequestConnection ?? onRequestInvite ?? handleRequestConnection}
+                disabled={requestInviteLoading && !onRequestInvite && !onRequestConnection}
                 activeOpacity={0.8}
               >
-                {requestInviteLoading && !onRequestInvite ? (
+                {requestInviteLoading && !onRequestInvite && !onRequestConnection ? (
                   <ActivityIndicator size="small" color={Theme.textOnDark} />
                 ) : (
                   <Text style={styles.notIntegratedBtnText}>
@@ -1010,7 +1016,11 @@ export function SharedLedgerContent({
             </Text>
             <TouchableOpacity
               style={styles.notIntegratedBtn}
-              onPress={onRequestInvite ?? handleInviteToApp}
+              onPress={() => {
+                if (onInviteToApp) onInviteToApp();
+                else if (onRequestInvite) onRequestInvite();
+                else handleInviteToApp();
+              }}
               activeOpacity={0.8}
             >
               <Text style={styles.notIntegratedBtnText}>Invite to app</Text>

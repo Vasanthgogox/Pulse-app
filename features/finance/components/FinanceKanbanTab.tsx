@@ -1,19 +1,23 @@
 /**
  * Kanban view for Finance transactions — specifically for Web.
  * Categorizes ledger entries into Customers, Suppliers, Garage, and Drivers columns.
+ * Card style matches the Timeline layout from Client Detail / Cash Flow.
  */
 import { ALL_LEDGER_CATEGORY_VALUES } from "@/components/AddTransactionModal";
 import Theme from '@/constants/Theme';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { formatIndianVehicleNumber } from '@/lib/format';
+import { formatIndianVehicleNumber, formatLedgerAmount } from '@/lib/format';
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import React, { useMemo, useState } from 'react';
+import Animated, { FadeInUp, Layout } from 'react-native-reanimated';
 import {
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View
+    View,
+    LayoutAnimation,
+    Platform
 } from 'react-native';
 import type { LedgerRow } from '../services/finance.service';
 import { LedgerExpandedCardFromData, type FinancialRowData } from "./FinancialRow";
@@ -43,6 +47,198 @@ export interface FinanceKanbanTabProps {
 const COLUMN_TYPES = ['customers', 'suppliers', 'garage', 'drivers'] as const;
 type ColumnType = typeof COLUMN_TYPES[number];
 
+const MONTHS_SHORT = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
+
+const AVATAR_COLORS = [
+  Theme.primary,
+  Theme.primaryLight,
+  Theme.aggregatePillText,
+  Theme.darkGreen,
+  Theme.teslaRed,
+  Theme.textPrimary,
+  Theme.buttonSecondary,
+  Theme.integratedIcon,
+  Theme.iconSlate,
+  Theme.primaryText,
+];
+
+/** Initials from party/name (max 2 chars, uppercase). */
+function initials(name: string): string {
+  const t = (name ?? "").trim();
+  if (!t) return "—";
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length >= 2)
+    return (words[0][0] + words[words.length - 1][0]).toUpperCase().slice(0, 2);
+  return t.slice(0, 2).toUpperCase();
+}
+
+function avatarColor(str: string): string {
+  let n = 0;
+  for (let i = 0; i < str.length; i++) n = (n * 31 + str.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[n % AVATAR_COLORS.length];
+}
+
+function formatTxDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const s = (iso ?? "").slice(0, 10);
+  if (!s) return "—";
+  const [y, m, day] = s.split("-");
+  return `${day} ${MONTHS_SHORT[Number(m) - 1] ?? m} ${y}`;
+}
+
+function KanbanCard({ row, index, cat, isExpanded, toggleExpand, hasAmtIn, amount, dateStr, vehicleStr, partyName, routeWhyLine, rowData, tripIdOnly, onRowSelect }: any) {
+  const [isCardHovered, setIsCardHovered] = useState(false);
+  const avatarBg = avatarColor(partyName);
+  const initialText = initials(partyName);
+
+  return (
+    <Animated.View 
+      style={[
+        styles.cardContainer,
+        {
+          transform: [{ scale: isCardHovered ? 1.02 : 1 }],
+        }
+      ]}
+      // @ts-ignore
+      onMouseEnter={() => setIsCardHovered(true)}
+      onMouseLeave={() => setIsCardHovered(false)}
+      entering={FadeInUp.delay(index * 30).springify()}
+      layout={Layout.springify()}
+    >
+      <TouchableOpacity 
+        style={[
+          styles.timelineCard, 
+          isExpanded && styles.cardExpanded,
+          isCardHovered && styles.cardHovered
+        ]}
+        activeOpacity={0.7}
+        onPress={() => toggleExpand(row.id)}
+      >
+        <View
+          style={[
+            styles.timelineCardAvatar,
+            { backgroundColor: avatarBg },
+            hasAmtIn ? styles.avatarWrapIn : styles.avatarWrapOut,
+          ]}
+        >
+          <Text style={styles.avatarText} numberOfLines={1}>
+            {initialText}
+          </Text>
+        </View>
+
+        <View style={styles.timelineCardBody}>
+          <Text style={styles.timelineCardParty} numberOfLines={1}>
+            {partyName}
+          </Text>
+          <Text style={styles.timelineCardDateVehicle} numberOfLines={1}>
+            {[dateStr, cat !== 'garage' ? vehicleStr : null].filter(Boolean).join(" · ")}
+          </Text>
+          {routeWhyLine ? (
+            <Text style={styles.timelineCardRouteWhy} numberOfLines={1}>
+              {routeWhyLine}
+            </Text>
+          ) : null}
+        </View>
+
+        <View style={styles.rightCol}>
+          {tripIdOnly && (
+            <TouchableOpacity 
+              style={styles.tripPillWithCheck}
+              onPress={() => onRowSelect?.(row)}
+              activeOpacity={0.6}
+            >
+              <FontAwesome name="check-circle" size={8} color={Theme.darkGreen} />
+              <Text style={styles.tripPillText} numberOfLines={1}>
+                {tripIdOnly}
+              </Text>
+            </TouchableOpacity>
+          )}
+          <Text
+            style={[
+              styles.amount,
+              hasAmtIn ? styles.amountIn : styles.amountOut,
+            ]}
+            numberOfLines={1}
+          >
+            {hasAmtIn ? "+" : "−"} ₹{formatLedgerAmount(amount)}
+          </Text>
+        </View>
+
+        <View style={styles.expandHint}>
+          <FontAwesome name={isExpanded ? "chevron-up" : "chevron-down"} size={8} color={Theme.textMuted} />
+        </View>
+      </TouchableOpacity>
+      
+      {isExpanded && (
+        <View style={styles.expandedContent}>
+          <LedgerExpandedCardFromData data={rowData} />
+          {row.trip_id && (
+              <TouchableOpacity 
+                  style={styles.viewTripBtn}
+                  onPress={() => onRowSelect?.(row)}
+              >
+                  <Text style={styles.viewTripBtnText}>VIEW FULL TRIP</Text>
+                  <FontAwesome name="arrow-right" size={10} color={Theme.primary} />
+              </TouchableOpacity>
+          )}
+        </View>
+      )}
+    </Animated.View>
+  );
+}
+
+function KanbanColumn({ type, transactions, t, renderCard }: { 
+  type: ColumnType; 
+  transactions: LedgerRow[]; 
+  t: any; 
+  renderCard: (row: LedgerRow, index: number) => React.ReactNode 
+}) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <View 
+      style={styles.column}
+      // @ts-ignore - mouse events supported on web
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <View style={styles.columnHeader}>
+        <View style={styles.columnTitleRow}>
+          <View style={styles.columnAccent} />
+          <Text style={styles.columnTitle}>{t(
+            type === 'customers' ? 'customersLabel' : 
+            type === 'suppliers' ? 'suppliersLabel' : 
+            type === 'garage' ? 'tabGarage' : 'tabDrivers'
+          ).toUpperCase()}</Text>
+        </View>
+        <View style={styles.countBadge}>
+          <Text style={styles.countText}>{transactions.length}</Text>
+        </View>
+      </View>
+      <ScrollView 
+        style={[
+          styles.columnScroll,
+          // @ts-ignore - web scrollbar styling
+          Platform.OS === 'web' && {
+            scrollbarWidth: 'thin',
+          }
+        ]}
+        showsVerticalScrollIndicator={isHovered}
+        // @ts-ignore - persistent scrollbar on web
+        contentContainerStyle={{ paddingRight: 0 }}
+      >
+        {transactions.length === 0 ? (
+          <View style={styles.emptyColumn}>
+            <Text style={styles.emptyText}>{t('noLedgerEntriesYet')}</Text>
+          </View>
+        ) : (
+          transactions.map((row, index) => renderCard(row, index))
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
 export function FinanceKanbanTab({
   transactions,
   onRowSelect,
@@ -59,23 +255,18 @@ export function FinanceKanbanTab({
     const driverName = (row.driver_name ?? "").trim();
     const isDriver = contactType === "driver" || driverName !== "";
 
-    // 1. DRIVERS
     if (isDriver) return 'drivers';
 
-    // 2. CUSTOMERS (Clients)
     const isClient = contactType === "client";
     if (isClient || (hasAmtIn && !contactType)) return 'customers';
 
-    // 3. GARAGE (Vehicles)
     const vehicleNum = row.vehicle_number ?? (row.trip_id != null ? (getVehicleNumberForTripId?.(row.trip_id) ?? null) : null);
     const isVehicle = contactType === "vehicle" || (!!vehicleNum && !isClient && contactType !== "supplier");
     if (isVehicle) return 'garage';
 
-    // 4. SUPPLIERS
     const isSupplier = contactType === "supplier";
     if (isSupplier || (hasAmtOut && !contactType)) return 'suppliers';
 
-    // Fallback for anything else
     if (hasAmtIn) return 'customers';
     if (hasAmtOut) return 'suppliers';
 
@@ -99,19 +290,6 @@ export function FinanceKanbanTab({
 
     return cols;
   }, [transactions, getVehicleNumberForTripId]);
-
-  function formatEntryDate(iso: string | undefined | null): string {
-    if (!iso) return "—";
-    try {
-      const s = iso.slice(0, 10);
-      const [y, m, day] = s.split("-");
-      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      const mi = parseInt(m ?? "0", 10) - 1;
-      return mi >= 0 && mi < 12 ? `${day} ${monthNames[mi]} ${y}` : s;
-    } catch {
-      return iso.slice(0, 10);
-    }
-  }
 
   const buildFinancialRowData = (row: LedgerRow): FinancialRowData => {
     const cat = getRowCategory(row);
@@ -141,7 +319,7 @@ export function FinanceKanbanTab({
 
             return {
               id: r.id,
-              date: formatEntryDate(r.transaction_date),
+              date: formatTxDate(r.transaction_date),
               typeLabel: getDoubleEntryDisplayLabel(r) ?? "—",
               in: r.amount_in ?? 0,
               out: r.amount_out ?? 0,
@@ -182,95 +360,60 @@ export function FinanceKanbanTab({
     };
   };
 
-  const renderCard = (row: LedgerRow) => {
+  const toggleExpand = (rowId: string) => {
+    if (Platform.OS === 'web') {
+      // @ts-ignore - document transition support on web
+      if (document.startViewTransition) {
+        // @ts-ignore
+        document.startViewTransition(() => {
+          setExpandedRowId(expandedRowId === rowId ? null : rowId);
+        });
+        return;
+      }
+    }
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedRowId(expandedRowId === rowId ? null : rowId);
+  };
+
+  const renderCard = (row: LedgerRow, index: number) => {
     const cat = getRowCategory(row);
     const hasAmtIn = (row.amount_in ?? 0) > 0;
     const amount = hasAmtIn ? row.amount_in : row.amount_out;
     const isExpanded = expandedRowId === row.id;
-    
-    const dateStr = row.transaction_date ? (() => {
-        try {
-            const d = new Date(row.transaction_date);
-            const day = d.getDate().toString().padStart(2, '0');
-            const month = d.toLocaleString('en-IN', { month: 'short' });
-            const year = d.getFullYear().toString().slice(-2);
-            return `${day} ${month} ${year}`;
-        } catch {
-            return row.transaction_date.slice(0, 10);
-        }
-    })() : '—';
-
+    const dateStr = formatTxDate(row.transaction_date ?? row.created_at);
     const vehicleNum = row.vehicle_number ?? (row.trip_id != null ? (getVehicleNumberForTripId?.(row.trip_id) ?? null) : null);
-    let entityName = row.party_name || "—";
+    const vehicleStr = vehicleNum ? formatIndianVehicleNumber(vehicleNum) : null;
+    let partyName = row.party_name || "—";
     if (cat === 'drivers') {
-      entityName = row.driver_name || row.party_name || "—";
+      partyName = row.driver_name || row.party_name || "—";
     } else if (cat === 'garage' && vehicleNum) {
-      entityName = formatIndianVehicleNumber(vehicleNum);
+      partyName = vehicleStr || row.party_name || "—";
     }
-
-    const desc = row.description ?? "";
-    const categoryLabel = ALL_LEDGER_CATEGORY_VALUES.includes(desc) ? desc : "GENERAL";
-
+    const typeLabel = getDoubleEntryDisplayLabel(row) ?? row.description ?? "GENERAL";
+    const tripDetail = row.trip_id ? tripDetailsMap[row.trip_id] : null;
+    const routeStr = tripDetail ? [tripDetail.pickup_area, tripDetail.drop_location].filter(Boolean).join(" → ") : null;
+    const routeWhyLine = [routeStr, typeLabel].filter(Boolean).join(" • ");
     const rowData = buildFinancialRowData(row);
+    const tripIdOnly = tripDetail?.trip_number || row.trip_number || (row.trip_id ? "TRIP" : null);
 
     return (
-      <View key={row.id} style={styles.cardContainer}>
-        <TouchableOpacity 
-          style={[styles.card, isExpanded && styles.cardExpanded]}
-          activeOpacity={0.7}
-          onPress={() => setExpandedRowId(isExpanded ? null : row.id)}
-        >
-          <View style={styles.cardHeader}>
-            <Text style={styles.entityName} numberOfLines={1}>{entityName}</Text>
-            <Text style={[styles.amount, hasAmtIn ? styles.amountIn : styles.amountOut]}>
-              ₹{amount?.toLocaleString('en-IN')}
-            </Text>
-          </View>
-          
-          <View style={styles.cardMeta}>
-            <View style={styles.categoryBadge}>
-              <Text style={styles.categoryText}>{categoryLabel}</Text>
-            </View>
-            <Text style={styles.date}>{dateStr}</Text>
-          </View>
-
-          {(row.trip_number || row.trip_id) && !isExpanded && (
-            <View style={styles.tripRow}>
-              <TouchableOpacity 
-                style={styles.tripBadge}
-                onPress={() => onRowSelect?.(row)}
-                activeOpacity={0.6}
-              >
-                <FontAwesome name="map-marker" size={10} color={Theme.primary} style={{ marginRight: 4 }} />
-                <Text style={styles.tripText}>{row.trip_number || 'TRIP'}</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {row.description && !ALL_LEDGER_CATEGORY_VALUES.includes(row.description) && !isExpanded && (
-            <Text style={styles.description} numberOfLines={2}>{row.description}</Text>
-          )}
-
-          <View style={styles.expandHint}>
-            <FontAwesome name={isExpanded ? "chevron-up" : "chevron-down"} size={10} color={Theme.textMuted} />
-          </View>
-        </TouchableOpacity>
-        
-        {isExpanded && (
-          <View style={styles.expandedContent}>
-            <LedgerExpandedCardFromData data={rowData} />
-            {row.trip_id && (
-                <TouchableOpacity 
-                    style={styles.viewTripBtn}
-                    onPress={() => onRowSelect?.(row)}
-                >
-                    <Text style={styles.viewTripBtnText}>VIEW FULL TRIP</Text>
-                    <FontAwesome name="arrow-right" size={10} color={Theme.primary} />
-                </TouchableOpacity>
-            )}
-          </View>
-        )}
-      </View>
+      <KanbanCard 
+        key={row.id}
+        row={row}
+        index={index}
+        cat={cat}
+        isExpanded={isExpanded}
+        toggleExpand={toggleExpand}
+        hasAmtIn={hasAmtIn}
+        amount={amount}
+        dateStr={dateStr}
+        vehicleStr={vehicleStr}
+        partyName={partyName}
+        routeWhyLine={routeWhyLine}
+        rowData={rowData}
+        tripIdOnly={tripIdOnly}
+        onRowSelect={onRowSelect}
+      />
     );
   };
 
@@ -278,33 +421,13 @@ export function FinanceKanbanTab({
     <View style={styles.wrapper}>
       <View style={styles.kanbanContainer}>
         {COLUMN_TYPES.map((type) => (
-          <View key={type} style={styles.column}>
-            <View style={styles.columnHeader}>
-              <View style={styles.columnTitleRow}>
-                <View style={styles.columnAccent} />
-                <Text style={styles.columnTitle}>{t(
-                  type === 'customers' ? 'customersLabel' : 
-                  type === 'suppliers' ? 'suppliersLabel' : 
-                  type === 'garage' ? 'tabGarage' : 'tabDrivers'
-                ).toUpperCase()}</Text>
-              </View>
-              <View style={styles.countBadge}>
-                <Text style={styles.countText}>{columns[type].length}</Text>
-              </View>
-            </View>
-            <ScrollView 
-              style={styles.columnScroll}
-              showsVerticalScrollIndicator={true}
-            >
-              {columns[type].length === 0 ? (
-                <View style={styles.emptyColumn}>
-                  <Text style={styles.emptyText}>{t('noLedgerEntriesYet')}</Text>
-                </View>
-              ) : (
-                columns[type].map(renderCard)
-              )}
-            </ScrollView>
-          </View>
+            <KanbanColumn 
+              key={type}
+              type={type}
+              transactions={columns[type]}
+              t={t}
+              renderCard={renderCard}
+            />
         ))}
       </View>
     </View>
@@ -318,16 +441,16 @@ const styles = StyleSheet.create({
   },
   kanbanContainer: {
     flex: 1,
-    padding: 24,
+    padding: 16,
     flexDirection: 'row',
-    gap: 20,
+    gap: 12,
     width: '100%',
   },
   column: {
     flex: 1,
     backgroundColor: Theme.surfaceGray,
-    borderRadius: 14,
-    padding: 12,
+    borderRadius: 12,
+    padding: 8,
     maxHeight: '100%',
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -341,9 +464,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 12,
     paddingHorizontal: 4,
-    paddingVertical: 4,
+    paddingVertical: 2,
   },
   columnTitleRow: {
     flexDirection: 'row',
@@ -377,19 +500,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardContainer: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
-  card: {
-    backgroundColor: Theme.surface,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 3,
+  timelineCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Theme.screenBackground,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 10,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: "rgba(0,0,0,0.04)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 6,
+    elevation: 1,
     position: 'relative',
   },
   cardExpanded: {
@@ -397,24 +524,67 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 0,
     borderBottomWidth: 0,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
+  cardHovered: {
+    borderColor: Theme.primary,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  entityName: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Theme.textPrimaryDark,
-    flex: 1,
-    marginRight: 10,
+  timelineCardAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+  },
+  avatarWrapIn: {
+    borderColor: Theme.positiveMuted,
+  },
+  avatarWrapOut: {
+    borderColor: Theme.negativeMuted,
+  },
+  avatarText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textOnPrimary,
     letterSpacing: 0.2,
   },
+  timelineCardBody: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+    gap: 2,
+  },
+  timelineCardParty: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
+  },
+  timelineCardDateVehicle: {
+    fontSize: 8,
+    fontWeight: "400",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  timelineCardRouteWhy: {
+    fontSize: 9,
+    fontWeight: "400",
+    fontStyle: "italic",
+    color: Theme.textMuted,
+    opacity: 0.8,
+  },
+  rightCol: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    gap: 4,
+    minWidth: 60,
+  },
   amount: {
-    fontSize: 15,
-    fontWeight: '500',
-    letterSpacing: -0.5,
+    fontSize: 12,
+    fontWeight: "600",
+    fontStyle: 'italic',
   },
   amountIn: {
     color: Theme.darkGreen,
@@ -422,75 +592,38 @@ const styles = StyleSheet.create({
   amountOut: {
     color: Theme.teslaRed,
   },
-  cardMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  categoryBadge: {
-    backgroundColor: Theme.surfaceGray,
-    paddingHorizontal: 8,
+  tripPillWithCheck: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 6,
     paddingVertical: 3,
-    borderRadius: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(248,250,252,0.5)",
     borderWidth: 1,
     borderColor: Theme.borderLight,
   },
-  categoryText: {
-    fontSize: 9,
-    fontWeight: '500',
-    color: Theme.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  date: {
-    fontSize: 11,
-    color: Theme.textMuted,
-    fontWeight: '400',
-  },
-  tripRow: {
-    flexDirection: 'row',
-    marginTop: 6,
-  },
-  tripBadge: {
-    backgroundColor: 'rgba(0, 102, 255, 0.06)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 102, 255, 0.12)',
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  tripText: {
-    fontSize: 10,
-    fontWeight: '500',
+  tripPillText: {
+    fontSize: 7,
+    fontWeight: "500",
     color: Theme.primary,
-    letterSpacing: 0.5,
-  },
-  description: {
-    fontSize: 12,
-    color: Theme.textSecondary,
-    marginTop: 12,
-    lineHeight: 18,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: Theme.borderLight,
-    fontStyle: 'italic',
+    fontStyle: "italic",
+    letterSpacing: 0.2,
+    textTransform: "uppercase",
   },
   expandHint: {
     position: 'absolute',
-    bottom: 8,
-    right: 8,
-    opacity: 0.5,
+    bottom: 4,
+    right: 12,
+    opacity: 0.3,
   },
   expandedContent: {
     backgroundColor: Theme.surface,
     borderWidth: 1,
     borderTopWidth: 0,
     borderColor: Theme.borderLight,
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
     paddingBottom: 12,
   },
   viewTripBtn: {
@@ -508,7 +641,7 @@ const styles = StyleSheet.create({
   },
   viewTripBtnText: {
     fontSize: 10,
-    fontWeight: '500',
+    fontWeight: "500",
     color: Theme.primary,
     letterSpacing: 1,
   },
