@@ -58,6 +58,8 @@ export function InvoicingExecuteScreen() {
   const [selectedTripIds, setSelectedTripIds] = useState<string[]>([]);
   const [clientSearch, setClientSearch] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [clientModalOpen, setClientModalOpen] = useState(false);
 
@@ -94,14 +96,36 @@ export function InvoicingExecuteScreen() {
 
   const clientTrips = useMemo(() => {
     if (!activeClient) return [];
+    
+    const parseDate = (dateStr: string) => {
+      // Very basic date parser assuming YYYY-MM-DD or DD/MM/YYYY for simplicity here
+      const [p1, p2, p3] = dateStr.includes('/') ? dateStr.split('/') : dateStr.split('-');
+      if (dateStr.includes('/')) {
+        // DD/MM/YYYY -> YYYY-MM-DD
+        return new Date(`${p3}-${p2}-${p1}`);
+      }
+      return new Date(dateStr);
+    };
+
+    const sDate = startDate ? parseDate(startDate) : null;
+    const eDate = endDate ? parseDate(endDate) : null;
+    if (eDate) eDate.setHours(23, 59, 59, 999);
+    
     const q = searchQuery.toLowerCase().trim();
+    
     return allTrips.filter((t) => {
       if (t.client !== activeClient) return false;
       if (t.status === 'pending') return false; 
+      
       if (q && !t.id.toLowerCase().includes(q) && !t.route.toLowerCase().includes(q)) return false;
+      
+      const tripDate = new Date(t.date);
+      if (sDate && tripDate < sDate) return false;
+      if (eDate && tripDate > eDate) return false;
+
       return true;
     });
-  }, [allTrips, activeClient, searchQuery]);
+  }, [allTrips, activeClient, searchQuery, startDate, endDate]);
 
   const tripsById = useMemo(() => {
     const map = new Map();
@@ -274,6 +298,10 @@ export function InvoicingExecuteScreen() {
                 onToggleTrip={handleToggleTrip}
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
+                startDate={startDate}
+                setStartDate={setStartDate}
+                endDate={endDate}
+                setEndDate={setEndDate}
                 isRefetching={isRefetching}
                 refetch={refetch}
               />
@@ -311,6 +339,10 @@ export function InvoicingExecuteScreen() {
                 onToggleTrip={handleToggleTrip}
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
+                startDate={startDate}
+                setStartDate={setStartDate}
+                endDate={endDate}
+                setEndDate={setEndDate}
                 isRefetching={isRefetching}
                 refetch={refetch}
               />
@@ -378,6 +410,10 @@ function TripListContent({
   setSearchQuery,
   isRefetching,
   refetch,
+  startDate,
+  setStartDate,
+  endDate,
+  setEndDate,
 }: any) {
   return (
     <View style={{ flex: 1 }}>
@@ -386,6 +422,9 @@ function TripListContent({
           <Text style={styles.listHeaderTitle}>Ready-to-Invoice Trips</Text>
           <Text style={styles.listHeaderSub}>Partner: <Text style={{ color: Theme.primary }}>{activeClient || 'None Selected'}</Text></Text>
         </View>
+        <Pressable style={styles.bulkActionBtn}>
+          <Text style={styles.bulkActionText}>Bulk Action</Text>
+        </Pressable>
       </View>
       <View style={styles.listFilters}>
         <View style={styles.searchRow}>
@@ -398,13 +437,48 @@ function TripListContent({
             onChangeText={setSearchQuery}
           />
         </View>
+        
+        <View style={styles.dateFilterContainer}>
+          <View style={styles.dateRow}>
+            <FontAwesome name="calendar" size={12} color={Theme.textMuted} style={{ marginRight: 6 }} />
+            <TextInput
+              style={styles.dateInput}
+              placeholder="DD/MM/YYYY"
+              placeholderTextColor={Theme.textMuted}
+              value={startDate}
+              onChangeText={setStartDate}
+            />
+            <Text style={styles.dateToText}>TO</Text>
+            <TextInput
+              style={styles.dateInput}
+              placeholder="DD/MM/YYYY"
+              placeholderTextColor={Theme.textMuted}
+              value={endDate}
+              onChangeText={setEndDate}
+            />
+            {(startDate || endDate) ? (
+              <Pressable onPress={() => { setStartDate(''); setEndDate(''); }} style={{ marginLeft: 4 }}>
+                <FontAwesome name="times" size={12} color={Theme.textMuted} />
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+      </View>
+      
+      <View style={styles.tableHeader}>
         <Pressable style={styles.selectAllGroup} onPress={onSelectAll}>
           <View style={styles.selectAllCheckbox}>
             {allSelected && <FontAwesome name="check" size={10} color={Theme.primary} />}
           </View>
-          <Text style={styles.selectAllText}>Select All</Text>
         </Pressable>
+        <Text style={[styles.tableHeaderText, { width: 100 }]}>Date / ID</Text>
+        <Text style={[styles.tableHeaderText, { flex: 1.5 }]}>Supplier</Text>
+        <Text style={[styles.tableHeaderText, { flex: 2 }]}>Route</Text>
+        <Text style={[styles.tableHeaderText, { width: 80, textAlign: 'right' }]}>Freight</Text>
+        <Text style={[styles.tableHeaderText, { width: 60, textAlign: 'right' }]}>Extras</Text>
+        <Text style={[styles.tableHeaderText, { width: 80, textAlign: 'center' }]}>Status</Text>
       </View>
+
       <FlatList
         data={clientTrips}
         keyExtractor={(item) => item.id}
@@ -419,33 +493,45 @@ function TripListContent({
         }
         renderItem={({ item: trip }) => (
           <Pressable 
-            style={[styles.tripCard, selectedTripIds.includes(trip.id) && styles.tripCardSelected]}
+            style={[styles.tripTableRow, selectedTripIds.includes(trip.id) && styles.tripTableRowSelected]}
             onPress={() => onToggleTrip(trip.id)}
           >
-            <View style={styles.tripCardTop}>
-              <View style={styles.tripCardTopLeft}>
-                <View style={[styles.checkBox, selectedTripIds.includes(trip.id) && styles.checkBoxOn]}>
-                  {selectedTripIds.includes(trip.id) && <FontAwesome name="check" size={10} color="#fff" />}
-                </View>
-                <View>
-                  <Text style={styles.tripId}>{trip.id}</Text>
-                  <Text style={styles.tripDate}>{new Date(trip.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
-                </View>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.tripAmount}>₹{trip.amount.toLocaleString()}</Text>
-                {trip.status === 'approved' ? (
-                  <Text style={styles.tagApproved}>Approved</Text>
-                ) : trip.status === 'received' ? (
-                  <Text style={styles.tagReceived}>Received</Text>
-                ) : (
-                  <Text style={styles.tagPending}>Pending</Text>
-                )}
+            <View style={styles.selectAllGroup}>
+              <View style={[styles.checkBox, selectedTripIds.includes(trip.id) && styles.checkBoxOn]}>
+                {selectedTripIds.includes(trip.id) && <FontAwesome name="check" size={10} color="#fff" />}
               </View>
             </View>
-            <View style={styles.tripCardBottom}>
+            
+            <View style={{ width: 100 }}>
+              <Text style={styles.tripDate}>{new Date(trip.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
+              <Text style={styles.tripId}>{trip.id}</Text>
+            </View>
+            
+            <View style={{ flex: 1.5 }}>
+              <Text style={styles.tripSupplier} numberOfLines={1}>{trip.supplier_name}</Text>
+            </View>
+            
+            <View style={{ flex: 2 }}>
               <Text style={styles.tripRoute} numberOfLines={1}>{trip.route}</Text>
               <Text style={styles.tripDetails} numberOfLines={1}>{trip.details || 'Vehicle N/A'}</Text>
+            </View>
+            
+            <View style={{ width: 80, alignItems: 'flex-end' }}>
+              <Text style={styles.tripAmount}>₹{trip.amount.toLocaleString()}</Text>
+            </View>
+            
+            <View style={{ width: 60, alignItems: 'flex-end' }}>
+              <Text style={styles.tripExtras}>₹0</Text>
+            </View>
+
+            <View style={{ width: 80, alignItems: 'center' }}>
+              {trip.status === 'approved' ? (
+                <Text style={styles.tagApproved}>Approved</Text>
+              ) : trip.status === 'received' ? (
+                <Text style={styles.tagReceived}>Received</Text>
+              ) : (
+                <Text style={styles.tagPending}>Pending</Text>
+              )}
             </View>
           </Pressable>
         )}
@@ -513,27 +599,41 @@ const styles = StyleSheet.create({
   listHeader: { padding: 16, borderBottomWidth: 1, borderBottomColor: Theme.borderLight, backgroundColor: 'rgba(248,250,252,0.3)', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   listHeaderTitle: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1, color: Theme.textMuted },
   listHeaderSub: { fontSize: 11, fontWeight: '800', color: Theme.textPrimaryDark, textTransform: 'uppercase', marginTop: 2 },
-  listFilters: { padding: 16, backgroundColor: Theme.screenBackground, borderBottomWidth: 1, borderBottomColor: Theme.borderLight, flexDirection: 'row', alignItems: 'center', gap: 16 },
-  searchRow: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: Theme.cardWhite, borderWidth: 1, borderColor: Theme.borderInput, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  bulkActionBtn: { backgroundColor: Theme.textPrimaryDark, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  bulkActionText: { color: Theme.buttonPrimaryText, fontSize: 9, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1 },
+  listFilters: { padding: 16, backgroundColor: Theme.screenBackground, borderBottomWidth: 1, borderBottomColor: Theme.borderLight, flexDirection: 'row', alignItems: 'center', gap: 16, flexWrap: 'wrap' },
+  searchRow: { flex: 1, minWidth: 180, flexDirection: 'row', alignItems: 'center', backgroundColor: Theme.cardWhite, borderWidth: 1, borderColor: Theme.borderInput, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   searchInput: { flex: 1, fontSize: 11, fontWeight: '700', color: Theme.textPrimaryDark, padding: 0, margin: 0 },
-  selectAllGroup: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  
+  dateFilterContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: Theme.cardWhite, borderWidth: 1, borderColor: Theme.borderInput, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  dateRow: { flexDirection: 'row', alignItems: 'center' },
+  dateInput: { fontSize: 10, fontWeight: '800', color: Theme.textPrimaryDark, padding: 0, margin: 0, minWidth: 80, textTransform: 'uppercase' },
+  dateToText: { fontSize: 9, fontWeight: '800', color: Theme.textMuted, marginHorizontal: 8, textTransform: 'uppercase' },
+  
+  tableHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Theme.borderLight, backgroundColor: 'rgba(248,250,252,0.5)', gap: 12 },
+  tableHeaderText: { fontSize: 9, fontWeight: '800', color: Theme.textMuted, textTransform: 'uppercase', letterSpacing: 1 },
+  
+  selectAllGroup: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: 24 },
   selectAllCheckbox: { width: 16, height: 16, borderRadius: 4, borderWidth: 1, borderColor: Theme.borderMedium, alignItems: 'center', justifyContent: 'center' },
-  selectAllText: { fontSize: 11, fontWeight: '700', color: Theme.textMuted },
 
-  tripCard: { backgroundColor: Theme.cardWhite, borderWidth: 1, borderColor: Theme.borderLight, borderRadius: 12, padding: 12, marginBottom: 10 },
-  tripCardSelected: { borderColor: Theme.primary, backgroundColor: 'rgba(26,35,126,0.02)' },
-  tripCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
-  tripCardTopLeft: { flexDirection: 'row', gap: 12 },
-  checkBox: { width: 16, height: 16, borderRadius: 4, borderWidth: 1, borderColor: Theme.borderMedium, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
+  tripTableRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: Theme.cardWhite, borderBottomWidth: 1, borderBottomColor: Theme.surfaceBorder, paddingVertical: 12, paddingHorizontal: 16, gap: 12 },
+  tripTableRowSelected: { backgroundColor: 'rgba(26,35,126,0.03)' },
+  
+  checkBox: { width: 16, height: 16, borderRadius: 4, borderWidth: 1, borderColor: Theme.borderMedium, alignItems: 'center', justifyContent: 'center' },
   checkBoxOn: { backgroundColor: Theme.primary, borderColor: Theme.primary },
-  tripId: { fontSize: 12, fontWeight: '800', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: Theme.textPrimaryDark },
-  tripDate: { fontSize: 10, fontWeight: '800', color: Theme.textMuted, marginTop: 2 },
-  tripAmount: { fontSize: 14, fontWeight: '800', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: Theme.textPrimaryDark, marginBottom: 4 },
-  tagPending: { fontSize: 9, fontWeight: '800', color: '#b45309', backgroundColor: 'rgba(180,83,9,0.1)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, textTransform: 'uppercase' },
-
-  tripCardBottom: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Theme.borderLight, paddingTop: 8, marginTop: 4 },
-  tripRoute: { fontSize: 11, fontWeight: '700', color: Theme.textPrimaryDark, textTransform: 'uppercase', marginBottom: 2 },
+  
+  tripDate: { fontSize: 11, fontWeight: '800', color: Theme.textPrimaryDark },
+  tripId: { fontSize: 9, fontWeight: '800', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: Theme.textMuted, marginTop: 2, textTransform: 'uppercase' },
+  tripSupplier: { fontSize: 10, fontWeight: '800', color: Theme.textPrimaryDark, textTransform: 'uppercase' },
+  tripRoute: { fontSize: 10, fontWeight: '800', color: Theme.textPrimaryDark, textTransform: 'uppercase', marginBottom: 2 },
   tripDetails: { fontSize: 9, fontWeight: '800', color: Theme.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  tripAmount: { fontSize: 11, fontWeight: '800', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: Theme.textPrimaryDark },
+  tripExtras: { fontSize: 9, fontWeight: '800', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: Theme.textMuted },
+
+  tagPending: { fontSize: 8, fontWeight: '800', color: '#b45309', backgroundColor: 'rgba(180,83,9,0.1)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, textTransform: 'uppercase', borderWidth: 1, borderColor: 'rgba(180,83,9,0.2)' },
+  tagApproved: { fontSize: 8, fontWeight: '800', color: '#059669', backgroundColor: 'rgba(5,150,105,0.1)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, textTransform: 'uppercase', borderWidth: 1, borderColor: 'rgba(5,150,105,0.2)' },
+  tagReceived: { fontSize: 8, fontWeight: '800', color: '#2563eb', backgroundColor: 'rgba(37,99,235,0.1)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, textTransform: 'uppercase', borderWidth: 1, borderColor: 'rgba(37,99,235,0.2)' },
+  tagSettled: { fontSize: 8, fontWeight: '800', color: Theme.textMuted, backgroundColor: Theme.surfaceBorder, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, textTransform: 'uppercase', borderWidth: 1, borderColor: Theme.borderMedium },
 
   empty: { alignItems: 'center', paddingVertical: 48 },
   emptyTitle: { fontSize: 13, fontWeight: '800', color: Theme.textPrimaryDark, marginTop: 12, textTransform: 'uppercase', letterSpacing: 1 },

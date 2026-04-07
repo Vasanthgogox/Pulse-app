@@ -1,11 +1,11 @@
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
@@ -19,12 +19,14 @@ import { useInvoiceCalc } from '@/features/invoicing/hooks/useInvoiceCalc';
 
 export interface InvoicePreviewPanelProps {
   onClose?: () => void;
-  onFinalize: (internalIds: string[]) => Promise<void>;
+  onFinalize: (internalIds: string[], notes: string, paymentTerms: string) => Promise<void>;
   isFinalizing: boolean;
   activeClient: string | null;
   selectedTrips: InvoicingTripView[];
   isStandalone?: boolean;
 }
+
+const PAYMENT_TERMS_OPTIONS = ['Due on Receipt', 'Net 15', 'Net 30', 'Net 45', 'Net 60'];
 
 export function InvoicePreviewPanel({
   onClose,
@@ -37,7 +39,9 @@ export function InvoicePreviewPanel({
   const insets = useSafeAreaInsets();
   
   const [paymentTerms, setPaymentTerms] = useState('Net 30');
+  const [showTermsModal, setShowTermsModal] = useState(false);
   const [notes, setNotes] = useState('');
+  
   const [includeGst, setIncludeGst] = useState(false);
   const [gstRate, setGstRate] = useState(5);
   const [includeFuel, setIncludeFuel] = useState(false);
@@ -76,7 +80,7 @@ export function InvoicePreviewPanel({
   const handleFinalize = async () => {
     if (selectedTrips.length === 0) return;
     const internalIds = selectedTrips.map((t) => t.internal_id);
-    await onFinalize(internalIds);
+    await onFinalize(internalIds, notes, paymentTerms);
   };
 
   return (
@@ -84,7 +88,6 @@ export function InvoicePreviewPanel({
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Invoice Draft <Text style={{ color: Theme.textMuted }}>#INV-DRAFT</Text></Text>
-          <Text style={styles.headerSub}>Configure tax, fuel, and adjustments</Text>
         </View>
         {onClose && (
           <Pressable style={styles.closeBtn} onPress={onClose} disabled={isFinalizing}>
@@ -120,40 +123,11 @@ export function InvoicePreviewPanel({
           </View>
         </View>
 
-        {/* Config Toggles */}
-        <View style={styles.configBlock}>
-          <Text style={styles.sectionLabel}>Configuration</Text>
-          
-          <View style={styles.toggleRow}>
-            <View style={styles.toggleText}>
-              <Text style={styles.toggleTitle}>Include GST (5%)</Text>
-              <Text style={styles.toggleSub}>Calculates CGST & SGST at 2.5% each</Text>
-            </View>
-            <Switch 
-              value={includeGst} 
-              onValueChange={setIncludeGst}
-              trackColor={{ true: Theme.primary, false: Theme.borderMedium }}
-            />
-          </View>
-
-          <View style={styles.toggleRow}>
-            <View style={styles.toggleText}>
-              <Text style={styles.toggleTitle}>Include Fuel Surcharge (2.5%)</Text>
-              <Text style={styles.toggleSub}>Calculated on base freight</Text>
-            </View>
-            <Switch 
-              value={includeFuel} 
-              onValueChange={setIncludeFuel}
-              trackColor={{ true: Theme.primary, false: Theme.borderMedium }}
-            />
-          </View>
-        </View>
-
         {/* Line Items */}
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionLabel}>Invoice Details</Text>
           <Pressable style={styles.addChargeBtn} onPress={() => handleAddCharge()}>
-            <FontAwesome name="plus" size={12} color={Theme.primary} />
+            <FontAwesome name="plus" size={12} color={Theme.textPrimaryDark} />
             <Text style={styles.addChargeText}>Add Custom Charge</Text>
           </Pressable>
         </View>
@@ -188,7 +162,8 @@ export function InvoicePreviewPanel({
         <View style={styles.tripsList}>
           {selectedTrips.length === 0 && (
             <View style={styles.emptyTrips}>
-              <Text style={styles.emptyTripsText}>No trips selected</Text>
+              <FontAwesome name="file-text-o" size={24} color={Theme.borderMedium} style={{ marginBottom: 8 }} />
+              <Text style={styles.emptyTripsText}>No context selected</Text>
             </View>
           )}
           {selectedTrips.map(trip => {
@@ -238,11 +213,57 @@ export function InvoicePreviewPanel({
           })}
         </View>
 
+        {/* Invoice Settings */}
+        <View style={styles.settingsBlock}>
+          <View style={styles.settingsRow}>
+            <Text style={styles.settingsLabel}>Payment Terms</Text>
+            <Pressable style={styles.settingsSelect} onPress={() => setShowTermsModal(true)}>
+              <Text style={styles.settingsSelectText}>{paymentTerms}</Text>
+              <FontAwesome name="chevron-down" size={12} color={Theme.textMuted} />
+            </Pressable>
+          </View>
+          
+          <View style={styles.settingsCol}>
+            <Text style={styles.settingsLabel}>Remarks / Notes</Text>
+            <TextInput
+              style={styles.notesInput}
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Add special instructions, PO references..."
+              placeholderTextColor={Theme.textMuted}
+              multiline
+              numberOfLines={2}
+            />
+          </View>
+
+          <View style={styles.settingsToggles}>
+            <Pressable 
+              style={styles.checkboxRow} 
+              onPress={() => setIncludeGst(!includeGst)}
+            >
+              <View style={[styles.checkbox, includeGst && styles.checkboxActive]}>
+                {includeGst && <FontAwesome name="check" size={10} color="#fff" />}
+              </View>
+              <Text style={styles.checkboxLabel}>Apply GST</Text>
+            </Pressable>
+
+            <Pressable 
+              style={styles.checkboxRow} 
+              onPress={() => setIncludeFuel(!includeFuel)}
+            >
+              <View style={[styles.checkbox, includeFuel && styles.checkboxActive]}>
+                {includeFuel && <FontAwesome name="check" size={10} color="#fff" />}
+              </View>
+              <Text style={styles.checkboxLabel}>Fuel Surcharge</Text>
+            </Pressable>
+          </View>
+        </View>
+
         {/* Calculations */}
         <View style={styles.calcBlock}>
-          <View style={styles.calcRow}>
-            <Text style={styles.calcLabel}>Base Freight Total</Text>
-            <Text style={styles.calcVal}>{formatCurrency(calculations.baseFreightTotal)}</Text>
+          <View style={[styles.calcRow, { marginBottom: 16 }]}>
+            <Text style={styles.calcLabelSubtotal}>Subtotal</Text>
+            <Text style={styles.calcValSubtotal}>{formatCurrency(calculations.subtotal)}</Text>
           </View>
           {calculations.additionalTotal !== 0 && (
             <View style={styles.calcRow}>
@@ -256,10 +277,6 @@ export function InvoicePreviewPanel({
               <Text style={styles.calcVal}>{formatCurrency(calculations.fuelSurcharge)}</Text>
             </View>
           )}
-          <View style={[styles.calcRow, styles.calcSubtotal]}>
-            <Text style={styles.calcLabelSubtotal}>Subtotal</Text>
-            <Text style={styles.calcValSubtotal}>{formatCurrency(calculations.subtotal)}</Text>
-          </View>
           {calculations.sgst > 0 && (
             <View style={styles.calcRow}>
               <Text style={styles.calcLabel}>SGST ({calculations.sgstRate}%)</Text>
@@ -272,20 +289,11 @@ export function InvoicePreviewPanel({
               <Text style={styles.calcVal}>{formatCurrency(calculations.cgst)}</Text>
             </View>
           )}
-          <View style={styles.calcTotalRow}>
-            <Text style={styles.calcTotalLabel}>Total Invoice Value</Text>
-            <Text style={styles.calcTotalVal}>{formatCurrency(calculations.totalAmount)}</Text>
-          </View>
         </View>
 
       </ScrollView>
 
       <View style={[styles.footer, !isStandalone && { paddingBottom: insets.bottom + 16 }]}>
-        {onClose && (
-          <Pressable style={styles.footerBtnOutline} onPress={onClose} disabled={isFinalizing}>
-            <Text style={styles.footerBtnOutlineText}>Cancel</Text>
-          </Pressable>
-        )}
         <Pressable 
           style={[styles.footerBtnPrimary, (isFinalizing || selectedTrips.length === 0) && styles.btnDisabled]} 
           onPress={handleFinalize}
@@ -295,12 +303,32 @@ export function InvoicePreviewPanel({
             <ActivityIndicator color={Theme.buttonPrimaryText} size="small" />
           ) : (
             <>
-              <FontAwesome name="send" size={14} color={Theme.buttonPrimaryText} style={{ marginRight: 8 }} />
-              <Text style={styles.footerBtnPrimaryText}>Finalize & Send</Text>
+              <FontAwesome name="database" size={14} color={Theme.buttonPrimaryText} style={{ marginRight: 8 }} />
+              <Text style={styles.footerBtnPrimaryText}>Finalize & Push to Supabase</Text>
             </>
           )}
         </Pressable>
       </View>
+
+      <Modal visible={showTermsModal} transparent animationType="fade">
+        <Pressable style={styles.modalOverlay} onPress={() => setShowTermsModal(false)}>
+          <View style={styles.termsModalContent}>
+            {PAYMENT_TERMS_OPTIONS.map(term => (
+              <Pressable 
+                key={term} 
+                style={styles.termOption} 
+                onPress={() => {
+                  setPaymentTerms(term);
+                  setShowTermsModal(false);
+                }}
+              >
+                <Text style={[styles.termOptionText, paymentTerms === term && styles.termOptionActive]}>{term}</Text>
+                {paymentTerms === term && <FontAwesome name="check" size={14} color={Theme.primary} />}
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -384,6 +412,19 @@ const styles = StyleSheet.create({
   calcTotalLabel: { fontSize: 16, fontWeight: '800', color: Theme.primary },
   calcTotalVal: { fontSize: 18, fontWeight: '800', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: Theme.primary },
 
+  settingsBlock: { backgroundColor: Theme.cardWhite, borderWidth: 1, borderColor: Theme.borderLight, borderRadius: 12, padding: 16, marginBottom: 24 },
+  settingsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  settingsCol: { marginBottom: 16 },
+  settingsLabel: { fontSize: 10, fontWeight: '800', color: Theme.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 },
+  settingsSelect: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: Theme.screenBackground, borderWidth: 1, borderColor: Theme.borderInput, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, width: '60%' },
+  settingsSelectText: { fontSize: 12, fontWeight: '700', color: Theme.textPrimaryDark },
+  notesInput: { backgroundColor: Theme.screenBackground, borderWidth: 1, borderColor: Theme.borderInput, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 12, color: Theme.textPrimaryDark, minHeight: 60, textAlignVertical: 'top' },
+  settingsToggles: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Theme.borderLight, paddingTop: 16 },
+  checkboxRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  checkbox: { width: 16, height: 16, borderRadius: 4, borderWidth: 1, borderColor: Theme.borderMedium, alignItems: 'center', justifyContent: 'center' },
+  checkboxActive: { backgroundColor: Theme.primary, borderColor: Theme.primary },
+  checkboxLabel: { fontSize: 10, fontWeight: '800', color: Theme.textMuted, textTransform: 'uppercase', letterSpacing: 1 },
+
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -400,4 +441,10 @@ const styles = StyleSheet.create({
   footerBtnPrimary: { flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: Theme.primary, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
   footerBtnPrimaryText: { fontSize: 14, fontWeight: '800', color: Theme.buttonPrimaryText, textTransform: 'uppercase', letterSpacing: 1 },
   btnDisabled: { opacity: 0.5 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'transparent', justifyContent: 'center', alignItems: 'center' },
+  termsModalContent: { backgroundColor: Theme.cardWhite, borderRadius: 12, padding: 8, width: 200, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8, borderWidth: 1, borderColor: Theme.borderLight },
+  termOption: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 8 },
+  termOptionText: { fontSize: 14, fontWeight: '600', color: Theme.textPrimaryDark },
+  termOptionActive: { color: Theme.primary, fontWeight: '800' },
 });

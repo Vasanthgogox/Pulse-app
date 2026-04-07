@@ -205,8 +205,10 @@ export default function LedgerSyncScreen() {
         const seen = new Set<string>();
         const merged: TripRow[] = [];
         for (const t of owned) {
-          merged.push(t);
-          seen.add(t.id);
+          if (!seen.has(t.id)) {
+            merged.push(t);
+            seen.add(t.id);
+          }
         }
         for (const t of asClient) {
           if (!seen.has(t.id)) {
@@ -290,6 +292,15 @@ export default function LedgerSyncScreen() {
       }
     });
   }, [orgId, params.entityType, params.entityId]);
+
+  const uniqueLinkedClientIdByOrgId = useMemo(
+    () => buildUniqueLinkedOrgIdMap(clients),
+    [clients],
+  );
+  const uniqueLinkedSupplierIdByOrgId = useMemo(
+    () => buildUniqueLinkedOrgIdMap(suppliers),
+    [suppliers],
+  );
 
   /** When opened from entity detail (vehicle/driver/client/supplier), show that entity's trips. For SUPPLIER, include owned trips and trips where org is client (integrated supplier-created). */
   const filteredTrips = useMemo(() => {
@@ -425,15 +436,6 @@ export default function LedgerSyncScreen() {
     });
     return m;
   }, [suppliers, clients]);
-
-  const uniqueLinkedClientIdByOrgId = useMemo(
-    () => buildUniqueLinkedOrgIdMap(clients),
-    [clients],
-  );
-  const uniqueLinkedSupplierIdByOrgId = useMemo(
-    () => buildUniqueLinkedOrgIdMap(suppliers),
-    [suppliers],
-  );
 
   /** Trip-level due for amount placeholder when trip is locked (aligns with mission row SALES/RECEIVED/DUE). */
   const tripComputedDues = useMemo(() => {
