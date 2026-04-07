@@ -115,7 +115,6 @@ export function InvoicingExecuteScreen() {
     
     return allTrips.filter((t) => {
       if (t.client !== activeClient) return false;
-      if (t.status === 'pending') return false; 
       
       if (q && !t.id.toLowerCase().includes(q) && !t.route.toLowerCase().includes(q)) return false;
       
@@ -124,6 +123,10 @@ export function InvoicingExecuteScreen() {
       if (eDate && tripDate > eDate) return false;
 
       return true;
+    }).sort((a, b) => {
+      // Sort: Approved first, then Received, then Pending
+      const statusOrder = { approved: 0, received: 1, pending: 2, warning: 3, blocked: 4 };
+      return statusOrder[a.status] - statusOrder[b.status];
     });
   }, [allTrips, activeClient, searchQuery, startDate, endDate]);
 
@@ -137,21 +140,30 @@ export function InvoicingExecuteScreen() {
     return selectedTripIds.map((id) => tripsById.get(id)).filter(Boolean);
   }, [tripsById, selectedTripIds]);
 
-  const allClientTripsSelected = clientTrips.length > 0 && clientTrips.every((t) => selectedTripIds.includes(t.id));
+  const invoiceableTrips = useMemo(() => clientTrips, [clientTrips]);
+  const allClientTripsSelected = invoiceableTrips.length > 0 && invoiceableTrips.every((t) => selectedTripIds.includes(t.id));
 
   const handleToggleTrip = useCallback((id: string) => {
     setSelectedTripIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
   }, []);
 
   const handleSelectAll = useCallback(() => {
-    if (allClientTripsSelected) {
-      const ids = clientTrips.map((t) => t.id);
+    const invoiceableTrips = clientTrips;
+    
+    if (invoiceableTrips.length === 0) {
+      return;
+    }
+
+    const allInvoiceableSelected = invoiceableTrips.every((t) => selectedTripIds.includes(t.id));
+
+    if (allInvoiceableSelected) {
+      const ids = invoiceableTrips.map((t) => t.id);
       setSelectedTripIds((prev) => prev.filter((id) => !ids.includes(id)));
     } else {
-      const ids = clientTrips.map((t) => t.id);
+      const ids = invoiceableTrips.map((t) => t.id);
       setSelectedTripIds((prev) => Array.from(new Set([...prev, ...ids])));
     }
-  }, [allClientTripsSelected, clientTrips]);
+  }, [clientTrips, selectedTripIds]);
 
   const selectClient = (clientName: string) => {
     setActiveClient(clientName);
@@ -159,9 +171,9 @@ export function InvoicingExecuteScreen() {
     setClientModalOpen(false);
   };
 
-  const handleFinalize = async (internalIds: string[]) => {
+  const handleFinalize = async (internalIds: string[], payload?: any) => {
     try {
-      await executeMutation.mutateAsync(internalIds);
+      await executeMutation.mutateAsync({ internalIds, payload });
       setPreviewModalOpen(false);
       setSelectedTripIds([]);
       Alert.alert('Success', 'Invoice finalized and dispatched!');
@@ -231,6 +243,8 @@ export function InvoicingExecuteScreen() {
                   <Text style={styles.tagApproved}>Invoice Pending</Text>
                 ) : client.received > 0 ? (
                   <Text style={styles.tagReceived}>Audit Required</Text>
+                ) : client.pending > 0 ? (
+                  <Text style={styles.tagPending}>POD Pending</Text>
                 ) : (
                   <Text style={styles.tagSettled}>Settled</Text>
                 )}
@@ -491,50 +505,59 @@ function TripListContent({
             <Text style={styles.emptyTitle}>No Active Transactions</Text>
           </View>
         }
-        renderItem={({ item: trip }) => (
-          <Pressable 
-            style={[styles.tripTableRow, selectedTripIds.includes(trip.id) && styles.tripTableRowSelected]}
-            onPress={() => onToggleTrip(trip.id)}
-          >
-            <View style={styles.selectAllGroup}>
-              <View style={[styles.checkBox, selectedTripIds.includes(trip.id) && styles.checkBoxOn]}>
-                {selectedTripIds.includes(trip.id) && <FontAwesome name="check" size={10} color="#fff" />}
+        renderItem={({ item: trip }) => {
+          const isPending = trip.status === 'pending';
+          return (
+            <Pressable 
+              style={[
+                styles.tripTableRow, 
+                selectedTripIds.includes(trip.id) && styles.tripTableRowSelected
+              ]}
+              onPress={() => onToggleTrip(trip.id)}
+            >
+              <View style={styles.selectAllGroup}>
+                <View style={[
+                  styles.checkBox, 
+                  selectedTripIds.includes(trip.id) && styles.checkBoxOn
+                ]}>
+                  {selectedTripIds.includes(trip.id) && <FontAwesome name="check" size={10} color="#fff" />}
+                </View>
               </View>
-            </View>
-            
-            <View style={{ width: 100 }}>
-              <Text style={styles.tripDate}>{new Date(trip.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
-              <Text style={styles.tripId}>{trip.id}</Text>
-            </View>
-            
-            <View style={{ flex: 1.5 }}>
-              <Text style={styles.tripSupplier} numberOfLines={1}>{trip.supplier_name}</Text>
-            </View>
-            
-            <View style={{ flex: 2 }}>
-              <Text style={styles.tripRoute} numberOfLines={1}>{trip.route}</Text>
-              <Text style={styles.tripDetails} numberOfLines={1}>{trip.details || 'Vehicle N/A'}</Text>
-            </View>
-            
-            <View style={{ width: 80, alignItems: 'flex-end' }}>
-              <Text style={styles.tripAmount}>₹{trip.amount.toLocaleString()}</Text>
-            </View>
-            
-            <View style={{ width: 60, alignItems: 'flex-end' }}>
-              <Text style={styles.tripExtras}>₹0</Text>
-            </View>
+              
+              <View style={{ width: 100 }}>
+                <Text style={styles.tripDate}>{new Date(trip.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
+                <Text style={styles.tripId}>{trip.id}</Text>
+              </View>
+              
+              <View style={{ flex: 1.5 }}>
+                <Text style={styles.tripSupplier} numberOfLines={1}>{trip.supplier_name}</Text>
+              </View>
+              
+              <View style={{ flex: 2 }}>
+                <Text style={styles.tripRoute} numberOfLines={1}>{trip.route}</Text>
+                <Text style={styles.tripDetails} numberOfLines={1}>{trip.details || 'Vehicle N/A'}</Text>
+              </View>
+              
+              <View style={{ width: 80, alignItems: 'flex-end' }}>
+                <Text style={styles.tripAmount}>₹{trip.amount.toLocaleString()}</Text>
+              </View>
+              
+              <View style={{ width: 60, alignItems: 'flex-end' }}>
+                <Text style={styles.tripExtras}>₹0</Text>
+              </View>
 
-            <View style={{ width: 80, alignItems: 'center' }}>
-              {trip.status === 'approved' ? (
-                <Text style={styles.tagApproved}>Approved</Text>
-              ) : trip.status === 'received' ? (
-                <Text style={styles.tagReceived}>Received</Text>
-              ) : (
-                <Text style={styles.tagPending}>Pending</Text>
-              )}
-            </View>
-          </Pressable>
-        )}
+              <View style={{ width: 80, alignItems: 'center' }}>
+                {trip.status === 'approved' ? (
+                  <Text style={styles.listTagApproved}>Approved</Text>
+                ) : trip.status === 'received' ? (
+                  <Text style={styles.listTagReceived}>Received</Text>
+                ) : (
+                  <Text style={styles.listTagPending}>Pending</Text>
+                )}
+              </View>
+            </Pressable>
+          );
+        }}
       />
     </View>
   );
@@ -594,6 +617,7 @@ const styles = StyleSheet.create({
   clientName: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', color: Theme.textPrimaryDark },
   tagApproved: { fontSize: 9, fontWeight: '800', color: '#059669', backgroundColor: 'rgba(5,150,105,0.1)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, textTransform: 'uppercase' },
   tagReceived: { fontSize: 9, fontWeight: '800', color: '#2563eb', backgroundColor: 'rgba(37,99,235,0.1)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, textTransform: 'uppercase' },
+  tagPending: { fontSize: 9, fontWeight: '800', color: '#b45309', backgroundColor: 'rgba(180,83,9,0.1)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, textTransform: 'uppercase' },
   tagSettled: { fontSize: 9, fontWeight: '800', color: Theme.textMuted, backgroundColor: Theme.surfaceBorder, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, textTransform: 'uppercase' },
   clientRowBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   clientBilled: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -652,10 +676,10 @@ const styles = StyleSheet.create({
   tripAmount: { fontSize: 11, fontWeight: '800', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: Theme.textPrimaryDark },
   tripExtras: { fontSize: 9, fontWeight: '800', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: Theme.textMuted },
 
-  tagPending: { fontSize: 8, fontWeight: '800', color: '#b45309', backgroundColor: 'rgba(180,83,9,0.1)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, textTransform: 'uppercase', borderWidth: 1, borderColor: 'rgba(180,83,9,0.2)' },
-  tagApproved: { fontSize: 8, fontWeight: '800', color: '#059669', backgroundColor: 'rgba(5,150,105,0.1)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, textTransform: 'uppercase', borderWidth: 1, borderColor: 'rgba(5,150,105,0.2)' },
-  tagReceived: { fontSize: 8, fontWeight: '800', color: '#2563eb', backgroundColor: 'rgba(37,99,235,0.1)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, textTransform: 'uppercase', borderWidth: 1, borderColor: 'rgba(37,99,235,0.2)' },
-  tagSettled: { fontSize: 8, fontWeight: '800', color: Theme.textMuted, backgroundColor: Theme.surfaceBorder, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, textTransform: 'uppercase', borderWidth: 1, borderColor: Theme.borderMedium },
+  listTagPending: { fontSize: 8, fontWeight: '800', color: '#b45309', backgroundColor: 'rgba(180,83,9,0.1)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, textTransform: 'uppercase', borderWidth: 1, borderColor: 'rgba(180,83,9,0.2)' },
+  listTagApproved: { fontSize: 8, fontWeight: '800', color: '#059669', backgroundColor: 'rgba(5,150,105,0.1)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, textTransform: 'uppercase', borderWidth: 1, borderColor: 'rgba(5,150,105,0.2)' },
+  listTagReceived: { fontSize: 8, fontWeight: '800', color: '#2563eb', backgroundColor: 'rgba(37,99,235,0.1)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, textTransform: 'uppercase', borderWidth: 1, borderColor: 'rgba(37,99,235,0.2)' },
+  listTagSettled: { fontSize: 8, fontWeight: '800', color: Theme.textMuted, backgroundColor: Theme.surfaceBorder, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, textTransform: 'uppercase', borderWidth: 1, borderColor: Theme.borderMedium },
 
   empty: { alignItems: 'center', paddingVertical: 48 },
   emptyTitle: { fontSize: 13, fontWeight: '800', color: Theme.textPrimaryDark, marginTop: 12, textTransform: 'uppercase', letterSpacing: 1 },

@@ -17,14 +17,14 @@ import Layout from '@/constants/Layout';
 import type { AdditionalCharge, InvoicingTripView } from '@/features/invoicing/services/invoicing.service';
 import { useInvoiceCalc } from '@/features/invoicing/hooks/useInvoiceCalc';
 
-export interface InvoicePreviewPanelProps {
-  onClose?: () => void;
-  onFinalize: (internalIds: string[], notes: string, paymentTerms: string) => Promise<void>;
-  isFinalizing: boolean;
-  activeClient: string | null;
-  selectedTrips: InvoicingTripView[];
-  isStandalone?: boolean;
-}
+  export interface InvoicePreviewPanelProps {
+    onClose?: () => void;
+    onFinalize: (internalIds: string[], payload?: any) => Promise<void>;
+    isFinalizing: boolean;
+    activeClient: string | null;
+    selectedTrips: InvoicingTripView[];
+    isStandalone?: boolean;
+  }
 
 const PAYMENT_TERMS_OPTIONS = ['Due on Receipt', 'Net 15', 'Net 30', 'Net 45', 'Net 60'];
 
@@ -80,7 +80,16 @@ export function InvoicePreviewPanel({
   const handleFinalize = async () => {
     if (selectedTrips.length === 0) return;
     const internalIds = selectedTrips.map((t) => t.internal_id);
-    await onFinalize(internalIds, notes, paymentTerms);
+    await onFinalize(internalIds, {
+      notes,
+      paymentTerms,
+      includeGst,
+      gstRate,
+      includeFuel,
+      fuelRate,
+      additionalCharges,
+      calculations,
+    });
   };
 
   return (
@@ -289,6 +298,11 @@ export function InvoicePreviewPanel({
               <Text style={styles.calcVal}>{formatCurrency(calculations.cgst)}</Text>
             </View>
           )}
+          <View style={styles.calcSubtotal} />
+          <View style={styles.calcTotalRow}>
+            <Text style={styles.calcTotalLabel}>Total</Text>
+            <Text style={styles.calcTotalVal}>{formatCurrency(calculations.totalAmount)}</Text>
+          </View>
         </View>
 
       </ScrollView>

@@ -1,7 +1,6 @@
 /**
  * Treasury header + tab row + summary card (totals, search, filters).
  */
-import { TeslaHeader } from "@/components/TeslaHeader";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -97,14 +96,6 @@ export function FinanceSummarySection({
   const { t } = useLanguage();
   return (
     <View style={[styles.darkBlock, { paddingTop: 0 }]}>
-      <TeslaHeader
-        title={title}
-        subtitle={subtitle}
-        onLoadClick={() => router.push("/load-board")}
-        onNetworkClick={() => router.push("/(tabs)/network")}
-        onProfileClick={() => router.push("/(tabs)/profile")}
-        onAddClick={onAddClick}
-      />
       <View style={styles.darkBlockContent}>
         <TreasurySummaryCard
           fullWidth

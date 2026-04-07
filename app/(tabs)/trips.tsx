@@ -4,7 +4,6 @@
  */
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { FinanceFAB } from "@/components/FinanceFAB";
-import { TeslaHeader } from "@/components/TeslaHeader";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -357,14 +356,6 @@ export default function TripsScreen() {
         { paddingTop: insets.top + Layout.tabBarHeight + 20 },
       ]}
     >
-      <TeslaHeader
-        title={tr("tripsControl")}
-        subtitle={tr("logisticNodes")}
-        skipSafeAreaTop
-        onLoadClick={() => router.push("/load-board")}
-        onNetworkClick={() => router.push("/(tabs)/network")}
-        onProfileClick={() => router.push("/(tabs)/profile")}
-      />
       <View style={styles.headerBlock}>
         {Platform.OS === "web" ? (
           <View style={styles.tabRowWeb}>

@@ -183,7 +183,7 @@ export async function fetchPodReconciliationSummary(): Promise<{
   summary: PodReconciliationSummary | null;
 }> {
   try {
-    const { data, error } = await supabase.rpc('get_pod_reconciliation_summary');
+    const { data, error } = await supabase().rpc('get_pod_reconciliation_summary');
     if (error) throw error;
     const summary = Array.isArray(data) ? data[0] : data;
     return {
@@ -206,26 +206,26 @@ export async function fetchPodReconciliationSummary(): Promise<{
 
 export async function executeInvoiceCreation(
   internalIds: string[],
+  payload?: any
 ): Promise<{ error: Error | null }> {
   try {
     const invoiceNo = `#INV-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}${Math.floor(Math.random() * 90) + 10}`;
-    const { error } = await supabase
+    const { error } = await supabase()
       .from('trips')
       .update({
         invoice_no: invoiceNo,
         invoice_status_1: 'Raised',
-        invoice_date: new Date().toISOString().split('T')[0],
       })
       .in('id', internalIds);
 
     if (error) throw error;
 
     for (const id of internalIds) {
-      await supabase.rpc('log_activity', {
+      await supabase().rpc('log_activity', {
         p_action: 'INVOICE_GENERATED',
         p_entity_type: 'trip',
         p_entity_id: id,
-        p_details: { invoice_no: invoiceNo },
+        p_details: { invoice_no: invoiceNo, payload },
       });
     }
 
