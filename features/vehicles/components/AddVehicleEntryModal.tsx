@@ -779,6 +779,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Theme.textPrimaryDark,
     paddingVertical: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      } as any,
+    }),
   },
   twoCol: { flexDirection: 'row', gap: 12 },
   fieldBlock: {
@@ -813,6 +818,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Theme.textPrimaryDark,
     paddingVertical: 4,
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      } as any,
+    }),
   },
   fieldChevron: { marginLeft: 4, flexShrink: 0 },
   pickerList: {

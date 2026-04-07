@@ -2086,6 +2086,11 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     paddingVertical: 0,
     letterSpacing: -0.5,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
 
   tagsRow: {
@@ -2158,6 +2163,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textPrimaryDark,
     paddingVertical: 6,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   fieldInputError: { borderWidth: 1, borderColor: Theme.negative, borderRadius: 8 },
   fieldErrorText: {

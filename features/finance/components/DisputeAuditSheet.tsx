@@ -468,6 +468,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Theme.textPrimaryDark,
     marginBottom: 12,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   inputError: { borderColor: Theme.negative },
   formErrorText: {

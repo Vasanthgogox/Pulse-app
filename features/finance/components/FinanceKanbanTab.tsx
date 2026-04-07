@@ -236,10 +236,14 @@ export function FinanceKanbanTab({
 
           {(row.trip_number || row.trip_id) && !isExpanded && (
             <View style={styles.tripRow}>
-              <View style={styles.tripBadge}>
+              <TouchableOpacity 
+                style={styles.tripBadge}
+                onPress={() => onRowSelect?.(row)}
+                activeOpacity={0.6}
+              >
                 <FontAwesome name="map-marker" size={10} color={Theme.primary} style={{ marginRight: 4 }} />
                 <Text style={styles.tripText}>{row.trip_number || 'TRIP'}</Text>
-              </View>
+              </TouchableOpacity>
             </View>
           )}
 

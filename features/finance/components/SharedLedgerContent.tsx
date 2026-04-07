@@ -32,6 +32,7 @@ import {
     ActivityIndicator,
     Alert,
     Modal,
+    Platform,
     ScrollView,
     Share,
     StyleSheet,
@@ -2353,6 +2354,11 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     minHeight: 64,
     textAlignVertical: "top",
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   modalActions: {
     flexDirection: "row",
