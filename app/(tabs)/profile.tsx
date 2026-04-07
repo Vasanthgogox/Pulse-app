@@ -248,6 +248,23 @@ export default function ProfileScreen() {
               </View>
               <FontAwesome name="chevron-right" size={14} color={Theme.textMuted} />
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.menuRow, styles.menuDivider]}
+              onPress={() => router.push('/invoicing-execute')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.menuLeft}>
+                <View style={styles.menuIconWrap}>
+                  <FontAwesome name="file-text" size={16} color={Theme.textPrimaryDark} />
+                </View>
+                <View style={styles.menuTextWrap}>
+                  <Text style={styles.menuValue}>Execute invoices</Text>
+                  <Text style={styles.menuLabel}>Review and generate invoices for confirmed trips</Text>
+                </View>
+              </View>
+              <FontAwesome name="chevron-right" size={14} color={Theme.textMuted} />
+            </TouchableOpacity>
           </View>
         ) : null}
 
