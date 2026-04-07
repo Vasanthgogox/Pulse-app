@@ -85,4 +85,9 @@ export const queryKeys = {
     trips: (orgId: string) => ['q', 'log-pods', 'trips', orgId] as const,
     courierPartners: () => ['q', 'log-pods', 'courier-partners'] as const,
   },
+
+  invoicing: {
+    trips: (orgId: string) => ['q', 'invoicing', 'trips', orgId] as const,
+    summary: (orgId: string) => ['q', 'invoicing', 'summary', orgId] as const,
+  },
 } as const;

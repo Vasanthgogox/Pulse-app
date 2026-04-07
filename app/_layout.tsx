@@ -227,6 +227,7 @@ function RootLayoutNav() {
           <Stack.Screen name="load-board" options={{ presentation: 'fullScreenModal' }} />
           <Stack.Screen name="create-indent" options={{ presentation: 'fullScreenModal' }} />
           <Stack.Screen name="log-incoming-pods" options={{ presentation: 'card', animation: 'slide_from_right' }} />
+          <Stack.Screen name="invoicing-execute" options={{ presentation: 'card', animation: 'slide_from_right' }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
           <Stack.Screen name="(modals)" options={{ presentation: 'modal' }} />
         </Stack>
