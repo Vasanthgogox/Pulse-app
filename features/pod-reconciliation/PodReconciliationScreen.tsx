@@ -30,7 +30,7 @@ import {
   usePodReconciliationSummaryQuery 
 } from './lib/usePodReconciliationQueries';
 import type { PodTab, PodReconciliationTripView } from './services/podReconciliationService';
-import { PodValidationModal } from './components/PodValidationModal';
+import { PodValidationView } from './components/PodValidationView';
 
 function canAccessPodManagement(profile: ReturnType<typeof useAuth>['profile']): boolean {
   if (!profile || profile.role === 'driver') return false;
@@ -95,8 +95,9 @@ export function PodReconciliationScreen() {
   if (orgLoading || !orgId) return <CenteredLoadingView message={orgLoading ? 'Loading...' : 'No organization'} />;
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
-      <View style={styles.topBar}>
+    <View style={[styles.root, { paddingTop: insets.top, flexDirection: isMediumScreen ? 'row' : 'column' }]}>
+      <View style={[styles.mainColumn, isMediumScreen && { flex: 0.4, borderRightWidth: 1, borderColor: Theme.borderLight }]}>
+        <View style={styles.topBar}>
         <View style={styles.topBarLeft}>
           <Pressable style={styles.iconBtn} onPress={() => router.back()} hitSlop={12}>
             <FontAwesome name="arrow-left" size={20} color={Theme.textMuted} />
@@ -241,15 +242,34 @@ export function PodReconciliationScreen() {
           />
         )}
       </View>
+      {isMediumScreen && (
+        <View style={styles.tabletRightPanel}>
+          {selectedTrip ? (
+            <PodValidationView
+              isTablet={true}
+              trip={selectedTrip}
+              onClose={() => setSelectedTrip(null)}
+            />
+          ) : (
+            <View style={styles.empty}>
+              <FontAwesome name="file-text-o" size={48} color={Theme.borderMedium} />
+              <Text style={styles.emptyTitle}>No trip selected</Text>
+              <Text style={styles.emptySub}>Select a trip from the list to validate.</Text>
+            </View>
+          )}
+        </View>
+      )}
+      </View>
 
-      <PodValidationModal
-        visible={validationModalOpen}
-        trip={selectedTrip}
-        onClose={() => {
-          setValidationModalOpen(false);
-          setSelectedTrip(null);
-        }}
-      />
+      {!isMediumScreen && validationModalOpen && (
+        <PodValidationView
+          trip={selectedTrip}
+          onClose={() => {
+            setValidationModalOpen(false);
+            setSelectedTrip(null);
+          }}
+        />
+      )}
 
       <Modal visible={regionModalOpen} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
@@ -355,6 +375,8 @@ function TripRowItem({ trip, onPress }: { trip: PodReconciliationTripView; onPre
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Theme.screenBackground },
+  mainColumn: { flex: 1, flexDirection: 'column' },
+  tabletRightPanel: { flex: 0.6, backgroundColor: Theme.screenBackground },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -464,7 +486,7 @@ const styles = StyleSheet.create({
   routeText: { fontSize: 11, fontWeight: '600', color: Theme.textSecondary },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   statusBadgeText: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
-  lrContainer: { marginTop: 8, pt: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Theme.borderLight, flexDirection: 'row', alignItems: 'center' },
+  lrContainer: { marginTop: 8, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Theme.borderLight, flexDirection: 'row', alignItems: 'center' },
   lrLabel: { fontSize: 10, fontWeight: '700', color: Theme.textMuted },
   lrText: { fontSize: 10, fontWeight: '700', color: Theme.textPrimaryDark },
 

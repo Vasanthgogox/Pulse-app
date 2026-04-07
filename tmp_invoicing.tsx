@@ -60,7 +60,8 @@ export function InvoicingExecuteScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [step, setStep] = useState<0 | 1 | 2>(0);
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [clientModalOpen, setClientModalOpen] = useState(false);
 
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 1024;
@@ -167,13 +168,13 @@ export function InvoicingExecuteScreen() {
   const selectClient = (clientName: string) => {
     setActiveClient(clientName);
     setSelectedTripIds([]);
-    setStep(1);
+    setClientModalOpen(false);
   };
 
   const handleFinalize = async (internalIds: string[], payload?: any) => {
     try {
       await executeMutation.mutateAsync({ internalIds, payload });
-      setStep(0);
+      setPreviewModalOpen(false);
       setSelectedTripIds([]);
       Alert.alert('Success', 'Invoice finalized and dispatched!');
       router.back();
@@ -333,75 +334,42 @@ export function InvoicingExecuteScreen() {
           </View>
         ) : (
           <View style={{ flex: 1 }}>
-            {step === 0 && (
-              <View style={styles.mobileStepContainer}>
-                <Text style={[styles.sectionLabel, { paddingHorizontal: 16, paddingTop: 16 }]}>Select Strategic Partner</Text>
-                {renderSidebar()}
-              </View>
-            )}
-            
-            {step === 1 && (
-              <View style={styles.mobileStepContainer}>
-                <View style={styles.mobileConfig}>
-                  <Text style={styles.sectionLabel}>Strategic Partner</Text>
-                  <Pressable style={styles.selectRow} onPress={() => setStep(0)}>
-                    <Text style={styles.selectRowText} numberOfLines={1}>
-                      {activeClient || 'Select a client...'}
-                    </Text>
-                    <Text style={{ fontSize: 12, color: Theme.primary, fontWeight: '700' }}>Change</Text>
-                  </Pressable>
-                </View>
-                <View style={styles.mobileGridArea}>
-                  <TripListContent 
-                    clientTrips={clientTrips}
-                    activeClient={activeClient}
-                    selectedTripIds={selectedTripIds}
-                    allSelected={allClientTripsSelected}
-                    onSelectAll={handleSelectAll}
-                    onToggleTrip={handleToggleTrip}
-                    searchQuery={searchQuery}
-                    setSearchQuery={setSearchQuery}
-                    startDate={startDate}
-                    setStartDate={setStartDate}
-                    endDate={endDate}
-                    setEndDate={setEndDate}
-                    isRefetching={isRefetching}
-                    refetch={refetch}
-                  />
-                </View>
-              </View>
-            )}
-
-            {step === 2 && (
-              <View style={styles.mobileStepContainer}>
-                <View style={styles.mobileConfig}>
-                  <Pressable style={styles.selectRow} onPress={() => setStep(1)}>
-                    <FontAwesome name="arrow-left" size={14} color={Theme.textMuted} />
-                    <Text style={[styles.selectRowText, { marginLeft: 8 }]} numberOfLines={1}>
-                      Back to Trips ({selectedTripIds.length} selected)
-                    </Text>
-                  </Pressable>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <InvoicePreviewPanel
-                    onFinalize={handleFinalize}
-                    isFinalizing={executeMutation.isPending}
-                    activeClient={activeClient}
-                    selectedTrips={selectedTrips}
-                    isStandalone={true}
-                  />
-                </View>
-              </View>
-            )}
+            <View style={styles.mobileConfig}>
+              <Text style={styles.sectionLabel}>Strategic Partner</Text>
+              <Pressable style={styles.selectRow} onPress={() => setClientModalOpen(true)}>
+                <Text style={styles.selectRowText} numberOfLines={1}>
+                  {activeClient || 'Select a client...'}
+                </Text>
+                <FontAwesome name="chevron-down" size={14} color={Theme.textMuted} />
+              </Pressable>
+            </View>
+            <View style={styles.mobileGridArea}>
+              <TripListContent 
+                clientTrips={clientTrips}
+                activeClient={activeClient}
+                selectedTripIds={selectedTripIds}
+                allSelected={allClientTripsSelected}
+                onSelectAll={handleSelectAll}
+                onToggleTrip={handleToggleTrip}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                startDate={startDate}
+                setStartDate={setStartDate}
+                endDate={endDate}
+                setEndDate={setEndDate}
+                isRefetching={isRefetching}
+                refetch={refetch}
+              />
+            </View>
           </View>
         )}
       </View>
 
-      {!isMediumScreen && step === 1 && (
+      {!isMediumScreen && (
         <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
           <Pressable
             style={[styles.footerBtn, selectedTripIds.length === 0 && styles.footerBtnDisabled]}
-            onPress={() => setStep(2)}
+            onPress={() => setPreviewModalOpen(true)}
             disabled={selectedTripIds.length === 0}
           >
             <Text style={styles.footerBtnText}>Configure Invoice ({selectedTripIds.length})</Text>
@@ -413,7 +381,7 @@ export function InvoicingExecuteScreen() {
         <View style={styles.desktopFooter}>
           <Pressable
             style={[styles.footerBtn, { alignSelf: 'flex-end', minWidth: 240 }, selectedTripIds.length === 0 && styles.footerBtnDisabled]}
-            onPress={() => setStep(2)}
+            onPress={() => setPreviewModalOpen(true)}
             disabled={selectedTripIds.length === 0}
           >
             <Text style={styles.footerBtnText}>Preview Invoice ({selectedTripIds.length})</Text>
@@ -421,6 +389,26 @@ export function InvoicingExecuteScreen() {
         </View>
       )}
 
+      <Modal visible={clientModalOpen} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, { maxHeight: '80%' }]}>
+            <Text style={styles.modalTitle}>Select Partner</Text>
+            {renderSidebar()}
+            <Pressable style={styles.modalClose} onPress={() => setClientModalOpen(false)}>
+              <Text style={styles.modalCloseText}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <InvoicePreviewModal
+        visible={previewModalOpen}
+        onClose={() => setPreviewModalOpen(false)}
+        activeClient={activeClient}
+        selectedTrips={selectedTrips}
+        onFinalize={handleFinalize}
+        isFinalizing={executeMutation.isPending}
+      />
     </View>
   );
 }
@@ -636,7 +624,6 @@ const styles = StyleSheet.create({
   dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: Theme.borderMedium },
   clientBilledText: { fontSize: 9, fontWeight: '700', color: Theme.textMuted, textTransform: 'uppercase', letterSpacing: 1 },
 
-  mobileStepContainer: { flex: 1, backgroundColor: Theme.screenBackground },
   mobileConfig: { padding: Layout.screenPaddingHorizontal, paddingTop: 16, backgroundColor: Theme.screenBackground, borderBottomWidth: 1, borderBottomColor: Theme.borderLight },
   sectionLabel: { fontSize: 10, fontWeight: '800', color: Theme.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 },
   selectRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: Theme.borderInput, backgroundColor: Theme.cardWhite, marginBottom: 16 },

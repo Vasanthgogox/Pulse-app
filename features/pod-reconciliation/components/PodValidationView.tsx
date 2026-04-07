@@ -19,13 +19,13 @@ import { supabase } from '@/lib/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PodReconciliationTripView } from '../services/podReconciliationService';
 
-interface PodValidationModalProps {
+interface PodValidationViewProps {
   trip: PodReconciliationTripView | null;
-  visible: boolean;
   onClose: () => void;
+  isTablet?: boolean;
 }
 
-export function PodValidationModal({ trip, visible, onClose }: PodValidationModalProps) {
+export function PodValidationView({ trip, onClose, isTablet }: PodValidationViewProps) {
   const queryClient = useQueryClient();
   const [shortage, setShortage] = useState('0');
   const [damage, setDamage] = useState('0');
@@ -45,7 +45,7 @@ export function PodValidationModal({ trip, visible, onClose }: PodValidationModa
       if (error) throw error;
       return data;
     },
-    enabled: !!trip?.internal_id && visible
+    enabled: !!trip?.internal_id
   });
 
   const getFileUrl = (path: string) => {
@@ -61,7 +61,14 @@ export function PodValidationModal({ trip, visible, onClose }: PodValidationModa
       const d = parseFloat(damage) || 0;
       const p = parseFloat(penalty) || 0;
       const totalDeductions = s + d + p;
-      const finalAmount = (trip.amount || 0) - totalDeductions;
+
+      if (totalDeductions > (trip.total_client_value || 0)) {
+        Alert.alert('Validation Error', 'Total deductions cannot exceed the trip amount.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const finalAmount = (trip.total_client_value || 0) - totalDeductions;
 
       const { error: tripError } = await supabase()
         .from("trips")
@@ -70,10 +77,10 @@ export function PodValidationModal({ trip, visible, onClose }: PodValidationModa
           pod_status: 'Received',
           invoice_status_1: 'Pending',
           pod_received_date: trip.pod_received_date || new Date().toISOString().split('T')[0],
-          // Keep these for compatibility if columns exist, they will be ignored if not (PostgREST won't fail if column is missing on update? Wait, actually it will fail if column is missing)
-          // So I should only include them if I'm sure they exist. 
-          // Since I'm NOT sure, I'll append them to remarks/notes for now if they are non-zero.
-          notes: (trip.notes || '') + `\nAudit: S:${s} D:${d} P:${p}. ${remarks}`.trim()
+          audit_shortage: s,
+          audit_damage: d,
+          audit_penalty: p,
+          audit_remarks: remarks,
         })
         .eq("id", trip.internal_id);
 
@@ -105,8 +112,100 @@ export function PodValidationModal({ trip, visible, onClose }: PodValidationModa
 
   if (!trip) return null;
 
+  const content = (
+    <>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Trip Details</Text>
+          <View style={styles.infoCard}>
+            <InfoRow label="Client" value={trip.client_name} />
+            <InfoRow label="Route" value={`${trip.pp_location} ➔ ${trip.drop_point}`} />
+            <InfoRow label="Amount" value={`₹${trip.total_client_value.toLocaleString()}`} />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Audit Adjustments</Text>
+          <View style={styles.inputCard}>
+            <AuditInput label="Shortage" value={shortage} onChange={setShortage} />
+            <AuditInput label="Damage" value={damage} onChange={setDamage} />
+            <AuditInput label="Penalty" value={penalty} onChange={setPenalty} />
+            <View style={styles.remarksBox}>
+              <Text style={styles.inputLabel}>Remarks</Text>
+              <TextInput
+                style={styles.textArea}
+                value={remarks}
+                onChangeText={setRemarks}
+                placeholder="Add audit notes..."
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Attachments ({attachments.length})</Text>
+          {isLoadingAttachments ? (
+            <ActivityIndicator size="small" color={Theme.primary} />
+          ) : attachments.length === 0 ? (
+            <Text style={styles.emptyText}>No documents attached.</Text>
+          ) : (
+            <View style={styles.attachmentGrid}>
+              {attachments.map((att: any) => (
+                <Pressable key={att.id} style={styles.attachmentItem}>
+                  {att.file_type && att.file_type.startsWith('image/') ? (
+                    <Image 
+                      source={{ uri: getFileUrl(att.file_path) }} 
+                      style={{ width: '100%', height: 100, borderRadius: 8 }} 
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <FontAwesome name="file-pdf-o" size={40} color={Theme.primary} />
+                  )}
+                  <Text style={styles.attachmentName} numberOfLines={1}>{att.file_name}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+
+      <View style={styles.footer}>
+        <Pressable 
+          style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]} 
+          onPress={handleValidate}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.submitBtnText}>Approve Invoicing</Text>
+          )}
+        </Pressable>
+      </View>
+    </>
+  );
+
+  if (isTablet) {
+    return (
+      <View style={styles.tabletContainer}>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.headerTitle}>Validate POD</Text>
+            <Text style={styles.headerSub}>{trip.id}</Text>
+          </View>
+          <Pressable onPress={onClose} hitSlop={12}>
+            <FontAwesome name="times" size={20} color={Theme.textMuted} />
+          </Pressable>
+        </View>
+        {content}
+      </View>
+    );
+  }
+
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <Modal visible animationType="slide" transparent>
       <View style={styles.overlay}>
         <View style={styles.sheet}>
           <View style={styles.header}>
@@ -118,69 +217,7 @@ export function PodValidationModal({ trip, visible, onClose }: PodValidationModa
               <FontAwesome name="times" size={20} color={Theme.textMuted} />
             </Pressable>
           </View>
-
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Trip Details</Text>
-              <View style={styles.infoCard}>
-                <InfoRow label="Client" value={trip.client_name} />
-                <InfoRow label="Route" value={`${trip.pp_location} ➔ ${trip.drop_point}`} />
-                <InfoRow label="Amount" value={`₹${trip.amount.toLocaleString()}`} />
-              </View>
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Audit Adjustments</Text>
-              <View style={styles.inputCard}>
-                <AuditInput label="Shortage" value={shortage} onChange={setShortage} />
-                <AuditInput label="Damage" value={damage} onChange={setDamage} />
-                <AuditInput label="Penalty" value={penalty} onChange={setPenalty} />
-                <View style={styles.remarksBox}>
-                  <Text style={styles.inputLabel}>Remarks</Text>
-                  <TextInput
-                    style={styles.textArea}
-                    value={remarks}
-                    onChangeText={setRemarks}
-                    placeholder="Add audit notes..."
-                    multiline
-                    numberOfLines={3}
-                  />
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Attachments ({attachments.length})</Text>
-              {isLoadingAttachments ? (
-                <ActivityIndicator size="small" color={Theme.primary} />
-              ) : attachments.length === 0 ? (
-                <Text style={styles.emptyText}>No documents attached.</Text>
-              ) : (
-                <View style={styles.attachmentGrid}>
-                  {attachments.map((att: any) => (
-                    <Pressable key={att.id} style={styles.attachmentItem}>
-                      <FontAwesome name="file-pdf-o" size={24} color={Theme.primary} />
-                      <Text style={styles.attachmentName} numberOfLines={1}>{att.file_name}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-            </View>
-          </ScrollView>
-
-          <View style={styles.footer}>
-            <Pressable 
-              style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]} 
-              onPress={handleValidate}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.submitBtnText}>Approve Invoicing</Text>
-              )}
-            </Pressable>
-          </View>
+          {content}
         </View>
       </View>
     </Modal>
@@ -256,4 +293,5 @@ const styles = StyleSheet.create({
   submitBtn: { backgroundColor: Theme.primary, height: 50, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   submitBtnDisabled: { opacity: 0.5 },
   submitBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  tabletContainer: { flex: 1, backgroundColor: Theme.screenBackground },
 });

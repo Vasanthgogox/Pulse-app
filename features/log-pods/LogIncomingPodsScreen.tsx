@@ -1206,7 +1206,7 @@ const styles = StyleSheet.create({
     color: Theme.primary,
   },
   selectAllBtn: { marginLeft: "auto" },
-  selectAllText: { fontSize: 12, fontWeight: "800", color: Theme.primary },
+  selectAllTextActive: { fontSize: 12, fontWeight: "800", color: Theme.primary },
   card: {
     borderRadius: 12,
     borderWidth: 1,
