@@ -281,7 +281,7 @@ export default function TripsScreen() {
             {statusTabs.map((tab) => (
               <TouchableOpacity
                 key={tab.id}
-                style={[styles.tab, tab.isActive && styles.tabActive]}
+                style={[styles.tabWeb, tab.isActive && styles.tabActive]}
                 onPress={tab.onPress}
                 activeOpacity={0.7}
               >
@@ -493,22 +493,37 @@ const styles = StyleSheet.create({
   },
   tabRowWeb: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "center",
-    gap: 16,
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 4,
-    paddingBottom: 4,
+    marginTop: 2,
+    marginBottom: 6,
+    paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: Theme.separatorDark,
   },
+  tabRowScrollContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 4,
+    paddingBottom: 6,
+  },
   tab: { position: "relative" as const, paddingVertical: 8 },
+  tabWeb: {
+    flex: 1,
+    minWidth: 56,
+    position: "relative" as const,
+    paddingVertical: 6,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   tabActive: {},
   tabText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 1.2,
+    letterSpacing: 2,
     color: Theme.textOnDarkMuted,
   },
   tabTextActive: { color: Theme.textOnDark },
