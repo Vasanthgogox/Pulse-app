@@ -31,7 +31,7 @@ export interface CreateIndentInput {
   vehicle_type: string;
   /** Required: load type (e.g. FMCG). */
   load_type: string;
-  /** Required: weight in kg. */
+  /** Required: weight in kg (UI converts from tons). */
   weight: number;
   pickup_date?: string | null;
   circulation_target?: CirculationTarget | null;
@@ -212,7 +212,7 @@ export async function createIndent(
   const loadTypeErr = runValidators((data.load_type ?? '').trim(), [required('Load type is required'), maxLength(100)]);
   if (loadTypeErr) return { error: new Error(`Load type: ${loadTypeErr}`), indent: null };
   if (data.weight == null || typeof data.weight !== 'number' || data.weight <= 0 || data.weight > 999999) {
-    return { error: new Error('Weight is required and must be between 0.01 and 999,999 kg.'), indent: null };
+    return { error: new Error('Weight is required and must be between 0.01 and 1,000 tons.'), indent: null };
   }
   if (data.pickup_date?.trim()) {
     const dateErr = dateISO()(data.pickup_date);

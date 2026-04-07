@@ -961,9 +961,11 @@ export function LoadCenterView({
         : Number(load.client_price || 0);
 
     return (
-      <View
+      <TouchableOpacity
         key={`${isDone ? "done" : "active"}-${load.id}`}
         style={styles.awardedCard}
+        onPress={() => onIndentPress(load)}
+        activeOpacity={0.8}
       >
         <View style={styles.awardedCardTop}>
           <View style={styles.awardedBadge}>
@@ -1002,7 +1004,8 @@ export function LoadCenterView({
         ) : (
           <TouchableOpacity
             style={styles.handshakeBtn}
-            onPress={() => {
+            onPress={(e) => {
+              e.stopPropagation();
               setAssignDriverId(null);
               setAssignVehicleId(undefined);
               setAssignVehicleRegistration("");
@@ -1029,7 +1032,7 @@ export function LoadCenterView({
             </Text>
           </TouchableOpacity>
         )}
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -1278,7 +1281,12 @@ export function LoadCenterView({
                   const isAwaitingSupplierDeploy =
                     isAwardedPendingTrip || hasDirectSupplier;
                   return (
-                    <View key={load.id} style={styles.loadCard}>
+                    <TouchableOpacity
+                      key={load.id}
+                      style={styles.loadCard}
+                      onPress={() => onIndentPress(load)}
+                      activeOpacity={0.8}
+                    >
                       <View style={styles.loadCardTop}>
                         <View style={styles.loadCardTopLeft}>
                           <Text style={styles.loadCardRoute} numberOfLines={3}>
@@ -1352,11 +1360,11 @@ export function LoadCenterView({
                         <View style={styles.loadCardActions}>
                           <TouchableOpacity
                             style={styles.shareIndentBtn}
-                            onPress={() =>
-                              isDone || isAwardedPendingTrip
-                                ? onIndentPress(load)
-                                : handleShareIndent(load)
-                            }
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              if (isDone || isAwardedPendingTrip) onIndentPress(load);
+                              else handleShareIndent(load);
+                            }}
                             activeOpacity={0.9}
                           >
                             <FontAwesome
@@ -1380,7 +1388,8 @@ export function LoadCenterView({
                           ) : (
                             <TouchableOpacity
                               style={styles.reviewBidsBtn}
-                              onPress={() => {
+                              onPress={(e) => {
+                                e.stopPropagation();
                                 setSelectedQuoteId(null);
                                 setLoadAction({ type: "AWARD", load });
                               }}
@@ -1393,7 +1402,7 @@ export function LoadCenterView({
                           )}
                         </View>
                       </View>
-                    </View>
+                    </TouchableOpacity>
                   );
                 })
               )}
@@ -1463,7 +1472,12 @@ export function LoadCenterView({
                   setLoadAction({ type: "BID", load });
                 };
                 return (
-                  <View key={load.id} style={styles.loadCard}>
+                    <TouchableOpacity
+                      key={load.id}
+                      style={styles.loadCard}
+                      onPress={() => onIndentPress(load)}
+                      activeOpacity={0.8}
+                    >
                     <View style={styles.loadCardTop}>
                       <View style={styles.loadCardTopLeft}>
                         <Text style={styles.getLoadCompany} numberOfLines={2}>
@@ -1515,7 +1529,10 @@ export function LoadCenterView({
                           </View>
                           <TouchableOpacity
                             style={styles.updateQuoteBtn}
-                            onPress={openBidModal}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              openBidModal();
+                            }}
                             activeOpacity={0.9}
                           >
                             <Text style={styles.updateQuoteBtnText}>
@@ -1539,7 +1556,10 @@ export function LoadCenterView({
                           </View>
                           <TouchableOpacity
                             style={styles.updateQuoteBtn}
-                            onPress={openBidModal}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              openBidModal();
+                            }}
                             activeOpacity={0.9}
                           >
                             <Text style={styles.updateQuoteBtnText}>
@@ -1551,7 +1571,10 @@ export function LoadCenterView({
                     ) : (
                       <TouchableOpacity
                         style={styles.quoteBtn}
-                        onPress={openBidModal}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          openBidModal();
+                        }}
                         activeOpacity={0.9}
                       >
                         <FontAwesome
@@ -1565,7 +1588,7 @@ export function LoadCenterView({
                         </Text>
                       </TouchableOpacity>
                     )}
-                  </View>
+                  </TouchableOpacity>
                 );
               })
             ))}
@@ -1980,7 +2003,7 @@ export function LoadCenterView({
                       <View style={styles.bidIndentSpecRow}>
                         <Text style={styles.bidIndentSpecLabel}>Weight</Text>
                         <Text style={styles.bidIndentSpecValue}>
-                          {String(loadAction.load.weight)} kg
+                          {(Number(loadAction.load.weight) / 1000).toFixed(2)} tons
                         </Text>
                       </View>
                     ) : null}
