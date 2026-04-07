@@ -272,11 +272,7 @@ export function FinanceKanbanTab({
 
   return (
     <View style={styles.wrapper}>
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={true}
-        contentContainerStyle={styles.kanbanContainer}
-      >
+      <View style={styles.kanbanContainer}>
         {COLUMN_TYPES.map((type) => (
           <View key={type} style={styles.column}>
             <View style={styles.columnHeader}>
@@ -306,7 +302,7 @@ export function FinanceKanbanTab({
             </ScrollView>
           </View>
         ))}
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -317,13 +313,14 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
   },
   kanbanContainer: {
+    flex: 1,
     padding: 24,
-    paddingBottom: 40,
     flexDirection: 'row',
-    gap: 24,
+    gap: 20,
+    width: '100%',
   },
   column: {
-    width: 350,
+    flex: 1,
     backgroundColor: Theme.surfaceGray,
     borderRadius: 14,
     padding: 12,
