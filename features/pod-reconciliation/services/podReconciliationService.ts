@@ -122,7 +122,21 @@ export async function fetchReconciliationTrips(
     });
 
     const internalIds = filtered.map(t => str(t.id)).filter(Boolean);
+    const supplierIds = Array.from(new Set(filtered.map(t => str(t.supplier_id)).filter(Boolean)));
+
     let lrByTripId = new Map<string, any[]>();
+    let supplierNameById = new Map<string, string>();
+
+    if (supplierIds.length > 0) {
+      const { data: supData } = await supabase()
+        .from('suppliers')
+        .select('id, name, company_name')
+        .in('id', supplierIds);
+      
+      (supData || []).forEach(s => {
+        supplierNameById.set(s.id, str(s.name || s.company_name));
+      });
+    }
 
     if (internalIds.length > 0) {
       const { data: lrData } = await supabase()
@@ -174,7 +188,7 @@ export async function fetchReconciliationTrips(
         id: tripDisplayId,
         internal_id: str(trip.id),
         client_name: str(trip.client_name),
-        vendor_name: str(trip.vendor_name || trip.supplier_name),
+        vendor_name: str(supplierNameById.get(str(trip.supplier_id)) || trip.vendor_name || trip.supplier_name),
         pp_location: str(trip.pickup_area || trip.pp_location),
         drop_point: str(trip.drop_location || trip.drop_point),
         amount: num(trip.client_price || trip.total_client_value),

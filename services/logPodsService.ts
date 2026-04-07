@@ -96,6 +96,7 @@ function mapRowToView(
   t: TripRecord,
   lrByTripId: Map<string, TripLrRow[]>,
   shipperNameByTripId: Record<string, string>,
+  supplierNameById: Map<string, string>,
 ): LogPodsTripView {
   const tripKey = getTripStringId(t);
   const internalId = str(t.id);
@@ -156,6 +157,7 @@ function mapRowToView(
     internal_id: str(t.id),
     client: shipperNameByTripId[internalId] || str((t as { client_name?: string | null }).client_name) || "—",
     supplier_name:
+      supplierNameById.get(str((t as { supplier_id?: string | null }).supplier_id)) ||
       str((t as { vendor_name?: string | null }).vendor_name) ||
       str((t as { supplier_name?: string | null }).supplier_name) ||
       "Unknown Supplier",
@@ -212,7 +214,27 @@ export async function fetchTripsForLogPods(
     );
 
     const internalIds = merged.map(t => str(t.id)).filter(Boolean);
+    const supplierIds = Array.from(new Set(merged.map(t => str((t as {supplier_id?: string | null}).supplier_id)).filter(Boolean)));
+
     let lrByTripId = new Map<string, TripLrRow[]>();
+    let supplierNameById = new Map<string, string>();
+
+    if (supplierIds.length > 0) {
+      const { data: supData, error: supErr } = await supabase()
+        .from("suppliers")
+        .select("id, name, company_name")
+        .in("id", supplierIds);
+      
+      if (supErr) {
+        console.warn("[logPods] suppliers fetch:", supErr.message);
+      } else {
+        for (const row of supData ?? []) {
+          if (row.id) {
+            supplierNameById.set(row.id, str(row.name || row.company_name));
+          }
+        }
+      }
+    }
 
     if (internalIds.length > 0) {
       const { data: lrData, error: lrErr } = await supabase()
@@ -234,7 +256,7 @@ export async function fetchTripsForLogPods(
       }
     }
 
-    const views = merged.map((t) => mapRowToView(t, lrByTripId, shipperNameByTripId));
+    const views = merged.map((t) => mapRowToView(t, lrByTripId, shipperNameByTripId, supplierNameById));
     return { error: null, trips: views };
   } catch (e) {
     return { error: e instanceof Error ? e : new Error(String(e)), trips: [] };
