@@ -2101,7 +2101,7 @@ export function LoadCenterView({
                 disabled={submittingQuote}
               >
                 <Text style={styles.modalSubmitText}>
-                  {submittingQuote ? "Publishing…" : "Publish Bid Node"}
+                  {submittingQuote ? "Publishing…" : "Publish Bid"}
                 </Text>
               </TouchableOpacity>
             </ScrollView>
