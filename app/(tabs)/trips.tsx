@@ -834,7 +834,6 @@ const styles = StyleSheet.create({
   },
   tripsSearchWrapRow: {
     flex: 1,
-    maxWidth: 850,
   },
   /** Web: avoid default focus ring clashing with dark field (RN web). */
   tripsSearchWrapWeb: {
