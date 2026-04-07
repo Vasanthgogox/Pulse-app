@@ -2597,11 +2597,11 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   loadFilterTabText: {
-    fontSize: 9,
-    fontWeight: "700",
+    fontSize: 8,
+    fontWeight: "800",
     color: Theme.textOnDarkMuted,
     textTransform: "uppercase",
-    letterSpacing: 1.5,
+    letterSpacing: 2,
   },
   loadFilterTabTextActive: { color: Theme.textOnDark },
   loadFilterTabBadge: {

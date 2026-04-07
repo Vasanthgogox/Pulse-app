@@ -351,16 +351,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between", // Changed to space-between
   },
   webLogoWrap: {
-    width: 72,
+    width: 200, // Matched with webRightWrap for centering
     height: "100%",
     flexDirection: "row",
-    justifyContent: "center",
+    justifyContent: "flex-start", // Left aligned
     alignItems: "center",
-    paddingLeft: 16,
+    paddingLeft: 24, // Matched with webRightWrap padding
     flexShrink: 0,
   },
   webLogoWrapCompact: {
-    width: 56,
+    width: 80, // Matched with webRightWrapCompact
     paddingLeft: 12,
     flexShrink: 0,
   },

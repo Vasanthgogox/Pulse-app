@@ -434,13 +434,13 @@ export default function NetworkScreen() {
   if (subTab === "load") {
     return (
       <View
-        style={[styles.container, { backgroundColor: Theme.darkBackground, paddingTop: insets.top + Layout.tabBarHeight + 20 }]}
+        style={[styles.container, { paddingTop: insets.top + Layout.tabBarHeight + 20 }]}
       >
         <View
           style={[
             styles.blackBlock,
             styles.blackBlockLoad,
-            { paddingTop: 12 },
+            { paddingTop: 4 },
           ]}
         >
           <View style={styles.mainTabRow}>
@@ -479,7 +479,7 @@ export default function NetworkScreen() {
   const MANAGE_CONTENT_BG = "#f4f5f7";
 
   return (
-    <View style={[styles.container, { backgroundColor: Theme.darkBackground, paddingTop: insets.top + Layout.tabBarHeight + 20 }]}>
+    <View style={[styles.container, { paddingTop: insets.top + Layout.tabBarHeight + 20 }]}>
       {/* Sync toast — small animated pill, non-blocking */}
       {showSuccess && (
         <Animated.View
@@ -500,7 +500,7 @@ export default function NetworkScreen() {
         </Animated.View>
       )}
 
-      <View style={[styles.blackBlock, { paddingTop: 12 }]}>
+      <View style={[styles.blackBlock, { paddingTop: 4 }]}>
 
         {/* Manage Network | Load — black tabs (body), Load-style */}
         <View style={styles.mainTabRow}>
@@ -877,11 +877,16 @@ export default function NetworkScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Theme.screenBackground },
+  container: {
+    flex: 1,
+    width: "100%",
+    minWidth: 0,
+    backgroundColor: Theme.screenBackground,
+  },
   blackBlock: {
     backgroundColor: Theme.darkBackground,
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingBottom: 12,
+    paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: Theme.separatorDark,
   },
@@ -958,7 +963,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: 8,
+    paddingTop: 4,
   },
   filterTab: {
     position: "relative" as const,
@@ -1015,8 +1020,9 @@ const styles = StyleSheet.create({
   mainTabRow: {
     flexDirection: "row",
     gap: 16,
-    marginBottom: 0,
-    paddingBottom: 4,
+    marginTop: 2,
+    marginBottom: 6,
+    paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: Theme.separatorDark,
   },
@@ -1024,7 +1030,7 @@ const styles = StyleSheet.create({
   mainTabActive: {},
   mainTabText: {
     fontSize: 8,
-    fontWeight: "600",
+    fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 2,
     color: Theme.textOnDarkMuted,
@@ -1042,7 +1048,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingTop: 10,
+    paddingTop: 6,
   },
   searchWrapDark: {
     flex: 1,
