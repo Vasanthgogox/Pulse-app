@@ -1,5 +1,5 @@
 import type { PODExtraction, PODExtractionLegacy, ConfidenceField } from '@/types/pod';
-import { getLoadingDuration, getUnloadingDuration, getInTransitDuration } from '@/lib/dateTimeFormat';
+import { getLoadingDuration, getUnloadingDuration, getInTransitDuration } from './dateTimeFormat';
 
 /** Line item description can be string or { value } from OCR; always return a string for display. */
 export function lineItemDescription(desc: unknown): string {
