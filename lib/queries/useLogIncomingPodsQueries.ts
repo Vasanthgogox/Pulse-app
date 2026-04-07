@@ -3,6 +3,8 @@ import {
   executeLogIncomingPods,
   fetchCourierPartners,
   fetchTripsForLogPods,
+  ensureCustomCourierPartner,
+  type CourierPartnerRow,
   type LogPodsPayload,
   type LogPodsTripView,
 } from '@/services/logPodsService';
@@ -30,6 +32,31 @@ export function useCourierPartnersQuery() {
       return partners;
     },
     staleTime: 300_000,
+  });
+}
+
+export function useAddCourierPartnerMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (customName: string) => {
+      const result = await ensureCustomCourierPartner('custom', customName);
+      if (result.error) throw result.error;
+      return result.partner;
+    },
+    onSuccess: (newPartner) => {
+      if (newPartner) {
+        queryClient.setQueryData(
+          queryKeys.logPods.courierPartners(),
+          (old: CourierPartnerRow[] | undefined) => {
+            if (!old) return [newPartner];
+            if (old.some(p => p.value === newPartner.value)) return old;
+            return [...old, newPartner];
+          }
+        );
+      }
+      queryClient.invalidateQueries({ queryKey: queryKeys.logPods.courierPartners() });
+    },
   });
 }
 
