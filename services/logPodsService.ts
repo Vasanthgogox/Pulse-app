@@ -5,6 +5,7 @@
 import {
     getTripsWhereOrgIsClient,
     getTripsWhereOrgIsSupplier,
+    getShipperDisplayNamesForSupplierTrips,
     type TripRow,
 } from "@/features/trips/services/trips.service";
 import { supabase } from "@/lib/supabase";
@@ -94,6 +95,7 @@ function passesLogPodsRow(t: TripRecord): boolean {
 function mapRowToView(
   t: TripRecord,
   lrByTripId: Map<string, TripLrRow[]>,
+  shipperNameByTripId: Record<string, string>,
 ): LogPodsTripView {
   const tripKey = getTripStringId(t);
   const internalId = str(t.id);
@@ -152,7 +154,7 @@ function mapRowToView(
   return {
     id: tripKey,
     internal_id: str(t.id),
-    client: str((t as { client_name?: string | null }).client_name) || "—",
+    client: shipperNameByTripId[internalId] || str((t as { client_name?: string | null }).client_name) || "—",
     supplier_name:
       str((t as { vendor_name?: string | null }).vendor_name) ||
       str((t as { supplier_name?: string | null }).supplier_name) ||
@@ -183,7 +185,7 @@ export async function fetchTripsForLogPods(
   orgId: string,
 ): Promise<{ error: Error | null; trips: LogPodsTripView[] }> {
   try {
-    const [ownerRes, supRes, cliRes] = await Promise.all([
+    const [ownerRes, supRes, cliRes, shipperNamesRes] = await Promise.all([
       supabase()
         .from("trips")
         .select("*")
@@ -192,6 +194,7 @@ export async function fetchTripsForLogPods(
         .limit(3000),
       getTripsWhereOrgIsSupplier(orgId),
       getTripsWhereOrgIsClient(orgId),
+      getShipperDisplayNamesForSupplierTrips(orgId),
     ]);
 
     if (ownerRes.error)
@@ -202,6 +205,7 @@ export async function fetchTripsForLogPods(
     const ownerRows = (ownerRes.data ?? []) as TripRecord[];
     const supRows = (supRes.trips ?? []) as TripRecord[];
     const cliRows = (cliRes.trips ?? []) as TripRecord[];
+    const shipperNameByTripId = shipperNamesRes.shipperNameByTripId ?? {};
 
     const merged = mergeTripsById([ownerRows, supRows, cliRows]).filter(
       passesLogPodsRow,
@@ -230,7 +234,7 @@ export async function fetchTripsForLogPods(
       }
     }
 
-    const views = merged.map((t) => mapRowToView(t, lrByTripId));
+    const views = merged.map((t) => mapRowToView(t, lrByTripId, shipperNameByTripId));
     return { error: null, trips: views };
   } catch (e) {
     return { error: e instanceof Error ? e : new Error(String(e)), trips: [] };
