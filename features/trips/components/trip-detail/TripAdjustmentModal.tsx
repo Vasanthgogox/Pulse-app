@@ -7,6 +7,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useState } from "react";
 import {
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -315,6 +316,11 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     minWidth: 120,
     padding: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   chip: {
@@ -346,6 +352,11 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surface,
     fontSize: 14,
     color: Theme.textPrimaryDark,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   footer: {
     paddingHorizontal: 24,

@@ -2610,7 +2610,7 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: Theme.positive,
+    backgroundColor: Theme.primary,
   },
   trackingMapDotLabel: {
     marginTop: 4,
@@ -2625,7 +2625,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 8,
     fontWeight: "700",
-    color: Theme.positive,
+    color: Theme.primary,
     fontStyle: "italic",
     maxWidth: 72,
     textAlign: "center",

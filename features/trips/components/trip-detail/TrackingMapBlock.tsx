@@ -211,8 +211,8 @@ const styles = StyleSheet.create({
   trackingMapNodeIcon: {
     width: 40,
     height: 40,
-    borderRadius: 12,
-    backgroundColor: Theme.textPrimaryDark,
+    borderRadius: 20,
+    backgroundColor: Theme.primary,
     alignItems: "center",
     justifyContent: "center",
   },

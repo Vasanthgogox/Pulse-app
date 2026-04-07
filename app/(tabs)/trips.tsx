@@ -717,6 +717,7 @@ const styles = StyleSheet.create({
   headerBlock: {
     backgroundColor: "#000000",
     width: "100%",
+    paddingTop: 12,
   },
   tabRowWeb: {
     flexDirection: "row",
