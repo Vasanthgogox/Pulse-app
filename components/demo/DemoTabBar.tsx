@@ -64,13 +64,13 @@ function AnimatedTabIcon({
 
 export type DemoTabId = "finance" | "trips" | "network";
 
-/** Side tabs: selected = primary icon + label. */
-const SIDE_SELECTED_COLOR = Theme.primary;
-
 interface DemoTabBarProps {
   activeTab: DemoTabId;
   onTabChange: (tab: DemoTabId) => void;
   onLoadBoardPress: () => void;
+  onProfilePress?: () => void;
+  onNotificationPress?: () => void;
+  onLogoPress?: () => void;
   showLoadFab?: boolean;
 }
 
@@ -78,6 +78,9 @@ export function DemoTabBar({
   activeTab,
   onTabChange,
   onLoadBoardPress,
+  onProfilePress,
+  onNotificationPress,
+  onLogoPress,
 }: DemoTabBarProps) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
@@ -104,11 +107,15 @@ export function DemoTabBar({
     >
       <View style={[styles.glassDock, isWeb && styles.glassDockWeb]}>
         {isWeb && (
-          <View
+          <TouchableOpacity
             style={[
               styles.webLogoWrap,
               webCompact && styles.webLogoWrapCompact,
             ]}
+            onPress={onLogoPress}
+            activeOpacity={0.8}
+            accessibilityLabel="Ops Agent"
+            accessibilityRole="button"
           >
             <Image
               source={require("../../assets/images/icon.png")}
@@ -117,9 +124,8 @@ export function DemoTabBar({
                 webCompact && styles.webLogoImageCompact,
               ]}
               resizeMode="contain"
-              accessibilityLabel="Q"
             />
-          </View>
+          </TouchableOpacity>
         )}
 
         <View
@@ -269,7 +275,27 @@ export function DemoTabBar({
               webCompact && styles.webRightWrapCompact,
             ]}
           >
-            {/* Optional right side content for web navbar */}
+            <View style={styles.webRightIcons}>
+              <TouchableOpacity
+                onPress={onNotificationPress}
+                style={styles.webRightIconBtn}
+                activeOpacity={0.7}
+                accessibilityLabel="Notifications"
+                accessibilityRole="button"
+              >
+                <FontAwesome5 name="bell" size={16} color={Theme.textMutedDemo} />
+                <View style={styles.notificationDot} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={onProfilePress}
+                style={styles.webProfileBtn}
+                activeOpacity={0.7}
+                accessibilityLabel="Profile"
+                accessibilityRole="button"
+              >
+                <FontAwesome5 name="user-circle" size={24} color={Theme.textMutedDemo} />
+              </TouchableOpacity>
+            </View>
           </View>
         )}
       </View>
@@ -375,8 +401,31 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   webRightWrapCompact: {
-    width: 48,
+    width: 80,
     paddingRight: 12,
+  },
+  webRightIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  webRightIconBtn: {
+    position: 'relative',
+    padding: 8,
+  },
+  notificationDot: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Theme.teslaRed,
+    borderWidth: 1.5,
+    borderColor: '#fff',
+  },
+  webProfileBtn: {
+    padding: 4,
   },
   dockColumn: {
     flex: 1,

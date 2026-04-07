@@ -10,64 +10,64 @@ import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { ClientRiskBadge } from "@/features/ai";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
+import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
 import { getRatingsForDriver, type RatingRow } from "@/features/ratings/services/ratings.service";
 import { getTripDisplayNumber, type TripRow } from "@/features/trips";
 import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import {
-  getExpenseGroupedForTrip,
-  getExpenseLinesForTripPnL,
+    getExpenseGroupedForTrip,
+    getExpenseLinesForTripPnL,
 } from "@/features/vehicles/pnl";
-import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import {
-  formatINR,
-  formatIndianVehicleNumber,
-  formatLedgerAmount,
-  formatLedgerDate,
-  formatLedgerDateTime,
-  formatRelative,
+    formatINR,
+    formatIndianVehicleNumber,
+    formatLedgerAmount,
+    formatLedgerDate,
+    formatLedgerDateTime,
+    formatRelative,
 } from "@/lib/format";
 import type { SalaryRequestWithDriverRow } from "@/services/salaryRequestsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert,
-  FlatList,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  useWindowDimensions,
+    Alert,
+    FlatList,
+    Modal,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+    useWindowDimensions,
 } from "react-native";
 import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
+    Easing,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
 import type { DriverOfferForAggregation } from "../aggregation";
 import {
-  buildMonthlyDriverStatement,
-  computeDriverCommissionForTrip,
-  type DriverLedgerEntryForStatement,
-  type TripForStatement,
+    buildMonthlyDriverStatement,
+    computeDriverCommissionForTrip,
+    type DriverLedgerEntryForStatement,
+    type TripForStatement,
 } from "../aggregation";
 import type { LedgerRow } from "../services/finance.service";
 import { MIN_FISCAL_TAB_WIDTH } from "../types";
 import { EntityCompareVerifyView } from "./EntityCompareVerifyView";
 import {
-  FinancialRow,
-  type FinancialRowData,
-  type FinancialRowType,
+    FinancialRow,
+    type FinancialRowData,
+    type FinancialRowType,
 } from "./FinancialRow";
 import { LedgerReportModal } from "./LedgerReportModal";
 import { LedgerTransactionListView } from "./LedgerTransactionListView";

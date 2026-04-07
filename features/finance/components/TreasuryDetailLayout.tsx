@@ -2,12 +2,12 @@
  * Shared detail-page layout: black header (TeslaHeader) + optional black card (tabs + summary + search).
  * Use for all entity/trip detail screens so they match the Treasury Fiscal Matrix UI globally.
  */
-import type { ReactNode } from "react";
-import { View, ScrollView, StyleSheet, RefreshControl } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { TeslaHeader } from "@/components/TeslaHeader";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { TeslaHeader } from "@/components/TeslaHeader";
+import type { ReactNode } from "react";
+import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TreasurySummaryCard } from "./TreasurySummaryCard";
 
 export interface TreasuryDetailLayoutProps {
