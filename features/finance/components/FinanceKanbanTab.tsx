@@ -15,9 +15,9 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
 import type { LedgerRow } from '../services/finance.service';
 import { LedgerExpandedCardFromData, type FinancialRowData } from "./FinancialRow";
+import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
 
 export interface FinanceKanbanTabProps {
   transactions: LedgerRow[];
@@ -52,6 +52,36 @@ export function FinanceKanbanTab({
   const { t } = useLanguage();
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
 
+  const getRowCategory = (row: LedgerRow): ColumnType | 'other' => {
+    const hasAmtIn = (row.amount_in ?? 0) > 0;
+    const hasAmtOut = (row.amount_out ?? 0) > 0;
+    const contactType = row.contact_type;
+    const driverName = (row.driver_name ?? "").trim();
+    const isDriver = contactType === "driver" || driverName !== "";
+
+    // 1. DRIVERS
+    if (isDriver) return 'drivers';
+
+    // 2. CUSTOMERS (Clients)
+    const isClient = contactType === "client";
+    if (isClient || (hasAmtIn && !contactType)) return 'customers';
+
+    // 3. GARAGE (Vehicles)
+    const vehicleNum = row.vehicle_number ?? (row.trip_id != null ? (getVehicleNumberForTripId?.(row.trip_id) ?? null) : null);
+    const isVehicle = contactType === "vehicle" || (!!vehicleNum && !isClient && contactType !== "supplier");
+    if (isVehicle) return 'garage';
+
+    // 4. SUPPLIERS
+    const isSupplier = contactType === "supplier";
+    if (isSupplier || (hasAmtOut && !contactType)) return 'suppliers';
+
+    // Fallback for anything else
+    if (hasAmtIn) return 'customers';
+    if (hasAmtOut) return 'suppliers';
+
+    return 'other';
+  };
+
   const columns = useMemo(() => {
     const cols: Record<ColumnType, LedgerRow[]> = {
       customers: [],
@@ -61,16 +91,10 @@ export function FinanceKanbanTab({
     };
 
     transactions.forEach((row) => {
-      const isDriver = row.contact_type === "driver" || (row.driver_name ?? "").trim() !== "";
-      const isClient = row.contact_type === "client";
-      const isSupplier = row.contact_type === "supplier";
-      const vehicleNum = row.vehicle_number ?? (row.trip_id != null && !isDriver ? (getVehicleNumberForTripId?.(row.trip_id) ?? null) : null);
-      const isVehicle = row.contact_type === "vehicle" || (!isDriver && !isClient && !isSupplier && vehicleNum);
-
-      if (isClient) cols.customers.push(row);
-      else if (isSupplier) cols.suppliers.push(row);
-      else if (isDriver) cols.drivers.push(row);
-      else if (isVehicle) cols.garage.push(row);
+      const cat = getRowCategory(row);
+      if (cat !== 'other') {
+        cols[cat].push(row);
+      }
     });
 
     return cols;
@@ -90,31 +114,40 @@ export function FinanceKanbanTab({
   }
 
   const buildFinancialRowData = (row: LedgerRow): FinancialRowData => {
-    const isDriverPayment = row.contact_type === "driver" || (row.driver_name ?? "").trim() !== "";
-    const isClientOrSupplier = row.contact_type === "client" || row.contact_type === "supplier";
-    const vehicleNum = row.vehicle_number ?? (row.trip_id != null && !isDriverPayment ? (getVehicleNumberForTripId?.(row.trip_id) ?? null) : null);
+    const cat = getRowCategory(row);
+    const vehicleNum = row.vehicle_number ?? (row.trip_id != null ? (getVehicleNumberForTripId?.(row.trip_id) ?? null) : null);
     
-    const entityName = isDriverPayment
-      ? row.driver_name || row.party_name || "—"
-      : isClientOrSupplier
-        ? row.party_name || "—"
-        : vehicleNum
-          ? formatIndianVehicleNumber(vehicleNum)
-          : (row.party_name ?? "—");
+    let entityName = row.party_name || "—";
+    if (cat === 'drivers') {
+      entityName = row.driver_name || row.party_name || "—";
+    } else if (cat === 'garage' && vehicleNum) {
+      entityName = formatIndianVehicleNumber(vehicleNum);
+    }
 
     const tripDetail = row.trip_id != null && tripDetailsMap[row.trip_id] ? tripDetailsMap[row.trip_id] : null;
     
     const sameTripTransactions = row.trip_id != null
       ? transactions
           .filter((r) => r.trip_id != null && r.trip_id === row.trip_id)
-          .map((r) => ({
-            id: r.id,
-            date: formatEntryDate(r.transaction_date),
-            typeLabel: getDoubleEntryDisplayLabel(r) ?? "—",
-            in: r.amount_in ?? 0,
-            out: r.amount_out ?? 0,
-            party: r.party_name || "—",
-          }))
+          .map((r) => {
+            const rCat = getRowCategory(r);
+            const rvNum = r.vehicle_number ?? (r.trip_id != null ? (getVehicleNumberForTripId?.(r.trip_id) ?? null) : null);
+            let rParty = r.party_name || "—";
+            if (rCat === 'drivers') {
+              rParty = r.driver_name || r.party_name || "—";
+            } else if (rCat === 'garage' && rvNum) {
+              rParty = formatIndianVehicleNumber(rvNum);
+            }
+
+            return {
+              id: r.id,
+              date: formatEntryDate(r.transaction_date),
+              typeLabel: getDoubleEntryDisplayLabel(r) ?? "—",
+              in: r.amount_in ?? 0,
+              out: r.amount_out ?? 0,
+              party: rParty,
+            };
+          })
       : undefined;
 
     const summary = row.trip_id != null
@@ -150,8 +183,9 @@ export function FinanceKanbanTab({
   };
 
   const renderCard = (row: LedgerRow) => {
-    const isIn = (row.amount_in ?? 0) > 0;
-    const amount = isIn ? row.amount_in : row.amount_out;
+    const cat = getRowCategory(row);
+    const hasAmtIn = (row.amount_in ?? 0) > 0;
+    const amount = hasAmtIn ? row.amount_in : row.amount_out;
     const isExpanded = expandedRowId === row.id;
     
     const dateStr = row.transaction_date ? (() => {
@@ -166,18 +200,13 @@ export function FinanceKanbanTab({
         }
     })() : '—';
 
-    const isDriver = row.contact_type === "driver" || (row.driver_name ?? "").trim() !== "";
-    const isClient = row.contact_type === "client";
-    const isSupplier = row.contact_type === "supplier";
-    const vehicleNum = row.vehicle_number ?? (row.trip_id != null && !isDriver ? (getVehicleNumberForTripId?.(row.trip_id) ?? null) : null);
-
-    const entityName = isDriver
-      ? row.driver_name || row.party_name || "—"
-      : (isClient || isSupplier)
-        ? row.party_name || "—"
-        : vehicleNum
-          ? formatIndianVehicleNumber(vehicleNum)
-          : (row.party_name ?? "—");
+    const vehicleNum = row.vehicle_number ?? (row.trip_id != null ? (getVehicleNumberForTripId?.(row.trip_id) ?? null) : null);
+    let entityName = row.party_name || "—";
+    if (cat === 'drivers') {
+      entityName = row.driver_name || row.party_name || "—";
+    } else if (cat === 'garage' && vehicleNum) {
+      entityName = formatIndianVehicleNumber(vehicleNum);
+    }
 
     const desc = row.description ?? "";
     const categoryLabel = ALL_LEDGER_CATEGORY_VALUES.includes(desc) ? desc : "GENERAL";
@@ -193,7 +222,7 @@ export function FinanceKanbanTab({
         >
           <View style={styles.cardHeader}>
             <Text style={styles.entityName} numberOfLines={1}>{entityName}</Text>
-            <Text style={[styles.amount, isIn ? styles.amountIn : styles.amountOut]}>
+            <Text style={[styles.amount, hasAmtIn ? styles.amountIn : styles.amountOut]}>
               ₹{amount?.toLocaleString('en-IN')}
             </Text>
           </View>
@@ -328,7 +357,7 @@ const styles = StyleSheet.create({
   },
   columnTitle: {
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '500',
     color: Theme.textPrimaryDark,
     letterSpacing: 1.5,
   },
@@ -340,7 +369,7 @@ const styles = StyleSheet.create({
   },
   countText: {
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '500',
     color: Theme.textOnDark,
   },
   columnScroll: {
@@ -375,7 +404,7 @@ const styles = StyleSheet.create({
   },
   entityName: {
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '500',
     color: Theme.textPrimaryDark,
     flex: 1,
     marginRight: 10,
@@ -383,7 +412,7 @@ const styles = StyleSheet.create({
   },
   amount: {
     fontSize: 15,
-    fontWeight: '900',
+    fontWeight: '500',
     letterSpacing: -0.5,
   },
   amountIn: {
@@ -408,7 +437,7 @@ const styles = StyleSheet.create({
   },
   categoryText: {
     fontSize: 9,
-    fontWeight: '800',
+    fontWeight: '500',
     color: Theme.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -416,7 +445,7 @@ const styles = StyleSheet.create({
   date: {
     fontSize: 11,
     color: Theme.textMuted,
-    fontWeight: '600',
+    fontWeight: '400',
   },
   tripRow: {
     flexDirection: 'row',
@@ -434,7 +463,7 @@ const styles = StyleSheet.create({
   },
   tripText: {
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: '500',
     color: Theme.primary,
     letterSpacing: 0.5,
   },
@@ -478,7 +507,7 @@ const styles = StyleSheet.create({
   },
   viewTripBtnText: {
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: '500',
     color: Theme.primary,
     letterSpacing: 1,
   },
@@ -490,7 +519,7 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 12,
     color: Theme.textMuted,
-    fontWeight: '600',
+    fontWeight: '400',
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
