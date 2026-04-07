@@ -3,12 +3,12 @@
  * Same DB as Q-unified-base; RLS applies.
  */
 import {
-  getTripsWhereOrgIsClient,
-  getTripsWhereOrgIsSupplier,
-  type TripRow,
-} from '@/features/trips/services/trips.service';
-import { expandLR } from '@/lib/utils/lr';
-import { supabase } from '@/lib/supabase';
+    getTripsWhereOrgIsClient,
+    getTripsWhereOrgIsSupplier,
+    type TripRow,
+} from "@/features/trips/services/trips.service";
+import { supabase } from "@/lib/supabase";
+import { expandLR } from "@/lib/utils/lr";
 
 export interface LogPodsTripView {
   /** User-facing trip id (trip_lrs.trip_id). */
@@ -37,12 +37,12 @@ type TripRecord = TripRow & Record<string, unknown>;
 
 function num(v: unknown): number | null {
   if (v == null) return null;
-  const n = typeof v === 'number' ? v : parseFloat(String(v));
+  const n = typeof v === "number" ? v : parseFloat(String(v));
   return Number.isFinite(n) ? n : null;
 }
 
 function str(v: unknown): string {
-  return v == null ? '' : String(v);
+  return v == null ? "" : String(v);
 }
 
 /** Public trip id for trip_lrs and trip_pods (cashflow uses trips.trip_id). */
@@ -69,26 +69,32 @@ function mergeTripsById(lists: TripRecord[][]): TripRecord[] {
 function passesPodPendingFilter(podStatus: string): boolean {
   const p = podStatus.toLowerCase();
   return (
-    p.includes('pending') ||
-    p.includes('i-bond') ||
-    p.includes('partial') ||
-    p === ''
+    p.includes("pending") ||
+    p.includes("i-bond") ||
+    p.includes("partial") ||
+    p === ""
   );
 }
 
 function passesLogPodsRow(t: TripRecord): boolean {
   const invoiceNo = (t as { invoice_no?: string | null }).invoice_no;
-  if (invoiceNo != null && String(invoiceNo).trim() !== '') return false;
+  if (invoiceNo != null && String(invoiceNo).trim() !== "") return false;
 
-  const inv2 = str((t as { invoice_status_2?: string | null }).invoice_status_2).toLowerCase();
-  const hasInv2 = (t as { invoice_status_2?: string | null }).invoice_status_2 != null;
-  if (hasInv2 && !inv2.includes('unbilled')) return false;
+  const inv2 = str(
+    (t as { invoice_status_2?: string | null }).invoice_status_2,
+  ).toLowerCase();
+  const hasInv2 =
+    (t as { invoice_status_2?: string | null }).invoice_status_2 != null;
+  if (hasInv2 && !inv2.includes("unbilled")) return false;
 
   const podStatus = str((t as { pod_status?: string | null }).pod_status);
   return passesPodPendingFilter(podStatus);
 }
 
-function mapRowToView(t: TripRecord, lrByTripId: Map<string, TripLrRow[]>): LogPodsTripView {
+function mapRowToView(
+  t: TripRecord,
+  lrByTripId: Map<string, TripLrRow[]>,
+): LogPodsTripView {
   const tripKey = getTripStringId(t);
   const lrs = lrByTripId.get(tripKey) ?? [];
 
@@ -103,7 +109,11 @@ function mapRowToView(t: TripRecord, lrByTripId: Map<string, TripLrRow[]>): LogP
   const receivedLRs = Array.from(
     new Set(
       lrs
-        .filter((lr) => lr.pod_received === true || str(lr.pod_status).toLowerCase() === 'received')
+        .filter(
+          (lr) =>
+            lr.pod_received === true ||
+            str(lr.pod_status).toLowerCase() === "received",
+        )
         .flatMap((lr) => expandLR(str(lr.lr_number))),
     ),
   );
@@ -111,39 +121,41 @@ function mapRowToView(t: TripRecord, lrByTripId: Map<string, TripLrRow[]>): LogP
   let finalReceived = receivedLRs;
   if (
     lrs.length === 0 &&
-    str((t as { pod_status?: string | null }).pod_status).toLowerCase() === 'received' &&
+    str((t as { pod_status?: string | null }).pod_status).toLowerCase() ===
+      "received" &&
     allLrNumbers.length > 0
   ) {
     finalReceived = allLrNumbers;
   }
 
   const tripDate =
-    (t as { trip_date?: string | null }).trip_date ?? (t as { pickup_date?: string | null }).pickup_date;
+    (t as { trip_date?: string | null }).trip_date ??
+    (t as { pickup_date?: string | null }).pickup_date;
   const dateLabel = tripDate
-    ? new Date(tripDate).toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
+    ? new Date(tripDate).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
       })
-    : 'N/A';
+    : "N/A";
 
   const from =
     str((t as { pp_location?: string | null }).pp_location) ||
     str((t as { pickup_area?: string | null }).pickup_area) ||
-    'Unknown';
+    "Unknown";
   const to =
     str((t as { drop_point?: string | null }).drop_point) ||
     str((t as { drop_location?: string | null }).drop_location) ||
-    'Unknown';
+    "Unknown";
 
   return {
     id: tripKey,
     internal_id: str(t.id),
-    client: str((t as { client_name?: string | null }).client_name) || '—',
+    client: str((t as { client_name?: string | null }).client_name) || "—",
     supplier_name:
       str((t as { vendor_name?: string | null }).vendor_name) ||
       str((t as { supplier_name?: string | null }).supplier_name) ||
-      'Unknown Supplier',
+      "Unknown Supplier",
     from,
     to,
     amount:
@@ -152,7 +164,7 @@ function mapRowToView(t: TripRecord, lrByTripId: Map<string, TripLrRow[]>): LogP
     status:
       str((t as { trip_status?: string | null }).trip_status) ||
       str((t as { status?: string | null }).status) ||
-      '—',
+      "—",
     lrNumbers: Array.from(new Set(allLrNumbers)),
     receivedLRs: finalReceived,
     date: dateLabel,
@@ -172,16 +184,17 @@ export async function fetchTripsForLogPods(
   try {
     const [ownerRes, supRes, cliRes] = await Promise.all([
       supabase()
-        .from('trips')
-        .select('*')
-        .eq('organization_id', orgId)
-        .order('created_at', { ascending: false })
+        .from("trips")
+        .select("*")
+        .eq("organization_id", orgId)
+        .order("created_at", { ascending: false })
         .limit(3000),
       getTripsWhereOrgIsSupplier(orgId),
       getTripsWhereOrgIsClient(orgId),
     ]);
 
-    if (ownerRes.error) return { error: new Error(ownerRes.error.message), trips: [] };
+    if (ownerRes.error)
+      return { error: new Error(ownerRes.error.message), trips: [] };
     if (supRes.error) return { error: supRes.error, trips: [] };
     if (cliRes.error) return { error: cliRes.error, trips: [] };
 
@@ -189,19 +202,21 @@ export async function fetchTripsForLogPods(
     const supRows = (supRes.trips ?? []) as TripRecord[];
     const cliRows = (cliRes.trips ?? []) as TripRecord[];
 
-    const merged = mergeTripsById([ownerRows, supRows, cliRows]).filter(passesLogPodsRow);
+    const merged = mergeTripsById([ownerRows, supRows, cliRows]).filter(
+      passesLogPodsRow,
+    );
 
     const stringIds = merged.map(getTripStringId).filter(Boolean);
     let lrByTripId = new Map<string, TripLrRow[]>();
 
     if (stringIds.length > 0) {
       const { data: lrData, error: lrErr } = await supabase()
-        .from('trip_lrs')
-        .select('trip_id, lr_number, pod_received, pod_status')
-        .in('trip_id', stringIds);
+        .from("trip_lrs")
+        .select("trip_id, lr_number, pod_received, pod_status")
+        .in("trip_id", stringIds);
 
       if (lrErr) {
-        console.warn('[logPods] trip_lrs fetch:', lrErr.message);
+        console.warn("[logPods] trip_lrs fetch:", lrErr.message);
       } else {
         lrByTripId = new Map();
         for (const row of lrData ?? []) {
@@ -226,10 +241,10 @@ export async function fetchCourierPartners(): Promise<{
   partners: CourierPartnerRow[];
 }> {
   const { data, error } = await supabase()
-    .from('courier_partners')
-    .select('*')
-    .eq('active', true)
-    .order('label', { ascending: true });
+    .from("courier_partners")
+    .select("*")
+    .eq("active", true)
+    .order("label", { ascending: true });
 
   if (error) return { error: new Error(error.message), partners: [] };
   return { error: null, partners: (data ?? []) as CourierPartnerRow[] };
@@ -258,20 +273,21 @@ export async function ensureCustomCourierPartner(
   courierValue: string,
   customCourierName: string,
 ): Promise<{ error: Error | null }> {
-  if (courierValue !== 'custom' || !customCourierName.trim()) return { error: null };
-  const value = customCourierName.toLowerCase().replace(/\s+/g, '_');
+  if (courierValue !== "custom" || !customCourierName.trim())
+    return { error: null };
+  const value = customCourierName.toLowerCase().replace(/\s+/g, "_");
   const { data: existing } = await supabase()
-    .from('courier_partners')
-    .select('label')
-    .eq('value', value)
+    .from("courier_partners")
+    .select("label")
+    .eq("value", value)
     .maybeSingle();
 
   if (existing) return { error: null };
 
-  const { error } = await supabase().from('courier_partners').insert({
+  const { error } = await supabase().from("courier_partners").insert({
     label: customCourierName.trim(),
     value,
-    category: 'other',
+    category: "other",
     is_custom: true,
   });
 
@@ -285,7 +301,7 @@ function resolveCourierName(
   partners: CourierPartnerRow[],
 ): string {
   const selected = partners.find((cp) => cp.value === courierValue);
-  if (courierValue === 'custom') return customCourierName.trim();
+  if (courierValue === "custom") return customCourierName.trim();
   return selected?.label || courierValue;
 }
 
@@ -304,9 +320,16 @@ export async function executeLogIncomingPods(payload: LogPodsPayload): Promise<{
     mappedAttachments,
   } = payload;
 
-  const finalCourierName = resolveCourierName(courierValue, customCourierName, dbCourierPartners);
+  const finalCourierName = resolveCourierName(
+    courierValue,
+    customCourierName,
+    dbCourierPartners,
+  );
 
-  const customErr = await ensureCustomCourierPartner(courierValue, customCourierName);
+  const customErr = await ensureCustomCourierPartner(
+    courierValue,
+    customCourierName,
+  );
   if (customErr.error) return { error: customErr.error };
 
   const podInserts: {
@@ -326,90 +349,105 @@ export async function executeLogIncomingPods(payload: LogPodsPayload): Promise<{
     for (const lr of lrs) {
       podInserts.push({
         trip_id: tripId,
-        lr_number: lr,
+        lr_number: lr === "N/A" ? null : lr,
         courier_name: finalCourierName,
         tracking_id: trackingId,
-      });
-      lrUpdates.push({ trip_id: tripId, lr_number: lr });
+      } as any);
+      if (lr !== "N/A") {
+        lrUpdates.push({ trip_id: tripId, lr_number: lr });
+      }
     }
 
     if (internalId) {
       const { data: allLrsForTrip } = await supabase()
-        .from('trip_lrs')
-        .select('pod_received, lr_number')
-        .eq('trip_id', tripId);
+        .from("trip_lrs")
+        .select("pod_received, lr_number")
+        .eq("trip_id", tripId);
 
       const totalLrs = allLrsForTrip?.length ?? 0;
-      const currentlyReceived = allLrsForTrip?.filter((l) => l.pod_received).length ?? 0;
-      const newlyReceived = lrs.length;
+      const currentlyReceived =
+        allLrsForTrip?.filter((l) => l.pod_received).length ?? 0;
+      const newlyReceived = lrs.filter((lr) => lr !== "N/A").length;
       const finalReceivedCount = currentlyReceived + newlyReceived;
-      const newStatus = totalLrs > 0 && finalReceivedCount >= totalLrs ? 'Received' : 'Partial';
+      const newStatus =
+        totalLrs === 0 || finalReceivedCount >= totalLrs
+          ? "Received"
+          : "Partial";
 
       await supabase()
-        .from('trips')
+        .from("trips")
         .update({
           pod_status: newStatus,
-          pod_received_date: new Date().toISOString().split('T')[0],
-          invoice_status_1: 'Received-Awaiting Validation',
+          pod_received_date: new Date().toISOString().split("T")[0],
+          invoice_status_1: "Received-Awaiting Validation",
         })
-        .eq('id', internalId);
+        .eq("id", internalId);
     }
   }
 
-  const attachmentInserts = mappedAttachments.map((att) => ({
-    trip_id: att.trip_id,
-    lr_number: att.lr_number,
-    file_path: att.file_path,
-    file_name: att.file_name,
-    file_size: att.file_size,
-    file_type: att.file_type,
-  }));
+  const attachmentInserts = mappedAttachments.map(
+    (att) =>
+      ({
+        trip_id: att.trip_id,
+        lr_number: att.lr_number === "N/A" ? null : att.lr_number,
+        file_path: att.file_path,
+        file_name: att.file_name,
+        file_size: att.file_size,
+        file_type: att.file_type,
+      }) as any,
+  );
 
   if (podInserts.length > 0) {
-    const { error } = await supabase().from('trip_pods').insert(podInserts);
-    if (error) console.error('[logPods] trip_pods insert:', error);
+    const { error } = await supabase().from("trip_pods").insert(podInserts);
+    if (error) console.error("[logPods] trip_pods insert:", error);
   }
 
   let attachmentWarning: string | undefined;
   if (attachmentInserts.length > 0) {
-    const { error } = await supabase().from('pod_attachments').insert(attachmentInserts);
+    const { error } = await supabase()
+      .from("pod_attachments")
+      .insert(attachmentInserts);
     if (error) {
-      console.error('[logPods] pod_attachments insert:', error);
-      attachmentWarning = 'POD logged, but attachment records failed to save.';
+      console.error("[logPods] pod_attachments insert:", error);
+      attachmentWarning = "POD logged, but attachment records failed to save.";
     }
   }
 
   for (const update of lrUpdates) {
     const { error } = await supabase()
-      .from('trip_lrs')
+      .from("trip_lrs")
       .update({
-        status: 'delivered',
+        status: "delivered",
         pod_received: true,
-        pod_status: 'Received',
-        invoice_status: 'Received-Awaiting Validation',
+        pod_status: "Received",
+        invoice_status: "Received-Awaiting Validation",
       })
-      .eq('trip_id', update.trip_id)
-      .eq('lr_number', update.lr_number);
+      .eq("trip_id", update.trip_id)
+      .eq("lr_number", update.lr_number);
 
-    if (error) console.error('[logPods] trip_lrs update:', error);
+    if (error) console.error("[logPods] trip_lrs update:", error);
   }
 
   for (const [tripId, lrs] of Object.entries(selectedLRs)) {
     if (lrs.length === 0) continue;
-    const attCount = mappedAttachments.filter((a) => a.trip_id === tripId).length;
-    const { error } = await supabase().rpc('log_activity', {
-      p_action: 'POD_LOGGED',
-      p_entity_type: 'trip',
+    const attCount = mappedAttachments.filter(
+      (a) => a.trip_id === tripId,
+    ).length;
+    const { error } = await supabase().rpc("log_activity", {
+      p_action: "POD_LOGGED",
+      p_entity_type: "trip",
       p_entity_id: tripId,
       p_details: {
-        lr_numbers: lrs,
+        lr_numbers: lrs.filter((lr) => lr !== "N/A"),
         courier_name: finalCourierName,
         tracking_id: trackingId || null,
         attachment_count: attCount,
       },
     });
-    if (error) console.warn('[logPods] log_activity:', error.message);
+    if (error) console.warn("[logPods] log_activity:", error.message);
   }
 
-  return attachmentWarning ? { error: null, attachmentWarning } : { error: null };
+  return attachmentWarning
+    ? { error: null, attachmentWarning }
+    : { error: null };
 }

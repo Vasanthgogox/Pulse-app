@@ -153,7 +153,9 @@ export function LogIncomingPodsScreen() {
 
   const handleSelectAll = useCallback(() => {
     const isAllSelected = supplierTrips.every((t) => {
-      const pendingLRs = t.lrNumbers.filter((lr) => !t.receivedLRs.includes(lr));
+      const pendingLRs = t.lrNumbers.length > 0
+        ? t.lrNumbers.filter((lr) => !t.receivedLRs.includes(lr))
+        : ['N/A'];
       return (
         pendingLRs.length === 0 ||
         (selectedLRs[t.id] && selectedLRs[t.id].length === pendingLRs.length)
@@ -165,7 +167,9 @@ export function LogIncomingPodsScreen() {
     } else {
       const next: Record<string, string[]> = {};
       supplierTrips.forEach((t) => {
-        const pendingLRs = t.lrNumbers.filter((lr) => !t.receivedLRs.includes(lr));
+        const pendingLRs = t.lrNumbers.length > 0
+          ? t.lrNumbers.filter((lr) => !t.receivedLRs.includes(lr))
+          : ['N/A'];
         if (pendingLRs.length > 0) next[t.id] = [...pendingLRs];
       });
       setSelectedLRs(next);
@@ -383,7 +387,9 @@ export function LogIncomingPodsScreen() {
           <View style={styles.selectAllCheckbox}>
             {supplierTrips.length > 0 &&
             supplierTrips.every((t) => {
-              const pendingLRs = t.lrNumbers.filter((lr) => !t.receivedLRs.includes(lr));
+              const pendingLRs = t.lrNumbers.length > 0
+                ? t.lrNumbers.filter((lr) => !t.receivedLRs.includes(lr))
+                : ['N/A'];
               return (
                 pendingLRs.length === 0 ||
                 (selectedLRs[t.id] && selectedLRs[t.id].length === pendingLRs.length)
@@ -432,7 +438,9 @@ export function LogIncomingPodsScreen() {
                 selectedSupplier={selectedSupplier}
                 selectedForTrip={selectedLRs[t.id] || []}
                 onToggleTrip={() => {
-                  const pendingLRs = t.lrNumbers.filter((lr) => !t.receivedLRs.includes(lr));
+                  const pendingLRs = t.lrNumbers.length > 0
+                    ? t.lrNumbers.filter((lr) => !t.receivedLRs.includes(lr))
+                    : ['N/A'];
                   if (pendingLRs.length > 0) toggleTrip(t.id, pendingLRs);
                 }}
                 onToggleLR={(lr) => toggleLR(t.id, lr)}
@@ -607,73 +615,60 @@ export function LogIncomingPodsScreen() {
               value={courierSearch}
               onChangeText={setCourierSearch}
             />
-            {courierSections.length === 0 ? (
-              <View>
-                <Text style={styles.emptyCourier}>
-                  {courierSearch.trim()
-                    ? 'No courier partners match your search.'
-                    : 'No active courier partners found in the directory.'}
-                </Text>
-                {courierSearch.trim() &&
-                !dbCourierPartners.some((p) => p.label.toLowerCase() === courierSearch.toLowerCase()) ? (
+            
+            <ScrollView style={{ flex: 1 }}>
+              {courierSearch.trim() && (
+                <View>
                   <Pressable
-                    style={styles.modalRow}
+                    style={[styles.modalRow, { backgroundColor: Theme.surfaceGray }]}
                     onPress={() => {
                       setCourierValue('custom');
                       setCustomCourierName(courierSearch.trim());
                       setCourierModalOpen(false);
-                    }}
-                  >
-                    <FontAwesome name="plus-circle" size={16} color={Theme.primary} />
-                    <Text style={[styles.modalRowText, { marginLeft: 8 }]}>
-                      Use “{courierSearch.trim()}” as custom
-                    </Text>
-                  </Pressable>
-                ) : null}
-              </View>
-            ) : (
-              <SectionList
-                sections={courierSections}
-                keyExtractor={(item) => item.value}
-                renderSectionHeader={({ section: { title } }) => (
-                  <Text style={styles.sectionHeader}>{title}</Text>
-                )}
-                renderItem={({ item }) => (
-                  <Pressable
-                    style={styles.modalRow}
-                    onPress={() => {
-                      setCourierValue(item.value);
-                      setCustomCourierName('');
-                      setCourierModalOpen(false);
                       setCourierSearch('');
                     }}
                   >
-                    <Text style={styles.modalRowText}>{item.label}</Text>
-                    {courierValue === item.value ? (
-                      <FontAwesome name="check" size={16} color={Theme.primary} />
-                    ) : null}
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <FontAwesome name="plus-circle" size={16} color={Theme.primary} />
+                      <Text style={[styles.modalRowText, { marginLeft: 8, fontWeight: '700' }]}>
+                        Use "{courierSearch.trim()}" as custom courier
+                      </Text>
+                    </View>
                   </Pressable>
-                )}
-                ListFooterComponent={
-                  courierSearch.trim() &&
-                  !dbCourierPartners.some((p) => p.label.toLowerCase() === courierSearch.toLowerCase()) ? (
+                  <View style={{ height: 1, backgroundColor: Theme.borderLight, marginVertical: 8 }} />
+                </View>
+              )}
+
+              {courierSections.map((section, idx) => (
+                <View key={section.title || idx}>
+                  <Text style={styles.sectionHeader}>{section.title}</Text>
+                  {section.data.map(item => (
                     <Pressable
+                      key={item.value}
                       style={styles.modalRow}
                       onPress={() => {
-                        setCourierValue('custom');
-                        setCustomCourierName(courierSearch.trim());
+                        setCourierValue(item.value);
+                        setCustomCourierName('');
                         setCourierModalOpen(false);
+                        setCourierSearch('');
                       }}
                     >
-                      <FontAwesome name="plus-circle" size={16} color={Theme.primary} />
-                      <Text style={[styles.modalRowText, { marginLeft: 8 }]}>
-                        Use “{courierSearch.trim()}” as custom
-                      </Text>
+                      <Text style={styles.modalRowText}>{item.label}</Text>
+                      {courierValue === item.value ? (
+                        <FontAwesome name="check" size={16} color={Theme.primary} />
+                      ) : null}
                     </Pressable>
-                  ) : null
-                }
-              />
-            )}
+                  ))}
+                </View>
+              ))}
+              
+              {courierSections.length === 0 && !courierSearch.trim() && (
+                <Text style={styles.emptyCourier}>
+                  No active courier partners found in the directory.
+                </Text>
+              )}
+            </ScrollView>
+
             <Pressable style={styles.modalClose} onPress={() => setCourierModalOpen(false)}>
               <Text style={styles.modalCloseText}>Close</Text>
             </Pressable>
@@ -706,7 +701,9 @@ function TripCard({
   onToggleTrip: () => void;
   onToggleLR: (lr: string) => void;
 }) {
-  const pendingLRs = trip.lrNumbers.filter((lr) => !trip.receivedLRs.includes(lr));
+  const pendingLRs = trip.lrNumbers.length > 0 
+    ? trip.lrNumbers.filter((lr) => !trip.receivedLRs.includes(lr))
+    : ['N/A'];
   const isFullySelected = selectedForTrip.length > 0 && selectedForTrip.length === pendingLRs.length;
   const isPartiallySelected =
     selectedForTrip.length > 0 && selectedForTrip.length < pendingLRs.length;
