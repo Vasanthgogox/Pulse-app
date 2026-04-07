@@ -30,6 +30,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Animated,
+    Platform,
     RefreshControl,
     ScrollView,
     Share,
@@ -1123,6 +1124,11 @@ const styles = StyleSheet.create({
     lineHeight: 11,
     color: Theme.textOnDark,
     paddingVertical: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   typeFilterWrapDark: {
     flexDirection: "row",
@@ -1184,6 +1190,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Theme.textPrimaryDark,
     paddingVertical: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   addBtn: {
     width: 44,

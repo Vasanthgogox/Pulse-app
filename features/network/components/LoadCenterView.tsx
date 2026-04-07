@@ -2679,6 +2679,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Theme.textOnDark,
     paddingVertical: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   loadTypeFilterWrap: {
     flexDirection: "row",

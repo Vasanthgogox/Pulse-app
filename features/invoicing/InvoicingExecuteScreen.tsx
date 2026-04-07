@@ -598,7 +598,17 @@ const styles = StyleSheet.create({
   sidebarTitle: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1, color: Theme.textMuted },
   sidebarBadge: { fontSize: 9, fontWeight: '800', color: Theme.primary, backgroundColor: 'rgba(26,35,126,0.1)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, textTransform: 'uppercase' },
   sidebarSearch: { flexDirection: 'row', alignItems: 'center', margin: 16, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: Theme.cardWhite, borderWidth: 1, borderColor: Theme.borderInput, borderRadius: 8 },
-  sidebarInput: { flex: 1, fontSize: 12, fontWeight: '700', color: Theme.textPrimaryDark },
+  sidebarInput: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      } as any,
+    }),
+  },
   
   clientRow: { padding: 16, borderBottomWidth: 1, borderBottomColor: Theme.surfaceBorder, backgroundColor: Theme.screenBackground },
   clientRowActive: { backgroundColor: 'rgba(26,35,126,0.03)' },
@@ -627,7 +637,19 @@ const styles = StyleSheet.create({
   bulkActionText: { color: Theme.buttonPrimaryText, fontSize: 9, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1 },
   listFilters: { padding: 16, backgroundColor: Theme.screenBackground, borderBottomWidth: 1, borderBottomColor: Theme.borderLight, flexDirection: 'row', alignItems: 'center', gap: 16, flexWrap: 'wrap' },
   searchRow: { flex: 1, minWidth: 180, flexDirection: 'row', alignItems: 'center', backgroundColor: Theme.cardWhite, borderWidth: 1, borderColor: Theme.borderInput, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
-  searchInput: { flex: 1, fontSize: 11, fontWeight: '700', color: Theme.textPrimaryDark, padding: 0, margin: 0 },
+  searchInput: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+    padding: 0,
+    margin: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      } as any,
+    }),
+  },
   
   dateFilterContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: Theme.cardWhite, borderWidth: 1, borderColor: Theme.borderInput, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   dateRow: { flexDirection: 'row', alignItems: 'center' },

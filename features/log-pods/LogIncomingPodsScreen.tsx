@@ -1125,6 +1125,11 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     marginBottom: 20,
     backgroundColor: Theme.cardWhite,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   summaryContainer: {
     padding: 24,
@@ -1168,6 +1173,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 13,
     color: Theme.textPrimaryDark,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   countRow: {
     flexDirection: "row",

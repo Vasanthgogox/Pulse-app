@@ -25,6 +25,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
+    Platform,
     RefreshControl,
     ScrollView,
     StyleSheet,
@@ -919,6 +920,11 @@ const detailStyles = StyleSheet.create({
     color: Theme.textOnDark,
     paddingVertical: 0,
     paddingLeft: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   byTripSummaryRow: {
     flexDirection: "row",

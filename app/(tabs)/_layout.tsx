@@ -27,6 +27,19 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
     router.push('/load-board');
   };
 
+  const onProfilePress = () => {
+    router.push('/(tabs)/profile');
+  };
+
+  const onNotificationPress = () => {
+    // TODO: implement notifications screen; currently redirects to network as a placeholder
+    router.push('/(tabs)/network');
+  };
+
+  const onLogoPress = () => {
+    router.push('/(tabs)/index');
+  };
+
   // Ops Agent (index) is full-screen with back button — no bottom nav
   if (routeName === 'index') {
     return null;
@@ -41,6 +54,9 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
         activeTab={activeTab}
         onTabChange={onTabChange}
         onLoadBoardPress={onLoadBoardPress}
+        onProfilePress={onProfilePress}
+        onNotificationPress={onNotificationPress}
+        onLogoPress={onLogoPress}
         showLoadFab={false}
       />
     </View>

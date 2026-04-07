@@ -8,6 +8,7 @@ import {
   ScrollView,
   RefreshControl,
   FlatList,
+  Platform,
   type ListRenderItem,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -199,6 +200,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 14,
     color: Theme.textPrimary,
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      } as any,
+    }),
   },
   iconBtn: {
     padding: 8,

@@ -11,6 +11,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Modal,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -261,6 +262,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     minHeight: 48,
     paddingRight: 44,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   readonlyInput: {
     justifyContent: "center",
