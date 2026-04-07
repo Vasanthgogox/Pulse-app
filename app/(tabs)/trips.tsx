@@ -268,14 +268,6 @@ export default function TripsScreen() {
     return Array.from(types).sort();
   }, [trips]);
 
-  const totalRevenue = useMemo(() => {
-    return filtered.reduce((acc, t) => acc + (t.client_price || 0), 0);
-  }, [filtered]);
-
-  const activeTripsCount = useMemo(() => {
-    return filtered.length;
-  }, [filtered]);
-
   const transactionsByTripId = useMemo(() => {
     const map = new Map<string, typeof transactions>();
     for (const tx of transactions) {
@@ -669,18 +661,6 @@ export default function TripsScreen() {
           />
         }
       >
-        {!isLargeScreen && (
-          <View style={styles.mobileSummaryRow}>
-            <View style={styles.mobileSummaryCard}>
-              <Text style={styles.mobileSummaryLabel}>{tr("tripsCount")}</Text>
-              <Text style={styles.mobileSummaryValue}>{activeTripsCount}</Text>
-            </View>
-            <View style={styles.mobileSummaryCard}>
-              <Text style={styles.mobileSummaryLabel}>{tr("total").toUpperCase()}</Text>
-              <Text style={styles.mobileSummaryValue}>₹{totalRevenue.toLocaleString("en-IN")}</Text>
-            </View>
-          </View>
-        )}
         {filtered.length === 0 ? (
             <Text style={styles.empty}>
               {showCompletedList
@@ -1072,36 +1052,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   scroll: { flex: 1, backgroundColor: Theme.darkBackground },
-  mobileSummaryRow: {
-    flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingBottom: 20,
-    paddingTop: 12,
-    backgroundColor: Theme.darkBackground,
-  },
-  mobileSummaryCard: {
-    flex: 1,
-    backgroundColor: Theme.darkSurface,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: 16,
-    padding: 16,
-  },
-  mobileSummaryLabel: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: Theme.textOnDarkMuted,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    marginBottom: 4,
-  },
-  mobileSummaryValue: {
-    fontSize: 18,
-    fontWeight: "700",
-    fontStyle: "italic",
-    color: Theme.textOnDark,
-  },
   scrollContent: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 12,
