@@ -245,7 +245,7 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
   const material = indent.load_type || '—';
   const weight =
     indent.weight != null && indent.weight > 0
-      ? `${indent.weight} kg`
+      ? `${(indent.weight / 1000).toFixed(2)} tons`
       : '—';
   const dateLabel = formatIndentDate(indent.pickup_date ?? null, indent.created_at);
 

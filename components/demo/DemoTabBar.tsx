@@ -166,7 +166,7 @@ export function DemoTabBar({
                 <Text
                   style={[styles.dockLabel, isFiscal && styles.dockLabelActive]}
                 >
-                  {t("fiscal").toUpperCase()}
+                  {t("finance").toUpperCase()}
                 </Text>
               </AnimatedTabIcon>
             </TouchableOpacity>

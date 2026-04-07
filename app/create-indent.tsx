@@ -78,8 +78,8 @@ function validateForm(state: FormState): Record<string, string> {
     errors.weight = 'Weight is required.';
   } else {
     const w = parseFloat(weightStr.replace(/,/g, ''));
-    if (Number.isNaN(w) || w <= 0) errors.weight = 'Enter a valid weight (kg).';
-    else if (w > 999999) errors.weight = 'Weight must be at most 999,999 kg.';
+    if (Number.isNaN(w) || w <= 0) errors.weight = 'Enter a valid weight (tons).';
+    else if (w > 1000) errors.weight = 'Weight must be at most 1,000 tons.';
   }
   if ((state.pickup_date ?? '').trim()) {
     const pickupDateErr = dateISO()(state.pickup_date ?? '');
@@ -343,7 +343,7 @@ export default function CreateIndentScreen() {
 
     const clientPrice = parseFloat(String(form.client_price).replace(/,/g, ''));
     const supplierTarget = parseFloat(String(form.supplier_target).replace(/,/g, ''));
-    const weightVal = parseFloat(form.weight.replace(/,/g, ''));
+    const weightVal = parseFloat(form.weight.replace(/,/g, '')) * 1000; // UI is tons, backend is kg
     const payload: CreateIndentInput = {
       pickup_area: form.pickup_area.trim(),
       drop_location: form.drop_location.trim(),
@@ -638,12 +638,12 @@ export default function CreateIndentScreen() {
           </View>
 
           <View style={styles.sheetSection}>
-            <Text style={styles.sheetLabel}>Weight (kg)</Text>
+            <Text style={styles.sheetLabel}>Weight (tons)</Text>
             <TextInput
               style={[styles.sheetInput, errors.weight && styles.inputError]}
               value={form.weight}
               onChangeText={(t) => update({ weight: t.replace(/[^\d.]/g, '').slice(0, 12) })}
-              placeholder="e.g. 500 (kg)"
+              placeholder="e.g. 1.5 (tons)"
               placeholderTextColor={Theme.textMuted}
               keyboardType="decimal-pad"
             />
