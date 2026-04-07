@@ -276,33 +276,58 @@ export default function TripsScreen() {
         onProfileClick={() => router.push("/(tabs)/profile")}
       />
       <View style={styles.headerBlock}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabRowScrollContent}
-          style={styles.tabRowScroll}
-        >
-          {statusTabs.map((tab) => (
-            <TouchableOpacity
-              key={tab.id}
-              style={[styles.tab, tab.isActive && styles.tabActive]}
-              onPress={tab.onPress}
-              activeOpacity={0.7}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  tab.isActive && styles.tabTextActive,
-                ]}
+        {Platform.OS === "web" ? (
+          <View style={styles.tabRowWeb}>
+            {statusTabs.map((tab) => (
+              <TouchableOpacity
+                key={tab.id}
+                style={[styles.tab, tab.isActive && styles.tabActive]}
+                onPress={tab.onPress}
+                activeOpacity={0.7}
               >
-                {tab.label}
-              </Text>
-              {tab.isActive ? (
-                <View style={styles.tabUnderline} />
-              ) : null}
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+                <Text
+                  style={[
+                    styles.tabText,
+                    tab.isActive && styles.tabTextActive,
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+                {tab.isActive ? (
+                  <View style={styles.tabUnderline} />
+                ) : null}
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabRowScrollContent}
+            style={styles.tabRowScroll}
+          >
+            {statusTabs.map((tab) => (
+              <TouchableOpacity
+                key={tab.id}
+                style={[styles.tab, tab.isActive && styles.tabActive]}
+                onPress={tab.onPress}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.tabText,
+                    tab.isActive && styles.tabTextActive,
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+                {tab.isActive ? (
+                  <View style={styles.tabUnderline} />
+                ) : null}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
 
         <View style={styles.tripsToolbar}>
           <View
@@ -466,20 +491,18 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.darkBackground,
     width: "100%",
   },
-  tabRowScroll: {
-    flexGrow: 0,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.separatorDark,
-  },
-  tabRowScrollContent: {
+  tabRowWeb: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 16,
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 4,
-    paddingBottom: 6,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.separatorDark,
   },
-  tab: { position: "relative" as const, paddingVertical: 6 },
+  tab: { position: "relative" as const, paddingVertical: 8 },
   tabActive: {},
   tabText: {
     fontSize: 9,
@@ -494,7 +517,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 2,
+    height: 1.5,
     backgroundColor: Theme.teslaRed,
     borderRadius: 1,
   },
