@@ -185,27 +185,51 @@ export function PodAttachmentModal({
         );
 
         const ext = fileObj.name.split('.').pop() ?? 'bin';
-        const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${ext}`;
-        const filePath = `pods/${new Date().toISOString().split('T')[0]}/${fileName}`;
-
         const response = await fetch(fileObj.uri);
         const blob = await response.blob();
 
-        const { data, error } = await supabase()
-          .storage.from('pod-documents')
-          .upload(filePath, blob, {
-            cacheControl: '3600',
-            upsert: false,
-            contentType: fileObj.mimeType,
-          });
+        const targets =
+          fileObj.matchedLRs.length > 0 ? fileObj.matchedLRs : flatSelectedLRs;
 
-        if (error) {
-          setFiles((prev) =>
-            prev.map((f) =>
-              f.id === fileObj.id ? { ...f, status: 'error', error: error.message, progress: 0 } : f,
-            ),
-          );
-          throw error;
+        // Group targets by tripId so we only upload once per trip
+        const tripIds = Array.from(new Set(targets.map((t) => t.tripId)));
+        
+        let firstUploadPath: string | null = null;
+
+        for (const tripId of tripIds) {
+          const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${ext}`;
+          // Use standard Q-unified-base trip document path: {tripId}/{uuid}.{ext}
+          const filePath = `${tripId}/${fileName}`;
+
+          const { data, error } = await supabase()
+            .storage.from('trip-documents')
+            .upload(filePath, blob, {
+              cacheControl: '3600',
+              upsert: false,
+              contentType: fileObj.mimeType,
+            });
+
+          if (error) {
+            setFiles((prev) =>
+              prev.map((f) =>
+                f.id === fileObj.id ? { ...f, status: 'error', error: error.message, progress: 0 } : f,
+              ),
+            );
+            throw error;
+          }
+          
+          if (!firstUploadPath) {
+            firstUploadPath = data?.path ?? filePath;
+          }
+
+          // Insert into trip_documents so the POD is visible in the standard Q-unified-base trip details
+          await supabase().from('trip_documents').insert({
+            trip_id: tripId,
+            file_name: fileObj.name,
+            storage_path: data?.path ?? filePath,
+            mime_type: fileObj.mimeType,
+            size_bytes: fileObj.size,
+          });
         }
 
         setFiles((prev) =>
@@ -214,15 +238,13 @@ export function PodAttachmentModal({
           ),
         );
 
-        const path = data?.path ?? filePath;
-        const targets =
-          fileObj.matchedLRs.length > 0 ? fileObj.matchedLRs : flatSelectedLRs;
-
+        // We map back to the original attachment payload for logPodsService
+        // logPodsService still uses mappedAttachments for pod_attachments
         targets.forEach((t) => {
           finalMappings.push({
             trip_id: t.tripId,
             lr_number: t.lrNumber,
-            file_path: path,
+            file_path: firstUploadPath ?? '',
             file_name: fileObj.name,
             file_size: fileObj.size,
             file_type: fileObj.mimeType,
