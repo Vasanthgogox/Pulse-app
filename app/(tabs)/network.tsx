@@ -443,34 +443,6 @@ export default function NetworkScreen() {
             { paddingTop: 12 },
           ]}
         >
-          <View style={styles.darkHeaderRow}>
-            <View style={styles.darkHeaderLeft}>
-              <View style={styles.darkHeaderTitleWrap}>
-                <Text style={styles.darkHeaderTitle}>NETWORK HUB</Text>
-                <Text style={styles.darkHeaderSubtitle}>Managing Partners</Text>
-              </View>
-            </View>
-            <View style={styles.darkHeaderRight}>
-              <View style={styles.bellWrap}>
-                <FontAwesome
-                  name="bell"
-                  size={18}
-                  color={Theme.textOnDarkMuted}
-                />
-              </View>
-              <TouchableOpacity
-                style={styles.avatarBtn}
-                onPress={() => router.push("/(tabs)/profile")}
-                activeOpacity={0.8}
-              >
-                <FontAwesome
-                  name="user"
-                  size={16}
-                  color={Theme.textOnDarkMuted}
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
           <View style={styles.mainTabRow}>
             <TouchableOpacity
               style={styles.mainTab}
@@ -528,37 +500,7 @@ export default function NetworkScreen() {
         </Animated.View>
       )}
 
-      {/* Single black block: title, Manage|Load tabs, segment tabs, search (finance-style) */}
       <View style={[styles.blackBlock, { paddingTop: 12 }]}>
-        <View style={styles.darkHeaderRow}>
-          <View style={styles.darkHeaderLeft}>
-            <View style={styles.darkHeaderTitleWrap}>
-              <Text style={styles.darkHeaderTitle}>NETWORK HUB</Text>
-              <Text style={styles.darkHeaderSubtitle}>Managing Partners</Text>
-            </View>
-          </View>
-          <View style={styles.darkHeaderRight}>
-            <View style={styles.bellWrap}>
-              <FontAwesome
-                name="bell"
-                size={18}
-                color={Theme.textOnDarkMuted}
-              />
-              {pendingRequestCount > 0 && <View style={styles.bellBadge} />}
-            </View>
-            <TouchableOpacity
-              style={styles.avatarBtn}
-              onPress={() => router.push("/(tabs)/profile")}
-              activeOpacity={0.8}
-            >
-              <FontAwesome
-                name="user"
-                size={16}
-                color={Theme.textOnDarkMuted}
-              />
-            </TouchableOpacity>
-          </View>
-        </View>
 
         {/* Manage Network | Load — black tabs (body), Load-style */}
         <View style={styles.mainTabRow}>
