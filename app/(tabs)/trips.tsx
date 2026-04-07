@@ -4,7 +4,6 @@
  */
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { FinanceFAB } from "@/components/FinanceFAB";
-import { TeslaHeader } from "@/components/TeslaHeader";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
