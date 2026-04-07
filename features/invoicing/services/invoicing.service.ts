@@ -215,7 +215,6 @@ export async function executeInvoiceCreation(
       .update({
         invoice_no: invoiceNo,
         invoice_status_1: 'Raised',
-        invoice_date: new Date().toISOString().split('T')[0],
       })
       .in('id', internalIds);
 
