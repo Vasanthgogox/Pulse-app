@@ -272,27 +272,30 @@ export interface LogPodsPayload {
 export async function ensureCustomCourierPartner(
   courierValue: string,
   customCourierName: string,
-): Promise<{ error: Error | null }> {
+): Promise<{ error: Error | null; partner: CourierPartnerRow | null }> {
   if (courierValue !== "custom" || !customCourierName.trim())
-    return { error: null };
+    return { error: null, partner: null };
   const value = customCourierName.toLowerCase().replace(/\s+/g, "_");
-  const { data: existing } = await supabase()
+  const { data: existing, error: existingErr } = await supabase()
     .from("courier_partners")
-    .select("label")
+    .select("*")
     .eq("value", value)
     .maybeSingle();
 
-  if (existing) return { error: null };
+  if (existingErr) return { error: new Error(existingErr.message), partner: null };
+  if (existing) return { error: null, partner: existing as CourierPartnerRow };
 
-  const { error } = await supabase().from("courier_partners").insert({
+  const partnerData = {
     label: customCourierName.trim(),
     value,
     category: "other",
     is_custom: true,
-  });
+  };
 
-  if (error) return { error: new Error(error.message) };
-  return { error: null };
+  const { error } = await supabase().from("courier_partners").insert(partnerData);
+
+  if (error) return { error: new Error(error.message), partner: null };
+  return { error: null, partner: partnerData as CourierPartnerRow };
 }
 
 function resolveCourierName(
@@ -341,20 +344,22 @@ export async function executeLogIncomingPods(payload: LogPodsPayload): Promise<{
 
   const lrUpdates: { trip_id: string; lr_number: string }[] = [];
 
-  for (const [tripId, lrs] of Object.entries(selectedLRs)) {
+  for (const [tripInternalId, lrs] of Object.entries(selectedLRs)) {
     if (lrs.length === 0) continue;
-    const trip = allTrips.find((t) => t.id === tripId);
+    const trip = allTrips.find((t) => t.internal_id === tripInternalId);
     const internalId = trip?.internal_id;
+    // Note: trip_lrs.trip_id is the internal UUID (not the string sequence)
+    // we need to use trip.internal_id for these updates!
 
     for (const lr of lrs) {
       podInserts.push({
-        trip_id: tripId,
+        trip_id: internalId as string,
         lr_number: lr === "N/A" ? null : lr,
         courier_name: finalCourierName,
         tracking_id: trackingId,
       } as any);
       if (lr !== "N/A") {
-        lrUpdates.push({ trip_id: tripId, lr_number: lr });
+        lrUpdates.push({ trip_id: internalId as string, lr_number: lr });
       }
     }
 
@@ -362,7 +367,7 @@ export async function executeLogIncomingPods(payload: LogPodsPayload): Promise<{
       const { data: allLrsForTrip } = await supabase()
         .from("trip_lrs")
         .select("pod_received, lr_number")
-        .eq("trip_id", tripId);
+        .eq("trip_id", internalId);
 
       const totalLrs = allLrsForTrip?.length ?? 0;
       const currentlyReceived =
@@ -386,15 +391,17 @@ export async function executeLogIncomingPods(payload: LogPodsPayload): Promise<{
   }
 
   const attachmentInserts = mappedAttachments.map(
-    (att) =>
-      ({
+    (att) => {
+      const trip = allTrips.find(t => t.internal_id === att.trip_id); // the modal will return tripInternalId since we mapped them
+      return {
         trip_id: att.trip_id,
         lr_number: att.lr_number === "N/A" ? null : att.lr_number,
         file_path: att.file_path,
         file_name: att.file_name,
         file_size: att.file_size,
         file_type: att.file_type,
-      }) as any,
+      } as any;
+    },
   );
 
   if (podInserts.length > 0) {
@@ -428,15 +435,15 @@ export async function executeLogIncomingPods(payload: LogPodsPayload): Promise<{
     if (error) console.error("[logPods] trip_lrs update:", error);
   }
 
-  for (const [tripId, lrs] of Object.entries(selectedLRs)) {
+  for (const [tripInternalId, lrs] of Object.entries(selectedLRs)) {
     if (lrs.length === 0) continue;
     const attCount = mappedAttachments.filter(
-      (a) => a.trip_id === tripId,
+      (a) => a.trip_id === tripInternalId,
     ).length;
     const { error } = await supabase().rpc("log_activity", {
       p_action: "POD_LOGGED",
       p_entity_type: "trip",
-      p_entity_id: tripId,
+      p_entity_id: tripInternalId,
       p_details: {
         lr_numbers: lrs.filter((lr) => lr !== "N/A"),
         courier_name: finalCourierName,
