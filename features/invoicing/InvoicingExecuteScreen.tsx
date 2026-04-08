@@ -17,8 +17,8 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
-    Alert,
     FlatList,
+    Modal,
     Platform,
     Pressable,
     StyleSheet,
@@ -215,22 +215,6 @@ export function InvoicingExecuteScreen() {
       },
     });
   }, [router]);
-
-  // No longer directly finalizing here, it's done in PdfPreviewScreen
-  const executeFinalizeMutation = useCallback(async (internalIds: string[], payload: any) => {
-    try {
-      await executeMutation.mutateAsync({ internalIds, payload });
-      setStep(0);
-      setSelectedTripIds([]);
-      Alert.alert('Success', 'Invoice finalized and dispatched!');
-      router.back();
-    } catch (e) {
-      Alert.alert(
-        'Error',
-        e instanceof Error ? e.message : 'Failed to finalize invoice.',
-      );
-    }
-  }, [executeMutation, router]);
 
   if (!allowed) {
     return (
@@ -534,6 +518,21 @@ export function InvoicingExecuteScreen() {
           </View>
         )}
       </View>
+
+      {isMediumScreen && !isLargeScreen && (
+        <Modal visible={step === 2} animationType="slide" onRequestClose={() => setStep(1)}>
+          <View style={[styles.previewModalContainer, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+            <InvoicePreviewPanel
+              onClose={() => setStep(1)}
+              onPreview={handlePreview}
+              isFinalizing={executeMutation.isPending}
+              activeClient={activeClient}
+              selectedTrips={selectedTrips}
+              isStandalone
+            />
+          </View>
+        </Modal>
+      )}
 
       {!isMediumScreen && step === 1 && (
         <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
@@ -1343,4 +1342,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   blockedBtnText: { color: Theme.buttonPrimaryText, fontWeight: "700" },
+  previewModalContainer: {
+    flex: 1,
+    backgroundColor: Theme.screenBackground,
+  },
 });

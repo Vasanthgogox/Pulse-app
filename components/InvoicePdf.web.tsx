@@ -55,7 +55,7 @@ export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = 
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`invoice_${invoiceData.id}.pdf`);
+      pdf.save(`invoice_${invoiceData.invoiceNo}.pdf`);
     } catch (error) {
       console.error("Failed to generate PDF", error);
     } finally {

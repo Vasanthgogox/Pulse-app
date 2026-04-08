@@ -111,6 +111,7 @@ export default function InvoicePdfPreviewScreen() {
     () => parsedSelectedTripIds.map((id) => tripsById.get(id)).filter(Boolean) as InvoicingTripView[],
     [parsedSelectedTripIds, tripsById],
   );
+  const previewInvoiceNo = useMemo(() => buildInvoiceNo(selectedTrips), [selectedTrips]);
 
   const invoiceConfig: InvoiceConfig = {
     includeGst: parsedIncludeGst,
@@ -144,7 +145,7 @@ export default function InvoicePdfPreviewScreen() {
     return {
       brandingCompanyName: brandingName,
       brandingLogoUrl,
-      invoiceNo: buildInvoiceNo(selectedTrips),
+      invoiceNo: previewInvoiceNo,
       clientName: activeClient || 'Unknown Client',
       issuedOn: formatDate(issued),
       dueOn: formatDate(due),
@@ -161,7 +162,7 @@ export default function InvoicePdfPreviewScreen() {
       paymentTerms,
       notes,
       lrScope,
-      assetFleet: selectedTrips[0]?.details || 'N/A',
+      assetFleet: Array.from(new Set(selectedTrips.map((t) => t.details || 'N/A'))).join(', '),
       bankDetailsLines: [
         'HDFC BANK | IFSC: HDFC0001234',
         'A/C: 50200012345678 | BRANCH: CHENNAI',
@@ -182,7 +183,7 @@ export default function InvoicePdfPreviewScreen() {
       taxAmount: calculations.sgst + calculations.cgst,
       grandTotal: calculations.totalAmount,
     };
-  }, [activeClient, brandingLogoUrl, brandingName, calculations.cgst, calculations.sgst, calculations.subtotal, calculations.totalAmount, notes, parsedAdditionalCharges, parsedGstRate, parsedIncludeGst, paymentTerms, selectedTrips]);
+  }, [activeClient, brandingLogoUrl, brandingName, calculations.cgst, calculations.sgst, calculations.subtotal, calculations.totalAmount, notes, parsedAdditionalCharges, parsedGstRate, parsedIncludeGst, paymentTerms, previewInvoiceNo, selectedTrips]);
 
   const handleFinalizeAndSend = useCallback(async () => {
     setIsFinalizing(true);
@@ -195,6 +196,7 @@ export default function InvoicePdfPreviewScreen() {
       await executeMutation.mutateAsync({
         internalIds,
         payload: {
+          invoiceNo: previewInvoiceNo,
           notes,
           paymentTerms,
           includeGst: parsedIncludeGst,
@@ -212,7 +214,7 @@ export default function InvoicePdfPreviewScreen() {
     } finally {
       setIsFinalizing(false);
     }
-  }, [orgId, selectedTrips, executeMutation, notes, paymentTerms, parsedIncludeGst, parsedGstRate, parsedIncludeFuel, parsedFuelRate, parsedAdditionalCharges, calculations, router]);
+  }, [orgId, selectedTrips, executeMutation, previewInvoiceNo, notes, paymentTerms, parsedIncludeGst, parsedGstRate, parsedIncludeFuel, parsedFuelRate, parsedAdditionalCharges, calculations, router]);
 
   if (!allowed) {
     return (

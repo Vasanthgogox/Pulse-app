@@ -229,7 +229,11 @@ export async function executeInvoiceCreation(
   payload?: any,
 ): Promise<{ error: Error | null }> {
   try {
-    const invoiceNo = `#INV-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}${Math.floor(Math.random() * 90) + 10}`;
+    const candidateInvoiceNo =
+      payload && typeof payload.invoiceNo === "string" ? payload.invoiceNo.trim() : "";
+    const invoiceNo =
+      candidateInvoiceNo ||
+      `#INV-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}${Math.floor(Math.random() * 90) + 10}`;
 
     // Note: Due to Q-mobile standards preventing schema changes in this repo,
     // the full payload (taxes, fuel surcharge, additional charges) is securely persisted
