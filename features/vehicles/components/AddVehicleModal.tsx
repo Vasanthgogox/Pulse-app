@@ -1,12 +1,11 @@
 /**
- * Add Vehicle modal — fields match Q-unified-base AddVehicleWizard 100%.
- * Steps: Vehicle Info (vehicle source, number, brand/model/body/size/axle/capacity), Documents (expiry), Review.
+ * Add Vehicle modal — vehicle info, documents (full flow), review.
+ * Vehicle category (text chips) replaces legacy brand; body length uses a scroll picker + Other (manual).
  * When visible is true, shows as Ledger-style bottom-sheet popup; when undefined, full-screen wizard (e.g. route).
  */
 import { WizardStepLayout } from "@/components/WizardStepLayout";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useEffect, useMemo, useState } from "react";
 import {
     Dimensions,
@@ -25,14 +24,15 @@ import { formatIndianVehicleNumberInput } from "@/lib/format";
 import { dateISO, validateIndianVehicleNumber } from "@/lib/validation";
 import {
     getAxleRecommendations,
-    getBrands,
-    getBodyTypeRecommendations,
-    getBrandRecommendations,
     getCapacityRecommendations,
-    getModels,
-    getSizeRecommendations,
-    getTruckSpec,
 } from "../utils/indianTruckData.util";
+import {
+    BODY_LENGTH_SELECT_OPTIONS,
+    normalizeBodyLengthKey,
+    OTHER_LABEL,
+    VEHICLE_CATEGORY_LABELS,
+    getModelSelectOptions,
+} from "../utils/vehicleFormOptions.util";
 import {
     DOCUMENT_EXPIRY_ORDER,
     DOCUMENT_LABELS,
@@ -61,7 +61,7 @@ const STEPS_FULL = [
 ];
 
 const STEPS_OWN_ASSET = [
-  { key: "info", label: "Vehicle Info", description: "Number, brand, body, size, axle" },
+  { key: "info", label: "Vehicle Info", description: "Number, category, body, model, capacity, length, axle" },
   { key: "review", label: "Review", description: "Confirm and add vehicle" },
 ];
 
@@ -70,7 +70,7 @@ interface AddVehicleModalProps {
   onComplete: (payload: AddVehicleCompletePayload) => void;
   /** When true, show as Ledger-style bottom-sheet popup. When undefined, full-screen (e.g. add-vehicle route). */
   visible?: boolean;
-  /** When true (e.g. from Garage), add only own asset; single step: vehicle number, brand, body type, size, axle. No partner option, no documents step. */
+  /** When true (e.g. from Garage), add only own asset; single info step (category, body, model, capacity, body length, axle). No partner option, no documents step. */
   ownAssetOnly?: boolean;
 }
 
@@ -86,10 +86,13 @@ export function AddVehicleModal({
   const [vehicleSource, setVehicleSource] =
     useState<VehicleSource>("organization");
   const [vehicleNumber, setVehicleNumber] = useState("");
-  const [brand, setBrand] = useState("");
+  const [vehicleCategory, setVehicleCategory] = useState("");
   const [model, setModel] = useState("");
-  const [bodyType, setBodyType] = useState("");
-  const [size, setSize] = useState("");
+  const [bodyLength, setBodyLength] = useState("");
+  const [bodyLengthIsOther, setBodyLengthIsOther] = useState(false);
+  const [bodyLengthPickerOpen, setBodyLengthPickerOpen] = useState(false);
+  const [modelIsOther, setModelIsOther] = useState(false);
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [axle, setAxle] = useState("");
   const [capacity, setCapacity] = useState("");
   const [expiryDates, setExpiryDates] = useState<Record<string, string>>({});
@@ -102,10 +105,13 @@ export function AddVehicleModal({
       setStepIndex(0);
       setVehicleSource("organization");
       setVehicleNumber("");
-      setBrand("");
+      setVehicleCategory("");
       setModel("");
-      setBodyType("");
-      setSize("");
+      setModelIsOther(false);
+      setModelPickerOpen(false);
+      setBodyLength("");
+      setBodyLengthIsOther(false);
+      setBodyLengthPickerOpen(false);
       setAxle("");
       setCapacity("");
       setExpiryDates({});
@@ -114,41 +120,309 @@ export function AddVehicleModal({
     }
   }, [visible]);
 
-  const brands = useMemo(() => getBrands(), []);
-  const modelsForBrand = useMemo(
-    () => (brand ? getModels(brand) : []),
-    [brand],
-  );
-  const spec = useMemo(
-    () => (brand && model ? getTruckSpec(brand, model) : null),
-    [brand, model],
-  );
-  const brandRecommendations = useMemo(() => getBrandRecommendations(brand).slice(0, 8), [brand]);
-  const bodyTypeRecommendations = useMemo(() => getBodyTypeRecommendations(bodyType).slice(0, 8), [bodyType]);
-  const sizeRecommendations = useMemo(() => getSizeRecommendations(size).slice(0, 8), [size]);
   const axleRecommendations = useMemo(() => getAxleRecommendations(axle).slice(0, 8), [axle]);
   const capacityRecommendations = useMemo(() => getCapacityRecommendations(capacity).slice(0, 6), [capacity]);
 
   const vehicleTypeLabel = useMemo(() => {
-    const parts = [brand, model].filter(Boolean);
-    if (bodyType) parts.push(`(${bodyType})`);
+    const parts = [vehicleCategory, model].filter(Boolean);
     return parts.join(" ") || "";
-  }, [brand, model, bodyType]);
+  }, [vehicleCategory, model]);
+
+  const openModelPicker = () => {
+    setModelPickerOpen(true);
+  };
+
+  const selectModelPreset = (value: string) => {
+    setModelIsOther(false);
+    setModel(value);
+    setModelPickerOpen(false);
+  };
+
+  const selectModelOtherFromPicker = () => {
+    setModelIsOther(true);
+    setModel("");
+    setModelPickerOpen(false);
+  };
+
+  const openBodyLengthPicker = () => {
+    setBodyLengthPickerOpen(true);
+  };
+
+  const selectBodyLengthPreset = (value: string) => {
+    setBodyLengthIsOther(false);
+    setBodyLength(value);
+    setBodyLengthPickerOpen(false);
+  };
+
+  const selectBodyLengthOtherFromPicker = () => {
+    setBodyLengthIsOther(true);
+    setBodyLength("");
+    setBodyLengthPickerOpen(false);
+  };
+
+  const renderBodyLengthPickerSheet = () => (
+    <Modal
+      visible={bodyLengthPickerOpen}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setBodyLengthPickerOpen(false)}
+    >
+      <KeyboardAvoidingView
+        style={pickerModalStyles.backdrop}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={() => setBodyLengthPickerOpen(false)}
+        />
+        <View
+          style={[
+            pickerModalStyles.sheet,
+            { paddingBottom: insets.bottom + 16, maxHeight: Dimensions.get("window").height * 0.72 },
+          ]}
+        >
+          <Text style={pickerModalStyles.sheetTitle}>Body length (ft)</Text>
+          <Text style={pickerModalStyles.sheetHint}>Scroll to choose a preset or Other to type manually.</Text>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator
+            style={pickerModalStyles.sheetScroll}
+          >
+            {BODY_LENGTH_SELECT_OPTIONS.map((opt) => (
+              <TouchableOpacity
+                key={normalizeBodyLengthKey(opt)}
+                style={[
+                  pickerModalStyles.optionRow,
+                  normalizeBodyLengthKey(bodyLength) === normalizeBodyLengthKey(opt) &&
+                    !bodyLengthIsOther &&
+                    pickerModalStyles.optionRowActive,
+                ]}
+                onPress={() => selectBodyLengthPreset(opt)}
+              >
+                <Text
+                  style={[
+                    pickerModalStyles.optionText,
+                    normalizeBodyLengthKey(bodyLength) === normalizeBodyLengthKey(opt) &&
+                      !bodyLengthIsOther &&
+                      pickerModalStyles.optionTextActive,
+                  ]}
+                >
+                  {opt}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={[
+                pickerModalStyles.optionRow,
+                bodyLengthIsOther && pickerModalStyles.optionRowActive,
+              ]}
+              onPress={selectBodyLengthOtherFromPicker}
+            >
+              <Text
+                style={[
+                  pickerModalStyles.optionText,
+                  bodyLengthIsOther && pickerModalStyles.optionTextActive,
+                ]}
+              >
+                {OTHER_LABEL} — type manually
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+          <TouchableOpacity
+            style={pickerModalStyles.doneBtn}
+            onPress={() => setBodyLengthPickerOpen(false)}
+          >
+            <Text style={pickerModalStyles.doneBtnText}>Done</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+
+  const renderModelPickerSheet = () => (
+    <Modal
+      visible={modelPickerOpen}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setModelPickerOpen(false)}
+    >
+      <KeyboardAvoidingView
+        style={pickerModalStyles.backdrop}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={() => setModelPickerOpen(false)}
+        />
+        <View
+          style={[
+            pickerModalStyles.sheet,
+            {
+              paddingBottom: insets.bottom + 16,
+              maxHeight: Dimensions.get("window").height * 0.72,
+            },
+          ]}
+        >
+          <Text style={pickerModalStyles.sheetTitle}>Model</Text>
+          <Text style={pickerModalStyles.sheetHint}>
+            Scroll to choose a preset or Other to type manually.
+          </Text>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator
+            style={pickerModalStyles.sheetScroll}
+          >
+            {getModelSelectOptions(vehicleCategory).map((opt) => (
+              <TouchableOpacity
+                key={`model-${normalizeBodyLengthKey(opt)}`}
+                style={[
+                  pickerModalStyles.optionRow,
+                  normalizeBodyLengthKey(model) === normalizeBodyLengthKey(opt) &&
+                    !modelIsOther &&
+                    pickerModalStyles.optionRowActive,
+                ]}
+                onPress={() => selectModelPreset(opt)}
+              >
+                <Text
+                  style={[
+                    pickerModalStyles.optionText,
+                    normalizeBodyLengthKey(model) === normalizeBodyLengthKey(opt) &&
+                      !modelIsOther &&
+                      pickerModalStyles.optionTextActive,
+                  ]}
+                >
+                  {opt}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={[
+                pickerModalStyles.optionRow,
+                modelIsOther && pickerModalStyles.optionRowActive,
+              ]}
+              onPress={selectModelOtherFromPicker}
+            >
+              <Text
+                style={[
+                  pickerModalStyles.optionText,
+                  modelIsOther && pickerModalStyles.optionTextActive,
+                ]}
+              >
+                {OTHER_LABEL} — type manually
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+          <TouchableOpacity
+            style={pickerModalStyles.doneBtn}
+            onPress={() => setModelPickerOpen(false)}
+          >
+            <Text style={pickerModalStyles.doneBtnText}>Done</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+
+  const renderModelField = () => (
+    <View style={{ marginBottom: 4 }}>
+      <Text style={labelStyle}>
+        Model <Text style={styles.requiredMark}>*</Text>
+      </Text>
+      {modelIsOther ? (
+        <TextInput
+          style={inputStyle}
+          placeholder="Type model"
+          placeholderTextColor={Theme.placeholder}
+          value={model}
+          onChangeText={setModel}
+          autoCorrect={false}
+          spellCheck={false}
+          autoComplete="off"
+        />
+      ) : (
+        <TouchableOpacity
+          style={[inputStyle, styles.bodyLengthTouchable]}
+          onPress={openModelPicker}
+          activeOpacity={0.75}
+        >
+          <Text
+            style={[
+              styles.bodyLengthTouchableText,
+              !model && { color: Theme.placeholder },
+            ]}
+          >
+            {model || "Tap to select model"}
+          </Text>
+        </TouchableOpacity>
+      )}
+      {modelIsOther ? (
+        <TouchableOpacity
+          onPress={openModelPicker}
+          style={styles.switchToPresetLink}
+        >
+          <Text style={styles.switchToPresetLinkText}>
+            Choose from list instead
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+
+  const renderBodyLengthField = () => (
+    <View style={{ marginBottom: 4 }}>
+      <Text style={labelStyle}>
+        Body length (ft) <Text style={styles.requiredMark}>*</Text>
+      </Text>
+      {bodyLengthIsOther ? (
+        <TextInput
+          style={inputStyle}
+          placeholder="e.g. 28 ft, custom size"
+          placeholderTextColor={Theme.placeholder}
+          value={bodyLength}
+          onChangeText={setBodyLength}
+          autoCorrect={false}
+          spellCheck={false}
+          autoComplete="off"
+        />
+      ) : (
+        <TouchableOpacity
+          style={[inputStyle, styles.bodyLengthTouchable]}
+          onPress={openBodyLengthPicker}
+          activeOpacity={0.75}
+        >
+          <Text
+            style={[
+              styles.bodyLengthTouchableText,
+              !bodyLength && { color: Theme.placeholder },
+            ]}
+          >
+            {bodyLength || "Tap to select body length (ft)"}
+          </Text>
+        </TouchableOpacity>
+      )}
+      {bodyLengthIsOther ? (
+        <TouchableOpacity onPress={openBodyLengthPicker} style={styles.switchToPresetLink}>
+          <Text style={styles.switchToPresetLinkText}>Choose from list instead</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
 
   const step = STEPS[stepIndex];
   const isReview = step.key === "review";
   const canProceedInfo = ownAssetOnly
     ? !!vehicleNumber.trim() &&
-        !!brand.trim() &&
-        !!bodyType.trim() &&
-        !!size.trim() &&
-        !!axle.trim()
+        !!vehicleCategory.trim() &&
+        !!bodyLength.trim() &&
+        !!model.trim() &&
+        !!capacity.trim()
     : !!vehicleNumber.trim() &&
-        !!brand &&
-        !!model &&
-        !!bodyType &&
-        !!size &&
-        !!capacity;
+        !!vehicleCategory.trim() &&
+        !!model.trim() &&
+        !!bodyLength.trim() &&
+        !!capacity.trim();
 
   const handleNext = () => {
     if (isReview) {
@@ -178,15 +452,18 @@ export function AddVehicleModal({
           if (exp) documents[key] = { url: "", expiryDate: exp };
         });
       }
+      const typeSummary =
+        [vehicleCategory, model].filter((s) => s?.trim()).join(" • ").trim() ||
+        "Other";
       const result = onComplete({
         vehicleSource: ownAssetOnly ? "organization" : vehicleSource,
         vehicleNumber: vehicleNumber.trim(),
-        vehicleType: ownAssetOnly ? (bodyType.trim() || brand || "Other") : (vehicleTypeLabel || brand || "Other"),
-        capacity: ownAssetOnly ? "" : capacity.trim(),
-        vehicleBrand: brand || null,
-        vehicleModel: ownAssetOnly ? null : (model || null),
-        vehicleBodyType: bodyType || null,
-        vehicleSize: size || null,
+        vehicleType: ownAssetOnly ? typeSummary : (vehicleTypeLabel || typeSummary),
+        capacity: capacity.trim(),
+        vehicleBrand: vehicleCategory.trim() || null,
+        vehicleModel: model.trim() || null,
+        vehicleBodyType: null,
+        vehicleSize: bodyLength.trim() || null,
         vehicleAxle: axle || null,
         documents,
       });
@@ -211,24 +488,6 @@ export function AddVehicleModal({
   const handleBack = () => {
     if (stepIndex > 0) setStepIndex(stepIndex - 1);
     else onClose();
-  };
-
-  const handleBrandSelect = (b: string) => {
-    setBrand(b);
-    setModel("");
-    setBodyType("");
-    setSize("");
-    setAxle("");
-  };
-
-  const handleModelSelect = (m: string) => {
-    setModel(m);
-    const s = brand && m ? getTruckSpec(brand, m) : null;
-    if (s) {
-      setBodyType(s.type);
-      setSize(s.size);
-      setAxle(s.axle);
-    }
   };
 
   const inputStyle = [
@@ -280,49 +539,48 @@ export function AddVehicleModal({
                 autoComplete="off"
               />
               <Text style={labelStyle}>
-                Brand <Text style={styles.requiredMark}>*</Text>
+                Vehicle category <Text style={styles.requiredMark}>*</Text>
+              </Text>
+              <View style={styles.pickerRow}>
+                {VEHICLE_CATEGORY_LABELS.map((cat) => (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[
+                      styles.chip,
+                      vehicleCategory === cat && styles.chipActive,
+                    ]}
+                    onPress={() => setVehicleCategory(cat)}
+                  >
+                    <Text
+                      style={[
+                        styles.chipText,
+                        vehicleCategory === cat && styles.chipTextActive,
+                      ]}
+                    >
+                      {cat}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {renderModelField()}
+              {renderBodyLengthField()}
+              <Text style={labelStyle}>
+                Capacity (TON) <Text style={styles.requiredMark}>*</Text>
               </Text>
               <TextInput
                 style={inputStyle}
-                placeholder="e.g. Tata, Ashok Leyland"
+                placeholder="e.g. 7.5"
                 placeholderTextColor={Theme.placeholder}
-                value={brand}
-                onChangeText={setBrand}
+                value={capacity}
+                onChangeText={setCapacity}
                 autoCorrect={false}
                 spellCheck={false}
                 autoComplete="off"
+                keyboardType="decimal-pad"
               />
-              {renderRecommendationHint(brandRecommendations, brand)}
+              {renderRecommendationHint(capacityRecommendations, capacity)}
               <Text style={labelStyle}>
-                Body type <Text style={styles.requiredMark}>*</Text>
-              </Text>
-              <TextInput
-                style={inputStyle}
-                placeholder="e.g. Tipper, Cargo"
-                placeholderTextColor={Theme.placeholder}
-                value={bodyType}
-                onChangeText={setBodyType}
-                autoCorrect={false}
-                spellCheck={false}
-                autoComplete="off"
-              />
-              {renderRecommendationHint(bodyTypeRecommendations, bodyType)}
-              <Text style={labelStyle}>
-                Size <Text style={styles.requiredMark}>*</Text>
-              </Text>
-              <TextInput
-                style={inputStyle}
-                placeholder="e.g. 28ft, 32ft"
-                placeholderTextColor={Theme.placeholder}
-                value={size}
-                onChangeText={setSize}
-                autoCorrect={false}
-                spellCheck={false}
-                autoComplete="off"
-              />
-              {renderRecommendationHint(sizeRecommendations, size)}
-              <Text style={labelStyle}>
-                Axle <Text style={styles.requiredMark}>*</Text>
+                Axle
               </Text>
               <TextInput
                 style={inputStyle}
@@ -391,75 +649,47 @@ export function AddVehicleModal({
               spellCheck={false}
               autoComplete="off"
             />
-            <Text style={labelStyle}>Brand</Text>
+            <Text style={labelStyle}>
+              Vehicle category <Text style={styles.requiredMark}>*</Text>
+            </Text>
             <View style={styles.pickerRow}>
-              {brands.map((b) => (
+              {VEHICLE_CATEGORY_LABELS.map((cat) => (
                 <TouchableOpacity
-                  key={b}
-                  style={[styles.chip, brand === b && styles.chipActive]}
-                  onPress={() => handleBrandSelect(b)}
+                  key={cat}
+                  style={[
+                    styles.chip,
+                    vehicleCategory === cat && styles.chipActive,
+                  ]}
+                  onPress={() => setVehicleCategory(cat)}
                 >
                   <Text
                     style={[
                       styles.chipText,
-                      brand === b && styles.chipTextActive,
+                      vehicleCategory === cat && styles.chipTextActive,
                     ]}
                   >
-                    {b}
+                    {cat}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
-            {brand && (
-              <>
-                <Text style={labelStyle}>Model</Text>
-                <View style={styles.pickerRow}>
-                  {modelsForBrand.map((m, index) => (
-                    <TouchableOpacity
-                      key={`${m.model}-${index}`}
-                      style={[
-                        styles.chip,
-                        model === m.model && styles.chipActive,
-                      ]}
-                      onPress={() => handleModelSelect(m.model)}
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          model === m.model && styles.chipTextActive,
-                        ]}
-                      >
-                        {m.model}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
-            )}
-            <Text style={labelStyle}>Body Type</Text>
+            {renderModelField()}
+            {renderBodyLengthField()}
+            <Text style={labelStyle}>
+              Load capacity (TON) <Text style={styles.requiredMark}>*</Text>
+            </Text>
             <TextInput
               style={inputStyle}
-              placeholder="e.g. Tipper, Cargo"
+              placeholder="e.g. 7.5"
               placeholderTextColor={Theme.placeholder}
-              value={bodyType}
-              onChangeText={setBodyType}
+              value={capacity}
               autoCorrect={false}
               spellCheck={false}
               autoComplete="off"
+              keyboardType="decimal-pad"
+              onChangeText={setCapacity}
             />
-            {renderRecommendationHint(bodyTypeRecommendations, bodyType)}
-            <Text style={labelStyle}>Size</Text>
-            <TextInput
-              style={inputStyle}
-              placeholder="e.g. 28ft / 32ft"
-              placeholderTextColor={Theme.placeholder}
-              value={size}
-              onChangeText={setSize}
-              autoCorrect={false}
-              spellCheck={false}
-              autoComplete="off"
-            />
-            {renderRecommendationHint(sizeRecommendations, size)}
+            {renderRecommendationHint(capacityRecommendations, capacity)}
             <Text style={labelStyle}>Axle</Text>
             <TextInput
               style={inputStyle}
@@ -472,18 +702,6 @@ export function AddVehicleModal({
               onChangeText={setAxle}
             />
             {renderRecommendationHint(axleRecommendations, axle)}
-            <Text style={labelStyle}>Load capacity</Text>
-            <TextInput
-              style={inputStyle}
-              placeholder="e.g. 5 Ton"
-              placeholderTextColor={Theme.placeholder}
-              value={capacity}
-              autoCorrect={false}
-              spellCheck={false}
-              autoComplete="off"
-              onChangeText={setCapacity}
-            />
-            {renderRecommendationHint(capacityRecommendations, capacity)}
           </ScrollView>
         );
       case "documents":
@@ -533,8 +751,16 @@ export function AddVehicleModal({
               </Text>
               <Text style={styles.reviewSub}>
                 {ownAssetOnly
-                  ? [brand, bodyType, size, axle].filter(Boolean).join(" • ") || "—"
-                  : `${vehicleTypeLabel || "—"} • ${capacity || "—"}`}
+                  ? [
+                      vehicleCategory,
+                      model,
+                      bodyLength,
+                      capacity.trim() ? `${capacity.trim()} TON` : null,
+                      axle,
+                    ]
+                      .filter(Boolean)
+                      .join(" • ") || "—"
+                  : `${vehicleTypeLabel || "—"} • ${capacity.trim() ? `${capacity.trim()} TON` : "—"}`}
               </Text>
             </View>
             {!ownAssetOnly &&
@@ -579,118 +805,126 @@ export function AddVehicleModal({
       Layout.ledgerPanelMaxHeight,
     );
     return (
-      <Modal
-        visible
-        transparent
-        animationType="slide"
-        onRequestClose={onClose}
-        presentationStyle="overFullScreen"
-      >
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === "ios" ? "padding" : "padding"}
-          keyboardVerticalOffset={insets.top + 16}
+      <>
+        <Modal
+          visible
+          transparent
+          animationType="slide"
+          onRequestClose={onClose}
+          presentationStyle="overFullScreen"
         >
-          <View style={popupStyles.backdrop}>
-            <TouchableOpacity
-              style={StyleSheet.absoluteFill}
-              onPress={onClose}
-              activeOpacity={1}
-            />
-            <View
-              style={[
-                popupStyles.panel,
-                {
-                  paddingBottom: insets.bottom + Layout.modalBottomPadding,
-                  height: panelHeight,
-                  maxHeight: panelHeight,
-                },
-              ]}
-            >
-              <View style={popupStyles.headerRow}>
-                <Text style={popupStyles.title}>{ownAssetOnly ? "Add Vehicle (Own Asset)" : "Add Vehicle"}</Text>
-              </View>
-              <View style={popupStyles.dotsRow}>
-                {STEPS.map((_, i) => (
-                  <View
-                    key={i}
-                    style={[
-                      popupStyles.dot,
-                      i === stepIndex && popupStyles.dotActive,
-                    ]}
-                  />
-                ))}
-              </View>
-              <ScrollView
-                keyboardShouldPersistTaps="handled"
-                style={popupStyles.scroll}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={popupStyles.scrollContent}
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === "ios" ? "padding" : "padding"}
+            keyboardVerticalOffset={insets.top + 16}
+          >
+            <View style={popupStyles.backdrop}>
+              <TouchableOpacity
+                style={StyleSheet.absoluteFill}
+                onPress={onClose}
+                activeOpacity={1}
+              />
+              <View
+                style={[
+                  popupStyles.panel,
+                  {
+                    paddingBottom: insets.bottom + Layout.modalBottomPadding,
+                    height: panelHeight,
+                    maxHeight: panelHeight,
+                  },
+                ]}
               >
-                {renderStep()}
-              </ScrollView>
-              <View style={popupStyles.footer}>
-                <TouchableOpacity
-                  style={popupStyles.footerLeft}
-                  onPress={handleBack}
+                <View style={popupStyles.headerRow}>
+                  <Text style={popupStyles.title}>{ownAssetOnly ? "Add Vehicle (Own Asset)" : "Add Vehicle"}</Text>
+                </View>
+                <View style={popupStyles.dotsRow}>
+                  {STEPS.map((_, i) => (
+                    <View
+                      key={i}
+                      style={[
+                        popupStyles.dot,
+                        i === stepIndex && popupStyles.dotActive,
+                      ]}
+                    />
+                  ))}
+                </View>
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  style={popupStyles.scroll}
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={popupStyles.scrollContent}
                 >
-                  <Text style={popupStyles.footerLeftText}>
-                    {stepIndex > 0 ? "Back" : "Cancel"}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    popupStyles.footerRight,
-                    (submitting ||
-                      (!isReview && step.key === "info" && !canProceedInfo)) &&
-                      popupStyles.footerRightDisabled,
-                  ]}
-                  onPress={handleNext}
-                  disabled={
-                    submitting ||
-                    (!isReview && step.key === "info" && !canProceedInfo)
-                  }
-                >
-                  <Text style={popupStyles.footerRightText}>
-                    {isReview && submitting
-                      ? "Adding…"
-                      : isReview
-                        ? "ADD VEHICLE"
-                        : "Continue"}
-                  </Text>
-                </TouchableOpacity>
+                  {renderStep()}
+                </ScrollView>
+                <View style={popupStyles.footer}>
+                  <TouchableOpacity
+                    style={popupStyles.footerLeft}
+                    onPress={handleBack}
+                  >
+                    <Text style={popupStyles.footerLeftText}>
+                      {stepIndex > 0 ? "Back" : "Cancel"}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      popupStyles.footerRight,
+                      (submitting ||
+                        (!isReview && step.key === "info" && !canProceedInfo)) &&
+                        popupStyles.footerRightDisabled,
+                    ]}
+                    onPress={handleNext}
+                    disabled={
+                      submitting ||
+                      (!isReview && step.key === "info" && !canProceedInfo)
+                    }
+                  >
+                    <Text style={popupStyles.footerRightText}>
+                      {isReview && submitting
+                        ? "Adding…"
+                        : isReview
+                          ? "ADD VEHICLE"
+                          : "Continue"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+          </KeyboardAvoidingView>
+        </Modal>
+        {renderBodyLengthPickerSheet()}
+        {renderModelPickerSheet()}
+      </>
     );
   }
 
   return (
-    <WizardStepLayout
-      title="Add Vehicle"
-      stepLabel={step.label}
-      stepIndex={stepIndex}
-      stepCount={STEPS.length}
-      onBack={handleBack}
-      onClose={onClose}
-      footerLeftLabel={stepIndex > 0 ? "Back" : "Cancel"}
-      footerRightLabel={
-        isReview && submitting
-          ? "Adding…"
-          : isReview
-            ? "Add Vehicle"
-            : "Continue"
-      }
-      onFooterLeft={handleBack}
-      onFooterRight={handleNext}
-      footerRightDisabled={
-        submitting || (!isReview && step.key === "info" && !canProceedInfo)
-      }
-    >
-      {renderStep()}
-    </WizardStepLayout>
+    <>
+      <WizardStepLayout
+        title="Add Vehicle"
+        stepLabel={step.label}
+        stepIndex={stepIndex}
+        stepCount={STEPS.length}
+        onBack={handleBack}
+        onClose={onClose}
+        footerLeftLabel={stepIndex > 0 ? "Back" : "Cancel"}
+        footerRightLabel={
+          isReview && submitting
+            ? "Adding…"
+            : isReview
+              ? "Add Vehicle"
+              : "Continue"
+        }
+        onFooterLeft={handleBack}
+        onFooterRight={handleNext}
+        footerRightDisabled={
+          submitting || (!isReview && step.key === "info" && !canProceedInfo)
+        }
+      >
+        {renderStep()}
+      </WizardStepLayout>
+      {renderBodyLengthPickerSheet()}
+      {renderModelPickerSheet()}
+    </>
   );
 }
 
@@ -736,6 +970,7 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
   },
   input: {
+    borderWidth: 1,
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 14,
@@ -743,11 +978,6 @@ const styles = StyleSheet.create({
     minHeight: 52,
     marginBottom: 12,
     backgroundColor: Theme.screenBackground,
-    ...Platform.select({
-      web: {
-        outlineStyle: "none",
-      } as any,
-    }),
   },
   pickerRow: {
     flexDirection: "row",
@@ -775,6 +1005,22 @@ const styles = StyleSheet.create({
   },
   chipText: { fontSize: 12, color: Theme.textPrimaryDark, fontWeight: "700" },
   chipTextActive: { color: Theme.textOnPrimary },
+  bodyLengthTouchable: {
+    justifyContent: "center",
+  },
+  bodyLengthTouchableText: {
+    fontSize: 15,
+    color: Theme.textPrimary,
+  },
+  switchToPresetLink: {
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  switchToPresetLinkText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+  },
   docRow: { marginBottom: 12 },
   reviewCard: {
     padding: 16,
@@ -882,5 +1128,66 @@ const popupStyles = StyleSheet.create({
     color: Theme.buttonMatteBlackText,
     textTransform: "uppercase",
     letterSpacing: 2,
+  },
+});
+
+const pickerModalStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+  sheet: {
+    backgroundColor: Theme.screenBackground,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderColor: Theme.borderInput,
+  },
+  sheetTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    marginBottom: 4,
+  },
+  sheetHint: {
+    fontSize: 12,
+    color: Theme.textMutedDemo,
+    marginBottom: 12,
+  },
+  sheetScroll: { maxHeight: Dimensions.get("window").height * 0.52 },
+  optionRow: {
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 6,
+    backgroundColor: Theme.surfaceForm,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+  },
+  optionRowActive: {
+    borderColor: Theme.textPrimaryDark,
+    backgroundColor: Theme.surfaceLight,
+  },
+  optionText: {
+    fontSize: 14,
+    color: Theme.textPrimary,
+  },
+  optionTextActive: {
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  doneBtn: {
+    marginTop: 12,
+    alignSelf: "flex-end",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  doneBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
   },
 });
