@@ -3,6 +3,7 @@
  */
 import type { TripRow } from "@/features/trips";
 import { getTripDisplayNumber } from "@/features/trips";
+import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
 import { useTransactionsQuery } from "@/lib/queries";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -10,25 +11,23 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { filterLedgerByPeriod } from "../lib/filterLedgerByPeriod";
 import { ledgerTotals } from "../lib/ledgerTotals";
 import type { LedgerRow } from "../services/finance.service";
+import type { ClientRow } from "@/features/clients/services/clients.service";
+import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import {
     LEDGER_CATEGORIES,
     LEDGER_CATEGORY_STORAGE_KEY,
     type FinancePeriodFilter,
     type LedgerCategory,
+    type LedgerSortKey,
 } from "../types";
-
-export type LedgerSortKey =
-  | "entity"
-  | "source"
-  | "cash_in"
-  | "cash_out"
-  | "date";
 
 export interface UseFinanceLedgerArgs {
   organizationId: string | null;
   canAccess: boolean;
   tripRows: TripRow[];
   vehicleRows: VehicleRow[];
+  clients?: ClientRow[];
+  suppliers?: SupplierRow[];
 }
 
 export interface UseFinanceLedgerResult {
@@ -102,6 +101,8 @@ export function useFinanceLedger({
   canAccess,
   tripRows,
   vehicleRows,
+  clients,
+  suppliers,
 }: UseFinanceLedgerArgs): UseFinanceLedgerResult {
   const orgId = canAccess ? organizationId : null;
   const {
@@ -247,16 +248,32 @@ export function useFinanceLedger({
         driver_id?: string | null;
       }
     > = {};
+    const linkedClientIdByOrgId = buildUniqueLinkedOrgIdMap(clients ?? []);
+    const linkedSupplierIdByOrgId = buildUniqueLinkedOrgIdMap(suppliers ?? []);
+
     for (let i = 0; i < tripRows.length; i++) {
       const t = tripRows[i];
+      let cid = t.client_id ?? null;
+      let sid = t.supplier_id ?? null;
+
+      // Integration check: for load-based trips where we are the carrier/supplier (originated by another org),
+      // attribute to the shipper org's local client/supplier entry if one exists.
+      if (t.organization_id && t.organization_id !== organizationId && isLoadBasedTrip(t)) {
+        const linkedCid = linkedClientIdByOrgId.get(t.organization_id);
+        if (linkedCid) cid = linkedCid;
+
+        const linkedSid = linkedSupplierIdByOrgId.get(t.organization_id);
+        if (linkedSid) sid = linkedSid;
+      }
+
       map[t.id] = {
-        client_id: t.client_id ?? null,
-        supplier_id: t.supplier_id ?? null,
+        client_id: cid,
+        supplier_id: sid,
         driver_id: t.driver_id ?? null,
       };
     }
     return map;
-  }, [tripRows]);
+  }, [tripRows, clients, suppliers]);
 
   const filteredLedgerBySource = useMemo(() => {
     if (sourceSupplyFilter === "all") return filteredLedger;
@@ -412,26 +429,54 @@ export function useFinanceLedger({
         supplier_id?: string | null;
       }
     > = {};
+    const linkedClientIdByOrgId = buildUniqueLinkedOrgIdMap(clients ?? []);
+    const clientById = new Map((clients ?? []).map(c => [c.id, c]));
+
+    const tripLedgerOutMap = new Map<string, number>();
+    for (const row of ledgerTransactions ?? []) {
+      if (row.trip_id && (row.amount_out ?? 0) > 0) {
+        tripLedgerOutMap.set(row.trip_id, (tripLedgerOutMap.get(row.trip_id) ?? 0) + (row.amount_out ?? 0));
+      }
+    }
+
     for (const t of tripRows) {
       const vehicle = t.vehicle_id ? vehicleById.get(t.vehicle_id) ?? null : null;
       const vehicleNumber = vehicle?.vehicle_number ?? null;
+
+      let resolvedClientName = t.client_name || undefined;
+      let resolvedClientPrice = t.client_price ?? null;
+      let resolvedSupplierRate = t.supplier_rate ?? null;
+      const isIntegratedCarrierPerspective = t.organization_id && t.organization_id !== organizationId && isLoadBasedTrip(t);
+
+      if (isIntegratedCarrierPerspective) {
+        const linkedCid = linkedClientIdByOrgId.get(t.organization_id);
+        if (linkedCid) {
+          resolvedClientName = clientById.get(linkedCid)?.name || resolvedClientName;
+        }
+        // From carrier perspective: what shipper pays us (supplier_rate) is our revenue (client_price)
+        resolvedClientPrice = t.supplier_rate ?? null;
+        // For our costs, we use the sum of our ledger "Out" entries for this trip, 
+        // since the trip record's supplier_rate field is already occupied by our revenue.
+        resolvedSupplierRate = tripLedgerOutMap.get(t.id) ?? 0;
+      }
+
       map[t.id] = {
         trip_number: getTripDisplayNumber(t),
         drop_location: t.drop_location || undefined,
         pickup_area: t.pickup_area || undefined,
-        client_name: t.client_name || undefined,
+        client_name: resolvedClientName,
         pickup_date: t.pickup_date ?? t.created_at ?? undefined,
         vehicle_number: vehicleNumber ?? undefined,
         vehicle_type: vehicle?.vehicle_type ?? undefined,
         vehicle_body_type: vehicle?.vehicle_body_type ?? undefined,
-        client_price: t.client_price ?? null,
-        supplier_rate: t.supplier_rate ?? null,
+        client_price: resolvedClientPrice,
+        supplier_rate: resolvedSupplierRate,
         driver_commission: t.driver_commission ?? null,
         supplier_id: t.supplier_id ?? null,
       };
     }
     return map;
-  }, [tripRows, vehicleById]);
+  }, [tripRows, vehicleById, clients, organizationId, ledgerTransactions]);
 
   const setLedgerTransactionsNoop = useCallback(
     (_action: React.SetStateAction<LedgerRow[] | null>) => {

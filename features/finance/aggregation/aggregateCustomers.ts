@@ -84,12 +84,14 @@ export function aggregateCustomers(
 
   const clientNameKeys = new Set<string>();
   const clientIdByNameKey: Record<string, string> = {};
+  const localClientIdSet = new Set<string>();
   for (let i = 0; i < clients.length; i++) {
     const k = toNameKey(getClientDisplayName(clients[i]));
     if (k) {
       clientNameKeys.add(k);
       clientIdByNameKey[k] = clients[i].id;
     }
+    localClientIdSet.add(clients[i].id);
   }
   const linkedClientIdByOrgId = buildUniqueLinkedOrgIdMap(clients);
 
@@ -105,28 +107,31 @@ export function aggregateCustomers(
 
   // Single pass: trips -> billed, trip count, and per-trip list per client.
   // Priority:
-  // 1) Trip owner view: attribute by client_id (or by name fallback) using client_price.
-  // 2) Supplier view (integrated): when we are the supplier, attribute by linked_organization_id === trip.organization_id
-  //    using supplier_rate (amount shipper owes supplier).
+  // 1) Supplier view (integrated): when we are the carrier, attribute to the shipper org's local client
+  //    match using linked_organization_id === trip.organization_id. Prefer this for load-based trips
+  //    where the trip.client_id/name is usually the shipper's end customer.
+  // 2) Trip owner view: attribute by client_id (or by name fallback) using client_price.
   for (let i = 0; i < trips.length; i++) {
     const t = trips[i];
     const nameKey = toNameKey(t.client_name || '');
 
-    // 1) Direct client on trip (trip owner perspective).
-    let clientId: string | null | undefined =
-      t.client_id ??
-      (nameKey ? clientIdByNameKey[nameKey] : undefined);
-
+    let clientId: string | null | undefined = null;
     let useSupplierRate = false;
 
-    // 2) When no direct client match, attribute to integrated shipper when we are supplier:
-    //    client.linked_organization_id === trip.organization_id.
-    if (clientId == null && t.organization_id && isLoadBasedTrip(t)) {
+    // 1) Integration check: for load-based trips, check if originating org maps to a local client.
+    if (t.organization_id && isLoadBasedTrip(t)) {
       const linkedClientId = linkedClientIdByOrgId.get(t.organization_id) ?? null;
       if (linkedClientId) {
         clientId = linkedClientId;
         useSupplierRate = true;
       }
+    }
+
+    // 2) Direct client on trip fallback (trip owner perspective or if no integration mapping).
+    if (clientId == null) {
+      clientId =
+        t.client_id ??
+        (nameKey ? clientIdByNameKey[nameKey] : undefined);
     }
 
     if (clientId == null) continue;

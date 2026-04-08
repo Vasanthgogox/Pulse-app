@@ -155,6 +155,9 @@ export function FinanceTabBody({
               transactions={filteredLedgerForDisplay}
               getVehicleNumberForTripId={getVehicleNumberForTripId}
               tripDetailsMap={tripDetailsMap}
+              clientRows={clientRows}
+              supplierRows={supplierRows}
+              tripPartyMap={tripPartyMap}
               onRowSelect={(row) => {
                 if (row.trip_id) {
                   onTripSelect(row.trip_id);
@@ -170,22 +173,25 @@ export function FinanceTabBody({
         {ledgerLoading && ledgerTransactions === null ? (
           <Text style={styles.ledgerLoading}>Loading…</Text>
         ) : (
-          <LedgerTab
-            organizationId={orgId}
-            refreshKey={ledgerRefreshKey}
-            transactions={
-              ledgerTransactions !== null ? filteredLedgerForDisplay : undefined
-            }
-            viewMode="transaction"
-            showFiscalSubTabs={false}
-            onRowSelect={onLedgerRowSelect}
-            onEntitySelect={() => {}}
-            getVehicleNumberForTripId={getVehicleNumberForTripId}
-            tripOptions={trips}
-            tripDetailsMap={tripDetailsMap}
-            onMissionChange={onLedgerMissionChange}
-            onAddTransactionPress={onAddTransactionPress}
-          />
+        <LedgerTab
+          organizationId={orgId}
+          refreshKey={ledgerRefreshKey}
+          transactions={
+            ledgerTransactions !== null ? filteredLedgerForDisplay : undefined
+          }
+          viewMode="transaction"
+          showFiscalSubTabs={false}
+          onRowSelect={onLedgerRowSelect}
+          onEntitySelect={() => {}}
+          getVehicleNumberForTripId={getVehicleNumberForTripId}
+          tripOptions={trips}
+          tripDetailsMap={tripDetailsMap}
+          onMissionChange={onLedgerMissionChange}
+          onAddTransactionPress={onAddTransactionPress}
+          clientRows={clientRows}
+          supplierRows={supplierRows}
+          tripPartyMap={tripPartyMap}
+        />
         )}
       </View>
     );

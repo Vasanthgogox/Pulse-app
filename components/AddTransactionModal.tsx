@@ -8,6 +8,7 @@ import type { LedgerRow } from "@/features/finance";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import { VALIDATION, dateISO } from "@/lib/validation";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
@@ -255,6 +256,12 @@ interface AddTransactionModalProps {
   entryContextLabel?: string;
   /** Map supplier party id -> linked_organization_id so trips created by that org (org-as-client) are shown for the supplier. */
   supplierLinkedOrgIds?: Record<string, string>;
+  /** Map linked_organization_id -> local_client_id (for integrated trips). */
+  linkedClientIdByOrgId?: Record<string, string> | Map<string, string>;
+  /** Map linked_organization_id -> local_supplier_id. */
+  linkedSupplierIdByOrgId?: Record<string, string> | Map<string, string>;
+  /** Current organization ID to detect if trip is "ours". */
+  viewerOrgId?: string | null;
   /** When true (e.g. Garrage/vehicle context), hide party dropdown for Cash OUT and use vehicle expense categories as first field. */
   hidePartyForCashOut?: boolean;
   /** Cash IN: suggested receivable in amount placeholder when the field is empty (e.g. customer / trip pending). */
@@ -291,6 +298,9 @@ export function AddTransactionModal({
   requireTripForSupplierOut = true,
   entryContextLabel,
   supplierLinkedOrgIds,
+  linkedClientIdByOrgId,
+  linkedSupplierIdByOrgId,
+  viewerOrgId,
   hidePartyForCashOut = false,
   dueAmountIn = null,
   dueAmountOut = null,
@@ -459,6 +469,36 @@ export function AddTransactionModal({
 
   const partyOptions = useMemo(() => {
     if (type === "in" && selectedTrip) {
+      const lid = (selectedTrip as any).organization_id;
+      const isIntegrated =
+        viewerOrgId != null &&
+        lid != null &&
+        lid !== viewerOrgId &&
+        isLoadBasedTrip(selectedTrip);
+
+      if (isIntegrated) {
+        const localCid =
+          linkedClientIdByOrgId instanceof Map
+            ? linkedClientIdByOrgId.get(lid)
+            : linkedClientIdByOrgId?.[lid];
+        if (localCid) {
+          const client = safeClients.find((c) => c.id === localCid);
+          if (client) return [client];
+          // If we have a local ID but not in full list, try defaultPartyName/lockedPartyName
+          if (
+            (defaultPartyId === localCid || lockedPartyId === localCid) &&
+            (defaultPartyName || lockedPartyName)
+          ) {
+            return [
+              {
+                id: localCid,
+                name: (lockedPartyName || defaultPartyName) as string,
+              },
+            ];
+          }
+        }
+      }
+
       const cid =
         selectedTrip.client_id && selectedTrip.client_id.trim()
           ? selectedTrip.client_id
@@ -480,6 +520,35 @@ export function AddTransactionModal({
       }
     }
     if (type === "out" && selectedTrip) {
+      const lid = (selectedTrip as any).organization_id;
+      const isIntegrated =
+        viewerOrgId != null &&
+        lid != null &&
+        lid !== viewerOrgId &&
+        isLoadBasedTrip(selectedTrip);
+
+      if (isIntegrated) {
+        const localSid =
+          linkedSupplierIdByOrgId instanceof Map
+            ? linkedSupplierIdByOrgId.get(lid)
+            : linkedSupplierIdByOrgId?.[lid];
+        if (localSid) {
+          const supplier = safeSuppliers.find((s) => s.id === localSid);
+          if (supplier) return [supplier];
+          if (
+            (defaultPartyId === localSid || lockedPartyId === localSid) &&
+            (defaultPartyName || lockedPartyName)
+          ) {
+            return [
+              {
+                id: localSid,
+                name: (lockedPartyName || defaultPartyName) as string,
+              },
+            ];
+          }
+        }
+      }
+
       const outOptions: PartyOption[] = [];
       if (selectedTrip.supplier_id) {
         const sup = safeSuppliers.find(
@@ -947,26 +1016,69 @@ export function AddTransactionModal({
     let derivedContactType: AddTransactionData["contactType"] = null;
     let derivedPartyName: string | null = null;
     if (tripLocked && selectedTrip) {
+      const lid = (selectedTrip as any).organization_id;
+      const isIntegrated =
+        viewerOrgId != null &&
+        lid != null &&
+        lid !== viewerOrgId &&
+        isLoadBasedTrip(selectedTrip);
+
       if (type === "in") {
-        derivedContactId = selectedTrip.client_id ?? null;
-        derivedContactType = derivedContactId ? "client" : null;
-        derivedPartyName = selectedTrip.client_name ?? null;
+        let localCid: string | null = null;
+        if (isIntegrated) {
+          localCid =
+            (linkedClientIdByOrgId instanceof Map
+              ? linkedClientIdByOrgId.get(lid)
+              : linkedClientIdByOrgId?.[lid]) ?? null;
+        }
+
+        if (localCid) {
+          derivedContactId = localCid;
+          derivedContactType = "client";
+          derivedPartyName =
+            safeClients.find((c) => c.id === localCid)?.name ??
+            lockedPartyName ??
+            defaultPartyName ??
+            null;
+        } else {
+          derivedContactId = selectedTrip.client_id ?? null;
+          derivedContactType = derivedContactId ? "client" : null;
+          derivedPartyName = selectedTrip.client_name ?? null;
+        }
       } else {
-        derivedContactId =
-          selectedTrip.supplier_id ?? selectedTrip.driver_id ?? null;
-        derivedContactType = selectedTrip.supplier_id
-          ? "supplier"
-          : selectedTrip.driver_id
-            ? "driver"
-            : null;
-        derivedPartyName = selectedTrip.supplier_id
-          ? (safeSuppliers.find((s) => s.id === selectedTrip!.supplier_id!)?.name ??
-            (selectedTrip as { supplier_name?: string }).supplier_name ??
-            null)
-          : selectedTrip.driver_id
-            ? (safeDrivers.find((d) => d.id === selectedTrip!.driver_id!)?.name ??
+        let localSid: string | null = null;
+        if (isIntegrated) {
+          localSid =
+            (linkedSupplierIdByOrgId instanceof Map
+              ? linkedSupplierIdByOrgId.get(lid)
+              : linkedSupplierIdByOrgId?.[lid]) ?? null;
+        }
+
+        if (localSid) {
+          derivedContactId = localSid;
+          derivedContactType = "supplier";
+          derivedPartyName =
+            safeSuppliers.find((s) => s.id === localSid)?.name ??
+            lockedPartyName ??
+            defaultPartyName ??
+            null;
+        } else {
+          derivedContactId =
+            selectedTrip.supplier_id ?? selectedTrip.driver_id ?? null;
+          derivedContactType = selectedTrip.supplier_id
+            ? "supplier"
+            : selectedTrip.driver_id
+              ? "driver"
+              : null;
+          derivedPartyName = selectedTrip.supplier_id
+            ? (safeSuppliers.find((s) => s.id === selectedTrip!.supplier_id!)?.name ??
+              (selectedTrip as { supplier_name?: string }).supplier_name ??
               null)
-            : null;
+            : selectedTrip.driver_id
+              ? (safeDrivers.find((d) => d.id === selectedTrip!.driver_id!)?.name ??
+                null)
+              : null;
+        }
       }
     }
     const isUnlinkedMisc =

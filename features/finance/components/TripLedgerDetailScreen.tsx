@@ -221,7 +221,19 @@ export function TripLedgerDetailScreen({
     return getTripLedgerEntries(transactions, trip?.id);
   }, [transactions, trip?.id]);
 
-  const sales = trip ? Number(trip.client_price ?? 0) : 0;
+  const isCrossOrgSupplier =
+    trip != null &&
+    orgId != null &&
+    trip.organization_id != null &&
+    trip.organization_id !== orgId &&
+    entityType === "CLIENT";
+
+  const sales = trip
+    ? isCrossOrgSupplier
+      ? Number(trip.supplier_rate ?? 0)
+      : Number(trip.client_price ?? 0)
+    : 0;
+
   const received = useMemo(() => {
     if (!tripLedgerEntries.length) return 0;
     return tripLedgerEntries.reduce((s, tx) => s + Number(tx.amount_in ?? 0), 0);
@@ -232,11 +244,18 @@ export function TripLedgerDetailScreen({
 
   // When we are the client (trip owned by another org), amount we owe = client_price; else supplier_rate (align with supplier detail / aggregateSuppliers).
   const isTripWhereWeAreClient =
-    trip != null && orgId != null && trip.organization_id != null && trip.organization_id !== orgId;
+    trip != null &&
+    orgId != null &&
+    trip.organization_id != null &&
+    trip.organization_id !== orgId &&
+    entityType === "SUPPLIER";
+
   const supplierCost = trip
     ? isTripWhereWeAreClient
       ? Number(trip.client_price ?? 0) || Number(trip.supplier_rate ?? 0)
-      : Number(trip.supplier_rate ?? 0)
+      : isCrossOrgSupplier
+        ? 0 // We are the supplier, this record is our revenue, not our cost.
+        : Number(trip.supplier_rate ?? 0)
     : 0;
   const supplierPaid = useMemo(() => {
     if (!tripLedgerEntries.length) return 0;
