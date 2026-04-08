@@ -5,47 +5,47 @@
  */
 import Theme from "@/constants/Theme";
 import {
-    getDriversByOrganization,
-    searchExistingDriversByPhone,
-    type DriverRow,
+  getDriversByOrganization,
+  searchExistingDriversByPhone,
+  type DriverRow,
 } from "@/features/drivers/services/drivers.service";
 import {
-    assignAggregateTripDriverByPhone,
-    assignTripDriverByPhone,
-    getActiveDriverIds,
-    getTripDisplayNumber,
-    isTripCompleted,
-    updateTripAssignment,
-    type TripRow,
-} from "@/features/trips/services/trips.service";
-import {
-    generateTripOtp,
-    getTripOtpForDisplay,
-    regenerateTripOtp,
+  generateTripOtp,
+  getTripOtpForDisplay,
+  regenerateTripOtp,
 } from "@/features/trips/services/tripOtp.service";
 import {
-    getVehiclesByOrganization,
-    type VehicleRow,
+  assignAggregateTripDriverByPhone,
+  assignTripDriverByPhone,
+  getActiveDriverIds,
+  getTripDisplayNumber,
+  isTripCompleted,
+  updateTripAssignment,
+  type TripRow,
+} from "@/features/trips/services/trips.service";
+import {
+  getVehiclesByOrganization,
+  type VehicleRow,
 } from "@/features/vehicles/services/vehicles.service";
 import {
-    formatIndianVehicleNumber,
-    formatIndianVehicleNumberInput,
+  formatIndianVehicleNumber,
+  formatIndianVehicleNumberInput,
 } from "@/lib/format";
 import { validatePhone } from "@/lib/phoneValidation";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    Alert,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export type AssignmentSource = "private" | "shared" | "unassigned";
 
@@ -624,7 +624,7 @@ export function TripAssignmentBlock({
     <View style={[styles.wrapper, styles.wrapperStretch]}>
       <View style={styles.card}>
         <View style={styles.currentHeader}>
-          <Text style={styles.currentHeaderTitle}>Current Node</Text>
+          <Text style={styles.currentHeaderTitle}>Current Assignment</Text>
           {showSourceBadge && (
             <View style={[styles.sourceBadge, sourceBadgeStyle]}>
               <Text
@@ -640,78 +640,81 @@ export function TripAssignmentBlock({
           )}
         </View>
 
-        {/* Driver row — reference: Driver Node, + Assign / Change */}
-        <View style={styles.assignRow}>
-          <View style={styles.assignRowLeft}>
-            <View style={[styles.assignIcon, hasDriver ? styles.assignIconDriverActive : styles.assignIconInactive]}>
-              <FontAwesome name="user" size={20} color={hasDriver ? Theme.primary : Theme.textMuted} />
+        {/* Driver and Vehicle rows — side-by-side on web view */}
+        <View style={Platform.OS === 'web' ? styles.twoCol : null}>
+          {/* Driver row — reference: Driver Node, + Assign / Change */}
+          <View style={[styles.assignRow, Platform.OS === 'web' && styles.webAssignRow]}>
+            <View style={styles.assignRowLeft}>
+              <View style={[styles.assignIcon, hasDriver ? styles.assignIconDriverActive : styles.assignIconInactive]}>
+                <FontAwesome name="user" size={20} color={hasDriver ? Theme.primary : Theme.textMuted} />
+              </View>
+              <View style={styles.assignRowText}>
+                <Text style={styles.assignRowLabel}>Driver</Text>
+                <Text style={[styles.assignRowValue, !hasDriver && styles.assignRowValueEmpty]} numberOfLines={1}>
+                  {hasDriver ? pilotText : "No assigned node"}
+                </Text>
+              </View>
             </View>
-            <View style={styles.assignRowText}>
-              <Text style={styles.assignRowLabel}>Driver Node</Text>
-              <Text style={[styles.assignRowValue, !hasDriver && styles.assignRowValueEmpty]} numberOfLines={1}>
-                {hasDriver ? pilotText : "No assigned node"}
-              </Text>
-            </View>
+            {effectiveCanAssign ? (
+              showAssignByPhone ? (
+                <TouchableOpacity
+                  style={[styles.actionBtn, hasDriver ? styles.actionBtnSecondary : styles.actionBtnPrimary]}
+                  onPress={() =>
+                    openPhoneModal(
+                      hasDriver,
+                      propsVehicleLabel ?? trip.vehicle_display_number ?? "",
+                    )
+                  }
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.actionBtnText, hasDriver ? styles.actionBtnTextSecondary : styles.actionBtnTextPrimary]}>
+                    {hasDriver ? "Change" : "+ Assign"}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.actionBtn, hasDriver ? styles.actionBtnSecondary : styles.actionBtnPrimary]}
+                  onPress={openDriverPicker}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.actionBtnText, hasDriver ? styles.actionBtnTextSecondary : styles.actionBtnTextPrimary]}>
+                    {hasDriver ? "Change" : "+ Assign"}
+                  </Text>
+                </TouchableOpacity>
+              )
+            ) : null}
           </View>
-          {effectiveCanAssign ? (
-            showAssignByPhone ? (
-              <TouchableOpacity
-                style={[styles.actionBtn, hasDriver ? styles.actionBtnSecondary : styles.actionBtnPrimary]}
-                onPress={() =>
-                  openPhoneModal(
-                    hasDriver,
-                    propsVehicleLabel ?? trip.vehicle_display_number ?? "",
-                  )
-                }
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.actionBtnText, hasDriver ? styles.actionBtnTextSecondary : styles.actionBtnTextPrimary]}>
-                  {hasDriver ? "Change" : "+ Assign"}
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={[styles.actionBtn, hasDriver ? styles.actionBtnSecondary : styles.actionBtnPrimary]}
-                onPress={openDriverPicker}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.actionBtnText, hasDriver ? styles.actionBtnTextSecondary : styles.actionBtnTextPrimary]}>
-                  {hasDriver ? "Change" : "+ Assign"}
-                </Text>
-              </TouchableOpacity>
-            )
-          ) : null}
-        </View>
 
-        {/* Vehicle row — reference: Vehicle Registry, Change */}
-        <View style={[styles.assignRow, styles.assignRowLast]}>
-          <View style={styles.assignRowLeft}>
-            <View style={[styles.assignIcon, hasVehicle ? styles.assignIconVehicleActive : styles.assignIconInactive]}>
-              <FontAwesome name="truck" size={18} color={hasVehicle ? "#ffffff" : Theme.textMuted} />
+          {/* Vehicle row — reference: Vehicle Registry, Change */}
+          <View style={[styles.assignRow, styles.assignRowLast, Platform.OS === 'web' && styles.webAssignRow]}>
+            <View style={styles.assignRowLeft}>
+              <View style={[styles.assignIcon, hasVehicle ? styles.assignIconVehicleActive : styles.assignIconInactive]}>
+                <FontAwesome name="truck" size={18} color={hasVehicle ? "#ffffff" : Theme.textMuted} />
+              </View>
+              <View style={styles.assignRowText}>
+                <Text style={styles.assignRowLabel}>Vehicle</Text>
+                <Text style={[styles.assignRowValue, !hasVehicle && styles.assignRowValueEmpty]} numberOfLines={1}>
+                  {hasVehicle
+                    ? vehicleText
+                        .split(" • ")
+                        .map((part, i) => (i === 0 ? part : part.toUpperCase()))
+                        .join(" • ")
+                    : "No vehicle assigned"}
+                </Text>
+              </View>
             </View>
-            <View style={styles.assignRowText}>
-              <Text style={styles.assignRowLabel}>Vehicle Registry</Text>
-              <Text style={[styles.assignRowValue, !hasVehicle && styles.assignRowValueEmpty]} numberOfLines={1}>
-                {hasVehicle
-                  ? vehicleText
-                      .split(" • ")
-                      .map((part, i) => (i === 0 ? part : part.toUpperCase()))
-                      .join(" • ")
-                  : "No vehicle assigned"}
-              </Text>
-            </View>
+            {effectiveCanAssign ? (
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionBtnSecondaryAlt]}
+                onPress={openVehiclePicker}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.actionBtnText, styles.actionBtnTextSecondaryAlt]}>
+                  {hasVehicle ? "Change" : "+ Assign"}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
-          {effectiveCanAssign ? (
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.actionBtnSecondaryAlt]}
-              onPress={openVehiclePicker}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.actionBtnText, styles.actionBtnTextSecondaryAlt]}>
-                {hasVehicle ? "Change" : "+ Assign"}
-              </Text>
-            </TouchableOpacity>
-          ) : null}
         </View>
 
         {showAssignByPhone && (partnerName ?? "").trim() ? (
@@ -1420,6 +1423,11 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     marginTop: 4,
     lineHeight: 16,
+  },
+  webAssignRow: {
+    flex: 1,
+    borderBottomWidth: 0,
+    paddingVertical: 12,
   },
   assignAggregateMeta: {
     marginTop: 8,

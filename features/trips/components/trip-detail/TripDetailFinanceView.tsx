@@ -277,6 +277,24 @@ export function TripDetailFinanceView({
     return { supplierCommission: supplier, driverCommission: driver };
   }, [tripLedgerEntries]);
 
+  const receivableTransactions = useMemo(
+    () => tripLedgerEntries.filter((tx) => Number(tx.amount_in ?? 0) > 0),
+    [tripLedgerEntries],
+  );
+  const payableTransactions = useMemo(
+    () => tripLedgerEntries.filter((tx) => Number(tx.amount_out ?? 0) > 0),
+    [tripLedgerEntries],
+  );
+
+  const revenueAdjustments = useMemo(
+    () => adjustments.filter((a) => a.type === "revenue"),
+    [adjustments],
+  );
+  const costAdjustments = useMemo(
+    () => adjustments.filter((a) => a.type === "cost"),
+    [adjustments],
+  );
+
   const receivableStatus = dueFromCustomer <= 0 ? "Cleared" : "Pending";
   const payableStatus = supplierDue <= 0 ? "Cleared" : "Pending";
 
