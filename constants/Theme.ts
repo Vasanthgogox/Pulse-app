@@ -138,6 +138,7 @@ export const Theme = {
   // ---- Buttons ----
   buttonPrimary: "#1a237e",
   buttonPrimaryText: "#ffffff",
+  buttonSecondaryBackground: "#4b5563", // Temporary comment to force refresh
   buttonSecondary: "#10b981",
   buttonSecondaryText: "#ffffff",
   buttonMatteBlack: "#151515",

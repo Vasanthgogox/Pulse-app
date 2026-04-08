@@ -2,14 +2,18 @@
  * Invoicing execute service — maps to cashflow InvoicingCenter / api.ts.
  * Same DB as Q-unified-base; RLS applies.
  */
-import { supabase } from '@/lib/supabase';
 import {
-  getTripsByOrganization,
   getTripsWhereOrgIsSupplier,
-  type TripRow,
-} from '@/features/trips/services/trips.service';
+  type TripRow
+} from "@/features/trips/services/trips.service";
+import { supabase } from "@/lib/supabase";
 
-export type TripStatus = 'approved' | 'received' | 'pending' | 'warning' | 'blocked';
+export type TripStatus =
+  | "approved"
+  | "received"
+  | "pending"
+  | "warning"
+  | "blocked";
 
 export interface TripChecks {
   poMatch: boolean;
@@ -59,12 +63,12 @@ export interface PodReconciliationSummary {
 type TripRecord = TripRow & Record<string, unknown>;
 
 function str(v: unknown): string {
-  return v == null ? '' : String(v);
+  return v == null ? "" : String(v);
 }
 
 function num(v: unknown): number {
   if (v == null) return 0;
-  const n = typeof v === 'number' ? v : parseFloat(String(v));
+  const n = typeof v === "number" ? v : parseFloat(String(v));
   return Number.isFinite(n) ? n : 0;
 }
 
@@ -80,31 +84,39 @@ export function getTripStringId(row: TripRecord): string {
 
 function passesInvoicingFilter(t: TripRecord): boolean {
   const invoiceNo = str((t as { invoice_no?: string | null }).invoice_no);
-  if (invoiceNo.trim() !== '') return false;
+  if (invoiceNo.trim() !== "") return false;
 
-  const inv1 = str((t as { invoice_status_1?: string | null }).invoice_status_1).toLowerCase();
-  if (inv1.includes('raised')) return false;
+  const inv1 = str(
+    (t as { invoice_status_1?: string | null }).invoice_status_1,
+  ).toLowerCase();
+  if (inv1.includes("raised")) return false;
 
   return true;
 }
 
 function mapRowToView(row: TripRecord): InvoicingTripView {
-  const podStatus = str((row as { pod_status?: string | null }).pod_status).toLowerCase();
-  const invStatus1 = str((row as { invoice_status_1?: string | null }).invoice_status_1).toLowerCase();
+  const podStatus = str(
+    (row as { pod_status?: string | null }).pod_status,
+  ).toLowerCase();
+  const invStatus1 = str(
+    (row as { invoice_status_1?: string | null }).invoice_status_1,
+  ).toLowerCase();
 
-  const isPodReceived = podStatus === 'received';
-  const isApproved = isPodReceived && (invStatus1.includes('pending') || invStatus1.includes('data shared'));
+  const isPodReceived = podStatus === "received";
+  const isApproved =
+    isPodReceived &&
+    (invStatus1.includes("pending") || invStatus1.includes("data shared"));
   const isReceivedOnly = isPodReceived && !isApproved;
   const isPending =
-    podStatus.includes('pending') ||
-    podStatus.includes('i-bond') ||
-    podStatus === '' ||
-    podStatus === 'partial';
+    podStatus.includes("pending") ||
+    podStatus.includes("i-bond") ||
+    podStatus === "" ||
+    podStatus === "partial";
 
-  let status: TripStatus = 'pending';
-  if (isApproved) status = 'approved';
-  else if (isReceivedOnly) status = 'received';
-  else if (isPending) status = 'pending';
+  let status: TripStatus = "pending";
+  if (isApproved) status = "approved";
+  else if (isReceivedOnly) status = "received";
+  else if (isPending) status = "pending";
 
   const tripDate = str(
     (row as { trip_date?: string | null }).trip_date ??
@@ -119,16 +131,16 @@ function mapRowToView(row: TripRecord): InvoicingTripView {
     (row as { drop_point?: string | null }).drop_point ??
       (row as { drop_location?: string | null }).drop_location,
   );
-  const route = `${ppLocation || 'Unknown'} ➔ ${dropPoint || 'Unknown'}`;
+  const route = `${ppLocation || "Unknown"} ➔ ${dropPoint || "Unknown"}`;
 
   return {
     internal_id: str(row.id),
     id: getTripStringId(row),
-    client: str((row as { client_name?: string | null }).client_name) || '—',
+    client: str((row as { client_name?: string | null }).client_name) || "—",
     supplier_name:
       str((row as { vendor_name?: string | null }).vendor_name) ||
       str((row as { supplier_name?: string | null }).supplier_name) ||
-      'Unknown Supplier',
+      "Unknown Supplier",
     route,
     date: tripDate,
     amount:
@@ -136,7 +148,9 @@ function mapRowToView(row: TripRecord): InvoicingTripView {
       num((row as { client_price?: unknown }).client_price) ||
       0,
     status,
-    details: str((row as { remarks?: string | null }).remarks) || str((row as { notes?: string | null }).notes),
+    details:
+      str((row as { remarks?: string | null }).remarks) ||
+      str((row as { notes?: string | null }).notes),
     checks: {
       poMatch: true,
       idConfirmed: true,
@@ -151,15 +165,16 @@ export async function fetchInvoicingTrips(
   try {
     const [ownerRes, supRes] = await Promise.all([
       supabase()
-        .from('trips')
-        .select('*')
-        .eq('organization_id', orgId)
-        .order('created_at', { ascending: false })
+        .from("trips")
+        .select("*")
+        .eq("organization_id", orgId)
+        .order("created_at", { ascending: false })
         .limit(3000),
       getTripsWhereOrgIsSupplier(orgId),
     ]);
 
-    if (ownerRes.error) return { error: new Error(ownerRes.error.message), trips: [] };
+    if (ownerRes.error)
+      return { error: new Error(ownerRes.error.message), trips: [] };
     if (supRes.error) return { error: supRes.error, trips: [] };
 
     const ownerRows = (ownerRes.data ?? []) as TripRecord[];
@@ -183,7 +198,9 @@ export async function fetchPodReconciliationSummary(): Promise<{
   summary: PodReconciliationSummary | null;
 }> {
   try {
-    const { data, error } = await supabase().rpc('get_pod_reconciliation_summary');
+    const { data, error } = await supabase().rpc(
+      "get_pod_reconciliation_summary",
+    );
     if (error) throw error;
     const summary = Array.isArray(data) ? data[0] : data;
     return {
@@ -200,34 +217,37 @@ export async function fetchPodReconciliationSummary(): Promise<{
       },
     };
   } catch (e) {
-    return { error: e instanceof Error ? e : new Error(String(e)), summary: null };
+    return {
+      error: e instanceof Error ? e : new Error(String(e)),
+      summary: null,
+    };
   }
 }
 
 export async function executeInvoiceCreation(
   internalIds: string[],
-  payload?: any
+  payload?: any,
 ): Promise<{ error: Error | null }> {
   try {
-    const invoiceNo = `#INV-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}${Math.floor(Math.random() * 90) + 10}`;
-    
+    const invoiceNo = `#INV-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}${Math.floor(Math.random() * 90) + 10}`;
+
     // Note: Due to Q-mobile standards preventing schema changes in this repo,
-    // the full payload (taxes, fuel surcharge, additional charges) is securely persisted 
+    // the full payload (taxes, fuel surcharge, additional charges) is securely persisted
     // as a structured JSON object in the activity_logs table via the log_activity RPC.
     const { error } = await supabase()
-      .from('trips')
+      .from("trips")
       .update({
         invoice_no: invoiceNo,
-        invoice_status_1: 'Raised',
+        invoice_status_1: "Raised",
       })
-      .in('id', internalIds);
+      .in("id", internalIds);
 
     if (error) throw error;
 
     for (const id of internalIds) {
-      await supabase().rpc('log_activity', {
-        p_action: 'INVOICE_GENERATED',
-        p_entity_type: 'trip',
+      await supabase().rpc("log_activity", {
+        p_action: "INVOICE_GENERATED",
+        p_entity_type: "trip",
         p_entity_id: id,
         p_details: { invoice_no: invoiceNo, payload },
       });
