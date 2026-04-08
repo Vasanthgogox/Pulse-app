@@ -13,6 +13,8 @@ import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
 import * as financeService from "../services/finance.service";
 import { FinancialRow, type FinancialRowData } from "./FinancialRow";
 import { LedgerTransactionListView } from "./LedgerTransactionListView";
+import type { ClientRow } from "@/features/clients/services/clients.service";
+import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 
 export type LedgerViewMode = "table" | "transaction";
 
@@ -60,6 +62,16 @@ export interface LedgerTabProps {
   onViewModeChange?: (mode: LedgerViewMode) => void;
   /** When false, hide TRANSACTION | TABLE | ANALYTICS sub-tabs (e.g. main Finance Cash tab). */
   showFiscalSubTabs?: boolean;
+  clientRows?: ClientRow[];
+  supplierRows?: SupplierRow[];
+  tripPartyMap?: Record<
+    string,
+    {
+      client_id?: string | null;
+      supplier_id?: string | null;
+      driver_id?: string | null;
+    }
+  >;
 }
 
 export function LedgerTab({
@@ -75,12 +87,45 @@ export function LedgerTab({
   onMissionChange,
   viewMode: viewModeProp,
   showFiscalSubTabs = true,
+  clientRows = [],
+  supplierRows = [],
+  tripPartyMap = {},
 }: LedgerTabProps) {
   const { t } = useLanguage();
   const isViewOnly = onAddTransactionPress === undefined;
   const isControlled = transactionsProp !== undefined;
   const [expandedLedgerRowId, setExpandedLedgerRowId] = useState<string | null>(null);
   const viewMode = viewModeProp ?? "table";
+
+  const clientById = new Map(clientRows.map(c => [c.id, c]));
+  const supplierById = new Map(supplierRows.map(s => [s.id, s]));
+
+  const getResolvedPartyName = (row: financeService.LedgerRow): string => {
+    const contactType = row.contact_type;
+    const tripId = row.trip_id;
+    
+    if (contactType === 'client' && row.contact_id) {
+      return clientById.get(row.contact_id)?.name || row.party_name || "—";
+    }
+    if (contactType === 'supplier' && row.contact_id) {
+      return supplierById.get(row.contact_id)?.name || row.party_name || "—";
+    }
+    if (contactType === 'driver') {
+      return row.driver_name || row.party_name || "—";
+    }
+
+    if (tripId && tripPartyMap[tripId]) {
+      const pm = tripPartyMap[tripId];
+      if (row.amount_in && pm.client_id) {
+        return clientById.get(pm.client_id)?.name || row.party_name || "—";
+      }
+      if (row.amount_out && pm.supplier_id) {
+        return supplierById.get(pm.supplier_id)?.name || row.party_name || "—";
+      }
+    }
+
+    return row.party_name || "—";
+  };
 
   const {
     data: cachedTransactions = [],
@@ -234,13 +279,7 @@ export function LedgerTab({
       (row.trip_id != null && !isDriverPayment
         ? (getVehicleNumberForTripId?.(row.trip_id) ?? null)
         : null);
-    const entityName = isDriverPayment
-      ? row.driver_name || row.party_name || "—"
-      : isClientOrSupplier
-        ? row.party_name || "—"
-        : vehicleNum
-          ? formatIndianVehicleNumber(vehicleNum)
-          : (row.party_name ?? "—");
+    const entityName = getResolvedPartyName(row);
     const tripDetail =
       row.trip_id != null && tripDetailsMap[row.trip_id]
         ? tripDetailsMap[row.trip_id]
@@ -275,13 +314,7 @@ export function LedgerTab({
                 (r.trip_id && !isDr
                   ? (getVehicleNumberForTripId?.(r.trip_id) ?? null)
                   : null);
-              const party = isDr
-                ? r.driver_name || r.party_name || "—"
-                : isCS
-                  ? r.party_name || "—"
-                  : vn
-                    ? vn
-                    : (r.party_name ?? "—");
+              const party = getResolvedPartyName(r);
               return {
                 id: r.id,
                 date: formatEntryDate(r.transaction_date),
@@ -292,12 +325,20 @@ export function LedgerTab({
               };
             })
         : undefined;
+
+    let derivedPartyType = row.contact_type;
+    if (!derivedPartyType && row.trip_id && tripPartyMap[row.trip_id]) {
+      const pm = tripPartyMap[row.trip_id];
+      if (row.amount_in && pm.client_id) derivedPartyType = 'client';
+      if (row.amount_out && pm.supplier_id) derivedPartyType = 'supplier';
+    }
+
     const ledgerPartyType =
-      row.contact_type === "client"
+      derivedPartyType === "client"
         ? "client"
-        : row.contact_type === "supplier"
+        : derivedPartyType === "supplier"
           ? "supplier"
-          : row.contact_type === "driver"
+          : isDriverPayment
             ? "driver"
             : "vehicle";
     const desc = row.description ?? "";
@@ -378,13 +419,7 @@ export function LedgerTab({
             ? (getVehicleNumberForTripId?.(row.trip_id) ?? null)
             : null);
         // Party column: show person name for client/supplier/driver; show vehicle only for vehicle expense (no contact).
-        const entityName = isDriverPayment
-          ? row.driver_name || row.party_name || "—"
-          : isClientOrSupplier
-            ? row.party_name || "—"
-            : vehicleNum
-              ? formatIndianVehicleNumber(vehicleNum)
-              : (row.party_name ?? "—");
+        const entityName = getResolvedPartyName(row);
         const tripDisplay = (row.trip_number ?? "").trim() || null;
         const entryDateStr = formatEntryDate(row.transaction_date);
         const restSublineDriver =
@@ -513,12 +548,18 @@ export function LedgerTab({
                 });
               })()
             : undefined;
+        let derivedPartyType = row.contact_type;
+        if (!derivedPartyType && row.trip_id && tripPartyMap[row.trip_id]) {
+          const pm = tripPartyMap[row.trip_id];
+          if (row.amount_in && pm.client_id) derivedPartyType = "client";
+          if (row.amount_out && pm.supplier_id) derivedPartyType = "supplier";
+        }
         const ledgerPartyType =
-          row.contact_type === "client"
+          derivedPartyType === "client"
             ? "client"
-            : row.contact_type === "supplier"
+            : derivedPartyType === "supplier"
               ? "supplier"
-              : row.contact_type === "driver"
+              : isDriverPayment
                 ? "driver"
                 : "vehicle";
         const data: FinancialRowData = {

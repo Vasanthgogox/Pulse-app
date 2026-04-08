@@ -59,6 +59,12 @@ export interface FinanceModalsProps {
   defaultContactId: string | undefined;
   defaultContactType: "client" | "supplier" | "driver" | undefined;
   defaultDriverPaymentType: import("@/components/AddTransactionModal").DriverPaymentType | null | undefined;
+  /** Map linked_organization_id -> local_client_id (for integrated trips). */
+  linkedClientIdByOrgId?: Record<string, string> | Map<string, string>;
+  /** Map linked_organization_id -> local_supplier_id. */
+  linkedSupplierIdByOrgId?: Record<string, string> | Map<string, string>;
+  /** Current organization ID to detect if trip is "ours". */
+  viewerOrgId?: string | null;
   financeSubTab: FinanceSubTab;
 
   // Add Client
@@ -169,6 +175,9 @@ export function FinanceModals(props: FinanceModalsProps) {
     defaultContactId,
     defaultContactType,
     defaultDriverPaymentType,
+    linkedClientIdByOrgId,
+    linkedSupplierIdByOrgId,
+    viewerOrgId,
     financeSubTab,
     showAddClientModal,
     onCloseAddClientModal,
@@ -239,6 +248,9 @@ export function FinanceModals(props: FinanceModalsProps) {
         clients={clients}
         suppliers={supplierPartyOptions}
         supplierLinkedOrgIds={supplierLinkedOrgIds}
+        linkedClientIdByOrgId={linkedClientIdByOrgId}
+        linkedSupplierIdByOrgId={linkedSupplierIdByOrgId}
+        viewerOrgId={viewerOrgId}
         drivers={driverPartyOptions}
         vehicles={vehicleOptions}
         trips={modalTripOptions}

@@ -23,6 +23,10 @@ import type { LedgerRow } from '../services/finance.service';
 import { LedgerExpandedCardFromData, type FinancialRowData } from "./FinancialRow";
 import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
 
+import type { ClientRow } from "@/features/clients/services/clients.service";
+import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
+import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
+
 export interface FinanceKanbanTabProps {
   transactions: LedgerRow[];
   onRowSelect?: (data: any) => void;
@@ -40,6 +44,18 @@ export interface FinanceKanbanTabProps {
       supplier_rate?: number | null;
       driver_commission?: number | null;
       supplier_id?: string | null;
+      organization_id?: string | null;
+      client_id?: string | null;
+    }
+  >;
+  clientRows?: ClientRow[];
+  supplierRows?: SupplierRow[];
+  tripPartyMap?: Record<
+    string,
+    {
+      client_id?: string | null;
+      supplier_id?: string | null;
+      driver_id?: string | null;
     }
   >;
 }
@@ -245,9 +261,44 @@ export function FinanceKanbanTab({
   onRowSelect,
   getVehicleNumberForTripId,
   tripDetailsMap = {},
+  clientRows = [],
+  supplierRows = [],
+  tripPartyMap = {},
 }: FinanceKanbanTabProps) {
   const { t } = useLanguage();
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+
+  const clientById = useMemo(() => new Map(clientRows.map(c => [c.id, c])), [clientRows]);
+  const supplierById = useMemo(() => new Map(supplierRows.map(s => [s.id, s])), [supplierRows]);
+
+  const getResolvedPartyName = (row: LedgerRow): string => {
+    const contactType = row.contact_type;
+    const tripId = row.trip_id;
+    
+    // 1) Explicit contact on transaction
+    if (contactType === 'client' && row.contact_id) {
+      return clientById.get(row.contact_id)?.name || row.party_name || "—";
+    }
+    if (contactType === 'supplier' && row.contact_id) {
+      return supplierById.get(row.contact_id)?.name || row.party_name || "—";
+    }
+    if (contactType === 'driver') {
+      return row.driver_name || row.party_name || "—";
+    }
+
+    // 2) Fallback to tripPartyMap if no explicit contact_id but we have a trip_id
+    if (tripId && tripPartyMap[tripId]) {
+      const pm = tripPartyMap[tripId];
+      if (row.amount_in && pm.client_id) {
+        return clientById.get(pm.client_id)?.name || row.party_name || "—";
+      }
+      if (row.amount_out && pm.supplier_id) {
+        return supplierById.get(pm.supplier_id)?.name || row.party_name || "—";
+      }
+    }
+
+    return row.party_name || "—";
+  };
 
   const getRowCategory = (row: LedgerRow): ColumnType | 'other' => {
     const hasAmtIn = (row.amount_in ?? 0) > 0;
@@ -258,15 +309,23 @@ export function FinanceKanbanTab({
 
     if (isDriver) return 'drivers';
 
-    const isClient = contactType === "client";
-    if (isClient || (hasAmtIn && !contactType)) return 'customers';
+    // Integration check for category
+    let resolvedContactType = contactType;
+    if (!resolvedContactType && row.trip_id && tripPartyMap[row.trip_id]) {
+      const pm = tripPartyMap[row.trip_id];
+      if (hasAmtIn && pm.client_id) resolvedContactType = 'client';
+      if (hasAmtOut && pm.supplier_id) resolvedContactType = 'supplier';
+    }
+
+    const isClient = resolvedContactType === "client";
+    if (isClient || (hasAmtIn && !resolvedContactType)) return 'customers';
 
     const vehicleNum = row.vehicle_number ?? (row.trip_id != null ? (getVehicleNumberForTripId?.(row.trip_id) ?? null) : null);
-    const isVehicle = contactType === "vehicle" || (!!vehicleNum && !isClient && contactType !== "supplier");
+    const isVehicle = resolvedContactType === "vehicle" || (!!vehicleNum && !isClient && resolvedContactType !== "supplier");
     if (isVehicle) return 'garage';
 
-    const isSupplier = contactType === "supplier";
-    if (isSupplier || (hasAmtOut && !contactType)) return 'suppliers';
+    const isSupplier = resolvedContactType === "supplier";
+    if (isSupplier || (hasAmtOut && !resolvedContactType)) return 'suppliers';
 
     if (hasAmtIn) return 'customers';
     if (hasAmtOut) return 'suppliers';
@@ -296,10 +355,8 @@ export function FinanceKanbanTab({
     const cat = getRowCategory(row);
     const vehicleNum = row.vehicle_number ?? (row.trip_id != null ? (getVehicleNumberForTripId?.(row.trip_id) ?? null) : null);
     
-    let entityName = row.party_name || "—";
-    if (cat === 'drivers') {
-      entityName = row.driver_name || row.party_name || "—";
-    } else if (cat === 'garage' && vehicleNum) {
+    let entityName = getResolvedPartyName(row);
+    if (cat === 'garage' && vehicleNum && entityName === "—") {
       entityName = formatIndianVehicleNumber(vehicleNum);
     }
 
@@ -311,10 +368,8 @@ export function FinanceKanbanTab({
           .map((r) => {
             const rCat = getRowCategory(r);
             const rvNum = r.vehicle_number ?? (r.trip_id != null ? (getVehicleNumberForTripId?.(r.trip_id) ?? null) : null);
-            let rParty = r.party_name || "—";
-            if (rCat === 'drivers') {
-              rParty = r.driver_name || r.party_name || "—";
-            } else if (rCat === 'garage' && rvNum) {
+            let rParty = getResolvedPartyName(r);
+            if (rCat === 'garage' && rvNum && rParty === "—") {
               rParty = formatIndianVehicleNumber(rvNum);
             }
 
@@ -384,10 +439,8 @@ export function FinanceKanbanTab({
     const dateStr = formatTxDate(row.transaction_date ?? row.created_at);
     const vehicleNum = row.vehicle_number ?? (row.trip_id != null ? (getVehicleNumberForTripId?.(row.trip_id) ?? null) : null);
     const vehicleStr = vehicleNum ? formatIndianVehicleNumber(vehicleNum) : null;
-    let partyName = row.party_name || "—";
-    if (cat === 'drivers') {
-      partyName = row.driver_name || row.party_name || "—";
-    } else if (cat === 'garage' && vehicleNum) {
+    let partyName = getResolvedPartyName(row);
+    if (cat === 'garage' && vehicleNum && partyName === "—") {
       partyName = vehicleStr || row.party_name || "—";
     }
     const typeLabel = getDoubleEntryDisplayLabel(row) ?? row.description ?? "GENERAL";

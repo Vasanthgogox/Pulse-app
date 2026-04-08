@@ -121,11 +121,18 @@ export function FinanceScreen() {
     canAccess,
     refreshKey: entitiesRefreshKey,
   });
+  const allTripsForLedger = useMemo(
+    () => [...entities.tripRows, ...entities.tripsWhereOrgIsSupplier],
+    [entities.tripRows, entities.tripsWhereOrgIsSupplier],
+  );
+
   const ledger = useFinanceLedger({
     organizationId: currentOrganization?.id ?? null,
     canAccess,
-    tripRows: entities.tripRows,
+    tripRows: allTripsForLedger,
     vehicleRows: entities.vehicleRows,
+    clients: entities.clientRows,
+    suppliers: entities.supplierRows,
   });
   const {
     clients,
@@ -1494,6 +1501,9 @@ export function FinanceScreen() {
         }))}
         suppliersList={suppliersList}
         tripCountByParty={tripCountByParty}
+        linkedClientIdByOrgId={uniqueLinkedClientIdByOrgId}
+        linkedSupplierIdByOrgId={uniqueLinkedSupplierIdByOrgId}
+        viewerOrgId={orgId}
       />
 
       <EntityListCategoryModal
