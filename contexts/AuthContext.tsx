@@ -55,6 +55,25 @@ function authProfileToUserProfile(p: authService.AuthProfile): UserProfile {
   };
 }
 
+function mergeAuthProfiles(
+  base: authService.AuthProfile,
+  db: authService.AuthProfile | null,
+): authService.AuthProfile {
+  if (!db) return base;
+  return {
+    ...base,
+    ...db,
+    // Prefer DB when present, but keep fresh auth metadata values when DB field is empty/stale.
+    avatar_url: db.avatar_url ?? base.avatar_url,
+    avatar_seed: db.avatar_seed ?? base.avatar_seed,
+    status_text: db.status_text ?? base.status_text,
+    company_name: db.company_name ?? base.company_name,
+    phone: db.phone ?? base.phone,
+    full_name: db.full_name ?? base.full_name,
+    displayName: db.displayName || base.displayName,
+  };
+}
+
 interface AuthContextType {
   user: AuthUser | null;
   profile: UserProfile | null;
@@ -152,9 +171,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               // Fetch latest profile from DB for accuracy (handles updates from other devices/sessions)
               const dbProfile = await authService.getProfile(auth.user.uid);
               if (!mounted) return;
-              
+
               setUser(auth.user);
-              setProfile(dbProfile ? authProfileToUserProfile(dbProfile) : authProfileToUserProfile(auth.profile));
+              setProfile(
+                authProfileToUserProfile(
+                  mergeAuthProfiles(auth.profile, dbProfile),
+                ),
+              );
               setSessionExpired(false);
             } else {
               if (!signOutRequestedRef.current) setSessionExpired(true);
@@ -182,7 +205,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               const dbProfile = await authService.getProfile(auth.user.uid);
               if (!mounted) return;
               setUser(auth.user);
-              setProfile(dbProfile ? authProfileToUserProfile(dbProfile) : authProfileToUserProfile(auth.profile));
+              setProfile(
+                authProfileToUserProfile(
+                  mergeAuthProfiles(auth.profile, dbProfile),
+                ),
+              );
               setSessionExpired(false);
             } else {
               if (!signOutRequestedRef.current) setSessionExpired(true);

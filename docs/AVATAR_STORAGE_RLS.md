@@ -1,12 +1,12 @@
 # Avatar storage bucket – RLS policies
 
-If you see **"new row violates row-level security policy"** when uploading a profile photo in the driver app, the Supabase Storage bucket `avatars` exists but RLS policies are missing or too strict.
+If you see **"new row violates row-level security policy"** when uploading a profile photo in the app, the Supabase Storage bucket `userprofiles` exists but RLS policies are missing or too strict.
 
 Apply the following in your Supabase project (Dashboard → SQL Editor, or add a migration in Q-unified-base).
 
 ## 1. Ensure the bucket exists
 
-Create the bucket if needed (Dashboard → Storage → New bucket, name: `avatars`, **Private**).
+Create the bucket if needed (Dashboard → Storage → New bucket, name: `userprofiles`, **Private**).
 
 ## 2. Storage RLS policies
 
@@ -19,7 +19,7 @@ ON storage.objects
 FOR INSERT
 TO authenticated
 WITH CHECK (
-  bucket_id = 'avatars'
+  bucket_id = 'userprofiles'
   AND (storage.foldername(name))[1] = (auth.uid())::text
 );
 
@@ -29,11 +29,11 @@ ON storage.objects
 FOR UPDATE
 TO authenticated
 USING (
-  bucket_id = 'avatars'
+  bucket_id = 'userprofiles'
   AND (storage.foldername(name))[1] = (auth.uid())::text
 )
 WITH CHECK (
-  bucket_id = 'avatars'
+  bucket_id = 'userprofiles'
   AND (storage.foldername(name))[1] = (auth.uid())::text
 );
 
@@ -43,14 +43,14 @@ ON storage.objects
 FOR SELECT
 TO authenticated
 USING (
-  bucket_id = 'avatars'
+  bucket_id = 'userprofiles'
   AND (storage.foldername(name))[1] = (auth.uid())::text
 );
 
 -- Optional: allow delete so "Remove photo" can delete the object (app currently only clears avatar_url)
 -- CREATE POLICY "Users can delete own avatar"
 -- ON storage.objects FOR DELETE TO authenticated
--- USING (bucket_id = 'avatars' AND (storage.foldername(name))[1] = (auth.uid())::text);
+-- USING (bucket_id = 'userprofiles' AND (storage.foldername(name))[1] = (auth.uid())::text);
 ```
 
 If policies with these names already exist, drop them first or use different names:

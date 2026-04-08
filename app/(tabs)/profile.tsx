@@ -445,7 +445,12 @@ export default function ProfileScreen() {
         initialCompanyName={profile?.company_name ?? ""}
         email={user?.email ?? ""}
         initialStatusText={profile?.status_text ?? ""}
-        onPhotoUpdated={refreshSession}
+        onPhotoUpdated={async (payload) => {
+          if (payload?.avatarUri?.trim()) {
+            setAvatarUri(payload.avatarUri);
+          }
+          await refreshSession();
+        }}
         initialAvatarSeed={avatarSeed}
         avatarPresetStyle="user-2d"
         onPresetSelected={(seed) => {

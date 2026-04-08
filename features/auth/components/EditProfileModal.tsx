@@ -47,7 +47,10 @@ export interface EditProfileModalProps {
   /** Read-only; shown for context */
   email: string;
   /** Called after profile photo is updated so parent can refresh (e.g. refreshSession). */
-  onPhotoUpdated?: () => void | Promise<void>;
+  onPhotoUpdated?: (payload?: {
+    avatarUri?: string | null;
+    avatarPath?: string | null;
+  }) => void | Promise<void>;
   /** Current preset seed when no uploaded photo (driver: from useDriverAvatar; tabs: from AsyncStorage). */
   initialAvatarSeed?: string;
   /** When user selects a preset from the grid, call this so parent can persist (e.g. setAvatarSeed or AsyncStorage). */
@@ -179,7 +182,7 @@ export function EditProfileModal({
     if (!uid) return;
     setError(null);
     setPhotoUploading(true);
-    const { path, error: pickErr } = await pickAndUploadAvatar(uid);
+    const { path, previewUri, error: pickErr } = await pickAndUploadAvatar(uid);
     setPhotoUploading(false);
     if (pickErr) {
       setError(pickErr.message);
@@ -191,8 +194,20 @@ export function EditProfileModal({
       setError(updateErr.message);
       return;
     }
-    await resolveAvatarUri(path, selectedPresetSeed);
-    await onPhotoUpdated?.();
+    if (previewUri?.trim()) {
+      // Optimistic local preview so user sees the uploaded photo immediately.
+      setAvatarUri(previewUri);
+    }
+    // Only replace optimistic preview when we successfully resolve a remote URL.
+    // If signed/public read fails due policy lag, keep the local preview instead of reverting.
+    const signed = await getSignedAvatarUrl(path);
+    if (signed) {
+      setAvatarUri(signed);
+    }
+    await onPhotoUpdated?.({
+      avatarUri: signed ?? previewUri ?? null,
+      avatarPath: path,
+    });
   };
 
   const handleSelectPreset = async (seed: string) => {
@@ -211,7 +226,10 @@ export function EditProfileModal({
     setSelectedPresetSeed(seed);
     setAvatarUri(getPresetUri(seed));
     onPresetSelected?.(seed);
-    await onPhotoUpdated?.();
+    await onPhotoUpdated?.({
+      avatarUri: getPresetUri(seed),
+      avatarPath: null,
+    });
   };
 
   const driverPreset =
@@ -235,7 +253,10 @@ export function EditProfileModal({
     }
     setSelectedPresetSeed(initialAvatarSeed);
     setAvatarUri(getPresetUri(initialAvatarSeed));
-    await onPhotoUpdated?.();
+    await onPhotoUpdated?.({
+      avatarUri: getPresetUri(initialAvatarSeed),
+      avatarPath: null,
+    });
   };
 
   const inputStyle = [

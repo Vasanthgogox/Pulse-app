@@ -1,7 +1,7 @@
 /**
  * Profile avatar upload and signed URL resolution for private bucket.
  * Bucket is private: we store the storage path in profile.avatar_url and resolve to signed URLs for display.
- * Storage bucket must exist in Supabase (e.g. "avatars") with RLS allowing authenticated users
+ * Storage bucket must exist in Supabase (e.g. "userprofiles") with RLS allowing authenticated users
  * to upload/update their own path: {user_id}/avatar.jpg
  */
 import { getAvatarUriForSeed } from '@/constants/DriverLevels';
@@ -13,15 +13,35 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useState } from 'react';
 
-export const AVATAR_BUCKET = 'avatars';
+export const AVATAR_BUCKET = 'userprofiles';
+const LEGACY_AVATAR_BUCKET = 'avatars';
 const MAX_SIZE = 512;
 const QUALITY = 0.85;
 /** Signed URL expiry (seconds). Refresh before expiry when displaying. */
 const SIGNED_URL_EXPIRY_SEC = 3600;
 
+function base64ToUint8Array(base64: string): Uint8Array {
+  const normalized = base64.replace(/\s/g, '');
+  if (typeof globalThis.atob === 'function') {
+    const binary = globalThis.atob(normalized);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  }
+  const maybeBuffer = (globalThis as { Buffer?: { from: (value: string, enc: string) => Uint8Array } }).Buffer;
+  if (maybeBuffer?.from) {
+    return maybeBuffer.from(normalized, 'base64');
+  }
+  throw new Error('Base64 decoding is not available on this device');
+}
+
 export interface PickAndUploadAvatarResult {
   /** Storage path to store in profile.avatar_url (e.g. "userId/avatar.jpg"). */
   path: string | null;
+  /** Local image uri for instant preview after successful upload. */
+  previewUri?: string | null;
   error: Error | null;
 }
 
@@ -33,7 +53,7 @@ export async function pickAndUploadAvatar(userId: string): Promise<PickAndUpload
   try {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      return { path: null, error: new Error('Permission to access photos is required') };
+      return { path: null, previewUri: null, error: new Error('Permission to access photos is required') };
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -41,10 +61,11 @@ export async function pickAndUploadAvatar(userId: string): Promise<PickAndUpload
       allowsEditing: true,
       aspect: [1, 1],
       quality: 1,
+      base64: true,
     });
 
     if (result.canceled || !result.assets?.[0]) {
-      return { path: null, error: null };
+      return { path: null, previewUri: null, error: null };
     }
 
     const asset = result.assets[0];
@@ -61,17 +82,25 @@ export async function pickAndUploadAvatar(userId: string): Promise<PickAndUpload
       // Keep original if resize fails
     }
 
-    const path = `${userId}/avatar.jpg`;
-    // In React Native, fetch(fileUri) + response.blob() often yields an empty blob for file:// URIs.
-    // Use expo-file-system File.arrayBuffer() so the uploaded file has real bytes.
-    const file = new File(uri);
-    const arrayBuffer = await file.arrayBuffer();
-    if (!arrayBuffer || arrayBuffer.byteLength === 0) {
-      return { path: null, error: new Error('Could not read image file') };
+    const path = `${userId}/avatar-${Date.now()}.jpg`;
+    // Prefer ImagePicker base64 payload because it is stable across Expo runtimes.
+    // Fallback to File.arrayBuffer() if base64 is unavailable on the current device.
+    let uploadBytes: ArrayBuffer | Uint8Array | null = null;
+    const base64 = typeof asset.base64 === 'string' ? asset.base64.trim() : '';
+    if (base64) {
+      uploadBytes = base64ToUint8Array(base64);
+    } else {
+      const file = new File(uri);
+      uploadBytes = await file.arrayBuffer();
     }
-    const { error } = await supabase().storage.from(AVATAR_BUCKET).upload(path, arrayBuffer, {
+
+    if (!uploadBytes || uploadBytes.byteLength === 0) {
+      return { path: null, previewUri: null, error: new Error('Could not read image file') };
+    }
+
+    const { error } = await supabase().storage.from(AVATAR_BUCKET).upload(path, uploadBytes, {
       contentType: 'image/jpeg',
-      upsert: true,
+      upsert: false,
     });
 
     if (error) {
@@ -79,18 +108,20 @@ export async function pickAndUploadAvatar(userId: string): Promise<PickAndUpload
       const isRls = /row-level security|policy|rls/i.test(msg);
       return {
         path: null,
+        previewUri: null,
         error: new Error(
           isRls
-            ? 'Storage permissions blocked. Your admin needs to add RLS policies for the avatars bucket (see docs/AVATAR_STORAGE_RLS.md).'
+            ? `Storage permissions blocked. Your admin needs to add RLS policies for the ${AVATAR_BUCKET} bucket (see docs/AVATAR_STORAGE_RLS.md).`
             : msg
         ),
       };
     }
 
-    return { path, error: null };
+    return { path, previewUri: uri, error: null };
   } catch (e) {
     return {
       path: null,
+      previewUri: null,
       error: e instanceof Error ? e : new Error('Failed to pick or upload photo'),
     };
   }
@@ -114,12 +145,39 @@ function normalizeAvatarPath(path: string): string {
 export async function getSignedAvatarUrl(path: string): Promise<string | null> {
   const normalized = normalizeAvatarPath(path);
   if (!normalized) return null;
-  const { data, error } = await supabase()
+
+  const withCacheBust = (url: string): string =>
+    `${url}${url.includes('?') ? '&' : '?'}cb=${Date.now()}`;
+
+  const primary = await supabase()
     .storage
     .from(AVATAR_BUCKET)
     .createSignedUrl(normalized, SIGNED_URL_EXPIRY_SEC);
-  if (error || !data?.signedUrl) return null;
-  return data.signedUrl;
+  if (!primary.error && primary.data?.signedUrl) {
+    return withCacheBust(primary.data.signedUrl);
+  }
+
+  // If bucket is public or signed URL policy is unavailable, try public URL.
+  const primaryPublic = supabase()
+    .storage
+    .from(AVATAR_BUCKET)
+    .getPublicUrl(normalized);
+  if (primaryPublic.data?.publicUrl) return withCacheBust(primaryPublic.data.publicUrl);
+
+  // Backward compatibility: old avatars may still be in the previous bucket.
+  const legacy = await supabase()
+    .storage
+    .from(LEGACY_AVATAR_BUCKET)
+    .createSignedUrl(normalized, SIGNED_URL_EXPIRY_SEC);
+  if (!legacy.error && legacy.data?.signedUrl) {
+    return withCacheBust(legacy.data.signedUrl);
+  }
+  const legacyPublic = supabase()
+    .storage
+    .from(LEGACY_AVATAR_BUCKET)
+    .getPublicUrl(normalized);
+  if (legacyPublic.data?.publicUrl) return withCacheBust(legacyPublic.data.publicUrl);
+  return null;
 }
 
 /**
