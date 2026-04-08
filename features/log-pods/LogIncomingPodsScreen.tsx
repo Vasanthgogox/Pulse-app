@@ -649,9 +649,11 @@ export function LogIncomingPodsScreen() {
             <View style={styles.iconBox}>
               <FontAwesome name="archive" size={20} color={Theme.primary} />
             </View>
-            <View>
-              <Text style={styles.topTitle}>Log Incoming PODs</Text>
-              <Text style={styles.topSub}>
+            <View style={{ flexShrink: 1 }}>
+              <Text style={styles.topTitle} numberOfLines={1}>
+                Log Incoming PODs
+              </Text>
+              <Text style={styles.topSub} numberOfLines={1}>
                 Select trips and enter incoming courier details
               </Text>
             </View>
@@ -979,14 +981,33 @@ function TripCard({
           </View>
           <Text style={styles.tripId}>{trip.id}</Text>
         </View>
-        <Text style={styles.tripDate}>{trip.date}</Text>
-      </Pressable>
-      <View style={styles.cardBody}>
-        <Text style={styles.routeLabel}>Route</Text>
-        <Text style={styles.routeText} numberOfLines={2}>
-          {trip.from} → {trip.to}
+        <Text style={styles.tripDate}>
+          {new Date(trip.date).toLocaleDateString("en-GB", {
+            day: "numeric",
+            month: "short",
+          })}
         </Text>
-        {!selectedSupplier ? (
+      </Pressable>
+
+      <View style={styles.cardMiddle}>
+        <Text style={styles.clientName} numberOfLines={1}>
+          {trip.client}
+        </Text>
+        {trip.amount != null ? (
+          <Text style={styles.tripAmount}>₹{trip.amount.toLocaleString()}</Text>
+        ) : (
+          <Text style={styles.tripAmount}>N/A</Text>
+        )}
+      </View>
+
+      <View style={styles.cardBody}>
+        <View style={styles.routeContainer}>
+          <FontAwesome name="map-marker" size={12} color={Theme.textMuted} />
+          <Text style={styles.routeText} numberOfLines={1}>
+            {trip.from} ➔ {trip.to}
+          </Text>
+        </View>
+        {!selectedSupplier && trip.supplier_name ? (
           <>
             <Text style={styles.routeLabel}>Supplier</Text>
             <Text style={styles.supplierText} numberOfLines={1}>
@@ -994,35 +1015,40 @@ function TripCard({
             </Text>
           </>
         ) : null}
-        <Text style={styles.lrLabel}>LR numbers</Text>
-        {trip.lrNumbers.map((lr) => {
-          const isReceived = trip.receivedLRs.includes(lr);
-          const isLrSelected = selectedForTrip.includes(lr);
-          if (isReceived) {
-            return (
-              <View key={lr} style={styles.lrReceived}>
-                <FontAwesome name="check-circle" size={14} color="#1a7f4c" />
-                <Text style={styles.lrReceivedText}>{lr}</Text>
-              </View>
-            );
-          }
-          return (
-            <Pressable
-              key={lr}
-              style={styles.lrRow}
-              onPress={() => onToggleLR(lr)}
-            >
-              <View style={[styles.lrCheck, isLrSelected && styles.lrCheckOn]}>
-                {isLrSelected ? (
-                  <FontAwesome name="check" size={10} color="#fff" />
-                ) : null}
-              </View>
-              <Text style={[styles.lrText, isLrSelected && styles.lrTextOn]}>
-                {lr}
-              </Text>
-            </Pressable>
-          );
-        })}
+
+        {trip.lrNumbers.length > 0 && (
+          <View style={styles.lrSection}>
+            <Text style={styles.lrLabel}>LR Numbers</Text>
+            {trip.lrNumbers.map((lr) => {
+              const isReceived = trip.receivedLRs.includes(lr);
+              const isLrSelected = selectedForTrip.includes(lr);
+              if (isReceived) {
+                return (
+                  <View key={lr} style={styles.lrReceived}>
+                    <FontAwesome name="check-circle" size={14} color="#1a7f4c" />
+                    <Text style={styles.lrReceivedText}>{lr}</Text>
+                  </View>
+                );
+              }
+              return (
+                <Pressable
+                  key={lr}
+                  style={styles.lrRow}
+                  onPress={() => onToggleLR(lr)}
+                >
+                  <View style={[styles.lrCheck, isLrSelected && styles.lrCheckOn]}>
+                    {isLrSelected ? (
+                      <FontAwesome name="check" size={10} color="#fff" />
+                    ) : null}
+                  </View>
+                  <Text style={[styles.lrText, isLrSelected && styles.lrTextOn]}>
+                    {lr}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
       </View>
     </View>
   );
@@ -1039,14 +1065,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
+    flexWrap: "wrap",
+    gap: 12,
+    width: "100%",
   },
-  topBarLeft: { flexDirection: "row", alignItems: "center" },
+  topBarLeft: { flexDirection: "row", alignItems: "center", flexShrink: 1 },
   iconBtn: { padding: 8, marginLeft: -8 },
   topTitleWrap: {
     flexDirection: "row",
     alignItems: "center",
     marginHorizontal: 8,
     gap: 12,
+    flexShrink: 1,
   },
   iconBox: {
     width: 36,
@@ -1055,10 +1085,11 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(26,35,126,0.1)",
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
   topTitle: { fontSize: 17, fontWeight: "800", color: Theme.textPrimaryDark },
-  topSub: { fontSize: 11, color: Theme.textMuted, marginTop: 2 },
-  topBarRight: { flexDirection: "row", alignItems: "center", gap: 12 },
+  topSub: { fontSize: 11, color: Theme.textMuted, marginTop: 2, flexShrink: 1 },
+  topBarRight: { flexDirection: "row", alignItems: "center", gap: 12, flexShrink: 0 },
   cancelBtn: { paddingHorizontal: 16, paddingVertical: 8 },
   cancelText: { fontSize: 14, fontWeight: "600", color: Theme.textMuted },
   headerLogBtn: {
@@ -1265,9 +1296,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    padding: 12,
+    padding: 16,
     marginBottom: 10,
     backgroundColor: Theme.cardWhite,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   cardSelected: {
     borderColor: Theme.primary,
@@ -1276,9 +1312,10 @@ const styles = StyleSheet.create({
   cardTop: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 8,
+    alignItems: "center",
+    marginBottom: 10,
   },
-  cardTopLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
+  cardTopLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
   checkBox: {
     width: 22,
     height: 22,
@@ -1287,6 +1324,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderMedium,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: Theme.cardWhite,
   },
   checkBoxOn: { backgroundColor: Theme.primary, borderColor: Theme.primary },
   checkBoxPartial: {
@@ -1298,9 +1336,36 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     fontSize: 14,
     fontWeight: "800",
+    color: Theme.primary,
   },
-  tripDate: { fontSize: 10, fontWeight: "800", color: Theme.textMuted },
-  cardBody: { paddingLeft: 30 },
+  tripDate: { fontSize: 11, fontWeight: "700", color: Theme.textMuted },
+  cardMiddle: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+    paddingLeft: 32,
+  },
+  clientName: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    flex: 1,
+    marginRight: 12,
+  },
+  tripAmount: {
+    fontSize: 14,
+    fontWeight: "800",
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    color: Theme.textPrimaryDark,
+  },
+  cardBody: { paddingLeft: 32 },
+  routeContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8,
+  },
   routeLabel: {
     fontSize: 9,
     fontWeight: "800",
@@ -1310,18 +1375,27 @@ const styles = StyleSheet.create({
   },
   routeText: {
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "600",
+    color: Theme.textSecondary,
+  },
+  supplierText: {
+    fontSize: 12,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
     marginBottom: 6,
   },
-  supplierText: { fontSize: 12, marginBottom: 6 },
+  lrSection: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+  },
   lrLabel: {
-    fontSize: 9,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "700",
     color: Theme.textMuted,
-    textTransform: "uppercase",
     marginTop: 4,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   lrRow: {
     flexDirection: "row",

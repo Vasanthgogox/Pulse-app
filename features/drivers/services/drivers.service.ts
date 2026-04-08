@@ -41,8 +41,15 @@ function excludeTrackingOnly(drivers: DriverRow[]): DriverRow[] {
 }
 
 /** Ensure display name is set (DB may use name or full_name). */
-function normalizeDriverRow<T extends { name?: string | null; full_name?: string | null }>(row: T): T {
-  const name = (row.name ?? (row as { full_name?: string | null }).full_name ?? "").trim() || "—";
+function normalizeDriverRow<
+  T extends { name?: string | null; full_name?: string | null },
+>(row: T): T {
+  const name =
+    (
+      row.name ??
+      (row as { full_name?: string | null }).full_name ??
+      ""
+    ).trim() || "—";
   return { ...row, name };
 }
 
@@ -109,7 +116,7 @@ export async function createDriver(
   if (phoneNorm) {
     const { drivers } = await getDriversByOrganization(orgId);
     const existing = drivers.find(
-      (d) => d.left_at && normalizePhone(d.phone) === phoneNorm
+      (d) => d.left_at && normalizePhone(d.phone) === phoneNorm,
     );
     if (existing) {
       const { error, driver } = await updateDriver(orgId, existing.id, {
@@ -163,14 +170,20 @@ export async function updateDriver(
   patch: UpdateDriverData,
 ): Promise<{ error: Error | null; driver: DriverRow | null }> {
   const updates: Record<string, unknown> = {};
-  if (patch.name !== undefined) updates.name = (patch.name ?? '').trim() || '—';
-  if (patch.phone !== undefined) updates.phone = (patch.phone ?? '').trim() || null;
-  if (patch.email !== undefined) updates.email = (patch.email ?? '').trim() || null;
-  if (patch.assigned_vehicle_id !== undefined) updates.assigned_vehicle_id = patch.assigned_vehicle_id || null;
+  if (patch.name !== undefined) updates.name = (patch.name ?? "").trim() || "—";
+  if (patch.phone !== undefined)
+    updates.phone = (patch.phone ?? "").trim() || null;
+  if (patch.email !== undefined)
+    updates.email = (patch.email ?? "").trim() || null;
+  if (patch.assigned_vehicle_id !== undefined)
+    updates.assigned_vehicle_id = patch.assigned_vehicle_id || null;
   if (patch.left_at === null) updates.left_at = null;
-  if (patch.payable_amount !== undefined) updates.payable_amount = patch.payable_amount;
-  if (patch.commission_percent !== undefined) updates.commission_percent = patch.commission_percent;
-  if (patch.commission_per_km !== undefined) updates.commission_per_km = patch.commission_per_km;
+  if (patch.payable_amount !== undefined)
+    updates.payable_amount = patch.payable_amount;
+  if (patch.commission_percent !== undefined)
+    updates.commission_percent = patch.commission_percent;
+  if (patch.commission_per_km !== undefined)
+    updates.commission_per_km = patch.commission_per_km;
   if (Object.keys(updates).length === 0) return { error: null, driver: null };
   const { data, error } = await supabase()
     .from("drivers")
@@ -439,10 +452,13 @@ export async function inviteDriver(
     // Use RPC because client-side RLS typically prevents selecting invite rows by from_organization_id.
     let existingStatus: string | null = null;
     try {
-      const { data: statusRow } = await supabase().rpc("get_driver_invite_sent_status", {
-        p_org_id: orgId,
-        p_to_user_id: toUserId,
-      });
+      const { data: statusRow } = await supabase().rpc(
+        "get_driver_invite_sent_status",
+        {
+          p_org_id: orgId,
+          p_to_user_id: toUserId,
+        },
+      );
       // RPC returns TABLE(status text); supabase-js usually returns an array.
       const row = Array.isArray(statusRow) ? statusRow[0] : statusRow;
       const s = (row as { status?: string } | undefined)?.status ?? null;
@@ -522,7 +538,12 @@ export async function inviteDriver(
       .select()
       .single();
 
-    if (updateErr) return { error: new Error(updateErr.message), driver: null, inviteSent: false };
+    if (updateErr)
+      return {
+        error: new Error(updateErr.message),
+        driver: null,
+        inviteSent: false,
+      };
     return { error: null, driver: updated as DriverRow, inviteSent: false };
   }
 
@@ -582,14 +603,15 @@ export async function ensureDriverRowByPhone(
     // Reassignment flow: always use an unlinked row so driver must claim via OTP.
     if (options.forceUnlinkedForOtp === true) {
       const wantLast10 = normalized.replace(/\D/g, "").slice(-10);
-      const { data: existingUnlinked, error: findUnlinkedErr } = await supabase()
-        .from("drivers")
-        .select("*")
-        .eq("organization_id", orgId)
-        .eq("phone", normalized)
-        .is("user_id", null)
-        .limit(1)
-        .maybeSingle();
+      const { data: existingUnlinked, error: findUnlinkedErr } =
+        await supabase()
+          .from("drivers")
+          .select("*")
+          .eq("organization_id", orgId)
+          .eq("phone", normalized)
+          .is("user_id", null)
+          .limit(1)
+          .maybeSingle();
       if (findUnlinkedErr)
         return { error: new Error(findUnlinkedErr.message), driver: null };
       if (existingUnlinked)
@@ -604,8 +626,11 @@ export async function ensureDriverRowByPhone(
           .is("user_id", null)
           .not("phone", "is", null);
         if (listErr) return { error: new Error(listErr.message), driver: null };
-        const found = (orgUnlinked as { id: string; phone: string | null }[]).find(
-          (d) => d.phone && d.phone.replace(/\D/g, "").slice(-10) === wantLast10,
+        const found = (
+          orgUnlinked as { id: string; phone: string | null }[]
+        ).find(
+          (d) =>
+            d.phone && d.phone.replace(/\D/g, "").slice(-10) === wantLast10,
         );
         if (found) {
           const { data: full, error: fullErr } = await supabase()
@@ -613,7 +638,8 @@ export async function ensureDriverRowByPhone(
             .select("*")
             .eq("id", found.id)
             .single();
-          if (fullErr) return { error: new Error(fullErr.message), driver: null };
+          if (fullErr)
+            return { error: new Error(fullErr.message), driver: null };
           if (full) return { error: null, driver: full as DriverRow };
         }
       }
@@ -635,8 +661,11 @@ export async function ensureDriverRowByPhone(
           .eq("organization_id", orgId)
           .not("phone", "is", null);
         if (!listErr && orgDrivers?.length) {
-          const found = (orgDrivers as { id: string; phone: string | null }[]).find(
-            (d) => d.phone && d.phone.replace(/\D/g, "").slice(-10) === wantLast10,
+          const found = (
+            orgDrivers as { id: string; phone: string | null }[]
+          ).find(
+            (d) =>
+              d.phone && d.phone.replace(/\D/g, "").slice(-10) === wantLast10,
           );
           if (found) anyByPhone = { id: found.id };
         }
@@ -646,7 +675,8 @@ export async function ensureDriverRowByPhone(
           .from("drivers")
           .update({ user_id: null, updated_at: new Date().toISOString() })
           .eq("id", anyByPhone.id);
-        if (unlinkErr) return { error: new Error(unlinkErr.message), driver: null };
+        if (unlinkErr)
+          return { error: new Error(unlinkErr.message), driver: null };
         const { data: full, error: fullErr } = await supabase()
           .from("drivers")
           .select("*")
@@ -656,42 +686,48 @@ export async function ensureDriverRowByPhone(
         if (full) return { error: null, driver: full as DriverRow };
       }
     } else {
-    let { data: existing, error: findError } = await supabase()
-      .from("drivers")
-      .select("*")
-      .eq("organization_id", orgId)
-      .eq("phone", normalized)
-      .limit(1)
-      .maybeSingle();
-    if (findError) return { error: new Error(findError.message), driver: null };
-    if (existing) return { error: null, driver: existing as DriverRow };
-    // Fallback: match by last 10 digits so 9876543210 finds +919876543210
-    const wantLast10 = normalized.replace(/\D/g, "").slice(-10);
-    if (wantLast10.length >= 10) {
-      const { data: orgDrivers, error: listErr } = await supabase()
+      let { data: existing, error: findError } = await supabase()
         .from("drivers")
-        .select("id, phone")
+        .select("*")
         .eq("organization_id", orgId)
-        .not("phone", "is", null);
-      if (!listErr && orgDrivers?.length) {
-        const found = (orgDrivers as { id: string; phone: string | null }[]).find(
-          (d) =>
-            d.phone &&
-            d.phone.replace(/\D/g, "").slice(-10) === wantLast10,
-        );
-        if (found) {
-          const { data: full, error: fullErr } = await supabase()
-            .from("drivers")
-            .select("*")
-            .eq("id", found.id)
-            .single();
-          if (!fullErr && full) return { error: null, driver: full as DriverRow };
+        .eq("phone", normalized)
+        .limit(1)
+        .maybeSingle();
+      if (findError)
+        return { error: new Error(findError.message), driver: null };
+      if (existing) return { error: null, driver: existing as DriverRow };
+      // Fallback: match by last 10 digits so 9876543210 finds +919876543210
+      const wantLast10 = normalized.replace(/\D/g, "").slice(-10);
+      if (wantLast10.length >= 10) {
+        const { data: orgDrivers, error: listErr } = await supabase()
+          .from("drivers")
+          .select("id, phone")
+          .eq("organization_id", orgId)
+          .not("phone", "is", null);
+        if (!listErr && orgDrivers?.length) {
+          const found = (
+            orgDrivers as { id: string; phone: string | null }[]
+          ).find(
+            (d) =>
+              d.phone && d.phone.replace(/\D/g, "").slice(-10) === wantLast10,
+          );
+          if (found) {
+            const { data: full, error: fullErr } = await supabase()
+              .from("drivers")
+              .select("*")
+              .eq("id", found.id)
+              .single();
+            if (!fullErr && full)
+              return { error: null, driver: full as DriverRow };
+          }
         }
       }
     }
-    }
   } else {
-    const q = supabase().from("drivers").select("*").eq("organization_id", orgId);
+    const q = supabase()
+      .from("drivers")
+      .select("*")
+      .eq("organization_id", orgId);
     const orClause = match
       ? `phone.eq.${normalized},user_id.eq.${match.user_id}`
       : `phone.eq.${normalized}`;
@@ -814,7 +850,13 @@ export interface DriverInviteSentRow {
 /** Match state when a manual driver's phone later signs up in app. */
 export interface DriverSignupMatchStatus {
   id: string;
-  state: "pending_owner_action" | "invite_sent" | "linked" | "declined" | "ignored" | "expired";
+  state:
+    | "pending_owner_action"
+    | "invite_sent"
+    | "linked"
+    | "declined"
+    | "ignored"
+    | "expired";
   matched_user_id: string;
   detected_at: string;
 }
@@ -833,16 +875,23 @@ export interface DriverOffer {
 export async function getLatestDriverInviteTermsByUser(
   orgId: string,
   userId: string,
-): Promise<{ error: Error | null; offer: DriverOffer | null; status: string | null }> {
+): Promise<{
+  error: Error | null;
+  offer: DriverOffer | null;
+  status: string | null;
+}> {
   const { data, error } = await supabase()
     .from("driver_invites")
-    .select("status, payable_amount, commission_percent, commission_per_km, created_at")
+    .select(
+      "status, payable_amount, commission_percent, commission_per_km, created_at",
+    )
     .eq("from_organization_id", orgId)
     .eq("to_user_id", userId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (error) return { error: new Error(error.message), offer: null, status: null };
+  if (error)
+    return { error: new Error(error.message), offer: null, status: null };
   if (!data) return { error: null, offer: null, status: null };
 
   const row = data as {
@@ -932,7 +981,9 @@ export async function getDriverInvitesSent(orgId: string): Promise<{
   invites: DriverInviteSentRow[];
 }> {
   // Prefer an RPC because client-side RLS typically blocks reading invitee details (auth.users/profiles).
-  const { data, error } = await supabase().rpc("get_driver_invites_sent", { p_org_id: orgId });
+  const { data, error } = await supabase().rpc("get_driver_invites_sent", {
+    p_org_id: orgId,
+  });
   if (error) {
     // Fallback: show invites even when the RPC isn't available (e.g. not deployed yet / RLS differences).
     const { data: fallback, error: fallbackErr } = await supabase()
@@ -940,16 +991,19 @@ export async function getDriverInvitesSent(orgId: string): Promise<{
       .select("id, from_org_name, invitee_name, status, created_at")
       .eq("from_organization_id", orgId)
       .order("created_at", { ascending: false });
-    if (fallbackErr) return { error: new Error(fallbackErr.message), invites: [] };
+    if (fallbackErr)
+      return { error: new Error(fallbackErr.message), invites: [] };
     return {
       error: null,
-      invites: ((fallback ?? []) as Array<{
-        id: string;
-        from_org_name: string | null;
-        invitee_name: string | null;
-        status: string;
-        created_at: string;
-      }>).map((r) => ({ ...r, driver_name: r.invitee_name ?? null })),
+      invites: (
+        (fallback ?? []) as Array<{
+          id: string;
+          from_org_name: string | null;
+          invitee_name: string | null;
+          status: string;
+          created_at: string;
+        }>
+      ).map((r) => ({ ...r, driver_name: r.invitee_name ?? null })),
     };
   }
   return { error: null, invites: (data ?? []) as DriverInviteSentRow[] };
@@ -962,11 +1016,16 @@ export async function getDriverInvitesSent(orgId: string): Promise<{
 export async function getDriverSignupMatchStatus(
   driverId: string,
 ): Promise<{ error: Error | null; match: DriverSignupMatchStatus | null }> {
-  const { data, error } = await supabase().rpc("get_driver_signup_match_status", {
-    p_driver_id: driverId,
-  });
+  const { data, error } = await supabase().rpc(
+    "get_driver_signup_match_status",
+    {
+      p_driver_id: driverId,
+    },
+  );
   if (error) return { error: new Error(error.message), match: null };
-  const row = (Array.isArray(data) ? data[0] : data) as DriverSignupMatchStatus | undefined;
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | DriverSignupMatchStatus
+    | undefined;
   return { error: null, match: row ?? null };
 }
 
@@ -1000,7 +1059,11 @@ export async function sendDriverSignupMatchInvite(
   if (error) {
     const msg = error.message ?? "";
     // Backward-compat: older backend has send_driver_signup_match_invite(uuid) only.
-    if (/Could not find the function public\.send_driver_signup_match_invite/i.test(msg)) {
+    if (
+      /Could not find the function public\.send_driver_signup_match_invite/i.test(
+        msg,
+      )
+    ) {
       const legacy = await supabase().rpc("send_driver_signup_match_invite", {
         p_driver_id: driverId,
       });
@@ -1008,11 +1071,23 @@ export async function sendDriverSignupMatchInvite(
       error = legacy.error;
     }
   }
-  if (error) return { error: new Error(error.message), ok: false, already_exists: false, status: null };
-  const obj = data as { ok?: boolean; already_exists?: boolean; status?: string } | null;
+  if (error)
+    return {
+      error: new Error(error.message),
+      ok: false,
+      already_exists: false,
+      status: null,
+    };
+  const obj = data as {
+    ok?: boolean;
+    already_exists?: boolean;
+    status?: string;
+  } | null;
   if (obj?.ok === false) {
     return {
-      error: new Error((obj as { error?: string }).error ?? "Failed to send invitation"),
+      error: new Error(
+        (obj as { error?: string }).error ?? "Failed to send invitation",
+      ),
       ok: false,
       already_exists: Boolean(obj?.already_exists),
       status: obj?.status ?? null,
@@ -1063,7 +1138,9 @@ export async function resetDriverSignupInvite(
   if (fallback.error) return { error: fallback.error, reset: false };
   if (fallback.dismissed > 0) return { error: null, reset: true };
   return {
-    error: new Error("Unable to reset invitation right now. Please try again shortly."),
+    error: new Error(
+      "Unable to reset invitation right now. Please try again shortly.",
+    ),
     reset: false,
   };
 }

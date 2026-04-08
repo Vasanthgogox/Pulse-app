@@ -179,6 +179,41 @@ export function PodReconciliationScreen() {
       </View>
 
       <View style={styles.metricsContainer}>
+        <View style={styles.velocityBanner}>
+          <View style={styles.velocityBannerIcon}>
+            <FontAwesome name="line-chart" size={16} color={Theme.primary} />
+          </View>
+          <View style={styles.velocityBannerTextWrap}>
+            <Text style={styles.velocityTitle}>Weekly Reconciliation Velocity</Text>
+            <Text style={styles.velocityText}>
+              You've cleared 18% more PODs this week compared to the previous cycle. Efficiency is trending upward.
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.agingRow}>
+          <View style={styles.agingHeader}>
+            <Text style={styles.agingTitle}>TODAY</Text>
+            <Text style={styles.agingSubTitle}>Pending Value by Aging</Text>
+          </View>
+          <View style={styles.agingBlocks}>
+            <View style={styles.agingBlock}>
+              <Text style={styles.agingBlockLabel}>0-7 Days</Text>
+              <Text style={styles.agingBlockVal}>₹ 98.0 L</Text>
+            </View>
+            <View style={styles.agingDivider} />
+            <View style={styles.agingBlock}>
+              <Text style={styles.agingBlockLabel}>8-15 Days</Text>
+              <Text style={styles.agingBlockVal}>₹ 65.4 L</Text>
+            </View>
+            <View style={styles.agingDivider} />
+            <View style={styles.agingBlock}>
+              <Text style={styles.agingBlockLabel}>15+ Days</Text>
+              <Text style={[styles.agingBlockVal, { color: "#b00020" }]}>₹ 54.5 L</Text>
+            </View>
+          </View>
+        </View>
+
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -607,6 +642,90 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   logPodsBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+
+  velocityBanner: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 16,
+    backgroundColor: "rgba(26,35,126,0.04)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(26,35,126,0.1)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  velocityBannerIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(26,35,126,0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  velocityBannerTextWrap: { flex: 1 },
+  velocityTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.primary,
+    marginBottom: 4,
+  },
+  velocityText: {
+    fontSize: 12,
+    color: Theme.textSecondary,
+    lineHeight: 18,
+  },
+
+  agingRow: {
+    marginHorizontal: 16,
+    marginBottom: 20,
+  },
+  agingHeader: { marginBottom: 12 },
+  agingTitle: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  agingSubTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    marginTop: 4,
+  },
+  agingBlocks: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  agingBlock: { flex: 1, alignItems: "center" },
+  agingBlockLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    marginBottom: 4,
+  },
+  agingBlockVal: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  agingDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: Theme.borderMedium,
+  },
 
   metricsContainer: { paddingVertical: 16, width: "100%" },
   metricsScroll: { paddingHorizontal: 16, gap: 16 },
