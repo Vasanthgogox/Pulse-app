@@ -4,11 +4,6 @@
  */
 import { supabase } from '@/lib/supabase';
 import { expandLR } from '@/lib/utils/lr';
-import { 
-  getTripsWhereOrgIsClient, 
-  getTripsWhereOrgIsSupplier, 
-  type TripRow 
-} from '@/features/trips/services/trips.service';
 
 export type PodTab = 'pod_pending' | 'received' | 'approved' | 'invoiced';
 
@@ -50,61 +45,50 @@ export async function fetchReconciliationTrips(
   regionFilter: string = 'All'
 ): Promise<{ error: Error | null; trips: PodReconciliationTripView[] }> {
   try {
-    const [ownerRes, supRes, cliRes] = await Promise.all([
-      supabase()
-        .from('trips')
-        .select('*')
-        .eq('organization_id', orgId)
-        .order('created_at', { ascending: false })
-        .limit(1000),
-      getTripsWhereOrgIsSupplier(orgId),
-      getTripsWhereOrgIsClient(orgId),
-    ]);
+    let query = supabase()
+      .from('trips')
+      .select('*');
+      
+    // Note: Removed .eq('organization_id', orgId) to match cashflow-catalyst, 
+    // which relies on RLS and doesn't filter by orgId on the trips table explicitly.
 
-    if (ownerRes.error) {
-      console.error("[podReconciliation] ownerRes error:", ownerRes.error);
-      return { error: new Error(ownerRes.error.message), trips: [] };
+    // Apply DB-side tab filtering to ensure we fetch the right subset, avoiding 1000-limit truncation
+    if (activeTab === 'invoiced') {
+      query = query.not('invoice_no', 'is', null);
+    } else if (activeTab === 'approved') {
+      query = query.is('invoice_no', null).or('invoice_status_1.ilike.%Pending%,invoice_status_1.ilike.%Data Shared%');
+    } else if (activeTab === 'received') {
+      query = query.is('invoice_no', null).ilike('pod_status', '%received%');
+    } else if (activeTab === 'pod_pending') {
+      // In CF catalyst it was: query = query.is('invoice_no', null).ilike('invoice_status_2', '%Unbilled%');
+      // For q-web, we query for no invoice and rely on JS filtering for the rest to avoid dropping nulls
+      query = query.is('invoice_no', null);
     }
-    if (supRes.error) {
-      console.error("[podReconciliation] supRes error:", supRes.error);
-      return { error: supRes.error, trips: [] };
-    }
-    if (cliRes.error) {
-      console.error("[podReconciliation] cliRes error:", cliRes.error);
-      return { error: cliRes.error, trips: [] };
-    }
-
-    const ownerRows = (ownerRes.data ?? []) as any[];
-    const supRows = (supRes.trips ?? []) as any[];
-    const cliRows = (cliRes.trips ?? []) as any[];
-
-    const map = new Map<string, any>();
-    for (const t of [...ownerRows, ...supRows, ...cliRows]) {
-      if (t?.id && !map.has(t.id)) map.set(t.id, t);
-    }
-    
-    let merged = Array.from(map.values());
 
     if (searchTerm) {
-      const q = searchTerm.toLowerCase().trim();
-      merged = merged.filter(t => 
-        str(t.trip_id).toLowerCase().includes(q) || 
-        str(t.display_trip_id).toLowerCase().includes(q) || 
-        str(t.trip_number).toLowerCase().includes(q) || 
-        str(t.client_name).toLowerCase().includes(q) || 
-        str(t.lr_no).toLowerCase().includes(q)
-      );
+      const q = searchTerm.trim();
+      query = query.or(`trip_id.ilike.%${q}%,client_name.ilike.%${q}%,lr_no.ilike.%${q}%`);
     }
 
-    if (regionFilter !== 'All') {
-      merged = merged.filter(t => 
-        str(t.pp_location || t.pickup_area).toLowerCase().startsWith(regionFilter.toLowerCase())
-      );
+    if (regionFilter && regionFilter !== 'All') {
+      query = query.ilike('pp_location', `${regionFilter}%`);
     }
 
-    // Precise filtering in JS
+    query = query.order('created_at', { ascending: false }).limit(1000);
+
+    const { data: ownerData, error: ownerError } = await query;
+
+    if (ownerError) {
+      console.error("[podReconciliation] query error:", ownerError);
+      return { error: new Error(ownerError.message), trips: [] };
+    }
+
+    let merged = ownerData || [];
+
+    // Precise filtering in JS (matches cashflow-catalyst end-to-end)
     const filtered = merged.filter(trip => {
       const inv1 = str(trip.invoice_status_1).toLowerCase();
+      const inv2 = str(trip.invoice_status_2).toLowerCase();
       const podS = str(trip.pod_status).toLowerCase();
       const isNoInvoice = !trip.invoice_no && !inv1.includes('raised');
       const isApproved = inv1.includes('pending') || inv1.includes('data shared');
@@ -116,6 +100,11 @@ export async function fetchReconciliationTrips(
       } else if (activeTab === 'received') {
         return isNoInvoice && podS === 'received' && !isApproved;
       } else if (activeTab === 'pod_pending') {
+        // Explicitly align with cashflow-catalyst invoicing/api.ts isPending logic
+        // "const isPending = isNoInvoice && (podStatus.includes("pending") || podStatus.includes("i-bond") || podStatus === "" || podStatus === "partial");"
+        
+        if (inv2.includes('unbilled')) return true; // Keep old explicit check just in case
+        
         return isNoInvoice && (podS.includes('pending') || podS.includes('i-bond') || podS === '' || podS === 'partial');
       }
       return true;
@@ -124,7 +113,7 @@ export async function fetchReconciliationTrips(
     const internalIds = filtered.map(t => str(t.id)).filter(Boolean);
     const supplierIds = Array.from(new Set(filtered.map(t => str(t.supplier_id)).filter(Boolean)));
 
-    let lrByTripId = new Map<string, any[]>();
+    let lrByTripId = new Map<string, Record<string, unknown>[]>();
     let supplierNameById = new Map<string, string>();
 
     if (supplierIds.length > 0) {

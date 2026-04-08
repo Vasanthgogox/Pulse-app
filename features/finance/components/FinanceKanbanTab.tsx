@@ -93,19 +93,19 @@ function KanbanCard({ row, index, cat, isExpanded, toggleExpand, hasAmtIn, amoun
 
   return (
     <Animated.View 
-      style={[
-        styles.cardContainer,
-        {
-          transform: [{ scale: isCardHovered ? 1.02 : 1 }],
-        }
-      ]}
-      // @ts-ignore
-      onMouseEnter={() => setIsCardHovered(true)}
-      onMouseLeave={() => setIsCardHovered(false)}
+      style={styles.cardContainer}
       entering={FadeInUp.delay(index * 30).springify()}
       layout={Layout.springify()}
     >
-      <TouchableOpacity 
+      <Animated.View
+        style={{
+          transform: [{ scale: isCardHovered ? 1.02 : 1 }],
+        }}
+        // @ts-ignore
+        onMouseEnter={() => setIsCardHovered(true)}
+        onMouseLeave={() => setIsCardHovered(false)}
+      >
+        <TouchableOpacity 
         style={[
           styles.timelineCard, 
           isExpanded && styles.cardExpanded,
@@ -183,6 +183,7 @@ function KanbanCard({ row, index, cat, isExpanded, toggleExpand, hasAmtIn, amoun
           )}
         </View>
       )}
+      </Animated.View>
     </Animated.View>
   );
 }
