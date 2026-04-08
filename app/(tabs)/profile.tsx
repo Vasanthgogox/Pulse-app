@@ -382,6 +382,26 @@ export default function ProfileScreen() {
           <View style={styles.premiumCard}>
             <View style={styles.premiumCardInner}>
               <ProfileItemRow
+                icon="file-text-o"
+                label="POD"
+                value="Manage proof of delivery"
+                onPress={() => router.push("/pod-reconciliation")}
+                showChevron
+              />
+              <View style={styles.premiumDivider} />
+              <ProfileItemRow
+                icon="file-text"
+                label="Invoice"
+                value="Execute Invoicing"
+                onPress={() => router.push("/invoicing-execute")}
+                showChevron
+              />
+            </View>
+          </View>
+
+          <View style={styles.premiumCard}>
+            <View style={styles.premiumCardInner}>
+              <ProfileItemRow
                 icon="cog"
                 label="Settings"
                 value="Privacy, notifications and controls"

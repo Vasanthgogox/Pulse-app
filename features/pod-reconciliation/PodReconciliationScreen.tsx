@@ -158,10 +158,10 @@ export function PodReconciliationScreen() {
             </View>
             <View style={{ flexShrink: 1 }}>
               <Text style={styles.topTitle} numberOfLines={1}>
-                POD Management
+                POD
               </Text>
               <Text style={styles.topSub} numberOfLines={1}>
-                Streamline your AR cycle and PODs
+                Manage proof of delivery and streamline your AR cycle.
               </Text>
             </View>
           </View>
@@ -173,7 +173,7 @@ export function PodReconciliationScreen() {
             onPress={() => router.push("/log-incoming-pods")}
           >
             <FontAwesome name="plus" size={14} color="#fff" />
-            <Text style={styles.logPodsBtnText}>Log PODs</Text>
+            <Text style={styles.logPodsBtnText}>Log Incoming PODs</Text>
           </Pressable>
         </View>
       </View>
