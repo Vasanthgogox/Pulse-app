@@ -21,7 +21,7 @@ const NO_ORG_MESSAGE =
 /** Close modal: go back when possible. */
 function closeModal(router: ReturnType<typeof useRouter>) {
   if (router.canGoBack()) router.back();
-  else router.navigate("/(tabs)/network");
+  else router.replace("/(tabs)/network");
 }
 
 export default function AddClientScreen() {

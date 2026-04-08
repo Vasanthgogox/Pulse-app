@@ -8,7 +8,7 @@ import { useSafeBack } from '@/lib/useSafeBack';
 /** Dismiss modal: go back to the page that opened it. */
 function closeModal(router: ReturnType<typeof useRouter>) {
   if (router.canGoBack()) router.back();
-  else router.navigate('/(tabs)/finance');
+  else router.replace('/(tabs)/finance');
 }
 
 export default function AddVehicleScreen() {
