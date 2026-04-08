@@ -408,15 +408,50 @@ export function PodReconciliationScreen() {
   );
 }
 
-function MetricCard({ label, value, count, color, icon }: any) {
+function MetricCard({
+  label,
+  value,
+  count,
+  color,
+  icon,
+}: {
+  label: string;
+  value: string;
+  count: number;
+  color: string;
+  icon: string;
+}) {
   return (
-    <View style={[styles.metricCard, { borderLeftColor: color }]}>
-      <View style={styles.metricHeader}>
-        <Text style={styles.metricLabel}>{label}</Text>
-        <FontAwesome name={icon} size={14} color={color} />
+    <View style={[styles.metricCard, { borderColor: `${color}20` }]}>
+      <View style={[styles.metricHeader, { backgroundColor: `${color}08` }]} />
+      <View style={styles.metricCardInner}>
+        <View style={styles.metricHeaderRow}>
+          <Text style={styles.metricLabel}>{label}</Text>
+          <FontAwesome name={icon} size={16} color={color} />
+        </View>
+        <Text style={styles.metricValue}>{value}</Text>
+        <Text style={styles.metricSub} numberOfLines={2}>
+          {label === "POD Pending"
+            ? "Not invoiced due to POD missing"
+            : label === "Needs Action"
+              ? "POD received, needs validation"
+              : label === "Ready for Invoice"
+                ? "POD received & ready for invoice"
+                : "POD received & invoiced"}
+        </Text>
+        <View style={styles.metricFooter}>
+          <Text style={styles.metricCount}>{count} Trips</Text>
+          <Text style={[styles.metricStatusTag, { color }]}>
+            {label === "POD Pending"
+              ? "Priority"
+              : label === "Needs Action"
+                ? "In Queue"
+                : label === "Ready for Invoice"
+                  ? "Actionable"
+                  : "Settled"}
+          </Text>
+        </View>
       </View>
-      <Text style={[styles.metricValue, { color }]}>{value}</Text>
-      <Text style={styles.metricCount}>{count} Trips</Text>
     </View>
   );
 }
@@ -574,34 +609,55 @@ const styles = StyleSheet.create({
   logPodsBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },
 
   metricsContainer: { paddingVertical: 16, width: "100%" },
-  metricsScroll: { paddingHorizontal: 16, gap: 12 },
+  metricsScroll: { paddingHorizontal: 16, gap: 16 },
   metricCard: {
-    width: 150,
+    width: 220,
     backgroundColor: Theme.cardWhite,
-    padding: 12,
     borderRadius: 12,
-    borderLeftWidth: 4,
+    borderWidth: 1,
+    overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
-    elevation: 2,
+    elevation: 1,
   },
   metricHeader: {
+    position: "absolute",
+    top: -20,
+    right: -20,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+  },
+  metricCardInner: {
+    padding: 20,
+  },
+  metricHeaderRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 4,
+    justifyContent: "space-between",
+    marginBottom: 8,
   },
   metricLabel: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "800",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  metricValue: { fontSize: 16, fontWeight: "900", marginBottom: 2 },
-  metricCount: { fontSize: 10, color: Theme.textSecondary, fontWeight: "600" },
+  metricValue: { fontSize: 24, fontWeight: "900", color: Theme.textPrimaryDark, marginBottom: 8 },
+  metricSub: { fontSize: 10, color: Theme.textSecondary, fontWeight: "700", marginBottom: 16, height: 28 },
+  metricFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+    paddingTop: 16,
+  },
+  metricCount: { fontSize: 10, color: Theme.textMuted, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.5 },
+  metricStatusTag: { fontSize: 9, fontWeight: "900", textTransform: "uppercase", letterSpacing: -0.5 },
 
   tabsContainer: {
     borderBottomWidth: StyleSheet.hairlineWidth,
