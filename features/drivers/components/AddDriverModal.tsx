@@ -450,72 +450,14 @@ export function AddDriverModal({
                   autoCapitalize="characters"
                 />
               </>
-            ) : (
-              <>
-                {phoneSearchLoading && (
-                  <View style={styles.existingRow}>
-                    <ActivityIndicator size="small" color={Theme.primary} />
-                    <Text style={styles.existingHint}>
-                      Searching for existing drivers…
-                    </Text>
-                  </View>
-                )}
-                {!phoneSearchLoading && phoneSearchError && (
-                  <Text
-                    style={[styles.existingError, { color: Theme.negative }]}
-                  >
-                    {phoneSearchError}
-                  </Text>
-                )}
-                {!phoneSearchLoading && existingMatches.length > 0 && (
-                  <View style={styles.existingList}>
-                    <Text style={styles.existingLabel}>
-                      Existing driver on platform — tap to use
-                    </Text>
-                    {existingMatches.map((match) => (
-                      <TouchableOpacity
-                        key={match.user_id}
-                        style={[
-                          styles.existingItem,
-                          selectedMatchUserId === match.user_id &&
-                            styles.existingItemSelected,
-                        ]}
-                        onPress={() => {
-                          setFormData((p) => ({
-                            ...p,
-                            phone: match.phone,
-                            name: match.full_name || p.name,
-                            email: match.email?.trim() ?? p.email,
-                            emergencyName:
-                              match.emergency_contact_name?.trim() ??
-                              p.emergencyName,
-                            emergencyContact:
-                              match.emergency_contact_phone?.trim() ??
-                              p.emergencyContact,
-                          }));
-                          setSelectedMatchUserId(match.user_id);
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.existingItemName} numberOfLines={1}>
-                          {match.full_name || match.phone || "Driver"}
-                        </Text>
-                        {match.phone ? (
-                          <Text
-                            style={styles.existingItemPhone}
-                            numberOfLines={1}
-                          >
-                            {match.phone}
-                          </Text>
-                        ) : null}
-                        <Text style={styles.existingFleetStatus}>
-                          Already in a fleet
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </>
+            ) : null}
+            {phoneSearchLoading && (
+              <View style={styles.existingRow}>
+                <ActivityIndicator size="small" color={Theme.primary} />
+                <Text style={styles.existingHint}>
+                  Searching for existing drivers…
+                </Text>
+              </View>
             )}
             {!phoneSearchLoading && phoneSearchError && (
               <Text style={[styles.existingError, { color: Theme.negative }]}>
@@ -527,44 +469,55 @@ export function AddDriverModal({
                 <Text style={styles.existingLabel}>
                   Existing driver on platform — tap to use
                 </Text>
-                {existingMatches.map((match) => (
-                  <TouchableOpacity
-                    key={match.user_id}
-                    style={[
-                      styles.existingItem,
-                      selectedMatchUserId === match.user_id &&
-                        styles.existingItemSelected,
-                    ]}
-                    onPress={() => {
-                      setFormData((p) => ({
-                        ...p,
-                        phone: match.phone,
-                        name: match.full_name || p.name,
-                        email: match.email?.trim() ?? p.email,
-                        emergencyName:
-                          match.emergency_contact_name?.trim() ??
-                          p.emergencyName,
-                        emergencyContact:
-                          match.emergency_contact_phone?.trim() ??
-                          p.emergencyContact,
-                      }));
-                      setSelectedMatchUserId(match.user_id);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.existingItemName} numberOfLines={1}>
-                      {match.full_name || match.phone || "Driver"}
-                    </Text>
-                    {match.phone ? (
-                      <Text style={styles.existingItemPhone} numberOfLines={1}>
-                        {match.phone}
+                {existingMatches.map((match) => {
+                  const inFleet = match.is_in_fleet === true;
+                  return (
+                    <TouchableOpacity
+                      key={match.user_id}
+                      style={[
+                        styles.existingItem,
+                        selectedMatchUserId === match.user_id &&
+                          styles.existingItemSelected,
+                      ]}
+                      onPress={() => {
+                        setFormData((p) => ({
+                          ...p,
+                          phone: match.phone,
+                          name: match.full_name || p.name,
+                          email: match.email?.trim() ?? p.email,
+                          emergencyName:
+                            match.emergency_contact_name?.trim() ??
+                            p.emergencyName,
+                          emergencyContact:
+                            match.emergency_contact_phone?.trim() ??
+                            p.emergencyContact,
+                        }));
+                        setSelectedMatchUserId(match.user_id);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.existingItemName} numberOfLines={1}>
+                        {match.full_name || match.phone || "Driver"}
                       </Text>
-                    ) : null}
-                    <Text style={styles.existingFleetStatus}>
-                      Already in a fleet
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      {match.phone ? (
+                        <Text style={styles.existingItemPhone} numberOfLines={1}>
+                          {match.phone}
+                        </Text>
+                      ) : null}
+                      <Text
+                        style={
+                          inFleet
+                            ? styles.existingFleetStatusInFleet
+                            : styles.existingFleetStatusNeutral
+                        }
+                      >
+                        {inFleet
+                          ? "Already in a fleet"
+                          : "Not linked to a fleet — you can send an invite"}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             )}
           </View>
@@ -1084,13 +1037,20 @@ const styles = StyleSheet.create({
     color: Theme.textMutedDemo,
     marginTop: 2,
   },
-  existingFleetStatus: {
+  existingFleetStatusInFleet: {
     fontSize: 11,
     marginTop: 6,
     color: Theme.negative,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.3,
+  },
+  existingFleetStatusNeutral: {
+    fontSize: 11,
+    marginTop: 6,
+    color: Theme.textMutedDemo,
+    fontWeight: "600",
+    letterSpacing: 0.2,
   },
   input: {
     borderWidth: 1,
