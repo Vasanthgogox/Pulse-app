@@ -402,8 +402,8 @@ export function InvoicePreviewPanel({
             <ActivityIndicator color={Theme.buttonPrimaryText} size="small" />
           ) : (
             <>
-              <FontAwesome name="database" size={14} color={Theme.buttonPrimaryText} style={{ marginRight: 8 }} />
-              <Text style={styles.footerBtnPrimaryText}>Finalize & Push to Supabase</Text>
+              <FontAwesome name="file-text" size={14} color={Theme.buttonPrimaryText} style={{ marginRight: 8 }} />
+              <Text style={styles.footerBtnPrimaryText}>Issue Invoice</Text>
             </>
           )}
         </Pressable>

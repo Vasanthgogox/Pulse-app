@@ -205,10 +205,10 @@ export default function InvoicePdfPreviewScreen() {
           calculations,
         },
       });
-      Alert.alert('Success', 'Invoice finalized and sent to Supabase!');
+      Alert.alert('Success', 'Invoice issued successfully.');
       router.back();
     } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to finalize and send invoice.');
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to issue invoice.');
     } finally {
       setIsFinalizing(false);
     }

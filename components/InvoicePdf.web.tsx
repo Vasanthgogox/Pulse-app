@@ -99,7 +99,7 @@ export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = 
               fontWeight: 'bold',
             }}
           >
-            {isFinalizing ? 'Finalizing...' : 'Finalize & Send'}
+            {isFinalizing ? 'Issuing...' : 'Issue Invoice'}
           </button>
         ) : null}
       </div>
