@@ -162,13 +162,13 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
       const p = parseFloat(penalty) || 0;
       const totalDeductions = s + d + p;
 
-      if (totalDeductions > (trip.total_client_value || 0)) {
+      if (totalDeductions > (trip.amount || 0)) {
         Alert.alert('Validation Error', 'Total deductions cannot exceed the trip amount.');
         setIsSubmitting(false);
         return;
       }
 
-      const finalAmount = (trip.total_client_value || 0) - totalDeductions;
+      const finalAmount = (trip.amount || 0) - totalDeductions;
 
       const { error: tripError } = await supabase()
         .from("trips")
@@ -177,14 +177,25 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
           pod_status: 'Received',
           invoice_status_1: 'Pending',
           pod_received_date: trip.pod_received_date || new Date().toISOString().split('T')[0],
-          audit_shortage: s,
-          audit_damage: d,
-          audit_penalty: p,
-          audit_remarks: remarks,
         })
         .eq("id", trip.internal_id);
 
       if (tripError) throw tripError;
+      
+      // Store audit details in activity_logs via log_activity RPC since schema changes are prohibited in q-web
+      await supabase().rpc('log_activity', {
+        p_action: 'POD_VALIDATED',
+        p_entity_type: 'trip',
+        p_entity_id: trip.internal_id,
+        p_details: { 
+          audit_shortage: s,
+          audit_damage: d,
+          audit_penalty: p,
+          audit_remarks: remarks,
+          original_amount: trip.amount || 0,
+          final_amount: finalAmount
+        },
+      });
 
       const { error: lrError } = await supabase()
         .from("trip_lrs")
@@ -212,7 +223,7 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
 
   if (!trip) return null;
 
-  const originalAmount = trip?.total_client_value ?? 0;
+  const originalAmount = trip?.amount ?? 0;
   const s = parseFloat(shortage) || 0;
   const d = parseFloat(damage) || 0;
   const p = parseFloat(penalty) || 0;
