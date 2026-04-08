@@ -3,6 +3,8 @@
  * Matches Canvas reference. Theme only.
  */
 import Theme from "@/constants/Theme";
+import Typography from "@/constants/Typography";
+import Layout from "@/constants/Layout";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -144,21 +146,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingBottom: 12,
-    paddingHorizontal: 20,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
   },
   wrapperDark: {
-    backgroundColor: "#000000",
-    borderBottomWidth: 0,
+    backgroundColor: Theme.darkBackground,
+    borderBottomColor: Theme.separatorDark,
   },
-  titleDark: { color: Theme.textOnDark, fontSize: 11, letterSpacing: 0.8 },
+  titleDark: { color: Theme.textOnDark },
   subtitleDark: {
     color: Theme.textSecondary,
-    fontSize: 7,
-    letterSpacing: 1.5,
     marginTop: 1,
+    ...Typography.headerSubtitle,
   },
   dotDark: { borderColor: Theme.darkBackground },
   avatarDark: {
@@ -180,18 +181,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   title: {
-    fontSize: 13,
-    fontWeight: "800",
+    ...Typography.headerTitle,
     color: Theme.textPrimaryDark,
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
   },
   subtitle: {
-    fontSize: 8,
-    fontWeight: "700",
+    ...Typography.headerSubtitle,
     color: Theme.textMutedDemo,
-    letterSpacing: 2,
-    textTransform: "uppercase",
     marginTop: 2,
   },
   icons: {

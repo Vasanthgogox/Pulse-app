@@ -1,7 +1,13 @@
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
 import Layout from "@/constants/Layout";
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 export type SubTabItem<T extends string> = {
   key: T;
@@ -75,12 +81,14 @@ export function SubTabs<T extends string>({
                     style={[
                       styles.badge,
                       isDark ? styles.badgeDark : styles.badgeLight,
+                      active && styles.badgeActive,
                     ]}
                   >
                     <Text
                       style={[
                         styles.badgeText,
                         isDark ? styles.badgeTextDark : styles.badgeTextLight,
+                        active && styles.badgeTextActive,
                       ]}
                     >
                       {it.badgeCount}
@@ -92,7 +100,12 @@ export function SubTabs<T extends string>({
               </View>
             </View>
             {active ? (
-              <View style={[styles.underline, { backgroundColor: Theme.primary }]} />
+              <View
+                style={[
+                  styles.underline,
+                  { backgroundColor: isDark ? Theme.teslaRed : Theme.primary },
+                ]}
+              />
             ) : null}
           </TouchableOpacity>
         );
@@ -155,7 +168,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 1,
+    height: 1.5,
   },
   badge: {
     minWidth: 18,
@@ -171,8 +184,10 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.12)",
   },
   badgeLight: { backgroundColor: Theme.surface, borderColor: Theme.borderLight },
+  badgeActive: { backgroundColor: "rgba(232,33,39,0.16)", borderColor: "rgba(232,33,39,0.35)" },
   badgeText: { fontSize: 10, fontWeight: "800" },
   badgeTextDark: { color: Theme.textOnDarkMuted },
   badgeTextLight: { color: Theme.textSecondary },
+  badgeTextActive: { color: Theme.teslaRed },
 });
 
