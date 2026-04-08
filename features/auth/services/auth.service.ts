@@ -90,6 +90,25 @@ function mapSupabaseUserToAuth(user: SupabaseUser): {
   };
 }
 
+/** Map public.profiles row to AuthProfile. */
+function mapDbProfileToAuth(profile: any): AuthProfile {
+  return {
+    uid: profile.id,
+    email: profile.email || "",
+    displayName: profile.full_name || profile.email?.split("@")[0] || "User",
+    full_name: profile.full_name,
+    role: (profile.role === "driver" ? "driver" : "user") as UserRole,
+    aggregated: profile.aggregated !== false,
+    asset: profile.asset !== false,
+    company_name: profile.company_name,
+    phone: profile.phone,
+    avatar_url: profile.avatar_url,
+    avatar_seed: profile.avatar_seed,
+    status_text: profile.bio, // Profiles table uses 'bio' for status_text
+    memberships: {},
+  };
+}
+
 export interface SignInResult {
   error: Error | null;
 }
@@ -375,6 +394,53 @@ export async function getSession(): Promise<{
     const { data: { session }, error } = await supabase().auth.getSession();
     if (error || !session?.user) return null;
     return mapSupabaseUserToAuth(session.user);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Refresh user and profile from server (network call).
+ * Uses getUser() for latest metadata and queries public.profiles for DB-side updates.
+ */
+export async function refreshSession(): Promise<{
+  user: AuthUser;
+  profile: AuthProfile;
+} | null> {
+  try {
+    const { data: { user }, error } = await supabase().auth.getUser();
+    if (error || !user) return null;
+    
+    // Fetch latest from public.profiles for absolute truth (metadata sync can be flaky)
+    const { data: profile } = await supabase()
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .single();
+
+    if (profile) {
+      return {
+        user: { uid: user.id, email: user.email ?? "", displayName: profile.full_name || user.email?.split("@")[0] || "User" },
+        profile: mapDbProfileToAuth(profile),
+      };
+    }
+
+    return mapSupabaseUserToAuth(user);
+  } catch {
+    return null;
+  }
+}
+
+/** Fetch a specific user's profile from the public.profiles table. */
+export async function getProfile(uid: string): Promise<AuthProfile | null> {
+  try {
+    const { data, error } = await supabase()
+      .from("profiles")
+      .select("*")
+      .eq("id", uid)
+      .single();
+    if (error || !data) return null;
+    return mapDbProfileToAuth(data);
   } catch {
     return null;
   }
