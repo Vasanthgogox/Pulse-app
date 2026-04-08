@@ -27,11 +27,14 @@ import {
   getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
 import { formatINR, formatLedgerDate } from "@/lib/format";
+import { getSignedAvatarUrl } from "@/lib/avatarUpload";
+import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Image,
   Modal,
   RefreshControl,
   ScrollView,
@@ -108,6 +111,7 @@ export default function ClientDetailScreen({
   const [editAddress, setEditAddress] = useState("");
   const [editGstin, setEditGstin] = useState("");
   const [editPan, setEditPan] = useState("");
+  const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
 
   const load = useCallback(() => {
     if (!clientId || !currentOrganization?.id) {
@@ -222,6 +226,39 @@ export default function ClientDetailScreen({
       setEditPan(client.pan_number ?? "");
     }
   }, [client]);
+
+  useEffect(() => {
+    let mounted = true;
+    const resolveAvatar = async () => {
+      if (!client?.linked_organization_id) {
+        if (mounted) setProfileAvatarUri(null);
+        return;
+      }
+      const { profile } = await getLinkedOrgProfile(client.linked_organization_id);
+      if (!profile) {
+        if (mounted) setProfileAvatarUri(null);
+        return;
+      }
+      if (profile.avatarUrl?.startsWith("http")) {
+        if (mounted) setProfileAvatarUri(profile.avatarUrl);
+        return;
+      }
+      if (profile.avatarUrl?.trim()) {
+        const signed = await getSignedAvatarUrl(profile.avatarUrl.trim());
+        if (mounted) setProfileAvatarUri(signed);
+        return;
+      }
+      if (profile.avatarSeed?.trim()) {
+        if (mounted) setProfileAvatarUri(getUser2DAvatarUriForSeed(profile.avatarSeed.trim()));
+        return;
+      }
+      if (mounted) setProfileAvatarUri(null);
+    };
+    void resolveAvatar();
+    return () => {
+      mounted = false;
+    };
+  }, [client?.linked_organization_id]);
 
   const ledgerEntries: LedgerEntry[] = useMemo(() => {
     const rows: LedgerEntry[] = transactions.map((tx) => {
@@ -915,7 +952,11 @@ export default function ClientDetailScreen({
             <View style={styles.profileCard}>
               <View style={styles.profileCardTop}>
                 <View style={styles.profileAvatarWrap}>
-                  <FontAwesome name="building" size={30} color={Theme.primary} />
+                  {profileAvatarUri ? (
+                    <Image source={{ uri: profileAvatarUri }} style={styles.profileAvatarImage} />
+                  ) : (
+                    <FontAwesome name="building" size={30} color={Theme.primary} />
+                  )}
                 </View>
                 <View style={styles.profileCardTopText}>
                   <Text style={styles.profileEntityName} numberOfLines={2}>
@@ -1144,6 +1185,11 @@ const styles = StyleSheet.create({
     borderColor: Theme.primary,
     alignItems: "center",
     justifyContent: "center",
+  },
+  profileAvatarImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 37,
   },
   profileCardTopText: { flex: 0, minWidth: 0, alignItems: "center" },
   profileEntityName: {

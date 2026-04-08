@@ -3,6 +3,7 @@ import { DetailPageLayout, DetailSection } from "@/components/DetailPageLayout";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -39,6 +40,7 @@ import {
   formatLedgerDateTime,
   formatRelative,
 } from "@/lib/format";
+import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
   getSalaryRequestsByDriverIds,
   updateSalaryRequestStatus,
@@ -50,6 +52,7 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -62,6 +65,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   attachDriverByContact,
   getDriverById,
+  getDriverProfileDisplay,
   getLatestDriverInviteTermsByUser,
   getDriverInviteSentStatus,
   getDriverLedgerByDriver,
@@ -131,6 +135,16 @@ function formatLedgerDateShort(s: string): string {
   return `${day} ${months[Number(m) - 1] ?? m} ${y}`;
 }
 
+function getDriverFallbackSeed(id: string): string {
+  const value = (id ?? "").trim();
+  if (!value) return "driver-1";
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash + value.charCodeAt(i)) % 10;
+  }
+  return `driver-${hash + 1}`;
+}
+
 /** Same labels as finance tab (Treasury DRIVERS) for consistency. */
 function getSalaryRequestTypeLabel(
   t: (k: string) => string,
@@ -195,6 +209,7 @@ export default function DriverDetailScreen({
     "ledger" | "statement"
   >("ledger");
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   const [expandedLedgerRowId, setExpandedLedgerRowId] = useState<string | null>(
     null,
   );
@@ -531,6 +546,43 @@ export default function DriverDetailScreen({
       ? monthlyStatement.detailsByMonth[primaryStatementRow.monthKey]
       : null;
 
+  useEffect(() => {
+    let mounted = true;
+    const resolveAvatar = async () => {
+      if (!driver?.id) {
+        if (mounted) setProfileAvatarUri(null);
+        return;
+      }
+      const { profile } = await getDriverProfileDisplay(driver.id);
+      if (!profile) {
+        // Always show a driver avatar in profile card, even when linked profile is unavailable.
+        if (mounted)
+          setProfileAvatarUri(getAvatarUriForSeed(getDriverFallbackSeed(driver.id)));
+        return;
+      }
+      if (profile.avatarUrl?.startsWith("http")) {
+        if (mounted) setProfileAvatarUri(profile.avatarUrl);
+        return;
+      }
+      if (profile.avatarUrl?.trim()) {
+        const signed = await getSignedAvatarUrl(profile.avatarUrl.trim());
+        if (mounted) setProfileAvatarUri(signed);
+        return;
+      }
+      if (profile.avatarSeed?.trim()) {
+        if (mounted)
+          setProfileAvatarUri(getAvatarUriForSeed(profile.avatarSeed.trim()));
+        return;
+      }
+      if (mounted)
+        setProfileAvatarUri(getAvatarUriForSeed(getDriverFallbackSeed(driver.id)));
+    };
+    void resolveAvatar();
+    return () => {
+      mounted = false;
+    };
+  }, [driver?.id]);
+
   if (loading) {
     return <CenteredLoadingView message={t("loadingDriver")} />;
   }
@@ -572,7 +624,7 @@ export default function DriverDetailScreen({
 
   const canLink =
     !driver.user_id &&
-    (driver.phone?.trim() || driver.email?.trim()) &&
+    Boolean(driver.phone?.trim() || driver.email?.trim()) &&
     leftAtFormatted == null;
   const normalizedMatchInviteStatus = (matchInviteStatus ?? "").toLowerCase();
   const rejectedInviteForMatch = normalizedMatchInviteStatus === "rejected";
@@ -912,7 +964,11 @@ export default function DriverDetailScreen({
             <View style={styles.profileCard}>
               <View style={styles.profileCardTop}>
                 <View style={styles.profileAvatarWrap}>
-                  <FontAwesome name="user" size={32} color={Theme.textOnPrimary} />
+                  {profileAvatarUri ? (
+                    <Image source={{ uri: profileAvatarUri }} style={styles.profileAvatarImage} />
+                  ) : (
+                    <FontAwesome name="user" size={32} color={Theme.textOnPrimary} />
+                  )}
                 </View>
                 <View style={styles.profileCardTopText}>
                   <Text style={styles.profileEntityName} numberOfLines={2}>
@@ -1004,9 +1060,9 @@ export default function DriverDetailScreen({
                       Base Salary (Payable)
                     </Text>
                     <Text style={styles.profileFiscalValue}>
-                      {driverOffer.payableAmount != null &&
-                      Number(driverOffer.payableAmount) > 0
-                        ? `₹${Number(driverOffer.payableAmount).toLocaleString("en-IN")} / mo`
+                      {driverOffer?.payableAmount != null &&
+                      Number(driverOffer?.payableAmount) > 0
+                        ? `₹${Number(driverOffer?.payableAmount).toLocaleString("en-IN")} / mo`
                         : "—"}
                     </Text>
                   </View>
@@ -1015,18 +1071,18 @@ export default function DriverDetailScreen({
                       Trip Commission
                     </Text>
                     <Text style={styles.profileFiscalValue}>
-                      {driverOffer.commissionPercent != null &&
-                      Number(driverOffer.commissionPercent) > 0
-                        ? `${driverOffer.commissionPercent}%`
+                      {driverOffer?.commissionPercent != null &&
+                      Number(driverOffer?.commissionPercent) > 0
+                        ? `${driverOffer?.commissionPercent}%`
                         : "—"}
                     </Text>
                   </View>
                   <View style={styles.profileFiscalRow}>
                     <Text style={styles.profileFiscalLabel}>Per-KM Rate</Text>
                     <Text style={styles.profileFiscalValue}>
-                      {driverOffer.commissionPerKm != null &&
-                      Number(driverOffer.commissionPerKm) > 0
-                        ? `₹${driverOffer.commissionPerKm} / km`
+                      {driverOffer?.commissionPerKm != null &&
+                      Number(driverOffer?.commissionPerKm) > 0
+                        ? `₹${driverOffer?.commissionPerKm} / km`
                         : "—"}
                     </Text>
                   </View>
@@ -1971,6 +2027,11 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.primary,
     alignItems: "center",
     justifyContent: "center",
+  },
+  profileAvatarImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 12,
   },
   profileCardTopText: { flex: 1, minWidth: 0 },
   profileEntityName: {
