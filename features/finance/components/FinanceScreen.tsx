@@ -171,8 +171,11 @@ export function FinanceScreen() {
     getVehicleNumberForTripId,
     tripPartyMap,
     tripDetailsMap,
+    clearFilters: ledgerClearFilters,
+    isAnyFilterActive: ledgerAnyFilterActive,
   } = ledger;
 
+  const [entityFilter, setEntityFilter] = useState<EntityListFilter>("all");
   const [financeSubTab, setFinanceSubTab] = useState<FinanceSubTab>("cash");
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showAddClientModal, setShowAddClientModal] = useState(false);
@@ -182,7 +185,17 @@ export function FinanceScreen() {
   const [editingEntry, setEditingEntry] = useState<LedgerRow | null>(null);
   const [tabTotals, setTabTotals] = useState({ totalIn: 0, totalOut: 0 });
   const [refreshing, setRefreshing] = useState(false);
-  const [entityFilter, setEntityFilter] = useState<EntityListFilter>("all");
+
+  const isAnyFilterActive = useMemo(
+    () => ledgerAnyFilterActive || entityFilter !== "all",
+    [ledgerAnyFilterActive, entityFilter],
+  );
+
+  const handleClearFilters = useCallback(() => {
+    ledgerClearFilters();
+    setEntityFilter("all");
+  }, [ledgerClearFilters]);
+
   const [showEntityListModal, setShowEntityListModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showSharedLedgerModal, setShowSharedLedgerModal] = useState(false);
@@ -1134,6 +1147,8 @@ export function FinanceScreen() {
           financeSubTab === "cash" ? "transaction" : undefined
         }
         onLedgerViewModeChange={undefined}
+        onClearFilters={handleClearFilters}
+        isAnyFilterActive={isAnyFilterActive}
       />
       <View style={styles.tableScroll}>
         <View style={styles.tableScrollInner}>
