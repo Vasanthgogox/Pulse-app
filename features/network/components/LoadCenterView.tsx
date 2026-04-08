@@ -7,6 +7,7 @@ import { SubTabs } from "@/components/SubTabs";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { upsertTripSubcontract } from "@/features/finance/services/tripSubcontracts.service";
 import {
   BidReceivedHammer,
   createDirectQuote,
@@ -46,11 +47,10 @@ import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import { Package } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Animated,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -63,10 +63,9 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { upsertTripSubcontract } from "@/features/finance/services/tripSubcontracts.service";
 
 type LoadSubTab = "GIVE_LOAD" | "GET_LOAD" | "AWARDED";
 
@@ -181,7 +180,7 @@ export function LoadCenterView({
   const invalidateIndents = useInvalidateIndents();
   const queryClient = useQueryClient();
 
-  const isSecuredTab = loadSubTab === "AWARDED";
+  const isClaimedTab = loadSubTab === "AWARDED";
 
   /** O(myQuotes.length): map indent_id -> quote for Find Work "Quote Sent" / "Update quote" and modal prefill. */
   const myQuoteByIndentId = useMemo(() => {
@@ -251,7 +250,7 @@ export function LoadCenterView({
     return Math.min(...pending.map((q) => Number(q.amount ?? 0)));
   }, [awardModalQuotes]);
 
-  /** Indent ids that already have a trip (owner or supplier). Exclude these from Secured so we don't show "ASSIGN STAFF & DEPLOY" again after deploy. */
+  /** Indent ids that already have a trip (owner or supplier). Exclude these from Claimed so we don't show "ASSIGN STAFF & DEPLOY" again after deploy. */
   const indentIdsWithTrip = useMemo(() => {
     const list = trips ?? [];
     const ids: string[] = [];
@@ -280,7 +279,7 @@ export function LoadCenterView({
   const { data: quoteCounts = {}, refetch: refetchQuoteCounts } =
     useDirectQuoteCountsQuery(giveLoadIds);
 
-  /** Indent ids where my org's quote is accepted (awarded to me). Used to exclude from Find Work and build Secured list. */
+  /** Indent ids where my org's quote is accepted (awarded to me). Used to exclude from Find Work and build Claimed list. */
   const awardedToMeIndentIds = useMemo(
     () =>
       new Set(
@@ -304,8 +303,8 @@ export function LoadCenterView({
 
   /**
    * Find Work "Done": terminal loads that I interacted with (quoted), excluding any
-   * load awarded to me (those belong in Secured → Done). We later union this with
-   * Secured → Done when rendering Find Work → Done, so users can view all done
+   * load awarded to me (those belong in Claimed → Done). We later union this with
+   * Claimed → Done when rendering Find Work → Done, so users can view all done
    * outcomes from one place without changing award/deploy flow.
    */
   const findWorkDoneLoads = useMemo(() => {
@@ -321,7 +320,7 @@ export function LoadCenterView({
     });
   }, [marketIndents, awardedToMeIndentIds, myQuoteByIndentId]);
 
-  /** Secured "Done": loads awarded to me that are completed or have a trip. */
+  /** Claimed "Done": loads awarded to me that are completed or have a trip. */
   const awardedLoadsDone = useMemo(
     () =>
       marketIndents.filter(
@@ -334,7 +333,7 @@ export function LoadCenterView({
   );
 
   /**
-   * Find Work → Done should also include Secured → Done (awarded-to-me + done/trip),
+   * Find Work → Done should also include Claimed → Done (awarded-to-me + done/trip),
    * so users can see final outcomes in the Find Work DONE tab too.
    */
   const findWorkDoneUnionLoads = useMemo(() => {
@@ -432,7 +431,7 @@ export function LoadCenterView({
         return findWorkLoads.filter((load) => myQuoteByIndentId.has(load.id));
       }
       if (statusFilterTab === "AWARDED") {
-        // Find Work: Awarded mirrors Secured (awarded to me, ready to deploy).
+        // Find Work: Awarded mirrors Claimed (awarded to me, ready to deploy).
         return awardedLoads;
       }
       return [];
@@ -457,16 +456,16 @@ export function LoadCenterView({
   const filteredFindWorkList =
     statusFilterTab === "DONE" ? filteredFindWorkDoneLoads : filteredFindWorkLoads;
 
-  const filteredSecuredLoads = useMemo(() => {
+  const filteredClaimedLoads = useMemo(() => {
     return awardedLoads.filter((load) => loadMatchesSearch(load, searchQuery));
   }, [awardedLoads, searchQuery, loadMatchesSearch]);
-  const filteredSecuredDoneLoads = useMemo(() => {
+  const filteredClaimedDoneLoads = useMemo(() => {
     return awardedLoadsDone.filter((load) =>
       loadMatchesSearch(load, searchQuery),
     );
   }, [awardedLoadsDone, searchQuery, loadMatchesSearch]);
 
-  /** Counts per status tab for the current role tab (Hire Partner / Find Work / Secured). */
+  /** Counts per status tab for the current role tab (Hire Partner / Find Work / Claimed). */
   const statusTabCounts = useMemo(() => {
     const getCount = (filter: StatusFilterTab) => {
       if (loadSubTab === "GIVE_LOAD") {
@@ -675,7 +674,7 @@ export function LoadCenterView({
       setLoadAction(null);
       invalidateIndents(orgId);
       triggerSuccess(
-        "Load awarded — supplier can assign and deploy from Secured.",
+        "Load awarded — supplier can assign and deploy from Claimed.",
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error.";
@@ -726,7 +725,7 @@ export function LoadCenterView({
         return;
       }
 
-      // Mark indent completed so it leaves Secured list (O(1)). Ignore status-update failure; trip is source of truth.
+      // Mark indent completed so it leaves Claimed list (O(1)). Ignore status-update failure; trip is source of truth.
       const { error: completedErr } = await updateIndent(load.id, {
         status: "completed",
       });
@@ -780,7 +779,7 @@ export function LoadCenterView({
     if (!assignDriverId || typeof assignVehicleId !== "string") {
       Alert.alert(
         "Select driver and vehicle",
-        "Please select a driver and a vehicle from your org to authorize voyage.",
+        "Please select a driver and a vehicle from your org to assign trip.",
       );
       return;
     }
@@ -1018,12 +1017,12 @@ export function LoadCenterView({
     return base + Layout.fabSize + Layout.fabBottomOffset;
   }, [insets.bottom, loadSubTab]);
   const statusTabsForRole = useMemo(() => {
-    return isSecuredTab
+    return isClaimedTab
       ? STATUS_TABS.filter((t) => t.id === "AWARDED")
       : STATUS_TABS;
-  }, [isSecuredTab]);
+  }, [isClaimedTab]);
 
-  const renderSecuredLoadCard = (load: IndentRow, isDone: boolean) => {
+  const renderClaimedLoadCard = (load: IndentRow, isDone: boolean) => {
     const acceptedQuote = myQuotes.find(
       (q) =>
         (q.status || "").toLowerCase() === "accepted" &&
@@ -1048,7 +1047,7 @@ export function LoadCenterView({
               style={{ marginRight: 6 }}
             />
             <Text style={styles.awardedBadgeText}>
-              {isDone ? "Deployed" : "Contract Secured"}
+              {isDone ? "Deployed" : "Contract Claimed"}
             </Text>
           </View>
           <Text style={styles.awardedId}>{getIndentDisplayNumber(load)}</Text>
@@ -1113,10 +1112,10 @@ export function LoadCenterView({
       <View
         style={[
           styles.loadDarkHeader,
-          isSecuredTab && styles.loadDarkHeaderSecured,
+          isClaimedTab && styles.loadDarkHeaderClaimed,
         ]}
       >
-        {/* Sub-tabs: HIRE PARTNER | FIND WORK | SECURED */}
+        {/* Sub-tabs: HIRE PARTNER | FIND WORK | CLAIMED */}
         <View style={styles.loadFilterHeaderRow}>
           <SubTabs<LoadSubTab>
             variant="dark"
@@ -1132,7 +1131,7 @@ export function LoadCenterView({
               { key: "GET_LOAD", label: "FIND WORK", badgeCount: findWorkLoads.length },
               {
                 key: "AWARDED",
-                label: "SECURED",
+                label: "CLAIMED",
                 badgeCount: awardedLoads.length,
               },
             ]}
@@ -1142,7 +1141,7 @@ export function LoadCenterView({
         <View
           style={[
             styles.loadSearchRow,
-            isSecuredTab && styles.loadSearchRowSecured,
+            isClaimedTab && styles.loadSearchRowClaimed,
           ]}
         >
           <View style={styles.loadSearchWrap}>
@@ -1207,14 +1206,14 @@ export function LoadCenterView({
       <View
         style={[
           styles.loadContentWrap,
-          isSecuredTab && styles.loadContentWrapSecured,
+          isClaimedTab && styles.loadContentWrapClaimed,
         ]}
       >
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={[
             styles.scrollContent,
-            isSecuredTab && styles.scrollContentSecured,
+            isClaimedTab && styles.scrollContentClaimed,
             { paddingBottom },
           ]}
           showsVerticalScrollIndicator={false}
@@ -1276,7 +1275,7 @@ export function LoadCenterView({
                   // Indent was assigned a supplier directly (no quote needed).
                   const hasDirectSupplier = !!load["assigned_supplier_id"];
                   // Shipper view: never show "Create Trip". The supplier creates the trip from
-                  // Secured (Assign Staff & Deploy). When awarded but no trip yet, supplier
+                  // Claimed (Assign Staff & Deploy). When awarded but no trip yet, supplier
                   // is assigned (from accepted quote or assigned_supplier_id); status stays
                   // "awarded" until supplier deploys.
                   const isAwaitingSupplierDeploy =
@@ -1333,7 +1332,7 @@ export function LoadCenterView({
                                 color={Theme.driverGold}
                               />
                               <Text style={styles.loadCardMetaText}>
-                                Supplier Secured
+                                Supplier Claimed
                               </Text>
                             </>
                           ) : (
@@ -1506,7 +1505,7 @@ export function LoadCenterView({
                               style={{ marginRight: 6 }}
                             />
                             <Text style={styles.quoteSentText}>
-                              Awarded — see Secured
+                              Awarded — see Claimed
                             </Text>
                           </View>
                         </View>
@@ -1575,7 +1574,7 @@ export function LoadCenterView({
             ))}
 
           {loadSubTab === "AWARDED" &&
-            (filteredSecuredLoads.length === 0 ? (
+            (filteredClaimedLoads.length === 0 ? (
               <View style={styles.emptyWrap}>
                 <View style={styles.emptyIconWrapGold}>
                   <FontAwesome
@@ -1584,9 +1583,9 @@ export function LoadCenterView({
                     color={Theme.driverGold}
                   />
                 </View>
-                <Text style={styles.emptyTitle}>Secured</Text>
+                <Text style={styles.emptyTitle}>Claimed</Text>
                 <Text style={styles.emptySub}>
-                  Secured loads will appear here.
+                  Claimed loads will appear here.
                 </Text>
               </View>
             ) : (
@@ -1594,11 +1593,11 @@ export function LoadCenterView({
                 <View style={styles.securedSectionHeader}>
                   <Text style={styles.securedSectionTitle}>Ready to Deploy</Text>
                   <Text style={styles.securedSectionCount}>
-                    {filteredSecuredLoads.length}
+                    {filteredClaimedLoads.length}
                   </Text>
                 </View>
-                {filteredSecuredLoads.map((load) =>
-                  renderSecuredLoadCard(load, false),
+                {filteredClaimedLoads.map((load) =>
+                  renderClaimedLoadCard(load, false),
                 )}
               </View>
             ))}
@@ -2095,7 +2094,7 @@ export function LoadCenterView({
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Staff Handshake modal: Roster (driver + vehicle from org) or Ad hoc driver (OTP claim). Triggered from Secured tab (ASSIGN STAFF & DEPLOY). O(n): drivers/vehicles loaded once per org. */}
+      {/* Staff Handshake modal: Roster (driver + vehicle from org) or Ad hoc driver (OTP claim). Triggered from Claimed tab (ASSIGN STAFF & DEPLOY). O(n): drivers/vehicles loaded once per org. */}
       <Modal
         visible={loadAction?.type === "ASSIGN"}
         animationType="slide"
@@ -2750,7 +2749,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.separatorDark,
   },
-  loadDarkHeaderSecured: {
+  loadDarkHeaderClaimed: {
     paddingBottom: 2,
   },
   loadFilterHeaderRow: {
@@ -2784,7 +2783,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingTop: 10,
   },
-  loadSearchRowSecured: {
+  loadSearchRowClaimed: {
     paddingTop: 6,
   },
   loadSearchWrap: {
@@ -2859,7 +2858,7 @@ const styles = StyleSheet.create({
     marginTop: 0,
     overflow: "hidden",
   },
-  loadContentWrapSecured: {
+  loadContentWrapClaimed: {
     marginTop: 0,
   },
   scroll: { flex: 1 },
@@ -2867,7 +2866,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 16,
   },
-  scrollContentSecured: {
+  scrollContentClaimed: {
     paddingTop: 12,
   },
   loadingWrap: { paddingVertical: 32, alignItems: "center", gap: 12 },

@@ -177,7 +177,7 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
         Alert.alert(
           'Quote accepted but status update failed',
           indentErr.message +
-            '\n\nThe quote was accepted. The supplier can assign and deploy from Secured.',
+            '\n\nThe quote was accepted. The supplier can assign and deploy from Claimed.',
         );
       }
       setSelectedQuoteId(null);
@@ -189,7 +189,7 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
       refetchQuotes();
       Alert.alert(
         'Load awarded',
-        `${winner.bidder_organization_name ?? 'Supplier'} can assign driver and vehicle from Secured, then deploy.`,
+        `${winner.bidder_organization_name ?? 'Supplier'} can assign driver and vehicle from Claimed, then deploy.`,
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error.';
