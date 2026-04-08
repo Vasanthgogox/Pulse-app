@@ -1053,13 +1053,17 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   input: {
-    borderWidth: 1,
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 14,
     fontSize: 15,
     minHeight: 52,
     backgroundColor: Theme.screenBackground,
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      } as any,
+    }),
   },
   emergencyBox: { gap: 12 },
   reviewScroll: { flex: 1 },

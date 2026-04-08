@@ -72,6 +72,9 @@ export interface TreasurySummaryCardProps {
   amountAnimationResetKey?: string;
   /** Cash tab: match Network hub — fiscal tabs, then search row, then totals (flex order; same controls). */
   cashNetworkLayout?: boolean;
+  /** When true, a "Clear" button is shown to reset filters. */
+  onClearFilters?: () => void;
+  isAnyFilterActive?: boolean;
 }
 
 const ENTITY_FILTER_LABELS: Record<EntityListFilter, string> = {
@@ -271,6 +274,8 @@ export function TreasurySummaryCard({
   filterRowRight,
   amountAnimationResetKey,
   cashNetworkLayout = false,
+  onClearFilters,
+  isAnyFilterActive = false,
 }: TreasurySummaryCardProps) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
@@ -775,6 +780,14 @@ export function TreasurySummaryCard({
                   spellCheck={false}
                   autoComplete="off"
                 />
+                {searchQuery !== '' && (
+                  <TouchableOpacity
+                    onPress={() => onSearchChange('')}
+                    style={styles.searchClearIcon}
+                  >
+                    <FontAwesome name="times-circle" size={14} color={Theme.textOnDarkMuted} />
+                  </TouchableOpacity>
+                )}
               </View>
 
               {onEntityFilterChange != null && (
@@ -804,6 +817,17 @@ export function TreasurySummaryCard({
 
               {/* When no entity filter (Cash tab), show period/source filters in-line like Network chips */}
               {onEntityFilterChange == null && periodAndSourceFilters}
+
+              {isAnyFilterActive && (
+                <TouchableOpacity
+                  onPress={onClearFilters}
+                  activeOpacity={0.7}
+                  style={styles.clearFiltersBtn}
+                >
+                  <FontAwesome name="times" size={10} color={Theme.textOnDark} />
+                  <Text style={styles.clearFiltersText}>Clear</Text>
+                </TouchableOpacity>
+              )}
 
               {filterRowRight != null && (
                 <View style={styles.filterRowRight}>{filterRowRight}</View>
@@ -848,6 +872,16 @@ export function TreasurySummaryCard({
             contentContainerStyle={styles.toolbarFiltersContent}
           >
             {periodAndSourceFilters}
+            {isAnyFilterActive && (
+              <TouchableOpacity
+                onPress={onClearFilters}
+                activeOpacity={0.7}
+                style={styles.clearFiltersBtn}
+              >
+                <FontAwesome name="times" size={10} color={Theme.textOnDark} />
+                <Text style={styles.clearFiltersText}>Clear</Text>
+              </TouchableOpacity>
+            )}
             {!hideReportInToolbar && (
               <PressableIcon
                 name="file-text-o"
@@ -1197,6 +1231,28 @@ const styles = StyleSheet.create({
     borderColor: Theme.separatorDark,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  clearFiltersBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    gap: 4,
+  },
+  clearFiltersText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: Theme.textOnDark,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  searchClearIcon: {
+    padding: 4,
+    marginRight: -4,
   },
   filterBlock: {
     position: 'relative',

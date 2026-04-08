@@ -29,6 +29,7 @@ import {
     Dimensions,
     FlatList,
     Modal,
+    Platform,
     ScrollView,
     StyleSheet,
     Switch,
@@ -205,13 +206,17 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   input: {
-    borderWidth: 1,
     borderRadius: 10,
     paddingHorizontal: Layout.screenPaddingHorizontal - 2,
     paddingVertical: 12,
     fontSize: 14,
     minHeight: Layout.minTouchTargetSize,
     marginBottom: Layout.screenPaddingHorizontal - 2,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   notesInput: {
     minHeight: 88,

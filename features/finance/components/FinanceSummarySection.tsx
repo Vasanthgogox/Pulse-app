@@ -54,6 +54,8 @@ export interface FinanceSummarySectionProps {
   onCustomerViewModeChange?: (m: "matrix" | "table" | "ledger") => void;
   /** When set, shows plus button in header (e.g. Add transaction on cash tab, Add node on entity tabs). */
   onAddClick?: () => void;
+  onClearFilters?: () => void;
+  isAnyFilterActive?: boolean;
 }
 
 export function FinanceSummarySection({
@@ -91,6 +93,8 @@ export function FinanceSummarySection({
   customerViewMode,
   onCustomerViewModeChange,
   onAddClick,
+  onClearFilters,
+  isAnyFilterActive,
 }: FinanceSummarySectionProps) {
   const router = useRouter();
   const { t } = useLanguage();
@@ -230,6 +234,8 @@ export function FinanceSummarySection({
             activeTab === "garage" ||
             activeTab === "drivers"
           }
+          onClearFilters={onClearFilters}
+          isAnyFilterActive={isAnyFilterActive}
         />
       </View>
     </View>

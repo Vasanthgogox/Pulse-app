@@ -17,7 +17,7 @@ import { useSafeBack } from '@/lib/useSafeBack';
 export default function AddSupplierScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const safeBack = useSafeBack();
+  const safeBack = useSafeBack("/(tabs)/network");
   const { currentOrganization } = useOrganization();
 
   const closeModal = () => safeBack();

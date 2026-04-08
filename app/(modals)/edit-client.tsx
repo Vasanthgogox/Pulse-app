@@ -15,7 +15,7 @@ import { useCallback, useEffect, useState } from "react";
 
 function closeModal(router: ReturnType<typeof useRouter>) {
   if (router.canGoBack()) router.back();
-  else router.replace("/(tabs)/finance");
+  else router.replace("/(tabs)/network");
 }
 
 export default function EditClientScreen() {

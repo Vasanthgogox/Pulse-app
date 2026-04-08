@@ -93,6 +93,8 @@ export interface UseFinanceLedgerResult {
       driver_commission?: number | null;
     }
   >;
+  clearFilters: () => void;
+  isAnyFilterActive: boolean;
 }
 
 export function useFinanceLedger({
@@ -133,6 +135,30 @@ export function useFinanceLedger({
     "all" | "in" | "out"
   >("all");
   const [searchQuery, setSearchQuery] = useState("");
+
+  const clearFilters = useCallback(() => {
+    setFinancePeriodFilter("RANGE");
+    setSourceSupplyFilter("all");
+    setCashDirectionFilter("all");
+    setSelectedLedgerCategory("all");
+    setSearchQuery("");
+  }, []);
+
+  const isAnyFilterActive = useMemo(
+    () =>
+      financePeriodFilter !== "RANGE" ||
+      sourceSupplyFilter !== "all" ||
+      cashDirectionFilter !== "all" ||
+      selectedLedgerCategory !== "all" ||
+      searchQuery !== "",
+    [
+      financePeriodFilter,
+      sourceSupplyFilter,
+      cashDirectionFilter,
+      selectedLedgerCategory,
+      searchQuery,
+    ],
+  );
 
   useEffect(() => {
     AsyncStorage.getItem(LEDGER_CATEGORY_STORAGE_KEY).then((saved) => {
@@ -446,5 +472,7 @@ export function useFinanceLedger({
     getVehicleNumberForTripId,
     tripPartyMap,
     tripDetailsMap,
+    clearFilters,
+    isAnyFilterActive,
   };
 }
