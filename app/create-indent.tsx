@@ -2,7 +2,7 @@
  * Create Indent — Deploy New Load.
  * Full-screen form: origin, destination, client, budget, supplier target, vehicle, load type, weight, pickup date.
  */
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -78,8 +78,8 @@ function validateForm(state: FormState): Record<string, string> {
     errors.weight = 'Weight is required.';
   } else {
     const w = parseFloat(weightStr.replace(/,/g, ''));
-    if (Number.isNaN(w) || w <= 0) errors.weight = 'Enter a valid weight (tons).';
-    else if (w > 1000) errors.weight = 'Weight must be at most 1,000 tons.';
+    if (Number.isNaN(w) || w <= 0) errors.weight = 'Enter a valid weight (kg).';
+    else if (w > 999999) errors.weight = 'Weight must be at most 999,999 kg.';
   }
   if ((state.pickup_date ?? '').trim()) {
     const pickupDateErr = dateISO()(state.pickup_date ?? '');
@@ -155,6 +155,7 @@ export default function CreateIndentScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [clientsLoading, setClientsLoading] = useState(false);
+  const [clientSearch, setClientSearch] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showAddClientModal, setShowAddClientModal] = useState(false);
   const [pickupLat, setPickupLat] = useState<number | null>(null);
@@ -332,6 +333,25 @@ export default function CreateIndentScreen() {
     update({ client_id: client.id, client_name: client.name ?? client.contact_person ?? '' });
   }, [update]);
 
+  const filteredClients = useMemo(() => {
+    const q = clientSearch.trim().toLowerCase();
+    if (!q) return clients;
+    const matches = clients.filter((c) => {
+      const name = (c.name ?? '').toLowerCase();
+      const person = (c.contact_person ?? '').toLowerCase();
+      const phone = String((c as { phone?: string | null }).phone ?? '').toLowerCase();
+      return name.includes(q) || person.includes(q) || phone.includes(q);
+    });
+    // Keep selected client visible even if it doesn't match current query.
+    if (form.client_id) {
+      const selected = clients.find((c) => c.id === form.client_id);
+      if (selected && !matches.some((c) => c.id === selected.id)) {
+        return [selected, ...matches];
+      }
+    }
+    return matches;
+  }, [clientSearch, clients, form.client_id]);
+
   const handleSubmit = useCallback(async () => {
     if (!orgId) {
       Alert.alert('Organization required', 'Please select an organization before creating an indent.');
@@ -343,7 +363,7 @@ export default function CreateIndentScreen() {
 
     const clientPrice = parseFloat(String(form.client_price).replace(/,/g, ''));
     const supplierTarget = parseFloat(String(form.supplier_target).replace(/,/g, ''));
-    const weightVal = parseFloat(form.weight.replace(/,/g, '')) * 1000; // UI is tons, backend is kg
+    const weightVal = parseFloat(form.weight.replace(/,/g, ''));
     const payload: CreateIndentInput = {
       pickup_area: form.pickup_area.trim(),
       drop_location: form.drop_location.trim(),
@@ -511,14 +531,41 @@ export default function CreateIndentScreen() {
           ) : null}
 
           <View style={styles.sheetSection}>
-            <Text style={styles.sheetLabel}>Client — select from list or add new</Text>
+            <Text style={styles.sheetLabel}>Client</Text>
+            <View style={styles.clientSearchRow}>
+              <FontAwesome name="search" size={14} color={Theme.textMuted} style={styles.clientSearchIcon} />
+              <TextInput
+                style={styles.clientSearchInput}
+                placeholder="Search client…"
+                placeholderTextColor={Theme.textMuted}
+                value={clientSearch}
+                onChangeText={setClientSearch}
+                autoCorrect={false}
+                spellCheck={false}
+                autoComplete="off"
+                returnKeyType="search"
+              />
+              {clientSearch.trim() ? (
+                <TouchableOpacity
+                  style={styles.clientSearchClear}
+                  onPress={() => setClientSearch('')}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear client search"
+                >
+                  <FontAwesome name="times-circle" size={16} color={Theme.textMuted} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
             {clientsLoading ? (
               <View style={styles.partnersWrap}>
                 <Text style={styles.partnersPlaceholder}>Loading…</Text>
               </View>
-            ) : clients.length === 0 ? (
+            ) : filteredClients.length === 0 ? (
               <View style={styles.partnersWrap}>
-                <Text style={styles.partnersPlaceholder}>No clients. Add one below.</Text>
+                <Text style={styles.partnersPlaceholder}>
+                  {clients.length === 0 ? 'No clients. Add one below.' : 'No matching clients.'}
+                </Text>
               </View>
             ) : (
               <ScrollView
@@ -526,7 +573,7 @@ export default function CreateIndentScreen() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.partnersScrollContent}
               >
-                {clients.map((client) => {
+                {filteredClients.map((client) => {
                   const isSelected = form.client_id === client.id;
                   return (
                     <TouchableOpacity
@@ -638,12 +685,12 @@ export default function CreateIndentScreen() {
           </View>
 
           <View style={styles.sheetSection}>
-            <Text style={styles.sheetLabel}>Weight (tons)</Text>
+            <Text style={styles.sheetLabel}>Weight (kg)</Text>
             <TextInput
               style={[styles.sheetInput, errors.weight && styles.inputError]}
               value={form.weight}
               onChangeText={(t) => update({ weight: t.replace(/[^\d.]/g, '').slice(0, 12) })}
-              placeholder="e.g. 1.5 (tons)"
+              placeholder="e.g. 500 (kg)"
               placeholderTextColor={Theme.textMuted}
               keyboardType="decimal-pad"
             />
@@ -770,7 +817,7 @@ const styles = StyleSheet.create({
   },
   sheetField: { flex: 1, minWidth: 0 },
   hiddenLabel: { height: 0, margin: 0, padding: 0, opacity: 0 },
-  sheetSection: { marginBottom: 10 },
+  sheetSection: { marginBottom: 8 },
   sheetLabel: {
     fontSize: 10,
     fontWeight: '800',
@@ -807,7 +854,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.borderInput,
     backgroundColor: Theme.surface,
-    marginTop: 8,
+    marginTop: 6,
   },
   addClientBtnText: {
     fontSize: 12,
@@ -823,7 +870,31 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.06)',
-    marginBottom: 12,
+    marginBottom: 8,
+  },
+  clientSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    minHeight: Layout.minTouchTargetSize,
+    marginBottom: 8,
+    gap: 8,
+  },
+  clientSearchIcon: { marginRight: 2 },
+  clientSearchInput: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 14,
+    fontWeight: '600',
+    color: Theme.textPrimaryDark,
+    paddingVertical: 0,
+  },
+  clientSearchClear: {
+    padding: 4,
   },
   partnersPlaceholder: {
     fontSize: 12,
@@ -835,10 +906,10 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 2,
     paddingRight: 16,
-    marginBottom: 12,
+    marginBottom: 8,
   },
   partnerChip: {
-    paddingVertical: 10,
+    paddingVertical: 9,
     paddingHorizontal: 12,
     borderRadius: 12,
     borderWidth: 1,

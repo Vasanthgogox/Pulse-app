@@ -76,16 +76,19 @@ export const Theme = {
   /** Liquid fill pill container (gray-100 / gray-200 to match reference) */
   liquidPillBg: "#f3f4f6",
   liquidPillBorder: "#e5e7eb",
-  /** LiquidFillPill wave layers by band (bad / warn / good) — tied to semantic hues, not generated HSL */
+
+  /** Liquid fill pill — theme-aligned semantic gradients (back/middle/front) */
+  // Keep these aligned with existing semantic colors (teslaRed / warning / darkGreen).
+  // Back/middle/front provide depth without neon tones.
   liquidBadBack: "#7f1d1d",
   liquidBadMiddle: "#b91c1c",
-  liquidBadFront: "#dc2626",
+  liquidBadFront: "#E82127",
   liquidWarnBack: "#78350f",
-  liquidWarnMiddle: "#b45309",
-  liquidWarnFront: "#d97706",
+  liquidWarnMiddle: "#B45309",
+  liquidWarnFront: "#D97706",
   liquidGoodBack: "#14532d",
-  liquidGoodMiddle: "#166534",
-  liquidGoodFront: "#15803D",
+  liquidGoodMiddle: "#15803D",
+  liquidGoodFront: "#188038",
 
   // ---- Icons ----
   iconMuted: "#999999",
@@ -98,6 +101,12 @@ export const Theme = {
   teslaRed: "#E82127",
   /** Demo: positive/credit */
   darkGreen: "#15803D",
+  /** Google Pay–style “received” amount on light lists */
+  gpayAmountReceived: "#188038",
+  /** GPay list primary title (light) */
+  gpayListTitle: "#000000",
+  /** GPay list timestamp line (light) */
+  gpayListSubtitle: "#5F6368",
   positive: "#15803D",
   positiveMuted: "#d1fae5",
   /** Warning / expiring soon */
@@ -212,6 +221,20 @@ export const Theme = {
   authPrimary: "#E31937",
   /** Primary CTA hover/pressed (darker red) */
   authPrimaryDark: "#B3132B",
+
+  // ---- Cinematic profile (premium UI) ----
+  /** Cinematic header background (slate-950-ish, not pure black) */
+  cinematicHeaderBg: "#020617",
+  /** Translucent header chip background */
+  cinematicHeaderChipBg: "rgba(255,255,255,0.10)",
+  /** Translucent header chip background (pressed) */
+  cinematicHeaderChipBgPressed: "rgba(255,255,255,0.18)",
+  /** Ultra-soft light card border */
+  cinematicCardBorder: "rgba(15,23,42,0.08)",
+  /** Hairline divider inside premium cards */
+  cinematicDivider: "rgba(15,23,42,0.06)",
+  /** Soft red glow for cinematic depth */
+  cinematicGlowRed: "rgba(232,33,39,0.45)",
 } as const;
 
 export type ThemeColors = typeof Theme;

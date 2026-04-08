@@ -3,42 +3,44 @@
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import Typography from "@/constants/Typography";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import type { DriverInviteSentRow } from "@/features/drivers/services/drivers.service";
 import { type IndentRow } from "@/features/indents";
 import { LoadCenterView } from "@/features/network/components/LoadCenterView";
+import { SubTabs } from "@/components/SubTabs";
 import {
-    useClientsQuery,
-    useConnectionRequestsReceivedQuery,
-    useConnectionRequestsSentQuery,
-    useDriverInvitesSentQuery,
-    useDriversQuery,
-    useInvalidateNetwork,
-    useSuppliersQuery,
+  useClientsQuery,
+  useConnectionRequestsReceivedQuery,
+  useConnectionRequestsSentQuery,
+  useDriverInvitesSentQuery,
+  useDriversQuery,
+  useInvalidateNetwork,
+  useSuppliersQuery,
 } from "@/lib/queries";
 import { useRefreshWithFeedback } from "@/lib/useRefreshWithFeedback";
 import {
-    approveConnectionRequest,
-    createConnectionRequest,
-    getConnectionInviteeByPhone,
-    rejectConnectionRequest,
+  approveConnectionRequest,
+  createConnectionRequest,
+  getConnectionInviteeByPhone,
+  rejectConnectionRequest,
 } from "@/services/connectionRequestsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { Building2, CircleCheck, Truck, User } from "lucide-react-native";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Animated,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    Share,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Animated,
+  RefreshControl,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -79,6 +81,37 @@ function requestKind(row: RequestItem["row"]): RequestKind {
     return "CLIENT_AND_SUPPLIER";
   if (row.request_shipper_client) return "CLIENT";
   return "SUPPLIER";
+}
+
+/**
+ * When a driver invite is accepted, the driver appears on the org roster. Keep that row only;
+ * drop the redundant "DRIVER + INVITE • ACCEPTED" request row (mirrors approved org connections vs roster).
+ */
+function dedupeDriverInvitesAgainstRoster(
+  invites: DriverInviteSentRow[],
+  drivers: Array<{ name?: string | null; user_id?: string | null }>,
+): DriverInviteSentRow[] {
+  const rosterUserIds = new Set<string>();
+  for (const d of drivers) {
+    if (d.user_id) rosterUserIds.add(d.user_id);
+  }
+  return invites.filter((inv) => {
+    const st = (inv.status ?? "").trim().toLowerCase();
+    if (st !== "accepted") return true;
+    const uid = inv.to_user_id ?? null;
+    if (uid && rosterUserIds.has(uid)) return false;
+    if (uid) return true;
+    const invName = (inv.driver_name ?? "").trim().toUpperCase();
+    if (!invName) return true;
+    const sameNameLinked = drivers.filter(
+      (d) =>
+        (d.name ?? "").trim().toUpperCase() === invName &&
+        d.user_id != null &&
+        d.user_id !== "",
+    );
+    if (sameNameLinked.length === 1) return false;
+    return true;
+  });
 }
 
 function toRequestItems(
@@ -148,6 +181,20 @@ function formatRequestStatus(status: string): string {
   if (normalized === "rejected") return "REJECTED";
   if (normalized === "pending") return "PENDING";
   return normalized.replace(/_/g, " ").toUpperCase();
+}
+
+function isApprovedConnectionStatus(status: string): boolean {
+  return (status ?? "").trim().toLowerCase() === "approved";
+}
+
+/** Other org on a connection_request row (not used for driver-invite pseudo-requests). */
+function connectionRequestCounterpartyOrgId(item: RequestItem): string | null {
+  if (item.kind === "DRIVER_INVITE") return null;
+  const row = item.row;
+  if (!row) return null;
+  return item.type === "SENT"
+    ? row.to_organization_id
+    : row.from_organization_id;
 }
 
 export default function NetworkScreen() {
@@ -277,12 +324,15 @@ export default function NetworkScreen() {
     drivers.forEach((d) => {
       const leftAt = (d as { left_at?: string | null }).left_at;
       const isDisconnected = leftAt != null && leftAt !== "";
+      const hasAppAccount = Boolean((d as { user_id?: string | null }).user_id);
       list.push({
         id: d.id,
         name: (d.name || "Unnamed").toUpperCase(),
         type: "DRIVER",
         status: isDisconnected ? "DISCONNECTED" : "INTEGRATED",
-        availableOnApp: !isDisconnected,
+        // "ON APP" should mean the driver has an app account linked (drivers.user_id),
+        // not merely that they exist in the organization roster.
+        availableOnApp: !isDisconnected && hasAppAccount,
         isIntegrated: !isDisconnected,
       });
     });
@@ -290,9 +340,29 @@ export default function NetworkScreen() {
   }, [clients, suppliers, drivers]);
 
   const requestItems = useMemo(
-    () => toRequestItems(received, sent, driverInvites),
-    [received, sent, driverInvites],
+    () =>
+      toRequestItems(
+        received,
+        sent,
+        dedupeDriverInvitesAgainstRoster(driverInvites, drivers),
+      ),
+    [received, sent, driverInvites, drivers],
   );
+
+  const rosterLinkedOrgIds = useMemo(() => {
+    const ids = new Set<string>();
+    clients.forEach((c) => {
+      const id = (c as { linked_organization_id?: string | null })
+        .linked_organization_id;
+      if (id) ids.add(id);
+    });
+    suppliers.forEach((s) => {
+      const id = (s as { linked_organization_id?: string | null })
+        .linked_organization_id;
+      if (id) ids.add(id);
+    });
+    return ids;
+  }, [clients, suppliers]);
 
   const loading = clientsLoading || suppliersLoading || driversLoading;
   const loadingRequests = recLoading;
@@ -420,8 +490,53 @@ export default function NetworkScreen() {
     });
   }, [requestItems, searchQuery, segment]);
 
+  /** Sent + received requests for the ALL segment, aligned with type chips + search. */
+  const filteredRequestsForAll = useMemo(() => {
+    return requestItems.filter((item) => {
+      if (nodeKind === "CLIENT") {
+        if (
+          item.kind !== "CLIENT" &&
+          item.kind !== "CLIENT_AND_SUPPLIER"
+        ) {
+          return false;
+        }
+      } else if (nodeKind === "SUPPLIER") {
+        if (
+          item.kind !== "SUPPLIER" &&
+          item.kind !== "CLIENT_AND_SUPPLIER"
+        ) {
+          return false;
+        }
+      } else if (nodeKind === "DRIVER") {
+        if (item.kind !== "DRIVER_INVITE") return false;
+      }
+      // Approved org requests: partner already listed under Clients/Suppliers — show roster only.
+      if (
+        item.kind !== "DRIVER_INVITE" &&
+        isApprovedConnectionStatus(item.status)
+      ) {
+        const counterparty = connectionRequestCounterpartyOrgId(item);
+        if (counterparty && rosterLinkedOrgIds.has(counterparty)) {
+          return false;
+        }
+      }
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.trim().toLowerCase();
+      const displayName =
+        item.type === "RECEIVED" ? item.from_org_name : item.to_org_name;
+      return (displayName ?? "").toLowerCase().includes(q);
+    });
+  }, [requestItems, searchQuery, nodeKind, rosterLinkedOrgIds]);
+
   const pendingRequestCount = requestItems.filter(
     (item) => item.type === "RECEIVED" && item.status === "pending",
+  ).length;
+  const pendingSentCount = requestItems.filter(
+    (item) => item.type === "SENT" && item.status === "pending",
+  ).length;
+  /** Pending inbound + outbound connection rows (matches what “needs attention” in ALL). */
+  const allSegmentPendingCount = requestItems.filter(
+    (item) => item.status === "pending",
   ).length;
 
   const handleAddPress = useCallback(() => {
@@ -431,37 +546,114 @@ export default function NetworkScreen() {
     else if (nodeKind === "DRIVER") router.push("/(modals)/add-driver");
   }, [router, segment, nodeKind]);
 
+  function renderRequestRow(item: RequestItem) {
+    const displayName =
+      item.type === "RECEIVED" ? item.from_org_name : item.to_org_name;
+    const isReceivedPending =
+      item.type === "RECEIVED" && item.status === "pending";
+    return (
+      <View key={item.id} style={styles.nodeCard}>
+        <View style={styles.nodeCardLeft}>
+          <View style={[styles.nodeIconWrap, styles.nodeIconWrapMuted]}>
+            <Building2
+              size={18}
+              strokeWidth={1.5}
+              color={Theme.iconSecondary}
+            />
+          </View>
+          <View style={styles.nodeCardText}>
+            <Text style={styles.nodeName} numberOfLines={1}>
+              {displayName}
+            </Text>
+            <Text style={styles.nodeMeta}>
+              {item.kind.replace("_", " + ")} • {item.status.toUpperCase()}
+            </Text>
+          </View>
+        </View>
+        {isReceivedPending && item.row ? (
+          <View style={styles.nodeActions}>
+            <TouchableOpacity
+              style={styles.acceptBtn}
+              onPress={() => handleApprove(item.id)}
+              disabled={actingRequestId === item.id}
+              activeOpacity={0.8}
+            >
+              {actingRequestId === item.id ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <FontAwesome name="user-plus" size={14} color="#fff" />
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.rejectBtn}
+              onPress={() => handleReject(item.id)}
+              disabled={actingRequestId === item.id}
+              activeOpacity={0.8}
+            >
+              <FontAwesome name="close" size={14} color={ROSE_500} />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.pendingPill}>
+            <Text style={styles.pendingPillText}>
+              {formatRequestStatus(item.status)}
+            </Text>
+          </View>
+        )}
+      </View>
+    );
+  }
+
   if (subTab === "load") {
     return (
       <View
-        style={[styles.container, { paddingTop: insets.top + Layout.tabBarHeight + 20 }]}
+        style={[styles.container, { backgroundColor: Theme.darkBackground }]}
       >
         <View
           style={[
             styles.blackBlock,
             styles.blackBlockLoad,
-            { paddingTop: 4 },
+            { paddingTop: insets.top + 12 },
           ]}
         >
-          <View style={styles.mainTabRow}>
-            <TouchableOpacity
-              style={styles.mainTab}
-              onPress={() => setSubTab("manage")}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.mainTabText}>Manage Network</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.mainTab, styles.mainTabActive]}
-              onPress={() => setSubTab("load")}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.mainTabText, styles.mainTabTextActive]}>
-                Load
-              </Text>
-              <View style={styles.mainTabUnderline} />
-            </TouchableOpacity>
+          <View style={styles.darkHeaderRow}>
+            <View style={styles.darkHeaderLeft}>
+              <View style={styles.darkHeaderTitleWrap}>
+                <Text style={styles.darkHeaderTitle}>NETWORK HUB</Text>
+                <Text style={styles.darkHeaderSubtitle}>Managing Partners</Text>
+              </View>
+            </View>
+            <View style={styles.darkHeaderRight}>
+              <View style={styles.bellWrap}>
+                <FontAwesome
+                  name="bell"
+                  size={18}
+                  color={Theme.textOnDarkMuted}
+                />
+              </View>
+              <TouchableOpacity
+                style={styles.avatarBtn}
+                onPress={() => router.push("/(tabs)/profile")}
+                activeOpacity={0.8}
+              >
+                <FontAwesome
+                  name="user"
+                  size={16}
+                  color={Theme.textOnDarkMuted}
+                />
+              </TouchableOpacity>
+            </View>
           </View>
+          <SubTabs<SubTab>
+            variant="dark"
+            value={subTab}
+            onChange={setSubTab}
+            horizontalPadding={0}
+            items={[
+              { key: "manage", label: "Manage Network" },
+              { key: "load", label: "Load" },
+            ]}
+          />
         </View>
         <LoadCenterView
           contentTopPadding={0}
@@ -476,10 +668,10 @@ export default function NetworkScreen() {
     );
   }
 
-  const MANAGE_CONTENT_BG = "#f4f5f7";
+  const MANAGE_CONTENT_BG = Theme.surfaceGray;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + Layout.tabBarHeight + 20 }]}>
+    <View style={[styles.container, { backgroundColor: Theme.darkBackground }]}>
       {/* Sync toast — small animated pill, non-blocking */}
       {showSuccess && (
         <Animated.View
@@ -500,28 +692,49 @@ export default function NetworkScreen() {
         </Animated.View>
       )}
 
-      <View style={[styles.blackBlock, { paddingTop: 4 }]}>
+      {/* Single black block: title, Manage|Load tabs, segment tabs, search (finance-style) */}
+      <View style={[styles.blackBlock, { paddingTop: insets.top + 12 }]}>
+        <View style={styles.darkHeaderRow}>
+          <View style={styles.darkHeaderLeft}>
+            <View style={styles.darkHeaderTitleWrap}>
+              <Text style={styles.darkHeaderTitle}>NETWORK HUB</Text>
+              <Text style={styles.darkHeaderSubtitle}>Managing Partners</Text>
+            </View>
+          </View>
+          <View style={styles.darkHeaderRight}>
+            <View style={styles.bellWrap}>
+              <FontAwesome
+                name="bell"
+                size={18}
+                color={Theme.textOnDarkMuted}
+              />
+              {pendingRequestCount > 0 && <View style={styles.bellBadge} />}
+            </View>
+            <TouchableOpacity
+              style={styles.avatarBtn}
+              onPress={() => router.push("/(tabs)/profile")}
+              activeOpacity={0.8}
+            >
+              <FontAwesome
+                name="user"
+                size={16}
+                color={Theme.textOnDarkMuted}
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
 
         {/* Manage Network | Load — black tabs (body), Load-style */}
-        <View style={styles.mainTabRow}>
-          <TouchableOpacity
-            style={[styles.mainTab, styles.mainTabActive]}
-            onPress={() => setSubTab("manage")}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.mainTabText, styles.mainTabTextActive]}>
-              Manage Network
-            </Text>
-            <View style={styles.mainTabUnderline} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.mainTab}
-            onPress={() => setSubTab("load")}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.mainTabText}>Load</Text>
-          </TouchableOpacity>
-        </View>
+        <SubTabs<SubTab>
+          variant="dark"
+          value={subTab}
+          onChange={setSubTab}
+          horizontalPadding={0}
+          items={[
+            { key: "manage", label: "Manage Network" },
+            { key: "load", label: "Load" },
+          ]}
+        />
 
         {/* Segment tabs: All, Sent, Received + add contact — Load-style ScrollView */}
         <View style={styles.filterHeaderRow}>
@@ -531,43 +744,25 @@ export default function NetworkScreen() {
             style={styles.filterScroll}
             contentContainerStyle={styles.filterScrollContent}
           >
-            {(["ALL", "SENT", "RECEIVED"] as const).map((tab) => (
-              <TouchableOpacity
-                key={tab}
-                onPress={() => setSegment(tab)}
-                style={styles.filterTab}
-                activeOpacity={0.8}
-              >
-                <View style={styles.filterTabLabelRow}>
-                  <Text
-                    style={[
-                      styles.filterTabText,
-                      segment === tab && styles.filterTabTextActive,
-                    ]}
-                  >
-                    {tab}
-                  </Text>
-                  {tab === "RECEIVED" && pendingRequestCount > 0 && (
-                    <View
-                      style={[
-                        styles.filterTabBadge,
-                        segment === tab && styles.filterTabBadgeActive,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.filterTabBadgeText,
-                          segment === tab && styles.filterTabBadgeTextActive,
-                        ]}
-                      >
-                        {pendingRequestCount}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-                {segment === tab && <View style={styles.filterTabUnderline} />}
-              </TouchableOpacity>
-            ))}
+            <SubTabs<NetworkSegment>
+              variant="dark"
+              horizontalPadding={0}
+              value={segment}
+              onChange={setSegment}
+              items={[
+                {
+                  key: "ALL",
+                  label: "ALL",
+                  badgeCount: allSegmentPendingCount,
+                },
+                { key: "SENT", label: "SENT", badgeCount: pendingSentCount },
+                {
+                  key: "RECEIVED",
+                  label: "RECEIVED",
+                  badgeCount: pendingRequestCount,
+                },
+              ]}
+            />
           </ScrollView>
           {segment === "ALL" &&
           (nodeKind === "CLIENT" ||
@@ -674,86 +869,20 @@ export default function NetworkScreen() {
                 <Text style={styles.emptyStateText}>Empty Registry</Text>
               </View>
             ) : (
-              filteredRequests.map((item) => {
-                const displayName =
-                  item.type === "RECEIVED"
-                    ? item.from_org_name
-                    : item.to_org_name;
-                const isReceivedPending =
-                  item.type === "RECEIVED" && item.status === "pending";
-                return (
-                  <View key={item.id} style={styles.nodeCard}>
-                    <View style={styles.nodeCardLeft}>
-                      <View
-                        style={[styles.nodeIconWrap, styles.nodeIconWrapMuted]}
-                      >
-                        <Building2
-                          size={18}
-                          strokeWidth={1.5}
-                          color={Theme.iconSecondary}
-                        />
-                      </View>
-                      <View style={styles.nodeCardText}>
-                        <Text style={styles.nodeName} numberOfLines={1}>
-                          {displayName}
-                        </Text>
-                        <Text style={styles.nodeMeta}>
-                          {item.kind.replace("_", " + ")} •{" "}
-                          {item.status.toUpperCase()}
-                        </Text>
-                      </View>
-                    </View>
-                    {isReceivedPending && item.row ? (
-                      <View style={styles.nodeActions}>
-                        <TouchableOpacity
-                          style={styles.acceptBtn}
-                          onPress={() => handleApprove(item.id)}
-                          disabled={actingRequestId === item.id}
-                          activeOpacity={0.8}
-                        >
-                          {actingRequestId === item.id ? (
-                            <ActivityIndicator size="small" color="#fff" />
-                          ) : (
-                            <FontAwesome
-                              name="user-plus"
-                              size={14}
-                              color="#fff"
-                            />
-                          )}
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.rejectBtn}
-                          onPress={() => handleReject(item.id)}
-                          disabled={actingRequestId === item.id}
-                          activeOpacity={0.8}
-                        >
-                          <FontAwesome
-                            name="close"
-                            size={14}
-                            color={ROSE_500}
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <View style={styles.pendingPill}>
-                        <Text style={styles.pendingPillText}>
-                          {formatRequestStatus(item.status)}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                );
-              })
+              filteredRequests.map(renderRequestRow)
             )
-          ) : loading ? (
+          ) : loading || loadingRequests ? (
             <Text style={styles.loadingText}>Loading…</Text>
-          ) : filteredNodes.length === 0 ? (
+          ) : filteredRequestsForAll.length === 0 &&
+            filteredNodes.length === 0 ? (
             <View style={styles.emptyState}>
               <FontAwesome name="users" size={48} color={Theme.textMuted} />
               <Text style={styles.emptyStateText}>Empty Registry</Text>
             </View>
           ) : (
-            filteredNodes.map((node) => {
+            <>
+              {filteredRequestsForAll.map(renderRequestRow)}
+              {filteredNodes.map((node) => {
               const onPlatform = node.availableOnApp ?? node.isIntegrated;
               return (
                 <View key={node.id} style={styles.nodeCard}>
@@ -816,7 +945,7 @@ export default function NetworkScreen() {
                         {node.name}
                       </Text>
                       <Text style={styles.nodeMeta}>
-                        {node.type} • {onPlatform ? "ON APP" : "OFF-GRID"}
+                        {node.type} • {onPlatform ? "ON APP" : "OFF"}
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -866,7 +995,8 @@ export default function NetworkScreen() {
                   </View>
                 </View>
               );
-            })
+            })}
+            </>
           )}
         </ScrollView>
       </View>
@@ -877,16 +1007,11 @@ export default function NetworkScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    width: "100%",
-    minWidth: 0,
-    backgroundColor: Theme.screenBackground,
-  },
+  container: { flex: 1, backgroundColor: Theme.screenBackground },
   blackBlock: {
     backgroundColor: Theme.darkBackground,
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingBottom: 8,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: Theme.separatorDark,
   },
@@ -909,20 +1034,13 @@ const styles = StyleSheet.create({
   darkHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
   darkHeaderTitleWrap: {},
   darkHeaderTitle: {
-    fontSize: 12,
-    fontWeight: "600",
-    letterSpacing: 2,
+    ...Typography.headerTitle,
     color: Theme.textOnDark,
-    textTransform: "uppercase",
   },
   darkHeaderSubtitle: {
-    fontSize: 8,
-    fontWeight: "500",
+    ...Typography.headerSubtitle,
     color: Theme.textOnDarkMuted,
-    textTransform: "uppercase",
-    letterSpacing: 1.5,
     marginTop: 4,
-    fontStyle: "italic",
   },
   darkHeaderRight: { flexDirection: "row", alignItems: "center", gap: 16 },
   bellWrap: { position: "relative" },
@@ -954,16 +1072,16 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   filterScrollContent: {
-    paddingLeft: 4,
-    paddingRight: 24,
-    gap: 16,
+    paddingLeft: 0,
+    paddingRight: 0,
+    gap: 0,
     flexGrow: 0,
   },
   filterHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: 4,
+    paddingTop: 8,
   },
   filterTab: {
     position: "relative" as const,
@@ -996,17 +1114,6 @@ const styles = StyleSheet.create({
     color: Theme.textOnDarkMuted,
     textAlign: "center",
   },
-  filterTabBadgeTextActive: {
-    color: Theme.textOnDark,
-  },
-  filterTabUnderline: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 2,
-    backgroundColor: Theme.teslaRed,
-  },
   filterAddBtn: {
     width: 26,
     height: 26,
@@ -1017,38 +1124,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginLeft: 4,
   },
-  mainTabRow: {
-    flexDirection: "row",
-    gap: 16,
-    marginTop: 2,
-    marginBottom: 6,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.separatorDark,
-  },
-  mainTab: { position: "relative" as const, paddingVertical: 8 },
-  mainTabActive: {},
-  mainTabText: {
-    fontSize: 8,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 2,
-    color: Theme.textOnDarkMuted,
-  },
-  mainTabTextActive: { color: Theme.textOnDark },
-  mainTabUnderline: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 1.5,
-    backgroundColor: Theme.teslaRed,
-  },
   searchRowDark: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingTop: 6,
+    paddingTop: 10,
   },
   searchWrapDark: {
     flex: 1,
@@ -1072,11 +1152,6 @@ const styles = StyleSheet.create({
     lineHeight: 11,
     color: Theme.textOnDark,
     paddingVertical: 0,
-    ...Platform.select({
-      web: {
-        outlineStyle: "none",
-      } as any,
-    }),
   },
   typeFilterWrapDark: {
     flexDirection: "row",
@@ -1138,11 +1213,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Theme.textPrimaryDark,
     paddingVertical: 0,
-    ...Platform.select({
-      web: {
-        outlineStyle: "none",
-      } as any,
-    }),
   },
   addBtn: {
     width: 44,

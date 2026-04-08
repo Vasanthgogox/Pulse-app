@@ -20,6 +20,10 @@
  * - Re-invite after existing connection: duplicate insert prevented as above; existing client/supplier rows are updated by trigger when linked_organization_id already exists.
  */
 import { supabase } from '@/lib/supabase';
+import {
+  normalizePhoneForInviteeLookup,
+  uniqueNormalizedPhonesForLookup,
+} from '@/lib/phoneLookup';
 
 export interface ConnectionInviteeByPhone {
   organization_id: string;
@@ -46,19 +50,17 @@ export interface ConnectionRequestRow {
  * Phone is stored on the person (auth.users.raw_user_meta_data->>'phone' or ->'phone_numbers' array), not on organizations.
  * RPC get_invitee_by_phone finds the profile by phone, then returns that user's org id and display name. O(1).
  */
-/** Normalize phone for lookup: digits only, last 10 for Indian mobile (matches get_invitee_by_phone in DB). */
-function normalizePhoneForLookup(phone: string): string {
-  const digits = (phone || '').replace(/\D/g, '');
-  if (digits.length >= 12 && digits.startsWith('91')) return digits.slice(-10);
-  if (digits.length >= 10) return digits.slice(-10);
-  return digits;
+export interface ConnectionInviteeByPhoneRow {
+  phone: string;
+  organization_id: string;
+  full_name: string | null;
 }
 
 export async function getConnectionInviteeByPhone(phone: string): Promise<{
   error: Error | null;
   invitee: ConnectionInviteeByPhone | null;
 }> {
-  const normalized = normalizePhoneForLookup(phone);
+  const normalized = normalizePhoneForInviteeLookup(phone);
   if (!normalized) return { error: null, invitee: null };
   const { data, error } = await supabase().rpc('get_invitee_by_phone', {
     p_phone: normalized,
@@ -75,6 +77,50 @@ export async function getConnectionInviteeByPhone(phone: string): Promise<{
       phone: row.phone ?? normalized,
     },
   };
+}
+
+/**
+ * Batch lookup: resolve invitee orgs for multiple phone numbers in one RPC call.
+ * Returns a map keyed by normalized phone (digits-only, last-10 for India).
+ *
+ * Backend dependency: requires RPC `get_invitees_by_phones(p_phones text[])`.
+ * If the RPC is not deployed yet, this function returns an empty map (no hard failure),
+ * so the UI can gracefully show "Offline" until backend rollout completes.
+ */
+export async function getConnectionInviteesByPhones(phones: string[]): Promise<{
+  error: Error | null;
+  inviteesByPhone: Map<string, ConnectionInviteeByPhone>;
+}> {
+  const normalizedPhones = uniqueNormalizedPhonesForLookup(phones);
+  const inviteesByPhone = new Map<string, ConnectionInviteeByPhone>();
+  if (normalizedPhones.length === 0) return { error: null, inviteesByPhone };
+
+  const { data, error } = await supabase().rpc('get_invitees_by_phones', {
+    p_phones: normalizedPhones,
+  });
+
+  if (error) {
+    const msg = error.message ?? '';
+    if (/function.*get_invitees_by_phones.*does not exist/i.test(msg)) {
+      return { error: null, inviteesByPhone };
+    }
+    return { error: new Error(msg), inviteesByPhone };
+  }
+
+  const rows = (data ?? []) as ConnectionInviteeByPhoneRow[];
+  for (const r of rows) {
+    const phoneKey = normalizePhoneForInviteeLookup(r?.phone ?? '');
+    if (!phoneKey) continue;
+    if (!r?.organization_id) continue;
+    // If backend returns multiple rows for same phone, keep the first (deterministic).
+    if (inviteesByPhone.has(phoneKey)) continue;
+    inviteesByPhone.set(phoneKey, {
+      organization_id: r.organization_id,
+      full_name: r.full_name ?? '',
+      phone: r.phone ?? phoneKey,
+    });
+  }
+  return { error: null, inviteesByPhone };
 }
 
 /**
@@ -140,6 +186,40 @@ export async function createConnectionRequest(
     error: null,
     requestId: data?.id ?? null,
     alreadyInvited: false,
+  };
+}
+
+export type ConnectionRequestStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "cancelled"
+  | "expired"
+  | string;
+
+/**
+ * Get the latest connection request status for a specific (from_org -> to_org).
+ * Used to update UI immediately after sending an invitation (driver-style).
+ */
+export async function getLatestConnectionRequestStatus(
+  fromOrgId: string,
+  toOrgId: string,
+): Promise<{ error: Error | null; status: ConnectionRequestStatus | null; requestId: string | null }> {
+  const { data, error } = await supabase()
+    .from("connection_requests")
+    .select("id, status, created_at")
+    .eq("from_organization_id", fromOrgId)
+    .eq("to_organization_id", toOrgId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), status: null, requestId: null };
+  if (!data) return { error: null, status: null, requestId: null };
+  const row = data as { id?: string | null; status?: string | null };
+  return {
+    error: null,
+    status: (row.status ?? null) as ConnectionRequestStatus | null,
+    requestId: row.id ?? null,
   };
 }
 

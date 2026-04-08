@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import {
   Alert,
@@ -8,23 +8,98 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
+  Pressable,
   View,
-  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Constants from 'expo-constants';
 import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
+import Typography from '@/constants/Typography';
 import { useAuth } from '@/contexts/AuthContext';
 import { getCapabilitiesFromProfile } from '@/lib/capabilities';
 import { EditProfileModal } from '@/features/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getSignedAvatarUrl } from '@/lib/avatarUpload';
+import { DEFAULT_USER_2D_AVATAR_SEED, getUser2DAvatarUriForSeed } from '@/constants/UserAvatars';
+
+type ProfileItemRowProps = {
+  icon: React.ComponentProps<typeof FontAwesome>['name'];
+  label: string;
+  value: string;
+  onPress?: () => void;
+  showChevron?: boolean;
+};
+
+function ProfileItemRow({ icon, label, value, onPress, showChevron }: ProfileItemRowProps) {
+  const content = (
+    <>
+      <View style={styles.profileItemLeft}>
+        <View style={styles.profileItemIconBox}>
+          <FontAwesome name={icon} size={16} color={Theme.textMuted} />
+        </View>
+        <View style={styles.profileItemTextWrap}>
+          <Text style={styles.profileItemLabel} numberOfLines={1}>
+            {label}
+          </Text>
+          <Text style={styles.profileItemValue} numberOfLines={1}>
+            {value}
+          </Text>
+        </View>
+      </View>
+      {showChevron ? (
+        <FontAwesome name="chevron-right" size={14} color={Theme.textSection} />
+      ) : (
+        <View style={styles.profileItemRightSpacer} />
+      )}
+    </>
+  );
+
+  if (!onPress) {
+    return <View style={styles.profileItemRow}>{content}</View>;
+  }
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.profileItemRow, pressed && styles.profileItemRowPressed]}
+      accessibilityRole="button"
+    >
+      {({ pressed }) => (
+        <View style={styles.profileItemRowInner}>
+          <View style={styles.profileItemLeft}>
+            <View style={[styles.profileItemIconBox, pressed && styles.profileItemIconBoxPressed]}>
+              <FontAwesome name={icon} size={16} color={pressed ? Theme.textOnDark : Theme.textMuted} />
+            </View>
+            <View style={styles.profileItemTextWrap}>
+              <Text style={styles.profileItemLabel} numberOfLines={1}>
+                {label}
+              </Text>
+              <Text style={styles.profileItemValue} numberOfLines={1}>
+                {value}
+              </Text>
+            </View>
+          </View>
+          {showChevron ? (
+            <FontAwesome name="chevron-right" size={14} color={Theme.textSection} />
+          ) : (
+            <View style={styles.profileItemRightSpacer} />
+          )}
+        </View>
+      )}
+    </Pressable>
+  );
+}
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { signOut, user, profile } = useAuth();
+  const { signOut, user, profile, refreshSession } = useAuth();
+
+  const USER_AVATAR_SEED_KEY = '@q-mobile/user-avatar-seed';
+  const [avatarSeed, setAvatarSeed] = useState(DEFAULT_USER_2D_AVATAR_SEED);
+  const [avatarUri, setAvatarUri] = useState<string>(() => getUser2DAvatarUriForSeed(DEFAULT_USER_2D_AVATAR_SEED));
 
   const capabilities = getCapabilitiesFromProfile(profile);
   const hasDispatcherOrFleetAccess =
@@ -37,22 +112,18 @@ export default function ProfileScreen() {
     router.back();
   };
 
-  const handleSignOut = async () => {
-    if (Platform.OS === 'web') {
-      if (typeof window !== 'undefined' && window.confirm) {
-        if (!window.confirm('Are you sure you want to sign out?')) return;
-      }
-    } else {
-      const confirmed = await new Promise((resolve) => {
-        Alert.alert('Sign out', 'Are you sure you want to sign out?', [
-          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-          { text: 'Sign out', style: 'destructive', onPress: () => resolve(true) },
-        ]);
-      });
-      if (!confirmed) return;
-    }
-    await signOut();
-    router.replace('/sign-in');
+  const handleSignOut = () => {
+    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign out',
+        style: 'destructive',
+        onPress: async () => {
+          await signOut();
+          router.replace('/sign-in');
+        },
+      },
+    ]);
   };
 
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
@@ -72,6 +143,10 @@ export default function ProfileScreen() {
   const email = user?.email ?? '—';
   const phone = profile?.phone ?? 'Not added';
   const companyName = profile?.company_name ?? 'Not added';
+  const accessLabel = useMemo(
+    () => (hasDispatcherOrFleetAccess ? 'Operational Access Enabled' : 'Limited Access'),
+    [hasDispatcherOrFleetAccess]
+  );
 
   const handleDialPhone = async () => {
     if (phone === 'Not added') return;
@@ -97,18 +172,37 @@ export default function ProfileScreen() {
     Constants.expoConfig?.android?.versionCode ??
     '—';
 
+  useEffect(() => {
+    AsyncStorage.getItem(USER_AVATAR_SEED_KEY)
+      .then((seed) => {
+        if (seed?.trim()) setAvatarSeed(seed.trim());
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const fallback = getUser2DAvatarUriForSeed(avatarSeed);
+      const raw = profile?.avatar_url?.trim();
+      if (!raw) {
+        if (mounted) setAvatarUri(fallback);
+        return;
+      }
+      if (raw.startsWith('http://') || raw.startsWith('https://')) {
+        if (mounted) setAvatarUri(raw);
+        return;
+      }
+      const signed = await getSignedAvatarUrl(raw);
+      if (mounted) setAvatarUri(signed ?? fallback);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [profile?.avatar_url, avatarSeed]);
+
   return (
     <View style={styles.outer}>
-      <View style={[styles.header, { paddingTop: insets.top + Layout.driverHeaderTopOffset }]}>
-        <TouchableOpacity onPress={handleClose} style={styles.headerBtn} activeOpacity={0.7}>
-          <FontAwesome name="chevron-left" size={20} color={Theme.textOnDark} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Profile</Text>
-        <TouchableOpacity onPress={handleEditProfile} style={styles.headerBtn} activeOpacity={0.7}>
-          <FontAwesome name="pencil" size={18} color={Theme.textOnDark} />
-        </TouchableOpacity>
-      </View>
-
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[
@@ -127,198 +221,107 @@ export default function ProfileScreen() {
           />
         }
       >
-        <View style={styles.profileHero}>
-          <TouchableOpacity style={styles.avatarTouch} onPress={handleEditProfile} activeOpacity={0.8}>
-            <Image
-              source={{
-                uri: `https://api.dicebear.com/7.x/avataaars/png?seed=${encodeURIComponent(displayName)}`,
-              }}
-              style={styles.avatar}
-            />
-            <View style={styles.avatarEditBadge}>
-              <FontAwesome name="camera" size={12} color={Theme.textPrimaryDark} />
-            </View>
-          </TouchableOpacity>
-          <Text numberOfLines={1} style={styles.nameText}>
-            {displayName}
-          </Text>
-          <Text style={styles.aboutText} numberOfLines={2}>
-            {statusText}
-          </Text>
-        </View>
-
-        <View style={styles.menuCard}>
-          <TouchableOpacity style={styles.menuRow} onPress={handleEditProfile} activeOpacity={0.7}>
-            <View style={styles.menuLeft}>
-              <View style={styles.menuIconWrap}>
-                <FontAwesome name="user" size={16} color={Theme.textPrimaryDark} />
-              </View>
-              <View style={styles.menuTextWrap}>
-                <Text style={styles.menuValue}>{displayName}</Text>
-                <Text style={styles.menuLabel}>Name</Text>
-              </View>
-            </View>
-            <FontAwesome name="chevron-right" size={14} color={Theme.textMuted} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.menuRow, styles.menuDivider]}
-            onPress={handleDialPhone}
-            activeOpacity={0.7}
-          >
-            <View style={styles.menuLeft}>
-              <View style={styles.menuIconWrap}>
-                <FontAwesome name="phone" size={16} color={Theme.textPrimaryDark} />
-              </View>
-              <View style={styles.menuTextWrap}>
-                <Text style={styles.menuValue}>{phone}</Text>
-                <Text style={styles.menuLabel}>Phone</Text>
-              </View>
-            </View>
-            <FontAwesome name="chevron-right" size={14} color={Theme.textMuted} />
-          </TouchableOpacity>
-
-          <View style={[styles.menuRow, styles.menuDivider]}>
-            <View style={styles.menuLeft}>
-              <View style={styles.menuIconWrap}>
-                <FontAwesome name="envelope" size={16} color={Theme.textPrimaryDark} />
-              </View>
-              <View style={styles.menuTextWrap}>
-                <Text style={styles.menuValue}>{email}</Text>
-                <Text style={styles.menuLabel}>Email</Text>
-              </View>
-            </View>
+        <View style={[styles.cinematicHeader, { paddingTop: insets.top + Layout.headerPaddingBelowInset }]}>
+          <View style={styles.cinematicHeaderBg}>
+            <View style={styles.cinematicHeaderGlow} />
+            <View style={styles.cinematicHeaderMesh} />
           </View>
 
-          <View style={[styles.menuRow, styles.menuDivider]}>
-            <View style={styles.menuLeft}>
-              <View style={styles.menuIconWrap}>
-                <FontAwesome name="building" size={16} color={Theme.textPrimaryDark} />
-              </View>
-              <View style={styles.menuTextWrap}>
-                <Text style={styles.menuValue}>{companyName}</Text>
-                <Text style={styles.menuLabel}>Company</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.menuCard}>
-          <View style={styles.menuRow}>
-            <View style={styles.menuLeft}>
-              <View style={styles.menuIconWrap}>
-                <FontAwesome name="shield" size={16} color={Theme.textPrimaryDark} />
-              </View>
-              <View style={styles.menuTextWrap}>
-                <Text style={styles.menuValue}>{roleLabel}</Text>
-                <Text style={styles.menuLabel}>Role</Text>
-              </View>
-            </View>
-          </View>
-          <View style={[styles.menuRow, styles.menuDivider]}>
-            <View style={styles.menuLeft}>
-              <View style={styles.menuIconWrap}>
-                <FontAwesome name="key" size={16} color={Theme.textPrimaryDark} />
-              </View>
-              <View style={styles.menuTextWrap}>
-                <Text style={styles.menuValue}>
-                  {hasDispatcherOrFleetAccess ? 'Operational Access Enabled' : 'Limited Access'}
-                </Text>
-                <Text style={styles.menuLabel}>Access</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {hasDispatcherOrFleetAccess ? (
-          <View style={styles.menuCard}>
-            <TouchableOpacity
-              style={styles.menuRow}
-              onPress={() => router.push('/pod-reconciliation')}
-              activeOpacity={0.7}
+          <View style={styles.cinematicHeaderTopRow}>
+            <Pressable
+              onPress={handleClose}
+              style={({ pressed }) => [styles.headerChip, pressed && styles.headerChipPressed]}
+              accessibilityRole="button"
+              hitSlop={Layout.touchTargetHitSlop}
             >
-              <View style={styles.menuLeft}>
-                <View style={styles.menuIconWrap}>
-                  <FontAwesome name="archive" size={16} color={Theme.textPrimaryDark} />
-                </View>
-                <View style={styles.menuTextWrap}>
-                  <Text style={styles.menuValue}>POD Management</Text>
-                  <Text style={styles.menuLabel}>Manage proof of delivery and streamline AR cycle</Text>
-                </View>
-              </View>
-              <FontAwesome name="chevron-right" size={14} color={Theme.textMuted} />
-            </TouchableOpacity>
+              <FontAwesome name="chevron-left" size={18} color={Theme.textOnDark} />
+            </Pressable>
 
-            <TouchableOpacity
-              style={[styles.menuRow, styles.menuDivider]}
-              onPress={() => router.push('/invoicing-execute')}
-              activeOpacity={0.7}
+            <Text style={styles.cinematicHeaderTitle}>Profile</Text>
+
+            <Pressable
+              onPress={handleEditProfile}
+              style={({ pressed }) => [styles.headerChip, pressed && styles.headerChipPressed]}
+              accessibilityRole="button"
+              hitSlop={Layout.touchTargetHitSlop}
             >
-              <View style={styles.menuLeft}>
-                <View style={styles.menuIconWrap}>
-                  <FontAwesome name="file-text" size={16} color={Theme.textPrimaryDark} />
-                </View>
-                <View style={styles.menuTextWrap}>
-                  <Text style={styles.menuValue}>Execute invoices</Text>
-                  <Text style={styles.menuLabel}>Review and generate invoices for confirmed trips</Text>
-                </View>
-              </View>
-              <FontAwesome name="chevron-right" size={14} color={Theme.textMuted} />
-            </TouchableOpacity>
+              <FontAwesome name="pencil" size={16} color={Theme.textOnDark} />
+            </Pressable>
           </View>
-        ) : null}
 
-        <View style={styles.menuCard}>
-          <TouchableOpacity
-            style={styles.menuRow}
-            onPress={() => Alert.alert('Account settings', 'Settings module is coming soon.')}
-            activeOpacity={0.7}
-          >
-            <View style={styles.menuLeft}>
-              <View style={styles.menuIconWrap}>
-                <FontAwesome name="cog" size={16} color={Theme.textPrimaryDark} />
+          <View style={styles.profileHero}>
+            <View style={styles.avatarGlow} />
+            <Pressable
+              style={({ pressed }) => [styles.avatarTouch, pressed && styles.avatarTouchPressed]}
+              onPress={handleEditProfile}
+              accessibilityRole="button"
+            >
+              <View style={styles.avatarFrame}>
+                <Image
+                  source={{
+                    uri: avatarUri,
+                  }}
+                  style={styles.avatar}
+                />
               </View>
-              <View style={styles.menuTextWrap}>
-                <Text style={styles.menuValue}>Settings</Text>
-                <Text style={styles.menuLabel}>Privacy, notifications and app controls</Text>
+              <View style={styles.avatarEditBadge}>
+                <FontAwesome name="camera" size={14} color={Theme.textPrimaryDark} />
               </View>
-            </View>
-            <FontAwesome name="chevron-right" size={14} color={Theme.textMuted} />
-          </TouchableOpacity>
-          <View style={[styles.menuRow, styles.menuDivider]}>
-            <View style={styles.menuLeft}>
-              <View style={styles.menuIconWrap}>
-                <FontAwesome name="info-circle" size={16} color={Theme.textPrimaryDark} />
-              </View>
-              <View style={styles.menuTextWrap}>
-                <Text style={styles.menuValue}>
-                  Version {appVersion} ({buildNumber})
-                </Text>
-                <Text style={styles.menuLabel}>App info</Text>
-              </View>
-            </View>
-          </View>
-          <View style={[styles.menuRow, styles.menuDivider]}>
-            <View style={styles.menuLeft}>
-              <View style={styles.menuIconWrap}>
-                <FontAwesome name="id-badge" size={16} color={Theme.textPrimaryDark} />
-              </View>
-              <View style={styles.menuTextWrap}>
-                <Text style={styles.menuValue}>{userCode}</Text>
-                <Text style={styles.menuLabel}>User ID</Text>
-              </View>
-            </View>
+            </Pressable>
+
+            <Text numberOfLines={1} style={styles.nameText}>
+              {displayName}
+            </Text>
+            <Text style={styles.aboutText} numberOfLines={2}>
+              {statusText}
+            </Text>
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.signOutBtn}
-          onPress={handleSignOut}
-          activeOpacity={0.85}
-        >
-          <FontAwesome name="sign-out" size={16} color={Theme.textOnDark} />
-          <Text style={styles.signOutText}>Sign out</Text>
-        </TouchableOpacity>
+        <View style={styles.contentWrap}>
+          <View style={styles.premiumCard}>
+            <View style={styles.premiumCardInner}>
+              <ProfileItemRow icon="user" label="Name" value={displayName} onPress={handleEditProfile} showChevron />
+              <View style={styles.premiumDivider} />
+              <ProfileItemRow icon="phone" label="Phone" value={phone} onPress={handleDialPhone} showChevron />
+              <View style={styles.premiumDivider} />
+              <ProfileItemRow icon="envelope" label="Email" value={email} />
+              <View style={styles.premiumDivider} />
+              <ProfileItemRow icon="building" label="Company" value={companyName} />
+            </View>
+          </View>
+
+          <View style={styles.premiumCard}>
+            <View style={styles.premiumCardInner}>
+              <ProfileItemRow icon="shield" label="Role" value={roleLabel} />
+              <View style={styles.premiumDivider} />
+              <ProfileItemRow icon="key" label="Access" value={accessLabel} />
+            </View>
+          </View>
+
+          <View style={styles.premiumCard}>
+            <View style={styles.premiumCardInner}>
+              <ProfileItemRow
+                icon="cog"
+                label="Settings"
+                value="Privacy, notifications and controls"
+                onPress={() => Alert.alert('Account settings', 'Settings module is coming soon.')}
+                showChevron
+              />
+              <View style={styles.premiumDivider} />
+              <ProfileItemRow icon="info-circle" label="Version" value={`Version ${appVersion} (${buildNumber})`} />
+            </View>
+          </View>
+
+          <Pressable
+            onPress={handleSignOut}
+            style={({ pressed }) => [styles.signOutBtn, pressed && styles.signOutBtnPressed]}
+            accessibilityRole="button"
+          >
+            <FontAwesome name="sign-out" size={16} color={Theme.textOnDark} />
+            <Text style={styles.signOutText}>Sign out</Text>
+          </Pressable>
+        </View>
       </ScrollView>
 
       <EditProfileModal
@@ -328,6 +331,14 @@ export default function ProfileScreen() {
         initialPhone={profile?.phone ?? ''}
         initialCompanyName={profile?.company_name ?? ''}
         email={user?.email ?? ''}
+        initialStatusText={profile?.status_text ?? ''}
+        onPhotoUpdated={refreshSession}
+        initialAvatarSeed={avatarSeed}
+        avatarPresetStyle="user-2d"
+        onPresetSelected={(seed) => {
+          setAvatarSeed(seed);
+          AsyncStorage.setItem(USER_AVATAR_SEED_KEY, seed).catch(() => {});
+        }}
       />
     </View>
   );
@@ -335,125 +346,229 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   outer: { flex: 1, backgroundColor: Theme.screenBackground },
-  header: {
-    backgroundColor: Theme.darkBackground,
+  scroll: { flex: 1 },
+  scrollContent: {
+    paddingTop: 0,
+    gap: 0,
+  },
+
+  cinematicHeader: {
+    backgroundColor: Theme.cinematicHeaderBg,
     paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 18,
+    overflow: 'hidden',
+  },
+  cinematicHeaderBg: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  cinematicHeaderGlow: {
+    position: 'absolute',
+    top: -120,
+    right: -120,
+    width: 280,
+    height: 280,
+    borderRadius: 280,
+    backgroundColor: Theme.cinematicGlowRed,
+    opacity: 0.6,
+  },
+  cinematicHeaderMesh: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 220,
+    backgroundColor: 'rgba(255,255,255,0.02)',
+  },
+  cinematicHeaderTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: Layout.spacingMedium,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderOnDark,
+    paddingBottom: 10,
+    marginBottom: 8,
   },
-  headerTitle: {
+  cinematicHeaderTitle: {
+    ...Typography.headerTitle,
     color: Theme.textOnDark,
-    fontSize: 18,
-    fontWeight: '700',
+    letterSpacing: 3,
   },
-  headerBtn: {
+  headerChip: {
     minWidth: Layout.minTouchTargetSize,
     minHeight: Layout.minTouchTargetSize,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: Theme.cinematicHeaderChipBg,
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
   },
-  scroll: { flex: 1 },
-  scrollContent: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: Layout.spacingLarge,
-    gap: Layout.spacingExtraLarge,
+  headerChipPressed: {
+    backgroundColor: Theme.cinematicHeaderChipBgPressed,
   },
+
   profileHero: {
     alignItems: 'center',
-    paddingTop: 8,
+    paddingTop: 6,
   },
-  avatarTouch: {
-    marginBottom: Layout.spacingMedium,
+  avatarGlow: {
+    position: 'absolute',
+    top: 14,
+    width: 124,
+    height: 124,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  avatarTouch: { marginBottom: Layout.spacingMedium },
+  avatarTouchPressed: { transform: [{ scale: 0.98 }] },
+  avatarFrame: {
+    width: 112,
+    height: 112,
+    borderRadius: 24,
+    overflow: 'hidden',
+    borderWidth: 4,
+    borderColor: Theme.darkBackground,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    elevation: 12,
   },
   avatar: {
-    width: 108,
-    height: 108,
-    borderRadius: 54,
+    width: '100%',
+    height: '100%',
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   avatarEditBadge: {
     position: 'absolute',
-    right: 2,
-    bottom: 2,
-    width: 28,
-    height: 28,
+    right: -6,
+    bottom: -6,
+    width: 40,
+    height: 40,
     borderRadius: 14,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: Theme.screenBackground,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.darkBackground,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 10,
   },
   nameText: {
     fontSize: 24,
     fontWeight: '700',
-    color: Theme.textPrimaryDark,
+    color: Theme.textOnDark,
     marginBottom: 4,
   },
   aboutText: {
-    fontSize: 14,
-    color: Theme.textSecondary,
+    fontSize: 10,
+    color: Theme.textOnDarkMuted,
     textAlign: 'center',
     paddingHorizontal: 16,
-    lineHeight: 20,
+    lineHeight: 14,
+    letterSpacing: 0.3,
   },
-  menuCard: {
-    backgroundColor: Theme.surface,
+
+  contentWrap: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 18,
+    gap: 16,
+  },
+  premiumCard: {
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 12,
-    overflow: 'hidden',
+    borderColor: Theme.cinematicCardBorder,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    elevation: 2,
   },
-  menuRow: {
+  premiumCardInner: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  premiumDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Theme.cinematicDivider,
+    marginLeft: 52,
+  },
+
+  profileItemRow: {
+    minHeight: 44,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    justifyContent: 'center',
+  },
+  profileItemRowPressed: {
+    opacity: 0.9,
+  },
+  profileItemRowInner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    minHeight: Layout.minTouchTargetSize,
   },
-  menuDivider: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
-  },
-  menuLeft: {
+  profileItemLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
     minWidth: 0,
+    gap: 12,
   },
-  menuIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: Theme.surfaceGray,
+  profileItemIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: Theme.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
   },
-  menuTextWrap: { flex: 1, minWidth: 0 },
-  menuValue: { fontSize: 14, color: Theme.textPrimaryDark, fontWeight: '600' },
-  menuLabel: { fontSize: 12, color: Theme.textSecondary, marginTop: 2 },
+  profileItemIconBoxPressed: {
+    backgroundColor: Theme.darkBackground,
+  },
+  profileItemTextWrap: { flex: 1, minWidth: 0 },
+  profileItemLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 2.2,
+    color: Theme.textSecondary,
+    marginBottom: 2,
+  },
+  profileItemValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Theme.textPrimaryDark,
+  },
+  profileItemRightSpacer: { width: 14, height: 14 },
+
   signOutBtn: {
     minHeight: Layout.minTouchTargetSize,
-    backgroundColor: Theme.darkBackground,
-    borderRadius: 12,
+    backgroundColor: Theme.cinematicHeaderBg,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 8,
     borderWidth: 1,
-    borderColor: Theme.darkBackground,
+    borderColor: 'rgba(255,255,255,0.08)',
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.18,
+    shadowRadius: 22,
+    elevation: 8,
+  },
+  signOutBtnPressed: {
+    backgroundColor: Theme.teslaRed,
+    transform: [{ scale: 0.985 }],
   },
   signOutText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     color: Theme.textOnDark,
+    textTransform: 'uppercase',
+    letterSpacing: 2.4,
   },
 });

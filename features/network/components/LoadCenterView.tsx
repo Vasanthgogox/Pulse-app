@@ -3,6 +3,7 @@
  * Header "Load Center" / "Find or Hire Work", three sub-tabs, cards, modals.
  */
 import { SemanticAddIcon } from "@/components/SemanticAddIcon";
+import { SubTabs } from "@/components/SubTabs";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -18,11 +19,13 @@ import {
 } from "@/features/indents";
 import { acceptAwardedQuote } from "@/features/indents/services/accept-awarded-quote.service";
 import {
+  assignAggregateTripDriverByPhone,
   generateTripOtp,
   regenerateTripOtp,
   setInitialTripForDetail,
 } from "@/features/trips";
 import { formatINR } from "@/lib/format";
+import { validatePhone } from "@/lib/phoneValidation";
 import {
   useDirectQuoteCountsQuery,
   useDriversQuery,
@@ -32,6 +35,7 @@ import {
   useInvalidateTrips,
   useMarketIndentsQuery,
   useMyDirectQuotesQuery,
+  useSuppliersQuery,
   useTripsQuery,
   useVehiclesQuery,
 } from "@/lib/queries";
@@ -55,12 +59,14 @@ import {
   ScrollView,
   Share,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { upsertTripSubcontract } from "@/features/finance/services/tripSubcontracts.service";
 
 type LoadSubTab = "GIVE_LOAD" | "GET_LOAD" | "AWARDED";
 
@@ -96,122 +102,6 @@ interface LoadCenterViewProps {
 }
 
 const TESLA_BLACK = "#171A20";
-
-/** EaseOutExpo: smooth deceleration at the end. */
-function easeOutExpo(progress: number): number {
-  return progress >= 1 ? 1 : 1 - Math.pow(2, -10 * progress);
-}
-
-/**
- * AnimatedCounter — animates the displayed number from previous to target value.
- * Uses requestAnimationFrame with easeOutExpo for smooth number rolling.
- */
-function AnimatedCounter({
-  value,
-  duration = 600,
-  style,
-  activeStyle,
-  isActive,
-}: {
-  value: number;
-  duration?: number;
-  style: object;
-  activeStyle: object;
-  isActive: boolean;
-}) {
-  const [displayValue, setDisplayValue] = useState(value);
-  const startValueRef = useRef(value);
-  const startTimeRef = useRef<number | null>(null);
-  const rafRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    startValueRef.current = displayValue;
-    startTimeRef.current = null;
-
-    const updateCount = (timestamp: number) => {
-      if (startTimeRef.current == null) startTimeRef.current = timestamp;
-      const elapsed = timestamp - startTimeRef.current;
-      const progress = Math.min(elapsed / duration, 1);
-      const easeProgress = easeOutExpo(progress);
-      const current = Math.round(
-        startValueRef.current + (value - startValueRef.current) * easeProgress,
-      );
-      setDisplayValue(current);
-
-      if (progress < 1) {
-        rafRef.current = requestAnimationFrame(updateCount);
-      }
-    };
-
-    rafRef.current = requestAnimationFrame(updateCount);
-    return () => {
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
-    };
-  }, [value, duration]);
-
-  return <Text style={[style, isActive && activeStyle]}>{displayValue}</Text>;
-}
-
-/**
- * Tab count badge with animated number roll and scale bump when count increases.
- */
-function AnimatedCountBadge({
-  count,
-  isActive,
-  badgeStyle,
-  badgeActiveStyle,
-  textStyle,
-  textActiveStyle,
-}: {
-  count: number;
-  isActive: boolean;
-  badgeStyle: object;
-  badgeActiveStyle: object;
-  textStyle: object;
-  textActiveStyle: object;
-}) {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const prevCount = useRef(count);
-
-  useEffect(() => {
-    if (count > prevCount.current) {
-      prevCount.current = count;
-      Animated.sequence([
-        Animated.timing(scaleAnim, {
-          toValue: 1.2,
-          duration: 120,
-          useNativeDriver: true,
-        }),
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          useNativeDriver: true,
-          speed: 12,
-          bounciness: 4,
-        }),
-      ]).start();
-    } else {
-      prevCount.current = count;
-    }
-  }, [count, scaleAnim]);
-
-  return (
-    <Animated.View
-      style={[
-        badgeStyle,
-        isActive && badgeActiveStyle,
-        { transform: [{ scale: scaleAnim }] },
-      ]}
-    >
-      <AnimatedCounter
-        value={count}
-        duration={500}
-        style={textStyle}
-        activeStyle={textActiveStyle}
-        isActive={isActive}
-      />
-    </Animated.View>
-  );
-}
 
 export function LoadCenterView({
   contentTopPadding = 0,
@@ -257,6 +147,11 @@ export function LoadCenterView({
   const [assignVehicleRegistration, setAssignVehicleRegistration] =
     useState("");
   const [useAdHocDriver, setUseAdHocDriver] = useState(false);
+  const [aggregateDriverPhone, setAggregateDriverPhone] = useState("");
+  const [subcontractSupplierId, setSubcontractSupplierId] = useState<string | null>(null);
+  const [subcontractRate, setSubcontractRate] = useState<string>("");
+  const [subcontractPickerOpen, setSubcontractPickerOpen] = useState(false);
+  const [showIntegratedPartners, setShowIntegratedPartners] = useState(false);
   const [deployOtpCode, setDeployOtpCode] = useState<string | null>(null);
   const [deployOtpExpiresAt, setDeployOtpExpiresAt] = useState<string | null>(
     null,
@@ -265,7 +160,7 @@ export function LoadCenterView({
     null,
   );
   const [handshakeStep, setHandshakeStep] = useState<
-    "flow_choice" | "roster" | "ad_hoc_driver" | "ad_hoc_vehicle"
+    "flow_choice" | "roster" | "ad_hoc_vehicle"
   >("flow_choice");
 
   const { data: indents = [], isLoading } = useIndentsQuery(orgId);
@@ -281,9 +176,12 @@ export function LoadCenterView({
   const { data: trips = [] } = useTripsQuery(orgId);
   const { data: drivers = [] } = useDriversQuery(orgId);
   const { data: vehicles = [] } = useVehiclesQuery(orgId);
+  const { data: suppliers = [] } = useSuppliersQuery(orgId);
   const invalidateTrips = useInvalidateTrips();
   const invalidateIndents = useInvalidateIndents();
   const queryClient = useQueryClient();
+
+  const isSecuredTab = loadSubTab === "AWARDED";
 
   /** O(myQuotes.length): map indent_id -> quote for Find Work "Quote Sent" / "Update quote" and modal prefill. */
   const myQuoteByIndentId = useMemo(() => {
@@ -291,6 +189,21 @@ export function LoadCenterView({
     for (const q of myQuotes) m.set(q.indent_id, q);
     return m;
   }, [myQuotes]);
+
+  const isIntegratedSupplierRow = useCallback((s: { supplier_type?: string | null; linked_organization_id?: string | null }) => {
+    return s.supplier_type === "integrated" && !!s.linked_organization_id;
+  }, []);
+
+  const visiblePartnersForHandshake = useMemo(() => {
+    const manual = suppliers.filter((s) => !isIntegratedSupplierRow(s));
+    const base = showIntegratedPartners ? suppliers : manual;
+    // Never hide the currently selected partner (keeps existing selection stable).
+    if (subcontractSupplierId && !base.some((s) => s.id === subcontractSupplierId)) {
+      const selected = suppliers.find((s) => s.id === subcontractSupplierId);
+      if (selected) return [selected, ...base];
+    }
+    return base;
+  }, [suppliers, showIntegratedPartners, subcontractSupplierId, isIntegratedSupplierRow]);
 
   const awardModalIndentId =
     loadAction?.type === "AWARD" ? loadAction.load.id : null;
@@ -389,6 +302,48 @@ export function LoadCenterView({
     [marketIndents, awardedToMeIndentIds, indentIdsWithTrip],
   );
 
+  /**
+   * Find Work "Done": terminal loads that I interacted with (quoted), excluding any
+   * load awarded to me (those belong in Secured → Done). We later union this with
+   * Secured → Done when rendering Find Work → Done, so users can view all done
+   * outcomes from one place without changing award/deploy flow.
+   */
+  const findWorkDoneLoads = useMemo(() => {
+    return marketIndents.filter((i) => {
+      const status = (i.status || "").toLowerCase();
+      if (!statusMatchesFilter(status, "DONE")) return false;
+      const target = (i.circulation_target || "").toLowerCase();
+      const isTargeted =
+        target === "integrated_supplier" || target === "both";
+      if (!isTargeted) return false;
+      if (awardedToMeIndentIds.has(i.id)) return false;
+      return myQuoteByIndentId.has(i.id);
+    });
+  }, [marketIndents, awardedToMeIndentIds, myQuoteByIndentId]);
+
+  /** Secured "Done": loads awarded to me that are completed or have a trip. */
+  const awardedLoadsDone = useMemo(
+    () =>
+      marketIndents.filter(
+        (i) =>
+          awardedToMeIndentIds.has(i.id) &&
+          (statusMatchesFilter(i.status || "", "DONE") ||
+            indentIdsWithTrip.has(i.id)),
+      ),
+    [marketIndents, awardedToMeIndentIds, indentIdsWithTrip],
+  );
+
+  /**
+   * Find Work → Done should also include Secured → Done (awarded-to-me + done/trip),
+   * so users can see final outcomes in the Find Work DONE tab too.
+   */
+  const findWorkDoneUnionLoads = useMemo(() => {
+    const byId = new Map<string, IndentRow>();
+    for (const l of findWorkDoneLoads) byId.set(l.id, l);
+    for (const l of awardedLoadsDone ?? []) byId.set(l.id, l);
+    return Array.from(byId.values());
+  }, [findWorkDoneLoads, awardedLoadsDone]);
+
   const getLoads = useMemo(
     () =>
       marketIndents.filter((i) => {
@@ -409,18 +364,6 @@ export function LoadCenterView({
   const findWorkLoads = useMemo(
     () => getLoads.filter((load) => !awardedToMeIndentIds.has(load.id)),
     [getLoads, awardedToMeIndentIds],
-  );
-
-  /** Secured "Done": loads awarded to me that are completed or have a trip. */
-  const awardedLoadsDone = useMemo(
-    () =>
-      marketIndents.filter(
-        (i) =>
-          awardedToMeIndentIds.has(i.id) &&
-          (statusMatchesFilter(i.status || "", "DONE") ||
-            indentIdsWithTrip.has(i.id)),
-      ),
-    [marketIndents, awardedToMeIndentIds, indentIdsWithTrip],
   );
 
   /** Check if a load matches the search query (route, ID, client, creator org). */
@@ -458,6 +401,14 @@ export function LoadCenterView({
           !statusMatchesFilter(status, "DONE");
         return (isQuotedStatus || hasBids) && isNotTerminal;
       }
+      if (statusFilterTab === "OPEN") {
+        // Hire Partner: once a load has any bids (or becomes "quoted"), it should
+        // move out of Created and into Quoted.
+        const hasBids = (quoteCounts[load.id] ?? 0) > 0;
+        const isQuotedStatus = statusMatchesFilter(status, "QUOTED");
+        if (hasBids || isQuotedStatus) return false;
+        return statusMatchesFilter(status, "OPEN");
+      }
       return statusMatchesFilter(status, statusFilterTab);
     });
     return statusFiltered.filter((load) =>
@@ -471,13 +422,41 @@ export function LoadCenterView({
     loadMatchesSearch,
   ]);
   const filteredFindWorkLoads = useMemo(() => {
-    const statusFiltered = findWorkLoads.filter((load) =>
-      statusMatchesFilter(load.status || "", statusFilterTab),
-    );
-    return statusFiltered.filter((load) =>
+    const statusFiltered = (() => {
+      if (statusFilterTab === "OPEN") {
+        // Find Work: Open should only show loads I haven't quoted yet.
+        return findWorkLoads.filter((load) => !myQuoteByIndentId.has(load.id));
+      }
+      if (statusFilterTab === "QUOTED") {
+        // Find Work: Quoted means I have sent a quote (pending/rejected/etc).
+        return findWorkLoads.filter((load) => myQuoteByIndentId.has(load.id));
+      }
+      if (statusFilterTab === "AWARDED") {
+        // Find Work: Awarded mirrors Secured (awarded to me, ready to deploy).
+        return awardedLoads;
+      }
+      return [];
+    })();
+
+    return statusFiltered.filter((load) => loadMatchesSearch(load, searchQuery));
+  }, [
+    findWorkLoads,
+    statusFilterTab,
+    searchQuery,
+    loadMatchesSearch,
+    myQuoteByIndentId,
+    awardedLoads,
+  ]);
+
+  const filteredFindWorkDoneLoads = useMemo(() => {
+    return findWorkDoneUnionLoads.filter((load) =>
       loadMatchesSearch(load, searchQuery),
     );
-  }, [findWorkLoads, statusFilterTab, searchQuery, loadMatchesSearch]);
+  }, [findWorkDoneUnionLoads, searchQuery, loadMatchesSearch]);
+
+  const filteredFindWorkList =
+    statusFilterTab === "DONE" ? filteredFindWorkDoneLoads : filteredFindWorkLoads;
+
   const filteredSecuredLoads = useMemo(() => {
     return awardedLoads.filter((load) => loadMatchesSearch(load, searchQuery));
   }, [awardedLoads, searchQuery, loadMatchesSearch]);
@@ -501,13 +480,27 @@ export function LoadCenterView({
               !statusMatchesFilter(status, "DONE");
             return (isQuotedStatus || hasBids) && isNotTerminal;
           }
+          if (filter === "OPEN") {
+            const hasBids = (quoteCounts[load.id] ?? 0) > 0;
+            const isQuotedStatus = statusMatchesFilter(status, "QUOTED");
+            if (hasBids || isQuotedStatus) return false;
+            return statusMatchesFilter(status, "OPEN");
+          }
           return statusMatchesFilter(status, filter);
         }).length;
       }
       if (loadSubTab === "GET_LOAD") {
-        return findWorkLoads.filter((load) =>
-          statusMatchesFilter(load.status || "", filter),
-        ).length;
+        if (filter === "DONE") return findWorkDoneUnionLoads.length;
+        if (filter === "AWARDED") return awardedLoads.length;
+        if (filter === "QUOTED") {
+          return findWorkLoads.filter((load) => myQuoteByIndentId.has(load.id))
+            .length;
+        }
+        if (filter === "OPEN") {
+          return findWorkLoads.filter((load) => !myQuoteByIndentId.has(load.id))
+            .length;
+        }
+        return 0;
       }
       if (loadSubTab === "AWARDED") {
         if (filter === "AWARDED") return awardedLoads.length;
@@ -526,10 +519,23 @@ export function LoadCenterView({
     loadSubTab,
     hirePartnerLoads,
     findWorkLoads,
+    findWorkDoneUnionLoads,
     awardedLoads,
     awardedLoadsDone,
     quoteCounts,
+    myQuoteByIndentId,
   ]);
+
+  useEffect(() => {
+    // Keep status filter valid per role tab to avoid confusing empty views.
+    if (loadSubTab === "AWARDED") {
+      if (statusFilterTab !== "AWARDED") {
+        setStatusFilterTab("AWARDED");
+      }
+      return;
+    }
+    // No additional guard needed: Hire Partner and Find Work both support AWARDED now.
+  }, [loadSubTab, statusFilterTab]);
 
   useEffect(() => {
     if (loadSubTab === "AWARDED") refetchMyQuotes();
@@ -851,6 +857,8 @@ export function LoadCenterView({
       Alert.alert("Cannot deploy", "No accepted quote found for this load.");
       return;
     }
+    const phoneTrimmed = aggregateDriverPhone.trim();
+    const phoneErr = phoneTrimmed ? validatePhone(phoneTrimmed) : null;
     try {
       setAssigningTripId(load.id);
       const vehicleIdForQuote =
@@ -878,11 +886,43 @@ export function LoadCenterView({
         );
         return;
       }
-      const {
-        error: otpErr,
-        code,
-        expires_at,
-      } = await generateTripOtp(trip.id);
+      // Driver + OTP are optional: require phone only for OTP generation (not for trip creation).
+      if (!phoneTrimmed || phoneErr) {
+        await updateIndent(load.id, { status: "completed" });
+        invalidateTrips(orgId);
+        invalidateIndents(orgId);
+        setLoadAction(null);
+        setAssigningTripId(null);
+        triggerSuccess("Trip created (OTP not generated)");
+        // Do not treat this as an error. OTP can be generated later from Trip Detail
+        // after providing a driver phone number.
+        return;
+      }
+
+      const { error: assignAggErr } = await assignAggregateTripDriverByPhone(
+        trip.id,
+        orgId,
+        phoneTrimmed,
+        regNum || null,
+      );
+      if (assignAggErr) {
+        await updateIndent(load.id, { status: "completed" });
+        invalidateTrips(orgId);
+        invalidateIndents(orgId);
+        setLoadAction(null);
+        setAssigningTripId(null);
+        Alert.alert(
+          "Trip created",
+          `Driver could not be assigned. ${assignAggErr.message}\n\nAssign driver from trip detail to generate OTP.`,
+        );
+        setInitialTripForDetail(trip);
+        router.push(
+          `/trip/${trip.id}?entryContext=supplier` as import("expo-router").Href,
+        );
+        return;
+      }
+
+      const { error: otpErr, code, expires_at } = await generateTripOtp(trip.id);
       if (otpErr || !code) {
         await updateIndent(load.id, { status: "completed" });
         invalidateTrips(orgId);
@@ -893,13 +933,38 @@ export function LoadCenterView({
           "Trip created",
           "OTP could not be generated. Get OTP from the trip detail screen.",
         );
-        if (load.organization_id === orgId)
-          router.push("/(tabs)/trips" as import("expo-router").Href);
+        setInitialTripForDetail(trip);
+        router.push(
+          `/trip/${trip.id}?entryContext=supplier` as import("expo-router").Href,
+        );
         return;
       }
+
       setDeployOtpCode(code);
       setDeployOtpExpiresAt(expires_at ?? null);
       setDeployTripIdForOtp(trip.id);
+
+      const subSupplierId = (subcontractSupplierId ?? "").trim();
+      const subRateNum = Number(subcontractRate);
+      const shouldSaveSubcontract =
+        subSupplierId !== "" &&
+        Number.isFinite(subRateNum) &&
+        subRateNum >= 0;
+      if (shouldSaveSubcontract) {
+        const { error: subErr } = await upsertTripSubcontract({
+          viewerOrgId: orgId,
+          tripId: trip.id,
+          supplierId: subSupplierId,
+          rate: subRateNum,
+        });
+        if (subErr) Alert.alert("Trip created", `Partner could not be saved. ${subErr.message}`);
+        // Ensure Finance → Suppliers reflects the saved partner payable immediately
+        // (covers both backend RPC success and local fallback).
+        queryClient.invalidateQueries({
+          queryKey: ["q", "trips", "subcontracts", orgId],
+        });
+      }
+
       await updateIndent(load.id, { status: "completed" });
       invalidateTrips(orgId);
       invalidateIndents(orgId);
@@ -919,6 +984,8 @@ export function LoadCenterView({
     () => drivers.filter((d) => !d.left_at),
     [drivers],
   );
+  const aggregateHasDriverPhone = aggregateDriverPhone.trim().length > 0;
+  const aggregateHasVehicleText = assignVehicleRegistration.trim().length > 0;
 
   /** Staff Handshake: back one step or close modal. Used by header BACK and backdrop. */
   const handleStaffHandshakeBack = useCallback(() => {
@@ -937,17 +1004,24 @@ export function LoadCenterView({
       setHandshakeStep("flow_choice");
       return;
     }
-    if (handshakeStep === "roster" || handshakeStep === "ad_hoc_driver") {
+    if (handshakeStep === "roster" || handshakeStep === "ad_hoc_vehicle") {
       setHandshakeStep("flow_choice");
       return;
     }
-    if (handshakeStep === "ad_hoc_vehicle") {
-      setHandshakeStep("ad_hoc_driver");
-    }
   }, [deployOtpCode, handshakeStep]);
 
-  const paddingBottom = 24 + Layout.tabBarHeight + insets.bottom + 24;
-  const showStatusFilters = loadSubTab !== "AWARDED";
+  /** Same coordinate system as FinanceScreen: parent already ends above the demo tab bar. */
+  const hirePartnerFabBottom = Layout.fabBottomOffset + insets.bottom;
+  const paddingBottom = useMemo(() => {
+    const base = 24 + Layout.tabBarHeight + insets.bottom + 24;
+    if (loadSubTab !== "GIVE_LOAD") return base;
+    return base + Layout.fabSize + Layout.fabBottomOffset;
+  }, [insets.bottom, loadSubTab]);
+  const statusTabsForRole = useMemo(() => {
+    return isSecuredTab
+      ? STATUS_TABS.filter((t) => t.id === "AWARDED")
+      : STATUS_TABS;
+  }, [isSecuredTab]);
 
   const renderSecuredLoadCard = (load: IndentRow, isDone: boolean) => {
     const acceptedQuote = myQuotes.find(
@@ -961,11 +1035,9 @@ export function LoadCenterView({
         : Number(load.client_price || 0);
 
     return (
-      <TouchableOpacity
+      <View
         key={`${isDone ? "done" : "active"}-${load.id}`}
         style={styles.awardedCard}
-        onPress={() => onIndentPress(load)}
-        activeOpacity={0.8}
       >
         <View style={styles.awardedCardTop}>
           <View style={styles.awardedBadge}>
@@ -1004,8 +1076,7 @@ export function LoadCenterView({
         ) : (
           <TouchableOpacity
             style={styles.handshakeBtn}
-            onPress={(e) => {
-              e.stopPropagation();
+            onPress={() => {
               setAssignDriverId(null);
               setAssignVehicleId(undefined);
               setAssignVehicleRegistration("");
@@ -1032,7 +1103,7 @@ export function LoadCenterView({
             </Text>
           </TouchableOpacity>
         )}
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -1042,84 +1113,36 @@ export function LoadCenterView({
       <View
         style={[
           styles.loadDarkHeader,
-          !showStatusFilters && styles.loadDarkHeaderSecured,
+          isSecuredTab && styles.loadDarkHeaderSecured,
         ]}
       >
         {/* Sub-tabs: HIRE PARTNER | FIND WORK | SECURED */}
         <View style={styles.loadFilterHeaderRow}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.loadFilterScroll}
-            contentContainerStyle={styles.loadFilterScrollContent}
-          >
-            {(
-              [
-                { id: "GIVE_LOAD" as const, label: "HIRE PARTNER" },
-                { id: "GET_LOAD" as const, label: "FIND WORK" },
-                { id: "AWARDED" as const, label: "SECURED" },
-              ] as const
-            ).map((tab) => {
-              const count =
-                tab.id === "GIVE_LOAD"
-                  ? hirePartnerLoads.length
-                  : tab.id === "GET_LOAD"
-                    ? findWorkLoads.length
-                    : awardedLoads.length + awardedLoadsDone.length;
-              const isActive = loadSubTab === tab.id;
-              return (
-                <TouchableOpacity
-                  key={tab.id}
-                  style={styles.loadFilterTab}
-                  onPress={() => setLoadSubTab(tab.id)}
-                  activeOpacity={0.8}
-                >
-                  <View style={styles.loadFilterTabLabelRow}>
-                    <Text
-                      style={[
-                        styles.loadFilterTabText,
-                        isActive && styles.loadFilterTabTextActive,
-                      ]}
-                    >
-                      {tab.label}
-                    </Text>
-                    <AnimatedCountBadge
-                      count={count}
-                      isActive={isActive}
-                      badgeStyle={styles.loadFilterTabBadge}
-                      badgeActiveStyle={styles.loadFilterTabBadgeActive}
-                      textStyle={styles.loadModeCountText}
-                      textActiveStyle={styles.loadModeCountTextActive}
-                    />
-                  </View>
-                  {isActive && <View style={styles.loadFilterTabUnderline} />}
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-          <TouchableOpacity
-            style={styles.loadFilterAddBtn}
-            onPress={onCreateIndentPress}
-            activeOpacity={0.8}
-          >
-            <SemanticAddIcon
-              IconComponent={Package}
-              iconSize={14}
-              iconColor={Theme.textOnDark}
-              badgeSize={14}
-              badgeIconSize={10}
-              badgeBackgroundColor={Theme.textOnDark}
-              badgeIconColor={Theme.darkBackground}
-              badgeOffsetX={-6}
-              badgeOffsetY={-4}
-            />
-          </TouchableOpacity>
+          <SubTabs<LoadSubTab>
+            variant="dark"
+            horizontalPadding={0}
+            value={loadSubTab}
+            onChange={setLoadSubTab}
+            items={[
+              {
+                key: "GIVE_LOAD",
+                label: "HIRE PARTNER",
+                badgeCount: hirePartnerLoads.length,
+              },
+              { key: "GET_LOAD", label: "FIND WORK", badgeCount: findWorkLoads.length },
+              {
+                key: "AWARDED",
+                label: "SECURED",
+                badgeCount: awardedLoads.length,
+              },
+            ]}
+          />
         </View>
         {/* Search + Status filters (same layout as Manage Network: search + filter chips) */}
         <View
           style={[
             styles.loadSearchRow,
-            !showStatusFilters && styles.loadSearchRowSecured,
+            isSecuredTab && styles.loadSearchRowSecured,
           ]}
         >
           <View style={styles.loadSearchWrap}>
@@ -1139,46 +1162,44 @@ export function LoadCenterView({
               autoCorrect={false}
             />
           </View>
-          {showStatusFilters ? (
-            <View style={styles.loadTypeFilterWrap}>
-              {STATUS_TABS.map((tab) => {
-                const count = statusTabCounts[tab.id];
-                const isActive = statusFilterTab === tab.id;
-                const tabLabel =
-                  loadSubTab === "GIVE_LOAD" && tab.id === "OPEN"
-                    ? "Created"
-                    : tab.label;
-                return (
-                  <TouchableOpacity
-                    key={tab.id}
+          <View style={styles.loadTypeFilterWrap}>
+            {statusTabsForRole.map((tab) => {
+              const count = statusTabCounts[tab.id];
+              const isActive = statusFilterTab === tab.id;
+              const tabLabel =
+                loadSubTab === "GIVE_LOAD" && tab.id === "OPEN"
+                  ? "Created"
+                  : tab.label;
+              return (
+                <TouchableOpacity
+                  key={tab.id}
+                  style={[
+                    styles.loadTypeFilterChip,
+                    isActive && styles.loadTypeFilterChipActive,
+                  ]}
+                  onPress={() => setStatusFilterTab(tab.id)}
+                  activeOpacity={0.8}
+                >
+                  <Text
                     style={[
-                      styles.loadTypeFilterChip,
-                      isActive && styles.loadTypeFilterChipActive,
+                      styles.loadTypeFilterChipText,
+                      isActive && styles.loadTypeFilterChipTextActive,
                     ]}
-                    onPress={() => setStatusFilterTab(tab.id)}
-                    activeOpacity={0.8}
                   >
-                    <Text
-                      style={[
-                        styles.loadTypeFilterChipText,
-                        isActive && styles.loadTypeFilterChipTextActive,
-                      ]}
-                    >
-                      {tabLabel}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.loadTypeFilterChipCount,
-                        isActive && styles.loadTypeFilterChipCountActive,
-                      ]}
-                    >
-                      {count}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ) : null}
+                    {tabLabel}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.loadTypeFilterChipCount,
+                      isActive && styles.loadTypeFilterChipCountActive,
+                    ]}
+                  >
+                    {count}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
       </View>
 
@@ -1186,14 +1207,14 @@ export function LoadCenterView({
       <View
         style={[
           styles.loadContentWrap,
-          !showStatusFilters && styles.loadContentWrapSecured,
+          isSecuredTab && styles.loadContentWrapSecured,
         ]}
       >
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={[
             styles.scrollContent,
-            !showStatusFilters && styles.scrollContentSecured,
+            isSecuredTab && styles.scrollContentSecured,
             { paddingBottom },
           ]}
           showsVerticalScrollIndicator={false}
@@ -1209,26 +1230,6 @@ export function LoadCenterView({
         >
           {loadSubTab === "GIVE_LOAD" && (
             <>
-              <TouchableOpacity
-                style={styles.shareCard}
-                onPress={onCreateIndentPress}
-                activeOpacity={0.9}
-              >
-                <View style={styles.shareCardIconWrap}>
-                  <SemanticAddIcon
-                    IconComponent={Package}
-                    iconSize={18}
-                    iconColor={LOAD_BROADCAST_MUTED}
-                    badgeSize={16}
-                    badgeIconSize={11}
-                    badgeBackgroundColor="#FFFFFF"
-                    badgeIconColor={Theme.darkBackground}
-                    badgeOffsetX={-6}
-                    badgeOffsetY={-4}
-                  />
-                </View>
-                <Text style={styles.shareCardText}>Broadcast New Indent</Text>
-              </TouchableOpacity>
               {isLoading ? (
                 <View style={styles.loadingWrap}>
                   <ActivityIndicator size="small" color={Theme.primary} />
@@ -1281,12 +1282,7 @@ export function LoadCenterView({
                   const isAwaitingSupplierDeploy =
                     isAwardedPendingTrip || hasDirectSupplier;
                   return (
-                    <TouchableOpacity
-                      key={load.id}
-                      style={styles.loadCard}
-                      onPress={() => onIndentPress(load)}
-                      activeOpacity={0.8}
-                    >
+                    <View key={load.id} style={styles.loadCard}>
                       <View style={styles.loadCardTop}>
                         <View style={styles.loadCardTopLeft}>
                           <Text style={styles.loadCardRoute} numberOfLines={3}>
@@ -1360,11 +1356,11 @@ export function LoadCenterView({
                         <View style={styles.loadCardActions}>
                           <TouchableOpacity
                             style={styles.shareIndentBtn}
-                            onPress={(e) => {
-                              e.stopPropagation();
-                              if (isDone || isAwardedPendingTrip) onIndentPress(load);
-                              else handleShareIndent(load);
-                            }}
+                            onPress={() =>
+                              isDone || isAwardedPendingTrip
+                                ? onIndentPress(load)
+                                : handleShareIndent(load)
+                            }
                             activeOpacity={0.9}
                           >
                             <FontAwesome
@@ -1388,8 +1384,7 @@ export function LoadCenterView({
                           ) : (
                             <TouchableOpacity
                               style={styles.reviewBidsBtn}
-                              onPress={(e) => {
-                                e.stopPropagation();
+                              onPress={() => {
                                 setSelectedQuoteId(null);
                                 setLoadAction({ type: "AWARD", load });
                               }}
@@ -1402,7 +1397,7 @@ export function LoadCenterView({
                           )}
                         </View>
                       </View>
-                    </TouchableOpacity>
+                    </View>
                   );
                 })
               )}
@@ -1443,7 +1438,7 @@ export function LoadCenterView({
                   <Text style={styles.quoteBtnText}>Retry</Text>
                 </TouchableOpacity>
               </View>
-            ) : filteredFindWorkLoads.length === 0 ? (
+            ) : filteredFindWorkList.length === 0 ? (
               <View style={styles.emptyWrap}>
                 <View style={styles.emptyIconWrapMuted}>
                   <FontAwesome
@@ -1459,7 +1454,7 @@ export function LoadCenterView({
                 </Text>
               </View>
             ) : (
-              filteredFindWorkLoads.map((load) => {
+              filteredFindWorkList.map((load) => {
                 const existingQuote = myQuoteByIndentId.get(load.id);
                 const quoteStatus = (existingQuote?.status ?? "").toLowerCase();
                 const isPending = quoteStatus === "pending";
@@ -1472,12 +1467,7 @@ export function LoadCenterView({
                   setLoadAction({ type: "BID", load });
                 };
                 return (
-                    <TouchableOpacity
-                      key={load.id}
-                      style={styles.loadCard}
-                      onPress={() => onIndentPress(load)}
-                      activeOpacity={0.8}
-                    >
+                  <View key={load.id} style={styles.loadCard}>
                     <View style={styles.loadCardTop}>
                       <View style={styles.loadCardTopLeft}>
                         <Text style={styles.getLoadCompany} numberOfLines={2}>
@@ -1529,10 +1519,7 @@ export function LoadCenterView({
                           </View>
                           <TouchableOpacity
                             style={styles.updateQuoteBtn}
-                            onPress={(e) => {
-                              e.stopPropagation();
-                              openBidModal();
-                            }}
+                            onPress={openBidModal}
                             activeOpacity={0.9}
                           >
                             <Text style={styles.updateQuoteBtnText}>
@@ -1556,10 +1543,7 @@ export function LoadCenterView({
                           </View>
                           <TouchableOpacity
                             style={styles.updateQuoteBtn}
-                            onPress={(e) => {
-                              e.stopPropagation();
-                              openBidModal();
-                            }}
+                            onPress={openBidModal}
                             activeOpacity={0.9}
                           >
                             <Text style={styles.updateQuoteBtnText}>
@@ -1571,10 +1555,7 @@ export function LoadCenterView({
                     ) : (
                       <TouchableOpacity
                         style={styles.quoteBtn}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          openBidModal();
-                        }}
+                        onPress={openBidModal}
                         activeOpacity={0.9}
                       >
                         <FontAwesome
@@ -1588,14 +1569,13 @@ export function LoadCenterView({
                         </Text>
                       </TouchableOpacity>
                     )}
-                  </TouchableOpacity>
+                  </View>
                 );
               })
             ))}
 
           {loadSubTab === "AWARDED" &&
-            (filteredSecuredLoads.length === 0 &&
-            filteredSecuredDoneLoads.length === 0 ? (
+            (filteredSecuredLoads.length === 0 ? (
               <View style={styles.emptyWrap}>
                 <View style={styles.emptyIconWrapGold}>
                   <FontAwesome
@@ -1610,38 +1590,44 @@ export function LoadCenterView({
                 </Text>
               </View>
             ) : (
-              <>
-                {filteredSecuredLoads.length > 0 ? (
-                  <View style={styles.securedSection}>
-                    <View style={styles.securedSectionHeader}>
-                      <Text style={styles.securedSectionTitle}>
-                        Ready to Deploy
-                      </Text>
-                      <Text style={styles.securedSectionCount}>
-                        {filteredSecuredLoads.length}
-                      </Text>
-                    </View>
-                    {filteredSecuredLoads.map((load) =>
-                      renderSecuredLoadCard(load, false),
-                    )}
-                  </View>
-                ) : null}
-                {filteredSecuredDoneLoads.length > 0 ? (
-                  <View style={styles.securedSection}>
-                    <View style={styles.securedSectionHeader}>
-                      <Text style={styles.securedSectionTitle}>Done</Text>
-                      <Text style={styles.securedSectionCount}>
-                        {filteredSecuredDoneLoads.length}
-                      </Text>
-                    </View>
-                    {filteredSecuredDoneLoads.map((load) =>
-                      renderSecuredLoadCard(load, true),
-                    )}
-                  </View>
-                ) : null}
-              </>
+              <View style={styles.securedSection}>
+                <View style={styles.securedSectionHeader}>
+                  <Text style={styles.securedSectionTitle}>Ready to Deploy</Text>
+                  <Text style={styles.securedSectionCount}>
+                    {filteredSecuredLoads.length}
+                  </Text>
+                </View>
+                {filteredSecuredLoads.map((load) =>
+                  renderSecuredLoadCard(load, false),
+                )}
+              </View>
             ))}
         </ScrollView>
+        {loadSubTab === "GIVE_LOAD" ? (
+          <View
+            style={[styles.hirePartnerFabWrap, { bottom: hirePartnerFabBottom }]}
+            pointerEvents="box-none"
+          >
+            <TouchableOpacity
+              style={styles.hirePartnerFab}
+              onPress={onCreateIndentPress}
+              activeOpacity={0.9}
+              accessibilityLabel="Broadcast New Indent"
+            >
+              <SemanticAddIcon
+                IconComponent={Package}
+                iconSize={20}
+                iconColor={Theme.textOnPrimary}
+                badgeSize={18}
+                badgeIconSize={13}
+                badgeBackgroundColor="#FFFFFF"
+                badgeIconColor={Theme.darkBackground}
+                badgeOffsetX={-7}
+                badgeOffsetY={-6}
+              />
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </View>
 
       {/* Success overlay */}
@@ -2003,7 +1989,7 @@ export function LoadCenterView({
                       <View style={styles.bidIndentSpecRow}>
                         <Text style={styles.bidIndentSpecLabel}>Weight</Text>
                         <Text style={styles.bidIndentSpecValue}>
-                          {(Number(loadAction.load.weight) / 1000).toFixed(2)} tons
+                          {String(loadAction.load.weight)} kg
                         </Text>
                       </View>
                     ) : null}
@@ -2101,7 +2087,7 @@ export function LoadCenterView({
                 disabled={submittingQuote}
               >
                 <Text style={styles.modalSubmitText}>
-                  {submittingQuote ? "Publishing…" : "Publish Bid"}
+                  {submittingQuote ? "Publishing…" : "Publish Bid Node"}
                 </Text>
               </TouchableOpacity>
             </ScrollView>
@@ -2119,9 +2105,9 @@ export function LoadCenterView({
         <View style={[styles.assignModalPage, { paddingTop: insets.top }]}>
           <View style={styles.assignModalHeader}>
             <View style={styles.assignModalHeaderText}>
-              <Text style={styles.assignModalTitle}>Allocations</Text>
+              <Text style={styles.assignModalTitle}>Staff Handshake</Text>
               <Text style={styles.assignModalSubtitle}>
-                Assign Drivers and Vehicles
+                Network Node Selection
               </Text>
             </View>
             <TouchableOpacity
@@ -2238,6 +2224,10 @@ export function LoadCenterView({
                       onPress={() => {
                         setUseAdHocDriver(false);
                         setAssignVehicleRegistration("");
+                        setAggregateDriverPhone("");
+                        setSubcontractSupplierId(null);
+                        setSubcontractRate("");
+                        setSubcontractPickerOpen(false);
                         setHandshakeStep("roster");
                       }}
                       activeOpacity={0.85}
@@ -2261,7 +2251,11 @@ export function LoadCenterView({
                         setAssignDriverId(null);
                         setAssignVehicleId(undefined);
                         setAssignVehicleRegistration("");
-                        setHandshakeStep("ad_hoc_driver");
+                        setAggregateDriverPhone("");
+                        setSubcontractSupplierId(null);
+                        setSubcontractRate("");
+                        setSubcontractPickerOpen(false);
+                        setHandshakeStep("ad_hoc_vehicle");
                       }}
                       activeOpacity={0.85}
                     >
@@ -2295,7 +2289,8 @@ export function LoadCenterView({
                   </TouchableOpacity>
                   <Text style={styles.sourceOfSupplySectionTitle}>Asset</Text>
                   <Text style={styles.modalHint}>
-                    Assign driver and vehicle from your org, then authorize the trip
+                    Assign driver and vehicle from your org, then authorize
+                    voyage.
                   </Text>
                   {(() => {
                     const selectedDriver = activeDrivers.find(
@@ -2436,8 +2431,8 @@ export function LoadCenterView({
                     </Text>
                   )}
                 </>
-              ) : handshakeStep === "ad_hoc_driver" ? (
-                /* Ad hoc driver: OTP for driver to claim */
+              ) : (
+                /* Aggregate — same fields as before; UI aligned with TripAssignmentBlock (trip detail). */
                 <>
                   <TouchableOpacity
                     style={styles.wizardBackBtn}
@@ -2454,61 +2449,147 @@ export function LoadCenterView({
                     Aggregate
                   </Text>
                   <Text style={styles.modalHint}>
-                    Who will drive this trip?
+                    Assign driver and vehicle for OTP (partner and rate optional).
                   </Text>
-                  <View style={[styles.wizardCard, styles.assignRowActive]}>
-                    <FontAwesome
-                      name="user-o"
-                      size={20}
-                      color={Theme.primary}
-                      style={{ marginRight: 12 }}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.wizardCardTitle}>
-                        Aggregate driver
+
+                  <View style={styles.tripAssignCard}>
+                    <View style={styles.tripAssignCardHeader}>
+                      <Text style={styles.tripAssignCardHeaderTitle}>
+                        Current Node
                       </Text>
-                      <Text style={styles.wizardCardSubtitle}>
-                        I'll share an OTP with the driver so they can claim the
-                        trip in the app.
+                      <View style={[styles.tripAssignSourceBadge, styles.tripAssignBadgeUnassigned]}>
+                        <Text
+                          style={[
+                            styles.tripAssignSourceBadgeText,
+                            styles.tripAssignSourceBadgeTextUnassigned,
+                          ]}
+                        >
+                          Unassigned
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.tripAssignRow}>
+                      <View style={styles.tripAssignRowLeft}>
+                        <View
+                          style={[
+                            styles.tripAssignIcon,
+                            aggregateHasDriverPhone
+                              ? styles.tripAssignIconDriverActive
+                              : styles.tripAssignIconInactive,
+                          ]}
+                        >
+                          <FontAwesome
+                            name="user"
+                            size={20}
+                            color={
+                              aggregateHasDriverPhone
+                                ? Theme.primary
+                                : Theme.textMuted
+                            }
+                          />
+                        </View>
+                        <View style={styles.tripAssignRowTextCol}>
+                          <Text style={styles.tripAssignRowLabel}>
+                            Driver Node
+                          </Text>
+                          <TextInput
+                            style={styles.tripAssignRowInput}
+                            placeholder="Phone for OTP (optional)"
+                            placeholderTextColor={Theme.textMuted}
+                            value={aggregateDriverPhone}
+                            onChangeText={setAggregateDriverPhone}
+                            keyboardType="phone-pad"
+                            autoComplete="tel"
+                          />
+                        </View>
+                      </View>
+                    </View>
+
+                    <View style={[styles.tripAssignRow, styles.tripAssignRowLast]}>
+                      <View style={styles.tripAssignRowLeft}>
+                        <View
+                          style={[
+                            styles.tripAssignIcon,
+                            aggregateHasVehicleText
+                              ? styles.tripAssignIconVehicleActive
+                              : styles.tripAssignIconInactive,
+                          ]}
+                        >
+                          <FontAwesome
+                            name="truck"
+                            size={18}
+                            color={
+                              aggregateHasVehicleText
+                                ? Theme.textPrimaryDark
+                                : Theme.textMuted
+                            }
+                          />
+                        </View>
+                        <View style={styles.tripAssignRowTextCol}>
+                          <Text style={styles.tripAssignRowLabel}>
+                            Vehicle Registry
+                          </Text>
+                          <TextInput
+                            style={styles.tripAssignRowInput}
+                            placeholder="Vehicle registration (optional)"
+                            placeholderTextColor={Theme.textMuted}
+                            value={assignVehicleRegistration}
+                            onChangeText={setAssignVehicleRegistration}
+                            editable={true}
+                          />
+                        </View>
+                      </View>
+                    </View>
+
+                    <View style={styles.tripAssignPartnerBlock}>
+                      <Text style={styles.tripAssignPartnerHint}>
+                        Associated partner (optional). Tag your partner for this
+                        trip and enter the rate you will pay.
                       </Text>
+                      <TouchableOpacity
+                        style={styles.subcontractPickBtn}
+                        onPress={() => setSubcontractPickerOpen(true)}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.subcontractPickLabel}>Partner</Text>
+                        <Text
+                          style={styles.subcontractPickValue}
+                          numberOfLines={1}
+                        >
+                          {subcontractSupplierId
+                            ? (suppliers.find(
+                                (s) => s.id === subcontractSupplierId,
+                              )?.company_name ||
+                                suppliers.find(
+                                  (s) => s.id === subcontractSupplierId,
+                                )?.name ||
+                                suppliers.find(
+                                  (s) => s.id === subcontractSupplierId,
+                                )?.contact_person ||
+                                "Selected")
+                            : "Select partner"}
+                        </Text>
+                        <FontAwesome
+                          name="chevron-down"
+                          size={12}
+                          color={Theme.textMuted}
+                          style={{ marginLeft: 10 }}
+                        />
+                      </TouchableOpacity>
+                      <View style={styles.assignInputWrap}>
+                        <TextInput
+                          style={styles.assignVehicleInput}
+                          placeholder="Partner rate (₹)"
+                          placeholderTextColor={Theme.textMuted}
+                          value={subcontractRate}
+                          onChangeText={setSubcontractRate}
+                          keyboardType="decimal-pad"
+                        />
+                      </View>
                     </View>
                   </View>
-                  <TouchableOpacity
-                    style={[styles.modalSubmit, styles.handshakeBtnModal]}
-                    onPress={() => setHandshakeStep("ad_hoc_vehicle")}
-                    activeOpacity={0.9}
-                  >
-                    <Text style={styles.modalSubmitText}>Continue</Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                /* Aggregate path Step 2: Vehicle (optional), then Deploy & get OTP */
-                <>
-                  <TouchableOpacity
-                    style={styles.wizardBackBtn}
-                    onPress={() => setHandshakeStep("ad_hoc_driver")}
-                  >
-                    <FontAwesome
-                      name="arrow-left"
-                      size={14}
-                      color={Theme.primary}
-                    />
-                    <Text style={styles.wizardBackText}>Back</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.modalHint}>
-                    Vehicle (optional). Enter the vehicle registration number if
-                    known.
-                  </Text>
-                  <View style={styles.assignInputWrap}>
-                    <TextInput
-                      style={styles.assignVehicleInput}
-                      placeholder="Vehicle registration number"
-                      placeholderTextColor={Theme.textMuted}
-                      value={assignVehicleRegistration}
-                      onChangeText={setAssignVehicleRegistration}
-                      editable={true}
-                    />
-                  </View>
+
                   {assigningTripId === loadAction.load.id ? (
                     <View style={styles.loadingWrap}>
                       <ActivityIndicator size="small" color={Theme.primary} />
@@ -2537,6 +2618,116 @@ export function LoadCenterView({
           )}
         </View>
       </Modal>
+
+      {/* Partner picker: own Modal so dimmer fully covers Staff Handshake (avoids z-order / bleed-through). */}
+      <Modal
+        visible={!!(subcontractPickerOpen && loadAction?.type === "ASSIGN")}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSubcontractPickerOpen(false)}
+        statusBarTranslucent
+      >
+        <View style={styles.subcontractPickerModalRoot}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFillObject}
+            activeOpacity={1}
+            onPress={() => setSubcontractPickerOpen(false)}
+          />
+          <View
+            style={[
+              styles.subcontractPickerModalBody,
+              {
+                paddingTop: insets.top + 12,
+                paddingBottom: insets.bottom + 12,
+              },
+            ]}
+            pointerEvents="box-none"
+          >
+            <View style={styles.subcontractPickerCard}>
+              <Text style={styles.subcontractPickerTitle}>Select partner</Text>
+              <View style={styles.subcontractPickerToggleRow}>
+                <Text style={styles.subcontractPickerToggleLabel}>
+                  Show integrated suppliers
+                </Text>
+                <Switch
+                  value={showIntegratedPartners}
+                  onValueChange={setShowIntegratedPartners}
+                  trackColor={{
+                    false: Theme.borderInput,
+                    true: Theme.primaryText,
+                  }}
+                  thumbColor={Theme.screenBackground}
+                />
+              </View>
+              <ScrollView
+                style={styles.subcontractPickerScroll}
+                contentContainerStyle={styles.subcontractPickerScrollContent}
+                showsVerticalScrollIndicator
+                keyboardShouldPersistTaps="handled"
+              >
+                {visiblePartnersForHandshake.length === 0 ? (
+                  <Text style={styles.subcontractPickerEmpty}>
+                    No partners yet. Add partners first.
+                  </Text>
+                ) : (
+                  visiblePartnersForHandshake.map((s) => (
+                    <TouchableOpacity
+                      key={s.id}
+                      style={[
+                        styles.subcontractPickerRow,
+                        subcontractSupplierId === s.id &&
+                          styles.subcontractPickerRowActive,
+                      ]}
+                      onPress={() => {
+                        setSubcontractSupplierId(
+                          subcontractSupplierId === s.id ? null : s.id,
+                        );
+                        setSubcontractPickerOpen(false);
+                      }}
+                      activeOpacity={0.75}
+                    >
+                      <Text
+                        style={styles.subcontractPickerText}
+                        numberOfLines={1}
+                      >
+                        {s.company_name || s.name || s.contact_person || "—"}
+                      </Text>
+                      {isIntegratedSupplierRow(s) ? (
+                        <Text
+                          style={styles.subcontractPickerBadge}
+                          numberOfLines={1}
+                        >
+                          INTEGRATED
+                        </Text>
+                      ) : null}
+                      {subcontractSupplierId === s.id ? (
+                        <FontAwesome
+                          name="check"
+                          size={14}
+                          color={Theme.darkGreen}
+                        />
+                      ) : null}
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+              {subcontractSupplierId ? (
+                <TouchableOpacity
+                  style={styles.subcontractPickerClearBtn}
+                  onPress={() => {
+                    setSubcontractSupplierId(null);
+                    setSubcontractPickerOpen(false);
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.subcontractPickerClearText}>Clear</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -2551,13 +2742,7 @@ const LOAD_BROADCAST_BG = "#eef1f6";
 const LOAD_BROADCAST_MUTED = "#829ab1";
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    width: "100%",
-    minWidth: 0,
-    alignSelf: "stretch",
-    backgroundColor: Theme.darkBackground,
-  },
+  container: { flex: 1, backgroundColor: Theme.darkBackground },
   loadDarkHeader: {
     backgroundColor: Theme.darkBackground,
     paddingHorizontal: Layout.screenPaddingHorizontal,
@@ -2574,88 +2759,30 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingTop: 8,
   },
-  loadFilterScroll: {
-    maxHeight: 36,
-    flex: 0,
-    flexShrink: 0,
-    alignSelf: "flex-start",
-  },
-  loadFilterScrollContent: {
-    paddingLeft: 4,
-    paddingRight: 24,
-    gap: 16,
-    flexGrow: 0,
-  },
-  loadFilterTab: {
-    position: "relative" as const,
-    paddingVertical: 8,
-    marginRight: 6,
-  },
-  loadFilterTabLabelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  loadFilterTabText: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: Theme.textOnDarkMuted,
-    textTransform: "uppercase",
-    letterSpacing: 2,
-  },
-  loadFilterTabTextActive: { color: Theme.textOnDark },
-  loadFilterTabBadge: {
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 8,
-    minWidth: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  loadFilterTabBadgeActive: {
-    backgroundColor: Theme.darkSurface,
-  },
-  loadFilterTabUnderline: {
+  hirePartnerFabWrap: {
     position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 2,
-    backgroundColor: Theme.teslaRed,
+    right: 16,
+    zIndex: 100,
+    elevation: 10,
   },
-  loadFilterAddBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    borderWidth: 1,
-    borderColor: "rgba(248,250,252,0.25)",
+  hirePartnerFab: {
+    width: Layout.fabSize,
+    height: Layout.fabSize,
+    borderRadius: Layout.fabBorderRadius,
+    backgroundColor: Theme.darkBackground,
     alignItems: "center",
     justifyContent: "center",
-    marginLeft: 4,
+    shadowColor: Theme.darkBackground,
+    shadowOffset: { width: 0, height: Layout.fabShadowOffsetY },
+    shadowOpacity: Layout.fabShadowOpacity,
+    shadowRadius: Layout.fabShadowRadius,
+    elevation: Layout.fabElevation,
   },
-  loadModeCountBadge: {
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 8,
-    minWidth: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  loadModeCountBadgeActive: {
-    backgroundColor: Theme.darkSurface,
-  },
-  loadModeCountText: {
-    fontSize: 7,
-    fontWeight: "700",
-    color: Theme.textOnDarkMuted,
-    textAlign: "center",
-  },
-  loadModeCountTextActive: { color: Theme.textOnDark },
   loadSearchRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingTop: 8,
+    paddingTop: 10,
   },
   loadSearchRowSecured: {
     paddingTop: 6,
@@ -2665,25 +2792,23 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
+    height: 38,
     backgroundColor: Theme.darkSurface,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderRadius: 11,
+    paddingHorizontal: 12,
+    paddingVertical: 0,
   },
   loadSearchIcon: { marginRight: 6 },
   loadSearchInput: {
     flex: 1,
     minWidth: 0,
+    height: 18,
     fontSize: 11,
+    lineHeight: 11,
     color: Theme.textOnDark,
     paddingVertical: 0,
-    ...Platform.select({
-      web: {
-        outlineStyle: "none",
-      } as any,
-    }),
   },
   loadTypeFilterWrap: {
     flexDirection: "row",
@@ -2693,13 +2818,13 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
-    paddingHorizontal: 5,
-    paddingVertical: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
     gap: 3,
   },
   loadTypeFilterChip: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
     borderRadius: 999,
     flexDirection: "row",
     alignItems: "center",
@@ -2728,8 +2853,6 @@ const styles = StyleSheet.create({
   },
   loadContentWrap: {
     flex: 1,
-    width: "100%",
-    minWidth: 0,
     backgroundColor: LOAD_CONTENT_BG,
     borderTopLeftRadius: 0,
     borderTopRightRadius: 0,
@@ -2739,47 +2862,13 @@ const styles = StyleSheet.create({
   loadContentWrapSecured: {
     marginTop: 0,
   },
-  scroll: { flex: 1, width: "100%", minWidth: 0 },
+  scroll: { flex: 1 },
   scrollContent: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 16,
-    flexGrow: 1,
-    width: "100%",
   },
   scrollContentSecured: {
     paddingTop: 12,
-  },
-  shareCard: {
-    borderWidth: 2,
-    ...(Platform.OS === "android" ? { borderStyle: "dashed" as const } : {}),
-    borderColor: "transparent",
-    borderRadius: 10,
-    paddingVertical: 28,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    marginBottom: 14,
-    backgroundColor: LOAD_BROADCAST_BG,
-  },
-  shareCardIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#dce4ee",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  shareCardText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: LOAD_BROADCAST_MUTED,
-    textTransform: "uppercase",
-    letterSpacing: 1.5,
   },
   loadingWrap: { paddingVertical: 32, alignItems: "center", gap: 12 },
   loadingText: { fontSize: 10, fontWeight: "700", color: Theme.textMuted },
@@ -3127,11 +3216,8 @@ const styles = StyleSheet.create({
     color: "#A0A0A0",
     marginTop: 12,
     textAlign: "center",
-    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingHorizontal: 40,
     lineHeight: 20,
-    alignSelf: "stretch",
-    width: "100%",
-    maxWidth: "100%",
   },
   successOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -3321,6 +3407,7 @@ const styles = StyleSheet.create({
   assignModalPage: {
     flex: 1,
     backgroundColor: "#f4f5f7",
+    position: "relative",
   },
   assignModalHeader: {
     flexDirection: "row",
@@ -3355,6 +3442,119 @@ const styles = StyleSheet.create({
   },
   assignModalScroll: { flex: 1 },
   assignModalScrollContent: { paddingHorizontal: 20, paddingTop: 20 },
+  /** Aggregate deploy — mirrors TripAssignmentBlock card on trip detail */
+  tripAssignCard: {
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  tripAssignCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingBottom: 10,
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
+  tripAssignCardHeaderTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  tripAssignSourceBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  tripAssignBadgeUnassigned: {
+    backgroundColor: Theme.surfaceLight,
+    borderColor: Theme.borderInput,
+  },
+  tripAssignSourceBadgeText: {
+    fontSize: 7,
+    fontWeight: "600",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  tripAssignSourceBadgeTextUnassigned: {
+    color: Theme.textPrimaryDark,
+  },
+  tripAssignRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
+  tripAssignRowLast: { borderBottomWidth: 0 },
+  tripAssignRowLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
+  },
+  tripAssignIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  tripAssignIconInactive: {
+    backgroundColor: Theme.surfaceGray,
+    borderColor: Theme.borderLight,
+  },
+  tripAssignIconDriverActive: {
+    backgroundColor: Theme.surfaceGray,
+    borderColor: Theme.primary,
+  },
+  tripAssignIconVehicleActive: {
+    backgroundColor: Theme.surfaceGray,
+    borderColor: Theme.borderLight,
+  },
+  tripAssignRowTextCol: { flex: 1, minWidth: 0 },
+  tripAssignRowLabel: {
+    fontSize: 9,
+    fontWeight: "400",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  tripAssignRowInput: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    minHeight: 22,
+  },
+  tripAssignPartnerBlock: {
+    marginTop: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+    gap: 8,
+  },
+  tripAssignPartnerHint: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    lineHeight: 16,
+  },
   assignSectionLabel: {
     fontSize: 10,
     fontWeight: "800",
@@ -3386,6 +3586,132 @@ const styles = StyleSheet.create({
   },
   assignInputWrap: {
     marginBottom: 6,
+  },
+  subcontractPickBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 2,
+    borderColor: "transparent",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    minHeight: 44,
+    marginBottom: 6,
+  },
+  subcontractPickLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginRight: 10,
+  },
+  subcontractPickValue: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+  },
+  subcontractPickerModalRoot: {
+    flex: 1,
+    width: "100%",
+    backgroundColor: Theme.overlayBackdrop,
+  },
+  subcontractPickerModalBody: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  subcontractPickerCard: {
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    overflow: "hidden",
+    maxHeight: 360,
+  },
+  subcontractPickerTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textMutedDemo,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
+  subcontractPickerToggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+  },
+  subcontractPickerToggleLabel: {
+    flex: 1,
+    paddingRight: 12,
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.textPrimary,
+  },
+  subcontractPickerScroll: { maxHeight: 260 },
+  subcontractPickerScrollContent: { paddingVertical: 6 },
+  subcontractPickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+    minHeight: 44,
+  },
+  subcontractPickerRowActive: {
+    backgroundColor: Theme.surfaceLight,
+  },
+  subcontractPickerText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 14,
+    fontWeight: "600",
+    color: Theme.textPrimary,
+    marginRight: 10,
+  },
+  subcontractPickerBadge: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.primary,
+    borderWidth: 1,
+    borderColor: Theme.primary,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginRight: 10,
+  },
+  subcontractPickerEmpty: {
+    padding: 16,
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textMuted,
+  },
+  subcontractPickerClearBtn: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: Theme.surface,
+  },
+  subcontractPickerClearText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.teslaRed,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
   },
   assignVehicleInput: {
     backgroundColor: Theme.surfaceGray,
