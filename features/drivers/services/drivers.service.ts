@@ -28,6 +28,10 @@ export interface DriverRow {
   commission_percent?: number | null;
   /** Per-kilometer rate for the driver (nullable). */
   commission_per_km?: number | null;
+  /** Joined profile data for the driver. */
+  avatar_url?: string | null;
+  avatar_seed?: string | null;
+  profile_full_name?: string | null;
 }
 
 /**
@@ -42,12 +46,17 @@ function excludeTrackingOnly(drivers: DriverRow[]): DriverRow[] {
 
 /** Ensure display name is set (DB may use name or full_name). */
 function normalizeDriverRow<
-  T extends { name?: string | null; full_name?: string | null },
+  T extends {
+    name?: string | null;
+    full_name?: string | null;
+    profile_full_name?: string | null;
+  },
 >(row: T): T {
   const name =
     (
       row.name ??
-      (row as { full_name?: string | null }).full_name ??
+      row.full_name ??
+      row.profile_full_name ??
       ""
     ).trim() || "—";
   return { ...row, name };
@@ -57,6 +66,35 @@ export async function getDriversByOrganization(
   orgId: string,
   opts?: PageOpts,
 ): Promise<{ error: Error | null; drivers: DriverRow[]; hasMore?: boolean }> {
+  try {
+    // Try optimized RPC first
+    const { data, error: rpcError } = await supabase().rpc("get_drivers_with_profiles", {
+      p_org_id: orgId,
+    });
+
+    if (!rpcError && data) {
+      const raw = excludeTrackingOnly((data ?? []) as DriverRow[]);
+      const normalized = raw.map((d) => normalizeDriverRow(d));
+      if (opts != null) {
+        const limit = opts.limit ?? DEFAULT_PAGE_SIZE;
+        const offset = opts.offset ?? 0;
+        const hasMore = normalized.length > offset + limit;
+        return {
+          error: null,
+          drivers: normalized.slice(offset, offset + limit),
+          hasMore,
+        };
+      }
+      return { error: null, drivers: normalized };
+    }
+    if (rpcError && __DEV__) {
+      console.warn('[getDriversByOrganization] RPC failed, falling back to select:', rpcError.message);
+    }
+  } catch (e) {
+    if (__DEV__) console.warn('[getDriversByOrganization] RPC exception:', e);
+  }
+
+  // Fallback to standard select if RPC fails or is missing
   const base = () =>
     supabase()
       .from("drivers")
@@ -226,6 +264,27 @@ export async function getLinkedDriversForCurrentUser(
     .order("created_at", { ascending: false });
   if (error) return { error: new Error(error.message), drivers: [] };
   return { error: null, drivers: (data ?? []) as DriverRow[] };
+}
+
+/** Fetch display profile for a driver (bypasses RLS). */
+export async function getDriverProfileDisplay(driverId: string): Promise<{
+  error: Error | null;
+  profile: { fullName: string; avatarUrl?: string; avatarSeed?: string } | null;
+}> {
+  const { data, error } = await supabase().rpc("get_driver_profile_display", {
+    p_driver_id: driverId,
+  });
+  if (error) return { error: new Error(error.message), profile: null };
+  if (!data) return { error: null, profile: null };
+  const raw = data as { fullName?: string; avatarUrl?: string; avatarSeed?: string };
+  return {
+    error: null,
+    profile: {
+      fullName: (raw.fullName ?? "").trim(),
+      avatarUrl: (raw.avatarUrl ?? "").trim(),
+      avatarSeed: (raw.avatarSeed ?? "").trim(),
+    },
+  };
 }
 
 /** Driver invite row (from get_driver_invites_received). Driver sees these in the app. */

@@ -26,10 +26,11 @@ import {
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { Building2, CircleCheck, Truck, User } from "lucide-react-native";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  Image,
   Platform,
   RefreshControl,
   ScrollView,
@@ -41,6 +42,14 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getAvatarUriForSeed } from "@/constants/DriverLevels";
+import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
+import { getSignedAvatarUrl } from "@/lib/avatarUpload";
+import { getLinkedOrgProfile } from "@/features/clients/services/clients.service";
+import { getDriverProfileDisplay } from "@/features/drivers/services/drivers.service";
+import type { ClientRow } from "@/features/clients/services/clients.service";
+import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
+import type { DriverRow } from "@/features/drivers/services/drivers.service";
 
 type NetworkSegment = "ALL" | "SENT" | "RECEIVED";
 type NodeKindFilter = "ALL" | "CLIENT" | "SUPPLIER" | "DRIVER";
@@ -55,6 +64,10 @@ interface NetworkNode {
   availableOnApp?: boolean;
   isIntegrated: boolean;
   phone?: string | null;
+  linked_organization_id?: string | null;
+  user_id?: string | null;
+  avatar_url?: string | null;
+  avatar_seed?: string | null;
 }
 
 type RequestKind =
@@ -150,6 +163,115 @@ function formatRequestStatus(status: string): string {
   return normalized.replace(/_/g, " ").toUpperCase();
 }
 
+function NetworkAvatar({
+  node,
+  onPlatform,
+}: {
+  node: NetworkNode;
+  onPlatform: boolean;
+}) {
+  const [uri, setUri] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      let avatarUrl = "";
+      let avatarSeed = "";
+
+      // 1. Layer: Check if profile data is already in the node (from optimized bulk fetch)
+      if (node.avatar_url || node.avatar_seed) {
+        avatarUrl = node.avatar_url || "";
+        avatarSeed = node.avatar_seed || "";
+      } else if (node.isIntegrated) {
+        // 2. Layer: Lazy-fetch if bulk fetch didn't provide it
+        try {
+          if (node.type === "DRIVER") {
+            const { profile } = await getDriverProfileDisplay(node.id);
+            if (profile) {
+              avatarUrl = profile.avatarUrl || "";
+              avatarSeed = profile.avatarSeed || "";
+            }
+          } else if (node.linked_organization_id) {
+            const { profile } = await getLinkedOrgProfile(node.linked_organization_id);
+            if (profile) {
+              avatarUrl = profile.avatarUrl || "";
+              avatarSeed = profile.avatarSeed || "";
+            }
+          }
+        } catch (e) {
+          if (__DEV__) console.warn('[NetworkAvatar] Lazy fetch failed:', e);
+        }
+      }
+
+      if (!mounted) return;
+
+      if (avatarUrl?.startsWith("http")) {
+        setUri(avatarUrl);
+        return;
+      }
+
+      if (avatarUrl?.trim()) {
+        const signed = await getSignedAvatarUrl(avatarUrl.trim());
+        if (mounted) setUri(signed);
+        return;
+      }
+
+      if (avatarSeed) {
+        const preset =
+          node.type === "DRIVER"
+            ? getAvatarUriForSeed(avatarSeed)
+            : getUser2DAvatarUriForSeed(avatarSeed);
+        if (mounted) setUri(preset);
+        return;
+      }
+
+      setUri(null);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [
+    node.id,
+    node.isIntegrated,
+    node.type,
+    node.linked_organization_id,
+    node.avatar_url,
+    node.avatar_seed,
+  ]);
+
+  if (uri) {
+    return <Image source={{ uri }} style={styles.nodeAvatar} />;
+  }
+
+  // If no avatar found but on platform, we could show a more "active" default icon
+  // but for now we'll stick to the themed icons.
+  if (node.type === "DRIVER") {
+    return (
+      <User
+        size={18}
+        strokeWidth={1.5}
+        color={onPlatform ? Theme.darkGreen : Theme.iconSecondary}
+      />
+    );
+  }
+  if (node.type === "SUPPLIER") {
+    return (
+      <Truck
+        size={18}
+        strokeWidth={1.5}
+        color={onPlatform ? Theme.darkGreen : Theme.iconSecondary}
+      />
+    );
+  }
+  return (
+    <Building2
+      size={18}
+      strokeWidth={1.5}
+      color={onPlatform ? Theme.darkGreen : Theme.iconSecondary}
+    />
+  );
+}
+
 export default function NetworkScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -229,63 +351,68 @@ export default function NetworkScreen() {
 
   const nodes = useMemo((): NetworkNode[] => {
     const list: NetworkNode[] = [];
-    clients.forEach((c) => {
-      const row = c as {
-        linked_organization_id?: string | null;
-        is_integrated?: boolean;
-        phone?: string | null;
-      };
-      const isIntegrated = Boolean(
-        row.is_integrated ?? row.linked_organization_id,
-      );
-      list.push({
-        id: c.id,
-        name: (c.name || c.contact_person || "Unnamed").toUpperCase(),
-        type: "CLIENT",
-        status: "INTEGRATED",
-        availableOnApp: Boolean(
-          row.linked_organization_id ?? row.is_integrated,
-        ),
-        isIntegrated,
-        phone: row.phone ?? (c as { phone?: string }).phone ?? null,
+    if (Array.isArray(clients)) {
+      clients.forEach((c) => {
+        const isIntegrated = Boolean(
+          c.is_integrated ?? c.linked_organization_id,
+        );
+        list.push({
+          id: c.id,
+          name: (c.name || c.contact_person || "Unnamed").toUpperCase(),
+          type: "CLIENT",
+          status: "INTEGRATED",
+          availableOnApp: Boolean(
+            c.linked_organization_id ?? c.is_integrated,
+          ),
+          isIntegrated,
+          phone: c.phone ?? null,
+          linked_organization_id: c.linked_organization_id,
+          avatar_url: c.avatar_url,
+          avatar_seed: c.avatar_seed,
+        });
       });
-    });
-    suppliers.forEach((s) => {
-      const row = s as {
-        linked_organization_id?: string | null;
-        supplier_type?: string;
-        phone?: string | null;
-      };
-      const isIntegrated =
-        row.supplier_type === "integrated" ||
-        Boolean(row.linked_organization_id);
-      list.push({
-        id: s.id,
-        name: (
-          s.name ||
-          s.company_name ||
-          s.contact_person ||
-          "Unnamed"
-        ).toUpperCase(),
-        type: "SUPPLIER",
-        status: "INTEGRATED",
-        availableOnApp: Boolean(row.linked_organization_id),
-        isIntegrated,
-        phone: row.phone ?? (s as { phone?: string }).phone ?? null,
+    }
+    if (Array.isArray(suppliers)) {
+      suppliers.forEach((s) => {
+        const isIntegrated =
+          s.supplier_type === "integrated" ||
+          Boolean(s.linked_organization_id);
+        list.push({
+          id: s.id,
+          name: (
+            s.name ||
+            s.company_name ||
+            s.contact_person ||
+            "Unnamed"
+          ).toUpperCase(),
+          type: "SUPPLIER",
+          status: "INTEGRATED",
+          availableOnApp: Boolean(s.linked_organization_id),
+          isIntegrated,
+          phone: s.phone ?? null,
+          linked_organization_id: s.linked_organization_id,
+          avatar_url: s.avatar_url,
+          avatar_seed: s.avatar_seed,
+        });
       });
-    });
-    drivers.forEach((d) => {
-      const leftAt = (d as { left_at?: string | null }).left_at;
-      const isDisconnected = leftAt != null && leftAt !== "";
-      list.push({
-        id: d.id,
-        name: (d.name || "Unnamed").toUpperCase(),
-        type: "DRIVER",
-        status: isDisconnected ? "DISCONNECTED" : "INTEGRATED",
-        availableOnApp: !isDisconnected,
-        isIntegrated: !isDisconnected,
+    }
+    if (Array.isArray(drivers)) {
+      drivers.forEach((d) => {
+        const leftAt = d.left_at;
+        const isDisconnected = leftAt != null && leftAt !== "";
+        list.push({
+          id: d.id,
+          name: (d.name || "Unnamed").toUpperCase(),
+          type: "DRIVER",
+          status: isDisconnected ? "DISCONNECTED" : "INTEGRATED",
+          availableOnApp: !isDisconnected,
+          isIntegrated: !isDisconnected,
+          user_id: d.user_id,
+          avatar_url: d.avatar_url,
+          avatar_seed: d.avatar_seed,
+        });
       });
-    });
+    }
     return list;
   }, [clients, suppliers, drivers]);
 
@@ -780,31 +907,10 @@ export default function NetworkScreen() {
                           : styles.nodeIconWrapMuted,
                       ]}
                     >
-                      {node.type === "DRIVER" ? (
-                        <User
-                          size={18}
-                          strokeWidth={1.5}
-                          color={
-                            onPlatform ? Theme.darkGreen : Theme.iconSecondary
-                          }
-                        />
-                      ) : node.type === "SUPPLIER" ? (
-                        <Truck
-                          size={18}
-                          strokeWidth={1.5}
-                          color={
-                            onPlatform ? Theme.darkGreen : Theme.iconSecondary
-                          }
-                        />
-                      ) : (
-                        <Building2
-                          size={18}
-                          strokeWidth={1.5}
-                          color={
-                            onPlatform ? Theme.darkGreen : Theme.iconSecondary
-                          }
-                        />
-                      )}
+                      <NetworkAvatar
+                        node={node}
+                        onPlatform={onPlatform}
+                      />
                       <View
                         style={[
                           styles.connectionDot,
@@ -1251,6 +1357,12 @@ const styles = StyleSheet.create({
   },
   nodeIconWrapActive: { backgroundColor: "transparent" },
   nodeIconWrapMuted: { backgroundColor: Theme.surface },
+  nodeAvatar: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 14,
+    backgroundColor: Theme.surface,
+  },
   connectedBadge: {
     position: "absolute",
     bottom: -2,
