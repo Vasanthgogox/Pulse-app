@@ -419,7 +419,7 @@ function MetricCard({
   value: string;
   count: number;
   color: string;
-  icon: string;
+  icon: any;
 }) {
   return (
     <View style={[styles.metricCard, { borderColor: `${color}20` }]}>

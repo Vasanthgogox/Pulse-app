@@ -23,6 +23,11 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
 import { getAvatarUriForSeed, ALL_PRESET_AVATARS } from '@/constants/DriverLevels';
+import {
+  DEFAULT_USER_2D_AVATAR_SEED,
+  USER_2D_AVATARS,
+  getUser2DAvatarUriForSeed,
+} from '@/constants/UserAvatars';
 import { useAuth } from '@/contexts/AuthContext';
 import { pickAndUploadAvatar, getSignedAvatarUrl } from '@/lib/avatarUpload';
 import { validatePhone } from '@/lib/phoneValidation';
@@ -49,6 +54,8 @@ export interface EditProfileModalProps {
   onPresetSelected?: (seed: string) => void;
   /** Profile quote/status (WhatsApp-style). Shown in Edit when provided (e.g. driver profile). */
   initialStatusText?: string;
+  /** Controls which preset avatars to show when choosing an avatar. */
+  avatarPresetStyle?: 'driver' | 'user-2d';
 }
 
 export function EditProfileModal({
@@ -62,9 +69,12 @@ export function EditProfileModal({
   initialAvatarSeed = DEFAULT_AVATAR_SEED,
   onPresetSelected,
   initialStatusText = '',
+  avatarPresetStyle = 'driver',
 }: EditProfileModalProps) {
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
+  const isUser2D = avatarPresetStyle === 'user-2d';
+  const accent = isUser2D ? Theme.primary : Theme.positive;
   const [fullName, setFullName] = useState(initialFullName);
   const [phone, setPhone] = useState(initialPhone);
   const [companyName, setCompanyName] = useState(initialCompanyName);
@@ -72,7 +82,13 @@ export function EditProfileModal({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
-  const [avatarUri, setAvatarUri] = useState<string>(() => getAvatarUriForSeed(DEFAULT_AVATAR_SEED));
+  const defaultPresetSeed =
+    avatarPresetStyle === 'user-2d' ? DEFAULT_USER_2D_AVATAR_SEED : DEFAULT_AVATAR_SEED;
+  const [avatarUri, setAvatarUri] = useState<string>(() =>
+    avatarPresetStyle === 'user-2d'
+      ? getUser2DAvatarUriForSeed(defaultPresetSeed)
+      : getAvatarUriForSeed(defaultPresetSeed)
+  );
   const [selectedPresetSeed, setSelectedPresetSeed] = useState<string>(initialAvatarSeed);
   const [showAvatarDropdown, setShowAvatarDropdown] = useState(false);
 
@@ -88,10 +104,19 @@ export function EditProfileModal({
     }
   }, [visible, initialFullName, initialPhone, initialCompanyName, initialStatusText, initialAvatarSeed]);
 
-  /** Resolve display URI: uploaded (signed URL) or driver preset from assets/drivers. */
+  const getPresetUri = useCallback(
+    (seed: string) => {
+      return avatarPresetStyle === 'user-2d'
+        ? getUser2DAvatarUriForSeed(seed)
+        : getAvatarUriForSeed(seed);
+    },
+    [avatarPresetStyle]
+  );
+
+  /** Resolve display URI: uploaded (signed URL) or preset avatar. */
   const resolveAvatarUri = useCallback(async (avatarUrl: string | undefined, presetSeed: string) => {
     if (!avatarUrl?.trim()) {
-      setAvatarUri(getAvatarUriForSeed(presetSeed));
+      setAvatarUri(getPresetUri(presetSeed));
       return;
     }
     if (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://')) {
@@ -99,8 +124,8 @@ export function EditProfileModal({
       return;
     }
     const signed = await getSignedAvatarUrl(avatarUrl.trim());
-    setAvatarUri(signed ?? getAvatarUriForSeed(presetSeed));
-  }, []);
+    setAvatarUri(signed ?? getPresetUri(presetSeed));
+  }, [getPresetUri]);
 
   useEffect(() => {
     if (!visible) return;
@@ -145,6 +170,7 @@ export function EditProfileModal({
       setError(err.message);
       return;
     }
+    await onPhotoUpdated?.();
     onClose();
   };
 
@@ -178,12 +204,19 @@ export function EditProfileModal({
       return;
     }
     setSelectedPresetSeed(seed);
-    setAvatarUri(getAvatarUriForSeed(seed));
+    setAvatarUri(getPresetUri(seed));
     onPresetSelected?.(seed);
     await onPhotoUpdated?.();
   };
 
-  const selectedPreset = ALL_PRESET_AVATARS.find((a) => a.seed === selectedPresetSeed) ?? ALL_PRESET_AVATARS[0];
+  const driverPreset =
+    ALL_PRESET_AVATARS.find((a) => a.seed === selectedPresetSeed) ?? ALL_PRESET_AVATARS[0];
+  const userPreset =
+    USER_2D_AVATARS.find((a) => a.seed === selectedPresetSeed) ?? USER_2D_AVATARS[0];
+  const selectedPreset =
+    avatarPresetStyle === 'user-2d'
+      ? { seed: userPreset.seed, name: userPreset.name, image: { uri: getUser2DAvatarUriForSeed(userPreset.seed) } }
+      : driverPreset;
 
   const handleRemovePhoto = async () => {
     setError(null);
@@ -193,7 +226,7 @@ export function EditProfileModal({
       return;
     }
     setSelectedPresetSeed(initialAvatarSeed);
-    setAvatarUri(getAvatarUriForSeed(initialAvatarSeed));
+    setAvatarUri(getPresetUri(initialAvatarSeed));
     await onPhotoUpdated?.();
   };
 
@@ -208,25 +241,45 @@ export function EditProfileModal({
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="pageSheet"
+      presentationStyle="fullScreen"
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        style={[styles.outer, { paddingTop: insets.top, paddingBottom: insets.bottom + 16 }]}
+        style={styles.outer}
         behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
         keyboardVerticalOffset={0}
       >
-        <View style={[styles.header, styles.headerThemed]}>
+        <View
+          style={[
+            styles.header,
+            { paddingTop: insets.top + Layout.driverHeaderTopOffset },
+            isUser2D
+              ? {
+                  backgroundColor: Theme.darkBackground,
+                  borderBottomColor: Theme.borderOnDark,
+                }
+              : styles.headerThemed,
+          ]}
+        >
           <TouchableOpacity
             onPress={onClose}
-            style={styles.headerBtn}
+            style={[
+              styles.headerBtn,
+              isUser2D && { backgroundColor: 'transparent' },
+            ]}
             hitSlop={12}
             accessibilityLabel="Close"
             disabled={saving}
           >
-            <FontAwesome name="times" size={20} color={Theme.textPrimaryDark} />
+            <FontAwesome
+              name="times"
+              size={20}
+              color={isUser2D ? Theme.textOnDark : Theme.textPrimaryDark}
+            />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Edit profile</Text>
+          <Text style={[styles.headerTitle, isUser2D && { color: Theme.textOnDark }]}>
+            Edit profile
+          </Text>
           <View style={styles.headerSpacer} />
         </View>
 
@@ -238,12 +291,28 @@ export function EditProfileModal({
         >
           {/* Change profile photo: one section with two options — Upload photo | Choose avatar (dropdown with arrow) */}
           <View style={styles.avatarSection}>
-            <Text style={[styles.sectionLabel, { color: Theme.textMuted }]}>Change profile photo</Text>
-            <View style={[styles.avatarPreviewWrap, styles.avatarRingGreen]}>
+            <Text style={[styles.sectionLabel, { color: Theme.textMuted }]}>
+              Change profile photo
+            </Text>
+            <View
+              style={[
+                styles.avatarPreviewWrap,
+                styles.avatarRingGreen,
+                isUser2D && {
+                  backgroundColor: Theme.surfaceGray,
+                  borderColor: Theme.borderLight,
+                },
+              ]}
+            >
               <Image source={{ uri: avatarUri }} style={styles.avatarPreview} />
             </View>
 
-            <View style={styles.changePhotoOptionsCard}>
+            <View
+              style={[
+                styles.changePhotoOptionsCard,
+                isUser2D && { backgroundColor: Theme.surface, borderColor: Theme.borderLight },
+              ]}
+            >
               <TouchableOpacity
                 style={[styles.changePhotoOptionRow, styles.changePhotoOptionBorder]}
                 onPress={handleChangePhoto}
@@ -252,9 +321,14 @@ export function EditProfileModal({
                 accessibilityLabel="Upload photo"
               >
                 {photoUploading ? (
-                  <ActivityIndicator size="small" color={Theme.positive} style={styles.photoIcon} />
+                  <ActivityIndicator size="small" color={accent} style={styles.photoIcon} />
                 ) : (
-                  <FontAwesome name="cloud-upload" size={18} color={Theme.positive} style={styles.photoIcon} />
+                  <FontAwesome
+                    name="cloud-upload"
+                    size={18}
+                    color={accent}
+                    style={styles.photoIcon}
+                  />
                 )}
                 <Text style={styles.changePhotoOptionLabel}>
                   {photoUploading ? 'Uploading…' : 'Profile photo upload'}
@@ -288,27 +362,39 @@ export function EditProfileModal({
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={true}
                 >
-                  {ALL_PRESET_AVATARS.map((av) => {
-                    const isSelected = selectedPresetSeed === av.seed;
-                    return (
-                      <TouchableOpacity
-                        key={av.seed}
-                        style={[styles.dropdownItem, isSelected && styles.dropdownItemSelected]}
-                        onPress={() => handleSelectPreset(av.seed)}
-                        activeOpacity={0.7}
-                        accessibilityLabel={av.name}
-                        accessibilityState={{ selected: isSelected }}
-                      >
-                        <Image source={av.image} style={styles.dropdownItemAvatar} />
-                        <Text style={[styles.dropdownItemText, isSelected && styles.dropdownItemTextSelected]} numberOfLines={1}>
-                          {av.name}
-                        </Text>
-                        {isSelected ? (
-                          <FontAwesome name="check" size={14} color={Theme.positive} />
-                        ) : null}
-                      </TouchableOpacity>
-                    );
-                  })}
+                  <View style={styles.avatarGrid}>
+                    {(avatarPresetStyle === 'user-2d' ? USER_2D_AVATARS : ALL_PRESET_AVATARS).map((av) => {
+                      const seed = (av as { seed: string }).seed;
+                      const name = (av as { name?: string }).name ?? 'Avatar';
+                      const isSelected = selectedPresetSeed === seed;
+                      const imageSource =
+                        avatarPresetStyle === 'user-2d'
+                          ? ({ uri: getUser2DAvatarUriForSeed(seed) } as const)
+                          : (av as { image: unknown }).image;
+                      return (
+                        <View key={seed} style={styles.avatarGridCell}>
+                          <TouchableOpacity
+                            style={[
+                              styles.avatarGridItem,
+                              isSelected && styles.avatarGridItemSelected,
+                            ]}
+                            onPress={() => handleSelectPreset(seed)}
+                            activeOpacity={0.8}
+                            accessibilityRole="button"
+                            accessibilityLabel={name}
+                            accessibilityState={{ selected: isSelected }}
+                          >
+                            <Image source={imageSource as never} style={styles.avatarGridAvatar} />
+                            {isSelected ? (
+                              <View style={styles.avatarGridCheck}>
+                                <FontAwesome name="check" size={12} color={Theme.textOnPrimary} />
+                              </View>
+                            ) : null}
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })}
+                  </View>
                 </ScrollView>
               </View>
             ) : null}
@@ -406,9 +492,22 @@ export function EditProfileModal({
           </Text>
         </ScrollView>
 
-        <View style={[styles.footer, styles.footerThemed, { paddingBottom: insets.bottom + 16 }]}>
+        <View
+          style={[
+            styles.footer,
+            isUser2D
+              ? { backgroundColor: Theme.screenBackground, borderTopColor: Theme.borderLight }
+              : styles.footerThemed,
+            { paddingBottom: insets.bottom + 16 },
+          ]}
+        >
           <TouchableOpacity
-            style={[styles.saveBtn, styles.saveBtnGreen, saving && styles.saveBtnDisabled]}
+            style={[
+              styles.saveBtn,
+              styles.saveBtnGreen,
+              isUser2D && { backgroundColor: Theme.darkBackground },
+              saving && styles.saveBtnDisabled,
+            ]}
             onPress={handleSave}
             disabled={saving}
             activeOpacity={0.8}
@@ -435,7 +534,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingVertical: 16,
+    paddingBottom: Layout.spacingMedium,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
@@ -591,33 +690,42 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     maxHeight: 280,
   },
-  dropdownItem: {
+  avatarGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
+    flexWrap: 'wrap',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
   },
-  dropdownItemSelected: {
-    backgroundColor: Theme.positiveMuted,
+  avatarGridCell: {
+    flexBasis: '16.6667%',
+    padding: 5,
   },
-  dropdownItemAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    marginRight: 12,
+  avatarGridItem: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
+    overflow: 'hidden',
   },
-  dropdownItemText: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '500',
-    color: Theme.textPrimaryDark,
+  avatarGridItemSelected: {
+    borderColor: Theme.positive,
   },
-  dropdownItemTextSelected: {
-    fontWeight: '600',
-    color: Theme.positive,
+  avatarGridAvatar: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarGridCheck: {
+    position: 'absolute',
+    right: 4,
+    bottom: 4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: Theme.positive,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   photoIcon: { marginRight: 14 },
   photoLabel: {

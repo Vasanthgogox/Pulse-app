@@ -9,10 +9,7 @@ import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import {
-  TripExpandableCard,
-  type TripRow
-} from "@/features/trips";
+import { TripExpandableCard, type TripRow } from "@/features/trips";
 import { canAccessTrips, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatLedgerDate } from "@/lib/format";
@@ -28,6 +25,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
+  Modal,
   Platform,
   RefreshControl,
   ScrollView,
@@ -35,10 +33,9 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   useWindowDimensions,
   View,
-  Modal,
-  TouchableWithoutFeedback,
   type TextStyle,
   type ViewStyle,
 } from "react-native";
@@ -46,7 +43,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type ActiveStatusTab = "all" | "unassigned" | "assigned" | "in_transit";
 type SupplyFilter = "all" | "asset" | "aggregated";
-type SortBy = "date_desc" | "date_asc" | "revenue_desc" | "revenue_asc" | "client_asc" | "client_desc";
+type SortBy =
+  | "date_desc"
+  | "date_asc"
+  | "revenue_desc"
+  | "revenue_asc"
+  | "client_asc"
+  | "client_desc";
 type PaymentFilter = "all" | "pending" | "partial" | "paid";
 type DateFilter = "all" | "today" | "tomorrow" | "this_week" | "this_month";
 
@@ -131,8 +134,8 @@ export default function TripsScreen() {
   const tripsByStatus = useMemo(
     () =>
       showCompletedList
-        // History tab: show only completed trips that had a driver assigned (no filtering)
-        ? trips.filter(
+        ? // History tab: show only completed trips that had a driver assigned (no filtering)
+          trips.filter(
             (t) => isCompletedStatus(t.status) && t.driver_id != null,
           )
         : trips.filter((t) => !isCompletedStatus(t.status)),
@@ -176,29 +179,45 @@ export default function TripsScreen() {
     if (paymentFilter !== "all") {
       list = list.filter((t) => {
         const status = (t.payment_status || "pending").toLowerCase();
-        if (paymentFilter === "paid") return status === "paid" || status === "fully_paid";
+        if (paymentFilter === "paid")
+          return status === "paid" || status === "fully_paid";
         return status === paymentFilter;
       });
     }
 
     if (loadTypeFilter !== "all") {
-      list = list.filter((t) => (t.load_type || "").toLowerCase() === loadTypeFilter.toLowerCase());
+      list = list.filter(
+        (t) =>
+          (t.load_type || "").toLowerCase() === loadTypeFilter.toLowerCase(),
+      );
     }
 
     if (dateRangeFilter !== "all") {
       const now = new Date();
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      const startOfDay = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+      ).getTime();
       const endOfDay = startOfDay + 24 * 60 * 60 * 1000;
       const tomorrowStart = endOfDay;
       const tomorrowEnd = tomorrowStart + 24 * 60 * 60 * 1000;
-      
-      const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay())).getTime();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+      const startOfWeek = new Date(
+        now.setDate(now.getDate() - now.getDay()),
+      ).getTime();
+      const startOfMonth = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        1,
+      ).getTime();
 
       list = list.filter((t) => {
         const date = new Date(t.pickup_date || t.created_at).getTime();
-        if (dateRangeFilter === "today") return date >= startOfDay && date < endOfDay;
-        if (dateRangeFilter === "tomorrow") return date >= tomorrowStart && date < tomorrowEnd;
+        if (dateRangeFilter === "today")
+          return date >= startOfDay && date < endOfDay;
+        if (dateRangeFilter === "tomorrow")
+          return date >= tomorrowStart && date < tomorrowEnd;
         if (dateRangeFilter === "this_week") return date >= startOfWeek;
         if (dateRangeFilter === "this_month") return date >= startOfMonth;
         return true;
@@ -209,7 +228,9 @@ export default function TripsScreen() {
     if (q) {
       list = list.filter((t) => {
         const displayName = (
-          shipperNameByTripId[t.id] ?? t.client_name ?? ""
+          shipperNameByTripId[t.id] ??
+          t.client_name ??
+          ""
         ).toLowerCase();
         const pickup = (t.pickup_area ?? "").toLowerCase();
         const drop = (t.drop_location ?? "").toLowerCase();
@@ -229,9 +250,15 @@ export default function TripsScreen() {
     sorted.sort((a, b) => {
       switch (sortBy) {
         case "date_desc":
-          return new Date(b.pickup_date || b.created_at).getTime() - new Date(a.pickup_date || a.created_at).getTime();
+          return (
+            new Date(b.pickup_date || b.created_at).getTime() -
+            new Date(a.pickup_date || a.created_at).getTime()
+          );
         case "date_asc":
-          return new Date(a.pickup_date || a.created_at).getTime() - new Date(b.pickup_date || b.created_at).getTime();
+          return (
+            new Date(a.pickup_date || a.created_at).getTime() -
+            new Date(b.pickup_date || b.created_at).getTime()
+          );
         case "revenue_desc":
           return (b.client_price || 0) - (a.client_price || 0);
         case "revenue_asc":
@@ -331,12 +358,36 @@ export default function TripsScreen() {
 
   const sortOptions = useMemo(
     () => [
-      { id: "date_desc" as const, label: tr("newestFirst"), icon: "calendar" as const },
-      { id: "date_asc" as const, label: tr("oldestFirst"), icon: "calendar" as const },
-      { id: "revenue_desc" as const, label: tr("revenueHighToLow"), icon: "money" as const },
-      { id: "revenue_asc" as const, label: tr("revenueLowToHigh"), icon: "money" as const },
-      { id: "client_asc" as const, label: tr("clientAZ"), icon: "sort-alpha-asc" as const },
-      { id: "client_desc" as const, label: tr("clientZA"), icon: "sort-alpha-desc" as const },
+      {
+        id: "date_desc" as const,
+        label: tr("newestFirst"),
+        icon: "calendar" as const,
+      },
+      {
+        id: "date_asc" as const,
+        label: tr("oldestFirst"),
+        icon: "calendar" as const,
+      },
+      {
+        id: "revenue_desc" as const,
+        label: tr("revenueHighToLow"),
+        icon: "money" as const,
+      },
+      {
+        id: "revenue_asc" as const,
+        label: tr("revenueLowToHigh"),
+        icon: "money" as const,
+      },
+      {
+        id: "client_asc" as const,
+        label: tr("clientAZ"),
+        icon: "sort-alpha-asc" as const,
+      },
+      {
+        id: "client_desc" as const,
+        label: tr("clientZA"),
+        icon: "sort-alpha-desc" as const,
+      },
     ],
     [tr],
   );
@@ -367,16 +418,11 @@ export default function TripsScreen() {
                 activeOpacity={0.7}
               >
                 <Text
-                  style={[
-                    styles.tabText,
-                    tab.isActive && styles.tabTextActive,
-                  ]}
+                  style={[styles.tabText, tab.isActive && styles.tabTextActive]}
                 >
                   {tab.label}
                 </Text>
-                {tab.isActive ? (
-                  <View style={styles.tabUnderline} />
-                ) : null}
+                {tab.isActive ? <View style={styles.tabUnderline} /> : null}
               </TouchableOpacity>
             ))}
           </View>
@@ -395,16 +441,11 @@ export default function TripsScreen() {
                 activeOpacity={0.7}
               >
                 <Text
-                  style={[
-                    styles.tabText,
-                    tab.isActive && styles.tabTextActive,
-                  ]}
+                  style={[styles.tabText, tab.isActive && styles.tabTextActive]}
                 >
                   {tab.label}
                 </Text>
-                {tab.isActive ? (
-                  <View style={styles.tabUnderline} />
-                ) : null}
+                {tab.isActive ? <View style={styles.tabUnderline} /> : null}
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -429,7 +470,9 @@ export default function TripsScreen() {
                 styles.tripsSearchInput,
                 Platform.OS === "web" && styles.tripsSearchInputWeb,
               ]}
-              placeholder={isLargeScreen ? "Find by name..." : tr("searchTripsPlaceholder")}
+              placeholder={
+                isLargeScreen ? "Find by name..." : tr("searchTripsPlaceholder")
+              }
               placeholderTextColor={Theme.textOnDarkMuted}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -492,11 +535,13 @@ export default function TripsScreen() {
               onPress={(e) => {
                 // @ts-ignore - capture location for dropdown anchor on native
                 const target = e.currentTarget;
-                if (target && typeof target.measureInWindow === 'function') {
-                  target.measureInWindow((_x: number, y: number, _w: number, h: number) => {
-                    setSortAnchorY(y + h + 6);
-                    setShowSortModal(true);
-                  });
+                if (target && typeof target.measureInWindow === "function") {
+                  target.measureInWindow(
+                    (_x: number, y: number, _w: number, h: number) => {
+                      setSortAnchorY(y + h + 6);
+                      setShowSortModal(true);
+                    },
+                  );
                 } else {
                   setSortAnchorY(100);
                   setShowSortModal(true);
@@ -518,28 +563,51 @@ export default function TripsScreen() {
       >
         <TouchableWithoutFeedback onPress={() => setShowSortModal(false)}>
           <View style={styles.modalOverlay}>
-            <View style={[styles.sortModalCard, { top: sortAnchorY || insets.top + 100 }]}>
+            <View
+              style={[
+                styles.sortModalCard,
+                { top: sortAnchorY || insets.top + 100 },
+              ]}
+            >
               <View style={styles.modalHandle} />
-              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: width > 1024 ? 600 : 450 }}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                style={{ maxHeight: width > 1024 ? 600 : 450 }}
+              >
                 {/* SORT BY SECTION */}
                 <View style={styles.modalSectionRow}>
-                  <FontAwesome name="sort" size={11} color={Theme.teslaRed} style={styles.modalSectionIcon} />
+                  <FontAwesome
+                    name="sort"
+                    size={11}
+                    color={Theme.teslaRed}
+                    style={styles.modalSectionIcon}
+                  />
                   <Text style={styles.modalSectionLabel}>{tr("sortBy")}</Text>
                 </View>
                 <View style={styles.filterChipRow}>
                   {sortOptions.map((opt) => (
                     <TouchableOpacity
                       key={opt.id}
-                      style={[styles.filterChip, sortBy === opt.id && styles.filterChipActive]}
+                      style={[
+                        styles.filterChip,
+                        sortBy === opt.id && styles.filterChipActive,
+                      ]}
                       onPress={() => setSortBy(opt.id)}
                     >
                       <FontAwesome
                         name={opt.icon}
                         size={10}
-                        color={sortBy === opt.id ? "#fff" : Theme.textOnDarkMuted}
+                        color={
+                          sortBy === opt.id ? "#fff" : Theme.textOnDarkMuted
+                        }
                         style={{ marginRight: 4 }}
                       />
-                      <Text style={[styles.filterChipText, sortBy === opt.id && styles.filterChipTextActive]}>
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          sortBy === opt.id && styles.filterChipTextActive,
+                        ]}
+                      >
                         {opt.label}
                       </Text>
                     </TouchableOpacity>
@@ -550,17 +618,40 @@ export default function TripsScreen() {
 
                 {/* DATE FILTER SECTION */}
                 <View style={styles.modalSectionRow}>
-                  <FontAwesome name="calendar" size={11} color={Theme.teslaRed} style={styles.modalSectionIcon} />
-                  <Text style={styles.modalSectionLabel}>{tr("dateFilter")}</Text>
+                  <FontAwesome
+                    name="calendar"
+                    size={11}
+                    color={Theme.teslaRed}
+                    style={styles.modalSectionIcon}
+                  />
+                  <Text style={styles.modalSectionLabel}>
+                    {tr("dateFilter")}
+                  </Text>
                 </View>
                 <View style={styles.filterChipRow}>
-                  {(["all", "today", "tomorrow", "this_week", "this_month"] as const).map((f) => (
+                  {(
+                    [
+                      "all",
+                      "today",
+                      "tomorrow",
+                      "this_week",
+                      "this_month",
+                    ] as const
+                  ).map((f) => (
                     <TouchableOpacity
                       key={f}
-                      style={[styles.filterChip, dateRangeFilter === f && styles.filterChipActive]}
+                      style={[
+                        styles.filterChip,
+                        dateRangeFilter === f && styles.filterChipActive,
+                      ]}
                       onPress={() => setDateRangeFilter(f)}
                     >
-                      <Text style={[styles.filterChipText, dateRangeFilter === f && styles.filterChipTextActive]}>
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          dateRangeFilter === f && styles.filterChipTextActive,
+                        ]}
+                      >
                         {f === "all" ? tr("all") : tr(`${f}Trips`)}
                       </Text>
                     </TouchableOpacity>
@@ -571,17 +662,32 @@ export default function TripsScreen() {
 
                 {/* PAYMENT STATUS SECTION */}
                 <View style={styles.modalSectionRow}>
-                  <FontAwesome name="money" size={11} color={Theme.teslaRed} style={styles.modalSectionIcon} />
-                  <Text style={styles.modalSectionLabel}>{tr("paymentStatus")}</Text>
+                  <FontAwesome
+                    name="money"
+                    size={11}
+                    color={Theme.teslaRed}
+                    style={styles.modalSectionIcon}
+                  />
+                  <Text style={styles.modalSectionLabel}>
+                    {tr("paymentStatus")}
+                  </Text>
                 </View>
                 <View style={styles.filterChipRow}>
                   {(["all", "pending", "partial", "paid"] as const).map((f) => (
                     <TouchableOpacity
                       key={f}
-                      style={[styles.filterChip, paymentFilter === f && styles.filterChipActive]}
+                      style={[
+                        styles.filterChip,
+                        paymentFilter === f && styles.filterChipActive,
+                      ]}
                       onPress={() => setPaymentFilter(f)}
                     >
-                      <Text style={[styles.filterChipText, paymentFilter === f && styles.filterChipTextActive]}>
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          paymentFilter === f && styles.filterChipTextActive,
+                        ]}
+                      >
                         {f === "all" ? tr("all") : tr(`${f}Payment`)}
                       </Text>
                     </TouchableOpacity>
@@ -592,25 +698,50 @@ export default function TripsScreen() {
                   <>
                     <View style={styles.modalDivider} />
                     <View style={styles.modalSectionRow}>
-                      <FontAwesome name="cube" size={11} color={Theme.teslaRed} style={styles.modalSectionIcon} />
-                      <Text style={styles.modalSectionLabel}>{tr("loadType")}</Text>
+                      <FontAwesome
+                        name="cube"
+                        size={11}
+                        color={Theme.teslaRed}
+                        style={styles.modalSectionIcon}
+                      />
+                      <Text style={styles.modalSectionLabel}>
+                        {tr("loadType")}
+                      </Text>
                     </View>
                     <View style={styles.filterChipRow}>
                       <TouchableOpacity
-                        style={[styles.filterChip, loadTypeFilter === "all" && styles.filterChipActive]}
+                        style={[
+                          styles.filterChip,
+                          loadTypeFilter === "all" && styles.filterChipActive,
+                        ]}
                         onPress={() => setLoadTypeFilter("all")}
                       >
-                        <Text style={[styles.filterChipText, loadTypeFilter === "all" && styles.filterChipTextActive]}>
+                        <Text
+                          style={[
+                            styles.filterChipText,
+                            loadTypeFilter === "all" &&
+                              styles.filterChipTextActive,
+                          ]}
+                        >
                           {tr("all")}
                         </Text>
                       </TouchableOpacity>
                       {loadTypeOptions.map((lt) => (
                         <TouchableOpacity
                           key={lt}
-                          style={[styles.filterChip, loadTypeFilter === lt && styles.filterChipActive]}
+                          style={[
+                            styles.filterChip,
+                            loadTypeFilter === lt && styles.filterChipActive,
+                          ]}
                           onPress={() => setLoadTypeFilter(lt)}
                         >
-                          <Text style={[styles.filterChipText, loadTypeFilter === lt && styles.filterChipTextActive]}>
+                          <Text
+                            style={[
+                              styles.filterChipText,
+                              loadTypeFilter === lt &&
+                                styles.filterChipTextActive,
+                            ]}
+                          >
                             {lt}
                           </Text>
                         </TouchableOpacity>
@@ -618,9 +749,9 @@ export default function TripsScreen() {
                     </View>
                   </>
                 )}
-                
+
                 <View style={{ height: 20 }} />
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.modalApplyBtn}
                   onPress={() => setShowSortModal(false)}
                 >
@@ -645,18 +776,16 @@ export default function TripsScreen() {
           ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={Theme.primary}
-          />
-        }
-      >
-        {filtered.length === 0 ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={Theme.primary}
+            />
+          }
+        >
+          {filtered.length === 0 ? (
             <Text style={styles.empty}>
-              {showCompletedList
-                ? tr("noCompletedTrips")
-                : tr("noTripsYet")}
+              {showCompletedList ? tr("noCompletedTrips") : tr("noTripsYet")}
             </Text>
           ) : (
             <View style={isLargeScreen ? styles.gridContainer : undefined}>
@@ -667,9 +796,13 @@ export default function TripsScreen() {
                     : (t.status || "ACTIVE").toUpperCase();
                 const isAggregate = isAggregateTrip(t);
                 const tripLedgerEntries = transactionsByTripId.get(t.id) ?? [];
-                const displayClientName = shipperNameByTripId[t.id] ?? t.client_name ?? undefined;
+                const displayClientName =
+                  shipperNameByTripId[t.id] ?? t.client_name ?? undefined;
                 return (
-                  <View key={t.id} style={isLargeScreen ? styles.gridItem : undefined}>
+                  <View
+                    key={t.id}
+                    style={isLargeScreen ? styles.gridItem : undefined}
+                  >
                     <TripExpandableCard
                       trip={t}
                       tripLedgerEntries={tripLedgerEntries}

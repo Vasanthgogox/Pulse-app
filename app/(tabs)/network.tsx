@@ -8,37 +8,37 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { type IndentRow } from "@/features/indents";
 import { LoadCenterView } from "@/features/network/components/LoadCenterView";
 import {
-    useClientsQuery,
-    useConnectionRequestsReceivedQuery,
-    useConnectionRequestsSentQuery,
-    useDriverInvitesSentQuery,
-    useDriversQuery,
-    useInvalidateNetwork,
-    useSuppliersQuery,
+  useClientsQuery,
+  useConnectionRequestsReceivedQuery,
+  useConnectionRequestsSentQuery,
+  useDriverInvitesSentQuery,
+  useDriversQuery,
+  useInvalidateNetwork,
+  useSuppliersQuery,
 } from "@/lib/queries";
 import { useRefreshWithFeedback } from "@/lib/useRefreshWithFeedback";
 import {
-    approveConnectionRequest,
-    createConnectionRequest,
-    getConnectionInviteeByPhone,
-    rejectConnectionRequest,
+  approveConnectionRequest,
+  createConnectionRequest,
+  getConnectionInviteeByPhone,
+  rejectConnectionRequest,
 } from "@/services/connectionRequestsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { Building2, CircleCheck, Truck, User } from "lucide-react-native";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Animated,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    Share,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Animated,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -434,14 +434,13 @@ export default function NetworkScreen() {
   if (subTab === "load") {
     return (
       <View
-        style={[styles.container, { paddingTop: insets.top + Layout.tabBarHeight + 20 }]}
+        style={[
+          styles.container,
+          { paddingTop: insets.top + Layout.tabBarHeight + 20 },
+        ]}
       >
         <View
-          style={[
-            styles.blackBlock,
-            styles.blackBlockLoad,
-            { paddingTop: 4 },
-          ]}
+          style={[styles.blackBlock, styles.blackBlockLoad, { paddingTop: 4 }]}
         >
           <View style={styles.mainTabRow}>
             <TouchableOpacity
@@ -479,7 +478,12 @@ export default function NetworkScreen() {
   const MANAGE_CONTENT_BG = "#f4f5f7";
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + Layout.tabBarHeight + 20 }]}>
+    <View
+      style={[
+        styles.container,
+        { paddingTop: insets.top + Layout.tabBarHeight + 20 },
+      ]}
+    >
       {/* Sync toast — small animated pill, non-blocking */}
       {showSuccess && (
         <Animated.View
@@ -501,7 +505,6 @@ export default function NetworkScreen() {
       )}
 
       <View style={[styles.blackBlock, { paddingTop: 4 }]}>
-
         {/* Manage Network | Load — black tabs (body), Load-style */}
         <View style={styles.mainTabRow}>
           <TouchableOpacity

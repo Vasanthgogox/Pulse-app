@@ -9,6 +9,7 @@ const GRAY_700 = '#374151';
 
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
+import Typography from '@/constants/Typography';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import * as driversService from '@/services/driversService';
@@ -275,8 +276,8 @@ const styles = StyleSheet.create({
   },
   backBtn: { padding: 8, marginRight: 8 },
   headerCenter: { flex: 1, minWidth: 0 },
-  headerTitle: { fontSize: 18, fontWeight: '800' },
-  headerSubtitle: { fontSize: 12, marginTop: 2 },
+  headerTitle: { ...Typography.headerTitle },
+  headerSubtitle: { ...Typography.headerSubtitle, marginTop: 2 },
   creditsSection: {
     paddingHorizontal: 16,
     paddingTop: 20,

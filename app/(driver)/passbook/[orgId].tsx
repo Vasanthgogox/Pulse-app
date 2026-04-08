@@ -4,8 +4,10 @@
  */
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
+import Typography from '@/constants/Typography';
 import { useAuth } from '@/contexts/AuthContext';
-import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import { phonePeMetaDate } from '@/lib/driverGpayTransactions';
 import { isAggregateTrip, tripEarningsForDriver } from '@/lib/driverUtils';
 import { usePreventScreenCapture } from '@/lib/usePreventScreenCapture';
 import { useSafeBack } from '@/lib/useSafeBack';
@@ -31,11 +33,6 @@ function isCompleted(status: string) {
 
 function tripEarnings(t: tripsService.TripRow): number {
   return tripEarningsForDriver(t);
-}
-
-function formatLedgerDate(dateStr: string) {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
 }
 
 function formatTransactionDateSection(dateStr: string): string {
@@ -71,7 +68,9 @@ export default function DriverPassbookDetailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const safeBack = useSafeBack('/(driver)');
+  const { theme } = useDriverTheme();
   const colors = useDriverThemeColors();
+  const isDark = theme === 'dark';
   const { profile } = useAuth();
   const params = useLocalSearchParams<{ orgId: string; orgName?: string }>();
   const orgId = typeof params.orgId === 'string' ? params.orgId : params.orgId?.[0] ?? '';
@@ -235,28 +234,73 @@ export default function DriverPassbookDetailScreen() {
       </View>
 
       {nonTripLedgerEntries.length > 0 && (
-        <View style={styles.section}>
+        <View style={[styles.section, styles.gpayListSection]}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Salary & other payments</Text>
-          <View style={[styles.ledgerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            {nonTripLedgerEntries.map((entry) => (
-              <View key={entry.id} style={[styles.ledgerRow, { borderBottomColor: colors.border }]}>
-                <View style={[styles.ledgerIconWrap, { backgroundColor: colors.emerald, borderWidth: 1, borderColor: colors.emerald }]}>
-                  <FontAwesome name="arrow-down" size={18} color={Theme.textOnPrimary} />
-                </View>
-                <View style={styles.ledgerDesc}>
-                  <Text style={[styles.ledgerDescText, { color: colors.text }]}>
-                    {entry.description?.trim() || ledgerTypeLabel(entry.type)}
+          {nonTripLedgerEntries.map((entry, entryIdx) => {
+            const label = entry.description?.trim() || ledgerTypeLabel(entry.type);
+            const raw = Number(entry.amount) || 0;
+            const isCredit = raw >= 0;
+            const amtAbs = Math.abs(raw);
+            const amountLabel = isCredit
+              ? `+ ₹${amtAbs.toLocaleString('en-IN')}`
+              : `₹${amtAbs.toLocaleString('en-IN')}`;
+            const amountColor = isCredit
+              ? isDark
+                ? colors.emerald
+                : Theme.gpayAmountReceived
+              : isDark
+                ? colors.text
+                : Theme.gpayListTitle;
+            const primary = isCredit ? 'Payment received' : 'Adjustment';
+            const metaRight = isCredit ? 'Credited to wallet' : 'Updated in passbook';
+            const listDivider = isDark ? colors.borderSubtle : Theme.borderMedium;
+            const subColor = colors.textMuted;
+            const metaColor = colors.textMuted;
+            const isLastEntry = entryIdx === nonTripLedgerEntries.length - 1;
+            return (
+              <View
+                key={entry.id}
+                style={[
+                  styles.ppTxCard,
+                  !isLastEntry && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: listDivider },
+                ]}
+              >
+                <View style={styles.ppTxTopRow}>
+                  <View style={[styles.ppIconSq, { backgroundColor: colors.emerald }]}>
+                    <FontAwesome
+                      name={isCredit ? 'arrow-down' : 'arrow-up'}
+                      size={18}
+                      color={Theme.textOnPrimary}
+                    />
+                  </View>
+                  <View style={styles.ppMiddle}>
+                    <Text style={[styles.ppPrimary, { color: colors.text }]} numberOfLines={1}>
+                      {primary}
+                    </Text>
+                    <Text style={[styles.ppSecondary, { color: subColor }]} numberOfLines={2}>
+                      {label}
+                    </Text>
+                  </View>
+                  <Text style={[styles.ppAmount, { color: amountColor }]} numberOfLines={1}>
+                    {amountLabel}
                   </Text>
-                  <Text style={[styles.ledgerDate, { color: colors.textMuted }]}>{formatLedgerDate(entry.created_at)}</Text>
                 </View>
-                <Text style={[styles.ledgerAmount, { color: colors.emerald }]}>+₹{Number(entry.amount).toLocaleString()}</Text>
+                <View style={styles.ppMetaRow}>
+                  <Text style={[styles.ppMetaLeft, { color: metaColor }]}>{phonePeMetaDate(entry.created_at)}</Text>
+                  <View style={styles.ppMetaRight}>
+                    <Text style={[styles.ppMetaRightText, { color: metaColor }]} numberOfLines={1}>
+                      {metaRight}
+                    </Text>
+                    <FontAwesome name="university" size={13} color={colors.emerald} style={styles.ppMetaBankIcon} />
+                  </View>
+                </View>
               </View>
-            ))}
-          </View>
+            );
+          })}
         </View>
       )}
 
-      <View style={styles.section}>
+      <View style={[styles.section, styles.gpayListSection]}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Trip history</Text>
         <Text style={[styles.sectionSubtitle, { color: colors.textMuted }]}>
           Earned per trip · Received = payments from fleet
@@ -279,88 +323,89 @@ export default function DriverPassbookDetailScreen() {
           <View style={styles.upiListWrap}>
             {transactionSections.map(({ sectionLabel, dateKey, trips }) => (
               <View key={dateKey || sectionLabel} style={styles.upiSection}>
-                <Text style={[styles.upiSectionHeader, { color: colors.textMuted }]}>
-                  {sectionLabel}
-                </Text>
-                <View
-                  style={[
-                    styles.upiListBlock,
-                    { backgroundColor: colors.surface, borderColor: colors.border },
-                  ]}
-                >
-                  {trips.map((trip, idx) => {
+                <Text style={[styles.upiSectionHeader, { color: colors.textMuted }]}>{sectionLabel}</Text>
+                <View style={[styles.upiListBlock, { backgroundColor: 'transparent' }]}>
+                  {trips.map((trip, tripIdx) => {
                     const earned = Math.round(tripEarnings(trip));
-                    const received = receivedByTripId[trip.id] ?? 0;
-                    const date = formatLedgerDate(
-                      trip.completed_at ?? trip.updated_at ?? trip.created_at,
-                    );
-                    const isPending = received === 0;
-                    const isAdHocTrip = isAggregateTrip(trip);
-                    const isLast = idx === trips.length - 1;
+                    const receivedAmt = receivedByTripId[trip.id] ?? 0;
+                    const isAggregate = isAggregateTrip(trip);
+                    const routeSummary = [trip.pickup_area?.trim(), trip.drop_location?.trim()]
+                      .filter(Boolean)
+                      .join(' → ');
+                    const tripRef = tripsService.getTripDisplayNumber(trip);
+                    let amountLabel: string;
+                    if (isAggregate) {
+                      amountLabel = '—';
+                    } else if (receivedAmt > 0) {
+                      amountLabel = `+ ₹${receivedAmt.toLocaleString('en-IN')}`;
+                    } else if (earned > 0) {
+                      amountLabel = `₹${earned.toLocaleString('en-IN')}`;
+                    } else {
+                      amountLabel = '₹0';
+                    }
+                    const amountColor =
+                      amountLabel === '—'
+                        ? colors.textMuted
+                        : receivedAmt > 0
+                          ? isDark
+                            ? colors.emerald
+                            : Theme.gpayAmountReceived
+                          : isDark
+                            ? colors.text
+                            : Theme.gpayListTitle;
+                    const listDivider = isDark ? colors.borderSubtle : Theme.borderMedium;
+                    const subColor = colors.textMuted;
+                    const metaColor = colors.textMuted;
+                    const secondaryLine = routeSummary || tripRef;
+                    const primaryLine =
+                      isAggregate && earned === 0
+                        ? 'Ad hoc trip'
+                        : receivedAmt > 0
+                          ? 'Received for trip'
+                          : 'Trip earnings';
+                    const metaRight =
+                      receivedAmt > 0
+                        ? 'Credited to wallet'
+                        : isAggregate && earned === 0
+                          ? 'Pending'
+                          : 'Pending from fleet';
+                    const isLastTrip = tripIdx === trips.length - 1;
+                    const iconName =
+                      isAggregate && earned === 0 ? 'exchange' : receivedAmt > 0 ? 'arrow-down' : 'clock-o';
                     return (
                       <View
                         key={trip.id}
                         style={[
-                          styles.upiRow,
-                          { borderBottomColor: colors.border },
-                          isLast && styles.upiRowLast,
+                          styles.ppTxCard,
+                          !isLastTrip && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: listDivider },
                         ]}
                       >
-                        <View style={styles.upiRowIcon}>
-                          <FontAwesome
-                            name={isPending ? 'clock-o' : 'check'}
-                            size={20}
-                            color={isPending ? Theme.negative : Theme.driverEmerald}
-                            style={styles.upiRowIconStyle}
-                          />
-                        </View>
-                        <View style={styles.upiRowBody}>
-                          <Text
-                            style={[styles.upiRowTitle, { color: colors.text }]}
-                            numberOfLines={1}
-                          >
-                            Trip earnings
-                          </Text>
-                          <Text
-                            style={[styles.upiRowSub, { color: colors.textMuted }]}
-                            numberOfLines={1}
-                          >
-                            {date}
-                            {isAdHocTrip ? ' · Ad hoc trip' : ''}
-                            {(trip.pickup_area?.trim() || trip.drop_location?.trim())
-                              ? ` · ${[trip.pickup_area?.trim(), trip.drop_location?.trim()]
-                                  .filter(Boolean)
-                                  .join(' → ')}`
-                              : ''}
+                        <View style={styles.ppTxTopRow}>
+                          <View style={[styles.ppIconSq, { backgroundColor: colors.emerald }]}>
+                            <FontAwesome name={iconName} size={18} color={Theme.textOnPrimary} />
+                          </View>
+                          <View style={styles.ppMiddle}>
+                            <Text style={[styles.ppPrimary, { color: colors.text }]} numberOfLines={1}>
+                              {primaryLine}
+                            </Text>
+                            <Text style={[styles.ppSecondary, { color: subColor }]} numberOfLines={2}>
+                              {secondaryLine}
+                            </Text>
+                          </View>
+                          <Text style={[styles.ppAmount, { color: amountColor }]} numberOfLines={1}>
+                            {amountLabel}
                           </Text>
                         </View>
-                        <View style={styles.upiRowRight}>
-                          <Text
-                            style={[
-                              styles.upiRowAmount,
-                              {
-                                color: isPending
-                                  ? Theme.primaryText
-                                  : Theme.darkGreen,
-                              },
-                            ]}
-                          >
-                            {isAggregateTrip(trip)
-                              ? '—'
-                              : `+₹${earned.toLocaleString('en-IN')}`}
+                        <View style={styles.ppMetaRow}>
+                          <Text style={[styles.ppMetaLeft, { color: metaColor }]}>
+                            {phonePeMetaDate(trip.completed_at ?? trip.updated_at ?? trip.created_at)}
                           </Text>
-                          <Text
-                            style={[
-                              styles.upiRowStatus,
-                              {
-                                color: isPending
-                                  ? Theme.negative
-                                  : Theme.driverEmerald,
-                              },
-                            ]}
-                          >
-                            {isPending ? 'Not received yet' : 'Received'}
-                          </Text>
+                          <View style={styles.ppMetaRight}>
+                            <Text style={[styles.ppMetaRightText, { color: metaColor }]} numberOfLines={1}>
+                              {metaRight}
+                            </Text>
+                            <FontAwesome name="university" size={13} color={colors.emerald} style={styles.ppMetaBankIcon} />
+                          </View>
                         </View>
                       </View>
                     );
@@ -387,8 +432,8 @@ const styles = StyleSheet.create({
   },
   backBtn: { padding: 8, marginRight: 8 },
   headerCenter: { flex: 1, minWidth: 0 },
-  headerTitle: { fontSize: 18, fontWeight: '800' },
-  headerSubtitle: { fontSize: 12, marginTop: 2 },
+  headerTitle: { ...Typography.headerTitle },
+  headerSubtitle: { ...Typography.headerSubtitle, marginTop: 2 },
   headerLeftAt: { fontSize: 11, marginTop: 4, fontStyle: 'italic' },
   summaryCard: {
     marginHorizontal: 24,
@@ -401,32 +446,13 @@ const styles = StyleSheet.create({
   summaryAmount: { fontSize: 24, fontWeight: '800' },
   summaryMeta: { marginTop: 8 },
   summaryMetaText: { fontSize: 12 },
-  section: { marginHorizontal: 24, marginTop: 28 },
-  sectionTitle: { fontSize: 14, fontWeight: '800', marginBottom: 4 },
-  sectionSubtitle: { fontSize: 12, marginBottom: 12 },
+  section: { marginTop: 28 },
+  gpayListSection: { marginHorizontal: Layout.screenPaddingHorizontal },
+  sectionTitle: { fontSize: 17, fontWeight: '500', marginBottom: 6, letterSpacing: 0.1 },
+  sectionSubtitle: { fontSize: 13, marginBottom: 12, lineHeight: 18 },
   ledgerCard: { borderWidth: 1, borderRadius: 16, overflow: 'hidden' },
   ledgerEmpty: { padding: 32, alignItems: 'center', gap: 12 },
   ledgerEmptyText: { fontSize: 14 },
-  ledgerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    gap: 12,
-  },
-  ledgerIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ledgerDesc: { flex: 1, minWidth: 0 },
-  ledgerDescText: { fontSize: 13, fontWeight: '700' },
-  ledgerDate: { fontSize: 11, marginTop: 2 },
-  ledgerAmount: { fontSize: 14, fontWeight: '800' },
   tripBlock: { borderBottomWidth: 1 },
   receivedSubrow: { paddingVertical: 10, paddingLeft: 52 },
   emptyCard: {
@@ -439,34 +465,89 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 16, fontWeight: '800', marginTop: 16 },
   emptySubtitle: { fontSize: 13, textAlign: 'center', marginTop: 8, lineHeight: 20 },
-  upiListWrap: { marginTop: 4, gap: 16 },
-  upiSection: { gap: 8 },
+  upiListWrap: { marginTop: 4, gap: 22 },
+  upiSection: { gap: 6 },
   upiSectionHeader: {
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontSize: 12,
+    fontWeight: '500',
+    letterSpacing: 0.15,
   },
   upiListBlock: {
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
+    borderRadius: 0,
+    borderWidth: 0,
+    overflow: 'visible',
   },
-  upiRow: {
+  ppTxCard: {
+    paddingVertical: 14,
+    paddingHorizontal: 0,
+  },
+  ppTxTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  ppIconSq: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  ppMiddle: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 8,
+  },
+  ppPrimary: {
+    fontSize: 15,
+    fontWeight: '500',
+    letterSpacing: 0.1,
+  },
+  ppSecondary: {
+    fontSize: 13,
+    fontWeight: '400',
+    marginTop: 4,
+    lineHeight: 18,
+    letterSpacing: 0.1,
+  },
+  ppAmount: {
+    fontSize: 16,
+    fontWeight: '500',
+    letterSpacing: 0.1,
+    flexShrink: 0,
+    maxWidth: '40%',
+    textAlign: 'right',
+  },
+  ppMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    gap: 12,
+    justifyContent: 'space-between',
+    marginTop: 10,
+    paddingLeft: 58,
+    paddingRight: 2,
   },
-  upiRowLast: { borderBottomWidth: 0 },
-  upiRowIcon: { width: 32, alignItems: 'center' },
-  upiRowIconStyle: { opacity: 0.9 },
-  upiRowBody: { flex: 1, minWidth: 0 },
-  upiRowTitle: { fontSize: 13, fontWeight: '700' },
-  upiRowSub: { fontSize: 11, marginTop: 2 },
-  upiRowRight: { alignItems: 'flex-end', gap: 4 },
-  upiRowAmount: { fontSize: 14, fontWeight: '800' },
-  upiRowStatus: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
+  ppMetaLeft: {
+    fontSize: 12,
+    fontWeight: '400',
+    flex: 1,
+    minWidth: 0,
+    marginRight: 8,
+  },
+  ppMetaRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+    maxWidth: '52%',
+    justifyContent: 'flex-end',
+  },
+  ppMetaRightText: {
+    fontSize: 12,
+    fontWeight: '400',
+    textAlign: 'right',
+    flexShrink: 1,
+  },
+  ppMetaBankIcon: {
+    marginTop: 1,
+  },
 });
