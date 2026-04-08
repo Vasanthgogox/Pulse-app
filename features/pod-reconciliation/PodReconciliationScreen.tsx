@@ -179,6 +179,7 @@ export function PodReconciliationScreen() {
       </View>
 
       <View style={styles.metricsContainer}>
+        {/*
         <View style={styles.velocityBanner}>
           <View style={styles.velocityBannerIcon}>
             <FontAwesome name="line-chart" size={16} color={Theme.primary} />
@@ -213,6 +214,7 @@ export function PodReconciliationScreen() {
             </View>
           </View>
         </View>
+        */}
 
         <ScrollView
           horizontal
