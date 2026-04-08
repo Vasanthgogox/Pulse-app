@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import jsPDF from 'jspdf/dist/jspdf.es.min.js';
+import { jsPDF } from 'jspdf/dist/jspdf.es.min';
 import html2canvas from 'html2canvas';
 import type { InvoicePdfData } from '@/components/InvoicePdf.types';
 

@@ -163,6 +163,16 @@ function formatRequestStatus(status: string): string {
   return normalized.replace(/_/g, " ").toUpperCase();
 }
 
+function getDriverFallbackSeed(id: string): string {
+  const value = (id ?? "").trim();
+  if (!value) return "driver-1";
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash + value.charCodeAt(i)) % 10;
+  }
+  return `driver-${hash + 1}`;
+}
+
 function NetworkAvatar({
   node,
   onPlatform,
@@ -225,6 +235,11 @@ function NetworkAvatar({
         return;
       }
 
+      if (node.type === "DRIVER") {
+        if (mounted) setUri(getAvatarUriForSeed(getDriverFallbackSeed(node.id)));
+        return;
+      }
+
       setUri(null);
     })();
     return () => {
@@ -240,7 +255,16 @@ function NetworkAvatar({
   ]);
 
   if (uri) {
-    return <Image source={{ uri }} style={styles.nodeAvatar} />;
+    return (
+      <View style={styles.nodeAvatarWrap}>
+        <Image source={{ uri }} style={styles.nodeAvatar} />
+        {node.type === "DRIVER" ? (
+          <View style={styles.driverIconBadge}>
+            <User size={10} strokeWidth={2} color={Theme.textOnPrimary} />
+          </View>
+        ) : null}
+      </View>
+    );
   }
 
   // If no avatar found but on platform, we could show a more "active" default icon
@@ -1362,6 +1386,23 @@ const styles = StyleSheet.create({
     height: "100%",
     borderRadius: 14,
     backgroundColor: Theme.surface,
+  },
+  nodeAvatarWrap: {
+    width: "100%",
+    height: "100%",
+  },
+  driverIconBadge: {
+    position: "absolute",
+    top: -3,
+    left: -3,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: Theme.primary,
+    borderWidth: 1,
+    borderColor: Theme.screenBackground,
+    alignItems: "center",
+    justifyContent: "center",
   },
   connectedBadge: {
     position: "absolute",
