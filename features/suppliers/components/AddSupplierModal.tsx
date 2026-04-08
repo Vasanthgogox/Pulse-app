@@ -759,6 +759,11 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
     paddingVertical: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   fieldRowWrap: {
     marginBottom: 20,
@@ -789,6 +794,11 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     paddingHorizontal: 0,
     minWidth: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   ledgerSubmitBtn: {
     paddingVertical: 16,
@@ -1125,6 +1135,11 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     paddingVertical: 0,
     minHeight: 28,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   screenActionCard: {
     flexDirection: "row",

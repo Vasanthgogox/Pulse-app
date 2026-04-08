@@ -662,8 +662,6 @@ const styles = StyleSheet.create({
   fieldRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderInput,
     paddingVertical: 10,
     minHeight: Layout.minTouchTargetSize + 4,
   },
@@ -752,8 +750,6 @@ const styles = StyleSheet.create({
   },
   amountBlock: {
     backgroundColor: Theme.surfaceLight,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
     padding: 16,
     minHeight: 56,
   },
@@ -789,8 +785,6 @@ const styles = StyleSheet.create({
   fieldBlock: {
     flex: 1,
     minWidth: 0,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderInput,
     paddingVertical: 10,
     minHeight: Layout.minTouchTargetSize + 4,
     flexDirection: 'row',

@@ -736,7 +736,6 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
   },
   input: {
-    borderWidth: 1,
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 14,
@@ -744,6 +743,11 @@ const styles = StyleSheet.create({
     minHeight: 52,
     marginBottom: 12,
     backgroundColor: Theme.screenBackground,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   pickerRow: {
     flexDirection: "row",

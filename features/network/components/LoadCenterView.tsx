@@ -2427,7 +2427,7 @@ export function LoadCenterView({
                         style={{ marginRight: 8 }}
                       />
                       <Text style={styles.modalSubmitText}>
-                        Authorize Voyage
+                        Assign Trip
                       </Text>
                     </TouchableOpacity>
                   ) : (
@@ -3389,8 +3389,6 @@ const styles = StyleSheet.create({
   },
   assignVehicleInput: {
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 2,
-    borderColor: "transparent",
     borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -3398,6 +3396,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textPrimaryDark,
     minHeight: 44,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   wizardBackBtn: {
     flexDirection: "row",

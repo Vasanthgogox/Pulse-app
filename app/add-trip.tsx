@@ -17,9 +17,9 @@ export default function AddTripPage() {
   const { currentOrganization } = useOrganization();
   const invalidateTrips = useInvalidateTrips();
 
-  const closeAndGoToTrips = () => {
-    safeBack();
-    setTimeout(() => router.navigate('/(tabs)/trips'), 100);
+  const closeAndGoBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/trips');
   };
 
   const handleComplete = async (data: AddTripFormData, options?: { supplySource: string; driverPhone?: string }) => {
@@ -66,7 +66,7 @@ export default function AddTripPage() {
         invalidateTrips(currentOrganization.id);
       }
       if (trip && otp) return { trip, otp };
-      closeAndGoToTrips();
+      closeAndGoBack();
       return;
     }
     const { error, trip } = await createTrip(currentOrganization.id, {
@@ -109,7 +109,7 @@ export default function AddTripPage() {
     if (trip) {
       invalidateTrips(currentOrganization.id);
     }
-    closeAndGoToTrips();
+    closeAndGoBack();
   };
 
   return (
@@ -117,7 +117,7 @@ export default function AddTripPage() {
       <StatusBar style="light" />
       <AddTripModal
         organizationId={currentOrganization?.id ?? null}
-        onClose={closeAndGoToTrips}
+        onClose={closeAndGoBack}
         onComplete={handleComplete}
       />
     </View>

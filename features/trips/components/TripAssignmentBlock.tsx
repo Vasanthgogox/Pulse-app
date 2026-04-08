@@ -1744,8 +1744,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.primary,
   },
   assignVehicleInput: {
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 14,
@@ -1754,6 +1752,11 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     backgroundColor: Theme.screenBackground,
     marginBottom: 10,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   assignModalFooter: {
     paddingHorizontal: 20,

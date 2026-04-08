@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 
 export function closeModal(router: ReturnType<typeof useRouter>) {
   if (router.canGoBack()) router.back();
-  else router.replace("/(tabs)/finance");
+  else router.navigate("/(tabs)/finance");
 }
 
 export default function AddDriverCloseModal() {

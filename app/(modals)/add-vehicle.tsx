@@ -5,10 +5,10 @@ import { queryKeys } from '@/lib/queryKeys';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSafeBack } from '@/lib/useSafeBack';
 
-/** Dismiss modal and navigate to Finance (Garrage) so we don't fall back to Ops Agent tab. */
-function closeModal(safeBack: () => void, router: ReturnType<typeof useRouter>) {
-  safeBack();
-  setTimeout(() => router.navigate('/(tabs)/finance'), 100);
+/** Dismiss modal: go back to the page that opened it. */
+function closeModal(router: ReturnType<typeof useRouter>) {
+  if (router.canGoBack()) router.back();
+  else router.navigate('/(tabs)/finance');
 }
 
 export default function AddVehicleScreen() {
@@ -34,12 +34,12 @@ export default function AddVehicleScreen() {
     });
     if (error) throw error;
     await queryClient.refetchQueries({ queryKey: queryKeys.vehicles.all(orgId) });
-    closeModal(safeBack, router);
+    closeModal(router);
   };
 
   return (
     <AddVehicleModal
-      onClose={() => closeModal(safeBack, router)}
+      onClose={() => closeModal(router)}
       onComplete={handleComplete}
       ownAssetOnly
     />
