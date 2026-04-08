@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import Layout from '@/constants/Layout';
 import { useExecuteInvoiceMutation, useInvoicingExecuteTripsQuery } from '@/lib/queries/useInvoicingExecuteQueries';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import type { AdditionalCharge, InvoiceConfig, InvoicingTripView } from '@/features/invoicing/services/invoicing.service';
+import { getInvoiceBrandingSettings } from '@/features/invoicing/services/invoiceBranding.service';
 import { useInvoiceCalc } from '@/features/invoicing/hooks/useInvoiceCalc';
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import { useAuth } from '@/contexts/AuthContext';
@@ -83,6 +84,8 @@ export default function InvoicePdfPreviewScreen() {
   const orgId = currentOrganization?.id ?? null;
 
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const [brandingName, setBrandingName] = useState('GOGOX');
+  const [brandingLogoUrl, setBrandingLogoUrl] = useState<string | null>(null);
 
   const activeClient = params.activeClient || '';
   const paymentTerms = params.paymentTerms || 'Net 30';
@@ -120,12 +123,27 @@ export default function InvoicePdfPreviewScreen() {
   const calculations = useInvoiceCalc(selectedTrips, invoiceConfig);
   const allowed = canAccessInvoicing(profile);
 
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const { settings } = await getInvoiceBrandingSettings();
+      if (!mounted) return;
+      setBrandingName(settings.companyName);
+      setBrandingLogoUrl(settings.logoUrl);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const invoiceData: InvoicePdfData = useMemo(() => {
     const issued = new Date();
     const due = addDays(issued, parseNetDays(paymentTerms));
     const lrScope = selectedTrips.slice(0, 6).map((t) => t.id).join(', ') || 'N/A';
 
     return {
+      brandingCompanyName: brandingName,
+      brandingLogoUrl,
       invoiceNo: buildInvoiceNo(selectedTrips),
       clientName: activeClient || 'Unknown Client',
       issuedOn: formatDate(issued),
@@ -164,7 +182,7 @@ export default function InvoicePdfPreviewScreen() {
       taxAmount: calculations.sgst + calculations.cgst,
       grandTotal: calculations.totalAmount,
     };
-  }, [activeClient, calculations.cgst, calculations.sgst, calculations.subtotal, calculations.totalAmount, notes, parsedAdditionalCharges, parsedGstRate, parsedIncludeGst, paymentTerms, selectedTrips]);
+  }, [activeClient, brandingLogoUrl, brandingName, calculations.cgst, calculations.sgst, calculations.subtotal, calculations.totalAmount, notes, parsedAdditionalCharges, parsedGstRate, parsedIncludeGst, paymentTerms, selectedTrips]);
 
   const handleFinalizeAndSend = useCallback(async () => {
     setIsFinalizing(true);

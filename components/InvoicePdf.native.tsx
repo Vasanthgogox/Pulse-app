@@ -12,6 +12,7 @@ interface InvoicePdfNativeProps {
 export default function InvoicePdfNative({ invoiceData }: InvoicePdfNativeProps) {
   return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <Text>{invoiceData.brandingCompanyName}</Text>
       <Text>Native PDF Viewer for Invoice #{invoiceData.invoiceNo}</Text>
       {/* Native PDF logic goes here */}
     </View>

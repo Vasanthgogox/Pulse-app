@@ -11,6 +11,8 @@ interface InvoicePdfDocumentProps {
   fuelRate: number;
   additionalCharges: AdditionalCharge[];
   calculations: InvoiceCalcResult;
+  brandingCompanyName?: string;
+  brandingLogoUrl?: string | null;
 }
 
 export const renderInvoiceToHtml = ({ 
@@ -22,7 +24,17 @@ export const renderInvoiceToHtml = ({
   fuelRate,
   additionalCharges,
   calculations,
+  brandingCompanyName = 'GOGOX',
+  brandingLogoUrl = null,
 }: InvoicePdfDocumentProps) => {
+  const escapeHtml = (value: string) =>
+    value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
   const formatCurrency = (val: number) => {
     return '₹' + val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
@@ -32,6 +44,10 @@ export const renderInvoiceToHtml = ({
     const d = new Date(trip.date);
     return isNaN(d.getTime()) ? trip.date : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   };
+
+  const sanitizedBrandName = escapeHtml((brandingCompanyName || 'GOGOX').trim() || 'GOGOX');
+  const sanitizedLogoUrl =
+    brandingLogoUrl && /^https?:\/\//i.test(brandingLogoUrl) ? escapeHtml(brandingLogoUrl.trim()) : '';
 
   return `
     <html>
@@ -53,6 +69,23 @@ export const renderInvoiceToHtml = ({
             padding: 30px;
             border: 1px solid #eee;
             box-shadow: 0 0 10px rgba(0,0,0,0.05);
+            position: relative;
+            overflow: hidden;
+          }
+          .watermark {
+            position: absolute;
+            top: 48%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-35deg);
+            font-size: 110px;
+            font-weight: 900;
+            letter-spacing: 0.2em;
+            color: rgba(15, 23, 42, 0.05);
+            text-transform: uppercase;
+            pointer-events: none;
+            white-space: nowrap;
+            user-select: none;
+            z-index: 0;
           }
           .header {
             display: flex;
@@ -61,11 +94,19 @@ export const renderInvoiceToHtml = ({
             margin-bottom: 30px;
             border-bottom: 1px solid #eee;
             padding-bottom: 20px;
+            position: relative;
+            z-index: 1;
           }
           .logo {
             font-size: 24px;
             font-weight: bold;
             color: #1A237E; /* Theme.primary */
+          }
+          .logo-image {
+            max-height: 34px;
+            max-width: 180px;
+            object-fit: contain;
+            display: block;
           }
           .invoice-title {
             font-size: 28px;
@@ -91,6 +132,8 @@ export const renderInvoiceToHtml = ({
             display: flex;
             justify-content: space-between;
             margin-bottom: 20px;
+            position: relative;
+            z-index: 1;
           }
           .col {
             flex: 1;
@@ -128,6 +171,8 @@ export const renderInvoiceToHtml = ({
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 20px;
+            position: relative;
+            z-index: 1;
           }
           .line-items-table th, .line-items-table td {
             border-bottom: 1px solid #eee;
@@ -158,6 +203,8 @@ export const renderInvoiceToHtml = ({
           }
           .notes-block {
             margin-bottom: 20px;
+            position: relative;
+            z-index: 1;
           }
           .notes-content {
             background-color: #f9f9f9;
@@ -172,6 +219,8 @@ export const renderInvoiceToHtml = ({
             border-top: 1px solid #eee;
             padding-top: 20px;
             margin-top: 30px;
+            position: relative;
+            z-index: 1;
           }
           .calc-row {
             display: flex;
@@ -210,6 +259,8 @@ export const renderInvoiceToHtml = ({
             margin-top: 40px;
             font-size: 10px;
             color: #aaa;
+            position: relative;
+            z-index: 1;
           }
           .annexure-block {
             background-color: #0f172a; /* Dark background */
@@ -253,9 +304,14 @@ export const renderInvoiceToHtml = ({
       </head>
       <body>
         <div class="container">
+          <div class="watermark">${sanitizedBrandName}</div>
           <div class="header">
             <div class="header-left">
-              <div class="logo">GOGOX</div>
+              ${
+                sanitizedLogoUrl
+                  ? `<img class="logo-image" src="${sanitizedLogoUrl}" alt="${sanitizedBrandName} logo" />`
+                  : `<div class="logo">${sanitizedBrandName}</div>`
+              }
               <p style="font-size:10px; color:#777;">LOGISTICS PLATFORM</p>
             </div>
             <div class="header-right">

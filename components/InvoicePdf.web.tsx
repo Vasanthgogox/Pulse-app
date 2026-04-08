@@ -13,6 +13,7 @@ function pageStyle(): React.CSSProperties {
     width: '210mm',
     minHeight: '297mm',
     padding: '28px 32px',
+    position: 'relative',
     boxShadow: '0 0 16px rgba(0,0,0,0.08)',
     boxSizing: 'border-box',
     color: '#1f2937',
@@ -29,6 +30,8 @@ interface InvoicePdfWebProps {
 export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = false }: InvoicePdfWebProps) {
   const printRef = useRef<HTMLDivElement>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [logoFailed, setLogoFailed] = useState(false);
+  const logoUrl = logoFailed ? null : invoiceData.brandingLogoUrl;
 
   const handleDownloadPdf = async () => {
     if (!printRef.current) return;
@@ -106,7 +109,18 @@ export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = 
         <div ref={printRef} style={pageStyle()}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #e5e7eb', paddingBottom: 14 }}>
             <div>
-              <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 0.6 }}>GOGOX</div>
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt="Company logo"
+                  style={{ height: 34, objectFit: 'contain', maxWidth: 180 }}
+                  onError={() => setLogoFailed(true)}
+                />
+              ) : (
+                <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 0.6 }}>
+                  {invoiceData.brandingCompanyName}
+                </div>
+              )}
               <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>Logistics Platform</div>
               <div style={{ marginTop: 12, fontSize: 14, fontWeight: 700 }}>{invoiceData.clientName}</div>
             </div>
@@ -120,7 +134,25 @@ export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = 
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
+          <div
+            style={{
+              position: 'absolute',
+              top: '45%',
+              left: '50%',
+              transform: 'translate(-50%, -50%) rotate(-33deg)',
+              fontSize: 86,
+              fontWeight: 800,
+              textTransform: 'uppercase',
+              letterSpacing: 10,
+              color: 'rgba(15,23,42,0.05)',
+              pointerEvents: 'none',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {invoiceData.brandingCompanyName}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16, position: 'relative', zIndex: 1 }}>
             <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>Billing Entity</div>
               {invoiceData.billingAddressLines.map((line, idx) => (
@@ -135,7 +167,7 @@ export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = 
             </div>
           </div>
 
-          <table style={{ width: '100%', marginTop: 18, borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', marginTop: 18, borderCollapse: 'collapse', position: 'relative', zIndex: 1 }}>
             <thead>
               <tr style={{ backgroundColor: '#f8fafc', textAlign: 'left' }}>
                 <th style={{ padding: '10px', borderBottom: '1px solid #d1d5db', fontSize: 12 }}>Description</th>
@@ -170,7 +202,7 @@ export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = 
             </tbody>
           </table>
 
-          <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16 }}>
+          <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16, position: 'relative', zIndex: 1 }}>
             <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
               <div style={{ fontSize: 12, fontWeight: 700 }}>Bank Transfer Details</div>
               {invoiceData.bankDetailsLines.map((line, idx) => (
@@ -196,7 +228,7 @@ export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = 
             </div>
           </div>
 
-          <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, fontSize: 12 }}>
+          <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, fontSize: 12, position: 'relative', zIndex: 1 }}>
             <div>
               <div><strong>Payment Terms:</strong> {invoiceData.paymentTerms}</div>
               <div style={{ marginTop: 4 }}><strong>LR Scope:</strong> {invoiceData.lrScope}</div>
@@ -211,7 +243,7 @@ export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = 
             </div>
           </div>
 
-          <div style={{ marginTop: 20, borderTop: '1px solid #e5e7eb', paddingTop: 10, fontSize: 11, color: '#6b7280', display: 'flex', justifyContent: 'space-between' }}>
+          <div style={{ marginTop: 20, borderTop: '1px solid #e5e7eb', paddingTop: 10, fontSize: 11, color: '#6b7280', display: 'flex', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
             <span>Sovereign Match Engine</span>
             <span>PAGE 1 OF 1</span>
           </div>
