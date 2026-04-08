@@ -554,14 +554,6 @@ export function TripRatingsBlock({
             ) : (
               <>
                 <View style={styles.heroHeader}>
-                  <TouchableOpacity
-                    style={styles.closeButton}
-                    onPress={closeModal}
-                    activeOpacity={0.8}
-                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                  >
-                    <Feather name="x" size={20} color={Theme.textOnDarkMuted} />
-                  </TouchableOpacity>
                   <View style={styles.heroTopRow}>
                     <View style={styles.avatarWrap}>
                       <Text style={styles.avatarText}>
@@ -581,6 +573,15 @@ export function TripRatingsBlock({
                       <Text style={styles.heroMeta}>{activeRoleLabel} • {activeSubjectMeta}</Text>
                     </View>
                   </View>
+
+                  <TouchableOpacity
+                    style={styles.closeButton}
+                    onPress={closeModal}
+                    activeOpacity={0.8}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  >
+                    <Feather name="x" size={20} color={Theme.textOnDarkMuted} />
+                  </TouchableOpacity>
                 </View>
 
                 <View style={styles.modalBody}>
@@ -806,6 +807,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.onPrimaryMuted,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 10,
   },
   heroTopRow: {
     flexDirection: 'row',
