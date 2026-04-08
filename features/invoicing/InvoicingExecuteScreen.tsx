@@ -212,8 +212,6 @@ export function InvoicingExecuteScreen() {
       pathname: '/invoicing/pdf-preview',
       params: {
         ...params,
-        selectedTripIds: JSON.stringify(params.selectedTripIds),
-        additionalCharges: JSON.stringify(params.additionalCharges),
       },
     });
   }, [router]);
