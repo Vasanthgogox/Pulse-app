@@ -35,6 +35,8 @@ export interface AuthProfile {
   asset: boolean;
   full_name?: string;
   avatar_url?: string;
+  /** Custom avatar seed for presets (e.g. pilot-1). Stored in DB so it persists across devices. */
+  avatar_seed?: string;
   phone?: string;
   company_name?: string;
   /** Profile quote/status (WhatsApp-style), shown under name on profile. */
@@ -81,6 +83,7 @@ function mapSupabaseUserToAuth(user: SupabaseUser): {
       company_name: meta.company_name,
       phone: meta.phone,
       avatar_url: meta.avatar_url,
+      avatar_seed: meta.avatar_seed,
       status_text: meta.status_text,
       memberships: {},
     },
@@ -392,19 +395,22 @@ export function onAuthStateChange(
   return () => subscription.unsubscribe();
 }
 
-/** Updates to apply to the current user's profile (stored in auth user_metadata). */
+/** Updates to apply to the current user's profile (stored in auth user_metadata and public.profiles). */
 export interface UpdateProfileOptions {
   full_name?: string;
   phone?: string;
   company_name?: string;
   /** Profile photo URL; pass null to clear. */
   avatar_url?: string | null;
+  /** Custom avatar seed for presets (e.g. pilot-1). */
+  avatar_seed?: string | null;
   /** Profile quote/status (WhatsApp-style). */
   status_text?: string | null;
 }
 
 /**
- * Update the current user's profile. Stored only in auth.users.raw_user_meta_data (Supabase Auth).
+ * Update the current user's profile. Stored in both auth.users.raw_user_meta_data (Supabase Auth)
+ * and the public.profiles table for relational integrity and searchability.
  * Connection invite-by-phone (get_invitee_by_phone) reads from auth.users. Triggers onAuthStateChange so AuthContext reflects the new profile.
  */
 export async function updateProfile(
@@ -439,6 +445,7 @@ export async function updateProfile(
     } = await supabase().auth.getUser();
     if (!user) return { error: new Error("Not signed in") };
 
+    // 1. Update auth.users metadata (for fast local access and sync across devices)
     const data: Record<string, unknown> = {};
     if (updates.full_name !== undefined)
       data.full_name = updates.full_name.trim();
@@ -450,11 +457,35 @@ export async function updateProfile(
       data.company_name = updates.company_name.trim();
     if (updates.avatar_url !== undefined)
       data.avatar_url = updates.avatar_url || null;
+    if (updates.avatar_seed !== undefined)
+      data.avatar_seed = updates.avatar_seed || null;
     if (updates.status_text !== undefined)
       data.status_text = updates.status_text?.trim() ?? "";
 
-    const { error } = await supabase().auth.updateUser({ data });
-    if (error) return { error: new Error(error.message || "Update failed") };
+    const { error: authError } = await supabase().auth.updateUser({ data });
+    if (authError) return { error: new Error(authError.message || "Auth update failed") };
+
+    // 2. Sync to public.profiles table (for relational use, searching, and public profile view)
+    const profileUpdates: Record<string, any> = {};
+    if (updates.full_name !== undefined) profileUpdates.full_name = updates.full_name.trim();
+    if (updates.phone !== undefined) profileUpdates.phone = updates.phone.trim() ? normalizePhoneForProfile(updates.phone) : "";
+    if (updates.company_name !== undefined) profileUpdates.company_name = updates.company_name.trim();
+    if (updates.avatar_url !== undefined) profileUpdates.avatar_url = updates.avatar_url;
+    if (updates.avatar_seed !== undefined) profileUpdates.avatar_seed = updates.avatar_seed;
+    // Note: Profiles table uses 'bio' for status/quote (from migrations)
+    if (updates.status_text !== undefined) profileUpdates.bio = updates.status_text?.trim() ?? "";
+    
+    // We update public.profiles but don't block the UI if it fails (metadata is the primary driver for the current user)
+    const { error: dbError } = await supabase()
+      .from("profiles")
+      .update(profileUpdates)
+      .eq("id", user.id);
+
+    if (dbError) {
+      console.warn("[authService] Failed to sync profile to public table:", dbError.message);
+      // We still return success if metadata update worked, as it drives the app UI
+    }
+
     return { error: null };
   } catch (e) {
     if (isNetworkError(e)) {

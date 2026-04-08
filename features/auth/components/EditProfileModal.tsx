@@ -198,7 +198,12 @@ export function EditProfileModal({
   const handleSelectPreset = async (seed: string) => {
     setShowAvatarDropdown(false);
     setError(null);
-    const { error: updateErr } = await authService.updateProfile({ avatar_url: null } as authService.UpdateProfileOptions);
+    // When selecting a preset, we clear the uploaded avatar_url and set the avatar_seed
+    const { error: updateErr } = await authService.updateProfile({ 
+      avatar_url: null,
+      avatar_seed: seed
+    } as authService.UpdateProfileOptions);
+    
     if (updateErr) {
       setError(updateErr.message);
       return;
@@ -220,7 +225,10 @@ export function EditProfileModal({
 
   const handleRemovePhoto = async () => {
     setError(null);
-    const { error: updateErr } = await authService.updateProfile({ avatar_url: null } as authService.UpdateProfileOptions);
+    const { error: updateErr } = await authService.updateProfile({ 
+      avatar_url: null,
+      avatar_seed: initialAvatarSeed // fallback to the one passed or default
+    } as authService.UpdateProfileOptions);
     if (updateErr) {
       setError(updateErr.message);
       return;

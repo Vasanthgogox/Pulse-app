@@ -124,9 +124,18 @@ export default function ProfileScreen() {
   const { signOut, user, profile, refreshSession } = useAuth();
 
   const USER_AVATAR_SEED_KEY = "@q-mobile/user-avatar-seed";
-  const [avatarSeed, setAvatarSeed] = useState(DEFAULT_USER_2D_AVATAR_SEED);
+  const [avatarSeed, setAvatarSeed] = useState(
+    profile?.avatar_seed || DEFAULT_USER_2D_AVATAR_SEED,
+  );
+
+  useEffect(() => {
+    if (profile?.avatar_seed) {
+      setAvatarSeed(profile.avatar_seed);
+    }
+  }, [profile?.avatar_seed]);
+
   const [avatarUri, setAvatarUri] = useState<string>(() =>
-    getUser2DAvatarUriForSeed(DEFAULT_USER_2D_AVATAR_SEED),
+    getUser2DAvatarUriForSeed(profile?.avatar_seed || DEFAULT_USER_2D_AVATAR_SEED),
   );
 
   const capabilities = getCapabilitiesFromProfile(profile);
@@ -213,14 +222,6 @@ export default function ProfileScreen() {
     Constants.expoConfig?.ios?.buildNumber ??
     Constants.expoConfig?.android?.versionCode ??
     "—";
-
-  useEffect(() => {
-    AsyncStorage.getItem(USER_AVATAR_SEED_KEY)
-      .then((seed) => {
-        if (seed?.trim()) setAvatarSeed(seed.trim());
-      })
-      .catch(() => {});
-  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -449,7 +450,6 @@ export default function ProfileScreen() {
         avatarPresetStyle="user-2d"
         onPresetSelected={(seed) => {
           setAvatarSeed(seed);
-          AsyncStorage.setItem(USER_AVATAR_SEED_KEY, seed).catch(() => {});
         }}
       />
     </View>
