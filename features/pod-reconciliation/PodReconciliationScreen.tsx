@@ -9,7 +9,7 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { getCapabilitiesFromProfile } from "@/lib/capabilities";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -62,6 +62,15 @@ export function PodReconciliationScreen() {
   const [selectedTrip, setSelectedTrip] =
     useState<PodReconciliationTripView | null>(null);
   const [validationModalOpen, setValidationModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"cards" | "table">(
+    Platform.OS === "web" ? "table" : "cards",
+  );
+  const [sortKey, setSortKey] = useState<
+    "id" | "trip_date" | "client_name" | "vendor_name" | "amount" | "invoice_status_display"
+  >("trip_date");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<20 | 50 | 100>(20);
 
   const {
     data: trips = [],
@@ -101,6 +110,75 @@ export function PodReconciliationScreen() {
     if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(2)} Cr`;
     if (amount >= 100000) return `₹${(amount / 100000).toFixed(2)} L`;
     return "₹" + amount.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  };
+
+  const safeDateText = (value: string | null | undefined): string => {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    return date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const sortTrips = (items: PodReconciliationTripView[]) => {
+    const cloned = [...items];
+    cloned.sort((a, b) => {
+      let left: string | number = "";
+      let right: string | number = "";
+      switch (sortKey) {
+        case "amount":
+          left = Number(a.amount || 0);
+          right = Number(b.amount || 0);
+          break;
+        case "trip_date":
+          left = new Date(a.trip_date || a.date || "").getTime() || 0;
+          right = new Date(b.trip_date || b.date || "").getTime() || 0;
+          break;
+        case "id":
+          left = (a.id || "").toLowerCase();
+          right = (b.id || "").toLowerCase();
+          break;
+        case "client_name":
+          left = (a.client_name || "").toLowerCase();
+          right = (b.client_name || "").toLowerCase();
+          break;
+        case "vendor_name":
+          left = (a.vendor_name || "").toLowerCase();
+          right = (b.vendor_name || "").toLowerCase();
+          break;
+        case "invoice_status_display":
+          left = (a.invoice_status_display || "").toLowerCase();
+          right = (b.invoice_status_display || "").toLowerCase();
+          break;
+      }
+      if (left < right) return sortDirection === "asc" ? -1 : 1;
+      if (left > right) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+    return cloned;
+  };
+
+  const sortedTrips = useMemo(() => sortTrips(trips), [trips, sortKey, sortDirection]);
+  const totalPages = Math.max(1, Math.ceil(sortedTrips.length / pageSize));
+  const paginatedTrips = useMemo(() => {
+    const safePage = Math.min(page, totalPages);
+    const start = (safePage - 1) * pageSize;
+    return sortedTrips.slice(start, start + pageSize);
+  }, [sortedTrips, page, pageSize, totalPages]);
+
+  const toggleSort = (
+    key: "id" | "trip_date" | "client_name" | "vendor_name" | "amount" | "invoice_status_display",
+  ) => {
+    setPage(1);
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDirection("asc");
   };
 
   if (!allowed) {
@@ -328,6 +406,46 @@ export function PodReconciliationScreen() {
               style={{ marginLeft: 6 }}
             />
           </Pressable>
+          {isMediumScreen && (
+            <View style={styles.viewModeWrap}>
+              <Pressable
+                style={[styles.viewModeBtn, viewMode === "cards" && styles.viewModeBtnActive]}
+                onPress={() => setViewMode("cards")}
+              >
+                <FontAwesome
+                  name="th-large"
+                  size={12}
+                  color={viewMode === "cards" ? "#fff" : Theme.textMuted}
+                />
+                <Text
+                  style={[
+                    styles.viewModeText,
+                    viewMode === "cards" && styles.viewModeTextActive,
+                  ]}
+                >
+                  Cards
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.viewModeBtn, viewMode === "table" && styles.viewModeBtnActive]}
+                onPress={() => setViewMode("table")}
+              >
+                <FontAwesome
+                  name="table"
+                  size={12}
+                  color={viewMode === "table" ? "#fff" : Theme.textMuted}
+                />
+                <Text
+                  style={[
+                    styles.viewModeText,
+                    viewMode === "table" && styles.viewModeTextActive,
+                  ]}
+                >
+                  Table
+                </Text>
+              </Pressable>
+            </View>
+          )}
         </View>
 
         <View style={styles.contentArea}>
@@ -360,6 +478,137 @@ export function PodReconciliationScreen() {
               <Text style={styles.emptySub}>
                 Try adjusting your filters or tab selection.
               </Text>
+            </View>
+          ) : viewMode === "table" && isMediumScreen ? (
+            <View style={styles.tableWrap}>
+              <ScrollView horizontal showsHorizontalScrollIndicator>
+                <View style={styles.tableInner}>
+                  <View style={styles.tableHeadRow}>
+                    <TableHeaderCell label="Trip ID" onPress={() => toggleSort("id")} />
+                    <TableHeaderCell label="Trip Date" onPress={() => toggleSort("trip_date")} />
+                    <TableHeaderCell label="Client Name" onPress={() => toggleSort("client_name")} />
+                    <TableHeaderCell label="Vendor Name" onPress={() => toggleSort("vendor_name")} />
+                    <TableHeaderCell label="LR No" />
+                    <TableHeaderCell label="PP Location" />
+                    <TableHeaderCell label="Drop Point" />
+                    <TableHeaderCell label="Value (₹)" onPress={() => toggleSort("amount")} align="right" />
+                    <TableHeaderCell label="Trip Status" />
+                    <TableHeaderCell label="POD Status" onPress={() => toggleSort("invoice_status_display")} />
+                    <TableHeaderCell label="POD Date" />
+                    <TableHeaderCell label="Inv Status 1" />
+                    <TableHeaderCell label="Invoice No" />
+                    <TableHeaderCell label="Actions" align="right" />
+                  </View>
+                  {paginatedTrips.map((item, index) => (
+                    <View
+                      key={item.internal_id}
+                      style={[
+                        styles.tableRow,
+                        index % 2 === 0 ? styles.tableRowEven : styles.tableRowOdd,
+                      ]}
+                    >
+                      <TableCell text={item.id || "—"} mono strong color={Theme.primary} />
+                      <TableCell text={safeDateText(item.trip_date || item.date)} />
+                      <TableCell text={item.client_name || "—"} strong />
+                      <TableCell text={item.vendor_name || "—"} />
+                      <TableCell
+                        text={
+                          item.lr_numbers?.length
+                            ? item.lr_numbers.length > 1
+                              ? `${item.lr_numbers[0]} +${item.lr_numbers.length - 1}`
+                              : item.lr_numbers[0]
+                            : "—"
+                        }
+                        mono
+                      />
+                      <TableCell text={item.pp_location || "—"} />
+                      <TableCell text={item.drop_point || "—"} />
+                      <TableCell
+                        text={(item.amount || 0).toLocaleString()}
+                        mono
+                        strong
+                        align="right"
+                      />
+                      <TableCell text={item.trip_status || "—"} />
+                      <TableStatusCell trip={item} />
+                      <TableCell text={safeDateText(item.pod_received_date)} />
+                      <TableCell text={item.invoice_status_1 || "—"} />
+                      <TableCell text={item.invoice_no || "—"} mono />
+                      <TableActionCell
+                        trip={item}
+                        onReview={() => {
+                          setSelectedTrip(item);
+                          setValidationModalOpen(true);
+                        }}
+                        onLog={() => router.push("/log-incoming-pods")}
+                        onOpenInvoicing={() => router.push("/invoicing-execute")}
+                      />
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+
+              <View style={styles.tableFooter}>
+                <Text style={styles.tableFooterText}>
+                  Showing{" "}
+                  {sortedTrips.length === 0
+                    ? 0
+                    : Math.min((page - 1) * pageSize + 1, sortedTrips.length)}
+                  -
+                  {Math.min(page * pageSize, sortedTrips.length)} of {sortedTrips.length}
+                </Text>
+                <View style={styles.tableFooterControls}>
+                  <Pressable
+                    style={styles.tablePagerBtn}
+                    onPress={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                  >
+                    <FontAwesome
+                      name="chevron-left"
+                      size={12}
+                      color={page <= 1 ? Theme.borderMedium : Theme.textPrimaryDark}
+                    />
+                  </Pressable>
+                  <Text style={styles.tablePagerText}>
+                    Page {Math.min(page, totalPages)} / {totalPages}
+                  </Text>
+                  <Pressable
+                    style={styles.tablePagerBtn}
+                    onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages}
+                  >
+                    <FontAwesome
+                      name="chevron-right"
+                      size={12}
+                      color={page >= totalPages ? Theme.borderMedium : Theme.textPrimaryDark}
+                    />
+                  </Pressable>
+                  <View style={styles.pageSizeWrap}>
+                    {[20, 50, 100].map((size) => (
+                      <Pressable
+                        key={size}
+                        style={[
+                          styles.pageSizeBtn,
+                          pageSize === size && styles.pageSizeBtnActive,
+                        ]}
+                        onPress={() => {
+                          setPageSize(size as 20 | 50 | 100);
+                          setPage(1);
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.pageSizeText,
+                            pageSize === size && styles.pageSizeTextActive,
+                          ]}
+                        >
+                          {size}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              </View>
             </View>
           ) : (
             <ScrollView
@@ -441,6 +690,130 @@ export function PodReconciliationScreen() {
           </View>
         </View>
       </Modal>
+    </View>
+  );
+}
+
+function TableHeaderCell({
+  label,
+  onPress,
+  align = "left",
+}: {
+  label: string;
+  onPress?: () => void;
+  align?: "left" | "right";
+}) {
+  const content = (
+    <Text style={[styles.tableHeadText, align === "right" && styles.textRight]}>{label}</Text>
+  );
+  return (
+    <View style={[styles.tableHeadCell, align === "right" && styles.tableCellRight]}>
+      {onPress ? (
+        <Pressable onPress={onPress} style={styles.tableHeadPressable}>
+          {content}
+        </Pressable>
+      ) : (
+        content
+      )}
+    </View>
+  );
+}
+
+function TableCell({
+  text,
+  mono,
+  strong,
+  color,
+  align = "left",
+}: {
+  text: string;
+  mono?: boolean;
+  strong?: boolean;
+  color?: string;
+  align?: "left" | "right";
+}) {
+  return (
+    <View style={[styles.tableCell, align === "right" && styles.tableCellRight]}>
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.tableCellText,
+          mono && styles.tableCellMono,
+          strong && styles.tableCellStrong,
+          align === "right" && styles.textRight,
+          color ? { color } : null,
+        ]}
+      >
+        {text}
+      </Text>
+    </View>
+  );
+}
+
+function TableStatusCell({ trip }: { trip: PodReconciliationTripView }) {
+  const status = trip.invoice_status_display || "Invoice Pending";
+  const isPartial =
+    status === "Invoice Pending" &&
+    trip.lr_numbers.length > 1 &&
+    trip.trip_pods.length > 0 &&
+    trip.trip_pods.length < trip.lr_numbers.length;
+  const badgeText = isPartial ? "Partial" : status;
+  const badgeStyle =
+    status === "Invoiced"
+      ? styles.tableBadgeInvoiced
+      : status === "Ready for Invoice"
+        ? styles.tableBadgeReady
+        : status === "Received"
+          ? styles.tableBadgeReceived
+          : styles.tableBadgePending;
+
+  return (
+    <View style={styles.tableCell}>
+      <View style={[styles.tableStatusBadge, badgeStyle]}>
+        <Text style={styles.tableStatusBadgeText}>{badgeText}</Text>
+      </View>
+      {trip.lr_numbers.length > 0 && (
+        <Text style={styles.tableStatusMeta}>
+          {trip.trip_pods.length}/{trip.lr_numbers.length}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+function TableActionCell({
+  trip,
+  onReview,
+  onLog,
+  onOpenInvoicing,
+}: {
+  trip: PodReconciliationTripView;
+  onReview: () => void;
+  onLog: () => void;
+  onOpenInvoicing: () => void;
+}) {
+  let label = "View";
+  let onPress = onReview;
+  let toneStyle = styles.tableActionDefault;
+  if (trip.invoice_status_display === "Invoice Pending") {
+    label = "Log";
+    onPress = onLog;
+    toneStyle = styles.tableActionPending;
+  } else if (trip.invoice_status_display === "Received") {
+    label = "Review";
+    onPress = onReview;
+    toneStyle = styles.tableActionReceived;
+  } else if (trip.invoice_status_display === "Invoiced") {
+    label = "View";
+    onPress = onOpenInvoicing;
+    toneStyle = styles.tableActionDefault;
+  }
+
+  return (
+    <View style={[styles.tableCell, styles.tableCellRight]}>
+      <Pressable style={[styles.tableActionBtn, toneStyle]} onPress={onPress}>
+        <Text style={styles.tableActionText}>{label}</Text>
+      </Pressable>
     </View>
   );
 }
@@ -836,8 +1209,219 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
+  viewModeWrap: {
+    flexDirection: "row",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    overflow: "hidden",
+    backgroundColor: Theme.cardWhite,
+  },
+  viewModeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  viewModeBtnActive: {
+    backgroundColor: Theme.primary,
+  },
+  viewModeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textMuted,
+  },
+  viewModeTextActive: {
+    color: "#fff",
+  },
 
   contentArea: { flex: 1, backgroundColor: "#f8f9fa", width: "100%" },
+  tableWrap: {
+    flex: 1,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  tableInner: {
+    minWidth: 1560,
+  },
+  tableHeadRow: {
+    flexDirection: "row",
+    backgroundColor: Theme.surfaceGray,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderMedium,
+  },
+  tableHeadCell: {
+    width: 120,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: Theme.borderLight,
+    justifyContent: "center",
+  },
+  tableHeadPressable: {
+    alignSelf: "stretch",
+  },
+  tableHeadText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  tableRow: {
+    flexDirection: "row",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+  },
+  tableRowEven: {
+    backgroundColor: Theme.cardWhite,
+  },
+  tableRowOdd: {
+    backgroundColor: Theme.surface,
+  },
+  tableCell: {
+    width: 120,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: Theme.borderLight,
+    justifyContent: "center",
+    minHeight: 48,
+  },
+  tableCellRight: {
+    alignItems: "flex-end",
+  },
+  tableCellText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+  },
+  tableCellMono: {
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+  },
+  tableCellStrong: {
+    fontWeight: "800",
+  },
+  textRight: {
+    textAlign: "right",
+  },
+  tableStatusBadge: {
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    alignSelf: "flex-start",
+  },
+  tableStatusBadgeText: {
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  tableStatusMeta: {
+    marginTop: 3,
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textMuted,
+  },
+  tableBadgePending: {
+    backgroundColor: "rgba(176,0,32,0.1)",
+  },
+  tableBadgeReceived: {
+    backgroundColor: "rgba(180,83,9,0.1)",
+  },
+  tableBadgeReady: {
+    backgroundColor: "rgba(5,150,105,0.1)",
+  },
+  tableBadgeInvoiced: {
+    backgroundColor: "rgba(26,35,126,0.1)",
+  },
+  tableActionBtn: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+  },
+  tableActionText: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  tableActionPending: {
+    borderColor: "rgba(26,35,126,0.25)",
+    backgroundColor: "rgba(26,35,126,0.05)",
+  },
+  tableActionReceived: {
+    borderColor: "rgba(180,83,9,0.25)",
+    backgroundColor: "rgba(180,83,9,0.05)",
+  },
+  tableActionDefault: {
+    borderColor: "rgba(5,150,105,0.25)",
+    backgroundColor: "rgba(5,150,105,0.05)",
+  },
+  tableFooter: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: Theme.surface,
+  },
+  tableFooterText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+  },
+  tableFooterControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  tablePagerBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderInput,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.cardWhite,
+  },
+  tablePagerText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  pageSizeWrap: {
+    flexDirection: "row",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderInput,
+    borderRadius: 8,
+    overflow: "hidden",
+    marginLeft: 6,
+  },
+  pageSizeBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: Theme.cardWhite,
+  },
+  pageSizeBtnActive: {
+    backgroundColor: Theme.primary,
+  },
+  pageSizeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+  },
+  pageSizeTextActive: {
+    color: "#fff",
+  },
   listContent: { padding: 16, paddingBottom: 40 },
   listContainerMobile: { gap: 12 },
   gridContainer: {

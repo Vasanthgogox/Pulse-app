@@ -1,9 +1,25 @@
 /**
  * POD Reconciliation service — maps to cashflow PodReconciliation.tsx.
  * Same DB as Q-unified-base; RLS applies.
+ *
+ * Trip scope: selected org only — merge owner trips + supplier-linked + client-linked RPCs
+ * so list counts match metrics (plain `from('trips')` + RLS can include other orgs).
  */
 import { supabase } from '@/lib/supabase';
 import { expandLR } from '@/lib/utils/lr';
+
+type TripRow = Record<string, unknown>;
+
+export interface PodReconciliationSummaryComputed {
+  pod_pending_count: number;
+  pod_pending_sum: number;
+  received_count: number;
+  received_sum: number;
+  approved_count: number;
+  approved_sum: number;
+  invoiced_count: number;
+  invoiced_sum: number;
+}
 
 export type PodTab = 'pod_pending' | 'received' | 'approved' | 'invoiced';
 
@@ -38,6 +54,110 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function tripAmount(t: TripRow): number {
+  return num(t.total_client_value ?? t.client_price);
+}
+
+/** Trips for the selected org: owner + supplier-linked + client-linked (same scope as finance/invoicing merge). */
+export async function mergeTripsForPodOrg(orgId: string): Promise<{
+  error: Error | null;
+  trips: TripRow[];
+}> {
+  try {
+    const [ownerRes, supRes, clientRes] = await Promise.all([
+      supabase()
+        .from('trips')
+        .select('*')
+        .eq('organization_id', orgId)
+        .order('created_at', { ascending: false })
+        .limit(5000),
+      supabase().rpc('get_trips_where_org_is_supplier', { p_org_id: orgId }),
+      supabase().rpc('get_trips_where_org_is_client', { p_org_id: orgId }),
+    ]);
+
+    if (ownerRes.error) {
+      return { error: new Error(ownerRes.error.message), trips: [] };
+    }
+    if (supRes.error) {
+      return { error: new Error(supRes.error.message), trips: [] };
+    }
+    if (clientRes.error) {
+      return { error: new Error(clientRes.error.message), trips: [] };
+    }
+
+    const map = new Map<string, TripRow>();
+    const push = (rows: unknown) => {
+      for (const row of (rows as TripRow[]) || []) {
+        if (row && row.id) map.set(str(row.id), row);
+      }
+    };
+    push(ownerRes.data);
+    push(supRes.data);
+    push(clientRes.data);
+
+    return { error: null, trips: Array.from(map.values()) };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e : new Error(String(e)),
+      trips: [],
+    };
+  }
+}
+
+/** Same rules as the tab list filter in fetchReconciliationTrips. */
+export function tripMatchesPodTab(trip: TripRow, activeTab: PodTab): boolean {
+  const inv1 = str(trip.invoice_status_1).toLowerCase();
+  const inv2 = str(trip.invoice_status_2).toLowerCase();
+  const podS = str(trip.pod_status).toLowerCase();
+  const hasInvoiceNo = Boolean(trip.invoice_no && str(trip.invoice_no).trim() !== '');
+  const isNoInvoice = !hasInvoiceNo && !inv1.includes('raised');
+  const isApproved = inv1.includes('pending') || inv1.includes('data shared');
+
+  if (activeTab === 'invoiced') {
+    return hasInvoiceNo || inv1.includes('raised');
+  }
+  if (activeTab === 'approved') {
+    return isNoInvoice && podS === 'received' && isApproved;
+  }
+  if (activeTab === 'received') {
+    return isNoInvoice && podS === 'received' && !isApproved;
+  }
+  if (activeTab === 'pod_pending') {
+    if (inv2.includes('unbilled')) return true;
+    return (
+      isNoInvoice &&
+      (podS.includes('pending') ||
+        podS.includes('i-bond') ||
+        podS === '' ||
+        podS === 'partial')
+    );
+  }
+  return true;
+}
+
+export function computePodReconciliationSummaryFromTrips(
+  rows: TripRow[],
+): PodReconciliationSummaryComputed {
+  const sumFor = (tab: PodTab) =>
+    rows
+      .filter((t) => tripMatchesPodTab(t, tab))
+      .reduce((s, t) => s + tripAmount(t), 0);
+
+  return {
+    pod_pending_count: rows.filter((t) => tripMatchesPodTab(t, 'pod_pending'))
+      .length,
+    pod_pending_sum: sumFor('pod_pending'),
+    received_count: rows.filter((t) => tripMatchesPodTab(t, 'received')).length,
+    received_sum: sumFor('received'),
+    approved_count: rows.filter((t) => tripMatchesPodTab(t, 'approved'))
+      .length,
+    approved_sum: sumFor('approved'),
+    invoiced_count: rows.filter((t) => tripMatchesPodTab(t, 'invoiced'))
+      .length,
+    invoiced_sum: sumFor('invoiced'),
+  };
+}
+
 export async function fetchReconciliationTrips(
   orgId: string,
   activeTab: PodTab,
@@ -45,70 +165,46 @@ export async function fetchReconciliationTrips(
   regionFilter: string = 'All'
 ): Promise<{ error: Error | null; trips: PodReconciliationTripView[] }> {
   try {
-    let query = supabase()
-      .from('trips')
-      .select('*');
-      
-    // Note: Removed .eq('organization_id', orgId) to match cashflow-catalyst, 
-    // which relies on RLS and doesn't filter by orgId on the trips table explicitly.
-
-    // Apply DB-side tab filtering to ensure we fetch the right subset, avoiding 1000-limit truncation
-    if (activeTab === 'invoiced') {
-      query = query.not('invoice_no', 'is', null);
-    } else if (activeTab === 'approved') {
-      query = query.is('invoice_no', null).or('invoice_status_1.ilike.%Pending%,invoice_status_1.ilike.%Data Shared%');
-    } else if (activeTab === 'received') {
-      query = query.is('invoice_no', null).ilike('pod_status', '%received%');
-    } else if (activeTab === 'pod_pending') {
-      // In CF catalyst it was: query = query.is('invoice_no', null).ilike('invoice_status_2', '%Unbilled%');
-      // For q-web, we query for no invoice and rely on JS filtering for the rest to avoid dropping nulls
-      query = query.is('invoice_no', null);
+    const { error: mergeErr, trips: merged } = await mergeTripsForPodOrg(orgId);
+    if (mergeErr) {
+      console.error('[podReconciliation] merge error:', mergeErr);
+      return { error: mergeErr, trips: [] };
     }
 
+    let pool = merged;
+
     if (searchTerm) {
-      const q = searchTerm.trim();
-      query = query.or(`trip_id.ilike.%${q}%,client_name.ilike.%${q}%,lr_no.ilike.%${q}%`);
+      const q = searchTerm.trim().toLowerCase();
+      pool = pool.filter((trip) => {
+        const tid = str(
+          trip.display_trip_id ??
+            trip.trip_number ??
+            trip.trip_id ??
+            trip.id,
+        ).toLowerCase();
+        const client = str(trip.client_name).toLowerCase();
+        const lr = str(trip.lr_no).toLowerCase();
+        return tid.includes(q) || client.includes(q) || lr.includes(q);
+      });
     }
 
     if (regionFilter && regionFilter !== 'All') {
-      query = query.ilike('pp_location', `${regionFilter}%`);
+      const pref = regionFilter.toLowerCase();
+      pool = pool.filter((trip) => {
+        const loc = str(trip.pickup_area ?? trip.pp_location).toLowerCase();
+        return loc.startsWith(pref);
+      });
     }
 
-    query = query.order('created_at', { ascending: false }).limit(1000);
-
-    const { data: ownerData, error: ownerError } = await query;
-
-    if (ownerError) {
-      console.error("[podReconciliation] query error:", ownerError);
-      return { error: new Error(ownerError.message), trips: [] };
-    }
-
-    let merged = ownerData || [];
-
-    // Precise filtering in JS (matches cashflow-catalyst end-to-end)
-    const filtered = merged.filter(trip => {
-      const inv1 = str(trip.invoice_status_1).toLowerCase();
-      const inv2 = str(trip.invoice_status_2).toLowerCase();
-      const podS = str(trip.pod_status).toLowerCase();
-      const isNoInvoice = !trip.invoice_no && !inv1.includes('raised');
-      const isApproved = inv1.includes('pending') || inv1.includes('data shared');
-
-      if (activeTab === 'invoiced') {
-        return trip.invoice_no || inv1.includes('raised');
-      } else if (activeTab === 'approved') {
-        return isNoInvoice && podS === 'received' && isApproved;
-      } else if (activeTab === 'received') {
-        return isNoInvoice && podS === 'received' && !isApproved;
-      } else if (activeTab === 'pod_pending') {
-        // Explicitly align with cashflow-catalyst invoicing/api.ts isPending logic
-        // "const isPending = isNoInvoice && (podStatus.includes("pending") || podStatus.includes("i-bond") || podStatus === "" || podStatus === "partial");"
-        
-        if (inv2.includes('unbilled')) return true; // Keep old explicit check just in case
-        
-        return isNoInvoice && (podS.includes('pending') || podS.includes('i-bond') || podS === '' || podS === 'partial');
-      }
-      return true;
+    pool.sort((a, b) => {
+      const ca = str(a.created_at);
+      const cb = str(b.created_at);
+      return cb.localeCompare(ca);
     });
+
+    const filtered = pool
+      .filter((trip) => tripMatchesPodTab(trip, activeTab))
+      .slice(0, 1000);
 
     const internalIds = filtered.map(t => str(t.id)).filter(Boolean);
     const supplierIds = Array.from(new Set(filtered.map(t => str(t.supplier_id)).filter(Boolean)));

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal,
   View,
@@ -30,6 +30,17 @@ interface PodValidationViewProps {
   isTablet?: boolean;
 }
 
+function createEmptyExtraction(): PODExtraction {
+  return {
+    header: {},
+    financials: {},
+    transport: {},
+    parties: {},
+    inspection: {},
+    line_items: [],
+  } as unknown as PODExtraction;
+}
+
 export function PodValidationView({ trip, onClose, isTablet }: PodValidationViewProps) {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
@@ -39,7 +50,7 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
   const [remarks, setRemarks] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [extractedData, setExtractedData] = useState<PODExtraction | null>(null);
+  const [extractedData, setExtractedData] = useState<PODExtraction | null>(createEmptyExtraction());
 
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
@@ -48,6 +59,13 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'audit' | 'chat'>('audit');
   const [selectedDocIndex, setSelectedDocIndex] = useState(0);
+  const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(false);
+  const [docLoading, setDocLoading] = useState(false);
+  const [docLoadError, setDocLoadError] = useState<string | null>(null);
+  const [renderableDocUrl, setRenderableDocUrl] = useState<string | null>(null);
+
+  // Catalyst-style full-screen terminal should always be used on web.
+  const isDesktopTerminal = Platform.OS === 'web' || !!isTablet;
 
   const { data: attachments = [], isLoading: isLoadingAttachments } = useQuery({
     queryKey: ['pod-attachments', trip?.internal_id],
@@ -64,13 +82,25 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
     enabled: !!trip?.internal_id
   });
 
-  const getFileUrl = (path: string) => {
-    return supabase().storage.from('pod-documents').getPublicUrl(path).data.publicUrl;
+  const STORAGE_BUCKET_CANDIDATES = ['trip-documents', 'pod-documents'] as const;
+
+  function sanitizeStoragePath(p: string): string {
+    let out = (p || '').trim();
+    // Sometimes callers accidentally store `bucket/path` or `/bucket/path`
+    out = out.replace(/^\/+/, '');
+    for (const b of STORAGE_BUCKET_CANDIDATES) {
+      if (out.startsWith(`${b}/`)) out = out.slice(b.length + 1);
+    }
+    return out;
+  }
+
+  const getFileUrl = (bucket: string, path: string) => {
+    return supabase().storage.from(bucket).getPublicUrl(path).data.publicUrl;
   };
 
   const updateExtractedField = (section: keyof Omit<PODExtraction, 'line_items' | 'validationError'>, key: string, value: any) => {
     setExtractedData(prev => {
-      const current = prev || { line_items: [] } as unknown as PODExtraction;
+      const current = prev || createEmptyExtraction();
       return {
         ...current,
         [section]: {
@@ -93,7 +123,10 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
       setIsScanning(true);
       setScanProgress(5);
       
-      const url = getFileUrl(doc.file_path);
+      const url = getFileUrl(
+        STORAGE_BUCKET_CANDIDATES[0],
+        sanitizeStoragePath(doc.file_path),
+      );
       const response = await fetch(url);
       const blob = await response.blob();
       
@@ -132,7 +165,10 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
 
     try {
       const doc = attachments[selectedDocIndex] || attachments[0];
-      const url = getFileUrl(doc.file_path);
+      const url = getFileUrl(
+        STORAGE_BUCKET_CANDIDATES[0],
+        sanitizeStoragePath(doc.file_path),
+      );
       const response = await fetch(url);
       const blob = await response.blob();
       const finalFile = await compressImage(blob, 1200);
@@ -173,7 +209,9 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
       const { error: tripError } = await supabase()
         .from("trips")
         .update({ 
+          // Keep both fields aligned to avoid downstream summary/list mismatches.
           client_price: finalAmount,
+          total_client_value: finalAmount,
           pod_status: 'Received',
           invoice_status_1: 'Pending',
           pod_received_date: trip.pod_received_date || new Date().toISOString().split('T')[0],
@@ -209,6 +247,15 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
 
       if (lrError) console.error("Error syncing LRs:", lrError);
 
+      // Persist extraction payload for the currently selected attachment when available.
+      if (extractedData && currentDoc?.id) {
+        const { error: attErr } = await supabase()
+          .from('pod_attachments')
+          .update({ extracted_data: extractedData as unknown as Record<string, unknown> })
+          .eq('id', currentDoc.id);
+        if (attErr) console.error('Error saving extracted data:', attErr);
+      }
+
       Alert.alert('Success', 'POD validated successfully.');
       queryClient.invalidateQueries({ queryKey: ['q', 'trips', 'reconciliation'] });
       queryClient.invalidateQueries({ queryKey: ['q', 'invoicing', 'summary'] });
@@ -229,9 +276,123 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
   const p = parseFloat(penalty) || 0;
   const totalDeductions = s + d + p;
   const finalAmount = originalAmount - totalDeductions;
+  const receivedLRs = Array.isArray(trip.trip_pods) ? trip.trip_pods : [];
+  const allLRs = Array.isArray(trip.lr_numbers) ? trip.lr_numbers : [];
+  const assignedVehicle =
+    (trip as any).vehicle_no ||
+    (trip as any).vehicle_display_number ||
+    'N/A';
+  const assignedVehicleType = (trip as any).vehicle_type || (trip as any).truck_type || undefined;
+  const dispatchDate = trip.date
+    ? new Date(trip.date).toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      })
+    : '—';
   
   const currentDoc = attachments[selectedDocIndex] || attachments[0];
-  const currentDocUrl = currentDoc ? getFileUrl(currentDoc.file_path) : null;
+  const currentDocKey = `${currentDoc?.id ?? ''}:${currentDoc?.file_path ?? ''}`;
+  const storagePath = useMemo(
+    () => (currentDoc?.file_path ? sanitizeStoragePath(currentDoc.file_path) : null),
+    [currentDocKey],
+  );
+  const currentDocUrl = useMemo(
+    () =>
+      storagePath != null
+        ? getFileUrl(STORAGE_BUCKET_CANDIDATES[0], storagePath)
+        : null,
+    [storagePath],
+  );
+  const previewDocUrl = renderableDocUrl || currentDocUrl;
+  const previewDocImageSource = useMemo(
+    () => (previewDocUrl ? { uri: previewDocUrl } : null),
+    [previewDocUrl],
+  );
+  const mobileDocImageSource = useMemo(
+    () => (currentDocUrl ? { uri: currentDocUrl } : null),
+    [currentDocUrl],
+  );
+  const currentDocType = (currentDoc?.file_type || '').toLowerCase();
+  const isPdf = currentDocType.includes('pdf') || previewDocUrl?.toLowerCase().includes('.pdf');
+  const isImage = currentDocType.startsWith('image/');
+  const attachmentPreviewItems = useMemo(
+    () =>
+      attachments.map((att: any) => {
+        const docUrl = getFileUrl(
+          STORAGE_BUCKET_CANDIDATES[0],
+          sanitizeStoragePath(att.file_path),
+        );
+        return {
+          ...att,
+          docUrl,
+          imageSource: att.file_type?.startsWith('image/') ? { uri: docUrl } : null,
+        };
+      }),
+    [attachments],
+  );
+
+  const lastSignedUrlKeyRef = useRef<string>('');
+  const previewLoadUrlRef = useRef<string | null>(null);
+  const previewLoadStartedRef = useRef(false);
+  const previewLoadEndedRef = useRef(false);
+
+  useEffect(() => {
+    // Prevent update loops if parent re-renders with same doc info.
+    if (lastSignedUrlKeyRef.current === currentDocKey) return;
+    lastSignedUrlKeyRef.current = currentDocKey;
+
+    let cancelled = false;
+    setDocLoadError(null);
+    setDocLoading(true);
+
+    async function run() {
+      if (!storagePath) return;
+
+      // Prefer signed URL: works for both public & private buckets.
+      // If bucket is missing/misnamed, we'll surface a clear error.
+      try {
+        let lastErr: any = null;
+        for (const bucket of STORAGE_BUCKET_CANDIDATES) {
+          const { data, error } = await supabase()
+            .storage
+            .from(bucket)
+            .createSignedUrl(storagePath, 60 * 60);
+          if (cancelled) return;
+          if (!error && data?.signedUrl) {
+            setRenderableDocUrl((prev) =>
+              prev === data.signedUrl ? prev : data.signedUrl,
+            );
+            return;
+          }
+          lastErr = error ?? lastErr;
+        }
+        throw lastErr ?? new Error('Object not found');
+      } catch (e: any) {
+        if (cancelled) return;
+        setDocLoadError(
+          e?.message ||
+            'Storage preview failed. Check bucket name and file path.',
+        );
+      } finally {
+        if (!cancelled) {
+          setDocLoading(false);
+        }
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentDocKey, storagePath]);
+
+  useEffect(() => {
+    // On web, image decode/load events can fire more than once; guard state flips per URL.
+    previewLoadUrlRef.current = previewDocUrl ?? null;
+    previewLoadStartedRef.current = false;
+    previewLoadEndedRef.current = false;
+  }, [previewDocUrl]);
 
   const renderAuditForm = () => (
     <>
@@ -240,11 +401,43 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
           <FontAwesome name="bolt" size={14} color={Theme.textPrimaryDark} style={{ marginRight: 8 }} />
           <Text style={styles.sectionLabel}>Intelligence Brief</Text>
         </View>
-        <View style={styles.inputCard}>
-          <View style={styles.subsectionHeaderRow}>
-            <Text style={styles.currencyIconText}>₹</Text>
-            <Text style={styles.subsectionLabel}>Audit Adjustments</Text>
+        <View style={styles.intelligenceCard}>
+          <View style={styles.infoTwoCol}>
+            <InfoItem label="Client" value={trip.client_name || '—'} />
+            <InfoItem label="Dispatch Date" value={dispatchDate} />
           </View>
+          <InfoItem label="Vendor / Supplier" value={trip.vendor_name || 'N/A'} />
+          <InfoItem
+            label="Route Vector"
+            value={`${trip.pp_location || 'Unknown'} → ${trip.drop_point || 'Unknown'}`}
+          />
+          <View style={styles.infoTwoCol}>
+            <InfoItem label="Assigned Vehicle" value={assignedVehicle} subValue={assignedVehicleType} />
+            <InfoItem label="LR Coverage" value={`${receivedLRs.length} / ${allLRs.length}`} />
+          </View>
+          <View style={styles.lrBlock}>
+            <Text style={styles.lrBlockLabel}>Linked Assets (LRs)</Text>
+            <View style={styles.lrChipsWrap}>
+              {receivedLRs.length > 0 ? (
+                receivedLRs.map((lr) => (
+                  <View key={lr} style={styles.lrChip}>
+                    <Text style={styles.lrChipText}>{lr}</Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.emptyText}>No LRs identified</Text>
+              )}
+            </View>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.subsectionHeaderRow}>
+          <Text style={styles.currencyIconText}>₹</Text>
+          <Text style={styles.subsectionLabel}>Audit Adjustments</Text>
+        </View>
+        <View style={styles.inputCard}>
           <AuditInput label="Shortage Amount" value={shortage} onChange={setShortage} />
           <AuditInput label="Damage Amount" value={damage} onChange={setDamage} />
           <AuditInput label="Late Penalty" value={penalty} onChange={setPenalty} />
@@ -262,56 +455,59 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
         </View>
       </View>
 
-      {extractedData && (
-        <>
-          <ExtractionSection title="Header Information">
-            <AIFieldRow label="LR Number" field={extractedData.header?.lr_number} onChange={(v) => updateExtractedField('header', 'lr_number', v)} />
-            <AIFieldRow label="Date" field={extractedData.header?.date} onChange={(v) => updateExtractedField('header', 'date', v)} />
-            <AIFieldRow label="Invoice Number" field={extractedData.header?.invoice_number} onChange={(v) => updateExtractedField('header', 'invoice_number', v)} />
-            <AIFieldRow label="Loading In Time" field={extractedData.header?.arrival_date_time} onChange={(v) => updateExtractedField('header', 'arrival_date_time', v)} />
-            <AIFieldRow label="Loading Out Time" field={extractedData.header?.release_date_time} onChange={(v) => updateExtractedField('header', 'release_date_time', v)} />
-            <AIFieldRow label="Unloading In Time" field={extractedData.header?.unload_start_date_time} onChange={(v) => updateExtractedField('header', 'unload_start_date_time', v)} />
-            <AIFieldRow label="Unloading Out Time" field={extractedData.header?.unload_end_date_time} onChange={(v) => updateExtractedField('header', 'unload_end_date_time', v)} />
-            <AIFieldRow label="Original GIR No." field={extractedData.header?.original_gir_no} onChange={(v) => updateExtractedField('header', 'original_gir_no', v)} />
-            <AIFieldRow label="GIR Number" field={extractedData.header?.gir_number} onChange={(v) => updateExtractedField('header', 'gir_number', v)} />
-            <AIFieldRow label="eWay Bill" field={extractedData.header?.eway_bill_number} onChange={(v) => updateExtractedField('header', 'eway_bill_number', v)} />
-          </ExtractionSection>
+      <ExtractionSection title="Header Information">
+        <AIFieldRow label="LR Number" field={extractedData?.header?.lr_number} onChange={(v) => updateExtractedField('header', 'lr_number', v)} />
+        <AIFieldRow label="Date" field={extractedData?.header?.date} onChange={(v) => updateExtractedField('header', 'date', v)} />
+        <AIFieldRow label="Invoice Number" field={extractedData?.header?.invoice_number} onChange={(v) => updateExtractedField('header', 'invoice_number', v)} />
+        <AIFieldRow label="Loading In Time" field={extractedData?.header?.arrival_date_time} onChange={(v) => updateExtractedField('header', 'arrival_date_time', v)} />
+        <AIFieldRow label="Loading Out Time" field={extractedData?.header?.release_date_time} onChange={(v) => updateExtractedField('header', 'release_date_time', v)} />
+        <AIFieldRow label="Unloading In Time" field={extractedData?.header?.unload_start_date_time} onChange={(v) => updateExtractedField('header', 'unload_start_date_time', v)} />
+        <AIFieldRow label="Unloading Out Time" field={extractedData?.header?.unload_end_date_time} onChange={(v) => updateExtractedField('header', 'unload_end_date_time', v)} />
+        <AIFieldRow label="Original GIR No." field={extractedData?.header?.original_gir_no} onChange={(v) => updateExtractedField('header', 'original_gir_no', v)} />
+        <AIFieldRow label="GIR Number" field={extractedData?.header?.gir_number} onChange={(v) => updateExtractedField('header', 'gir_number', v)} />
+        <AIFieldRow label="eWay Bill" field={extractedData?.header?.eway_bill_number} onChange={(v) => updateExtractedField('header', 'eway_bill_number', v)} />
+      </ExtractionSection>
 
-          <ExtractionSection title="Financials">
-            <AIFieldRow label="Total Amount" field={extractedData.financials?.total_amount} isNumber onChange={(v) => updateExtractedField('financials', 'total_amount', v)} />
-            <AIFieldRow label="Loading Cost" field={extractedData.financials?.loading_cost} isNumber onChange={(v) => updateExtractedField('financials', 'loading_cost', v)} />
-            <AIFieldRow label="Unloading Cost" field={extractedData.financials?.unloading_cost} isNumber onChange={(v) => updateExtractedField('financials', 'unloading_cost', v)} />
-            <AIFieldRow label="Damage Cost" field={extractedData.financials?.damage_cost} isNumber onChange={(v) => updateExtractedField('financials', 'damage_cost', v)} />
-            <AIFieldRow label="Shortage Cost" field={extractedData.financials?.shortage_cost} isNumber onChange={(v) => updateExtractedField('financials', 'shortage_cost', v)} />
-            <AIFieldRow label="Loading Charges" field={extractedData.financials?.loading_charges} isNumber onChange={(v) => updateExtractedField('financials', 'loading_charges', v)} />
-            <AIFieldRow label="Unloading Charges" field={extractedData.financials?.unloading_charges} isNumber onChange={(v) => updateExtractedField('financials', 'unloading_charges', v)} />
-            <AIFieldRow label="Shortage Amount" field={extractedData.financials?.shortage_amount} isNumber onChange={(v) => updateExtractedField('financials', 'shortage_amount', v)} />
-            <AIFieldRow label="Damage Amount" field={extractedData.financials?.damage_amount} isNumber onChange={(v) => updateExtractedField('financials', 'damage_amount', v)} />
-            <AIFieldRow label="Leakage Amount" field={extractedData.financials?.leakage_amount} isNumber onChange={(v) => updateExtractedField('financials', 'leakage_amount', v)} />
-            <AIFieldRow label="Debit Reason Code" field={extractedData.financials?.debit_reason_code} onChange={(v) => updateExtractedField('financials', 'debit_reason_code', v)} />
-            <AIFieldRow label="Debit Type" field={extractedData.financials?.debit_type} onChange={(v) => updateExtractedField('financials', 'debit_type', v)} />
-          </ExtractionSection>
+      <ExtractionSection title="Financials">
+        <AIFieldRow label="Total Amount" field={extractedData?.financials?.total_amount} isNumber onChange={(v) => updateExtractedField('financials', 'total_amount', v)} />
+        <AIFieldRow label="Loading Cost" field={extractedData?.financials?.loading_cost} isNumber onChange={(v) => updateExtractedField('financials', 'loading_cost', v)} />
+        <AIFieldRow label="Unloading Cost" field={extractedData?.financials?.unloading_cost} isNumber onChange={(v) => updateExtractedField('financials', 'unloading_cost', v)} />
+        <AIFieldRow label="Damage Cost" field={extractedData?.financials?.damage_cost} isNumber onChange={(v) => updateExtractedField('financials', 'damage_cost', v)} />
+        <AIFieldRow label="Shortage Cost" field={extractedData?.financials?.shortage_cost} isNumber onChange={(v) => updateExtractedField('financials', 'shortage_cost', v)} />
+        <AIFieldRow label="Loading Charges" field={extractedData?.financials?.loading_charges} isNumber onChange={(v) => updateExtractedField('financials', 'loading_charges', v)} />
+        <AIFieldRow label="Unloading Charges" field={extractedData?.financials?.unloading_charges} isNumber onChange={(v) => updateExtractedField('financials', 'unloading_charges', v)} />
+        <AIFieldRow label="Shortage Amount" field={extractedData?.financials?.shortage_amount} isNumber onChange={(v) => updateExtractedField('financials', 'shortage_amount', v)} />
+        <AIFieldRow label="Damage Amount" field={extractedData?.financials?.damage_amount} isNumber onChange={(v) => updateExtractedField('financials', 'damage_amount', v)} />
+        <AIFieldRow label="Leakage Amount" field={extractedData?.financials?.leakage_amount} isNumber onChange={(v) => updateExtractedField('financials', 'leakage_amount', v)} />
+        <AIFieldRow label="Debit Reason Code" field={extractedData?.financials?.debit_reason_code} onChange={(v) => updateExtractedField('financials', 'debit_reason_code', v)} />
+        <AIFieldRow label="Debit Type" field={extractedData?.financials?.debit_type} onChange={(v) => updateExtractedField('financials', 'debit_type', v)} />
+      </ExtractionSection>
 
-          <ExtractionSection title="Parties">
-            <AIFieldRow label="From" field={extractedData.parties?.consignor_name_address} onChange={(v) => updateExtractedField('parties', 'consignor_name_address', v)} />
-            <AIFieldRow label="To" field={extractedData.parties?.consignee_name_address} onChange={(v) => updateExtractedField('parties', 'consignee_name_address', v)} />
-            <AIFieldRow label="GSTIN" field={extractedData.parties?.gstin} onChange={(v) => updateExtractedField('parties', 'gstin', v)} />
-            <AIFieldRow label="PAN" field={extractedData.parties?.pan} onChange={(v) => updateExtractedField('parties', 'pan', v)} />
-            <AIFieldRow label="GST Paid By" field={extractedData.parties?.gst_paid_by} onChange={(v) => updateExtractedField('parties', 'gst_paid_by', v)} />
-          </ExtractionSection>
+      <ExtractionSection title="Parties">
+        <AIFieldRow label="From" field={extractedData?.parties?.consignor_name_address} onChange={(v) => updateExtractedField('parties', 'consignor_name_address', v)} />
+        <AIFieldRow label="To" field={extractedData?.parties?.consignee_name_address} onChange={(v) => updateExtractedField('parties', 'consignee_name_address', v)} />
+        <AIFieldRow label="GSTIN" field={extractedData?.parties?.gstin} onChange={(v) => updateExtractedField('parties', 'gstin', v)} />
+        <AIFieldRow label="PAN" field={extractedData?.parties?.pan} onChange={(v) => updateExtractedField('parties', 'pan', v)} />
+        <AIFieldRow label="GST Paid By" field={extractedData?.parties?.gst_paid_by} onChange={(v) => updateExtractedField('parties', 'gst_paid_by', v)} />
+      </ExtractionSection>
 
-          <ExtractionSection title="Inspection">
-            <AIFieldRow label="Goods Report" field={extractedData.inspection?.goods_inspection_report} onChange={(v) => updateExtractedField('inspection', 'goods_inspection_report', v)} />
-            <AIFieldRow label="BPIL Copy Data" field={extractedData.inspection?.bpil_copy_data} onChange={(v) => updateExtractedField('inspection', 'bpil_copy_data', v)} />
-            <AIFieldRow label="LSCR Copy Data" field={extractedData.inspection?.lscr_copy_data} onChange={(v) => updateExtractedField('inspection', 'lscr_copy_data', v)} />
-            <AIFieldRow label="Tolerance Hours" field={extractedData.inspection?.tolerance_hours} isNumber onChange={(v) => updateExtractedField('inspection', 'tolerance_hours', v)} />
-            <AIFieldRow label="Actual vs Standard Time" field={extractedData.inspection?.actual_vs_standard_time} onChange={(v) => updateExtractedField('inspection', 'actual_vs_standard_time', v)} />
-            <AIFieldRow label="Short Cases" field={extractedData.inspection?.short_cases !== undefined ? { value: extractedData.inspection.short_cases, confidence: 1 } : undefined} isNumber onChange={(v) => updateExtractedField('inspection', 'short_cases', v)} />
-            <AIFieldRow label="Damaged Cases" field={extractedData.inspection?.damaged_cases !== undefined ? { value: extractedData.inspection.damaged_cases, confidence: 1 } : undefined} isNumber onChange={(v) => updateExtractedField('inspection', 'damaged_cases', v)} />
-            <AIFieldRow label="Excess Cases" field={extractedData.inspection?.excess_cases !== undefined ? { value: extractedData.inspection.excess_cases, confidence: 1 } : undefined} isNumber onChange={(v) => updateExtractedField('inspection', 'excess_cases', v)} />
-          </ExtractionSection>
-        </>
-      )}
+      <ExtractionSection title="Inspection">
+        <AIFieldRow label="Goods Report" field={extractedData?.inspection?.goods_inspection_report} onChange={(v) => updateExtractedField('inspection', 'goods_inspection_report', v)} />
+        <AIFieldRow label="BPIL Copy Data" field={extractedData?.inspection?.bpil_copy_data} onChange={(v) => updateExtractedField('inspection', 'bpil_copy_data', v)} />
+        <AIFieldRow label="LSCR Copy Data" field={extractedData?.inspection?.lscr_copy_data} onChange={(v) => updateExtractedField('inspection', 'lscr_copy_data', v)} />
+        <AIFieldRow label="Tolerance Hours" field={extractedData?.inspection?.tolerance_hours} isNumber onChange={(v) => updateExtractedField('inspection', 'tolerance_hours', v)} />
+        <AIFieldRow label="Actual vs Standard Time" field={extractedData?.inspection?.actual_vs_standard_time} onChange={(v) => updateExtractedField('inspection', 'actual_vs_standard_time', v)} />
+        <AIFieldRow label="Short Cases" field={extractedData?.inspection?.short_cases !== undefined ? { value: extractedData.inspection.short_cases, confidence: 1 } : undefined} isNumber onChange={(v) => updateExtractedField('inspection', 'short_cases', v)} />
+        <AIFieldRow label="Damaged Cases" field={extractedData?.inspection?.damaged_cases !== undefined ? { value: extractedData.inspection.damaged_cases, confidence: 1 } : undefined} isNumber onChange={(v) => updateExtractedField('inspection', 'damaged_cases', v)} />
+        <AIFieldRow label="Excess Cases" field={extractedData?.inspection?.excess_cases !== undefined ? { value: extractedData.inspection.excess_cases, confidence: 1 } : undefined} isNumber onChange={(v) => updateExtractedField('inspection', 'excess_cases', v)} />
+      </ExtractionSection>
+
+      <ExtractionSection title="Transport Details">
+        <AIFieldRow label="Transporter Name" field={extractedData?.transport?.transporter_name} onChange={(v) => updateExtractedField('transport', 'transporter_name', v)} />
+        <AIFieldRow label="Vehicle Number" field={extractedData?.transport?.vehicle_number} onChange={(v) => updateExtractedField('transport', 'vehicle_number', v)} />
+        <AIFieldRow label="Driver Name" field={extractedData?.transport?.driver_name} onChange={(v) => updateExtractedField('transport', 'driver_name', v)} />
+        <AIFieldRow label="Driver Phone" field={extractedData?.transport?.driver_phone} onChange={(v) => updateExtractedField('transport', 'driver_phone', v)} />
+      </ExtractionSection>
     </>
   );
 
@@ -347,6 +543,33 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
     </View>
   );
 
+  const renderChatSidebar = () => (
+    <View style={styles.chatSidebar}>
+      <View style={styles.chatSidebarHeader}>
+        <View style={styles.chatSidebarHeaderLeft}>
+          <View style={styles.chatBotIcon}>
+            <FontAwesome name="android" size={16} color="#fff" />
+          </View>
+          <View>
+            <Text style={styles.chatSidebarTitle}>POD AI</Text>
+            <Text style={styles.chatSidebarSub}>DIGITAL AUDIT ASSISTANT</Text>
+          </View>
+        </View>
+        <Pressable
+          onPress={() => setIsChatSidebarOpen(false)}
+          style={styles.chatSidebarCloseBtn}
+          hitSlop={10}
+        >
+          <FontAwesome name="times" size={14} color={Theme.textMuted} />
+        </Pressable>
+      </View>
+
+      <View style={styles.chatSidebarBody}>
+        {renderChatForm()}
+      </View>
+    </View>
+  );
+
   const renderFooterSummary = () => (
     <View style={styles.summaryContainer}>
       <View style={styles.summaryRow}>
@@ -373,15 +596,14 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
         <Text style={styles.emptyText}>No documents attached.</Text>
       ) : (
         <View style={styles.attachmentGrid}>
-          {attachments.map((att: any, idx: number) => {
-            const docUrl = getFileUrl(att.file_path);
+          {attachmentPreviewItems.map((att: any, idx: number) => {
             const isSelected = selectedDocIndex === idx;
             return (
               <View key={att.id} style={[styles.attachmentItem, isSelected && { borderColor: Theme.primary }]}>
-                <Pressable onPress={() => { setSelectedDocIndex(idx); if (Platform.OS !== 'web') Linking.openURL(docUrl); }}>
+                <Pressable onPress={() => { setSelectedDocIndex(idx); if (Platform.OS !== 'web') Linking.openURL(att.docUrl); }}>
                   {att.file_type && att.file_type.startsWith('image/') ? (
                     <Image 
-                      source={{ uri: docUrl }} 
+                      source={att.imageSource}
                       style={{ width: '100%', height: 100, borderRadius: 8 }} 
                       resizeMode="cover"
                     />
@@ -430,7 +652,7 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
           <FontAwesome name="image" size={48} color={Theme.borderLight} />
           <Text style={styles.emptyStateText}>No valid proof of delivery documents attached to this trip.</Text>
         </View>
-      ) : currentDocUrl ? (
+      ) : previewDocUrl ? (
         <>
           <View style={styles.docInfoOverlay}>
             <View style={styles.docInfoBox}>
@@ -439,27 +661,110 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
                 <Text style={styles.docFileSize}>{(currentDoc.file_size / 1024 / 1024).toFixed(2)} MB</Text>
               </View>
               <View style={styles.docActionIcons}>
-                <Pressable style={styles.docIconBtn} onPress={() => Linking.openURL(currentDocUrl)}>
+                <Pressable style={styles.docIconBtn} onPress={() => Linking.openURL(previewDocUrl)}>
                   <FontAwesome name="external-link" size={14} color={Theme.textMuted} />
                 </Pressable>
-                <Pressable style={styles.docIconBtn} onPress={() => Linking.openURL(`${currentDocUrl}?download=${currentDoc.file_name}`)}>
+                <Pressable style={styles.docIconBtn} onPress={() => Linking.openURL(`${previewDocUrl}?download=${currentDoc.file_name}`)}>
                   <FontAwesome name="download" size={14} color={Theme.textMuted} />
                 </Pressable>
               </View>
             </View>
           </View>
-          
-          <Image 
-            source={{ uri: currentDocUrl }} 
-            style={{ width: '100%', height: '100%', borderRadius: 16 }} 
-            resizeMode="contain"
-          />
+
+          <View style={styles.documentStage}>
+            {docLoadError ? (
+              <View style={styles.centered}>
+                <FontAwesome name="exclamation-triangle" size={28} color="#ef4444" />
+                <Text style={styles.emptyStateText}>
+                  Couldn’t load preview. {docLoadError}
+                </Text>
+                <Pressable
+                  style={[styles.btnPrimaryFilled, { marginTop: 12 }]}
+                  onPress={() => Linking.openURL(previewDocUrl)}
+                >
+                  <Text style={styles.btnPrimaryFilledText}>OPEN DOCUMENT</Text>
+                </Pressable>
+              </View>
+            ) : Platform.OS === 'web' && isPdf ? (
+            // On web, render PDFs using an iframe (closest to Catalyst UX).
+            // RN-web supports arbitrary DOM elements in JSX.
+            // eslint-disable-next-line react/no-unknown-property
+            <iframe
+              src={previewDocUrl}
+              title={currentDoc?.file_name || 'POD document'}
+              style={{
+                width: '100%',
+                height: '100%',
+                border: 'none',
+                borderRadius: 16,
+                background: 'white',
+              }}
+              onLoad={() => {
+                setDocLoading(false);
+                setDocLoadError(null);
+              }}
+            />
+          ) : isImage ? (
+            <Image
+              source={previewDocImageSource as { uri: string }}
+              style={styles.documentImage}
+              resizeMode="contain"
+              onLoadStart={() => {
+                if (Platform.OS === 'web') {
+                  if (previewLoadStartedRef.current) return;
+                  previewLoadStartedRef.current = true;
+                }
+                setDocLoadError(null);
+                setDocLoading((prev) => (prev ? prev : true));
+              }}
+              onLoadEnd={() => {
+                if (Platform.OS === 'web') {
+                  if (previewLoadEndedRef.current) return;
+                  previewLoadEndedRef.current = true;
+                }
+                setDocLoading(false);
+              }}
+              onError={(e: any) => {
+                if (Platform.OS === 'web') {
+                  if (previewLoadEndedRef.current) return;
+                  previewLoadEndedRef.current = true;
+                }
+                setDocLoading(false);
+                const msg =
+                  e?.nativeEvent?.error ||
+                  e?.message ||
+                  'Image failed to load';
+                setDocLoadError(String(msg));
+              }}
+            />
+          ) : (
+            <View style={styles.centered}>
+              <FontAwesome name="file-pdf-o" size={56} color={Theme.primary} />
+              <Text style={styles.emptyStateText}>
+                Preview not available. Open the document using the external link.
+              </Text>
+              <Pressable
+                style={[styles.btnPrimaryFilled, { marginTop: 12 }]}
+                onPress={() => Linking.openURL(previewDocUrl)}
+              >
+                <Text style={styles.btnPrimaryFilledText}>OPEN DOCUMENT</Text>
+              </Pressable>
+            </View>
+          )}
+
+            {docLoading && (
+              <View style={styles.docLoadingOverlay}>
+                <ActivityIndicator size="large" color={Theme.primary} />
+                <Text style={styles.loadingText}>Loading preview…</Text>
+              </View>
+            )}
+          </View>
         </>
       ) : null}
     </View>
   );
 
-  if (isTablet) {
+  if (isDesktopTerminal) {
     return (
       <View style={styles.tabletWrapper}>
         <View style={styles.tabletHeaderStrip}>
@@ -478,9 +783,29 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
           </View>
           
           <View style={styles.tabletHeaderRight}>
-            <Pressable style={[styles.btnOutline, activeTab === 'chat' && { backgroundColor: Theme.textPrimaryDark, borderColor: Theme.textPrimaryDark }]} onPress={() => setActiveTab(activeTab === 'chat' ? 'audit' : 'chat')}>
-              <FontAwesome name="comment-o" size={12} color={activeTab === 'chat' ? '#fff' : Theme.textPrimaryDark} />
-              <Text style={[styles.btnOutlineText, activeTab === 'chat' && { color: '#fff' }]}>ASK POD AI</Text>
+            <Pressable
+              style={[
+                styles.btnOutline,
+                isChatSidebarOpen && {
+                  backgroundColor: Theme.textPrimaryDark,
+                  borderColor: Theme.textPrimaryDark,
+                },
+              ]}
+              onPress={() => setIsChatSidebarOpen(v => !v)}
+            >
+              <FontAwesome
+                name="comment-o"
+                size={12}
+                color={isChatSidebarOpen ? '#fff' : Theme.textPrimaryDark}
+              />
+              <Text
+                style={[
+                  styles.btnOutlineText,
+                  isChatSidebarOpen && { color: '#fff' },
+                ]}
+              >
+                ASK POD AI
+              </Text>
             </Pressable>
             <Pressable style={styles.btnPrimaryLight} onPress={handleScanWithAI} disabled={isScanning || isSubmitting}>
               {isScanning ? <ActivityIndicator size="small" color={Theme.primary} /> : <FontAwesome name="magic" size={12} color={Theme.primary} />}
@@ -498,16 +823,8 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
 
         <View style={styles.tabletMainLayout}>
           <View style={styles.tabletLeftCol}>
-            <View style={styles.tabletTabContainer}>
-               <Pressable style={[styles.tabletTab, activeTab === 'audit' && styles.tabletTabActive]} onPress={() => setActiveTab('audit')}>
-                 <Text style={[styles.tabletTabText, activeTab === 'audit' && styles.tabletTabTextActive]}>AUDIT</Text>
-               </Pressable>
-               <Pressable style={[styles.tabletTab, activeTab === 'chat' && styles.tabletTabActive]} onPress={() => setActiveTab('chat')}>
-                 <Text style={[styles.tabletTabText, activeTab === 'chat' && styles.tabletTabTextActive]}>AI CHAT</Text>
-               </Pressable>
-            </View>
             <ScrollView style={styles.tabletLeftScroll} showsVerticalScrollIndicator={false}>
-              {activeTab === 'audit' ? renderAuditForm() : renderChatForm()}
+              {renderAuditForm()}
               {renderAttachmentsGrid()}
             </ScrollView>
             <View style={styles.tabletFooterWrapper}>
@@ -527,7 +844,30 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
                  ))}
                </View>
             )}
+            {attachments.length > 1 && (
+              <>
+                <Pressable
+                  style={[styles.docNavBtn, styles.docNavBtnLeft]}
+                  onPress={() =>
+                    setSelectedDocIndex((prev) =>
+                      (prev - 1 + attachments.length) % attachments.length,
+                    )
+                  }
+                >
+                  <FontAwesome name="chevron-left" size={22} color={Theme.textMuted} />
+                </Pressable>
+                <Pressable
+                  style={[styles.docNavBtn, styles.docNavBtnRight]}
+                  onPress={() =>
+                    setSelectedDocIndex((prev) => (prev + 1) % attachments.length)
+                  }
+                >
+                  <FontAwesome name="chevron-right" size={22} color={Theme.textMuted} />
+                </Pressable>
+              </>
+            )}
             {renderDocumentViewer()}
+            {isChatSidebarOpen && renderChatSidebar()}
           </View>
         </View>
       </View>
@@ -561,9 +901,9 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
             {activeTab === 'audit' ? renderAuditForm() : renderChatForm()}
             {renderAttachmentsGrid()}
-            {Platform.OS !== 'web' && currentDocUrl && (
+            {Platform.OS !== 'web' && mobileDocImageSource && (
               <View style={styles.mobileDocViewer}>
-                 <Image source={{uri: currentDocUrl}} style={{width: '100%', height: 300, borderRadius: 12}} resizeMode="cover" />
+                 <Image source={mobileDocImageSource} style={{width: '100%', height: 300, borderRadius: 12}} resizeMode="cover" />
               </View>
             )}
           </ScrollView>
@@ -609,18 +949,9 @@ function ExtractionSection({ title, children }: { title: string; children: React
 }
 
 function AIFieldRow({ label, field, isNumber, onChange }: { label: string; field: any; isNumber?: boolean; onChange: (val: any) => void }) {
-  if (!field) {
-    return (
-      <View style={styles.aiFieldRow}>
-        <Text style={styles.aiFieldLabel}>{label}</Text>
-        <Text style={styles.aiFieldEmpty}>—</Text>
-      </View>
-    );
-  }
-  
-  const value = field.value !== undefined ? field.value : '';
-  const confidence = field.confidence ?? 1;
-  const isLowConfidence = confidence < 0.85;
+  const value = field?.value !== undefined ? field.value : '';
+  const confidence = field?.confidence ?? null;
+  const isLowConfidence = confidence != null && confidence < 0.85;
 
   return (
     <View style={styles.aiFieldRow}>
@@ -629,10 +960,12 @@ function AIFieldRow({ label, field, isNumber, onChange }: { label: string; field
         <TextInput
           style={[styles.aiFieldInput, isLowConfidence && styles.aiFieldInputWarning]}
           value={String(value)}
-          onChangeText={onChange}
+          onChangeText={(txt) => onChange(isNumber ? (txt === '' ? '' : Number(txt)) : txt)}
           keyboardType={isNumber ? 'numeric' : 'default'}
+          placeholder="—"
+          placeholderTextColor={Theme.textMuted}
         />
-        {isLowConfidence && (
+        {isLowConfidence && confidence != null && (
           <View style={styles.confidenceBadge}>
             <Text style={styles.confidenceText}>{Math.round(confidence * 100)}%</Text>
           </View>
@@ -666,6 +999,26 @@ function AuditInput({ label, value, onChange }: { label: string; value: string; 
   );
 }
 
+function InfoItem({
+  label,
+  value,
+  subValue,
+}: {
+  label: string;
+  value: string;
+  subValue?: string;
+}) {
+  return (
+    <View style={styles.infoItem}>
+      <Text style={styles.infoItemLabel}>{label}</Text>
+      <Text style={styles.infoItemValue}>
+        {value}
+        {subValue ? <Text style={styles.infoItemSubValue}>{"\n"}{subValue}</Text> : null}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   // Modal Base
   overlay: { flex: 1, backgroundColor: Theme.overlayBackdrop, justifyContent: 'flex-end' },
@@ -694,6 +1047,69 @@ const styles = StyleSheet.create({
   subsectionHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, paddingHorizontal: 4 },
   currencyIconText: { fontSize: 14, fontWeight: '800', color: Theme.textPrimaryDark, marginRight: 12 },
   subsectionLabel: { fontSize: 11, fontWeight: '800', color: Theme.textPrimaryDark, textTransform: 'uppercase', letterSpacing: 2 },
+
+  // Intelligence brief
+  intelligenceCard: {
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 18,
+    padding: 16,
+    gap: 14,
+  },
+  infoTwoCol: { flexDirection: 'row', gap: 12 },
+  infoItem: { flex: 1, minWidth: 0 },
+  infoItemLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    marginBottom: 4,
+  },
+  infoItemValue: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+    lineHeight: 18,
+  },
+  infoItemSubValue: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Theme.textMuted,
+  },
+  lrBlock: {
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+    paddingTop: 10,
+  },
+  lrBlockLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    marginBottom: 6,
+  },
+  lrChipsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  lrChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+  },
+  lrChipText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
   
   // Audit Inputs
   inputCard: { backgroundColor: Theme.cardWhite, padding: 0, gap: 12 },
@@ -770,8 +1186,8 @@ const styles = StyleSheet.create({
   mobileDocViewer: { marginTop: 24, marginBottom: 24 },
 
   // Tablet Layout (Exact Match to Web)
-  tabletWrapper: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: Theme.screenBackground },
-  tabletHeaderStrip: { height: 64, backgroundColor: Theme.screenBackground, borderBottomWidth: 1, borderBottomColor: Theme.borderLight, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 32, zIndex: 20, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2 },
+  tabletWrapper: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: Theme.surface },
+  tabletHeaderStrip: { height: 64, backgroundColor: Theme.cardWhite, borderBottomWidth: 1, borderBottomColor: Theme.borderLight, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 32, zIndex: 20, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2 },
   tabletHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 24 },
   tabletCloseBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: Theme.surface },
   tabletHeaderDivider: { width: 1, height: 32, backgroundColor: Theme.borderLight },
@@ -790,15 +1206,9 @@ const styles = StyleSheet.create({
   btnPrimaryFilledText: { fontSize: 10, fontWeight: '800', color: '#fff', letterSpacing: 2 },
 
   tabletMainLayout: { flex: 1, flexDirection: 'row', overflow: 'hidden' },
-  tabletLeftCol: { width: 450, backgroundColor: Theme.screenBackground, borderRightWidth: 1, borderRightColor: Theme.borderLight, zIndex: 10, elevation: 1 },
+  tabletLeftCol: { width: 450, backgroundColor: Theme.cardWhite, borderRightWidth: 1, borderRightColor: Theme.borderLight, zIndex: 10, elevation: 1 },
   tabletLeftScroll: { flex: 1, padding: 32 },
-  tabletFooterWrapper: { padding: 32, backgroundColor: Theme.screenBackground, borderTopWidth: 1, borderTopColor: Theme.borderLight },
-  
-  tabletTabContainer: { flexDirection: 'row', gap: 16, paddingHorizontal: 32, paddingTop: 16, borderBottomWidth: 1, borderBottomColor: Theme.borderLight },
-  tabletTab: { paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  tabletTabActive: { borderBottomColor: Theme.primary },
-  tabletTabText: { fontSize: 11, fontWeight: '800', color: Theme.textMuted, textTransform: 'uppercase', letterSpacing: 1 },
-  tabletTabTextActive: { color: Theme.primary },
+  tabletFooterWrapper: { padding: 32, backgroundColor: Theme.cardWhite, borderTopWidth: 1, borderTopColor: Theme.borderLight },
 
   tabletRightCol: { flex: 1, backgroundColor: Theme.surface, position: 'relative' },
   docDotsOverlay: { position: 'absolute', top: 24, left: '50%', transform: [{ translateX: -50 }], zIndex: 30, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.8)', padding: 8, borderRadius: 20, borderWidth: 1, borderColor: Theme.borderLight },
@@ -816,4 +1226,109 @@ const styles = StyleSheet.create({
   docFileSize: { fontSize: 8, fontWeight: '700', color: Theme.textMuted, textTransform: 'uppercase', letterSpacing: 2 },
   docActionIcons: { flexDirection: 'row', alignItems: 'center', gap: 4, borderLeftWidth: 1, borderLeftColor: Theme.borderLight, paddingLeft: 12 },
   docIconBtn: { padding: 8, borderRadius: 8 },
+
+  documentStage: {
+    flex: 1,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  documentImage: {
+    flex: 1,
+    width: '100%',
+    height: undefined as unknown as number,
+    backgroundColor: Theme.cardWhite,
+  },
+  docLoadingOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(255,255,255,0.65)',
+  },
+
+  docNavBtn: {
+    position: 'absolute',
+    top: '50%',
+    zIndex: 35,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  docNavBtnLeft: { left: 24, transform: [{ translateY: -28 }] },
+  docNavBtnRight: { right: 24, transform: [{ translateY: -28 }] },
+
+  // Catalyst-style chat terminal sidebar (desktop)
+  chatSidebar: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: 420,
+    backgroundColor: Theme.cardWhite,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    zIndex: 40,
+    shadowColor: '#000',
+    shadowOffset: { width: -4, height: 0 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  chatSidebarHeader: {
+    height: 64,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    paddingHorizontal: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  chatSidebarHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  chatBotIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: Theme.textPrimaryDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chatSidebarTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: Theme.textPrimaryDark,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  chatSidebarSub: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    marginTop: 2,
+  },
+  chatSidebarCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  chatSidebarBody: { flex: 1, padding: 16 },
 });

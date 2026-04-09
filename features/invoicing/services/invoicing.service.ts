@@ -6,6 +6,10 @@ import {
   getTripsWhereOrgIsSupplier,
   type TripRow
 } from "@/features/trips/services/trips.service";
+import {
+  computePodReconciliationSummaryFromTrips,
+  mergeTripsForPodOrg,
+} from "@/features/pod-reconciliation/services/podReconciliationService";
 import { supabase } from "@/lib/supabase";
 
 export type TripStatus =
@@ -200,25 +204,23 @@ export async function fetchPodReconciliationSummary(
   summary: PodReconciliationSummary | null;
 }> {
   try {
-    const { data, error } = await supabase().rpc(
-      "get_pod_reconciliation_summary",
-      organizationId
-        ? { p_organization_id: organizationId }
-        : { p_organization_id: null },
-    );
+    if (!organizationId) {
+      return { error: null, summary: null };
+    }
+    const { error, trips } = await mergeTripsForPodOrg(organizationId);
     if (error) throw error;
-    const summary = Array.isArray(data) ? data[0] : data;
+    const s = computePodReconciliationSummaryFromTrips(trips);
     return {
       error: null,
       summary: {
-        pod_pending_count: summary?.pod_pending_count || 0,
-        pod_pending_sum: summary?.pod_pending_sum || 0,
-        received_count: summary?.received_count || 0,
-        received_sum: summary?.received_sum || 0,
-        approved_count: summary?.approved_count || 0,
-        approved_sum: summary?.approved_sum || 0,
-        invoiced_count: summary?.invoiced_count || 0,
-        invoiced_sum: summary?.invoiced_sum || 0,
+        pod_pending_count: s.pod_pending_count,
+        pod_pending_sum: s.pod_pending_sum,
+        received_count: s.received_count,
+        received_sum: s.received_sum,
+        approved_count: s.approved_count,
+        approved_sum: s.approved_sum,
+        invoiced_count: s.invoiced_count,
+        invoiced_sum: s.invoiced_sum,
       },
     };
   } catch (e) {
