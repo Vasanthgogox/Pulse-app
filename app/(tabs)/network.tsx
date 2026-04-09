@@ -39,6 +39,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -153,6 +154,10 @@ function toRequestItems(
 
 const EMERALD = "#10b981";
 const ROSE_500 = "#f43f5e";
+/** Trip card primary title color (matches TripExpandableCard). */
+const TESLA_BLACK = "#171A20";
+/** Manage list panel — original light body (matches pre–dark-list Network). */
+const MANAGE_CONTENT_BG = "#f4f5f7";
 
 function formatRequestStatus(status: string): string {
   const normalized = (status ?? "").trim().toLowerCase();
@@ -297,6 +302,8 @@ function NetworkAvatar({
 }
 
 export default function NetworkScreen() {
+  const { width } = useWindowDimensions();
+  const isLargeScreen = Platform.OS === "web" && width >= 1024;
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t } = useLanguage();
@@ -626,8 +633,6 @@ export default function NetworkScreen() {
     );
   }
 
-  const MANAGE_CONTENT_BG = "#f4f5f7";
-
   return (
     <View
       style={[
@@ -797,13 +802,8 @@ export default function NetworkScreen() {
         </View>
       ) : null}
 
-      {/* Content area: rounded top, light bg — Load-style layout */}
-      <View
-        style={[
-          styles.manageContentWrap,
-          { backgroundColor: MANAGE_CONTENT_BG },
-        ]}
-      >
+      {/* Content area: light body; cards match Trips (incl. web 3-col grid). */}
+      <View style={styles.manageContentWrap}>
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={[
@@ -828,76 +828,148 @@ export default function NetworkScreen() {
                 <Text style={styles.emptyStateText}>Empty Registry</Text>
               </View>
             ) : (
-              filteredRequests.map((item) => {
+              <View
+                style={isLargeScreen ? styles.gridContainer : undefined}
+              >
+                {filteredRequests.map((item) => {
                 const displayName =
                   item.type === "RECEIVED"
                     ? item.from_org_name
                     : item.to_org_name;
                 const isReceivedPending =
                   item.type === "RECEIVED" && item.status === "pending";
+                const kindLabel =
+                  item.kind === "DRIVER_INVITE"
+                    ? "DRIVER INVITE"
+                    : item.kind.replace(/_/g, " + ");
                 return (
-                  <View key={item.id} style={styles.nodeCard}>
-                    <View style={styles.nodeCardLeft}>
-                      <View
-                        style={[styles.nodeIconWrap, styles.nodeIconWrapMuted]}
-                      >
-                        <Building2
-                          size={18}
-                          strokeWidth={1.5}
-                          color={Theme.iconSecondary}
-                        />
-                      </View>
-                      <View style={styles.nodeCardText}>
-                        <Text style={styles.nodeName} numberOfLines={1}>
-                          {displayName}
-                        </Text>
-                        <Text style={styles.nodeMeta}>
-                          {item.kind.replace("_", " + ")} •{" "}
-                          {item.status.toUpperCase()}
-                        </Text>
+                  <View
+                    key={item.id}
+                    style={isLargeScreen ? styles.gridItem : undefined}
+                  >
+                    <View style={styles.networkCardWrap}>
+                      <View style={styles.networkCard}>
+                      <View style={styles.networkCardOrb} pointerEvents="none" />
+                      <View style={styles.networkCardMainRow}>
+                        <View style={styles.networkCardBody}>
+                          <View style={styles.networkCardTop}>
+                            <View style={styles.networkCardTopLeft}>
+                              <View
+                                style={[
+                                  styles.networkTypePill,
+                                  styles.networkTypePillRequest,
+                                ]}
+                              >
+                                <Text style={styles.networkTypePillTextRequest}>
+                                  {item.type === "RECEIVED"
+                                    ? "RECEIVED"
+                                    : "SENT"}
+                                </Text>
+                              </View>
+                              <View
+                                style={[
+                                  styles.networkTypePill,
+                                  styles.networkKindPill,
+                                ]}
+                              >
+                                <Text style={styles.networkKindPillText}>
+                                  {kindLabel}
+                                </Text>
+                              </View>
+                            </View>
+                            <View style={styles.networkCardTopRight}>
+                              <View
+                                style={[
+                                  styles.networkStagePill,
+                                  item.status === "pending"
+                                    ? styles.networkStagePillPending
+                                    : item.status === "approved"
+                                      ? styles.networkStagePillOk
+                                      : styles.networkStagePillNeutral,
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.networkStagePillText,
+                                    item.status !== "pending" &&
+                                    item.status !== "approved"
+                                      ? styles.networkStagePillTextDark
+                                      : null,
+                                  ]}
+                                >
+                                  {formatRequestStatus(item.status)}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+                          <Text
+                            style={styles.networkCardTitle}
+                            numberOfLines={2}
+                          >
+                            {displayName}
+                          </Text>
+                          <View style={styles.networkCardInner}>
+                            <View style={styles.networkCardInnerRow}>
+                              <View style={styles.networkCardIconWrap}>
+                                <Building2
+                                  size={14}
+                                  strokeWidth={1.5}
+                                  color={Theme.primary}
+                                />
+                              </View>
+                              <View style={styles.networkCardInnerCol}>
+                                <Text style={styles.networkCardInnerLabel}>
+                                  CONNECTION
+                                </Text>
+                                <Text
+                                  style={styles.networkCardInnerMeta}
+                                  numberOfLines={2}
+                                >
+                                  {kindLabel} • {item.status.toUpperCase()}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+                        </View>
+                        {isReceivedPending && item.row ? (
+                          <View style={styles.networkCardActionsCol}>
+                            <TouchableOpacity
+                              style={styles.acceptBtn}
+                              onPress={() => handleApprove(item.id)}
+                              disabled={actingRequestId === item.id}
+                              activeOpacity={0.8}
+                            >
+                              {actingRequestId === item.id ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                              ) : (
+                                <FontAwesome
+                                  name="user-plus"
+                                  size={14}
+                                  color="#fff"
+                                />
+                              )}
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.rejectBtn}
+                              onPress={() => handleReject(item.id)}
+                              disabled={actingRequestId === item.id}
+                              activeOpacity={0.8}
+                            >
+                              <FontAwesome
+                                name="close"
+                                size={14}
+                                color={ROSE_500}
+                              />
+                            </TouchableOpacity>
+                          </View>
+                        ) : null}
                       </View>
                     </View>
-                    {isReceivedPending && item.row ? (
-                      <View style={styles.nodeActions}>
-                        <TouchableOpacity
-                          style={styles.acceptBtn}
-                          onPress={() => handleApprove(item.id)}
-                          disabled={actingRequestId === item.id}
-                          activeOpacity={0.8}
-                        >
-                          {actingRequestId === item.id ? (
-                            <ActivityIndicator size="small" color="#fff" />
-                          ) : (
-                            <FontAwesome
-                              name="user-plus"
-                              size={14}
-                              color="#fff"
-                            />
-                          )}
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.rejectBtn}
-                          onPress={() => handleReject(item.id)}
-                          disabled={actingRequestId === item.id}
-                          activeOpacity={0.8}
-                        >
-                          <FontAwesome
-                            name="close"
-                            size={14}
-                            color={ROSE_500}
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <View style={styles.pendingPill}>
-                        <Text style={styles.pendingPillText}>
-                          {formatRequestStatus(item.status)}
-                        </Text>
-                      </View>
-                    )}
+                    </View>
                   </View>
                 );
-              })
+              })}
+              </View>
             )
           ) : loading ? (
             <Text style={styles.loadingText}>Loading…</Text>
@@ -907,99 +979,204 @@ export default function NetworkScreen() {
               <Text style={styles.emptyStateText}>Empty Registry</Text>
             </View>
           ) : (
-            filteredNodes.map((node) => {
+            <View
+              style={isLargeScreen ? styles.gridContainer : undefined}
+            >
+              {filteredNodes.map((node) => {
               const onPlatform = node.availableOnApp ?? node.isIntegrated;
+              const typePillStyle =
+                node.type === "CLIENT"
+                  ? styles.networkTypePillClient
+                  : node.type === "SUPPLIER"
+                    ? styles.networkTypePillSupplier
+                    : styles.networkTypePillDriver;
+              const typePillTextStyle =
+                node.type === "CLIENT"
+                  ? styles.networkTypePillTextClient
+                  : node.type === "SUPPLIER"
+                    ? styles.networkTypePillTextSupplier
+                    : styles.networkTypePillTextDriver;
+              const stageLabel =
+                node.status === "DISCONNECTED" ? "OFFLINE" : "ACTIVE";
+              const stagePillStyle =
+                node.status === "DISCONNECTED"
+                  ? styles.networkStagePillNeutral
+                  : styles.networkStagePillOk;
               return (
-                <View key={node.id} style={styles.nodeCard}>
-                  <TouchableOpacity
-                    style={styles.nodeCardLeft}
-                    activeOpacity={0.7}
-                    onPress={() => {
-                      if (node.type === "CLIENT")
-                        router.push(`/client/${node.id}`);
-                      else if (node.type === "SUPPLIER")
-                        router.push(`/supplier/${node.id}`);
-                      else if (node.type === "DRIVER")
-                        router.push(`/driver/${node.id}`);
-                    }}
-                  >
-                    <View
-                      style={[
-                        styles.nodeIconWrap,
-                        onPlatform
-                          ? styles.nodeIconWrapActive
-                          : styles.nodeIconWrapMuted,
-                      ]}
-                    >
-                      <NetworkAvatar
-                        node={node}
-                        onPlatform={onPlatform}
-                      />
+                <View
+                  key={node.id}
+                  style={isLargeScreen ? styles.gridItem : undefined}
+                >
+                  <View style={styles.networkCardWrap}>
+                    <View style={styles.networkCard}>
                       <View
-                        style={[
-                          styles.connectionDot,
-                          onPlatform
-                            ? styles.connectionDotActive
-                            : styles.connectionDotMuted,
-                        ]}
+                        style={styles.networkCardOrb}
+                        pointerEvents="none"
                       />
-                    </View>
-                    <View style={styles.nodeCardText}>
-                      <Text style={styles.nodeName} numberOfLines={1}>
-                        {node.name}
-                      </Text>
-                      <Text style={styles.nodeMeta}>
-                        {node.type} • {onPlatform ? "ON APP" : "OFF-GRID"}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                  <View style={styles.nodeActions}>
-                    {node.status === "INTEGRATED" &&
-                    node.availableOnApp !== false ? (
-                      <View style={styles.activePill}>
-                        <CircleCheck
-                          size={12}
-                          strokeWidth={1.7}
-                          color={Theme.darkGreen}
-                          style={{ marginRight: 5 }}
-                        />
-                        <Text style={styles.activePillText}>Active</Text>
-                      </View>
-                    ) : (
+                      <View style={styles.networkCardMainRow}>
                       <TouchableOpacity
-                        style={[
-                          styles.connectBtn,
-                          !onPlatform && styles.inviteBtn,
-                        ]}
-                        onPress={() => handleSendInviteOrRequest(node)}
-                        disabled={sendingNodeId === node.id}
-                        activeOpacity={0.8}
+                        style={styles.networkCardBody}
+                        activeOpacity={0.7}
+                        onPress={() => {
+                          if (node.type === "CLIENT")
+                            router.push(`/client/${node.id}`);
+                          else if (node.type === "SUPPLIER")
+                            router.push(`/supplier/${node.id}`);
+                          else if (node.type === "DRIVER")
+                            router.push(`/driver/${node.id}`);
+                        }}
                       >
-                        {sendingNodeId === node.id ? (
-                          <ActivityIndicator
-                            size="small"
-                            color={
-                              onPlatform
-                                ? Theme.textOnPrimary
-                                : Theme.textPrimaryDark
-                            }
-                          />
-                        ) : (
-                          <Text
-                            style={[
-                              styles.connectBtnText,
-                              !onPlatform && styles.inviteBtnText,
-                            ]}
-                          >
-                            {onPlatform ? "Connect" : "Invite"}
-                          </Text>
-                        )}
+                        <View style={styles.networkCardTop}>
+                          <View style={styles.networkCardTopLeft}>
+                            <View
+                              style={[styles.networkTypePill, typePillStyle]}
+                            >
+                              <Text
+                                style={[
+                                  styles.networkTypePillTextBase,
+                                  typePillTextStyle,
+                                ]}
+                              >
+                                {node.type}
+                              </Text>
+                            </View>
+                            <View
+                              style={[
+                                styles.networkTypePill,
+                                onPlatform
+                                  ? styles.networkPlatformPillOn
+                                  : styles.networkPlatformPillOff,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.networkPlatformPillText,
+                                  onPlatform
+                                    ? styles.networkPlatformPillTextOn
+                                    : styles.networkPlatformPillTextOff,
+                                ]}
+                              >
+                                {onPlatform ? "ON APP" : "OFF-GRID"}
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={styles.networkCardTopRight}>
+                            <View
+                              style={[styles.networkStagePill, stagePillStyle]}
+                            >
+                              <Text
+                                style={[
+                                  styles.networkStagePillText,
+                                  node.status === "DISCONNECTED"
+                                    ? styles.networkStagePillTextDark
+                                    : null,
+                                ]}
+                              >
+                                {stageLabel}
+                              </Text>
+                            </View>
+                            <FontAwesome
+                              name="chevron-right"
+                              size={12}
+                              color={Theme.textMuted}
+                              style={styles.networkCardChevron}
+                            />
+                          </View>
+                        </View>
+                        <Text style={styles.networkCardTitle} numberOfLines={2}>
+                          {node.name}
+                        </Text>
+                        <View style={styles.networkCardInner}>
+                          <View style={styles.networkCardInnerRow}>
+                            <View
+                              style={[
+                                styles.networkCardIconWrap,
+                                onPlatform
+                                  ? styles.networkCardIconWrapOn
+                                  : styles.networkCardIconWrapOff,
+                              ]}
+                            >
+                              <View style={styles.networkAvatarInCard}>
+                                <NetworkAvatar
+                                  node={node}
+                                  onPlatform={onPlatform}
+                                />
+                              </View>
+                              <View
+                                style={[
+                                  styles.connectionDot,
+                                  onPlatform
+                                    ? styles.connectionDotActive
+                                    : styles.connectionDotMuted,
+                                ]}
+                              />
+                            </View>
+                            <View style={styles.networkCardInnerCol}>
+                              <Text style={styles.networkCardInnerLabel}>
+                                NETWORK NODE
+                              </Text>
+                              <Text
+                                style={styles.networkCardInnerMeta}
+                                numberOfLines={2}
+                              >
+                                {node.type} •{" "}
+                                {onPlatform ? "ON APP" : "OFF-GRID"}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
                       </TouchableOpacity>
-                    )}
+                      <View style={styles.networkCardActionsCol}>
+                        {node.status === "INTEGRATED" &&
+                        node.availableOnApp !== false ? (
+                          <View style={styles.activePill}>
+                            <CircleCheck
+                              size={12}
+                              strokeWidth={1.7}
+                              color={Theme.darkGreen}
+                              style={{ marginRight: 5 }}
+                            />
+                            <Text style={styles.activePillText}>Active</Text>
+                          </View>
+                        ) : (
+                          <TouchableOpacity
+                            style={[
+                              styles.connectBtn,
+                              !onPlatform && styles.inviteBtn,
+                            ]}
+                            onPress={() => handleSendInviteOrRequest(node)}
+                            disabled={sendingNodeId === node.id}
+                            activeOpacity={0.8}
+                          >
+                            {sendingNodeId === node.id ? (
+                              <ActivityIndicator
+                                size="small"
+                                color={
+                                  onPlatform
+                                    ? Theme.textOnPrimary
+                                    : Theme.textPrimaryDark
+                                }
+                              />
+                            ) : (
+                              <Text
+                                style={[
+                                  styles.connectBtnText,
+                                  !onPlatform && styles.inviteBtnText,
+                                ]}
+                              >
+                                {onPlatform ? "Connect" : "Invite"}
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
                   </View>
                 </View>
+                </View>
               );
-            })
+            })}
+            </View>
           )}
         </ScrollView>
       </View>
@@ -1028,9 +1205,7 @@ const styles = StyleSheet.create({
   },
   manageContentWrap: {
     flex: 1,
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-    marginTop: 0,
+    backgroundColor: MANAGE_CONTENT_BG,
     overflow: "hidden",
   },
   darkHeaderRow: {
@@ -1336,12 +1511,18 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.negative,
   },
-  scroll: { flex: 1 },
+  scroll: { flex: 1, backgroundColor: MANAGE_CONTENT_BG },
   scrollContent: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 24,
+    paddingTop: 12,
+    flexGrow: 1,
+    backgroundColor: MANAGE_CONTENT_BG,
   },
-  loadingText: { padding: 24, textAlign: "center", color: Theme.textSecondary },
+  loadingText: {
+    padding: 24,
+    textAlign: "center",
+    color: Theme.textSecondary,
+  },
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
@@ -1355,32 +1536,203 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginTop: 16,
   },
-  nodeCard: {
+  /** Same grid as Trips tab (`app/(tabs)/trips.tsx`) for web ≥1024px */
+  gridContainer: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.border,
-    backgroundColor: "transparent",
+    flexWrap: "wrap",
+    marginHorizontal: -8,
   },
-  nodeCardLeft: {
-    flex: 1,
+  gridItem: {
+    width: "33.333%",
+    paddingHorizontal: 8,
+  },
+  /** TripExpandableCard: wrap + card shell (padding 16, radius 20, marginBottom 12) */
+  networkCardWrap: { marginBottom: 12 },
+  networkCard: {
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 20,
+    padding: 16,
+    backgroundColor: Theme.screenBackground,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+    overflow: "hidden",
+  },
+  networkCardOrb: {
+    position: "absolute",
+    right: -20,
+    bottom: -20,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: Theme.primary,
+    opacity: 0.08,
+  },
+  networkCardMainRow: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
+    alignItems: "stretch",
+    gap: 12,
+  },
+  networkCardBody: {
+    flex: 1,
     minWidth: 0,
   },
-  nodeIconWrap: {
-    width: 50,
-    height: 50,
-    borderRadius: 14,
+  networkCardTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 12,
+  },
+  networkCardTopLeft: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+    minWidth: 0,
+  },
+  networkCardTopRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  networkCardChevron: { marginLeft: 2 },
+  networkTypePill: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    backgroundColor: Theme.surfaceGray,
+  },
+  networkTypePillClient: { borderColor: Theme.primary },
+  networkTypePillSupplier: { borderColor: Theme.darkGreen },
+  networkTypePillDriver: {
+    borderColor: Theme.aggregatePillBorder,
+    backgroundColor: Theme.aggregatePillBg,
+  },
+  networkTypePillRequest: { borderColor: Theme.primary },
+  networkTypePillTextBase: {
+    fontSize: 6,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+  networkTypePillTextClient: { color: Theme.primary },
+  networkTypePillTextSupplier: { color: Theme.darkGreen },
+  networkTypePillTextDriver: { color: Theme.aggregatePillText },
+  networkTypePillTextRequest: {
+    fontSize: 6,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+    color: Theme.primary,
+  },
+  networkKindPill: {
+    borderColor: Theme.surfaceBorder,
+    backgroundColor: Theme.surfaceGray,
+  },
+  networkKindPillText: {
+    fontSize: 6,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    letterSpacing: 0.3,
+  },
+  networkPlatformPillOn: { borderColor: Theme.darkGreen },
+  networkPlatformPillOff: { borderColor: Theme.borderMedium },
+  networkPlatformPillText: {
+    fontSize: 6,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+  networkPlatformPillTextOn: { color: Theme.darkGreen },
+  networkPlatformPillTextOff: { color: Theme.textMuted },
+  networkStagePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  networkStagePillOk: { backgroundColor: Theme.positive },
+  networkStagePillPending: { backgroundColor: Theme.warning },
+  networkStagePillNeutral: {
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+  },
+  networkStagePillText: {
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    color: Theme.screenBackground,
+  },
+  networkStagePillTextDark: { color: TESLA_BLACK },
+  networkCardTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: TESLA_BLACK,
+    textTransform: "uppercase",
+    marginBottom: 12,
+  },
+  networkCardInner: {
+    backgroundColor: Theme.surfaceGray,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+  },
+  networkCardInnerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  /** Matches TripExpandableCard `cardRouteIconWrap` (36×36, radius 10) */
+  networkCardIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
+    marginRight: 8,
+    borderWidth: 1,
+    position: "relative",
   },
-  nodeIconWrapActive: { backgroundColor: "transparent" },
-  nodeIconWrapMuted: { backgroundColor: Theme.surface },
+  networkCardIconWrapOn: {
+    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.surfaceBorder,
+  },
+  networkCardIconWrapOff: {
+    backgroundColor: Theme.surface,
+    borderColor: Theme.borderLight,
+  },
+  networkAvatarInCard: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    borderRadius: 8,
+  },
+  networkCardInnerCol: { flex: 1, minWidth: 0 },
+  networkCardInnerLabel: {
+    fontSize: 6,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  /** Matches TripExpandableCard `cardRouteValue` (10 / 800) */
+  networkCardInnerMeta: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: TESLA_BLACK,
+    textTransform: "uppercase",
+  },
+  networkCardActionsCol: {
+    justifyContent: "center",
+    alignItems: "flex-end",
+    gap: 8,
+    paddingLeft: 4,
+  },
   nodeAvatar: {
     width: "100%",
     height: "100%",
@@ -1449,7 +1801,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.9,
     marginTop: 3,
   },
-  nodeActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   acceptBtn: {
     width: 32,
     height: 32,
@@ -1503,7 +1854,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.border,
   },
-  inviteBtnText: { color: "#cbd5e1" },
+  inviteBtnText: { color: Theme.textPrimaryDark },
   activePill: {
     flexDirection: "row",
     alignItems: "center",

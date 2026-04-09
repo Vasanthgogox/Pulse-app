@@ -103,7 +103,6 @@ function formatTxDate(iso: string | null | undefined): string {
 }
 
 function KanbanCard({ row, index, cat, isExpanded, toggleExpand, hasAmtIn, amount, dateStr, vehicleStr, partyName, routeWhyLine, rowData, tripIdOnly, onRowSelect }: any) {
-  const [isCardHovered, setIsCardHovered] = useState(false);
   const avatarBg = avatarColor(partyName);
   const initialText = initials(partyName);
 
@@ -113,19 +112,10 @@ function KanbanCard({ row, index, cat, isExpanded, toggleExpand, hasAmtIn, amoun
       entering={FadeInUp.delay(index * 30).springify()}
       layout={Layout.springify()}
     >
-      <Animated.View
-        style={{
-          transform: [{ scale: isCardHovered ? 1.02 : 1 }],
-        }}
-        // @ts-ignore
-        onMouseEnter={() => setIsCardHovered(true)}
-        onMouseLeave={() => setIsCardHovered(false)}
-      >
-        <TouchableOpacity 
+      <TouchableOpacity 
         style={[
           styles.timelineCard, 
-          isExpanded && styles.cardExpanded,
-          isCardHovered && styles.cardHovered
+          isExpanded && styles.cardExpanded
         ]}
         activeOpacity={0.7}
         onPress={() => toggleExpand(row.id)}
@@ -199,7 +189,6 @@ function KanbanCard({ row, index, cat, isExpanded, toggleExpand, hasAmtIn, amoun
           )}
         </View>
       )}
-      </Animated.View>
     </Animated.View>
   );
 }
@@ -222,11 +211,17 @@ function KanbanColumn({ type, transactions, t, renderCard }: {
       <View style={styles.columnHeader}>
         <View style={styles.columnTitleRow}>
           <View style={styles.columnAccent} />
-          <Text style={styles.columnTitle}>{t(
-            type === 'customers' ? 'customersLabel' : 
-            type === 'suppliers' ? 'suppliersLabel' : 
-            type === 'garage' ? 'tabGarage' : 'tabDrivers'
-          ).toUpperCase()}</Text>
+          <Text style={styles.columnTitle}>
+            {t(
+              type === "customers"
+                ? "customersLabel"
+                : type === "suppliers"
+                  ? "suppliersLabel"
+                  : type === "garage"
+                    ? "tabGarage"
+                    : "tabDrivers",
+            )}
+          </Text>
         </View>
         <View style={styles.countBadge}>
           <Text style={styles.countText}>{transactions.length}</Text>
@@ -529,15 +524,17 @@ const styles = StyleSheet.create({
   },
   columnAccent: {
     width: 3,
-    height: 14,
+    height: 12,
     backgroundColor: Theme.teslaRed,
     borderRadius: 2,
   },
+  /** Kanban column headers — uppercase muted caps (matches mobile board). */
   columnTitle: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: Theme.textPrimaryDark,
-    letterSpacing: 1.5,
+    fontSize: 10,
+    fontWeight: "400",
+    color: Theme.textMuted,
+    letterSpacing: 0.2,
+    textTransform: "uppercase",
   },
   countBadge: {
     backgroundColor: Theme.darkBackground,
@@ -546,8 +543,8 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   countText: {
-    fontSize: 11,
-    fontWeight: '500',
+    fontSize: 8,
+    fontWeight: "500",
     color: Theme.textOnDark,
   },
   columnScroll: {
@@ -578,12 +575,6 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 0,
     borderBottomWidth: 0,
   },
-  cardHovered: {
-    borderColor: Theme.primary,
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-  },
   timelineCardAvatar: {
     width: 32,
     height: 32,
@@ -600,7 +591,7 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "600",
     color: Theme.textOnPrimary,
     letterSpacing: 0.2,
   },
@@ -610,35 +601,44 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 2,
   },
+  /** Org / party — italic, uppercase, medium weight, dark (mobile cash list). */
   timelineCardParty: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "500",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
   },
+  /** Date line — not italic; slate; smaller than title. */
   timelineCardDateVehicle: {
     fontSize: 8,
     fontWeight: "400",
-    color: Theme.textMuted,
+    fontStyle: "normal",
+    color: Theme.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
+    marginTop: 2,
   },
+  /** Route + type — smallest, italic, muted (sentence case from data). */
   timelineCardRouteWhy: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "400",
     fontStyle: "italic",
     color: Theme.textMuted,
-    opacity: 0.8,
+    marginTop: 2,
+    opacity: 0.95,
   },
   rightCol: {
     alignItems: "flex-end",
     justifyContent: "center",
-    gap: 4,
-    minWidth: 60,
+    gap: 6,
+    minWidth: 0,
   },
+  /** Amount — large, medium-strong, italic; green / red from amountIn / amountOut. */
   amount: {
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: "600",
-    fontStyle: 'italic',
+    fontStyle: "italic",
   },
   amountIn: {
     color: Theme.darkGreen,
@@ -649,16 +649,17 @@ const styles = StyleSheet.create({
   tripPillWithCheck: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 999,
     backgroundColor: "rgba(248,250,252,0.5)",
     borderWidth: 1,
     borderColor: Theme.borderLight,
   },
+  /** Trip id pill — italic uppercase, primary (dark blue on light). */
   tripPillText: {
-    fontSize: 7,
+    fontSize: 8,
     fontWeight: "500",
     color: Theme.primary,
     fontStyle: "italic",
@@ -695,7 +696,7 @@ const styles = StyleSheet.create({
   },
   viewTripBtnText: {
     fontSize: 10,
-    fontWeight: "500",
+    fontWeight: "400",
     color: Theme.primary,
     letterSpacing: 1,
   },
@@ -705,10 +706,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyText: {
-    fontSize: 12,
+    fontSize: 10,
+    fontWeight: "300",
     color: Theme.textMuted,
-    fontWeight: '400',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    textAlign: "center",
   },
 });

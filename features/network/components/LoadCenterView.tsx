@@ -22,6 +22,7 @@ import { acceptAwardedQuote } from "@/features/indents/services/accept-awarded-q
 import {
   assignAggregateTripDriverByPhone,
   generateTripOtp,
+  isTripCompleted,
   regenerateTripOtp,
   setInitialTripForDetail,
 } from "@/features/trips";
@@ -40,6 +41,7 @@ import {
   useTripsQuery,
   useVehiclesQuery,
 } from "@/lib/queries";
+import { searchExistingDriversByPhone } from "@/features/drivers/services/drivers.service";
 import { queryKeys } from "@/lib/queryKeys";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useQueryClient } from "@tanstack/react-query";
@@ -47,7 +49,7 @@ import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import { Package } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -147,6 +149,10 @@ export function LoadCenterView({
     useState("");
   const [useAdHocDriver, setUseAdHocDriver] = useState(false);
   const [aggregateDriverPhone, setAggregateDriverPhone] = useState("");
+  const [aggregatePhoneName, setAggregatePhoneName] = useState<string | null>(null);
+  const [aggregatePhoneNotFound, setAggregatePhoneNotFound] = useState(false);
+  const [aggregatePhoneInTrip, setAggregatePhoneInTrip] = useState(false);
+  const aggregatePhoneLookupTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [subcontractSupplierId, setSubcontractSupplierId] = useState<string | null>(null);
   const [subcontractRate, setSubcontractRate] = useState<string>("");
   const [subcontractPickerOpen, setSubcontractPickerOpen] = useState(false);
@@ -249,6 +255,73 @@ export function LoadCenterView({
     if (pending.length === 0) return null;
     return Math.min(...pending.map((q) => Number(q.amount ?? 0)));
   }, [awardModalQuotes]);
+
+  useEffect(() => {
+    const trimmed = aggregateDriverPhone.trim();
+    if (aggregatePhoneLookupTimeoutRef.current)
+      clearTimeout(aggregatePhoneLookupTimeoutRef.current);
+    aggregatePhoneLookupTimeoutRef.current = setTimeout(() => {
+      aggregatePhoneLookupTimeoutRef.current = null;
+      const digits = trimmed.replace(/\D/g, "");
+      const last10 = digits.slice(-10);
+      if (last10.length < 10) {
+        setAggregatePhoneName(null);
+        setAggregatePhoneNotFound(false);
+        setAggregatePhoneInTrip(false);
+        return;
+      }
+
+      searchExistingDriversByPhone(last10).then(async ({ matches }) => {
+        const direct = matches[0]?.full_name ?? null;
+        let userId = matches[0]?.user_id ?? null;
+        let foundName = direct;
+
+        if (!foundName) {
+          // Some deployments store phone as +91XXXXXXXXXX; try that too.
+          const { matches: matchesWithCode } = await searchExistingDriversByPhone(
+            `+91${last10}`,
+          );
+          foundName = matchesWithCode[0]?.full_name ?? null;
+          userId = userId ?? matchesWithCode[0]?.user_id ?? null;
+        }
+
+        setAggregatePhoneName(foundName);
+        setAggregatePhoneNotFound(!foundName);
+
+        // If driver exists in app, show if they're currently assigned to an active trip.
+        const driverRow =
+          userId != null
+            ? drivers.find((d) => d.user_id === userId) ??
+              drivers.find(
+                (d) =>
+                  (d.phone ?? "").replace(/\D/g, "").slice(-10) === last10,
+              ) ??
+              null
+            : drivers.find(
+                (d) =>
+                  (d.phone ?? "").replace(/\D/g, "").slice(-10) === last10,
+              ) ?? null;
+
+        if (!driverRow?.id) {
+          setAggregatePhoneInTrip(false);
+          return;
+        }
+
+        const activeTrip =
+          (trips ?? []).find(
+            (t) =>
+              (t as { driver_id?: string | null }).driver_id === driverRow.id &&
+              !isTripCompleted(t as any) &&
+              String((t as any).status ?? "").toLowerCase() !== "cancelled",
+          ) ?? null;
+        setAggregatePhoneInTrip(!!activeTrip);
+      });
+    }, 400);
+    return () => {
+      if (aggregatePhoneLookupTimeoutRef.current)
+        clearTimeout(aggregatePhoneLookupTimeoutRef.current);
+    };
+  }, [aggregateDriverPhone, drivers, trips]);
 
   /** Indent ids that already have a trip (owner or supplier). Exclude these from Claimed so we don't show "ASSIGN STAFF & DEPLOY" again after deploy. */
   const indentIdsWithTrip = useMemo(() => {
@@ -1034,9 +1107,11 @@ export function LoadCenterView({
         : Number(load.client_price || 0);
 
     return (
-      <View
+      <TouchableOpacity
         key={`${isDone ? "done" : "active"}-${load.id}`}
         style={styles.awardedCard}
+        onPress={() => onIndentPress(load)}
+        activeOpacity={0.7}
       >
         <View style={styles.awardedCardTop}>
           <View style={styles.awardedBadge}>
@@ -1102,7 +1177,7 @@ export function LoadCenterView({
             </Text>
           </TouchableOpacity>
         )}
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -1281,7 +1356,12 @@ export function LoadCenterView({
                   const isAwaitingSupplierDeploy =
                     isAwardedPendingTrip || hasDirectSupplier;
                   return (
-                    <View key={load.id} style={styles.loadCard}>
+                    <TouchableOpacity
+                      key={load.id}
+                      style={styles.loadCard}
+                      onPress={() => onIndentPress(load)}
+                      activeOpacity={0.7}
+                    >
                       <View style={styles.loadCardTop}>
                         <View style={styles.loadCardTopLeft}>
                           <Text style={styles.loadCardRoute} numberOfLines={3}>
@@ -1396,7 +1476,7 @@ export function LoadCenterView({
                           )}
                         </View>
                       </View>
-                    </View>
+                    </TouchableOpacity>
                   );
                 })
               )}
@@ -1466,7 +1546,12 @@ export function LoadCenterView({
                   setLoadAction({ type: "BID", load });
                 };
                 return (
-                  <View key={load.id} style={styles.loadCard}>
+                  <TouchableOpacity
+                    key={load.id}
+                    style={styles.loadCard}
+                    onPress={() => onIndentPress(load)}
+                    activeOpacity={0.7}
+                  >
                     <View style={styles.loadCardTop}>
                       <View style={styles.loadCardTopLeft}>
                         <Text style={styles.getLoadCompany} numberOfLines={2}>
@@ -1568,7 +1653,7 @@ export function LoadCenterView({
                         </Text>
                       </TouchableOpacity>
                     )}
-                  </View>
+                  </TouchableOpacity>
                 );
               })
             ))}
@@ -2501,6 +2586,16 @@ export function LoadCenterView({
                             keyboardType="phone-pad"
                             autoComplete="tel"
                           />
+                          {aggregatePhoneName ? (
+                            <Text style={styles.phoneModalFound}>Found: {aggregatePhoneName}</Text>
+                          ) : aggregatePhoneNotFound ? (
+                            <Text style={styles.phoneModalNotFound}>
+                              No driver found for this number
+                            </Text>
+                          ) : null}
+                          {aggregatePhoneName && aggregatePhoneInTrip ? (
+                            <Text style={styles.phoneModalInTrip}>Driver is in trip</Text>
+                          ) : null}
                         </View>
                       </View>
                     </View>
@@ -2808,6 +2903,11 @@ const styles = StyleSheet.create({
     lineHeight: 11,
     color: Theme.textOnDark,
     paddingVertical: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   loadTypeFilterWrap: {
     flexDirection: "row",
@@ -3540,6 +3640,29 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     paddingHorizontal: 0,
     minHeight: 22,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
+  },
+  phoneModalFound: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    marginTop: 4,
+  },
+  phoneModalNotFound: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    marginTop: 4,
+  },
+  phoneModalInTrip: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.negative,
+    marginTop: 4,
   },
   tripAssignPartnerBlock: {
     marginTop: 8,
@@ -4114,6 +4237,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textPrimaryDark,
     minHeight: 48,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   quotePlaceholder: {
     fontSize: 36,

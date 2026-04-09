@@ -56,6 +56,7 @@ export default function DriverProfileScreen() {
   const { user, profile, signOut, refreshSession } = useAuth();
   const { avatarSeed, setAvatarSeed } = useDriverAvatar();
   const { avatarUri } = useDriverAvatarUri();
+  const [avatarOverrideUri, setAvatarOverrideUri] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [showEditQuoteModal, setShowEditQuoteModal] = useState(false);
@@ -69,7 +70,9 @@ export default function DriverProfileScreen() {
     user?.email?.split('@')[0] ||
     'Pilot';
   const tagline = profile?.status_text?.trim() || DEFAULT_TAGLINE;
-  const displayAvatarUri = avatarError ? getAvatarUriForSeed(displayName || 'pilot') : (avatarUri || getAvatarUriForSeed(displayName || 'pilot'));
+  const displayAvatarUri = avatarError
+    ? getAvatarUriForSeed(displayName || 'pilot')
+    : (avatarOverrideUri || avatarUri || getAvatarUriForSeed(displayName || 'pilot'));
 
   const handleCloseEditProfile = () => {
     setShowEditProfileModal(false);
@@ -245,7 +248,13 @@ export default function DriverProfileScreen() {
         initialPhone={profile?.phone ?? ''}
         initialCompanyName={profile?.company_name ?? ''}
         email={user?.email ?? ''}
-        onPhotoUpdated={refreshSession}
+        onPhotoUpdated={async (payload) => {
+          if (payload?.avatarUri?.trim()) {
+            setAvatarOverrideUri(payload.avatarUri);
+            setAvatarError(false);
+          }
+          await refreshSession();
+        }}
         initialAvatarSeed={avatarSeed}
         onPresetSelected={(seed) => {
           setAvatarSeed(seed);

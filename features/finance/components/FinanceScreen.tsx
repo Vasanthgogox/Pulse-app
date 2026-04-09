@@ -1103,6 +1103,10 @@ export function FinanceScreen() {
                 )
             : undefined
         }
+        ledgerCategory={financeSubTab === "cash" ? selectedLedgerCategory : undefined}
+        onLedgerCategoryChange={
+          financeSubTab === "cash" ? setSelectedLedgerCategory : undefined
+        }
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         searchPlaceholder={

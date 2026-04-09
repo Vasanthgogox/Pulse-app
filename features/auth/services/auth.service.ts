@@ -423,8 +423,11 @@ export async function refreshSession(): Promise<{
   try {
     const { data: { user }, error } = await supabase().auth.getUser();
     if (error || !user) return null;
-    
-    // Fetch latest from public.profiles for absolute truth (metadata sync can be flaky)
+
+    // Base profile from auth metadata (immediate source after avatar/profile updates).
+    const base = mapSupabaseUserToAuth(user);
+
+    // Fetch from public.profiles and merge with metadata so stale DB values don't hide fresh updates.
     const { data: profile } = await supabase()
       .from("profiles")
       .select("*")
@@ -432,13 +435,25 @@ export async function refreshSession(): Promise<{
       .single();
 
     if (profile) {
+      const dbProfile = mapDbProfileToAuth(profile);
+      const merged: AuthProfile = {
+        ...base.profile,
+        ...dbProfile,
+        avatar_url: dbProfile.avatar_url ?? base.profile.avatar_url,
+        avatar_seed: dbProfile.avatar_seed ?? base.profile.avatar_seed,
+        status_text: dbProfile.status_text ?? base.profile.status_text,
+        company_name: dbProfile.company_name ?? base.profile.company_name,
+        phone: dbProfile.phone ?? base.profile.phone,
+        full_name: dbProfile.full_name ?? base.profile.full_name,
+        displayName: dbProfile.displayName || base.profile.displayName,
+      };
       return {
-        user: { uid: user.id, email: user.email ?? "", displayName: profile.full_name || user.email?.split("@")[0] || "User" },
-        profile: mapDbProfileToAuth(profile),
+        user: { uid: user.id, email: user.email ?? "", displayName: merged.displayName || "User" },
+        profile: merged,
       };
     }
 
-    return mapSupabaseUserToAuth(user);
+    return base;
   } catch {
     return null;
   }

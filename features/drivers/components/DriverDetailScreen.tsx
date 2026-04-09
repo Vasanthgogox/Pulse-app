@@ -812,7 +812,11 @@ export default function DriverDetailScreen({
               : undefined
           }
         >
-          <FontAwesome name="user" size={16} color={Theme.textPrimaryDark} />
+          {profileAvatarUri ? (
+            <Image source={{ uri: profileAvatarUri }} style={styles.headerAvatarImage} />
+          ) : (
+            <FontAwesome name="user" size={16} color={Theme.textPrimaryDark} />
+          )}
           {hasPendingSalaryRequests ? <View style={styles.headerProfileBadge} /> : null}
         </TouchableOpacity>
       }
@@ -1957,6 +1961,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
+  },
+  headerAvatarImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 22,
   },
   headerProfileBadge: {
     position: "absolute",

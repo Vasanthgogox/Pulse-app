@@ -1640,6 +1640,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.borderLight,
     marginBottom: 10,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   assignAdhocVehicleBtn: {
     paddingVertical: 12,
@@ -1958,6 +1963,11 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     backgroundColor: Theme.screenBackground,
     marginBottom: 10,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   phoneModalFoundWrap: { marginBottom: 10 },
   phoneModalFound: {
@@ -1987,6 +1997,11 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     backgroundColor: Theme.surfaceForm ?? Theme.surfaceLight,
     marginBottom: 8,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   phoneFound: {
     fontSize: 13,
