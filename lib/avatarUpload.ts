@@ -106,6 +106,8 @@ export async function pickAndUploadAvatar(userId: string): Promise<PickAndUpload
     if (error) {
       const msg = error.message || 'Upload failed';
       const isRls = /row-level security|policy|rls/i.test(msg);
+      // Log for debugging
+      console.log("[Avatar Upload Error]", msg, "isRls:", isRls, "bucket:", AVATAR_BUCKET, "path:", path);
       return {
         path: null,
         previewUri: null,
