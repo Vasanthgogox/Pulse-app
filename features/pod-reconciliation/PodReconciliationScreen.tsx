@@ -12,6 +12,7 @@ import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Modal,
   Platform,
@@ -71,6 +72,16 @@ export function PodReconciliationScreen() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<20 | 50 | 100>(20);
+  const [filtersModalOpen, setFiltersModalOpen] = useState(false);
+  const [columnFilters, setColumnFilters] = useState<{
+    trip_status: string[];
+    pod_status: string[];
+    invoice_status_1: string[];
+  }>({
+    trip_status: [],
+    pod_status: [],
+    invoice_status_1: [],
+  });
 
   const {
     data: trips = [],
@@ -122,6 +133,18 @@ export function PodReconciliationScreen() {
       year: "numeric",
     });
   };
+  const getTripStatusLabel = (trip: PodReconciliationTripView): string =>
+    (trip.trip_status || "").trim() || "Not Set";
+  const getPodStatusLabel = (trip: PodReconciliationTripView): string => {
+    const pod = (trip.pod_status || "").trim();
+    if (pod) return pod;
+    return trip.invoice_status_display === "Invoice Pending" ? "Pending" : "Not Set";
+  };
+  const getInvStatusLabel = (trip: PodReconciliationTripView): string => {
+    const inv = (trip.invoice_status_1 || "").trim();
+    if (inv) return inv;
+    return trip.invoice_status_display === "Invoice Pending" ? "Pending" : "Not Set";
+  };
 
   const sortTrips = (items: PodReconciliationTripView[]) => {
     const cloned = [...items];
@@ -161,7 +184,25 @@ export function PodReconciliationScreen() {
     return cloned;
   };
 
-  const sortedTrips = useMemo(() => sortTrips(trips), [trips, sortKey, sortDirection]);
+  const filteredTrips = useMemo(() => {
+    return trips.filter((trip) => {
+      const tripStatusOk =
+        columnFilters.trip_status.length === 0 ||
+        columnFilters.trip_status.includes(getTripStatusLabel(trip));
+      const podStatusOk =
+        columnFilters.pod_status.length === 0 ||
+        columnFilters.pod_status.includes(getPodStatusLabel(trip));
+      const invStatusOk =
+        columnFilters.invoice_status_1.length === 0 ||
+        columnFilters.invoice_status_1.includes(getInvStatusLabel(trip));
+      return tripStatusOk && podStatusOk && invStatusOk;
+    });
+  }, [trips, columnFilters]);
+
+  const sortedTrips = useMemo(
+    () => sortTrips(filteredTrips),
+    [filteredTrips, sortKey, sortDirection],
+  );
   const totalPages = Math.max(1, Math.ceil(sortedTrips.length / pageSize));
   const paginatedTrips = useMemo(() => {
     const safePage = Math.min(page, totalPages);
@@ -179,6 +220,100 @@ export function PodReconciliationScreen() {
     }
     setSortKey(key);
     setSortDirection("asc");
+  };
+
+  const uniqueValues = useMemo(() => {
+    const summarize = (values: string[]) => {
+      const counts = new Map<string, number>();
+      values
+        .filter((v) => v && v.trim() !== "")
+        .forEach((value) => counts.set(value, (counts.get(value) || 0) + 1));
+      return Array.from(counts.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([value, count]) => ({ value, count }));
+    };
+    return {
+      trip_status: summarize(trips.map((t) => getTripStatusLabel(t))),
+      pod_status: summarize(trips.map((t) => getPodStatusLabel(t))),
+      invoice_status_1: summarize(trips.map((t) => getInvStatusLabel(t))),
+    };
+  }, [trips]);
+
+  const toggleColumnFilterValue = (
+    key: "trip_status" | "pod_status" | "invoice_status_1",
+    value: string,
+  ) => {
+    setPage(1);
+    setColumnFilters((prev) => {
+      const has = prev[key].includes(value);
+      return {
+        ...prev,
+        [key]: has ? prev[key].filter((v) => v !== value) : [...prev[key], value],
+      };
+    });
+  };
+
+  const activeFilterCount =
+    columnFilters.trip_status.length +
+    columnFilters.pod_status.length +
+    columnFilters.invoice_status_1.length;
+
+  const clearAllColumnFilters = () => {
+    setColumnFilters({
+      trip_status: [],
+      pod_status: [],
+      invoice_status_1: [],
+    });
+    setPage(1);
+  };
+
+  const handleExportCsv = () => {
+    const rows = sortedTrips.map((item) => ({
+      trip_id: item.id || "",
+      trip_date: safeDateText(item.trip_date || item.date),
+      client_name: item.client_name || "",
+      vendor_name: item.vendor_name || "",
+      lr_no: item.lr_numbers?.join(" | ") || "",
+      pp_location: item.pp_location || "",
+      drop_point: item.drop_point || "",
+      value_inr: item.amount || 0,
+      trip_status: item.trip_status || "",
+      pod_status: item.pod_status || "",
+      pod_date: safeDateText(item.pod_received_date),
+      inv_status_1: item.invoice_status_1 || "",
+      invoice_no: item.invoice_no || "",
+      queue_status: item.invoice_status_display || "",
+    }));
+    const headers = Object.keys(rows[0] || {});
+    if (headers.length === 0) {
+      Alert.alert("Export", "No rows available for export.");
+      return;
+    }
+    const csv = [
+      headers.join(","),
+      ...rows.map((r) =>
+        headers
+          .map((h) => {
+            const value = String((r as Record<string, unknown>)[h] ?? "");
+            return `"${value.replace(/"/g, '""')}"`;
+          })
+          .join(","),
+      ),
+    ].join("\n");
+
+    if (Platform.OS === "web" && typeof document !== "undefined") {
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `pod_reconciliation_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      return;
+    }
+    Alert.alert("Export", "CSV export is available on web.");
   };
 
   if (!allowed) {
@@ -446,6 +581,20 @@ export function PodReconciliationScreen() {
               </Pressable>
             </View>
           )}
+          {isMediumScreen && viewMode === "table" && (
+            <>
+              <Pressable style={styles.tableUtilityBtn} onPress={() => setFiltersModalOpen(true)}>
+                <FontAwesome name="filter" size={12} color={Theme.textMuted} />
+                <Text style={styles.tableUtilityText}>
+                  Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+                </Text>
+              </Pressable>
+              <Pressable style={styles.tableUtilityBtn} onPress={handleExportCsv}>
+                <FontAwesome name="download" size={12} color={Theme.textMuted} />
+                <Text style={styles.tableUtilityText}>Export CSV</Text>
+              </Pressable>
+            </>
+          )}
         </View>
 
         <View style={styles.contentArea}>
@@ -484,16 +633,16 @@ export function PodReconciliationScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator>
                 <View style={styles.tableInner}>
                   <View style={styles.tableHeadRow}>
-                    <TableHeaderCell label="Trip ID" onPress={() => toggleSort("id")} />
-                    <TableHeaderCell label="Trip Date" onPress={() => toggleSort("trip_date")} />
-                    <TableHeaderCell label="Client Name" onPress={() => toggleSort("client_name")} />
-                    <TableHeaderCell label="Vendor Name" onPress={() => toggleSort("vendor_name")} />
+                    <TableHeaderCell label="Trip ID" onPress={() => toggleSort("id")} id="id" sortKey={sortKey} sortDirection={sortDirection} />
+                    <TableHeaderCell label="Trip Date" onPress={() => toggleSort("trip_date")} id="trip_date" sortKey={sortKey} sortDirection={sortDirection} />
+                    <TableHeaderCell label="Client Name" onPress={() => toggleSort("client_name")} id="client_name" sortKey={sortKey} sortDirection={sortDirection} />
+                    <TableHeaderCell label="Vendor Name" onPress={() => toggleSort("vendor_name")} id="vendor_name" sortKey={sortKey} sortDirection={sortDirection} />
                     <TableHeaderCell label="LR No" />
                     <TableHeaderCell label="PP Location" />
                     <TableHeaderCell label="Drop Point" />
-                    <TableHeaderCell label="Value (₹)" onPress={() => toggleSort("amount")} align="right" />
+                    <TableHeaderCell label="Value (₹)" onPress={() => toggleSort("amount")} align="right" id="amount" sortKey={sortKey} sortDirection={sortDirection} />
                     <TableHeaderCell label="Trip Status" />
-                    <TableHeaderCell label="POD Status" onPress={() => toggleSort("invoice_status_display")} />
+                    <TableHeaderCell label="POD Status" onPress={() => toggleSort("invoice_status_display")} id="invoice_status_display" sortKey={sortKey} sortDirection={sortDirection} />
                     <TableHeaderCell label="POD Date" />
                     <TableHeaderCell label="Inv Status 1" />
                     <TableHeaderCell label="Invoice No" />
@@ -529,10 +678,10 @@ export function PodReconciliationScreen() {
                         strong
                         align="right"
                       />
-                      <TableCell text={item.trip_status || "—"} />
+                      <TableCell text={getTripStatusLabel(item)} />
                       <TableStatusCell trip={item} />
                       <TableCell text={safeDateText(item.pod_received_date)} />
-                      <TableCell text={item.invoice_status_1 || "—"} />
+                      <TableCell text={getInvStatusLabel(item)} />
                       <TableCell text={item.invoice_no || "—"} mono />
                       <TableActionCell
                         trip={item}
@@ -690,6 +839,119 @@ export function PodReconciliationScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={filtersModalOpen} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.filterModalHeader}>
+              <Text style={styles.modalTitle}>Table Filters</Text>
+              {activeFilterCount > 0 ? (
+                <Pressable onPress={clearAllColumnFilters}>
+                  <Text style={styles.clearFiltersText}>Clear all</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            <ScrollView>
+              <FilterSection
+                title="Trip Status"
+                values={uniqueValues.trip_status}
+                selected={columnFilters.trip_status}
+                onToggle={(v) => toggleColumnFilterValue("trip_status", v)}
+              />
+              <FilterSection
+                title="POD Status"
+                values={uniqueValues.pod_status}
+                selected={columnFilters.pod_status}
+                onToggle={(v) => toggleColumnFilterValue("pod_status", v)}
+              />
+              <FilterSection
+                title="Inv Status 1"
+                values={uniqueValues.invoice_status_1}
+                selected={columnFilters.invoice_status_1}
+                onToggle={(v) => toggleColumnFilterValue("invoice_status_1", v)}
+              />
+            </ScrollView>
+            {activeFilterCount > 0 ? (
+              <View style={styles.activeFiltersWrap}>
+                <Text style={styles.activeFiltersTitle}>Active filters</Text>
+                <View style={styles.filterChipsWrap}>
+                  {columnFilters.trip_status.map((v) => (
+                    <Pressable
+                      key={`trip-${v}`}
+                      style={styles.activeFilterChip}
+                      onPress={() => toggleColumnFilterValue("trip_status", v)}
+                    >
+                      <Text style={styles.activeFilterChipText}>{`Trip: ${v} x`}</Text>
+                    </Pressable>
+                  ))}
+                  {columnFilters.pod_status.map((v) => (
+                    <Pressable
+                      key={`pod-${v}`}
+                      style={styles.activeFilterChip}
+                      onPress={() => toggleColumnFilterValue("pod_status", v)}
+                    >
+                      <Text style={styles.activeFilterChipText}>{`POD: ${v} x`}</Text>
+                    </Pressable>
+                  ))}
+                  {columnFilters.invoice_status_1.map((v) => (
+                    <Pressable
+                      key={`inv-${v}`}
+                      style={styles.activeFilterChip}
+                      onPress={() => toggleColumnFilterValue("invoice_status_1", v)}
+                    >
+                      <Text style={styles.activeFilterChipText}>{`Inv1: ${v} x`}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+            <Pressable
+              style={styles.modalClose}
+              onPress={() => setFiltersModalOpen(false)}
+            >
+              <Text style={styles.modalCloseText}>Apply</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+function FilterSection({
+  title,
+  values,
+  selected,
+  onToggle,
+}: {
+  title: string;
+  values: Array<{ value: string; count: number }>;
+  selected: string[];
+  onToggle: (value: string) => void;
+}) {
+  return (
+    <View style={styles.filterSection}>
+      <Text style={styles.filterSectionTitle}>{title}</Text>
+      {values.length === 0 ? (
+        <Text style={styles.filterSectionEmpty}>No values</Text>
+      ) : (
+        <View style={styles.filterChipsWrap}>
+          {values.map(({ value, count }) => {
+            const active = selected.includes(value);
+            return (
+              <Pressable
+                key={value}
+                style={[styles.filterChip, active && styles.filterChipActive]}
+                onPress={() => onToggle(value)}
+              >
+                <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+                  {`${value} (${count})`}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }
@@ -698,13 +960,29 @@ function TableHeaderCell({
   label,
   onPress,
   align = "left",
+  id,
+  sortKey,
+  sortDirection,
 }: {
   label: string;
   onPress?: () => void;
   align?: "left" | "right";
+  id?: "id" | "trip_date" | "client_name" | "vendor_name" | "amount" | "invoice_status_display";
+  sortKey?: "id" | "trip_date" | "client_name" | "vendor_name" | "amount" | "invoice_status_display";
+  sortDirection?: "asc" | "desc";
 }) {
+  const isSorted = Boolean(id && sortKey === id);
   const content = (
-    <Text style={[styles.tableHeadText, align === "right" && styles.textRight]}>{label}</Text>
+    <View style={[styles.tableHeadLabelWrap, align === "right" && styles.tableHeadLabelWrapRight]}>
+      <Text style={[styles.tableHeadText, align === "right" && styles.textRight]}>{label}</Text>
+      {onPress ? (
+        <FontAwesome
+          name={isSorted ? (sortDirection === "asc" ? "sort-up" : "sort-down") : "sort"}
+          size={10}
+          color={isSorted ? Theme.primary : Theme.textMuted}
+        />
+      ) : null}
+    </View>
   );
   return (
     <View style={[styles.tableHeadCell, align === "right" && styles.tableCellRight]}>
@@ -1235,6 +1513,22 @@ const styles = StyleSheet.create({
   viewModeTextActive: {
     color: "#fff",
   },
+  tableUtilityBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  tableUtilityText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textMuted,
+  },
 
   contentArea: { flex: 1, backgroundColor: "#f8f9fa", width: "100%" },
   tableWrap: {
@@ -1273,6 +1567,14 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.4,
+  },
+  tableHeadLabelWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  tableHeadLabelWrapRight: {
+    alignSelf: "flex-end",
   },
   tableRow: {
     flexDirection: "row",
@@ -1576,6 +1878,83 @@ const styles = StyleSheet.create({
   modalRowText: { fontSize: 15, color: Theme.textPrimaryDark },
   modalClose: { marginTop: 16, alignItems: "center", padding: 16 },
   modalCloseText: { fontSize: 16, fontWeight: "700", color: Theme.primary },
+  filterModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingRight: 16,
+  },
+  clearFiltersText: {
+    color: Theme.primary,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  filterSection: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  filterSectionTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    marginBottom: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  filterSectionEmpty: {
+    fontSize: 12,
+    color: Theme.textMuted,
+  },
+  activeFiltersWrap: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  activeFiltersTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    marginBottom: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  activeFilterChip: {
+    borderRadius: 999,
+    backgroundColor: "rgba(26,35,126,0.1)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  activeFilterChipText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.primary,
+  },
+  filterChipsWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  filterChip: {
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: Theme.cardWhite,
+  },
+  filterChipActive: {
+    backgroundColor: Theme.primary,
+    borderColor: Theme.primary,
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  filterChipTextActive: {
+    color: "#fff",
+  },
 
   blocked: {
     flex: 1,
