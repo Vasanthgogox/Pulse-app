@@ -39,6 +39,29 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+function formatShortDate(value?: string | null): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+function formatFullDate(value?: string | null): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function supplierLabel(value?: string | null): string {
+  const trimmed = (value || "").trim();
+  return trimmed || "Unknown Supplier";
+}
+
 function canAccessLogPods(
   profile: ReturnType<typeof useAuth>["profile"],
 ): boolean {
@@ -82,6 +105,9 @@ export function LogIncomingPodsScreen() {
   const [trackingId, setTrackingId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [attachmentModalOpen, setAttachmentModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"cards" | "table">(
+    Platform.OS === "web" ? "table" : "cards",
+  );
 
   const { width } = useWindowDimensions();
   const isLargeScreen = width >= 1024;
@@ -570,20 +596,68 @@ export function LogIncomingPodsScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.searchRow}>
-        <FontAwesome
-          name="search"
-          size={16}
-          color={Theme.textMuted}
-          style={styles.searchIcon}
-        />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search trip ID or route..."
-          placeholderTextColor={Theme.textMuted}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
+      <View style={styles.mainHeaderRight}>
+        <View style={styles.searchRow}>
+          <FontAwesome
+            name="search"
+            size={16}
+            color={Theme.textMuted}
+            style={styles.searchIcon}
+          />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search trip ID or route..."
+            placeholderTextColor={Theme.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
+        {isMediumScreen ? (
+          <View style={styles.viewModeWrap}>
+            <Pressable
+              style={[
+                styles.viewModeBtn,
+                viewMode === "cards" && styles.viewModeBtnActive,
+              ]}
+              onPress={() => setViewMode("cards")}
+            >
+              <FontAwesome
+                name="th-large"
+                size={12}
+                color={viewMode === "cards" ? "#fff" : Theme.textMuted}
+              />
+              <Text
+                style={[
+                  styles.viewModeText,
+                  viewMode === "cards" && styles.viewModeTextActive,
+                ]}
+              >
+                Cards
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.viewModeBtn,
+                viewMode === "table" && styles.viewModeBtnActive,
+              ]}
+              onPress={() => setViewMode("table")}
+            >
+              <FontAwesome
+                name="table"
+                size={12}
+                color={viewMode === "table" ? "#fff" : Theme.textMuted}
+              />
+              <Text
+                style={[
+                  styles.viewModeText,
+                  viewMode === "table" && styles.viewModeTextActive,
+                ]}
+              >
+                Table
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -630,6 +704,80 @@ export function LogIncomingPodsScreen() {
           ))}
         </View>
       )}
+    </View>
+  );
+
+  const renderTripsTable = () => (
+    <View style={styles.tableWrap}>
+      <ScrollView horizontal showsHorizontalScrollIndicator>
+        <View style={styles.tableInner}>
+          <View style={styles.tableHeadRow}>
+            <TableHead width={78} label="Select" />
+            <TableHead width={110} label="Trip ID" />
+            <TableHead width={110} label="Date" />
+            <TableHead width={190} label="Client" />
+            <TableHead width={120} label="Value (₹)" align="right" />
+            <TableHead width={280} label="Route" />
+            <TableHead width={180} label="Supplier" />
+            <TableHead width={120} label="Pending LRs" />
+            <TableHead width={120} label="Selected" />
+            <TableHead width={110} label="Action" align="right" />
+          </View>
+          {supplierTrips.map((t, idx) => {
+            const pendingLRs =
+              t.lrNumbers.length > 0
+                ? t.lrNumbers.filter((lr) => !t.receivedLRs.includes(lr))
+                : ["N/A"];
+            const selectedCount = (selectedLRs[t.internal_id] || []).length;
+            const isAllForTripSelected =
+              selectedCount > 0 && selectedCount === pendingLRs.length;
+            return (
+              <View
+                key={t.internal_id}
+                style={[
+                  styles.tableRow,
+                  idx % 2 === 0 ? styles.tableRowEven : styles.tableRowOdd,
+                ]}
+              >
+                <TableCell width={78}>
+                  <Pressable
+                    style={[styles.tableCheckBox, isAllForTripSelected && styles.tableCheckBoxOn]}
+                    onPress={() => pendingLRs.length > 0 && toggleTrip(t.internal_id, pendingLRs)}
+                  >
+                    {isAllForTripSelected ? (
+                      <FontAwesome name="check" size={10} color="#fff" />
+                    ) : null}
+                  </Pressable>
+                </TableCell>
+                <TableCell width={110} text={t.id} mono strong color={Theme.primary} />
+                <TableCell width={110} text={formatFullDate(t.date)} />
+                <TableCell width={190} text={t.client || "—"} strong />
+                <TableCell
+                  width={120}
+                  text={t.amount != null ? t.amount.toLocaleString() : "—"}
+                  align="right"
+                  mono
+                  strong
+                />
+                <TableCell width={280} text={`${t.from || "—"} -> ${t.to || "—"}`} />
+                <TableCell width={180} text={supplierLabel(t.supplier_name)} />
+                <TableCell width={120} text={String(pendingLRs.length)} />
+                <TableCell width={120} text={String(selectedCount)} strong />
+                <TableCell width={110} align="right">
+                  <Pressable
+                    style={styles.tableActionBtn}
+                    onPress={() => pendingLRs.length > 0 && toggleTrip(t.internal_id, pendingLRs)}
+                  >
+                    <Text style={styles.tableActionText}>
+                      {isAllForTripSelected ? "Clear" : "Select"}
+                    </Text>
+                  </Pressable>
+                </TableCell>
+              </View>
+            );
+          })}
+        </View>
+      </ScrollView>
     </View>
   );
 
@@ -714,7 +862,7 @@ export function LogIncomingPodsScreen() {
             <View style={styles.mainArea}>
               {renderMainContentHeader()}
               <ScrollView contentContainerStyle={styles.mainScroll}>
-                {renderTripsGrid()}
+                {viewMode === "table" ? renderTripsTable() : renderTripsGrid()}
               </ScrollView>
             </View>
           </View>
@@ -724,7 +872,9 @@ export function LogIncomingPodsScreen() {
             <View style={styles.mobileMainHeader}>
               {renderMainContentHeader()}
             </View>
-            <View style={styles.mobileGridArea}>{renderTripsGrid()}</View>
+            <View style={styles.mobileGridArea}>
+              {viewMode === "table" ? renderTripsTable() : renderTripsGrid()}
+            </View>
           </ScrollView>
         )}
       </View>
@@ -785,7 +935,7 @@ export function LogIncomingPodsScreen() {
                   }}
                 >
                   <Text style={styles.modalRowText}>
-                    {item ? item : "All suppliers"}
+                    {item ? supplierLabel(item) : "All suppliers"}
                   </Text>
                   {selectedSupplier === item ? (
                     <FontAwesome name="check" size={16} color={Theme.primary} />
@@ -939,6 +1089,59 @@ export function LogIncomingPodsScreen() {
   );
 }
 
+function TableHead({
+  width,
+  label,
+  align = "left",
+}: {
+  width: number;
+  label: string;
+  align?: "left" | "right";
+}) {
+  return (
+    <View style={[styles.tableHeadCell, { width }, align === "right" && styles.tableCellRight]}>
+      <Text style={[styles.tableHeadText, align === "right" && styles.textRight]}>{label}</Text>
+    </View>
+  );
+}
+
+function TableCell({
+  width,
+  text,
+  children,
+  mono,
+  strong,
+  color,
+  align = "left",
+}: {
+  width: number;
+  text?: string;
+  children?: React.ReactNode;
+  mono?: boolean;
+  strong?: boolean;
+  color?: string;
+  align?: "left" | "right";
+}) {
+  return (
+    <View style={[styles.tableCell, { width }, align === "right" && styles.tableCellRight]}>
+      {children ?? (
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.tableCellText,
+            mono && styles.tableCellMono,
+            strong && styles.tableCellStrong,
+            align === "right" && styles.textRight,
+            color ? { color } : null,
+          ]}
+        >
+          {text ?? "—"}
+        </Text>
+      )}
+    </View>
+  );
+}
+
 function TripCard({
   trip,
   selectedSupplier,
@@ -981,12 +1184,7 @@ function TripCard({
           </View>
           <Text style={styles.tripId}>{trip.id}</Text>
         </View>
-        <Text style={styles.tripDate}>
-          {new Date(trip.date).toLocaleDateString("en-GB", {
-            day: "numeric",
-            month: "short",
-          })}
-        </Text>
+        <Text style={styles.tripDate}>{formatShortDate(trip.date)}</Text>
       </Pressable>
 
       <View style={styles.cardMiddle}>
@@ -1011,7 +1209,7 @@ function TripCard({
           <>
             <Text style={styles.routeLabel}>Supplier</Text>
             <Text style={styles.supplierText} numberOfLines={1}>
-              {trip.supplier_name}
+              {supplierLabel(trip.supplier_name)}
             </Text>
           </>
         ) : null}
@@ -1128,6 +1326,11 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
   },
   mainHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 24 },
+  mainHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   mainHeaderTitle: {
     fontSize: 14,
     fontWeight: "800",
@@ -1263,6 +1466,126 @@ const styles = StyleSheet.create({
         outlineStyle: "none",
       } as any,
     }),
+  },
+  viewModeWrap: {
+    flexDirection: "row",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    overflow: "hidden",
+    backgroundColor: Theme.cardWhite,
+  },
+  viewModeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  viewModeBtnActive: {
+    backgroundColor: Theme.primary,
+  },
+  viewModeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textMuted,
+  },
+  viewModeTextActive: {
+    color: "#fff",
+  },
+  tableWrap: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    overflow: "hidden",
+  },
+  tableInner: {
+    minWidth: 1400,
+  },
+  tableHeadRow: {
+    flexDirection: "row",
+    backgroundColor: Theme.surfaceGray,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderMedium,
+  },
+  tableHeadCell: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: Theme.borderLight,
+    justifyContent: "center",
+  },
+  tableHeadText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  tableRow: {
+    flexDirection: "row",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+  },
+  tableRowEven: {
+    backgroundColor: Theme.cardWhite,
+  },
+  tableRowOdd: {
+    backgroundColor: Theme.surface,
+  },
+  tableCell: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: Theme.borderLight,
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  tableCellRight: {
+    alignItems: "flex-end",
+  },
+  tableCellText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+  },
+  tableCellMono: {
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+  },
+  tableCellStrong: {
+    fontWeight: "800",
+  },
+  textRight: {
+    textAlign: "right",
+  },
+  tableCheckBox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.cardWhite,
+  },
+  tableCheckBoxOn: {
+    backgroundColor: Theme.primary,
+    borderColor: Theme.primary,
+  },
+  tableActionBtn: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(26,35,126,0.25)",
+    backgroundColor: "rgba(26,35,126,0.06)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  tableActionText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.primary,
+    textTransform: "uppercase",
   },
   countRow: {
     flexDirection: "row",
