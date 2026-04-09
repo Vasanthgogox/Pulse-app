@@ -513,7 +513,7 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
                     {q.bidder_organization_name ?? '—'}
                   </Text>
                   <Text style={styles.quoteRowAmount}>{formatINR(Number(q.amount ?? 0))}</Text>
-                  <Text style={styles.quoteRowStatus}>{(q.status || '').toUpperCase()}</Text>
+                  <Text style={styles.quoteRowStatus}>{q.status === 'accepted' ? 'AWARDED' : (q.status || '').toUpperCase()}</Text>
                 </TouchableOpacity>
               );
             })}
