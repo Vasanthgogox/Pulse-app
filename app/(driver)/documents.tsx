@@ -4,6 +4,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
+import Typography from '@/constants/Typography';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
 
 export default function DocumentsScreen() {
@@ -114,8 +115,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     flex: 1,
-    fontSize: 16,
-    fontWeight: '800',
+    ...Typography.headerTitle,
     textAlign: 'center',
   },
   headerSpacer: { width: 44 },

@@ -4,8 +4,8 @@
  * Preset avatars are 10 bundled driver icons in assets/drivers/.
  */
 
-import { Image } from 'react-native';
 import { Asset } from 'expo-asset';
+import { Image, type ImageSourcePropType } from 'react-native';
 
 export const LEVELS_CONFIG = [
   { level: 1, name: 'Initiate', goalText: 'Complete Signup', type: 'signup', target: 1, reward: 'Access Hub', tier: 'Bronze' },
@@ -19,7 +19,7 @@ export const LEVELS_CONFIG = [
 ] as const;
 
 /** Preset avatar: bundled image (require) and seed for persistence. */
-export type PresetAvatar = { name: string; seed: string; image: number };
+export type PresetAvatar = { name: string; seed: string; image: ImageSourcePropType };
 
 const driver1 = require('../assets/drivers/driver-1.png');
 const driver2 = require('../assets/drivers/driver-2.png');
@@ -51,33 +51,20 @@ export const ALL_PRESET_AVATARS: PresetAvatar[] = DRIVER_PRESET_AVATARS;
 
 /** URI for a preset (from bundled asset). */
 export function getPresetAvatarUri(av: PresetAvatar): string {
-  if (!av.image) return '';
-  
-  // 1. Fallback for static bundler configurations on web where require returns an object or string
-  if (typeof av.image === 'object' && 'uri' in av.image) {
-    return (av.image as any).uri;
-  }
-  if (typeof av.image === 'string') {
-    return av.image;
+  const source = av.image as any;
+
+  if (!source) return '';
+  if (typeof source === 'string') return source;
+  if (typeof source?.uri === 'string' && source.uri.length > 0) return source.uri;
+
+  const resolver = (Image as any)?.resolveAssetSource;
+  if (typeof resolver === 'function') {
+    const resolved = resolver(source);
+    if (typeof resolved?.uri === 'string' && resolved.uri.length > 0) return resolved.uri;
   }
 
-  try {
-    // 2. Try resolving using Expo's Asset, which works natively and on web for opaque asset IDs (numbers)
-    const asset = Asset.fromModule(av.image);
-    if (asset && asset.uri) {
-      return asset.uri;
-    }
-  } catch (e) {
-    // Ignore error
-  }
-
-  // 3. Try Image.resolveAssetSource, works in React Native but may be missing on web
-  if (Image && typeof Image.resolveAssetSource === 'function') {
-    const resolved = Image.resolveAssetSource(av.image);
-    return resolved?.uri ?? '';
-  }
-
-  return '';
+  const asset = Asset.fromModule(source);
+  return asset?.uri ?? asset?.localUri ?? '';
 }
 
 /** Resolve stored avatarSeed to display URI. */

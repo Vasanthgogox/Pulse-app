@@ -767,7 +767,7 @@ export default function DriverWalletScreen() {
                             </View>
 
                             {/* Actions */}
-                            {isPending && !isAdHocTrip ? (
+                            {isPending && !isOtpAdHocPending ? (
                               <View style={styles.dropdownActions}>
                                 <TouchableOpacity
                                   style={[styles.dropdownPrimaryBtn, { backgroundColor: isDark ? colors.surfaceElevated : '#0f172a' }]}

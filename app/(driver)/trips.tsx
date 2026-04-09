@@ -179,9 +179,10 @@ function buildMissionLog(trip: tripsService.TripRow): MissionLogEntry[] {
   return entries;
 }
 
-function getGrossRevenue(trip: tripsService.TripRow): number {
-  if (isAggregateTrip(trip)) return 0;
-  return Number(trip.supplier_rate ?? trip.client_price ?? 0);
+function getGrossRevenue(trip: tripsService.TripRow): number | string {
+  const amount = Number(trip.supplier_rate ?? trip.client_price ?? 0);
+  if (amount <= 0 && isAggregateTrip(trip)) return "SALARY";
+  return amount;
 }
 
 /** Arrow with translate-x animation on press (reference: group-hover:translate-x-2) */
@@ -307,9 +308,8 @@ export default function DriverTripsScreen() {
   }, [profile?.uid, fetch]);
 
   const getEarning = (trip: tripsService.TripRow) => {
-    if (isAggregateTrip(trip)) return "—";
     const amount = tripEarningsForDriver(trip);
-    if (amount <= 0) return "SALARY";
+    if (amount <= 0) return isAggregateTrip(trip) ? "SALARY" : "—";
     return `₹${Math.round(amount).toLocaleString()}`;
   };
 
@@ -813,85 +813,156 @@ export default function DriverTripsScreen() {
               </View>
 
               {detailTab === "journey" && archiveMissionLog.length > 0 && (
-                <View
-                  style={[
-                    styles.logCardActivityRef,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
+                <>
+                  <View style={styles.logSectionHeaderRef}>
+                    <View
+                      style={[
+                        styles.logSectionIconWrap,
+                        { backgroundColor: colors.whiteMuted },
+                      ]}
+                    >
+                      <FontAwesome name="list-alt" size={14} color={colors.text} />
+                    </View>
+                    <Text style={[styles.logSectionTitleRef, { color: colors.text }]}>
+                      Mission Log
+                    </Text>
+                  </View>
                   <View
                     style={[
-                      styles.logCardActivityLineRef,
-                      { backgroundColor: colors.border },
+                      styles.logCardActivityRef,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
                     ]}
-                  />
-                  {archiveMissionLog.map((log, i) => {
-                    const completed = true;
-                    const isLast = i === archiveMissionLog.length - 1;
-                    return (
-                      <View
-                        key={i}
-                        style={[
-                          styles.logItemActivityRef,
-                          isLast && styles.logItemActivityLastRef,
-                        ]}
-                      >
+                  >
+                    {archiveMissionLog.map((log, i) => {
+                      const completed = true;
+                      const isLast = i === archiveMissionLog.length - 1;
+                      return (
                         <View
+                          key={i}
                           style={[
-                            styles.logCircleWrapRef,
-                            completed
-                              ? { backgroundColor: colors.emerald }
-                              : { backgroundColor: colors.border },
+                            styles.logItemActivityRef,
+                            isLast && styles.logItemActivityLastRef,
                           ]}
                         >
-                          {completed && (
-                            <FontAwesome
-                              name="check"
-                              size={10}
-                              color={Theme.textOnPrimary}
-                            />
-                          )}
-                        </View>
-                        <View style={styles.logContentActivityRef}>
-                          <View style={styles.logHeadRef}>
-                            <Text
+                          <View style={styles.logMarkerColRef}>
+                            <View
                               style={[
-                                styles.logStatusRef,
-                                {
-                                  color: completed
-                                    ? colors.text
-                                    : colors.textMuted,
-                                },
+                                styles.logCircleWrapRef,
+                                completed
+                                  ? { backgroundColor: colors.emerald }
+                                  : { backgroundColor: colors.border },
                               ]}
                             >
-                              {log.status}
-                            </Text>
+                              {completed && (
+                                <FontAwesome
+                                  name="check"
+                                  size={9}
+                                  color={Theme.textOnPrimary}
+                                />
+                              )}
+                            </View>
+                            {!isLast && (
+                              <View
+                                style={[
+                                  styles.logConnectorRef,
+                                  { backgroundColor: colors.border },
+                                ]}
+                              />
+                            )}
+                          </View>
+                          <View style={styles.logContentActivityRef}>
+                            <View style={styles.logHeadRef}>
+                              <Text
+                                style={[
+                                  styles.logStatusRef,
+                                  {
+                                    color: completed
+                                      ? colors.text
+                                      : colors.textMuted,
+                                  },
+                                ]}
+                              >
+                                {log.status}
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.logTimeRef,
+                                  { color: colors.textMuted },
+                                ]}
+                              >
+                                {log.time}
+                              </Text>
+                            </View>
                             <Text
                               style={[
-                                styles.logTimeRef,
-                                { color: colors.textMuted },
+                                styles.logLocTextRef,
+                                { color: colors.text },
                               ]}
+                              numberOfLines={2}
                             >
-                              {log.time}
+                              {log.loc}
                             </Text>
                           </View>
-                          <Text
-                            style={[
-                              styles.logLocTextRef,
-                              { color: colors.textMuted },
-                            ]}
-                            numberOfLines={2}
-                          >
-                            {log.loc}
-                          </Text>
                         </View>
+                      );
+                    })}
+                  </View>
+                  <View style={styles.logBadgesGridRef}>
+                    <View
+                      style={[
+                        styles.logBadgeCardRef,
+                        { backgroundColor: colors.surface, borderColor: colors.border },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.logBadgeIconWrapRef,
+                          { backgroundColor: colors.whiteMuted },
+                        ]}
+                      >
+                        <FontAwesome
+                          name="check-circle"
+                          size={11}
+                          color={colors.text}
+                        />
                       </View>
-                    );
-                  })}
-                </View>
+                      <Text style={[styles.logBadgeTitleRef, { color: colors.text }]}>
+                        Proof of Delivery
+                      </Text>
+                      <Text
+                        style={[styles.logBadgeSubtitleRef, { color: colors.textMuted }]}
+                      >
+                        Digital signature & Photo verified
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.logBadgeCardRef,
+                        { backgroundColor: colors.surface, borderColor: colors.border },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.logBadgeIconWrapRef,
+                          { backgroundColor: colors.whiteMuted },
+                        ]}
+                      >
+                        <FontAwesome name="dashboard" size={11} color={colors.text} />
+                      </View>
+                      <Text style={[styles.logBadgeTitleRef, { color: colors.text }]}>
+                        Performance
+                      </Text>
+                      <Text
+                        style={[styles.logBadgeSubtitleRef, { color: colors.textMuted }]}
+                      >
+                        Maintained 94% Cruise speed
+                      </Text>
+                    </View>
+                  </View>
+                </>
               )}
 
               {detailTab === "settlement" && (
@@ -911,19 +982,39 @@ export default function DriverTripsScreen() {
                       { borderBottomColor: colors.border },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.yieldRowLabelSettlementRef,
-                        { color: colors.textMuted },
-                      ]}
-                    >
-                      Fare Earnings
-                    </Text>
-                    <Text
-                      style={[styles.yieldRowValueRef, { color: colors.text }]}
-                    >
-                      ₹{getGrossRevenue(selectedTrip).toLocaleString()}
-                    </Text>
+                    <View style={styles.yieldRowTextBlockRef}>
+                      <Text
+                        style={[
+                          styles.yieldRowLabelSettlementRef,
+                          { color: colors.text },
+                        ]}
+                      >
+                        Fare Earnings
+                      </Text>
+                      <Text
+                        style={[
+                          styles.yieldRowSubtextRef,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        Base trip rate calculation
+                      </Text>
+                    </View>
+                    <View style={styles.yieldRowValueBlockRef}>
+                      <Text
+                        style={[styles.yieldRowValueRef, { color: colors.text }]}
+                      >
+                        {getGrossRevenue(selectedTrip) === "SALARY" ? "SALARY" : `₹${getGrossRevenue(selectedTrip).toLocaleString()}`}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.yieldRowValueMetaRef,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        CALCULATED
+                      </Text>
+                    </View>
                   </View>
                   <View
                     style={[
@@ -932,25 +1023,42 @@ export default function DriverTripsScreen() {
                       { borderBottomColor: colors.border },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.yieldRowLabelSettlementRef,
-                        { color: colors.textMuted },
-                      ]}
-                    >
-                      Partner Bonus
-                    </Text>
-                    <Text
-                      style={[
-                        styles.yieldRowValueEmeraldRef,
-                        { color: colors.emerald },
-                      ]}
-                    >
-                      + ₹
-                      {Math.round(
-                        getEarningAmount(selectedTrip),
-                      ).toLocaleString()}
-                    </Text>
+                    <View style={styles.yieldRowTextBlockRef}>
+                      <Text
+                        style={[
+                          styles.yieldRowLabelSettlementRef,
+                          { color: colors.text },
+                        ]}
+                      >
+                        Partner Bonus
+                      </Text>
+                      <Text
+                        style={[
+                          styles.yieldRowSubtextRef,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        Precision pilot multiplier
+                      </Text>
+                    </View>
+                    <View style={styles.yieldRowValueBlockRef}>
+                      <Text
+                        style={[
+                          styles.yieldRowValueEmeraldRef,
+                          { color: colors.emerald },
+                        ]}
+                      >
+                        {getEarning(selectedTrip) === "SALARY" ? "—" : `+ ₹${Math.round(getEarningAmount(selectedTrip)).toLocaleString()}`}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.yieldRowValueMetaRef,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        AWARDED
+                      </Text>
+                    </View>
                   </View>
                   <View
                     style={[
@@ -959,22 +1067,42 @@ export default function DriverTripsScreen() {
                       { borderBottomColor: colors.border },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.yieldRowLabelSettlementRef,
-                        { color: colors.textMuted },
-                      ]}
-                    >
-                      Tax Deductions
-                    </Text>
-                    <Text
-                      style={[
-                        styles.yieldRowValueDeductionRef,
-                        { color: Theme.negative },
-                      ]}
-                    >
-                      - ₹0
-                    </Text>
+                    <View style={styles.yieldRowTextBlockRef}>
+                      <Text
+                        style={[
+                          styles.yieldRowLabelSettlementRef,
+                          { color: colors.text },
+                        ]}
+                      >
+                        Tax Deductions
+                      </Text>
+                      <Text
+                        style={[
+                          styles.yieldRowSubtextRef,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        TDS and platform overhead
+                      </Text>
+                    </View>
+                    <View style={styles.yieldRowValueBlockRef}>
+                      <Text
+                        style={[
+                          styles.yieldRowValueDeductionRef,
+                          { color: Theme.negative },
+                        ]}
+                      >
+                        - ₹0
+                      </Text>
+                      <Text
+                        style={[
+                          styles.yieldRowValueMetaRef,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        DEDUCTED
+                      </Text>
+                    </View>
                   </View>
 
                   <View style={styles.yieldPayoutHeroDarkRef}>
@@ -982,9 +1110,9 @@ export default function DriverTripsScreen() {
                       Net payout
                     </Text>
                     <View style={styles.yieldPayoutHeroAmountRowRef}>
-                      <Text style={styles.yieldPayoutHeroRupeeRef}>₹</Text>
+                      {getEarning(selectedTrip) === "SALARY" ? null : <Text style={styles.yieldPayoutHeroRupeeRef}>₹</Text>}
                       <Text style={styles.yieldPayoutHeroAmountDarkRef}>
-                        {Math.round(
+                        {getEarning(selectedTrip) === "SALARY" ? "SALARY" : Math.round(
                           getEarningAmount(selectedTrip),
                         ).toLocaleString()}
                       </Text>
@@ -1506,73 +1634,161 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   logCardActivityRef: {
-    paddingVertical: 20,
-    paddingHorizontal: 20,
-    borderRadius: 24,
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+    borderRadius: 20,
     borderWidth: 1,
     position: "relative",
     overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
   logCardActivityLineRef: {
     position: "absolute",
-    left: 13,
-    top: 40,
-    bottom: 40,
+    left: 12,
+    top: 32,
+    bottom: 32,
     width: 1,
   },
   logItemActivityRef: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 24,
+    marginBottom: 26,
   },
   logItemActivityLastRef: {
     marginBottom: 0,
   },
   logCircleWrapRef: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    marginRight: 14,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    marginRight: 0,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: "#ffffff",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.05,
     shadowRadius: 2,
-    elevation: 2,
+    elevation: 1,
+  },
+  logMarkerColRef: {
+    width: 20,
+    marginRight: 12,
+    alignItems: "center",
+    position: "relative",
+  },
+  logConnectorRef: {
+    position: "absolute",
+    top: 20,
+    bottom: -26,
+    width: 1,
+    alignSelf: "center",
   },
   logContentActivityRef: {
     flex: 1,
     minWidth: 0,
   },
+  logStatusChipRef: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  logStatusChipTextRef: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  logTimeMetaRef: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+    textTransform: "uppercase",
+  },
+  logBadgesGridRef: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 12,
+  },
+  logBadgeCardRef: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  logBadgeIconWrapRef: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  logBadgeTitleRef: {
+    fontSize: 12,
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  logBadgeSubtitleRef: {
+    fontSize: 11,
+    fontWeight: "500",
+    lineHeight: 15,
+  },
   yieldCardSettlementRef: {
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 4,
-    borderRadius: 32,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 2,
+    borderRadius: 20,
     borderWidth: 1,
     marginBottom: 0,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
   yieldRowLabelSettlementRef: {
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 17,
+    fontWeight: "700",
     color: DETAIL_REF.yieldRowLabel,
   },
+  yieldRowTextBlockRef: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 10,
+  },
+  yieldRowSubtextRef: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  yieldRowValueBlockRef: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    minWidth: 94,
+  },
+  yieldRowValueMetaRef: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
   yieldRowValueDeductionRef: {
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 20,
+    fontWeight: "800",
   },
   yieldPayoutHeroDarkRef: {
     marginTop: 24,
@@ -1592,12 +1808,12 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   yieldPayoutHeroLabelDarkRef: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "800",
     color: "#94a3b8",
-    letterSpacing: 0.5,
-    textTransform: "none",
-    marginBottom: 16,
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+    marginBottom: 12,
   },
   yieldPayoutHeroRupeeRef: {
     fontSize: 24,
@@ -1606,10 +1822,10 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   yieldPayoutHeroAmountDarkRef: {
-    fontSize: 44,
+    fontSize: 40,
     fontWeight: "800",
     color: "#ffffff",
-    letterSpacing: -1,
+    letterSpacing: -0.8,
   },
   yieldPayoutHeroBadgeDarkRef: {
     flexDirection: "row",
@@ -1881,13 +2097,13 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   yieldRowValueRef: {
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 20,
+    fontWeight: "800",
     color: DETAIL_REF.headerTitle,
   },
   yieldRowValueEmeraldRef: {
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 20,
+    fontWeight: "800",
     color: DETAIL_REF.emerald,
   },
   yieldRowLabelNetRef: {

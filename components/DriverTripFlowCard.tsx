@@ -137,9 +137,10 @@ export function DriverTripFlowCard({
 
   const tripIsAggregate = useMemo(() => isAggregateTrip(localTrip), [localTrip]);
   const earnings = useMemo(() => {
-    if (tripIsAggregate) return '—';
     const n = Math.max(0, Number(commissionAmount ?? 0) || 0);
-    return formatINR(n);
+    if (n > 0) return formatINR(n);
+    if (tripIsAggregate) return 'SALARY';
+    return formatINR(0);
   }, [tripIsAggregate, commissionAmount]);
 
   const progressPct = useMemo(() => progressForStep(step), [step]);
@@ -688,7 +689,7 @@ const styles = StyleSheet.create({
     overflow: 'visible',
     backgroundColor: 'transparent',
     borderWidth: 0,
-    paddingHorizontal: 24,
+    paddingHorizontal: 0,
     paddingBottom: 18,
     paddingTop: 12,
   },

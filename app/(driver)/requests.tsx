@@ -11,7 +11,6 @@ import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { tripEarningsForDriver } from '@/lib/driverUtils';
 import { useAuth } from '@/contexts/AuthContext';
-import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import * as driversService from '@/services/driversService';
 import * as tripsService from '@/services/tripsService';
@@ -33,24 +32,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-function isCompleted(status: string) {
-  const s = (status || '').toLowerCase();
-  return s === 'completed' || s === 'delivered' || s === 'done';
-}
-
-function buildOfferText(inv: driversService.DriverInviteRow): string {
-  const parts: string[] = [];
-  if (inv.payable_amount != null && inv.payable_amount > 0) {
-    parts.push(`₹${Number(inv.payable_amount).toLocaleString('en-IN')}`);
-  }
-  if (inv.commission_percent != null && inv.commission_percent > 0) {
-    parts.push(`${inv.commission_percent}% commission`);
-  }
-  if (inv.commission_per_km != null && inv.commission_per_km > 0) {
-    parts.push(`₹${inv.commission_per_km}/km`);
-  }
-  return parts.length ? parts.join(' · ') : 'Offer on accept';
-}
+import { isCompleted, buildOfferText } from '@/lib/driverUtils';
+import { getInitials } from '@/lib/stringUtils';
 
 /** Per-org passbook stats (trips, earned, received from DB). */
 export interface ConnectionPassbook {
@@ -69,7 +52,6 @@ export default function DriverRequestsScreen() {
   const router = useRouter();
   const colors = useDriverThemeColors();
   const { profile } = useAuth();
-  const { avatarSeed } = useDriverAvatar();
   const { avatarUri } = useDriverAvatarUri();
 
   const [invites, setInvites] = useState<driversService.DriverInviteRow[]>([]);
@@ -150,8 +132,6 @@ export default function DriverRequestsScreen() {
         .sort((a, b) => new Date((b.left_at ?? 0) as string).getTime() - new Date((a.left_at ?? 0) as string).getTime()),
     [linkedDrivers]
   );
-  /** Show only 3 most recently left for minimal cards; "See more" goes to full history. */
-  const pastLinkedDriversPreview = useMemo(() => pastLinkedDrivers.slice(0, 3), [pastLinkedDrivers]);
 
   /** Accepted invites where the driver is still active (not left). */
   const connectedAcceptedInvites = useMemo(
@@ -192,6 +172,8 @@ export default function DriverRequestsScreen() {
     }
     return map;
   }, [resolvedInvites, linkedDrivers, allTrips, allLedger]);
+
+  const hasAccepted = connectedAcceptedInvites.length > 0 || pastLinkedDrivers.length > 0;
 
   const handleLeaveFleet = useCallback(
     async (organizationId: string) => {
@@ -243,7 +225,9 @@ export default function DriverRequestsScreen() {
           </TouchableOpacity>
           <View style={styles.headerTextWrap}>
             <Text style={[styles.brand, { color: colors.textMuted }]}>Q PILOT</Text>
-            <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>Requests</Text>
+            <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>
+              {hasAccepted ? 'Passbook' : 'Requests'}
+            </Text>
           </View>
         </View>
         <TouchableOpacity
@@ -257,8 +241,12 @@ export default function DriverRequestsScreen() {
       </View>
 
       <View style={[styles.creditsSection, { backgroundColor: colors.background }]}>
-        <Text style={[styles.creditsTitle, { color: EMERALD_500 }]}>Requests.</Text>
-        <Text style={[styles.creditsSubtitle, { color: GRAY_700 }]}>Connection invites.</Text>
+        <Text style={[styles.creditsTitle, { color: EMERALD_500, textTransform: 'uppercase' }]}>
+          {hasAccepted ? 'Passbook.' : 'Requests.'}
+        </Text>
+        <Text style={[styles.creditsSubtitle, { color: GRAY_700 }]}>
+          {hasAccepted ? 'Fleet connections.' : 'Connection invites.'}
+        </Text>
       </View>
 
       {loading ? (
@@ -288,8 +276,16 @@ export default function DriverRequestsScreen() {
                   style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
                 >
                   <View style={styles.cardHeader}>
-                    <View style={[styles.cardIconWrap, { backgroundColor: colors.emeraldMuted }]}>
-                      <FontAwesome name="building" size={22} color={colors.emerald} />
+                    <View style={[styles.cardIconWrap, { backgroundColor: colors.emeraldMuted, borderRadius: 24 }]}>
+                      {inv.from_org_avatar_url ? (
+                        <Image source={{ uri: inv.from_org_avatar_url }} style={styles.cardOrgAvatar} resizeMode="cover" />
+                      ) : (
+                        <View style={[styles.cardOrgAvatar, { backgroundColor: colors.surface, borderColor: colors.text, borderWidth: 1 }]}>
+                          <Text style={[styles.cardOrgAvatarText, { color: colors.text }]}>
+                            {getInitials(inv.from_org_name || 'O')}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                     <View style={styles.cardHeaderText}>
                       <Text style={[styles.cardOrgName, { color: colors.text }]} numberOfLines={1}>
@@ -315,7 +311,7 @@ export default function DriverRequestsScreen() {
                       disabled={!!inviteActionId}
                       activeOpacity={0.8}
                     >
-                      <Text style={[styles.btnSecondaryText, { color: colors.text }]}>Decline</Text>
+                      <Text style={[styles.btnSecondaryText, { color: colors.text }]}>Ignore</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.btnPrimary, { backgroundColor: colors.emerald }, inviteActionId === inv.id && styles.btnDisabled]}
@@ -404,7 +400,7 @@ export default function DriverRequestsScreen() {
                         ]}
                         onPress={() => router.push({
                           pathname: `/(driver)/passbook/${passbook?.orgId ?? inv.from_organization_id}` as const,
-                          params: { orgName: passbook?.orgName ?? inv.from_org_name ?? 'Fleet' },
+                          params: { orgName: passbook?.orgName ?? inv.from_org_name ?? 'Fleet', from: 'requests' },
                         } as Parameters<typeof router.push>[0])}
                         activeOpacity={0.9}
                       >
@@ -450,17 +446,19 @@ export default function DriverRequestsScreen() {
             </View>
           )}
 
-          <View style={styles.section}>
-            <TouchableOpacity
-              style={styles.viewHistoryLink}
-              onPress={() => router.push('/(driver)/passbook/history')}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.viewHistoryLinkEyebrow, { color: colors.textMuted }]}>PASSBOOK HISTORY</Text>
-              <Text style={[styles.viewHistoryLinkText, { color: colors.emerald }]}>View history</Text>
-              <FontAwesome name="chevron-right" size={12} color={colors.emerald} />
-            </TouchableOpacity>
-          </View>
+          {pastLinkedDrivers.length > 0 && (
+            <View style={styles.section}>
+              <TouchableOpacity
+                style={styles.viewHistoryLink}
+                onPress={() => router.push('/(driver)/passbook/history')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.viewHistoryLinkEyebrow, { color: colors.textMuted }]}>PASSBOOK HISTORY</Text>
+                <Text style={[styles.viewHistoryLinkText, { color: colors.emerald }]}>View history</Text>
+                <FontAwesome name="chevron-right" size={12} color={colors.emerald} />
+              </TouchableOpacity>
+            </View>
+          )}
 
           {pendingInvites.length === 0 && connectedAcceptedInvites.length === 0 && pastLinkedDrivers.length === 0 && (
             <View style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -749,4 +747,16 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 17, fontWeight: '800', marginBottom: 8, letterSpacing: 0.3 },
   emptySubtitle: { fontSize: 13, textAlign: 'center', lineHeight: 20, paddingHorizontal: 8 },
+  cardOrgAvatar: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardOrgAvatarText: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
 });

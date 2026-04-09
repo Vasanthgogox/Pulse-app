@@ -10,7 +10,6 @@ import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeCont
 import { phonePeMetaDate } from '@/lib/driverGpayTransactions';
 import { isAggregateTrip, tripEarningsForDriver } from '@/lib/driverUtils';
 import { usePreventScreenCapture } from '@/lib/usePreventScreenCapture';
-import { useSafeBack } from '@/lib/useSafeBack';
 import * as driversService from '@/services/driversService';
 import * as tripsService from '@/services/tripsService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -67,14 +66,22 @@ export default function DriverPassbookDetailScreen() {
   usePreventScreenCapture();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const safeBack = useSafeBack('/(driver)');
   const { theme } = useDriverTheme();
   const colors = useDriverThemeColors();
   const isDark = theme === 'dark';
   const { profile } = useAuth();
-  const params = useLocalSearchParams<{ orgId: string; orgName?: string }>();
+  const params = useLocalSearchParams<{ orgId: string; orgName?: string; from?: string }>();
   const orgId = typeof params.orgId === 'string' ? params.orgId : params.orgId?.[0] ?? '';
   const orgName = (typeof params.orgName === 'string' ? params.orgName : params.orgName?.[0]) ?? 'Fleet';
+  const from = typeof params.from === 'string' ? params.from : params.from?.[0] ?? 'requests';
+
+  const handleBack = useCallback(() => {
+    if (from === 'history') {
+      router.navigate('/(driver)/passbook/history');
+    } else {
+      router.navigate('/(driver)/requests');
+    }
+  }, [router, from]);
 
   const [driver, setDriver] = useState<driversService.DriverRow | null>(null);
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
@@ -188,7 +195,7 @@ export default function DriverPassbookDetailScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.background }]}>
         <View style={[styles.header, { paddingHorizontal: 24, paddingBottom: 20, borderColor: colors.border }]}>
-          <TouchableOpacity onPress={safeBack} style={styles.backBtn} hitSlop={12}>
+          <TouchableOpacity onPress={handleBack} style={styles.backBtn} hitSlop={12}>
             <FontAwesome name="arrow-left" size={20} color={colors.text} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: colors.text }]}>Passbook</Text>
@@ -211,7 +218,7 @@ export default function DriverPassbookDetailScreen() {
       showsVerticalScrollIndicator={false}
     >
       <View style={[styles.header, { paddingTop: insets.top + Layout.driverHeaderTopOffset, paddingBottom: Layout.driverHeaderBottomPadding, backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <TouchableOpacity onPress={safeBack} style={styles.backBtn} hitSlop={12}>
+        <TouchableOpacity onPress={handleBack} style={styles.backBtn} hitSlop={12}>
           <FontAwesome name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>

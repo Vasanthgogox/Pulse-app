@@ -61,28 +61,20 @@ export default function PassbookHistoryScreen() {
     load();
   }, [load]);
 
-  const acceptedInvites = useMemo(
-    () => invites.filter((i) => i.status === 'accepted'),
-    [invites]
-  );
-
-  const pastDrivers = useMemo(
+  const historyDrivers = useMemo(
     () =>
       linkedDrivers
         .filter((d) => !!d.left_at)
-        .sort(
-          (a, b) =>
-            new Date((b.left_at ?? 0) as string).getTime() -
-            new Date((a.left_at ?? 0) as string).getTime()
-        ),
+        .sort((a, b) => new Date(b.left_at as string).getTime() - new Date(a.left_at as string).getTime()),
     [linkedDrivers]
   );
 
   const getOrgName = useCallback(
-    (organizationId: string) =>
-      acceptedInvites.find((i) => i.from_organization_id === organizationId)?.from_org_name ??
-      'Fleet',
-    [acceptedInvites]
+    (organizationId: string) => {
+      const invite = invites.find((i) => i.from_organization_id === organizationId);
+      return invite?.from_org_name && invite.from_org_name.trim() !== '' ? invite.from_org_name : 'Fleet';
+    },
+    [invites]
   );
 
   if (loading) {
@@ -149,7 +141,7 @@ export default function PassbookHistoryScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {pastDrivers.length === 0 ? (
+        {historyDrivers.length === 0 ? (
           <View style={styles.noHistoryRoot}>
             <View
               style={[
@@ -207,7 +199,7 @@ export default function PassbookHistoryScreen() {
           </View>
         ) : (
           <View style={styles.section}>
-            {pastDrivers.map((d) => {
+            {historyDrivers.map((d) => {
               const orgId = d.organization_id;
               const orgName = getOrgName(orgId);
               return (
@@ -235,7 +227,7 @@ export default function PassbookHistoryScreen() {
                     onPress={() =>
                       router.push({
                         pathname: `/(driver)/passbook/${orgId}` as const,
-                        params: { orgName },
+                        params: { orgName, from: 'history' },
                       } as Parameters<typeof router.push>[0])
                     }
                     activeOpacity={0.8}

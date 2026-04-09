@@ -9,6 +9,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
+import Typography from '@/constants/Typography';
 import { LEVELS_CONFIG } from '@/constants/DriverLevels';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -266,7 +267,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: { flex: 1, fontSize: 16, fontWeight: '800', textAlign: 'center' },
+  headerTitle: { flex: 1, ...Typography.headerTitle, textAlign: 'center' },
   headerSpacer: { width: 44 },
 
   // Elite Evolution (dark card — same as user profile)
