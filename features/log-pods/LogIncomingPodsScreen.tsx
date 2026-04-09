@@ -187,6 +187,10 @@ export function LogIncomingPodsScreen() {
     () => Object.values(selectedLRs).reduce((sum, arr) => sum + arr.length, 0),
     [selectedLRs],
   );
+  const selectedTripsCount = useMemo(
+    () => Object.keys(selectedLRs).length,
+    [selectedLRs],
+  );
 
   const [autoSelectedSupplier, setAutoSelectedSupplier] = useState<boolean>(false);
 
@@ -709,6 +713,44 @@ export function LogIncomingPodsScreen() {
 
   const renderTripsTable = () => (
     <View style={styles.tableWrap}>
+      <View style={styles.tableToolbar}>
+        <View style={styles.tableToolbarLeft}>
+          <Text style={styles.tableToolbarTitle}>Trip Selection Grid</Text>
+          <Text style={styles.tableToolbarSub}>
+            {supplierTrips.length} trips • {totalDisplayLRs} unique LRs • {selectedTripsCount} selected trips
+          </Text>
+        </View>
+        <View style={styles.tableToolbarRight}>
+          <Pressable style={styles.tableToolbarBtn} onPress={handleSelectAll}>
+            <Text style={styles.tableToolbarBtnText}>
+              {supplierTrips.length > 0 &&
+              supplierTrips.every((t) => {
+                const pendingLRs =
+                  t.lrNumbers.length > 0
+                    ? t.lrNumbers.filter((lr) => !t.receivedLRs.includes(lr))
+                    : ["N/A"];
+                return (
+                  pendingLRs.length === 0 ||
+                  (selectedLRs[t.internal_id] &&
+                    selectedLRs[t.internal_id].length === pendingLRs.length)
+                );
+              })
+                ? "Clear All"
+                : "Select All"}
+            </Text>
+          </Pressable>
+          {selectedTripsCount > 0 ? (
+            <Pressable
+              style={[styles.tableToolbarBtn, styles.tableToolbarBtnDanger]}
+              onPress={() => setSelectedLRs({})}
+            >
+              <Text style={[styles.tableToolbarBtnText, styles.tableToolbarBtnDangerText]}>
+                Clear Selected
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
       <ScrollView horizontal showsHorizontalScrollIndicator>
         <View style={styles.tableInner}>
           <View style={styles.tableHeadRow}>
@@ -794,9 +836,6 @@ export function LogIncomingPodsScreen() {
             <FontAwesome name="arrow-left" size={20} color={Theme.textMuted} />
           </Pressable>
           <View style={styles.topTitleWrap}>
-            <View style={styles.iconBox}>
-              <FontAwesome name="archive" size={20} color={Theme.primary} />
-            </View>
             <View style={{ flexShrink: 1 }}>
               <Text style={styles.topTitle} numberOfLines={1}>
                 Log Incoming PODs
@@ -1276,15 +1315,6 @@ const styles = StyleSheet.create({
     gap: 12,
     flexShrink: 1,
   },
-  iconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: "rgba(26,35,126,0.1)",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
   topTitle: { fontSize: 17, fontWeight: "800", color: Theme.textPrimaryDark },
   topSub: { fontSize: 11, color: Theme.textMuted, marginTop: 2, flexShrink: 1 },
   topBarRight: { flexDirection: "row", alignItems: "center", gap: 12, flexShrink: 0 },
@@ -1499,6 +1529,57 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
     overflow: "hidden",
+  },
+  tableToolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    gap: 12,
+  },
+  tableToolbarLeft: {
+    flex: 1,
+    minWidth: 0,
+  },
+  tableToolbarTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  tableToolbarSub: {
+    marginTop: 2,
+    fontSize: 11,
+    color: Theme.textMuted,
+    fontWeight: "600",
+  },
+  tableToolbarRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  tableToolbarBtn: {
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: Theme.cardWhite,
+  },
+  tableToolbarBtnText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  tableToolbarBtnDanger: {
+    borderColor: "rgba(176,0,32,0.3)",
+    backgroundColor: "rgba(176,0,32,0.06)",
+  },
+  tableToolbarBtnDangerText: {
+    color: "#b00020",
   },
   tableInner: {
     minWidth: 1400,

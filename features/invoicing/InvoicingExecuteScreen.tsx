@@ -348,9 +348,6 @@ export function InvoicingExecuteScreen() {
             <FontAwesome name="arrow-left" size={20} color={Theme.textMuted} />
           </Pressable>
           <View style={styles.topTitleWrap}>
-            <View style={styles.iconBox}>
-              <FontAwesome name="file-text" size={20} color={Theme.primary} />
-            </View>
             <View>
               <Text style={styles.topTitle}>Revenue & Invoicing</Text>
               <Text style={styles.topSub}>
@@ -799,14 +796,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginHorizontal: 8,
     gap: 12,
-  },
-  iconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: "rgba(26,35,126,0.1)",
-    alignItems: "center",
-    justifyContent: "center",
   },
   topTitle: { fontSize: 17, fontWeight: "800", color: Theme.textPrimaryDark },
   topSub: { fontSize: 11, color: Theme.textMuted, marginTop: 2 },

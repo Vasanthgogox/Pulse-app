@@ -366,9 +366,6 @@ export function PodReconciliationScreen() {
             />
           </Pressable>
           <View style={styles.topTitleWrap}>
-            <View style={styles.iconBox}>
-              <FontAwesome name="tasks" size={20} color={Theme.primary} />
-            </View>
             <View style={{ flexShrink: 1 }}>
               <Text style={styles.topTitle} numberOfLines={1}>
                 POD
@@ -1267,15 +1264,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
     gap: 12,
     flexShrink: 1,
-  },
-  iconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: "rgba(26,35,126,0.1)",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
   },
   topTitle: { fontSize: 17, fontWeight: "800", color: Theme.textPrimaryDark },
   topSub: { fontSize: 11, color: Theme.textMuted, marginTop: 2, flexShrink: 1 },
