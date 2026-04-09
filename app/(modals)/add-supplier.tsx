@@ -44,6 +44,8 @@ export default function AddSupplierScreen() {
       organization_id: invitee.organization_id,
       full_name: invitee.full_name,
       phone: invitee.phone,
+      organization_name: invitee.organization_name,
+      profile_company_name: invitee.profile_company_name,
     };
   };
 

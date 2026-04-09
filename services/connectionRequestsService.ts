@@ -29,6 +29,20 @@ export interface ConnectionInviteeByPhone {
   organization_id: string;
   full_name: string;
   phone: string;
+  /** Matched user's organization name (organizations.name). */
+  organization_name: string;
+  /** Matched user's profile company (profiles.company_name), if set. */
+  profile_company_name: string | null;
+}
+
+/** Prefill: prefer profile company_name, else organization display name. */
+export function inviteeSuggestedCompanyName(invitee: {
+  profile_company_name?: string | null;
+  organization_name?: string;
+}): string {
+  const fromProfile = (invitee.profile_company_name ?? "").trim();
+  if (fromProfile.length > 0) return fromProfile;
+  return (invitee.organization_name ?? "").trim();
 }
 
 export interface ConnectionRequestRow {
@@ -54,6 +68,8 @@ export interface ConnectionInviteeByPhoneRow {
   phone: string;
   organization_id: string;
   full_name: string | null;
+  organization_name?: string | null;
+  profile_company_name?: string | null;
 }
 
 export async function getConnectionInviteeByPhone(phone: string): Promise<{
@@ -75,6 +91,8 @@ export async function getConnectionInviteeByPhone(phone: string): Promise<{
       organization_id: row.organization_id,
       full_name: row.full_name ?? '',
       phone: row.phone ?? normalized,
+      organization_name: row.organization_name ?? '',
+      profile_company_name: row.profile_company_name ?? null,
     },
   };
 }
@@ -118,6 +136,8 @@ export async function getConnectionInviteesByPhones(phones: string[]): Promise<{
       organization_id: r.organization_id,
       full_name: r.full_name ?? '',
       phone: r.phone ?? phoneKey,
+      organization_name: r.organization_name ?? '',
+      profile_company_name: r.profile_company_name ?? null,
     });
   }
   return { error: null, inviteesByPhone };

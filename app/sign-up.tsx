@@ -27,7 +27,7 @@ import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
 import { validateEmail } from '@/lib/emailValidation';
 import { isPhoneValid, validatePhone } from '@/lib/phoneValidation';
-import { validateFullName, validatePassword } from '@/lib/validation';
+import { VALIDATION, maxLength, validateFullName, validatePassword } from '@/lib/validation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
 import { checkExistingUserByPhone, type OperatingModel } from '@/features/auth';
@@ -51,6 +51,7 @@ export default function SignUp() {
   const router = useRouter();
   const [operatingModel, setOperatingModel] = useState<OperatingModel>('HYBRID');
   const [fullName, setFullName] = useState('');
+  const [companyName, setCompanyName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -68,7 +69,7 @@ export default function SignUp() {
   const scrollRef = useRef<ScrollView>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const fieldYRef = useRef({ fullName: 0, phone: 0, email: 0, password: 0 });
+  const fieldYRef = useRef({ fullName: 0, company: 0, phone: 0, email: 0, password: 0 });
 
   /** Extra scroll offset so focused field stays above keyboard. Use larger offset on iOS when focusing password so the field stays above the "Strong Password" / autofill bar. */
   const SCROLL_OFFSET_DEFAULT = 100;
@@ -168,6 +169,17 @@ export default function SignUp() {
       setErrorMsg(fullNameErr);
       return;
     }
+    const companyTrim = companyName.trim();
+    if (companyTrim.length > 0) {
+      const companyErr = maxLength(
+        VALIDATION.COMPANY_NAME_MAX_LENGTH,
+        `Company name must be at most ${VALIDATION.COMPANY_NAME_MAX_LENGTH} characters.`,
+      )(companyTrim);
+      if (companyErr) {
+        setErrorMsg(companyErr);
+        return;
+      }
+    }
     if (!trimmedEmail) {
       setErrorMsg('Please enter email.');
       return;
@@ -205,7 +217,15 @@ export default function SignUp() {
     }
     setLoading(true);
     const phoneToSave = normalizedPhone.length > 0 ? normalizedPhone : undefined;
-    const { error } = await signUp(trimmedEmail, password, fullName.trim() || undefined, 'user', operatingModel, phoneToSave);
+    const { error } = await signUp(
+      trimmedEmail,
+      password,
+      fullName.trim() || undefined,
+      'user',
+      operatingModel,
+      phoneToSave,
+      companyTrim || undefined,
+    );
     setLoading(false);
     if (error) {
       const isNetwork = error.message.includes('Cannot reach server');
@@ -296,6 +316,24 @@ export default function SignUp() {
               autoCorrect={false}
               spellCheck={false}
               autoComplete="name"
+              editable={!loading}
+            />
+          </View>
+          <View
+            style={styles.inputWrap}
+            onLayout={(e) => { fieldYRef.current.company = e.nativeEvent.layout.y; }}
+          >
+            <TextInput
+              style={[styles.input, styles.inputNoMargin]}
+              placeholder="Company name (optional)"
+              placeholderTextColor={Theme.authTextMuted}
+              value={companyName}
+              onChangeText={setCompanyName}
+              onFocus={() => scrollToField('company')}
+              autoCapitalize="words"
+              autoCorrect={false}
+              spellCheck={false}
+              autoComplete="organization"
               editable={!loading}
             />
           </View>

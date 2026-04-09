@@ -193,13 +193,18 @@ export async function fetchInvoicingTrips(
   }
 }
 
-export async function fetchPodReconciliationSummary(): Promise<{
+export async function fetchPodReconciliationSummary(
+  organizationId?: string | null,
+): Promise<{
   error: Error | null;
   summary: PodReconciliationSummary | null;
 }> {
   try {
     const { data, error } = await supabase().rpc(
       "get_pod_reconciliation_summary",
+      organizationId
+        ? { p_organization_id: organizationId }
+        : { p_organization_id: null },
     );
     if (error) throw error;
     const summary = Array.isArray(data) ? data[0] : data;
