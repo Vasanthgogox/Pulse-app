@@ -37,7 +37,7 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
   };
 
   const onLogoPress = () => {
-    router.push('/(tabs)/index');
+    router.navigate('/');
   };
 
   // Ops Agent (index) is full-screen with back button — no bottom nav
