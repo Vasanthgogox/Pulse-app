@@ -12,6 +12,7 @@ import {
   LedgerReportModal,
   type LedgerRow,
 } from "@/features/finance";
+import { LedgerTransactionListView } from "@/features/finance/components/LedgerTransactionListView";
 import {
   buildMonthlyDriverStatement,
   type DriverLedgerEntryForStatement,
@@ -38,7 +39,6 @@ import {
   formatLedgerAmount,
   formatLedgerDate,
   formatLedgerDateTime,
-  formatRelative,
 } from "@/lib/format";
 import {
   getSalaryRequestsByDriverIds,
@@ -193,8 +193,8 @@ export default function DriverDetailScreen({
   >([]);
   const [driverTransactions, setDriverTransactions] = useState<LedgerRow[]>([]);
   const [driverDetailTab, setDriverDetailTab] = useState<
-    "ledger" | "statement"
-  >("ledger");
+    "missions" | "ledger" | "statement"
+  >("missions");
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [expandedLedgerRowId, setExpandedLedgerRowId] = useState<string | null>(
@@ -501,6 +501,30 @@ export default function DriverDetailScreen({
     entityPaid,
     entityPending,
   ]);
+
+  /** Trip details map for Cash Flow list. */
+  const driverTripDetailsMap = useMemo(() => {
+    const m: Record<
+      string,
+      {
+        trip_number: string;
+        drop_location?: string;
+        pickup_area?: string;
+        client_name?: string;
+        pickup_date?: string | null;
+      }
+    > = {};
+    trips.forEach((t) => {
+      m[t.id] = {
+        trip_number: getTripDisplayNumber(t),
+        drop_location: t.drop_location ?? undefined,
+        pickup_area: t.pickup_area ?? undefined,
+        client_name: t.client_name ?? undefined,
+        pickup_date: t.pickup_date ?? undefined,
+      };
+    });
+    return m;
+  }, [trips]);
 
   const monthlyStatement = useMemo(() => {
     const tripsForStatement: TripForStatement[] = trips.map((t) => ({
@@ -876,6 +900,23 @@ export default function DriverDetailScreen({
         <TouchableOpacity
           style={[
             styles.tabItem,
+            driverDetailTab === "missions" && styles.tabItemActive,
+          ]}
+          onPress={() => setDriverDetailTab("missions")}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={[
+              styles.tabItemText,
+              driverDetailTab === "missions" && styles.tabItemTextActive,
+            ]}
+          >
+            MISSIONS
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.tabItem,
             driverDetailTab === "ledger" && styles.tabItemActive,
           ]}
           onPress={() => setDriverDetailTab("ledger")}
@@ -1038,7 +1079,7 @@ export default function DriverDetailScreen({
                       Base Salary (Payable)
                     </Text>
                     <Text style={styles.profileFiscalValue}>
-                      {driverOffer.payableAmount != null &&
+                      {driverOffer?.payableAmount != null &&
                       Number(driverOffer.payableAmount) > 0
                         ? `₹${Number(driverOffer.payableAmount).toLocaleString("en-IN")} / mo`
                         : "—"}
@@ -1049,7 +1090,7 @@ export default function DriverDetailScreen({
                       Trip Commission
                     </Text>
                     <Text style={styles.profileFiscalValue}>
-                      {driverOffer.commissionPercent != null &&
+                      {driverOffer?.commissionPercent != null &&
                       Number(driverOffer.commissionPercent) > 0
                         ? `${driverOffer.commissionPercent}%`
                         : "—"}
@@ -1058,7 +1099,7 @@ export default function DriverDetailScreen({
                   <View style={styles.profileFiscalRow}>
                     <Text style={styles.profileFiscalLabel}>Per-KM Rate</Text>
                     <Text style={styles.profileFiscalValue}>
-                      {driverOffer.commissionPerKm != null &&
+                      {driverOffer?.commissionPerKm != null &&
                       Number(driverOffer.commissionPerKm) > 0
                         ? `₹${driverOffer.commissionPerKm} / km`
                         : "—"}
@@ -1204,7 +1245,7 @@ export default function DriverDetailScreen({
                 <TouchableOpacity
                   style={[styles.linkBtn, linking && styles.linkBtnDisabled]}
                   onPress={canSendMatchedInvite ? handleSendMatchedInvite : handleLinkToAccount}
-                  disabled={linking || inviting || dismissingMatch || inviteAlreadySentForMatch}
+                  disabled={linking || inviting || dismissingMatch || Boolean(inviteAlreadySentForMatch)}
                 >
                   <Text style={styles.linkBtnText}>
                     {inviteAlreadySentForMatch
@@ -1267,7 +1308,7 @@ export default function DriverDetailScreen({
         </View>
       </Modal>
 
-      {driverDetailTab === "ledger" && (
+      {driverDetailTab === "missions" && (
         <ScrollView
           style={styles.tabScroll}
           contentContainerStyle={[
@@ -1625,6 +1666,31 @@ export default function DriverDetailScreen({
                 })
               )}
             </View>
+          </View>
+        </ScrollView>
+      )}
+
+      {driverDetailTab === "ledger" && (
+        <ScrollView
+          style={styles.tabScroll}
+          contentContainerStyle={[
+            styles.tabScrollContent,
+            { paddingBottom: 24 + insets.bottom },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View>
+            <LedgerTransactionListView
+              transactions={sortedDriverLedger}
+              tripDetailsMap={driverTripDetailsMap}
+              tripOptions={tripOptions}
+              useTimelineLayout={true}
+              showFiscalSubTabs={false}
+              showTitle={false}
+              showHistoryHeader={false}
+              showGridFooter={false}
+              embedInParentScroll={true}
+            />
           </View>
         </ScrollView>
       )}
