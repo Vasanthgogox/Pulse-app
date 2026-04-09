@@ -7,7 +7,8 @@ RETURNS TABLE (
   from_org_name text,
   driver_name text,
   status text,
-  created_at timestamptz
+  created_at timestamptz,
+  to_user_id uuid
 )
 LANGUAGE sql
 SECURITY DEFINER
@@ -26,7 +27,8 @@ AS $$
       'Driver'
     ) AS driver_name,
     di.status,
-    di.created_at
+    di.created_at,
+    di.to_user_id
   FROM public.driver_invites di
   LEFT JOIN public.organizations o ON o.id = di.from_organization_id
   LEFT JOIN auth.users u ON u.id = di.to_user_id

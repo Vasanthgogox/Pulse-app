@@ -85,6 +85,7 @@ interface RequestItem {
   status: string;
   created_at: string;
   row?: import("@/services/connectionRequestsService").ConnectionRequestRow;
+  nodeInfo?: Partial<NetworkNode>;
 }
 
 function requestKind(row: RequestItem["row"]): RequestKind {
@@ -104,47 +105,70 @@ function toRequestItems(
     driver_name: string | null;
     status: string;
     created_at: string;
+    to_user_id?: string | null;
   }[],
 ): RequestItem[] {
   const items: RequestItem[] = [];
-  received.forEach((row) => {
-    if (!row) return;
-    items.push({
-      id: row.id,
-      type: "RECEIVED",
-      kind: requestKind(row),
-      from_org_name: row.from_org_name ?? "Unknown",
-      to_org_name: row.to_org_name ?? "Unknown",
-      status: row.status,
-      created_at: row.created_at,
-      row,
+    received.forEach((row) => {
+      if (!row) return;
+      items.push({
+        id: row.id,
+        type: "RECEIVED",
+        kind: requestKind(row),
+        from_org_name: row.from_org_name ?? "Unknown",
+        to_org_name: row.to_org_name ?? "Unknown",
+        status: row.status,
+        created_at: row.created_at,
+        row,
+        nodeInfo: {
+          id: row.from_organization_id,
+          type: requestKind(row) === "CLIENT" ? "CLIENT" : requestKind(row) === "SUPPLIER" ? "SUPPLIER" : "CLIENT", // default or handle mixed
+          name: row.from_org_name ?? "Unknown",
+          isIntegrated: true,
+          status: "PENDING",
+          linked_organization_id: row.from_organization_id // Needed for lazy fetching
+        }
+      });
     });
-  });
-  sent.forEach((row) => {
-    if (!row) return;
-    items.push({
-      id: row.id,
-      type: "SENT",
-      kind: requestKind(row),
-      from_org_name: row.from_org_name ?? "Unknown",
-      to_org_name: row.to_org_name ?? "Unknown",
-      status: row.status,
-      created_at: row.created_at,
-      row,
+    sent.forEach((row) => {
+      if (!row) return;
+      items.push({
+        id: row.id,
+        type: "SENT",
+        kind: requestKind(row),
+        from_org_name: row.from_org_name ?? "Unknown",
+        to_org_name: row.to_org_name ?? "Unknown",
+        status: row.status,
+        created_at: row.created_at,
+        row,
+        nodeInfo: {
+          id: row.to_organization_id,
+          type: requestKind(row) === "CLIENT" ? "CLIENT" : requestKind(row) === "SUPPLIER" ? "SUPPLIER" : "CLIENT", // default or handle mixed
+          name: row.to_org_name ?? "Unknown",
+          isIntegrated: true,
+          status: "PENDING",
+          linked_organization_id: row.to_organization_id // Needed for lazy fetching
+        }
+      });
     });
-  });
-  driverInvites.forEach((d) => {
-    items.push({
-      id: d.id,
-      type: "SENT",
-      kind: "DRIVER_INVITE",
-      from_org_name: d.from_org_name ?? "Unknown",
-      // For driver-invite "sent" requests we display the invitee's name in the card.
-      to_org_name: d.driver_name ?? "Driver",
-      status: d.status,
-      created_at: d.created_at,
+    driverInvites.forEach((d) => {
+      items.push({
+        id: d.id,
+        type: "SENT",
+        kind: "DRIVER_INVITE",
+        from_org_name: d.from_org_name ?? "Unknown",
+        to_org_name: d.driver_name ?? "Driver",
+        status: d.status,
+        created_at: d.created_at,
+        nodeInfo: {
+          type: "DRIVER",
+          id: d.to_user_id || d.id, // Fallback to invite id
+          name: d.driver_name ?? "Driver",
+          isIntegrated: true,
+          status: "PENDING"
+        }
+      });
     });
-  });
   items.sort(
     (a, b) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
@@ -910,12 +934,32 @@ export default function NetworkScreen() {
                           </Text>
                           <View style={styles.networkCardInner}>
                             <View style={styles.networkCardInnerRow}>
-                              <View style={styles.networkCardIconWrap}>
-                                <Building2
-                                  size={14}
-                                  strokeWidth={1.5}
-                                  color={Theme.primary}
-                                />
+                              <View
+                                style={[
+                                  styles.networkCardIconWrap,
+                                  styles.networkCardIconWrapOn, // Assuming active/on platform for requests visually
+                                ]}
+                              >
+                                <View style={styles.networkAvatarInCard}>
+                                  {item.nodeInfo ? (
+                                    <NetworkAvatar
+                                      node={item.nodeInfo as NetworkNode}
+                                      onPlatform={true}
+                                    />
+                                  ) : item.kind === "DRIVER_INVITE" ? (
+                                    <User
+                                      size={18}
+                                      strokeWidth={1.5}
+                                      color={Theme.darkGreen}
+                                    />
+                                  ) : (
+                                    <Building2
+                                      size={18}
+                                      strokeWidth={1.5}
+                                      color={Theme.darkGreen}
+                                    />
+                                  )}
+                                </View>
                               </View>
                               <View style={styles.networkCardInnerCol}>
                                 <Text style={styles.networkCardInnerLabel}>
@@ -1771,12 +1815,12 @@ const styles = StyleSheet.create({
   },
   connectionDot: {
     position: "absolute",
-    right: 6,
-    bottom: 6,
-    width: 12,
-    height: 12,
-    borderRadius: 7,
-    borderWidth: 2,
+    right: -2,
+    bottom: -2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1.5,
     borderColor: Theme.screenBackground,
   },
   connectionDotActive: {
