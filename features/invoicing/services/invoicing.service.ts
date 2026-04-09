@@ -76,6 +76,20 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function resolveSupplierName(
+  row: TripRecord,
+  supplierNameById?: Map<string, string>,
+): string {
+  const supplierId = str((row as { supplier_id?: string | null }).supplier_id);
+  const byId = supplierId ? str(supplierNameById?.get(supplierId)) : "";
+  return (
+    byId ||
+    str((row as { vendor_name?: string | null }).vendor_name) ||
+    str((row as { supplier_name?: string | null }).supplier_name) ||
+    "Unknown Supplier"
+  );
+}
+
 export function getTripStringId(row: TripRecord): string {
   const r = row as {
     trip_id?: string;
@@ -98,7 +112,10 @@ function passesInvoicingFilter(t: TripRecord): boolean {
   return true;
 }
 
-function mapRowToView(row: TripRecord): InvoicingTripView {
+function mapRowToView(
+  row: TripRecord,
+  supplierNameById?: Map<string, string>,
+): InvoicingTripView {
   const podStatus = str(
     (row as { pod_status?: string | null }).pod_status,
   ).toLowerCase();
@@ -141,10 +158,7 @@ function mapRowToView(row: TripRecord): InvoicingTripView {
     internal_id: str(row.id),
     id: getTripStringId(row),
     client: str((row as { client_name?: string | null }).client_name) || "—",
-    supplier_name:
-      str((row as { vendor_name?: string | null }).vendor_name) ||
-      str((row as { supplier_name?: string | null }).supplier_name) ||
-      "Unknown Supplier",
+    supplier_name: resolveSupplierName(row, supplierNameById),
     route,
     date: tripDate,
     amount:
@@ -190,7 +204,34 @@ export async function fetchInvoicingTrips(
     }
     const merged = Array.from(map.values()).filter(passesInvoicingFilter);
 
-    const views = merged.map(mapRowToView);
+    const supplierIds = Array.from(
+      new Set(
+        merged
+          .map((trip) =>
+            str((trip as { supplier_id?: string | null }).supplier_id),
+          )
+          .filter(Boolean),
+      ),
+    );
+    const supplierNameById = new Map<string, string>();
+
+    if (supplierIds.length > 0) {
+      const { data: supData } = await supabase()
+        .from("suppliers")
+        .select("id, name, company_name")
+        .in("id", supplierIds);
+
+      for (const s of supData ?? []) {
+        const id = str((s as { id?: string | null }).id);
+        if (!id) continue;
+        const name =
+          str((s as { name?: string | null }).name) ||
+          str((s as { company_name?: string | null }).company_name);
+        if (name) supplierNameById.set(id, name);
+      }
+    }
+
+    const views = merged.map((row) => mapRowToView(row, supplierNameById));
     return { error: null, trips: views };
   } catch (e) {
     return { error: e instanceof Error ? e : new Error(String(e)), trips: [] };
