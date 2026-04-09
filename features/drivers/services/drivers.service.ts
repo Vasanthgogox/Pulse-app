@@ -904,6 +904,7 @@ export interface DriverInviteSentRow {
   driver_name: string | null;
   status: string;
   created_at: string;
+  to_user_id?: string | null;
 }
 
 /** Match state when a manual driver's phone later signs up in app. */
@@ -1039,33 +1040,27 @@ export async function getDriverInvitesSent(orgId: string): Promise<{
   error: Error | null;
   invites: DriverInviteSentRow[];
 }> {
-  // Prefer an RPC because client-side RLS typically blocks reading invitee details (auth.users/profiles).
-  const { data, error } = await supabase().rpc("get_driver_invites_sent", {
-    p_org_id: orgId,
-  });
+  // Always query the table directly so we can get to_user_id, since the RPC might not return it.
+  const { data, error } = await supabase()
+    .from("driver_invites")
+    .select("id, from_org_name, invitee_name, status, created_at, to_user_id")
+    .eq("from_organization_id", orgId)
+    .order("created_at", { ascending: false });
+
   if (error) {
-    // Fallback: show invites even when the RPC isn't available (e.g. not deployed yet / RLS differences).
-    const { data: fallback, error: fallbackErr } = await supabase()
-      .from("driver_invites")
-      .select("id, from_org_name, invitee_name, status, created_at")
-      .eq("from_organization_id", orgId)
-      .order("created_at", { ascending: false });
-    if (fallbackErr)
-      return { error: new Error(fallbackErr.message), invites: [] };
-    return {
-      error: null,
-      invites: (
-        (fallback ?? []) as Array<{
-          id: string;
-          from_org_name: string | null;
-          invitee_name: string | null;
-          status: string;
-          created_at: string;
-        }>
-      ).map((r) => ({ ...r, driver_name: r.invitee_name ?? null })),
-    };
+    return { error: new Error(error.message), invites: [] };
   }
-  return { error: null, invites: (data ?? []) as DriverInviteSentRow[] };
+
+  const invites = (data ?? []).map((r) => ({
+    id: r.id,
+    from_org_name: r.from_org_name ?? null,
+    driver_name: r.invitee_name ?? null,
+    status: r.status,
+    created_at: r.created_at,
+    to_user_id: r.to_user_id ?? null,
+  }));
+
+  return { error: null, invites };
 }
 
 /**
