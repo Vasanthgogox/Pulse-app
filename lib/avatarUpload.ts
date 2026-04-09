@@ -111,7 +111,7 @@ export async function pickAndUploadAvatar(userId: string): Promise<PickAndUpload
         previewUri: null,
         error: new Error(
           isRls
-            ? `Storage permissions blocked. Your admin needs to add RLS policies for the ${AVATAR_BUCKET} bucket (see docs/AVATAR_STORAGE_RLS.md).`
+            ? `Storage permissions blocked for bucket "${AVATAR_BUCKET}" (path: "${path}"). Supabase says: ${msg}. Add/verify RLS policies in docs/AVATAR_STORAGE_RLS.md.`
             : msg
         ),
       };
