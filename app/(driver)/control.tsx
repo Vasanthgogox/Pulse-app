@@ -1,6 +1,7 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import Typography from "@/constants/Typography";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDriverThemeColors } from "@/contexts/DriverThemeContext";
 import {
@@ -1301,8 +1302,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: "800",
+    ...Typography.headerTitle,
     color: Theme.textOnDark,
   },
   eta: { alignItems: "flex-end" },

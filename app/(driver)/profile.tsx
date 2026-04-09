@@ -1,12 +1,13 @@
 /**
- * Driver Profile — flat UI: profile block + menu list on white background.
- * Professional green accent (Theme.positive); spacing from Layout.
+ * Driver Profile — flat UI: profile block + menu list; respects Driver theme (light/dark).
  */
 import { getAvatarUriForSeed } from '@/constants/DriverLevels';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
+import Typography from '@/constants/Typography';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
+import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { EditProfileModal } from '@/features/auth/components/EditProfileModal';
 import * as authService from '@/features/auth/services/auth.service';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
@@ -16,7 +17,6 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Image,
     KeyboardAvoidingView,
     Modal,
@@ -30,8 +30,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-/** Professional green accent for icons and actions. */
-const ACCENT = Theme.positive;
 /** Horizontal padding aligned with Layout. */
 const SCREEN_PADDING_H = Layout.screenPaddingHorizontal;
 /** Menu row horizontal inset for icon/label/chevron alignment. */
@@ -53,10 +51,10 @@ const DEFAULT_TAGLINE = 'Trust your feelings, be a good human beings';
 export default function DriverProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const colors = useDriverThemeColors();
   const { user, profile, signOut, refreshSession } = useAuth();
   const { avatarSeed, setAvatarSeed } = useDriverAvatar();
   const { avatarUri } = useDriverAvatarUri();
-  const [avatarOverrideUri, setAvatarOverrideUri] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [showEditQuoteModal, setShowEditQuoteModal] = useState(false);
@@ -70,9 +68,7 @@ export default function DriverProfileScreen() {
     user?.email?.split('@')[0] ||
     'Pilot';
   const tagline = profile?.status_text?.trim() || DEFAULT_TAGLINE;
-  const displayAvatarUri = avatarError
-    ? getAvatarUriForSeed(displayName || 'pilot')
-    : (avatarOverrideUri || avatarUri || getAvatarUriForSeed(displayName || 'pilot'));
+  const displayAvatarUri = avatarError ? getAvatarUriForSeed(displayName || 'pilot') : (avatarUri || getAvatarUriForSeed(displayName || 'pilot'));
 
   const handleCloseEditProfile = () => {
     setShowEditProfileModal(false);
@@ -116,23 +112,12 @@ export default function DriverProfileScreen() {
   };
 
   const handleSignOut = async () => {
-    if (typeof window !== 'undefined' && window.confirm) {
-      if (!window.confirm('Are you sure you want to sign out?')) return;
-    } else {
-      const confirmed = await new Promise((resolve) => {
-        Alert.alert('Sign out', 'Are you sure you want to sign out?', [
-          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-          { text: 'Sign out', style: 'destructive', onPress: () => resolve(true) },
-        ]);
-      });
-      if (!confirmed) return;
-    }
     await signOut();
     router.replace('/sign-in');
   };
 
   return (
-    <View style={[styles.outer, { backgroundColor: Theme.screenBackground }]}>
+    <View style={[styles.outer, { backgroundColor: colors.background }]}>
       <View
         style={[
           styles.header,
@@ -140,6 +125,7 @@ export default function DriverProfileScreen() {
             paddingTop: insets.top + Layout.driverHeaderTopOffset,
             paddingHorizontal: Layout.driverHeaderHorizontalPadding,
             paddingBottom: Layout.driverHeaderBottomPadding,
+            borderBottomColor: colors.border,
           },
         ]}
       >
@@ -149,16 +135,16 @@ export default function DriverProfileScreen() {
           activeOpacity={0.7}
           accessibilityLabel="Back"
         >
-          <FontAwesome name="chevron-left" size={20} color={Theme.textPrimaryDark} />
+          <FontAwesome name="chevron-left" size={20} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Profile</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
         <TouchableOpacity
           style={styles.searchBtn}
           onPress={() => {}}
           activeOpacity={0.7}
           accessibilityLabel="Search"
         >
-          <FontAwesome name="search" size={20} color={ACCENT} />
+          <FontAwesome name="search" size={20} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
@@ -178,16 +164,16 @@ export default function DriverProfileScreen() {
         >
           <Image
             source={{ uri: displayAvatarUri }}
-            style={styles.avatar}
+            style={[styles.avatar, { backgroundColor: colors.surfaceElevated }]}
             onError={() => setAvatarError(true)}
             onLoad={() => setAvatarError(false)}
           />
           <View style={styles.profileInfo}>
-            <Text style={styles.profileName} numberOfLines={1}>
+            <Text style={[styles.profileName, { color: colors.text }]} numberOfLines={1}>
               {displayName}
             </Text>
             <View style={styles.taglineRow}>
-              <Text style={styles.profileTagline} numberOfLines={2}>
+              <Text style={[styles.profileTagline, { color: colors.textMuted }]} numberOfLines={2}>
                 {tagline}
               </Text>
               <TouchableOpacity
@@ -198,7 +184,7 @@ export default function DriverProfileScreen() {
                 accessibilityLabel="Edit quote"
                 accessibilityRole="button"
               >
-                <FontAwesome name="pencil" size={14} color={ACCENT} />
+                <FontAwesome name="pencil" size={14} color={colors.primary} />
               </TouchableOpacity>
             </View>
           </View>
@@ -210,7 +196,7 @@ export default function DriverProfileScreen() {
               key={item.id}
               style={[
                 styles.menuRow,
-                index > 0 && styles.menuRowDivider,
+                index > 0 && [styles.menuRowDivider, { borderTopColor: colors.border }],
                 { paddingLeft: MENU_ROW_PADDING_H, paddingRight: MENU_ROW_PADDING_H },
               ]}
               onPress={() => handleMenuPress(item.id)}
@@ -219,11 +205,11 @@ export default function DriverProfileScreen() {
               accessibilityRole="button"
             >
               <View style={styles.menuRowLeft}>
-                <FontAwesome name={item.icon} size={20} color={ACCENT} style={styles.menuIcon} />
-                <Text style={styles.menuLabel} numberOfLines={1}>{item.label}</Text>
+                <FontAwesome name={item.icon} size={20} color={colors.primary} style={styles.menuIcon} />
+                <Text style={[styles.menuLabel, { color: colors.text }]} numberOfLines={1}>{item.label}</Text>
               </View>
               <View style={styles.menuRowRight}>
-                <FontAwesome name="chevron-right" size={14} color={Theme.textMuted} />
+                <FontAwesome name="chevron-right" size={14} color={colors.textMuted} />
               </View>
             </TouchableOpacity>
           ))}
@@ -236,8 +222,8 @@ export default function DriverProfileScreen() {
           accessibilityLabel="Sign out"
           accessibilityRole="button"
         >
-          <FontAwesome name="sign-out" size={18} color={Theme.textPrimaryDark} />
-          <Text style={styles.signOutText}>Sign out</Text>
+          <FontAwesome name="sign-out" size={18} color={colors.text} />
+          <Text style={[styles.signOutText, { color: colors.text }]}>Sign out</Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -248,13 +234,7 @@ export default function DriverProfileScreen() {
         initialPhone={profile?.phone ?? ''}
         initialCompanyName={profile?.company_name ?? ''}
         email={user?.email ?? ''}
-        onPhotoUpdated={async (payload) => {
-          if (payload?.avatarUri?.trim()) {
-            setAvatarOverrideUri(payload.avatarUri);
-            setAvatarError(false);
-          }
-          await refreshSession();
-        }}
+        onPhotoUpdated={refreshSession}
         initialAvatarSeed={avatarSeed}
         onPresetSelected={(seed) => {
           setAvatarSeed(seed);
@@ -270,11 +250,11 @@ export default function DriverProfileScreen() {
         onRequestClose={() => !quoteSaving && setShowEditQuoteModal(false)}
       >
         <KeyboardAvoidingView
-          style={[styles.quoteModalOuter, { paddingTop: insets.top, paddingBottom: insets.bottom + 16 }]}
+          style={[styles.quoteModalOuter, { paddingTop: insets.top, paddingBottom: insets.bottom + 16, backgroundColor: colors.background }]}
           behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
           keyboardVerticalOffset={0}
         >
-          <View style={[styles.quoteModalHeader, { borderBottomColor: Theme.borderLight }]}>
+          <View style={[styles.quoteModalHeader, { borderBottomColor: colors.border }]}>
             <TouchableOpacity
               onPress={() => !quoteSaving && setShowEditQuoteModal(false)}
               style={styles.quoteModalHeaderBtn}
@@ -282,9 +262,9 @@ export default function DriverProfileScreen() {
               disabled={quoteSaving}
               accessibilityLabel="Cancel"
             >
-              <Text style={[styles.quoteModalCancelText, { color: Theme.textSecondary }]}>Cancel</Text>
+              <Text style={[styles.quoteModalCancelText, { color: colors.textMuted }]}>Cancel</Text>
             </TouchableOpacity>
-            <Text style={styles.quoteModalTitle}>Edit quote</Text>
+            <Text style={[styles.quoteModalTitle, { color: colors.text }]}>Edit quote</Text>
             <TouchableOpacity
               onPress={handleSaveQuote}
               style={[styles.quoteModalHeaderBtn, styles.quoteModalHeaderBtnRight]}
@@ -293,9 +273,9 @@ export default function DriverProfileScreen() {
               accessibilityLabel="Save"
             >
               {quoteSaving ? (
-                <ActivityIndicator size="small" color={ACCENT} />
+                <ActivityIndicator size="small" color={colors.primary} />
               ) : (
-                <Text style={[styles.quoteModalSaveText, { color: ACCENT }]}>Save</Text>
+                <Text style={[styles.quoteModalSaveText, { color: colors.primary }]}>Save</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -306,9 +286,9 @@ export default function DriverProfileScreen() {
             showsVerticalScrollIndicator={false}
           >
             <TextInput
-              style={[styles.quoteInput, { borderColor: Theme.borderInput, backgroundColor: Theme.surfaceForm, color: Theme.textPrimary }]}
+              style={[styles.quoteInput, { borderColor: colors.border, backgroundColor: colors.inputBg, color: colors.text }]}
               placeholder="e.g. Trust your feelings, be a good human being"
-              placeholderTextColor={Theme.textMuted}
+              placeholderTextColor={colors.placeholder}
               value={quoteDraft}
               onChangeText={(t) => { setQuoteDraft(t); setQuoteError(null); }}
               multiline
@@ -318,7 +298,7 @@ export default function DriverProfileScreen() {
               spellCheck
               editable={!quoteSaving}
             />
-            <Text style={[styles.quoteCharCount, { color: Theme.textMuted }]}>
+            <Text style={[styles.quoteCharCount, { color: colors.textMuted }]}>
               {quoteDraft.length}/{VALIDATION.STATUS_TEXT_MAX_LENGTH}
             </Text>
             {quoteError ? <Text style={styles.quoteError}>{quoteError}</Text> : null}
@@ -338,7 +318,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
   },
   backBtn: {
     width: 44,
@@ -348,9 +327,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     flex: 1,
-    fontSize: 22,
-    fontWeight: '800',
-    color: Theme.textPrimaryDark,
+    ...Typography.headerTitle,
     textAlign: 'center',
   },
   searchBtn: {
@@ -373,7 +350,6 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: Theme.surfaceLight,
     marginRight: 16,
   },
   profileInfo: { flex: 1, minWidth: 0 },
@@ -389,13 +365,11 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 17,
     fontWeight: '700',
-    color: Theme.textPrimaryDark,
     marginBottom: 2,
   },
   profileTagline: {
     fontSize: 13,
     fontWeight: '400',
-    color: Theme.textSecondary,
     lineHeight: 18,
   },
   menuList: {
@@ -410,7 +384,6 @@ const styles = StyleSheet.create({
   },
   menuRowDivider: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
   },
   menuRowLeft: {
     flexDirection: 'row',
@@ -431,7 +404,6 @@ const styles = StyleSheet.create({
   menuLabel: {
     fontSize: 15,
     fontWeight: '500',
-    color: Theme.textPrimaryDark,
   },
   signOutBtn: {
     flexDirection: 'row',
@@ -444,11 +416,9 @@ const styles = StyleSheet.create({
   signOutText: {
     fontSize: 15,
     fontWeight: '600',
-    color: Theme.textPrimaryDark,
   },
   quoteModalOuter: {
     flex: 1,
-    backgroundColor: Theme.screenBackground,
   },
   quoteModalHeader: {
     flexDirection: 'row',
@@ -472,7 +442,6 @@ const styles = StyleSheet.create({
   quoteModalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: Theme.textPrimaryDark,
   },
   quoteModalSaveText: {
     fontSize: 16,

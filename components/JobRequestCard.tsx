@@ -3,19 +3,19 @@
  * Earnings header, pickup/drop-off, distance/ETA pill, hold-to-accept button.
  * No close button; no swipe left/right.
  */
-import Theme from '@/constants/Theme';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import React, { useEffect, useRef, useState } from 'react';
+import Theme from "@/constants/Theme";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
+import React, { useEffect, useRef, useState } from "react";
 import {
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from "react-native";
 
 const CARD_PADDING = 24;
 const CARD_PADDING_BOTTOM = 20;
@@ -56,6 +56,14 @@ export interface JobRequestCardProps {
   disabled?: boolean;
   /** Optional: accent color for earnings icon and progress (default Theme.positive) */
   accentColor?: string;
+  /** Large currency line above "ESTIMATED EARNINGS". Default Theme.textPrimaryDark; use Theme.textOnPrimary on dark surfaces */
+  earningsAmountColor?: string;
+  /** Primary body text: addresses, OTP title/digits (not the light distance/ETA pill). Default Theme.textPrimaryDark */
+  primaryTextColor?: string;
+  /** Muted labels: PICKUP/DROP-OFF, ESTIMATED EARNINGS, icons. Default Theme.textMuted */
+  mutedTextColor?: string;
+  /** Hold-to-accept bar background. Default Theme.textPrimaryDark */
+  holdTrackColor?: string;
   /** Optional: error message to show above swipe bar (e.g. accept failed) */
   errorMessage?: string | null;
   /** Optional: show OTP entry as next step inside same card */
@@ -73,7 +81,7 @@ export interface JobRequestCardProps {
    * - "card": default rounded card frame (used in standalone lists)
    * - "page": frameless page inside the existing bottom sheet container
    */
-  variant?: 'card' | 'page';
+  variant?: "card" | "page";
 }
 
 export function JobRequestCard({
@@ -89,16 +97,20 @@ export function JobRequestCard({
   requireOtp = false,
   disabled = false,
   accentColor = Theme.positive,
+  earningsAmountColor = Theme.textPrimaryDark,
+  primaryTextColor = Theme.textPrimaryDark,
+  mutedTextColor = Theme.textMuted,
+  holdTrackColor = Theme.textPrimaryDark,
   errorMessage = null,
   otpMode = false,
-  otpValue = '',
+  otpValue = "",
   onOtpChange,
   onOtpSubmit,
   otpSubmitting = false,
   otpError = null,
   onOtpCancel,
   edgeToEdge = false,
-  variant = 'card',
+  variant = "card",
 }: JobRequestCardProps) {
   const [isAccepted, setIsAccepted] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
@@ -153,11 +165,13 @@ export function JobRequestCard({
   return (
     <View
       style={[
-        variant === 'page'
+        variant === "page"
           ? styles.page
           : [
               styles.card,
-              Platform.OS === 'ios' ? styles.cardShadowIos : styles.cardShadowAndroid,
+              Platform.OS === "ios"
+                ? styles.cardShadowIos
+                : styles.cardShadowAndroid,
               { marginHorizontal: edgeToEdge ? 0 : CARD_MARGIN_H },
             ],
       ]}
@@ -168,10 +182,14 @@ export function JobRequestCard({
           style={styles.collapseHandle}
           activeOpacity={0.85}
           accessibilityRole="button"
-          accessibilityLabel={collapsed ? 'Expand' : 'Collapse'}
+          accessibilityLabel={collapsed ? "Expand" : "Collapse"}
           hitSlop={12}
         >
-          <FontAwesome name={collapsed ? 'chevron-up' : 'chevron-down'} size={16} color={Theme.textMuted} />
+          <FontAwesome
+            name={collapsed ? "chevron-up" : "chevron-down"}
+            size={16}
+            color={mutedTextColor}
+          />
         </TouchableOpacity>
       ) : null}
       {otpMode ? (
@@ -182,68 +200,101 @@ export function JobRequestCard({
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.otpPageWrap}>
-          <Text style={[styles.otpPageTitle, { color: Theme.textPrimaryDark }]}>Enter trip OTP</Text>
-          <Text style={[styles.otpPageSubtitle, { color: Theme.textMuted }]}>
-            Enter the 6-digit OTP shared by your dispatcher to claim this trip.
-          </Text>
-          <Text style={[styles.otpPageRoute, { color: Theme.textPrimaryDark }]} numberOfLines={2}>
-            {pickup || 'Pickup'} to {dropoff || 'Drop-off'}
-          </Text>
-          <TouchableOpacity
-            style={styles.otpBoxRow}
-            onPress={() => otpInputRef.current?.focus()}
-            activeOpacity={1}
-          >
-            {Array.from({ length: OTP_LENGTH }).map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.otpBox,
-                  {
-                    borderColor: otpValue.length === i ? accentColor : Theme.border,
-                    backgroundColor: Theme.surfaceLight,
-                  },
-                ]}
-              >
-                <Text style={[styles.otpBoxDigit, { color: Theme.textPrimaryDark }]}>{otpValue[i] ?? ''}</Text>
-              </View>
-            ))}
-          </TouchableOpacity>
-          <TextInput
-            ref={otpInputRef}
-            value={otpValue}
-            onChangeText={(value) => onOtpChange?.(value.replace(/\D/g, '').slice(0, OTP_LENGTH))}
-            keyboardType="number-pad"
-            maxLength={OTP_LENGTH}
-            style={styles.otpHiddenInput}
-            caretHidden
-            autoFocus
-          />
-          {otpError ? <Text style={[styles.errorText, { color: Theme.negative }]}>{otpError}</Text> : null}
-          <TouchableOpacity
-            onPress={onOtpSubmit}
-            style={[
-              styles.otpSubmitBtn,
-              { backgroundColor: accentColor },
-              (otpSubmitting || otpValue.length !== OTP_LENGTH) && styles.holdBtnDisabled,
-            ]}
-            disabled={otpSubmitting || otpValue.length !== OTP_LENGTH}
-            activeOpacity={0.85}
-          >
-            {otpSubmitting ? (
-              <Text style={styles.otpSubmitText}>Verifying...</Text>
-            ) : (
-              <>
-                <FontAwesome name="check" size={16} color={Theme.textOnPrimary} />
-                <Text style={styles.otpSubmitText}>Verify OTP</Text>
-              </>
-            )}
-          </TouchableOpacity>
-          {onOtpCancel ? (
-            <TouchableOpacity onPress={onOtpCancel} style={styles.declineLinkWrap} activeOpacity={0.7}>
-              <Text style={[styles.declineLink, { color: Theme.textMuted }]}>Cancel</Text>
+            <Text
+              style={[styles.otpPageTitle, { color: primaryTextColor }]}
+            >
+              Enter trip OTP
+            </Text>
+            <Text style={[styles.otpPageSubtitle, { color: mutedTextColor }]}>
+              Enter the 6-digit OTP shared by your dispatcher to claim this
+              trip.
+            </Text>
+            <Text
+              style={[styles.otpPageRoute, { color: primaryTextColor }]}
+              numberOfLines={2}
+            >
+              {pickup || "Pickup"} to {dropoff || "Drop-off"}
+            </Text>
+            <TouchableOpacity
+              style={styles.otpBoxRow}
+              onPress={() => otpInputRef.current?.focus()}
+              activeOpacity={1}
+            >
+              {Array.from({ length: OTP_LENGTH }).map((_, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.otpBox,
+                    {
+                      borderColor:
+                        otpValue.length === i ? accentColor : Theme.border,
+                      backgroundColor: Theme.surfaceLight,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.otpBoxDigit,
+                      { color: primaryTextColor },
+                    ]}
+                  >
+                    {otpValue[i] ?? ""}
+                  </Text>
+                </View>
+              ))}
             </TouchableOpacity>
-          ) : null}
+            <TextInput
+              ref={otpInputRef}
+              value={otpValue}
+              onChangeText={(value) =>
+                onOtpChange?.(value.replace(/\D/g, "").slice(0, OTP_LENGTH))
+              }
+              keyboardType="number-pad"
+              maxLength={OTP_LENGTH}
+              style={styles.otpHiddenInput}
+              caretHidden
+              autoFocus
+            />
+            {otpError ? (
+              <Text style={[styles.errorText, { color: Theme.negative }]}>
+                {otpError}
+              </Text>
+            ) : null}
+            <TouchableOpacity
+              onPress={onOtpSubmit}
+              style={[
+                styles.otpSubmitBtn,
+                { backgroundColor: accentColor },
+                (otpSubmitting || otpValue.length !== OTP_LENGTH) &&
+                  styles.holdBtnDisabled,
+              ]}
+              disabled={otpSubmitting || otpValue.length !== OTP_LENGTH}
+              activeOpacity={0.85}
+            >
+              {otpSubmitting ? (
+                <Text style={styles.otpSubmitText}>Verifying...</Text>
+              ) : (
+                <>
+                  <FontAwesome
+                    name="check"
+                    size={16}
+                    color={Theme.textOnPrimary}
+                  />
+                  <Text style={styles.otpSubmitText}>Verify OTP</Text>
+                </>
+              )}
+            </TouchableOpacity>
+            {onOtpCancel ? (
+              <TouchableOpacity
+                onPress={onOtpCancel}
+                style={styles.declineLinkWrap}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.declineLink, { color: mutedTextColor }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </ScrollView>
       ) : (
@@ -251,14 +302,33 @@ export function JobRequestCard({
           {/* Header: earnings only (no close button) */}
           <View style={styles.header}>
             <View style={styles.earningsRow}>
-              <View style={[styles.earningsIconWrap, { backgroundColor: `${accentColor}20` }]}>
-                <FontAwesome name="money" size={EARNINGS_ICON_INNER} color={accentColor} />
+              <View
+                style={[
+                  styles.earningsIconWrap,
+                  { backgroundColor: `${accentColor}20` },
+                ]}
+              >
+                <FontAwesome
+                  name="money"
+                  size={EARNINGS_ICON_INNER}
+                  color={accentColor}
+                />
               </View>
               <View style={styles.earningsTextWrap}>
-                <Text style={[styles.earningsAmount, { color: Theme.textPrimaryDark }]} numberOfLines={1}>
+                <Text
+                  style={[
+                    styles.earningsAmount,
+                    { color: earningsAmountColor },
+                  ]}
+                  numberOfLines={1}
+                >
                   {earnings}
                 </Text>
-                <Text style={[styles.earningsLabel, { color: Theme.textMuted }]}>ESTIMATED EARNINGS</Text>
+                <Text
+                  style={[styles.earningsLabel, { color: mutedTextColor }]}
+                >
+                  ESTIMATED EARNINGS
+                </Text>
               </View>
             </View>
           </View>
@@ -266,15 +336,44 @@ export function JobRequestCard({
           {!collapsed ? (
             <>
               {/* Distance + ETA pill */}
-              <View style={[styles.pill, { backgroundColor: Theme.surfaceLight, borderColor: Theme.border }]}>
+              <View
+                style={[
+                  styles.pill,
+                  {
+                    backgroundColor: Theme.surfaceLight,
+                    borderColor: Theme.border,
+                  },
+                ]}
+              >
                 <View style={styles.pillItem}>
-                  <FontAwesome name="paper-plane" size={16} color={Theme.textMuted} />
-                  <Text style={[styles.pillText, { color: Theme.textPrimaryDark }]}>{distance}</Text>
+                  <FontAwesome
+                    name="paper-plane"
+                    size={16}
+                    color={Theme.textMuted}
+                  />
+                  <Text
+                    style={[styles.pillText, { color: Theme.textPrimaryDark }]}
+                  >
+                    {distance}
+                  </Text>
                 </View>
-                <View style={[styles.pillDivider, { backgroundColor: Theme.border }]} />
+                <View
+                  style={[
+                    styles.pillDivider,
+                    { backgroundColor: Theme.border },
+                  ]}
+                />
                 <View style={styles.pillItem}>
-                  <FontAwesome name="clock-o" size={16} color={Theme.textMuted} />
-                  <Text style={[styles.pillText, { color: Theme.textPrimaryDark }]}>{eta}</Text>
+                  <FontAwesome
+                    name="clock-o"
+                    size={16}
+                    color={Theme.textMuted}
+                  />
+                  <Text
+                    style={[styles.pillText, { color: Theme.textPrimaryDark }]}
+                  >
+                    {eta}
+                  </Text>
                 </View>
               </View>
               <View style={styles.routeWrap}>
@@ -282,33 +381,78 @@ export function JobRequestCard({
                   <View
                     style={[
                       styles.routeIconWrap,
-                      { backgroundColor: Theme.surfaceLight, borderColor: Theme.border, borderWidth: 1 },
+                      {
+                        backgroundColor: Theme.surfaceLight,
+                        borderColor: Theme.border,
+                        borderWidth: 1,
+                      },
                     ]}
                   >
-                    <View style={[styles.pickupDot, { backgroundColor: Theme.textPrimaryDark }]} />
+                    <View
+                      style={[
+                        styles.pickupDot,
+                        { backgroundColor: Theme.textPrimaryDark },
+                      ]}
+                    />
                   </View>
                   <View style={styles.routeTextWrap}>
-                    <Text style={[styles.routeLabel, { color: Theme.textMuted }]}>PICKUP</Text>
-                    <Text style={[styles.routeAddress, { color: Theme.textPrimaryDark }]} numberOfLines={2}>
-                      {pickup || '—'}
+                    <Text
+                      style={[styles.routeLabel, { color: mutedTextColor }]}
+                    >
+                      PICKUP
+                    </Text>
+                    <Text
+                      style={[
+                        styles.routeAddress,
+                        { color: primaryTextColor },
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {pickup || "—"}
                     </Text>
                   </View>
                 </View>
-                <View style={[styles.connectorLine, { backgroundColor: Theme.border }]} />
+                <View
+                  style={[
+                    styles.connectorLine,
+                    { backgroundColor: Theme.border },
+                  ]}
+                />
                 <View style={styles.routeRow}>
-                  <View style={[styles.routeIconWrap, { backgroundColor: `${accentColor}20` }]}>
-                    <FontAwesome name="map-marker" size={14} color={accentColor} />
+                  <View
+                    style={[
+                      styles.routeIconWrap,
+                      { backgroundColor: `${accentColor}20` },
+                    ]}
+                  >
+                    <FontAwesome
+                      name="map-marker"
+                      size={14}
+                      color={accentColor}
+                    />
                   </View>
                   <View style={styles.routeTextWrap}>
-                    <Text style={[styles.routeLabel, { color: Theme.textMuted }]}>DROP-OFF</Text>
-                    <Text style={[styles.routeAddress, { color: Theme.textPrimaryDark }]} numberOfLines={2}>
-                      {dropoff || '—'}
+                    <Text
+                      style={[styles.routeLabel, { color: mutedTextColor }]}
+                    >
+                      DROP-OFF
+                    </Text>
+                    <Text
+                      style={[
+                        styles.routeAddress,
+                        { color: primaryTextColor },
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {dropoff || "—"}
                     </Text>
                   </View>
                 </View>
               </View>
               {errorMessage ? (
-                <Text style={[styles.errorText, { color: Theme.negative }]}>{errorMessage}</Text>
+                <Text style={[styles.errorText, { color: Theme.negative }]}>
+                  {errorMessage}
+                </Text>
               ) : null}
               {/* Hold to accept */}
               <Pressable
@@ -317,25 +461,31 @@ export function JobRequestCard({
                 style={[styles.holdBtnWrap, disabled && styles.holdBtnDisabled]}
                 disabled={disabled}
               >
-                <View style={[styles.holdTrack, { backgroundColor: Theme.textPrimaryDark }]}>
+                <View
+                  style={[
+                    styles.holdTrack,
+                    { backgroundColor: holdTrackColor },
+                  ]}
+                >
                   <View
                     style={[
                       styles.holdFill,
                       {
                         width: `${holdProgress}%`,
-                        backgroundColor: 'rgba(255,255,255,0.18)',
+                        backgroundColor: "rgba(255,255,255,0.18)",
                       },
                     ]}
                   />
                 </View>
                 <Text
-                  style={[
-                    styles.holdLabel,
-                    { color: Theme.textOnPrimary },
-                  ]}
+                  style={[styles.holdLabel, { color: Theme.textOnPrimary }]}
                   numberOfLines={1}
                 >
-                  {isAccepted ? (requireOtp ? 'Accepted! Enter OTP' : 'Accepted!') : 'Hold to accept'}
+                  {isAccepted
+                    ? requireOtp
+                      ? "Accepted! Enter OTP"
+                      : "Accepted!"
+                    : "Hold to accept"}
                 </Text>
               </Pressable>
               {onDecline && !isAccepted && (
@@ -346,7 +496,11 @@ export function JobRequestCard({
                   activeOpacity={0.7}
                   accessibilityLabel="Decline"
                 >
-                  <Text style={[styles.declineLink, { color: Theme.textMuted }]}>Decline</Text>
+                  <Text
+                    style={[styles.declineLink, { color: mutedTextColor }]}
+                  >
+                    Decline
+                  </Text>
                 </TouchableOpacity>
               )}
             </>
@@ -366,40 +520,40 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     borderRadius: 24,
     backgroundColor: Theme.screenBackground,
-    overflow: 'hidden',
+    overflow: "hidden",
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
+    borderColor: "rgba(0,0,0,0.05)",
   },
   /** Frameless container so the bottom sheet itself becomes the only "panel". */
   page: {
     marginHorizontal: 0,
     marginBottom: 0,
-    paddingTop: 16,
-    paddingHorizontal: 24,
-    paddingBottom: 24,
+    paddingTop: 12,
+    paddingHorizontal: 0,
+    paddingBottom: 18,
     borderRadius: 0,
-    backgroundColor: 'transparent',
-    overflow: 'visible',
+    backgroundColor: "transparent",
+    overflow: "visible",
     borderWidth: 0,
   },
   collapseHandle: {
-    position: 'absolute',
+    position: "absolute",
     top: 10,
     left: 0,
     right: 0,
-    alignSelf: 'center',
+    alignSelf: "center",
     width: 44,
     height: 28,
     borderRadius: 14,
     backgroundColor: Theme.surfaceLight,
     borderWidth: 1,
     borderColor: Theme.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     zIndex: 3,
   },
   cardShadowIos: {
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.15,
     shadowRadius: 24,
@@ -408,14 +562,14 @@ const styles = StyleSheet.create({
     elevation: 16,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 14,
   },
   earningsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
     flex: 1,
     minWidth: 0,
@@ -424,12 +578,12 @@ const styles = StyleSheet.create({
     width: EARNINGS_ICON_SIZE,
     height: EARNINGS_ICON_SIZE,
     borderRadius: EARNINGS_ICON_SIZE / 2,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   earningsAmount: {
     fontSize: 24,
-    fontWeight: '900',
+    fontWeight: "900",
   },
   earningsTextWrap: {
     flex: 1,
@@ -437,9 +591,9 @@ const styles = StyleSheet.create({
   },
   earningsLabel: {
     fontSize: EARNINGS_LABEL_FONT,
-    fontWeight: '800',
+    fontWeight: "800",
     letterSpacing: 1,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     marginTop: 4,
   },
   routeWrap: {
@@ -447,16 +601,16 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   routeRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: 12,
   },
   routeIconWrap: {
     width: PICKUP_DROP_ICON_SIZE,
     height: PICKUP_DROP_ICON_SIZE,
     borderRadius: PICKUP_DROP_ICON_SIZE / 2,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: 2,
   },
   pickupDot: {
@@ -470,20 +624,20 @@ const styles = StyleSheet.create({
   },
   routeLabel: {
     fontSize: ADDRESS_LABEL_FONT,
-    fontWeight: '800',
+    fontWeight: "800",
     letterSpacing: 0.5,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   routeAddress: {
     fontSize: ADDRESS_FONT,
-    fontWeight: '600',
+    fontWeight: "600",
     marginTop: 2,
     flexShrink: 1,
     lineHeight: 20,
   },
   errorText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 8,
     marginTop: 4,
   },
@@ -495,8 +649,8 @@ const styles = StyleSheet.create({
     borderRadius: 1,
   },
   pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: PILL_PADDING_V,
     paddingHorizontal: PILL_PADDING_H,
     borderRadius: 18,
@@ -505,8 +659,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   pillItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     flex: 1,
   },
@@ -517,45 +671,45 @@ const styles = StyleSheet.create({
   },
   pillText: {
     fontSize: PILL_FONT,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   otpScroll: {
-    width: '100%',
+    width: "100%",
   },
   otpScrollContent: {
     flexGrow: 1,
-    alignItems: 'center',
+    alignItems: "center",
     paddingBottom: 12,
   },
   otpPageWrap: {
-    width: '100%',
+    width: "100%",
     paddingTop: 4,
-    alignItems: 'center',
+    alignItems: "center",
   },
   otpPageTitle: {
     fontSize: 20,
-    fontWeight: '800',
-    textAlign: 'center',
+    fontWeight: "800",
+    textAlign: "center",
   },
   otpPageSubtitle: {
     marginTop: 6,
     fontSize: 14,
     lineHeight: 20,
-    textAlign: 'center',
+    textAlign: "center",
     marginBottom: 14,
   },
   otpPageRoute: {
     fontSize: 16,
-    fontWeight: '700',
-    textAlign: 'center',
-    width: '100%',
+    fontWeight: "700",
+    textAlign: "center",
+    width: "100%",
     marginBottom: 16,
   },
   otpBoxRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
     gap: 10,
-    width: '100%',
+    width: "100%",
     marginBottom: 14,
   },
   otpBox: {
@@ -563,39 +717,39 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 12,
     borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   otpBoxDigit: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   otpHiddenInput: {
-    position: 'absolute',
+    position: "absolute",
     width: 1,
     height: 1,
     opacity: 0,
   },
   otpSubmitBtn: {
-    width: '100%',
+    width: "100%",
     minHeight: HOLD_BTN_HEIGHT,
     borderRadius: HOLD_BTN_RADIUS,
     marginTop: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 10,
   },
   otpSubmitText: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Theme.textOnPrimary,
   },
   holdBtnWrap: {
     height: HOLD_BTN_HEIGHT,
     borderRadius: 18,
-    overflow: 'hidden',
-    justifyContent: 'center',
+    overflow: "hidden",
+    justifyContent: "center",
     marginTop: 12,
   },
   holdBtnDisabled: {
@@ -606,7 +760,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
   },
   holdFill: {
-    position: 'absolute',
+    position: "absolute",
     left: 0,
     top: 0,
     bottom: 0,
@@ -614,20 +768,20 @@ const styles = StyleSheet.create({
   },
   holdLabel: {
     fontSize: 16,
-    fontWeight: '900',
+    fontWeight: "900",
     letterSpacing: 0.2,
-    textAlign: 'center',
+    textAlign: "center",
     zIndex: 1,
   },
   declineLinkWrap: {
-    alignSelf: 'center',
+    alignSelf: "center",
     paddingVertical: 10,
     paddingHorizontal: 16,
     marginTop: 2,
   },
   declineLink: {
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: "800",
   },
 });
 

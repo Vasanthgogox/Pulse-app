@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
-import * as routingService from "@/services/routingService";
-import * as tripsService from "@/services/tripsService";
-import { getTripStopCoordinate } from "@/features/drivers/utils/driverGuidanceUtils";
-import { DriverGuidanceStep } from "@/types/driver";
+import { useEffect, useState } from 'react';
+import * as routingService from '@/services/routingService';
+import * as tripsService from '@/services/tripsService';
+import { getTripStopCoordinate } from '@/features/drivers/utils/driverGuidanceUtils';
+import { DriverGuidanceStep } from '@/types/driver';
 
 /**
  * Fetches road geometry for the status-aware leg:
@@ -23,8 +23,8 @@ export function useTripAnimation(opts: {
       setRoute(null);
       return;
     }
-    const pickup = getTripStopCoordinate(trip, "pickup");
-    const drop = getTripStopCoordinate(trip, "drop");
+    const pickup = getTripStopCoordinate(trip, 'pickup');
+    const drop = getTripStopCoordinate(trip, 'drop');
     if (!pickup || !drop) {
       setRoute(null);
       return;
@@ -34,10 +34,10 @@ export function useTripAnimation(opts: {
     let from: { latitude: number; longitude: number } = pickup;
     let to: { latitude: number; longitude: number } = drop;
 
-    if (step === "accepted" || step === "pickup") {
+    if (step === 'accepted' || step === 'pickup') {
       from = driverFix ?? pickup;
       to = pickup;
-    } else if (step === "transit" || step === "reached" || step === "completed") {
+    } else if (step === 'transit' || step === 'reached' || step === 'completed') {
       from = driverFix ?? pickup;
       to = drop;
     }
@@ -64,4 +64,3 @@ export function useTripAnimation(opts: {
 
   return { truckPosition: null as { latitude: number; longitude: number } | null, route };
 }
-

@@ -3,13 +3,13 @@ import { DetailPageLayout, DetailSection } from "@/components/DetailPageLayout";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
   computeDriverCommissionForTrip,
   getTransactionsByOrganizationAndDriver,
+  LedgerReportModal,
   type LedgerRow,
 } from "@/features/finance";
 import {
@@ -21,7 +21,7 @@ import {
   averageScore,
   getRatingsForDriver,
   type RatingRow,
-} from "@/features/ratings/services/ratings.service";
+} from "@/features/ratings";
 import {
   getTripDisplayNumber,
   getTripsByOrganization,
@@ -40,7 +40,6 @@ import {
   formatLedgerDateTime,
   formatRelative,
 } from "@/lib/format";
-import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
   getSalaryRequestsByDriverIds,
   updateSalaryRequestStatus,
@@ -52,7 +51,6 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
-  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -65,7 +63,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   attachDriverByContact,
   getDriverById,
-  getDriverProfileDisplay,
   getLatestDriverInviteTermsByUser,
   getDriverInviteSentStatus,
   getDriverLedgerByDriver,
@@ -135,16 +132,6 @@ function formatLedgerDateShort(s: string): string {
   return `${day} ${months[Number(m) - 1] ?? m} ${y}`;
 }
 
-function getDriverFallbackSeed(id: string): string {
-  const value = (id ?? "").trim();
-  if (!value) return "driver-1";
-  let hash = 0;
-  for (let i = 0; i < value.length; i++) {
-    hash = (hash + value.charCodeAt(i)) % 10;
-  }
-  return `driver-${hash + 1}`;
-}
-
 /** Same labels as finance tab (Treasury DRIVERS) for consistency. */
 function getSalaryRequestTypeLabel(
   t: (k: string) => string,
@@ -209,7 +196,7 @@ export default function DriverDetailScreen({
     "ledger" | "statement"
   >("ledger");
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
+  const [showReportModal, setShowReportModal] = useState(false);
   const [expandedLedgerRowId, setExpandedLedgerRowId] = useState<string | null>(
     null,
   );
@@ -409,6 +396,16 @@ export default function DriverDetailScreen({
     [entityPaid, totalDriverEarnings],
   );
 
+  const sortedDriverLedger = useMemo(
+    () =>
+      [...driverTransactions].sort((a, b) => {
+        const da = a.transaction_date ?? a.created_at ?? "";
+        const db = b.transaction_date ?? b.created_at ?? "";
+        return db.localeCompare(da);
+      }),
+    [driverTransactions],
+  );
+
   const ledgerRows = useMemo(() => {
     const normId = (id: string | null | undefined) =>
       id == null ? "" : String(id).trim();
@@ -546,43 +543,6 @@ export default function DriverDetailScreen({
       ? monthlyStatement.detailsByMonth[primaryStatementRow.monthKey]
       : null;
 
-  useEffect(() => {
-    let mounted = true;
-    const resolveAvatar = async () => {
-      if (!driver?.id) {
-        if (mounted) setProfileAvatarUri(null);
-        return;
-      }
-      const { profile } = await getDriverProfileDisplay(driver.id);
-      if (!profile) {
-        // Always show a driver avatar in profile card, even when linked profile is unavailable.
-        if (mounted)
-          setProfileAvatarUri(getAvatarUriForSeed(getDriverFallbackSeed(driver.id)));
-        return;
-      }
-      if (profile.avatarUrl?.startsWith("http")) {
-        if (mounted) setProfileAvatarUri(profile.avatarUrl);
-        return;
-      }
-      if (profile.avatarUrl?.trim()) {
-        const signed = await getSignedAvatarUrl(profile.avatarUrl.trim());
-        if (mounted) setProfileAvatarUri(signed);
-        return;
-      }
-      if (profile.avatarSeed?.trim()) {
-        if (mounted)
-          setProfileAvatarUri(getAvatarUriForSeed(profile.avatarSeed.trim()));
-        return;
-      }
-      if (mounted)
-        setProfileAvatarUri(getAvatarUriForSeed(getDriverFallbackSeed(driver.id)));
-    };
-    void resolveAvatar();
-    return () => {
-      mounted = false;
-    };
-  }, [driver?.id]);
-
   if (loading) {
     return <CenteredLoadingView message={t("loadingDriver")} />;
   }
@@ -624,7 +584,7 @@ export default function DriverDetailScreen({
 
   const canLink =
     !driver.user_id &&
-    Boolean(driver.phone?.trim() || driver.email?.trim()) &&
+    (driver.phone?.trim() || driver.email?.trim()) &&
     leftAtFormatted == null;
   const normalizedMatchInviteStatus = (matchInviteStatus ?? "").toLowerCase();
   const rejectedInviteForMatch = normalizedMatchInviteStatus === "rejected";
@@ -786,39 +746,54 @@ export default function DriverDetailScreen({
     return `${day} ${months[Number(m) - 1]} ${y}`;
   }
 
-  const ratingSubline =
-    driverRatingAvg != null && driverRatingAvg > 0 ? (
-      <Text style={styles.headerRatingText}>
-        {driverRatingAvg.toFixed(1)} ★
-        {driverRatings.length > 0 ? ` (${driverRatings.length})` : ""}
-      </Text>
-    ) : null;
   const hasPendingSalaryRequests = driverRequests.length > 0;
 
   return (
     <DetailPageLayout
-      title={driver.name}
-      titleSubline={ratingSubline}
+      title={driver.name ?? t("driver")}
+      titleSubline={
+        <View style={styles.headerTitleSubwrap}>
+          <Text style={styles.entityHeaderSubtitle}>DEEP ENTITY INTEL</Text>
+          {driverRatingAvg != null && driverRatingAvg > 0 ? (
+            <Text style={styles.headerRatingText}>
+              {driverRatingAvg.toFixed(1)} ★
+              {driverRatings.length > 0 ? ` (${driverRatings.length})` : ""}
+            </Text>
+          ) : null}
+        </View>
+      }
       onBack={onBack}
       rightAction={
-        <TouchableOpacity
-          style={styles.headerProfileBtn}
-          onPress={() => setShowProfileModal(true)}
-          activeOpacity={0.8}
-          accessibilityLabel={t("profile")}
-          accessibilityHint={
-            hasPendingSalaryRequests
-              ? "Open profile with pending salary requests"
-              : undefined
-          }
-        >
-          {profileAvatarUri ? (
-            <Image source={{ uri: profileAvatarUri }} style={styles.headerAvatarImage} />
-          ) : (
-            <FontAwesome name="user" size={16} color={Theme.textPrimaryDark} />
-          )}
-          {hasPendingSalaryRequests ? <View style={styles.headerProfileBadge} /> : null}
-        </TouchableOpacity>
+        <View style={styles.headerRightActions}>
+          <TouchableOpacity
+            style={styles.profileHeaderBtn}
+            onPress={() => setShowProfileModal(true)}
+            activeOpacity={0.8}
+            accessibilityLabel={t("profile")}
+            accessibilityHint={
+              hasPendingSalaryRequests
+                ? "Open profile with pending salary requests"
+                : undefined
+            }
+          >
+            <FontAwesome name="user" size={16} color={Theme.textOnPrimary} />
+            {hasPendingSalaryRequests ? (
+              <View style={styles.headerProfileBadge} />
+            ) : null}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.downloadHeaderBtn}
+            onPress={() => setShowReportModal(true)}
+            activeOpacity={0.8}
+            accessibilityLabel={t("ledgerReport")}
+          >
+            <FontAwesome
+              name="cloud-download"
+              size={18}
+              color={Theme.textOnPrimary}
+            />
+          </TouchableOpacity>
+        </View>
       }
       fab={
         canAddTransaction ? (
@@ -947,7 +922,7 @@ export default function DriverDetailScreen({
           ]}
         >
           <View style={styles.profileModalHeader}>
-            <Text style={styles.profileModalTitle}>DRIVER PROFILE</Text>
+            <Text style={styles.profileModalTitle}>Driver Profile</Text>
             <TouchableOpacity
               onPress={() => setShowProfileModal(false)}
               style={styles.profileModalCloseBtn}
@@ -968,75 +943,74 @@ export default function DriverDetailScreen({
             <View style={styles.profileCard}>
               <View style={styles.profileCardTop}>
                 <View style={styles.profileAvatarWrap}>
-                  {profileAvatarUri ? (
-                    <Image source={{ uri: profileAvatarUri }} style={styles.profileAvatarImage} />
-                  ) : (
-                    <FontAwesome name="user" size={32} color={Theme.textOnPrimary} />
-                  )}
+                  <FontAwesome name="user" size={30} color={Theme.primary} />
                 </View>
                 <View style={styles.profileCardTopText}>
                   <Text style={styles.profileEntityName} numberOfLines={2}>
                     {driver.name ?? "—"}
                   </Text>
-                  <Text style={styles.profileEntitySub} numberOfLines={1}>
-                    {driver.phone ?? driver.email ?? "—"}
-                  </Text>
+                  {driver.phone?.trim() ? (
+                    <Text style={styles.profileEntitySub} numberOfLines={1}>
+                      {driver.phone}
+                    </Text>
+                  ) : driver.email?.trim() ? (
+                    <Text style={styles.profileEntitySub} numberOfLines={1}>
+                      {driver.email}
+                    </Text>
+                  ) : null}
                   <View style={styles.profileBadges}>
-                    <View
-                      style={[
-                        styles.profileBadge,
-                        (driver.status === "online" ||
-                          driver.status === "on_trip") &&
-                          styles.profileBadgeCore,
-                      ]}
-                    >
-                      <Text style={styles.profileBadgeText}>{statusLabel}</Text>
-                    </View>
+                    {driver.user_id ? (
+                      <View style={styles.profileBadge}>
+                        <Text style={styles.profileBadgeText}>Verified</Text>
+                      </View>
+                    ) : (
+                      <View style={styles.profileBadge}>
+                        <Text style={styles.profileBadgeText} numberOfLines={1}>
+                          {statusLabel}
+                        </Text>
+                      </View>
+                    )}
                     <View style={[styles.profileBadge, styles.profileBadgeCore]}>
-                      <Text style={styles.profileBadgeCoreText}>PILOT NODE</Text>
+                      <Text style={styles.profileBadgeCoreText}>Core Node</Text>
                     </View>
                   </View>
                 </View>
               </View>
               <View style={styles.profileGrid}>
                 <View style={styles.profileGridItem}>
-                  <Text style={styles.profileGridLabel}>STATUS</Text>
-                  <Text
-                    style={[
-                      styles.profileGridValue,
-                      (driver.status === "online" ||
-                        driver.status === "on_trip") &&
-                        styles.profileGridValueActive,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {statusLabel}
+                  <Text style={styles.profileGridLabel}>Payments</Text>
+                  <Text style={styles.profileGridValue} numberOfLines={1}>
+                    {formatINR(totalDriverEarnings)}
                   </Text>
                 </View>
                 <View style={styles.profileGridItem}>
-                  <Text style={styles.profileGridLabel}>RATING</Text>
+                  <Text style={styles.profileGridLabel}>Paid</Text>
                   <Text style={styles.profileGridValue} numberOfLines={1}>
-                    {driverRatingAvg != null && driverRatingAvg > 0
-                      ? `${driverRatingAvg.toFixed(1)} ★${driverRatings.length > 0 ? ` (${driverRatings.length})` : ""}`
-                      : "—"}
+                    {formatINR(entityPaid)}
                   </Text>
                 </View>
                 <View style={styles.profileGridItem}>
-                  <Text style={styles.profileGridLabel}>JOINED</Text>
+                  <Text style={styles.profileGridLabel}>To pay</Text>
                   <Text style={styles.profileGridValue} numberOfLines={1}>
-                    {driver.created_at
-                      ? formatRelative(driver.created_at)
-                      : "—"}
+                    {formatINR(entityPending)}
                   </Text>
                 </View>
               </View>
-              <Text style={styles.profileSectionTitle}>CONTACT PROTOCOL</Text>
+              <View style={styles.profileHealthRow}>
+                <Text style={styles.profileHealthLabel}>Node health</Text>
+                <View style={styles.profileHealthPill}>
+                  <Text style={styles.profileHealthValue}>
+                    {settlementHealth}%
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.profileSectionTitle}>Contact protocol</Text>
               <View style={styles.profileContactRow}>
                 <View style={styles.profileContactIcon}>
                   <FontAwesome name="phone" size={14} color={Theme.textMuted} />
                 </View>
                 <View style={styles.profileContactText}>
-                  <Text style={styles.profileContactLabel}>PHONE REGISTRY</Text>
+                  <Text style={styles.profileContactLabel}>Phone Registry</Text>
                   <Text style={styles.profileContactValue}>
                     {driver.phone ?? "—"}
                   </Text>
@@ -1047,7 +1021,7 @@ export default function DriverDetailScreen({
                   <FontAwesome name="envelope" size={14} color={Theme.textMuted} />
                 </View>
                 <View style={styles.profileContactText}>
-                  <Text style={styles.profileContactLabel}>EMAIL LINK</Text>
+                  <Text style={styles.profileContactLabel}>Email link</Text>
                   <Text style={styles.profileContactValue}>
                     {driver.email ?? "—"}
                   </Text>
@@ -1057,16 +1031,16 @@ export default function DriverDetailScreen({
               {driverOffer || driver.tracking_only ? (
                 <>
                   <Text style={styles.profileSectionTitle}>
-                    COMPENSATION TERMS
+                    Compensation terms
                   </Text>
                   <View style={styles.profileFiscalRow}>
                     <Text style={styles.profileFiscalLabel}>
                       Base Salary (Payable)
                     </Text>
                     <Text style={styles.profileFiscalValue}>
-                      {driverOffer?.payableAmount != null &&
-                      Number(driverOffer?.payableAmount) > 0
-                        ? `₹${Number(driverOffer?.payableAmount).toLocaleString("en-IN")} / mo`
+                      {driverOffer.payableAmount != null &&
+                      Number(driverOffer.payableAmount) > 0
+                        ? `₹${Number(driverOffer.payableAmount).toLocaleString("en-IN")} / mo`
                         : "—"}
                     </Text>
                   </View>
@@ -1075,18 +1049,18 @@ export default function DriverDetailScreen({
                       Trip Commission
                     </Text>
                     <Text style={styles.profileFiscalValue}>
-                      {driverOffer?.commissionPercent != null &&
-                      Number(driverOffer?.commissionPercent) > 0
-                        ? `${driverOffer?.commissionPercent}%`
+                      {driverOffer.commissionPercent != null &&
+                      Number(driverOffer.commissionPercent) > 0
+                        ? `${driverOffer.commissionPercent}%`
                         : "—"}
                     </Text>
                   </View>
                   <View style={styles.profileFiscalRow}>
                     <Text style={styles.profileFiscalLabel}>Per-KM Rate</Text>
                     <Text style={styles.profileFiscalValue}>
-                      {driverOffer?.commissionPerKm != null &&
-                      Number(driverOffer?.commissionPerKm) > 0
-                        ? `₹${driverOffer?.commissionPerKm} / km`
+                      {driverOffer.commissionPerKm != null &&
+                      Number(driverOffer.commissionPerKm) > 0
+                        ? `₹${driverOffer.commissionPerKm} / km`
                         : "—"}
                     </Text>
                   </View>
@@ -1935,13 +1909,32 @@ export default function DriverDetailScreen({
         </View>
       )}
 
+      <LedgerReportModal
+        visible={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        transactions={sortedDriverLedger}
+        title={
+          lockedPartyName
+            ? `${t("ledgerFor")}${lockedPartyName}`
+            : t("ledgerReport")
+        }
+      />
     </DetailPageLayout>
   );
 }
 
 const styles = StyleSheet.create({
   errorText: { fontSize: 15, color: Theme.textSecondary },
-  // Header
+  headerTitleSubwrap: {
+    alignItems: "center",
+    gap: 2,
+  },
+  entityHeaderSubtitle: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 1.2,
+  },
   headerRightActions: {
     flexDirection: "row",
     alignItems: "center",
@@ -1953,24 +1946,27 @@ const styles = StyleSheet.create({
     zIndex: 100,
     elevation: 10,
   },
-  headerProfileBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Theme.surfaceLight,
+  profileHeaderBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: Theme.darkBackground,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
   },
-  headerAvatarImage: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 22,
+  downloadHeaderBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: Theme.darkBackground,
+    alignItems: "center",
+    justifyContent: "center",
   },
   headerProfileBadge: {
     position: "absolute",
-    top: 10,
-    right: 10,
+    top: 5,
+    right: 5,
     width: 10,
     height: 10,
     borderRadius: 5,
@@ -1992,12 +1988,11 @@ const styles = StyleSheet.create({
     borderBottomColor: Theme.borderLight,
   },
   profileModalTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "800",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
-    letterSpacing: -0.5,
   },
   profileModalCloseBtn: {
     width: 40,
@@ -2011,77 +2006,80 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
   profileCard: {
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 20,
+    backgroundColor: Theme.surface,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    padding: 20,
+    borderColor: Theme.surfaceBorder,
+    padding: 18,
     marginBottom: 16,
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
   },
   profileCardTop: {
-    flexDirection: "row",
+    flexDirection: "column",
     alignItems: "center",
-    gap: 16,
-    marginBottom: 20,
+    gap: 12,
+    marginBottom: 14,
   },
   profileAvatarWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 12,
-    backgroundColor: Theme.primary,
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    backgroundColor: Theme.avatarIndigo,
+    borderWidth: 2,
+    borderColor: Theme.primary,
     alignItems: "center",
     justifyContent: "center",
   },
-  profileAvatarImage: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 12,
-  },
-  profileCardTopText: { flex: 1, minWidth: 0 },
+  profileCardTopText: { flex: 0, minWidth: 0, alignItems: "center" },
   profileEntityName: {
     fontSize: 18,
     fontWeight: "800",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
-    marginBottom: 2,
+    marginBottom: 8,
+    textAlign: "center",
   },
   profileEntitySub: {
     fontSize: 11,
     fontWeight: "600",
     color: Theme.textMuted,
     marginBottom: 6,
+    textAlign: "center",
   },
-  profileBadges: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  profileBadges: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    justifyContent: "center",
+  },
   profileBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: Theme.darkGreen,
+    backgroundColor: Theme.positiveMuted,
+    borderWidth: 1,
+    borderColor: Theme.darkGreen,
   },
   profileBadgeText: {
-    fontSize: 9,
+    fontSize: 7,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.darkGreen,
     textTransform: "uppercase",
   },
   profileBadgeCore: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.fiscalTabActiveBg ?? "#e8eaf6",
+    borderColor: Theme.primary,
   },
   profileBadgeCoreText: {
-    fontSize: 9,
+    fontSize: 7,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.primary,
     textTransform: "uppercase",
   },
   profileGrid: {
     flexDirection: "row",
-    gap: 12,
-    marginBottom: 20,
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 14,
   },
   profileGridItem: {
     flex: 1,
@@ -2090,29 +2088,61 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
+    alignItems: "center",
   },
   profileGridLabel: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: Theme.textMuted,
+    fontSize: 7,
+    fontWeight: "700",
+    color: Theme.primary,
     textTransform: "uppercase",
     marginBottom: 4,
+    textAlign: "center",
   },
   profileGridValue: {
     fontSize: 14,
     fontWeight: "800",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
+    textAlign: "center",
   },
-  profileGridValueActive: { color: Theme.darkGreen },
+  profileHealthRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+    paddingHorizontal: 6,
+  },
+  profileHealthLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  profileHealthPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+  },
+  profileHealthValue: {
+    fontSize: 16,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: Theme.primary,
+  },
   profileSectionTitle: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 8,
+    fontWeight: "800",
     color: Theme.textMuted,
     letterSpacing: 1,
     textTransform: "uppercase",
     marginBottom: 12,
-    marginTop: 4,
     paddingBottom: 6,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
@@ -2124,17 +2154,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   profileContactIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
   },
   profileContactText: { flex: 1, minWidth: 0 },
   profileContactLabel: {
-    fontSize: 9,
-    fontWeight: "600",
+    fontSize: 7,
+    fontWeight: "700",
     color: Theme.textMuted,
     textTransform: "uppercase",
     marginBottom: 2,

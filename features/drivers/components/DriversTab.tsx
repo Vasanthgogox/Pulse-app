@@ -10,7 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LiquidFillPill } from '@/components/LiquidFillPill';
 import { IntegrationModeTag } from '@/components/IntegrationModeTag';
 import Theme from '@/constants/Theme';
-import { averageScore, getRatingsForDrivers } from '@/features/ratings/services/ratings.service';
+import { getRatingsForDrivers, averageScore } from '@/features/ratings';
 import type { TripRow } from '@/features/trips';
 import type { EntityListFilter } from "@/features/finance/components/TreasurySummaryCard";
 import type { FinancialRowData } from "@/features/finance/components/FinancialRow";

@@ -83,13 +83,13 @@ function normalizePhone(raw: string): string {
 
 /** Full phone for API (India: +91 + 10 digits). */
 function getFullPhoneIndia(national: string): string {
-  const digits = national.replace(/\D/g, '');
+  const digits = normalizePhone(national);
   return digits.length === 10 ? `+${INDIA_DIAL_CODE}${digits}` : '';
 }
 
 /** Step 1 valid: 10-digit Indian number. */
 function isPhoneStepValid(national: string): boolean {
-  const digits = national.replace(/\D/g, '');
+  const digits = normalizePhone(national);
   return digits.length === 10 && isPhoneValid(digits);
 }
 
@@ -97,7 +97,7 @@ function isPhoneStepValid(national: string): boolean {
 function getPhoneInlineError(national: string): string | null {
   const t = national.trim();
   if (t.length === 0) return null;
-  const digits = national.replace(/\D/g, '');
+  const digits = normalizePhone(national);
   if (digits.length !== 10) return digits.length > 10 ? 'Enter at most 10 digits.' : 'Enter a 10-digit number.';
   return validatePhone(digits);
 }
@@ -116,7 +116,7 @@ export default function DriverSignUpScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const safeBack = useSafeBack('/sign-in');
-  const { signUp } = useAuth();
+  const { signUp, signInWithGoogle } = useAuth();
   const isOnline = useIsOnline();
   const scrollRef = useRef<ScrollView>(null);
 
@@ -242,6 +242,32 @@ export default function DriverSignUpScreen() {
       return;
     }
     goToPage(1);
+  };
+
+  const handleGoogleDriverSignIn = async () => {
+    if (!isOnline) {
+      Alert.alert("No internet", "Connect to the internet to continue.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const { error } = await signInWithGoogle({
+        role: "driver",
+        operatingModel: "ASSET_BASED",
+      });
+      if (error) throw error;
+      router.replace("/");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Google sign in failed";
+      Alert.alert(
+        "Error",
+        msg.includes("Cannot reach server")
+          ? "Cannot reach server. Check your connection."
+          : msg
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const verifyOtpStep = () => {
@@ -418,6 +444,16 @@ export default function DriverSignUpScreen() {
               activeOpacity={0.8}
             >
               <Text style={styles.primaryBtnText}>Continue with phone</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.googleBtn, loading && styles.primaryBtnDisabled]}
+              onPress={handleGoogleDriverSignIn}
+              disabled={loading}
+              activeOpacity={0.85}
+            >
+              <FontAwesome name="google" size={18} color={LIGHT.text} />
+              <Text style={styles.googleBtnText}>Continue with Google</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -949,6 +985,25 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#ffffff',
     letterSpacing: 0.5,
+  },
+  googleBtn: {
+    marginTop: 12,
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: LIGHT.border,
+    backgroundColor: LIGHT.surface,
+  },
+  googleBtnText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: LIGHT.text,
+    letterSpacing: 0.2,
   },
   otpBoxRow: {
     flexDirection: 'row',

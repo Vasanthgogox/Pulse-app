@@ -26,7 +26,8 @@ function DriverTabsNavigator() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Dashboard' }} />
-      <Tabs.Screen name="control" options={{ title: 'Trip' }} />
+      {/* Keep route for internal dashboard flow, but hide from tab bar */}
+      <Tabs.Screen name="control" options={{ title: 'Trip', href: null }} />
       <Tabs.Screen name="trips" options={{ title: 'History' }} />
       <Tabs.Screen name="requests" options={{ title: 'Requests', href: null }} />
       <Tabs.Screen name="wallet" options={{ title: 'Wallet' }} />

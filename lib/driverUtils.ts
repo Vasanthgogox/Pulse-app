@@ -4,6 +4,8 @@
  * trip rate or commission derived from client_price/supplier_rate to the driver.
  */
 
+import * as driversService from "@/services/driversService";
+
 export interface TripWithSupplier {
   supplier_id?: string | null;
   driver_commission?: number | null;
@@ -40,7 +42,7 @@ export function isAggregateTrip(trip: TripWithSupplier | null | undefined): bool
  * Otherwise: driver_commission, else 10% supplier_rate, else 10% client_price (matches finance aggregation).
  */
 export function tripEarningsForDriver(trip: TripWithSupplier | null | undefined): number {
-  if (!trip || isAggregateTrip(trip)) return 0;
+  if (!trip) return 0;
   const commission = Number(trip.driver_commission ?? 0) || 0;
   if (commission > 0) return commission;
   const supplierRate = Number(trip.supplier_rate ?? 0) || 0;
@@ -48,4 +50,60 @@ export function tripEarningsForDriver(trip: TripWithSupplier | null | undefined)
   const clientPrice = Number(trip.client_price ?? 0) || 0;
   if (clientPrice > 0) return Math.round(clientPrice * 0.1);
   return 0;
+}
+
+export function isAssignedNotStarted(status: string) {
+  const s = (status || "").toLowerCase();
+  return s === "assigned" || s === "pending" || s === "scheduled";
+}
+
+export function isActiveMission(status: string) {
+  const s = (status || "").toLowerCase();
+  return (
+    s === "in_progress" ||
+    s === "in_transit" ||
+    s === "transit" ||
+    s === "picked_up" ||
+    s === "pickup" ||
+    s === "started" ||
+    s === "at_drop"
+  );
+}
+
+export function isCompletedStatus(status: string) {
+  const s = (status || "").toLowerCase();
+  return s === "completed" || s === "delivered" || s === "done";
+}
+
+export function buildInviteOfferText(inv: driversService.DriverInviteRow): string {
+  const parts: string[] = [];
+  if (inv.payable_amount != null && inv.payable_amount > 0) {
+    parts.push(`₹${Number(inv.payable_amount).toLocaleString("en-IN")}`);
+  }
+  if (inv.commission_percent != null && inv.commission_percent > 0) {
+    parts.push(`${inv.commission_percent}% commission`);
+  }
+  if (inv.commission_per_km != null && inv.commission_per_km > 0) {
+    parts.push(`₹${inv.commission_per_km}/km`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : "Offer on accept";
+}
+
+export function isCompleted(status: string) {
+  const s = (status || '').toLowerCase();
+  return s === 'completed' || s === 'delivered' || s === 'done';
+}
+
+export function buildOfferText(inv: driversService.DriverInviteRow): string {
+  const parts: string[] = [];
+  if (inv.payable_amount != null && inv.payable_amount > 0) {
+    parts.push(`₹${Number(inv.payable_amount).toLocaleString('en-IN')}`);
+  }
+  if (inv.commission_percent != null && inv.commission_percent > 0) {
+    parts.push(`${inv.commission_percent}% commission`);
+  }
+  if (inv.commission_per_km != null && inv.commission_per_km > 0) {
+    parts.push(`₹${inv.commission_per_km}/km`);
+  }
+  return parts.length ? parts.join(' · ') : 'Offer on accept';
 }
