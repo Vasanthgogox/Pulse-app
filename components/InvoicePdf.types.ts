@@ -7,6 +7,8 @@ export interface InvoicePdfItem {
 }
 
 export interface InvoicePdfData {
+  brandingCompanyName: string;
+  brandingLogoUrl: string | null;
   invoiceNo: string;
   clientName: string;
   issuedOn: string;

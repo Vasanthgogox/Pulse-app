@@ -405,13 +405,8 @@ export default function ProfileScreen() {
               <ProfileItemRow
                 icon="cog"
                 label="Settings"
-                value="Privacy, notifications and controls"
-                onPress={() =>
-                  Alert.alert(
-                    "Account settings",
-                    "Settings module is coming soon.",
-                  )
-                }
+                value="Branding & identity for invoice PDFs"
+                onPress={() => router.push("/branding-settings")}
                 showChevron
               />
               <View style={styles.premiumDivider} />

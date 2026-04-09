@@ -41,6 +41,8 @@ export interface UseFinanceAddEntityHandlersResult {
     organization_id: string;
     full_name: string;
     phone: string;
+    organization_name?: string;
+    profile_company_name?: string | null;
   } | null>;
   handleSendClientInvitation: (toOrgId: string) => Promise<void>;
   handleSendSupplierInvitation: (toOrgId: string) => Promise<void>;
@@ -87,6 +89,8 @@ export function useFinanceAddEntityHandlers(
       organization_id: invitee.organization_id,
       full_name: invitee.full_name,
       phone: invitee.phone,
+      organization_name: invitee.organization_name,
+      profile_company_name: invitee.profile_company_name,
     };
   }, []);
 

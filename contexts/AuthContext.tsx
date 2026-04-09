@@ -90,6 +90,7 @@ interface AuthContextType {
     role?: authService.UserRole,
     operatingModel?: authService.OperatingModel,
     phone?: string,
+    companyName?: string,
   ) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
@@ -263,12 +264,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     role?: authService.UserRole,
     operatingModel?: authService.OperatingModel,
     phone?: string,
+    companyName?: string,
   ) => {
     return authService.signUp({
       email,
       password,
       fullName,
       phone,
+      companyName,
       role,
       operatingModel,
     });

@@ -119,6 +119,8 @@ export interface SignUpOptions {
   fullName?: string;
   /** Phone (e.g. for drivers). Stored in user_metadata; backends can use it to link invited drivers. */
   phone?: string;
+  /** Optional trading / legal name; stored in profiles.company_name and used for default organization name. */
+  companyName?: string;
   role?: UserRole;
   /** Business model for the new org: asset, aggregate, or both. Default HYBRID. */
   operatingModel?: OperatingModel;
@@ -129,6 +131,7 @@ export async function signUp({
   password,
   fullName,
   phone,
+  companyName,
   role = "user",
   operatingModel: operatingModelOption,
 }: SignUpOptions): Promise<SignInResult> {
@@ -144,6 +147,14 @@ export async function signUp({
     const phoneErr = validatePhone(phone);
     if (phoneErr) return { error: new Error(phoneErr) };
   }
+  if (companyName != null && String(companyName).trim()) {
+    const c = companyName.trim();
+    const companyErr = maxLength(
+      VALIDATION.COMPANY_NAME_MAX_LENGTH,
+      `Company name must be at most ${VALIDATION.COMPANY_NAME_MAX_LENGTH} characters.`,
+    )(c);
+    if (companyErr) return { error: new Error(companyErr) };
+  }
   try {
     const operatingModel: OperatingModel = operatingModelOption ?? "HYBRID";
     const metadata: Record<string, unknown> = {
@@ -151,6 +162,8 @@ export async function signUp({
       operating_model: operatingModel,
     };
     if (fullName?.trim()) metadata.full_name = fullName.trim();
+    if (companyName != null && companyName.trim())
+      metadata.company_name = companyName.trim();
     // Normalize phone (trim + collapse spaces) so it matches get_invitee_by_phone / get_driver_invitee_by_phone lookup.
     if (phone != null && phone !== "") {
       const normalized = phone.trim().replace(/\s+/g, "");

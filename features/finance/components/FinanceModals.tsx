@@ -7,7 +7,10 @@ import type { AddTransactionData } from "@/components/AddTransactionModal";
 import type { PartyOption, TripOption } from "@/components/AddTransactionModal";
 import { AddTransactionModal } from "@/components/AddTransactionModal";
 import { AddClientModal } from "@/features/clients/components/AddClientModal";
-import type { AddClientFormData } from "@/features/clients/components/AddClientModal";
+import type {
+  AddClientFormData,
+  ConnectionInviteeMatch,
+} from "@/features/clients/components/AddClientModal";
 import { EditClientModal } from "@/features/clients/components/EditClientModal";
 import type { ClientRow, UpdateClientData } from "@/features/clients/services/clients.service";
 import { AddDriverModal } from "@/features/drivers/components/AddDriverModal";
@@ -74,7 +77,7 @@ export interface FinanceModalsProps {
   organizationId: string | null;
   noOrganizationMessage: string | null;
   onRefreshOrganization: () => void;
-  searchInviteeByPhone: (phone: string) => Promise<{ organization_id: string; full_name: string; phone: string } | null>;
+  searchInviteeByPhone: (phone: string) => Promise<ConnectionInviteeMatch | null>;
   onSendClientInvitation: (toOrgId: string) => Promise<void>;
 
   // Edit Client

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import Layout from '@/constants/Layout';
 import { useExecuteInvoiceMutation, useInvoicingExecuteTripsQuery } from '@/lib/queries/useInvoicingExecuteQueries';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import type { AdditionalCharge, InvoiceConfig, InvoicingTripView } from '@/features/invoicing/services/invoicing.service';
+import { getInvoiceBrandingSettings } from '@/features/invoicing/services/invoiceBranding.service';
 import { useInvoiceCalc } from '@/features/invoicing/hooks/useInvoiceCalc';
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import { useAuth } from '@/contexts/AuthContext';
@@ -83,6 +84,8 @@ export default function InvoicePdfPreviewScreen() {
   const orgId = currentOrganization?.id ?? null;
 
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const [brandingName, setBrandingName] = useState('GOGOX');
+  const [brandingLogoUrl, setBrandingLogoUrl] = useState<string | null>(null);
 
   const activeClient = params.activeClient || '';
   const paymentTerms = params.paymentTerms || 'Net 30';
@@ -108,6 +111,7 @@ export default function InvoicePdfPreviewScreen() {
     () => parsedSelectedTripIds.map((id) => tripsById.get(id)).filter(Boolean) as InvoicingTripView[],
     [parsedSelectedTripIds, tripsById],
   );
+  const previewInvoiceNo = useMemo(() => buildInvoiceNo(selectedTrips), [selectedTrips]);
 
   const invoiceConfig: InvoiceConfig = {
     includeGst: parsedIncludeGst,
@@ -120,13 +124,28 @@ export default function InvoicePdfPreviewScreen() {
   const calculations = useInvoiceCalc(selectedTrips, invoiceConfig);
   const allowed = canAccessInvoicing(profile);
 
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const { settings } = await getInvoiceBrandingSettings();
+      if (!mounted) return;
+      setBrandingName(settings.companyName);
+      setBrandingLogoUrl(settings.logoUrl);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const invoiceData: InvoicePdfData = useMemo(() => {
     const issued = new Date();
     const due = addDays(issued, parseNetDays(paymentTerms));
     const lrScope = selectedTrips.slice(0, 6).map((t) => t.id).join(', ') || 'N/A';
 
     return {
-      invoiceNo: buildInvoiceNo(selectedTrips),
+      brandingCompanyName: brandingName,
+      brandingLogoUrl,
+      invoiceNo: previewInvoiceNo,
       clientName: activeClient || 'Unknown Client',
       issuedOn: formatDate(issued),
       dueOn: formatDate(due),
@@ -143,7 +162,7 @@ export default function InvoicePdfPreviewScreen() {
       paymentTerms,
       notes,
       lrScope,
-      assetFleet: selectedTrips[0]?.details || 'N/A',
+      assetFleet: Array.from(new Set(selectedTrips.map((t) => t.details || 'N/A'))).join(', '),
       bankDetailsLines: [
         'HDFC BANK | IFSC: HDFC0001234',
         'A/C: 50200012345678 | BRANCH: CHENNAI',
@@ -164,7 +183,7 @@ export default function InvoicePdfPreviewScreen() {
       taxAmount: calculations.sgst + calculations.cgst,
       grandTotal: calculations.totalAmount,
     };
-  }, [activeClient, calculations.cgst, calculations.sgst, calculations.subtotal, calculations.totalAmount, notes, parsedAdditionalCharges, parsedGstRate, parsedIncludeGst, paymentTerms, selectedTrips]);
+  }, [activeClient, brandingLogoUrl, brandingName, calculations.cgst, calculations.sgst, calculations.subtotal, calculations.totalAmount, notes, parsedAdditionalCharges, parsedGstRate, parsedIncludeGst, paymentTerms, previewInvoiceNo, selectedTrips]);
 
   const handleFinalizeAndSend = useCallback(async () => {
     setIsFinalizing(true);
@@ -177,6 +196,7 @@ export default function InvoicePdfPreviewScreen() {
       await executeMutation.mutateAsync({
         internalIds,
         payload: {
+          invoiceNo: previewInvoiceNo,
           notes,
           paymentTerms,
           includeGst: parsedIncludeGst,
@@ -187,14 +207,14 @@ export default function InvoicePdfPreviewScreen() {
           calculations,
         },
       });
-      Alert.alert('Success', 'Invoice finalized and sent to Supabase!');
+      Alert.alert('Success', 'Invoice issued successfully.');
       router.back();
     } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to finalize and send invoice.');
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to issue invoice.');
     } finally {
       setIsFinalizing(false);
     }
-  }, [orgId, selectedTrips, executeMutation, notes, paymentTerms, parsedIncludeGst, parsedGstRate, parsedIncludeFuel, parsedFuelRate, parsedAdditionalCharges, calculations, router]);
+  }, [orgId, selectedTrips, executeMutation, previewInvoiceNo, notes, paymentTerms, parsedIncludeGst, parsedGstRate, parsedIncludeFuel, parsedFuelRate, parsedAdditionalCharges, calculations, router]);
 
   if (!allowed) {
     return (

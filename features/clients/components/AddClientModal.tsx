@@ -9,6 +9,7 @@ import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { pickContactForNameAndPhone } from "@/lib/contactPicker";
 import { validatePhone } from "@/lib/phoneValidation";
+import { inviteeSuggestedCompanyName } from "@/services/connectionRequestsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -38,6 +39,10 @@ export interface ConnectionInviteeMatch {
   organization_id: string;
   full_name: string;
   phone: string;
+  /** Invitee org display name (organizations.name). */
+  organization_name?: string;
+  /** Invitee profile company (profiles.company_name). */
+  profile_company_name?: string | null;
 }
 
 interface AddClientModalProps {
@@ -162,6 +167,10 @@ export function AddClientModal({
         setSearchedNoResult(!result);
         if (result) {
           setContactPerson((prev) => (prev.trim() ? prev : result.full_name));
+          const suggested = inviteeSuggestedCompanyName(result);
+          if (suggested) {
+            setOrganizationName((prev) => (prev.trim() ? prev : suggested));
+          }
           // Do not set phone from result to avoid effect re-run loop; lookup already used current phone.
         }
       });

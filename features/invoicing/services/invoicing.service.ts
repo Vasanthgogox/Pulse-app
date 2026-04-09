@@ -193,13 +193,18 @@ export async function fetchInvoicingTrips(
   }
 }
 
-export async function fetchPodReconciliationSummary(): Promise<{
+export async function fetchPodReconciliationSummary(
+  organizationId?: string | null,
+): Promise<{
   error: Error | null;
   summary: PodReconciliationSummary | null;
 }> {
   try {
     const { data, error } = await supabase().rpc(
       "get_pod_reconciliation_summary",
+      organizationId
+        ? { p_organization_id: organizationId }
+        : { p_organization_id: null },
     );
     if (error) throw error;
     const summary = Array.isArray(data) ? data[0] : data;
@@ -229,7 +234,11 @@ export async function executeInvoiceCreation(
   payload?: any,
 ): Promise<{ error: Error | null }> {
   try {
-    const invoiceNo = `#INV-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}${Math.floor(Math.random() * 90) + 10}`;
+    const candidateInvoiceNo =
+      payload && typeof payload.invoiceNo === "string" ? payload.invoiceNo.trim() : "";
+    const invoiceNo =
+      candidateInvoiceNo ||
+      `#INV-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}${Math.floor(Math.random() * 90) + 10}`;
 
     // Note: Due to Q-mobile standards preventing schema changes in this repo,
     // the full payload (taxes, fuel surcharge, additional charges) is securely persisted

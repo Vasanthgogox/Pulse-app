@@ -35,7 +35,7 @@ export function usePodReconciliationSummaryQuery(orgId: string | null) {
   return useQuery({
     queryKey: orgId ? queryKeys.invoicing.summary(orgId) : ['q', 'invoicing', 'summary', 'none'],
     queryFn: async () => {
-      const { error, summary } = await fetchPodReconciliationSummary();
+      const { error, summary } = await fetchPodReconciliationSummary(orgId);
       if (error) throw error;
       return summary;
     },

@@ -9,6 +9,7 @@ import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { pickContactForNameAndPhone } from "@/lib/contactPicker";
 import { validatePhone } from "@/lib/phoneValidation";
+import { inviteeSuggestedCompanyName } from "@/services/connectionRequestsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -38,6 +39,8 @@ export interface SupplierInviteeMatch {
   organization_id: string;
   full_name: string;
   phone: string;
+  organization_name?: string;
+  profile_company_name?: string | null;
 }
 
 interface AddSupplierModalProps {
@@ -158,6 +161,10 @@ export function AddSupplierModal({
         setSearchedNoResult(!result);
         if (result) {
           setName((prev) => (prev.trim() ? prev : result.full_name));
+          const suggested = inviteeSuggestedCompanyName(result);
+          if (suggested) {
+            setCompanyName((prev) => (prev.trim() ? prev : suggested));
+          }
         }
       });
     }, PHONE_DEBOUNCE_MS);
