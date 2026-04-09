@@ -452,14 +452,14 @@ export function InvoicePreviewPanel({
         <View style={styles.settingsBlock}>
           <View style={styles.settingsRow}>
             <Text style={styles.settingsLabel}>Payment Terms</Text>
-            <View style={{ position: "relative", zIndex: 1 }}>
+            <View style={styles.settingsSelectWrap}>
               <Pressable
                 style={styles.settingsSelect}
-                onPress={() => setShowTermsModal(true)}
+                onPress={() => setShowTermsModal((prev) => !prev)}
               >
                 <Text style={styles.settingsSelectText}>{paymentTerms}</Text>
                 <FontAwesome
-                  name="chevron-down"
+                  name={showTermsModal ? "chevron-up" : "chevron-down"}
                   size={12}
                   color={Theme.textMuted}
                 />
@@ -467,42 +467,34 @@ export function InvoicePreviewPanel({
 
               {Platform.OS === "web" ? (
                 showTermsModal ? (
-                  <Pressable
-                    style={styles.webTermsBackdrop}
-                    onPress={() => setShowTermsModal(false)}
-                  >
-                    <Pressable
-                      style={styles.webTermsDropdown}
-                      onPress={() => {}}
-                    >
-                      {PAYMENT_TERMS_OPTIONS.map((term) => (
-                        <Pressable
-                          key={term}
-                          style={styles.termOption}
-                          onPress={() => {
-                            setPaymentTerms(term);
-                            setShowTermsModal(false);
-                          }}
+                  <View style={styles.webTermsDropdown}>
+                    {PAYMENT_TERMS_OPTIONS.map((term) => (
+                      <Pressable
+                        key={term}
+                        style={styles.termOption}
+                        onPress={() => {
+                          setPaymentTerms(term);
+                          setShowTermsModal(false);
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.termOptionText,
+                            paymentTerms === term && styles.termOptionActive,
+                          ]}
                         >
-                          <Text
-                            style={[
-                              styles.termOptionText,
-                              paymentTerms === term && styles.termOptionActive,
-                            ]}
-                          >
-                            {term}
-                          </Text>
-                          {paymentTerms === term && (
-                            <FontAwesome
-                              name="check"
-                              size={14}
-                              color={Theme.primary}
-                            />
-                          )}
-                        </Pressable>
-                      ))}
-                    </Pressable>
-                  </Pressable>
+                          {term}
+                        </Text>
+                        {paymentTerms === term && (
+                          <FontAwesome
+                            name="check"
+                            size={14}
+                            color={Theme.primary}
+                          />
+                        )}
+                      </Pressable>
+                    ))}
+                  </View>
                 ) : null
               ) : (
                 <Modal
@@ -1140,14 +1132,23 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 24,
+    position: "relative",
+    overflow: "visible",
+    zIndex: 10,
   },
   settingsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 16,
+    position: "relative",
+    zIndex: 30,
   },
-  settingsCol: { marginBottom: 16 },
+  settingsCol: {
+    marginBottom: 16,
+    position: "relative",
+    zIndex: 1,
+  },
   settingsLabel: {
     fontSize: 10,
     fontWeight: "800",
@@ -1166,7 +1167,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    width: "100%",
+    width: 120,
+  },
+  settingsSelectWrap: {
+    position: "relative",
+    alignItems: "flex-end",
+    zIndex: 1000,
   },
   settingsSelectText: {
     fontSize: 12,
@@ -1184,6 +1190,8 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     minHeight: 60,
     textAlignVertical: "top",
+    position: "relative",
+    zIndex: 1,
   },
   settingsToggles: {
     flexDirection: "row",
@@ -1192,6 +1200,8 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
     paddingTop: 16,
+    position: "relative",
+    zIndex: 1,
   },
   checkboxRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   checkbox: {
@@ -1314,20 +1324,11 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
   },
   termOptionActive: { color: Theme.primary, fontWeight: "800" },
-  webTermsBackdrop: {
-    position: "fixed" as any,
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: "transparent",
-    zIndex: 999,
-  },
   webTermsDropdown: {
     position: "absolute" as any,
-    top: 42,
-    left: 0,
+    top: 44,
     right: 0,
+    width: 120,
     backgroundColor: Theme.cardWhite,
     borderRadius: 12,
     padding: 8,
@@ -1337,6 +1338,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
-    elevation: 8,
+    elevation: 24,
+    zIndex: 9999,
   },
 });
