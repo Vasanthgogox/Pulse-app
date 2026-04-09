@@ -5,8 +5,14 @@
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { getSignedAvatarUrl } from "@/lib/avatarUpload";
+import {
+    DEFAULT_USER_2D_AVATAR_SEED,
+    getUser2DAvatarUriForSeed,
+} from "@/constants/UserAvatars";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
     Image,
     Platform,
@@ -82,6 +88,37 @@ export function DemoTabBar({
   onNotificationPress,
   onLogoPress,
 }: DemoTabBarProps) {
+  const { profile } = useAuth();
+  const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const resolveAvatar = async () => {
+      if (!profile) {
+        if (mounted) setProfileAvatarUri(null);
+        return;
+      }
+      if (profile.avatar_url?.startsWith("http")) {
+        if (mounted) setProfileAvatarUri(profile.avatar_url);
+        return;
+      }
+      if (profile.avatar_url?.trim()) {
+        const signed = await getSignedAvatarUrl(profile.avatar_url.trim());
+        if (mounted) setProfileAvatarUri(signed);
+        return;
+      }
+      if (profile.avatar_seed?.trim()) {
+        if (mounted) setProfileAvatarUri(getUser2DAvatarUriForSeed(profile.avatar_seed.trim()));
+        return;
+      }
+      if (mounted) setProfileAvatarUri(getUser2DAvatarUriForSeed(DEFAULT_USER_2D_AVATAR_SEED));
+    };
+    void resolveAvatar();
+    return () => {
+      mounted = false;
+    };
+  }, [profile?.avatar_url, profile?.avatar_seed]);
+
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const { t } = useLanguage();
@@ -293,7 +330,11 @@ export function DemoTabBar({
                 accessibilityLabel="Profile"
                 accessibilityRole="button"
               >
-                <FontAwesome5 name="user-circle" size={24} color={Theme.textMutedDemo} />
+                {profileAvatarUri ? (
+                  <Image source={{ uri: profileAvatarUri }} style={styles.webProfileAvatar} />
+                ) : (
+                  <FontAwesome5 name="user-circle" size={24} color={Theme.textMutedDemo} />
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -426,6 +467,15 @@ const styles = StyleSheet.create({
   },
   webProfileBtn: {
     padding: 4,
+    width: 32,
+    height: 32,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  webProfileAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
   },
   dockColumn: {
     flex: 1,

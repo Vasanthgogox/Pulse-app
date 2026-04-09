@@ -6,8 +6,12 @@ import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
 import Layout from "@/constants/Layout";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAuth } from "@/contexts/AuthContext";
+import { getSignedAvatarUrl } from "@/lib/avatarUpload";
+import { DEFAULT_USER_2D_AVATAR_SEED, getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
+import { useState, useEffect } from "react";
 
 export interface TeslaHeaderProps {
   title: string;
@@ -50,6 +54,37 @@ export function TeslaHeader({
   hideRightIcons = false,
   onAddClick,
 }: TeslaHeaderProps) {
+  const { profile } = useAuth();
+  const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const resolveAvatar = async () => {
+      if (!profile) {
+        if (mounted) setProfileAvatarUri(null);
+        return;
+      }
+      if (profile.avatar_url?.startsWith("http")) {
+        if (mounted) setProfileAvatarUri(profile.avatar_url);
+        return;
+      }
+      if (profile.avatar_url?.trim()) {
+        const signed = await getSignedAvatarUrl(profile.avatar_url.trim());
+        if (mounted) setProfileAvatarUri(signed);
+        return;
+      }
+      if (profile.avatar_seed?.trim()) {
+        if (mounted) setProfileAvatarUri(getUser2DAvatarUriForSeed(profile.avatar_seed.trim()));
+        return;
+      }
+      if (mounted) setProfileAvatarUri(getUser2DAvatarUriForSeed(DEFAULT_USER_2D_AVATAR_SEED));
+    };
+    void resolveAvatar();
+    return () => {
+      mounted = false;
+    };
+  }, [profile?.avatar_url, profile?.avatar_seed]);
+
   const insets = useSafeAreaInsets();
   const isDark = variant === 'dark';
   const topPadding = skipSafeAreaTop ? 16 : insets.top + 16;
@@ -104,14 +139,22 @@ export function TeslaHeader({
         {onProfileClick ? (
           <TouchableOpacity
             onPress={onProfileClick}
-            style={[styles.avatar, isDark && styles.avatarDark]}
+            style={[styles.avatar, isDark && styles.avatarDark, profileAvatarUri ? styles.avatarWithImage : null]}
             hitSlop={8}
           >
-            <FontAwesome name="user" size={12} color={mutedColor(isDark)} />
+            {profileAvatarUri ? (
+              <Image source={{ uri: profileAvatarUri }} style={styles.avatarImage} />
+            ) : (
+              <FontAwesome name="user" size={12} color={mutedColor(isDark)} />
+            )}
           </TouchableOpacity>
         ) : (
-          <View style={[styles.avatar, isDark && styles.avatarDark]}>
-            <FontAwesome name="user" size={12} color={mutedColor(isDark)} />
+          <View style={[styles.avatar, isDark && styles.avatarDark, profileAvatarUri ? styles.avatarWithImage : null]}>
+            {profileAvatarUri ? (
+              <Image source={{ uri: profileAvatarUri }} style={styles.avatarImage} />
+            ) : (
+              <FontAwesome name="user" size={12} color={mutedColor(isDark)} />
+            )}
           </View>
         )}
         {onAddClick != null && (
@@ -220,6 +263,15 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
+  },
+  avatarWithImage: {
+    borderWidth: 0,
+    backgroundColor: "transparent",
+  },
+  avatarImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 12,
   },
   addBtn: {
     width: 44,
