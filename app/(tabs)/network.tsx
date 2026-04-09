@@ -1854,7 +1854,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.border,
   },
-  inviteBtnText: { color: "#cbd5e1" },
+  inviteBtnText: { color: Theme.textPrimaryDark },
   activePill: {
     flexDirection: "row",
     alignItems: "center",

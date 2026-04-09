@@ -689,7 +689,11 @@ export default function ClientDetailScreen({
             activeOpacity={0.8}
             accessibilityLabel="Client profile"
           >
-            <FontAwesome name="user" size={16} color={Theme.textOnPrimary} />
+            {profileAvatarUri ? (
+              <Image source={{ uri: profileAvatarUri }} style={styles.headerAvatarImage} />
+            ) : (
+              <FontAwesome name="user" size={16} color={Theme.textPrimaryDark} />
+            )}
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.downloadBtn}
@@ -1113,9 +1117,14 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
+  },
+  headerAvatarImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 12,
   },
   downloadBtn: {
     width: 40,
