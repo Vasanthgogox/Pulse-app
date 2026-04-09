@@ -1034,9 +1034,11 @@ export function LoadCenterView({
         : Number(load.client_price || 0);
 
     return (
-      <View
+      <TouchableOpacity
         key={`${isDone ? "done" : "active"}-${load.id}`}
         style={styles.awardedCard}
+        onPress={() => onIndentPress(load)}
+        activeOpacity={0.7}
       >
         <View style={styles.awardedCardTop}>
           <View style={styles.awardedBadge}>
@@ -1102,7 +1104,7 @@ export function LoadCenterView({
             </Text>
           </TouchableOpacity>
         )}
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -1281,7 +1283,12 @@ export function LoadCenterView({
                   const isAwaitingSupplierDeploy =
                     isAwardedPendingTrip || hasDirectSupplier;
                   return (
-                    <View key={load.id} style={styles.loadCard}>
+                    <TouchableOpacity
+                      key={load.id}
+                      style={styles.loadCard}
+                      onPress={() => onIndentPress(load)}
+                      activeOpacity={0.7}
+                    >
                       <View style={styles.loadCardTop}>
                         <View style={styles.loadCardTopLeft}>
                           <Text style={styles.loadCardRoute} numberOfLines={3}>
@@ -1396,7 +1403,7 @@ export function LoadCenterView({
                           )}
                         </View>
                       </View>
-                    </View>
+                    </TouchableOpacity>
                   );
                 })
               )}
@@ -1466,7 +1473,12 @@ export function LoadCenterView({
                   setLoadAction({ type: "BID", load });
                 };
                 return (
-                  <View key={load.id} style={styles.loadCard}>
+                  <TouchableOpacity
+                    key={load.id}
+                    style={styles.loadCard}
+                    onPress={() => onIndentPress(load)}
+                    activeOpacity={0.7}
+                  >
                     <View style={styles.loadCardTop}>
                       <View style={styles.loadCardTopLeft}>
                         <Text style={styles.getLoadCompany} numberOfLines={2}>
@@ -1568,7 +1580,7 @@ export function LoadCenterView({
                         </Text>
                       </TouchableOpacity>
                     )}
-                  </View>
+                  </TouchableOpacity>
                 );
               })
             ))}

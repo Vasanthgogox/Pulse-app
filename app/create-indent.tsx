@@ -15,6 +15,7 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  Dimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -37,6 +38,7 @@ import {
   getClientsByOrganization,
   type ClientRow,
 } from '@/features/clients';
+import { VEHICLE_CATEGORY_LABELS, BODY_LENGTH_SELECT_OPTIONS, normalizeBodyLengthKey, OTHER_LABEL } from '@/features/vehicles/utils/vehicleFormOptions.util';
 import {
   VALIDATION,
   dateISO,
@@ -167,6 +169,8 @@ export default function CreateIndentScreen() {
   const [routeLoading, setRouteLoading] = useState(false);
   const [pickupDropdownOpen, setPickupDropdownOpen] = useState(false);
   const [dropDropdownOpen, setDropDropdownOpen] = useState(false);
+  const [vehicleTypePickerOpen, setVehicleTypePickerOpen] = useState(false);
+  const [vehicleTypeIsOther, setVehicleTypeIsOther] = useState(false);
 
   const capabilities = getCapabilitiesFromProfile(
     profile ? { role: profile.role, aggregated: profile.aggregated, asset: profile.asset } : null
@@ -662,13 +666,40 @@ export default function CreateIndentScreen() {
           <View style={styles.sheetGrid}>
             <View style={styles.sheetField}>
               <Text style={styles.sheetLabel}>Vehicle</Text>
-              <TextInput
-                style={[styles.sheetInput, errors.vehicle_type && styles.inputError]}
-                value={form.vehicle_type}
-                onChangeText={(t) => update({ vehicle_type: t })}
-                placeholder="e.g. Truck"
-                placeholderTextColor={Theme.textMuted}
-              />
+              {vehicleTypeIsOther ? (
+                <TextInput
+                  style={[styles.sheetInput, errors.vehicle_type && styles.inputError]}
+                  value={form.vehicle_type}
+                  onChangeText={(t) => update({ vehicle_type: t })}
+                  placeholder="Type vehicle"
+                  placeholderTextColor={Theme.textMuted}
+                />
+              ) : (
+                <TouchableOpacity
+                  style={[
+                    styles.sheetInput,
+                    { justifyContent: 'center' },
+                    errors.vehicle_type && styles.inputError,
+                  ]}
+                  onPress={() => setVehicleTypePickerOpen(true)}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={form.vehicle_type ? styles.dropdownTouchableText : styles.dropdownTouchablePlaceholder}
+                    numberOfLines={1}
+                  >
+                    {form.vehicle_type || 'Select Vehicle'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {vehicleTypeIsOther ? (
+                <TouchableOpacity
+                  onPress={() => setVehicleTypePickerOpen(true)}
+                  style={styles.switchToPresetLink}
+                >
+                  <Text style={styles.switchToPresetLinkText}>Choose from list instead</Text>
+                </TouchableOpacity>
+              ) : null}
               {errors.vehicle_type ? <Text style={styles.errorText}>{errors.vehicle_type}</Text> : null}
             </View>
             <View style={styles.sheetField}>
@@ -776,6 +807,123 @@ export default function CreateIndentScreen() {
               )
             )}
           </View>
+
+          {vehicleTypePickerOpen ? (
+            <Modal
+              visible
+              transparent
+              animationType="slide"
+              onRequestClose={() => setVehicleTypePickerOpen(false)}
+            >
+              <KeyboardAvoidingView
+                style={styles.datePickerBackdrop}
+                behavior={Platform.OS === "ios" ? "padding" : undefined}
+              >
+                <TouchableOpacity
+                  style={StyleSheet.absoluteFill}
+                  activeOpacity={1}
+                  onPress={() => setVehicleTypePickerOpen(false)}
+                />
+                  <View
+                    style={[
+                      styles.datePickerSheet,
+                      { paddingBottom: insets.bottom + 16, maxHeight: Dimensions.get("window").height * 0.8 },
+                    ]}
+                  >
+                  <View style={styles.datePickerHeader}>
+                    <Text style={styles.datePickerTitle}>Select Vehicle</Text>
+                    <TouchableOpacity onPress={() => setVehicleTypePickerOpen(false)} hitSlop={12}>
+                      <Text style={styles.datePickerDone}>Done</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <ScrollView
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator
+                    style={{ maxHeight: Dimensions.get("window").height * 0.7 }}
+                  >
+                    <View style={styles.vehicleOptionSection}>
+                      <Text style={styles.vehicleOptionSectionTitle}>Categories</Text>
+                    </View>
+                    {VEHICLE_CATEGORY_LABELS.map((opt) => (
+                      <TouchableOpacity
+                        key={opt}
+                        style={[
+                          styles.vehicleOptionRow,
+                          form.vehicle_type === opt && !vehicleTypeIsOther && styles.vehicleOptionRowActive,
+                        ]}
+                        onPress={() => {
+                          setVehicleTypeIsOther(false);
+                          update({ vehicle_type: opt });
+                          setVehicleTypePickerOpen(false);
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.vehicleOptionText,
+                            form.vehicle_type === opt && !vehicleTypeIsOther && styles.vehicleOptionTextActive,
+                          ]}
+                        >
+                          {opt}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                    
+                    <View style={styles.vehicleOptionSection}>
+                      <Text style={styles.vehicleOptionSectionTitle}>Presets & Lengths</Text>
+                    </View>
+                    {BODY_LENGTH_SELECT_OPTIONS.map((opt) => (
+                      <TouchableOpacity
+                        key={normalizeBodyLengthKey(opt)}
+                        style={[
+                          styles.vehicleOptionRow,
+                          form.vehicle_type === opt && !vehicleTypeIsOther && styles.vehicleOptionRowActive,
+                        ]}
+                        onPress={() => {
+                          setVehicleTypeIsOther(false);
+                          update({ vehicle_type: opt });
+                          setVehicleTypePickerOpen(false);
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.vehicleOptionText,
+                            form.vehicle_type === opt && !vehicleTypeIsOther && styles.vehicleOptionTextActive,
+                          ]}
+                        >
+                          {opt}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+
+                    <View style={styles.vehicleOptionSection}>
+                      <Text style={styles.vehicleOptionSectionTitle}>Custom</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[
+                        styles.vehicleOptionRow,
+                        vehicleTypeIsOther && styles.vehicleOptionRowActive,
+                        { borderBottomWidth: 0 }
+                      ]}
+                      onPress={() => {
+                        setVehicleTypeIsOther(true);
+                        update({ vehicle_type: '' });
+                        setVehicleTypePickerOpen(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.vehicleOptionText,
+                          vehicleTypeIsOther && styles.vehicleOptionTextActive,
+                        ]}
+                      >
+                        {OTHER_LABEL} — type manually
+                      </Text>
+                    </TouchableOpacity>
+                  </ScrollView>
+                </View>
+              </KeyboardAvoidingView>
+            </Modal>
+          ) : null}
 
             <TouchableOpacity
               style={[styles.submitBtn, (!canSubmit || submitting) && styles.submitBtnDisabled]}
@@ -970,6 +1118,58 @@ const styles = StyleSheet.create({
   dateTouchablePlaceholder: {
     fontSize: 14,
     color: Theme.textMuted,
+  },
+  dropdownTouchableText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Theme.textPrimaryDark,
+  },
+  dropdownTouchablePlaceholder: {
+    fontSize: 14,
+    color: Theme.textMuted,
+  },
+  vehicleOptionSection: {
+    backgroundColor: Theme.surfaceGray,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
+  vehicleOptionSectionTitle: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  vehicleOptionRow: {
+    paddingVertical: 14,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+  },
+  vehicleOptionRowActive: {
+    backgroundColor: Theme.surface,
+  },
+  vehicleOptionText: {
+    fontSize: 15,
+    color: Theme.textPrimaryDark,
+  },
+  vehicleOptionTextActive: {
+    fontWeight: "700",
+    color: Theme.primary,
+  },
+  switchToPresetLink: {
+    marginTop: 6,
+    paddingVertical: 2,
+  },
+  switchToPresetLinkText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.primary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   datePickerBackdrop: {
     flex: 1,
