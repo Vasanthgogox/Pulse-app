@@ -19,6 +19,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { LedgerCategory } from '../types';
 
 export type EntityListFilter = 'all' | 'has_due' | 'no_due';
 
@@ -63,6 +64,9 @@ export interface TreasurySummaryCardProps {
   onCashInPress?: () => void;
   /** Ledger tab: called when user taps the cash-out (right) summary cell. Toggle filter to out/all. */
   onCashOutPress?: () => void;
+  /** Cash tab: filter by ledger party category (All / Customers / Suppliers / Vehicle / Driver). */
+  ledgerCategory?: LedgerCategory;
+  onLedgerCategoryChange?: (c: LedgerCategory) => void;
   /** When entity filter row is shown, optional content to render on the right (e.g. view mode icons). */
   filterRowRight?: ReactNode;
   /**
@@ -87,6 +91,14 @@ const SOURCE_FILTER_LABELS: Record<'all' | 'asset' | 'aggregate', string> = {
   all: 'All',
   asset: 'Asset',
   aggregate: 'Aggregate',
+};
+
+const LEDGER_CATEGORY_LABELS: Record<LedgerCategory, string> = {
+  all: 'All',
+  customers: 'Customers',
+  suppliers: 'Suppliers',
+  vehicle: 'Vehicle',
+  driver: 'Driver',
 };
 
 function formatAmount(n: number): string {
@@ -271,6 +283,8 @@ export function TreasurySummaryCard({
   cashDirectionFilter = 'all',
   onCashInPress,
   onCashOutPress,
+  ledgerCategory = 'all',
+  onLedgerCategoryChange,
   filterRowRight,
   amountAnimationResetKey,
   cashNetworkLayout = false,
@@ -314,6 +328,9 @@ export function TreasurySummaryCard({
   /** Entity filter is shown as Network-style chips in the toolbar; skip duplicate dropdown. */
   const hideEntityFilterDropdown =
     cashNetworkToolbar && onEntityFilterChange != null;
+
+  const showLedgerCategoryInPeriodDropdown =
+    cashNetworkToolbar && onEntityFilterChange == null && onLedgerCategoryChange != null;
 
   const periodAndSourceFilters = (
     <>
@@ -372,7 +389,17 @@ export function TreasurySummaryCard({
                 >
                   <View style={StyleSheet.absoluteFill} />
                 </TouchableWithoutFeedback>
-                <View style={[styles.filterModalCardWrap, { top: dropdownAnchorY > 0 ? dropdownAnchorY : insets.top + 100 }]}>
+                <View
+                  style={[
+                    styles.filterModalCardWrap,
+                    {
+                      top:
+                        dropdownAnchorY > 0
+                          ? Math.max(insets.top + 12, dropdownAnchorY - 40)
+                          : insets.top + 60,
+                    },
+                  ]}
+                >
                   <View style={styles.filterModalCard}>
                     <View style={styles.filterModalHandle} />
                     {onEntityFilterChange && showFilterDropdown && (
@@ -512,6 +539,44 @@ export function TreasurySummaryCard({
                             )}
                           </TouchableOpacity>
                         ))}
+
+                        {showLedgerCategoryInPeriodDropdown && (
+                          <>
+                            <View style={styles.filterModalDivider} />
+                            <View style={styles.filterModalSectionRow}>
+                              <FontAwesome name="users" size={11} color={Theme.teslaRed} style={styles.filterModalSectionIcon} />
+                              <Text style={styles.filterModalSectionLabel}>Type</Text>
+                            </View>
+                            {(['all', 'customers', 'suppliers', 'vehicle', 'driver'] as const).map((c) => (
+                              <TouchableOpacity
+                                key={c}
+                                style={[styles.dropdownItem, ledgerCategory === c && styles.dropdownItemActive]}
+                                onPress={() => {
+                                  onLedgerCategoryChange?.(c);
+                                  setShowFilterDropdown(false);
+                                  setShowPeriodDropdown(false);
+                                  setShowSourceDropdown(false);
+                                }}
+                                activeOpacity={0.75}
+                              >
+                                {ledgerCategory === c && <View style={styles.dropdownItemAccent} />}
+                                <View style={[styles.dropdownItemIconWrap, ledgerCategory === c && styles.dropdownItemIconWrapActive]}>
+                                  <FontAwesome
+                                    name={c === 'all' ? 'list' : c === 'customers' ? 'building' : c === 'suppliers' ? 'warehouse' : c === 'vehicle' ? 'truck' : 'user'}
+                                    size={14}
+                                    color={ledgerCategory === c ? Theme.teslaRed : Theme.textMutedDemo}
+                                  />
+                                </View>
+                                <Text style={[styles.dropdownItemText, ledgerCategory === c && styles.dropdownItemTextActive]}>
+                                  {LEDGER_CATEGORY_LABELS[c]}
+                                </Text>
+                                {ledgerCategory === c && (
+                                  <FontAwesome name="check" size={12} color={Theme.teslaRed} style={styles.dropdownItemCheck} />
+                                )}
+                              </TouchableOpacity>
+                            ))}
+                          </>
+                        )}
                       </>
                     )}
                     {onSourceFilterChange && showSourceDropdown && (
@@ -1297,8 +1362,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   filterModalCard: {
-    width: '100%',
-    maxWidth: 280,
+    width: 280,
+    maxWidth: '100%',
+    alignSelf: 'center',
     backgroundColor: Theme.darkBackground,
     borderTopWidth: 2,
     borderTopColor: Theme.teslaRed,

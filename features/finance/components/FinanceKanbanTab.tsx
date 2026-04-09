@@ -103,7 +103,6 @@ function formatTxDate(iso: string | null | undefined): string {
 }
 
 function KanbanCard({ row, index, cat, isExpanded, toggleExpand, hasAmtIn, amount, dateStr, vehicleStr, partyName, routeWhyLine, rowData, tripIdOnly, onRowSelect }: any) {
-  const [isCardHovered, setIsCardHovered] = useState(false);
   const avatarBg = avatarColor(partyName);
   const initialText = initials(partyName);
 
@@ -113,19 +112,10 @@ function KanbanCard({ row, index, cat, isExpanded, toggleExpand, hasAmtIn, amoun
       entering={FadeInUp.delay(index * 30).springify()}
       layout={Layout.springify()}
     >
-      <Animated.View
-        style={{
-          transform: [{ scale: isCardHovered ? 1.02 : 1 }],
-        }}
-        // @ts-ignore
-        onMouseEnter={() => setIsCardHovered(true)}
-        onMouseLeave={() => setIsCardHovered(false)}
-      >
-        <TouchableOpacity 
+      <TouchableOpacity 
         style={[
           styles.timelineCard, 
-          isExpanded && styles.cardExpanded,
-          isCardHovered && styles.cardHovered
+          isExpanded && styles.cardExpanded
         ]}
         activeOpacity={0.7}
         onPress={() => toggleExpand(row.id)}
@@ -199,7 +189,6 @@ function KanbanCard({ row, index, cat, isExpanded, toggleExpand, hasAmtIn, amoun
           )}
         </View>
       )}
-      </Animated.View>
     </Animated.View>
   );
 }
@@ -585,12 +574,6 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
     borderBottomWidth: 0,
-  },
-  cardHovered: {
-    borderColor: Theme.primary,
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
   },
   timelineCardAvatar: {
     width: 32,

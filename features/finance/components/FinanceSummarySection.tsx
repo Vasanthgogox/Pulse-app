@@ -11,6 +11,7 @@ import { styles } from "./FinanceScreen.styles";
 import { FinanceTabRow } from "./FinanceTabRow";
 import type { EntityListFilter } from "./TreasurySummaryCard";
 import { TreasurySummaryCard } from "./TreasurySummaryCard";
+import type { LedgerCategory } from "../types";
 
 export type LedgerViewMode = "table" | "transaction";
 
@@ -54,6 +55,9 @@ export interface FinanceSummarySectionProps {
   onCustomerViewModeChange?: (m: "matrix" | "table" | "ledger") => void;
   /** When set, shows plus button in header (e.g. Add transaction on cash tab, Add node on entity tabs). */
   onAddClick?: () => void;
+  /** Cash tab: party category filter (All / Customers / Suppliers / Vehicle / Driver). */
+  ledgerCategory?: LedgerCategory;
+  onLedgerCategoryChange?: (c: LedgerCategory) => void;
   onClearFilters?: () => void;
   isAnyFilterActive?: boolean;
 }
@@ -93,6 +97,8 @@ export function FinanceSummarySection({
   customerViewMode,
   onCustomerViewModeChange,
   onAddClick,
+  ledgerCategory,
+  onLedgerCategoryChange,
   onClearFilters,
   isAnyFilterActive,
 }: FinanceSummarySectionProps) {
@@ -209,6 +215,8 @@ export function FinanceSummarySection({
           cashDirectionFilter={cashDirectionFilter}
           onCashInPress={onCashInPress}
           onCashOutPress={onCashOutPress}
+          ledgerCategory={ledgerCategory}
+          onLedgerCategoryChange={onLedgerCategoryChange}
           searchQuery={searchQuery}
           onSearchChange={onSearchChange}
           searchPlaceholder={searchPlaceholder}
