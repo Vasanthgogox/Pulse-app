@@ -76,7 +76,11 @@ function canAccessLogPods(
   );
 }
 
-export function LogIncomingPodsScreen() {
+interface LogIncomingPodsScreenProps {
+  embedded?: boolean;
+}
+
+export function LogIncomingPodsScreen({ embedded = false }: LogIncomingPodsScreenProps) {
   const insets = useSafeAreaInsets();
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
@@ -131,7 +135,7 @@ export function LogIncomingPodsScreen() {
       }
       setCourierModalOpen(false);
       setCourierSearch("");
-    } catch (e) {
+    } catch {
       Alert.alert("Error", "Could not add custom courier partner.");
     }
   };
@@ -351,7 +355,11 @@ export function LogIncomingPodsScreen() {
         setCustomCourierName("");
         setTrackingId("");
         setCourierSearch("");
-        router.back();
+        if (!embedded) {
+          router.back();
+        } else {
+          Alert.alert("Success", "Incoming PODs logged successfully.");
+        }
       } catch (e) {
         Alert.alert(
           "Error",
@@ -865,8 +873,9 @@ export function LogIncomingPodsScreen() {
   );
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
-      <View style={styles.topBar}>
+    <View style={[styles.root, { paddingTop: embedded ? 0 : insets.top }]}>
+      {!embedded ? (
+        <View style={styles.topBar}>
         <View style={styles.topBarLeft}>
           <Pressable
             style={styles.iconBtn}
@@ -929,7 +938,8 @@ export function LogIncomingPodsScreen() {
             )}
           </Pressable>
         </View>
-      </View>
+        </View>
+      ) : null}
 
       <View style={styles.contentArea}>
         {isMediumScreen ? (
