@@ -31,7 +31,7 @@ export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = 
   const printRef = useRef<HTMLDivElement>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
-  const logoUrl = logoFailed ? null : invoiceData.brandingLogoUrl;
+  const logoUrl = logoFailed ? null : invoiceData.brandingLogoUrl;        
 
   const handleDownloadPdf = async () => {
     if (!printRef.current) return;
