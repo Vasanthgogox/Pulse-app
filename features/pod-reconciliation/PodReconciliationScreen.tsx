@@ -202,19 +202,10 @@ export function PodReconciliationScreen() {
   };
 
   const filteredTrips = useMemo(() => {
-    return trips.filter((trip) => {
-      const tripStatusOk =
-        columnFilters.trip_status.length === 0 ||
-        columnFilters.trip_status.includes(getTripStatusLabel(trip));
-      const podStatusOk =
-        columnFilters.pod_status.length === 0 ||
-        columnFilters.pod_status.includes(getPodStatusLabel(trip));
-      const invStatusOk =
-        columnFilters.invoice_status_1.length === 0 ||
-        columnFilters.invoice_status_1.includes(getInvStatusLabel(trip));
-      return tripStatusOk && podStatusOk && invStatusOk;
-    });
-  }, [trips, columnFilters]);
+    // Column-level modal filters are intentionally disabled in this flow.
+    // Keep table/cards aligned to the same base trip set.
+    return trips;
+  }, [trips]);
 
   const sortedTrips = useMemo(
     () => sortTrips(filteredTrips),
@@ -881,7 +872,7 @@ export function PodReconciliationScreen() {
                       <Text style={styles.retryBtnText}>Retry</Text>
                     </Pressable>
                   </View>
-                ) : trips.length === 0 ? (
+            ) : sortedTrips.length === 0 ? (
                   <View style={styles.empty}>
                     <FontAwesome
                       name="folder-open-o"
@@ -895,8 +886,20 @@ export function PodReconciliationScreen() {
                       Try adjusting your filters or tab selection.
                     </Text>
                   </View>
-                ) : viewMode === "table" && isMediumScreen ? (
-                  <View style={styles.tableWrap}>
+            ) : viewMode === "table" && isMediumScreen ? (
+              <ScrollView
+                {...tabBarScrollProps}
+                contentContainerStyle={[
+                  styles.tableModeScrollContent,
+                  {
+                    paddingBottom: Math.max(
+                      16,
+                      insets.bottom + Layout.demoTabBarScrollBottomInset + 12,
+                    ),
+                  },
+                ]}
+              >
+                <View style={styles.tableWrap}>
                     <ScrollView
                       horizontal
                       showsHorizontalScrollIndicator
@@ -1094,6 +1097,7 @@ export function PodReconciliationScreen() {
                       </View>
                     </View>
                   </View>
+              </ScrollView>
                 ) : (
                   <ScrollView
                     refreshControl={
@@ -1125,7 +1129,7 @@ export function PodReconciliationScreen() {
                             : styles.listContainerMobile
                       }
                     >
-                      {trips.map((item) => (
+                  {sortedTrips.map((item) => (
                         <View
                           key={item.internal_id}
                           style={
@@ -2196,14 +2200,15 @@ const styles = StyleSheet.create({
 
   contentArea: { flex: 1, backgroundColor: "#f8f9fa", width: "100%" },
   tableWrap: {
-    flex: 1,
     marginHorizontal: 16,
-    marginBottom: 16,
     backgroundColor: Theme.cardWhite,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     borderRadius: 12,
     overflow: "hidden",
+  },
+  tableModeScrollContent: {
+    paddingTop: 0,
   },
   tableInner: {
     minWidth: 1560,
