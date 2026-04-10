@@ -1,6 +1,7 @@
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import {
     DEFAULT_USER_2D_AVATAR_SEED,
     getUser2DAvatarUriForSeed,
@@ -120,6 +121,7 @@ function ProfileItemRow({
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const { signOut, user, profile, refreshSession } = useAuth();
 
@@ -250,9 +252,15 @@ export default function ProfileScreen() {
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: Layout.sectionSpacing + insets.bottom },
+          {
+            paddingBottom:
+              Layout.sectionSpacing +
+              insets.bottom +
+              Layout.demoTabBarScrollBottomInset,
+          },
         ]}
         showsVerticalScrollIndicator={false}
+        {...tabBarScrollProps}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

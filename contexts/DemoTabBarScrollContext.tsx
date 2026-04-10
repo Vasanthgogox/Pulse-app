@@ -19,9 +19,9 @@ import Animated, {
 } from "react-native-reanimated";
 
 const HIDE_MS = 200;
-const SHOW_MS = 240;
+const SHOW_MS = 200;
 const WEB_IDLE_MS = 380;
-const SHOW_DELAY_MS = 320;
+const SHOW_DELAY_MS = 0;
 
 type ScrollControls = {
   onScrollBeginDrag: () => void;

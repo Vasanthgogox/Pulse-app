@@ -6,6 +6,7 @@ import { FAB } from "@/components/FAB";
 import { IntegrationModeTag } from "@/components/IntegrationModeTag";
 import { LiquidFillPill } from "@/components/LiquidFillPill";
 import Theme from "@/constants/Theme";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import {
     aggregateCustomers,
     type TripPartyMap,
@@ -1816,6 +1817,7 @@ export function CustomersTab({
   onRefresh,
   bottomInset = 100,
 }: CustomersTabProps) {
+  const tabBarScrollProps = useTabBarAwareScrollProps();
   const insets = useSafeAreaInsets();
   const [selectedCustomer, setSelectedCustomer] =
     useState<FinancialRowData | null>(null);
@@ -1935,6 +1937,7 @@ export function CustomersTab({
           { paddingBottom: bottomInset + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
+        {...tabBarScrollProps}
         stickyHeaderIndices={[stickyHeaderIndex]}
         refreshControl={
           onRefresh ? (

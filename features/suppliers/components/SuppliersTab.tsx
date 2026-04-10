@@ -5,6 +5,7 @@
 import { IntegrationModeTag } from "@/components/IntegrationModeTag";
 import { LiquidFillPill } from "@/components/LiquidFillPill";
 import Theme from "@/constants/Theme";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import type { EntityListFilter } from "@/features/finance/components/TreasurySummaryCard";
 import { aggregateSuppliers, type FinancialRowData, type TripPartyMap } from "@/features/finance/aggregation";
 import type { DirectQuoteForAggregation, IndentForAggregation } from "@/features/finance/aggregation/types";
@@ -92,6 +93,7 @@ export function SuppliersTab({
   onRefresh,
   bottomInset = 100,
 }: SuppliersTabProps) {
+  const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [suppliersState, setSuppliersState] = useState<SupplierRow[]>([]);
@@ -201,6 +203,7 @@ export function SuppliersTab({
           { paddingBottom: bottomInset + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
+        {...tabBarScrollProps}
         stickyHeaderIndices={[stickyHeaderIndex]}
         refreshControl={
           onRefresh ? (

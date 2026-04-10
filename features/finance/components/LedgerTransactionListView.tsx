@@ -5,6 +5,7 @@
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { getDoubleEntryDisplayLabel } from "@/features/finance/accounting/accountingModel";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { formatLedgerAmount } from "@/lib/format";
@@ -505,6 +506,7 @@ export function LedgerTransactionListView({
   onExportPress,
   renderPartyAvatar,
 }: LedgerTransactionListViewProps) {
+  const tabBarScrollProps = useTabBarAwareScrollProps();
   const { t } = useLanguage();
   const [tripPickerRowId, setTripPickerRowId] = useState<string | null>(null);
   const [fiscalViewModeInternal, setFiscalViewModeInternal] = useState<
@@ -803,6 +805,7 @@ export function LedgerTransactionListView({
             style={styles.tableViewScroll}
             contentContainerStyle={styles.tableViewScrollContent}
             showsVerticalScrollIndicator={false}
+            {...tabBarScrollProps}
           >
             {groups.map(({ key, rows: sectionRows }) => {
               const sectionLabel =
@@ -1239,6 +1242,7 @@ export function LedgerTransactionListView({
                   showsVerticalScrollIndicator: false,
                   style: styles.ledgerMainScroll,
                   contentContainerStyle: styles.ledgerMainScrollContent,
+                  ...tabBarScrollProps,
                 };
             return (
               <ScrollWrapper {...scrollWrapperProps}>
