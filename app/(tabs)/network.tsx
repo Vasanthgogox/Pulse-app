@@ -43,6 +43,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
@@ -205,9 +206,12 @@ function getDriverFallbackSeed(id: string): string {
 function NetworkAvatar({
   node,
   onPlatform,
+  frameSize,
 }: {
   node: NetworkNode;
   onPlatform: boolean;
+  /** When set, avatar is cropped to a circle of this diameter (hero / stories). */
+  frameSize?: number;
 }) {
   const [uri, setUri] = useState<string | null>(null);
 
@@ -283,10 +287,40 @@ function NetworkAvatar({
     node.avatar_seed,
   ]);
 
+  const iconSize = frameSize ? Math.round(frameSize * 0.4) : 18;
+
   if (uri) {
+    const inner = frameSize ? frameSize - 4 : undefined;
     return (
-      <View style={styles.nodeAvatarWrap}>
-        <Image source={{ uri }} style={styles.nodeAvatar} />
+      <View
+        style={[
+          styles.nodeAvatarWrap,
+          frameSize
+            ? {
+                width: frameSize,
+                height: frameSize,
+                borderRadius: frameSize / 2,
+                borderWidth: 2,
+                borderColor: Theme.primary,
+                padding: 2,
+                backgroundColor: Theme.screenBackground,
+              }
+            : null,
+        ]}
+      >
+        <Image
+          source={{ uri }}
+          style={[
+            styles.nodeAvatar,
+            inner
+              ? {
+                  width: inner,
+                  height: inner,
+                  borderRadius: inner / 2,
+                }
+              : null,
+          ]}
+        />
         {node.type === "DRIVER" ? (
           <View style={styles.driverIconBadge}>
             <User size={10} strokeWidth={2} color={Theme.textOnPrimary} />
@@ -298,6 +332,44 @@ function NetworkAvatar({
 
   // If no avatar found but on platform, we could show a more "active" default icon
   // but for now we'll stick to the themed icons.
+  const iconWrap =
+    frameSize != null ? (
+      <View
+        style={{
+          width: frameSize,
+          height: frameSize,
+          borderRadius: frameSize / 2,
+          borderWidth: 2,
+          borderColor: Theme.primary,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: Theme.surface,
+        }}
+      >
+        {node.type === "DRIVER" ? (
+          <User
+            size={iconSize}
+            strokeWidth={1.5}
+            color={onPlatform ? Theme.darkGreen : Theme.iconSecondary}
+          />
+        ) : node.type === "SUPPLIER" ? (
+          <Truck
+            size={iconSize}
+            strokeWidth={1.5}
+            color={onPlatform ? Theme.darkGreen : Theme.iconSecondary}
+          />
+        ) : (
+          <Building2
+            size={iconSize}
+            strokeWidth={1.5}
+            color={onPlatform ? Theme.darkGreen : Theme.iconSecondary}
+          />
+        )}
+      </View>
+    ) : null;
+
+  if (iconWrap) return iconWrap;
+
   if (node.type === "DRIVER") {
     return (
       <User
@@ -325,14 +397,50 @@ function NetworkAvatar({
   );
 }
 
+function shortRelativeTime(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "";
+  const d = Date.now() - t;
+  const m = Math.floor(d / 60000);
+  if (m < 1) return "now";
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 48) return `${h}h`;
+  const days = Math.floor(h / 24);
+  return `${days}d`;
+}
+
 export default function NetworkScreen() {
   const { width } = useWindowDimensions();
   const isLargeScreen = Platform.OS === "web" && width >= 1024;
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t } = useLanguage();
-  const { currentOrganization } = useOrganization();
+   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
+
+  const tabBarScrollProps = useTabBarAwareScrollProps();
+  const screenTopPad =
+    Platform.OS === "web" ? 0 : insets.top + Layout.headerPaddingBelowInset;
+  const scrollBottomPad =
+    24 + Layout.demoTabBarScrollBottomInset + insets.bottom + 24;
+  const [socialTap, setSocialTap] = useState<
+    Record<string, { heart: boolean; save: boolean }>
+  >({});
+
+  const toggleHeart = useCallback((id: string) => {
+    setSocialTap((s) => {
+      const cur = s[id] ?? { heart: false, save: false };
+      return { ...s, [id]: { ...cur, heart: !cur.heart } };
+    });
+  }, []);
+
+  const toggleSave = useCallback((id: string) => {
+    setSocialTap((s) => {
+      const cur = s[id] ?? { heart: false, save: false };
+      return { ...s, [id]: { ...cur, save: !cur.save } };
+    });
+  }, []);
 
   const [subTab, setSubTab] = useState<SubTab>("manage");
   const [segment, setSegment] = useState<NetworkSegment>("ALL");
@@ -618,7 +726,7 @@ export default function NetworkScreen() {
       <View
         style={[
           styles.container,
-          { paddingTop: insets.top + Layout.tabBarHeight + 20 },
+          { paddingTop: screenTopPad },
         ]}
       >
         <View
@@ -661,7 +769,7 @@ export default function NetworkScreen() {
     <View
       style={[
         styles.container,
-        { paddingTop: insets.top + Layout.tabBarHeight + 20 },
+        { paddingTop: screenTopPad },
       ]}
     >
       {/* Sync toast — small animated pill, non-blocking */}
@@ -832,9 +940,10 @@ export default function NetworkScreen() {
           style={styles.scroll}
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingBottom: 24 + Layout.tabBarHeight + insets.bottom + 24 },
+            { paddingBottom: scrollBottomPad },
           ]}
           showsVerticalScrollIndicator={false}
+          {...tabBarScrollProps}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -843,6 +952,44 @@ export default function NetworkScreen() {
             />
           }
         >
+          {segment === "ALL" && !isLargeScreen && filteredNodes.length > 0 ? (
+            <View style={styles.storiesSection}>
+              <Text style={styles.storiesSectionLabel}>On your grid</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.storiesRow}
+              >
+                {filteredNodes.slice(0, 24).map((node) => {
+                  const onPlatform = node.availableOnApp ?? node.isIntegrated;
+                  return (
+                    <TouchableOpacity
+                      key={`story-${node.id}`}
+                      style={styles.storyItem}
+                      activeOpacity={0.85}
+                      onPress={() => {
+                        if (node.type === "CLIENT")
+                          router.push(`/client/${node.id}`);
+                        else if (node.type === "SUPPLIER")
+                          router.push(`/supplier/${node.id}`);
+                        else if (node.type === "DRIVER")
+                          router.push(`/driver/${node.id}`);
+                      }}
+                    >
+                      <NetworkAvatar
+                        node={node}
+                        onPlatform={onPlatform}
+                        frameSize={54}
+                      />
+                      <Text style={styles.storyLabel} numberOfLines={1}>
+                        {node.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          ) : null}
           {segment !== "ALL" ? (
             loadingRequests ? (
               <Text style={styles.loadingText}>{t("loadingRequests")}</Text>
@@ -931,6 +1078,9 @@ export default function NetworkScreen() {
                             numberOfLines={2}
                           >
                             {displayName}
+                          </Text>
+                          <Text style={styles.cardTimeAgo}>
+                            {shortRelativeTime(item.created_at)}
                           </Text>
                           <View style={styles.networkCardInner}>
                             <View style={styles.networkCardInnerRow}>
@@ -1052,12 +1202,26 @@ export default function NetworkScreen() {
                   style={isLargeScreen ? styles.gridItem : undefined}
                 >
                   <View style={styles.networkCardWrap}>
-                    <View style={styles.networkCard}>
+                    <View
+                      style={[
+                        styles.networkCard,
+                        !isLargeScreen && styles.networkCardElevated,
+                      ]}
+                    >
                       <View
                         style={styles.networkCardOrb}
                         pointerEvents="none"
                       />
                       <View style={styles.networkCardMainRow}>
+                      {!isLargeScreen ? (
+                        <View style={styles.networkCardHeroAvatar}>
+                          <NetworkAvatar
+                            node={node}
+                            onPlatform={onPlatform}
+                            frameSize={56}
+                          />
+                        </View>
+                      ) : null}
                       <TouchableOpacity
                         style={styles.networkCardBody}
                         activeOpacity={0.7}
@@ -1132,30 +1296,37 @@ export default function NetworkScreen() {
                         </Text>
                         <View style={styles.networkCardInner}>
                           <View style={styles.networkCardInnerRow}>
-                            <View
-                              style={[
-                                styles.networkCardIconWrap,
-                                onPlatform
-                                  ? styles.networkCardIconWrapOn
-                                  : styles.networkCardIconWrapOff,
-                              ]}
-                            >
-                              <View style={styles.networkAvatarInCard}>
-                                <NetworkAvatar
-                                  node={node}
-                                  onPlatform={onPlatform}
-                                />
-                              </View>
+                            {isLargeScreen ? (
                               <View
                                 style={[
-                                  styles.connectionDot,
+                                  styles.networkCardIconWrap,
                                   onPlatform
-                                    ? styles.connectionDotActive
-                                    : styles.connectionDotMuted,
+                                    ? styles.networkCardIconWrapOn
+                                    : styles.networkCardIconWrapOff,
                                 ]}
-                              />
-                            </View>
-                            <View style={styles.networkCardInnerCol}>
+                              >
+                                <View style={styles.networkAvatarInCard}>
+                                  <NetworkAvatar
+                                    node={node}
+                                    onPlatform={onPlatform}
+                                  />
+                                </View>
+                                <View
+                                  style={[
+                                    styles.connectionDot,
+                                    onPlatform
+                                      ? styles.connectionDotActive
+                                      : styles.connectionDotMuted,
+                                  ]}
+                                />
+                              </View>
+                            ) : null}
+                            <View
+                              style={[
+                                styles.networkCardInnerCol,
+                                !isLargeScreen && styles.networkCardInnerColSolo,
+                              ]}
+                            >
                               <Text style={styles.networkCardInnerLabel}>
                                 NETWORK NODE
                               </Text>
@@ -1215,8 +1386,61 @@ export default function NetworkScreen() {
                         )}
                       </View>
                     </View>
+                    {!isLargeScreen ? (
+                      <View style={styles.cardSocialBar}>
+                        <TouchableOpacity
+                          style={styles.cardSocialBtn}
+                          onPress={() => toggleHeart(node.id)}
+                          activeOpacity={0.75}
+                          accessibilityLabel="Highlight connection"
+                        >
+                          <FontAwesome
+                            name="heart"
+                            size={15}
+                            color={
+                              socialTap[node.id]?.heart
+                                ? Theme.teslaRed
+                                : Theme.textMuted
+                            }
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.cardSocialBtn}
+                          onPress={() => toggleSave(node.id)}
+                          activeOpacity={0.75}
+                          accessibilityLabel="Save to shortlist"
+                        >
+                          <FontAwesome
+                            name="bookmark"
+                            size={15}
+                            color={
+                              socialTap[node.id]?.save
+                                ? Theme.primary
+                                : Theme.textMuted
+                            }
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.cardSocialBtn}
+                          onPress={() =>
+                            Share.share({
+                              message: `Working with ${node.name} on Q — sync ledger & trips.`,
+                              title: node.name,
+                            })
+                          }
+                          activeOpacity={0.75}
+                          accessibilityLabel="Share"
+                        >
+                          <FontAwesome
+                            name="share-alt"
+                            size={15}
+                            color={Theme.textMuted}
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
                   </View>
-                </View>
+                  </View>
                 </View>
               );
             })}
@@ -1604,6 +1828,76 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
     overflow: "hidden",
+  },
+  networkCardElevated: {
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+    borderColor: Theme.borderMedium,
+  },
+  networkCardHeroAvatar: {
+    marginRight: 10,
+    alignSelf: "flex-start",
+    paddingTop: 2,
+  },
+  networkCardInnerColSolo: {
+    marginLeft: 0,
+  },
+  storiesSection: {
+    marginBottom: 16,
+    marginTop: 4,
+  },
+  storiesSectionLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 2,
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
+    marginBottom: 10,
+  },
+  storiesRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    paddingRight: 8,
+  },
+  storyItem: {
+    width: 72,
+    alignItems: "center",
+  },
+  storyLabel: {
+    marginTop: 6,
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    textAlign: "center",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  cardTimeAgo: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    marginTop: -6,
+    marginBottom: 10,
+  },
+  cardSocialBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    gap: 4,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Theme.surfaceBorder,
+  },
+  cardSocialBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    minWidth: 44,
+    alignItems: "center",
+    justifyContent: "center",
   },
   networkCardOrb: {
     position: "absolute",

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, View, type StyleProp, type ViewStyle } from "react-native";
 import WebView, { type WebViewMessageEvent } from "react-native-webview";
+import { LeafletMap as LeafletMapWeb } from "./LeafletMap.web";
 
 export type LeafletLatLng = { latitude: number; longitude: number };
 
@@ -169,11 +170,16 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(({
 
   React.useImperativeHandle(ref, () => ({
     focusCurrentLocation: (currentCenter, currentZoom = 15) => {
-      webRef.current?.postMessage(JSON.stringify({ type: "focus", center: currentCenter, zoom: currentZoom }));
+      if (Platform.OS === "web") {
+        // @ts-ignore
+        ref.current?.focusCurrentLocation(currentCenter, currentZoom);
+      } else {
+        webRef.current?.postMessage(JSON.stringify({ type: "focus", center: currentCenter, zoom: currentZoom }));
+      }
     }
   }));
 
-  const html = useMemo(() => buildHtml({ center, zoom, markers, polyline, polylineColor, lowPower }), []);
+  const html = useMemo(() => buildHtml({ center, zoom, markers, polyline, polylineColor, lowPower }), [center, zoom, markers, polyline, polylineColor, lowPower]);
 
   const statePayload = useMemo(
     () => ({ center, zoom, markers, polyline, polylineColor, lowPower }),
@@ -181,6 +187,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(({
   );
 
   useEffect(() => {
+    if (Platform.OS === "web") return;
     if (!ready) return;
     webRef.current?.postMessage(JSON.stringify({ type: "state", state: statePayload }));
   }, [ready, statePayload]);
@@ -194,12 +201,25 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(({
     }
   };
 
+  if (Platform.OS === "web") {
+    return <LeafletMapWeb
+      style={style}
+      center={center}
+      zoom={zoom}
+      markers={markers}
+      polyline={polyline}
+      polylineColor={polylineColor}
+      lowPower={lowPower}
+      ref={ref}
+    />;
+  }
+
   return (
     <View style={style}>
       <WebView
         ref={webRef}
         originWhitelist={["*"]}
-        source={{ html }}
+        source={{ html: html }}
         onMessage={onMessage}
         javaScriptEnabled
         domStorageEnabled
