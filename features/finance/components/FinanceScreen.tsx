@@ -34,6 +34,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Platform,
   Text,
   View,
   useWindowDimensions
@@ -99,6 +100,8 @@ function createReportRow({
 
 export function FinanceScreen() {
   const insets = useSafeAreaInsets();
+  const screenTopPad =
+    Platform.OS === "web" ? 0 : insets.top + Layout.headerPaddingBelowInset;
   const { width: screenWidth } = useWindowDimensions();
   const router = useRouter();
   const { t } = useLanguage();
@@ -1044,7 +1047,7 @@ export function FinanceScreen() {
 
   if (isOrgLoading) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top + Layout.tabBarHeight + 20 }]}>
+      <View style={[styles.container, { paddingTop: screenTopPad }]}>
         <View style={[styles.centered, { flex: 1, paddingTop: 24 }]}>
           <ActivityIndicator size="large" color={Theme.primary} />
         </View>
@@ -1054,7 +1057,7 @@ export function FinanceScreen() {
 
   if (!orgId) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top + Layout.tabBarHeight + 20 }]}>
+      <View style={[styles.container, { paddingTop: screenTopPad }]}>
         <View
           style={[styles.centered, { flex: 1, paddingTop: 24 }]}
         >
@@ -1073,7 +1076,7 @@ export function FinanceScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + Layout.tabBarHeight + 20 }]} testID="finance-tab-screen">
+    <View style={[styles.container, { paddingTop: screenTopPad }]} testID="finance-tab-screen">
       <FinanceSummarySection
         title={t("treasury")}
         subtitle={t("fiscalMatrix")}
@@ -1208,7 +1211,12 @@ export function FinanceScreen() {
               }
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              bottomInset={24 + insets.bottom + 120}
+              bottomInset={
+                24 +
+                insets.bottom +
+                Layout.demoTabBarScrollBottomInset +
+                40
+              }
             />
           </View>
         </View>
@@ -1232,7 +1240,12 @@ export function FinanceScreen() {
           <View
             style={[
               styles.fabAbsoluteWrap,
-              { bottom: Layout.fabBottomOffset + insets.bottom },
+              {
+                bottom:
+                  Layout.demoTabBarScrollBottomInset +
+                  insets.bottom +
+                  Layout.tabBarBottomPaddingMin,
+              },
             ]}
           >
             <FinanceFAB

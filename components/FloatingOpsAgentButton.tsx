@@ -58,7 +58,10 @@ export function FloatingOpsAgentButton() {
 
   if (!show) return null;
 
-  const bottom = Layout.tabBarHeight + insets.bottom + Layout.tabBarBottomPaddingMin + 8;
+  const bottom =
+    Layout.demoTabBarScrollBottomInset +
+    insets.bottom +
+    Layout.tabBarBottomPaddingMin;
 
   return (
     <View

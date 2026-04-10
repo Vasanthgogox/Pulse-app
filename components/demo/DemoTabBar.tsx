@@ -75,7 +75,6 @@ interface DemoTabBarProps {
   onTabChange: (tab: DemoTabId) => void;
   onLoadBoardPress: () => void;
   onProfilePress?: () => void;
-  onNotificationPress?: () => void;
   onLogoPress?: () => void;
   showLoadFab?: boolean;
 }
@@ -85,7 +84,6 @@ export function DemoTabBar({
   onTabChange,
   onLoadBoardPress,
   onProfilePress,
-  onNotificationPress,
   onLogoPress,
 }: DemoTabBarProps) {
   const { profile } = useAuth();
@@ -131,14 +129,17 @@ export function DemoTabBar({
   const dockBottom = insets.bottom;
   const verticalPad = Math.max(dockBottom / 4, 4);
   const bottomPad = verticalPad + 6;
-  const topPad = isWeb ? Math.max(insets.top, 16) : verticalPad;
 
   return (
     <View
       style={[
         styles.footerWrap,
         isWeb
-          ? { paddingTop: 0, paddingBottom: 0, paddingHorizontal: 0 }
+          ? {
+              paddingTop: 0,
+              paddingBottom: dockBottom,
+              paddingHorizontal: 0,
+            }
           : { paddingTop: verticalPad, paddingBottom: bottomPad },
       ]}
     >
@@ -314,16 +315,6 @@ export function DemoTabBar({
           >
             <View style={styles.webRightIcons}>
               <TouchableOpacity
-                onPress={onNotificationPress}
-                style={styles.webRightIconBtn}
-                activeOpacity={0.7}
-                accessibilityLabel="Notifications"
-                accessibilityRole="button"
-              >
-                <FontAwesome5 name="bell" size={16} color={Theme.textMutedDemo} />
-                <View style={styles.notificationDot} />
-              </TouchableOpacity>
-              <TouchableOpacity
                 onPress={onProfilePress}
                 style={styles.webProfileBtn}
                 activeOpacity={0.7}
@@ -378,18 +369,24 @@ const styles = StyleSheet.create({
   },
   glassDockWeb: {
     height: Layout.tabBarHeight + 20,
-    borderRadius: 0,
-    borderTopWidth: 0,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderTopWidth: 1,
     borderLeftWidth: 0,
     borderRightWidth: 0,
-    borderBottomWidth: 1,
+    borderBottomWidth: 0,
     borderColor: "rgba(15,23,42,0.08)",
-    shadowOffset: { width: 0, height: 4 },
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
     backgroundColor: "#fff",
-    elevation: 4,
+    elevation: 8,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between", // Changed to space-between
+    justifyContent: "space-between",
   },
   webLogoWrap: {
     width: 200, // Matched with webRightWrap for centering
@@ -448,22 +445,7 @@ const styles = StyleSheet.create({
   webRightIcons: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-  },
-  webRightIconBtn: {
-    position: 'relative',
-    padding: 8,
-  },
-  notificationDot: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Theme.teslaRed,
-    borderWidth: 1.5,
-    borderColor: '#fff',
+    gap: 8,
   },
   webProfileBtn: {
     padding: 4,
