@@ -7,11 +7,12 @@ import Theme from "@/constants/Theme";
 import { getCategoryLabel } from "@/constants/courierCategories";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { PodAttachmentModal } from "@/features/log-pods/components/PodAttachmentModal";
 import { getCapabilitiesFromProfile } from "@/lib/capabilities";
 import {
-    useCourierPartnersQuery,
     useAddCourierPartnerMutation,
+    useCourierPartnersQuery,
     useLogIncomingPodsMutation,
     useLogIncomingPodsTripsQuery,
     type LogPodsTripView,
@@ -35,7 +36,7 @@ import {
     Text,
     TextInput,
     View,
-    useWindowDimensions
+    useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -77,6 +78,7 @@ function canAccessLogPods(
 
 export function LogIncomingPodsScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const { profile } = useAuth();
   const { currentOrganization, isLoading: orgLoading } = useOrganization();
@@ -122,15 +124,15 @@ export function LogIncomingPodsScreen() {
       const partner = await addCourierPartner.mutateAsync(name);
       if (partner) {
         setCourierValue(partner.value);
-        setCustomCourierName('');
+        setCustomCourierName("");
       } else {
-        setCourierValue('custom');
+        setCourierValue("custom");
         setCustomCourierName(name);
       }
       setCourierModalOpen(false);
-      setCourierSearch('');
+      setCourierSearch("");
     } catch (e) {
-      Alert.alert('Error', 'Could not add custom courier partner.');
+      Alert.alert("Error", "Could not add custom courier partner.");
     }
   };
 
@@ -192,83 +194,94 @@ export function LogIncomingPodsScreen() {
     [selectedLRs],
   );
 
-  const [autoSelectedSupplier, setAutoSelectedSupplier] = useState<boolean>(false);
+  const [autoSelectedSupplier, setAutoSelectedSupplier] =
+    useState<boolean>(false);
 
-  const toggleTrip = useCallback((internalId: string, lrNumbers: string[]) => {
-    setSelectedLRs((prev) => {
-      const next = { ...prev };
-      const isSelecting = !(next[internalId] && next[internalId].length === lrNumbers.length);
-      
-      if (!isSelecting) {
-        delete next[internalId];
-        // If we are unselecting the last trip, and we auto-selected the supplier, revert it.
-        if (Object.keys(next).length === 0 && autoSelectedSupplier) {
-          setTimeout(() => {
-            setSelectedSupplier("");
-            setAutoSelectedSupplier(false);
-          }, 0);
-        }
-      } else {
-        next[internalId] = [...lrNumbers];
-        // Auto-select supplier if currently "All suppliers"
-        if (!selectedSupplier) {
-          const trip = allTrips.find((t) => t.internal_id === internalId);
-          if (trip && trip.supplier_name) {
+  const toggleTrip = useCallback(
+    (internalId: string, lrNumbers: string[]) => {
+      setSelectedLRs((prev) => {
+        const next = { ...prev };
+        const isSelecting = !(
+          next[internalId] && next[internalId].length === lrNumbers.length
+        );
+
+        if (!isSelecting) {
+          delete next[internalId];
+          // If we are unselecting the last trip, and we auto-selected the supplier, revert it.
+          if (Object.keys(next).length === 0 && autoSelectedSupplier) {
             setTimeout(() => {
-              setSelectedSupplier(trip.supplier_name);
-              setAutoSelectedSupplier(true);
+              setSelectedSupplier("");
+              setAutoSelectedSupplier(false);
             }, 0);
           }
-        }
-      }
-      return next;
-    });
-  }, [selectedSupplier, autoSelectedSupplier, allTrips]);
-
-  const toggleLR = useCallback((internalId: string, lr: string) => {
-    setSelectedLRs((prev) => {
-      const next = { ...prev };
-      const current = next[internalId] || [];
-      const isSelecting = !current.includes(lr);
-
-      if (!isSelecting) {
-        next[internalId] = current.filter((l) => l !== lr);
-        if (next[internalId].length === 0) delete next[internalId];
-        
-        if (Object.keys(next).length === 0 && autoSelectedSupplier) {
-          setTimeout(() => {
-            setSelectedSupplier("");
-            setAutoSelectedSupplier(false);
-          }, 0);
-        }
-      } else {
-        next[internalId] = [...current, lr];
-        if (!selectedSupplier) {
-          const trip = allTrips.find((t) => t.internal_id === internalId);
-          if (trip && trip.supplier_name) {
-            setTimeout(() => {
-              setSelectedSupplier(trip.supplier_name);
-              setAutoSelectedSupplier(true);
-            }, 0);
+        } else {
+          next[internalId] = [...lrNumbers];
+          // Auto-select supplier if currently "All suppliers"
+          if (!selectedSupplier) {
+            const trip = allTrips.find((t) => t.internal_id === internalId);
+            if (trip && trip.supplier_name) {
+              setTimeout(() => {
+                setSelectedSupplier(trip.supplier_name);
+                setAutoSelectedSupplier(true);
+              }, 0);
+            }
           }
         }
-      }
-      return next;
-    });
-  }, [selectedSupplier, autoSelectedSupplier, allTrips]);
+        return next;
+      });
+    },
+    [selectedSupplier, autoSelectedSupplier, allTrips],
+  );
+
+  const toggleLR = useCallback(
+    (internalId: string, lr: string) => {
+      setSelectedLRs((prev) => {
+        const next = { ...prev };
+        const current = next[internalId] || [];
+        const isSelecting = !current.includes(lr);
+
+        if (!isSelecting) {
+          next[internalId] = current.filter((l) => l !== lr);
+          if (next[internalId].length === 0) delete next[internalId];
+
+          if (Object.keys(next).length === 0 && autoSelectedSupplier) {
+            setTimeout(() => {
+              setSelectedSupplier("");
+              setAutoSelectedSupplier(false);
+            }, 0);
+          }
+        } else {
+          next[internalId] = [...current, lr];
+          if (!selectedSupplier) {
+            const trip = allTrips.find((t) => t.internal_id === internalId);
+            if (trip && trip.supplier_name) {
+              setTimeout(() => {
+                setSelectedSupplier(trip.supplier_name);
+                setAutoSelectedSupplier(true);
+              }, 0);
+            }
+          }
+        }
+        return next;
+      });
+    },
+    [selectedSupplier, autoSelectedSupplier, allTrips],
+  );
 
   const handleSelectAll = useCallback(() => {
-    const isAllSelected = supplierTrips.length > 0 && supplierTrips.every((t) => {
-      const pendingLRs =
-        t.lrNumbers.length > 0
-          ? t.lrNumbers.filter((lr) => !t.receivedLRs.includes(lr))
-          : ["N/A"];
-      return (
-        pendingLRs.length === 0 ||
-        (selectedLRs[t.internal_id] &&
-          selectedLRs[t.internal_id].length === pendingLRs.length)
-      );
-    });
+    const isAllSelected =
+      supplierTrips.length > 0 &&
+      supplierTrips.every((t) => {
+        const pendingLRs =
+          t.lrNumbers.length > 0
+            ? t.lrNumbers.filter((lr) => !t.receivedLRs.includes(lr))
+            : ["N/A"];
+        return (
+          pendingLRs.length === 0 ||
+          (selectedLRs[t.internal_id] &&
+            selectedLRs[t.internal_id].length === pendingLRs.length)
+        );
+      });
 
     if (isAllSelected) {
       setSelectedLRs({});
@@ -279,7 +292,7 @@ export function LogIncomingPodsScreen() {
     } else {
       const next: Record<string, string[]> = {};
       const uniqueSuppliers = new Set<string>();
-      
+
       supplierTrips.forEach((t) => {
         const pendingLRs =
           t.lrNumbers.length > 0
@@ -717,7 +730,8 @@ export function LogIncomingPodsScreen() {
         <View style={styles.tableToolbarLeft}>
           <Text style={styles.tableToolbarTitle}>Trip Selection Grid</Text>
           <Text style={styles.tableToolbarSub}>
-            {supplierTrips.length} trips • {totalDisplayLRs} unique LRs • {selectedTripsCount} selected trips
+            {supplierTrips.length} trips • {totalDisplayLRs} unique LRs •{" "}
+            {selectedTripsCount} selected trips
           </Text>
         </View>
         <View style={styles.tableToolbarRight}>
@@ -744,14 +758,23 @@ export function LogIncomingPodsScreen() {
               style={[styles.tableToolbarBtn, styles.tableToolbarBtnDanger]}
               onPress={() => setSelectedLRs({})}
             >
-              <Text style={[styles.tableToolbarBtnText, styles.tableToolbarBtnDangerText]}>
+              <Text
+                style={[
+                  styles.tableToolbarBtnText,
+                  styles.tableToolbarBtnDangerText,
+                ]}
+              >
                 Clear Selected
               </Text>
             </Pressable>
           ) : null}
         </View>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator
+        {...tabBarScrollProps}
+      >
         <View style={styles.tableInner}>
           <View style={styles.tableHeadRow}>
             <TableHead width={78} label="Select" />
@@ -783,15 +806,27 @@ export function LogIncomingPodsScreen() {
               >
                 <TableCell width={78}>
                   <Pressable
-                    style={[styles.tableCheckBox, isAllForTripSelected && styles.tableCheckBoxOn]}
-                    onPress={() => pendingLRs.length > 0 && toggleTrip(t.internal_id, pendingLRs)}
+                    style={[
+                      styles.tableCheckBox,
+                      isAllForTripSelected && styles.tableCheckBoxOn,
+                    ]}
+                    onPress={() =>
+                      pendingLRs.length > 0 &&
+                      toggleTrip(t.internal_id, pendingLRs)
+                    }
                   >
                     {isAllForTripSelected ? (
                       <FontAwesome name="check" size={10} color="#fff" />
                     ) : null}
                   </Pressable>
                 </TableCell>
-                <TableCell width={110} text={t.id} mono strong color={Theme.primary} />
+                <TableCell
+                  width={110}
+                  text={t.id}
+                  mono
+                  strong
+                  color={Theme.primary}
+                />
                 <TableCell width={110} text={formatFullDate(t.date)} />
                 <TableCell width={190} text={t.client || "—"} strong />
                 <TableCell
@@ -801,14 +836,20 @@ export function LogIncomingPodsScreen() {
                   mono
                   strong
                 />
-                <TableCell width={280} text={`${t.from || "—"} -> ${t.to || "—"}`} />
+                <TableCell
+                  width={280}
+                  text={`${t.from || "—"} -> ${t.to || "—"}`}
+                />
                 <TableCell width={180} text={supplierLabel(t.supplier_name)} />
                 <TableCell width={120} text={String(pendingLRs.length)} />
                 <TableCell width={120} text={String(selectedCount)} strong />
                 <TableCell width={110} align="right">
                   <Pressable
                     style={styles.tableActionBtn}
-                    onPress={() => pendingLRs.length > 0 && toggleTrip(t.internal_id, pendingLRs)}
+                    onPress={() =>
+                      pendingLRs.length > 0 &&
+                      toggleTrip(t.internal_id, pendingLRs)
+                    }
                   >
                     <Text style={styles.tableActionText}>
                       {isAllForTripSelected ? "Clear" : "Select"}
@@ -894,19 +935,30 @@ export function LogIncomingPodsScreen() {
         {isMediumScreen ? (
           <View style={styles.splitLayout}>
             <View style={styles.sidebar}>
-              <ScrollView contentContainerStyle={styles.sidebarScroll}>
+              <ScrollView
+                contentContainerStyle={styles.sidebarScroll}
+                {...tabBarScrollProps}
+              >
                 {renderSidebarContent()}
               </ScrollView>
             </View>
             <View style={styles.mainArea}>
               {renderMainContentHeader()}
-              <ScrollView contentContainerStyle={styles.mainScroll}>
+              <ScrollView
+                contentContainerStyle={styles.mainScroll}
+                {...tabBarScrollProps}
+              >
                 {viewMode === "table" ? renderTripsTable() : renderTripsGrid()}
               </ScrollView>
             </View>
           </View>
         ) : (
-          <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
+          <ScrollView
+            contentContainerStyle={{
+              paddingBottom: Layout.demoTabBarScrollBottomInset + 36,
+            }}
+            {...tabBarScrollProps}
+          >
             <View style={styles.mobileConfig}>{renderSidebarContent()}</View>
             <View style={styles.mobileMainHeader}>
               {renderMainContentHeader()}
@@ -919,7 +971,15 @@ export function LogIncomingPodsScreen() {
       </View>
 
       {!isMediumScreen && (
-        <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
+        <View
+          style={[
+            styles.footer,
+            {
+              paddingBottom:
+                insets.bottom + Layout.demoTabBarScrollBottomInset + 8,
+            },
+          ]}
+        >
           <Pressable
             style={[
               styles.logBtn,
@@ -962,6 +1022,7 @@ export function LogIncomingPodsScreen() {
             <FlatList
               data={["", ...filteredSuppliers]}
               keyExtractor={(item) => item || "__all__"}
+              {...tabBarScrollProps}
               renderItem={({ item }) => (
                 <Pressable
                   style={styles.modalRow}
@@ -1004,7 +1065,11 @@ export function LogIncomingPodsScreen() {
               onChangeText={setCourierSearch}
             />
 
-            <ScrollView style={{ flex: 1, marginTop: 8 }} contentContainerStyle={{ paddingBottom: 24 }}>
+            <ScrollView
+              style={{ flex: 1, marginTop: 8 }}
+              contentContainerStyle={{ paddingBottom: 24 }}
+              {...tabBarScrollProps}
+            >
               {courierSearch.trim() !== "" &&
                 !dbCourierPartners.some(
                   (p) =>
@@ -1015,14 +1080,14 @@ export function LogIncomingPodsScreen() {
                     style={[
                       styles.modalRow,
                       {
-                        backgroundColor: Theme.primary + '10',
+                        backgroundColor: Theme.primary + "10",
                         borderRadius: 8,
                         paddingHorizontal: 12,
                         paddingVertical: 14,
                         marginBottom: 12,
                         borderWidth: 1,
-                        borderColor: Theme.primary + '30',
-                      }
+                        borderColor: Theme.primary + "30",
+                      },
                     ]}
                     onPress={handleAddCustomCourier}
                     disabled={addCourierPartner.isPending}
@@ -1083,9 +1148,30 @@ export function LogIncomingPodsScreen() {
                   </View>
                 ))
               ) : (
-                <View style={{ paddingVertical: 40, paddingHorizontal: 20, alignItems: "center" }}>
-                  <FontAwesome name="truck" size={40} color={Theme.textMuted} style={{ opacity: 0.3, marginBottom: 16 }} />
-                  <Text style={[styles.emptyCourier, { marginBottom: 8, padding: 0, fontWeight: '600', color: Theme.textPrimaryDark }]}>
+                <View
+                  style={{
+                    paddingVertical: 40,
+                    paddingHorizontal: 20,
+                    alignItems: "center",
+                  }}
+                >
+                  <FontAwesome
+                    name="truck"
+                    size={40}
+                    color={Theme.textMuted}
+                    style={{ opacity: 0.3, marginBottom: 16 }}
+                  />
+                  <Text
+                    style={[
+                      styles.emptyCourier,
+                      {
+                        marginBottom: 8,
+                        padding: 0,
+                        fontWeight: "600",
+                        color: Theme.textPrimaryDark,
+                      },
+                    ]}
+                  >
                     {courierSearch.trim()
                       ? "No courier partners match your search."
                       : "No active courier partners found."}
@@ -1138,8 +1224,18 @@ function TableHead({
   align?: "left" | "right";
 }) {
   return (
-    <View style={[styles.tableHeadCell, { width }, align === "right" && styles.tableCellRight]}>
-      <Text style={[styles.tableHeadText, align === "right" && styles.textRight]}>{label}</Text>
+    <View
+      style={[
+        styles.tableHeadCell,
+        { width },
+        align === "right" && styles.tableCellRight,
+      ]}
+    >
+      <Text
+        style={[styles.tableHeadText, align === "right" && styles.textRight]}
+      >
+        {label}
+      </Text>
     </View>
   );
 }
@@ -1162,7 +1258,13 @@ function TableCell({
   align?: "left" | "right";
 }) {
   return (
-    <View style={[styles.tableCell, { width }, align === "right" && styles.tableCellRight]}>
+    <View
+      style={[
+        styles.tableCell,
+        { width },
+        align === "right" && styles.tableCellRight,
+      ]}
+    >
       {children ?? (
         <Text
           numberOfLines={1}
@@ -1262,7 +1364,11 @@ function TripCard({
               if (isReceived) {
                 return (
                   <View key={lr} style={styles.lrReceived}>
-                    <FontAwesome name="check-circle" size={14} color="#1a7f4c" />
+                    <FontAwesome
+                      name="check-circle"
+                      size={14}
+                      color="#1a7f4c"
+                    />
                     <Text style={styles.lrReceivedText}>{lr}</Text>
                   </View>
                 );
@@ -1273,12 +1379,16 @@ function TripCard({
                   style={styles.lrRow}
                   onPress={() => onToggleLR(lr)}
                 >
-                  <View style={[styles.lrCheck, isLrSelected && styles.lrCheckOn]}>
+                  <View
+                    style={[styles.lrCheck, isLrSelected && styles.lrCheckOn]}
+                  >
                     {isLrSelected ? (
                       <FontAwesome name="check" size={10} color="#fff" />
                     ) : null}
                   </View>
-                  <Text style={[styles.lrText, isLrSelected && styles.lrTextOn]}>
+                  <Text
+                    style={[styles.lrText, isLrSelected && styles.lrTextOn]}
+                  >
                     {lr}
                   </Text>
                 </Pressable>
@@ -1317,7 +1427,12 @@ const styles = StyleSheet.create({
   },
   topTitle: { fontSize: 17, fontWeight: "800", color: Theme.textPrimaryDark },
   topSub: { fontSize: 11, color: Theme.textMuted, marginTop: 2, flexShrink: 1 },
-  topBarRight: { flexDirection: "row", alignItems: "center", gap: 12, flexShrink: 0 },
+  topBarRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flexShrink: 0,
+  },
   cancelBtn: { paddingHorizontal: 16, paddingVertical: 8 },
   cancelText: { fontSize: 14, fontWeight: "600", color: Theme.textMuted },
   headerLogBtn: {
@@ -1695,7 +1810,11 @@ const styles = StyleSheet.create({
     color: Theme.primary,
   },
   selectAllBtn: { marginLeft: "auto" },
-  selectAllTextActive: { fontSize: 12, fontWeight: "800", color: Theme.primary },
+  selectAllTextActive: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.primary,
+  },
   card: {
     borderRadius: 12,
     borderWidth: 1,

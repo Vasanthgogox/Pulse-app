@@ -6,6 +6,7 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { InvoicePreviewPanel } from "@/features/invoicing/components/InvoicePreviewPanel";
 import { getCapabilitiesFromProfile } from "@/lib/capabilities";
 import {
@@ -44,6 +45,7 @@ function canAccessInvoicing(
 
 export function InvoicingExecuteScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const { profile } = useAuth();
   const { currentOrganization, isLoading: orgLoading } = useOrganization();
@@ -281,6 +283,7 @@ export function InvoicingExecuteScreen() {
       <FlatList
         data={clientStats}
         keyExtractor={(item) => item.name}
+        {...tabBarScrollProps}
         renderItem={({ item: client }) => (
           <Pressable
             style={[
@@ -394,6 +397,7 @@ export function InvoicingExecuteScreen() {
               ]}
             >
               <TripListContent
+                tabBarScrollProps={tabBarScrollProps}
                 clientTrips={clientTrips}
                 activeClient={activeClient}
                 selectedTripIds={selectedTripIds}
@@ -462,6 +466,7 @@ export function InvoicingExecuteScreen() {
                 </View>
                 <View style={styles.mobileGridArea}>
                   <TripListContent
+                    tabBarScrollProps={tabBarScrollProps}
                     clientTrips={clientTrips}
                     activeClient={activeClient}
                     selectedTripIds={selectedTripIds}
@@ -532,7 +537,15 @@ export function InvoicingExecuteScreen() {
       )}
 
       {!isMediumScreen && step === 1 && (
-        <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
+        <View
+          style={[
+            styles.footer,
+            {
+              paddingBottom:
+                insets.bottom + Layout.demoTabBarScrollBottomInset + 8,
+            },
+          ]}
+        >
           <Pressable
             style={[
               styles.footerBtn,
@@ -570,6 +583,7 @@ export function InvoicingExecuteScreen() {
 }
 
 function TripListContent({
+  tabBarScrollProps,
   clientTrips,
   activeClient,
   selectedTripIds,
@@ -687,9 +701,13 @@ function TripListContent({
       <FlatList
         data={clientTrips}
         keyExtractor={(item) => item.id}
+        {...tabBarScrollProps}
         refreshing={isRefetching}
         onRefresh={refetch}
-        contentContainerStyle={{ padding: 16, paddingBottom: 60 }}
+        contentContainerStyle={{
+          padding: 16,
+          paddingBottom: Layout.demoTabBarScrollBottomInset + 24,
+        }}
         ListEmptyComponent={
           <View style={styles.empty}>
             <FontAwesome
