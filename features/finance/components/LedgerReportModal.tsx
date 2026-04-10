@@ -212,14 +212,14 @@ export function LedgerReportModal({
       onRequestClose={onClose}
     >
       <View style={[styles.overlay, styles.overlayFull]}>
-        <View style={[styles.sheet, styles.sheetDark, styles.sheetFull]}>
+        <View style={[styles.sheet, styles.sheetLight, styles.sheetFull]}>
           <View style={[styles.header, { paddingTop: 16 + insets.top }]}>
             <View style={styles.headerTitleRow}>
               <Text style={styles.headerTitle}>{displayTitle}</Text>
               <Text style={styles.previewSubtitle}>Report preview</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={12}>
-              <FontAwesome name="times" size={18} color={Theme.textOnDark} />
+              <FontAwesome name="times" size={18} color={Theme.textPrimary} />
             </TouchableOpacity>
           </View>
           <View style={styles.summaryRow}>
@@ -273,15 +273,15 @@ export function LedgerReportModal({
 
           <View style={[styles.actionBar, { paddingBottom: 12 + insets.bottom, paddingTop: 16 }]}>
             <TouchableOpacity style={styles.actionBtn} onPress={handlePrint}>
-              <FontAwesome name="print" size={16} color={Theme.textOnDark} />
+              <FontAwesome name="print" size={16} color={Theme.textPrimary} />
               <Text style={styles.actionBtnText}>Print</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionBtn} onPress={handleWhatsApp}>
-              <FontAwesome name="whatsapp" size={16} color={Theme.textOnDark} />
+              <FontAwesome name="whatsapp" size={16} color={Theme.textPrimary} />
               <Text style={styles.actionBtnText}>WhatsApp</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionBtn} onPress={handleShare}>
-              <FontAwesome name="share-alt" size={16} color={Theme.textOnDark} />
+              <FontAwesome name="share-alt" size={16} color={Theme.textPrimary} />
               <Text style={styles.actionBtnText}>Share</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -290,9 +290,9 @@ export function LedgerReportModal({
               disabled={downloadInProgress}
             >
               {downloadInProgress ? (
-                <ActivityIndicator size="small" color={Theme.textOnDark} />
+                <ActivityIndicator size="small" color={Theme.textPrimary} />
               ) : (
-                <FontAwesome name="download" size={16} color={Theme.textOnDark} />
+                <FontAwesome name="download" size={16} color={Theme.textPrimary} />
               )}
               <Text style={styles.actionBtnText}>{downloadInProgress ? 'Generating…' : 'Download'}</Text>
             </TouchableOpacity>
@@ -306,7 +306,7 @@ export function LedgerReportModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.screenBackground,
   },
   overlayFull: {
     justifyContent: 'flex-start',
@@ -318,8 +318,8 @@ const styles = StyleSheet.create({
   sheetFull: {
     flex: 1,
   },
-  sheetDark: {
-    backgroundColor: Theme.darkBackground,
+  sheetLight: {
+    backgroundColor: Theme.screenBackground,
   },
   header: {
     flexDirection: 'row',
@@ -328,79 +328,84 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Theme.separatorDark,
+    borderBottomColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
   },
   headerTitleRow: {
     flex: 1,
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '800',
-    color: Theme.textOnDark,
-    letterSpacing: 1,
+    color: Theme.textPrimary,
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
   previewSubtitle: {
-    fontSize: 11,
+    fontSize: 12,
     color: Theme.textSecondary,
-    marginTop: 4,
+    marginTop: 2,
     textTransform: 'none',
   },
   closeBtn: {
     padding: 8,
+    backgroundColor: Theme.surfaceGray,
+    borderRadius: 20,
   },
   actionBar: {
     flexDirection: 'row',
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 12,
-    gap: 8,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 16,
+    gap: 12,
     borderTopWidth: 1,
-    borderTopColor: Theme.separatorDark,
-    backgroundColor: Theme.darkBackground,
+    borderTopColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
   },
   actionBtn: {
     flex: 1,
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 10,
-    paddingHorizontal: 6,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 8,
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    backgroundColor: Theme.surface,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.separatorDark,
+    borderColor: Theme.borderLight,
   },
   actionBtnDisabled: {
-    opacity: 0.7,
+    opacity: 0.5,
   },
   actionBtnText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: Theme.textOnDark,
+    fontSize: 10,
+    fontWeight: '700',
+    color: Theme.textPrimary,
     letterSpacing: 0.5,
-    textTransform: 'uppercase',
   },
   summaryRow: {
     flexDirection: 'row',
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    gap: 16,
+    paddingVertical: 20,
+    gap: 24,
     borderBottomWidth: 1,
-    borderBottomColor: Theme.separatorDark,
+    borderBottomColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
   },
-  summaryCell: {},
+  summaryCell: {
+    flex: 1,
+  },
   summaryLabel: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '800',
     color: Theme.textSecondary,
-    letterSpacing: 1,
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   summaryValue: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: '800',
   },
   positive: { color: Theme.darkGreen },
@@ -408,27 +413,29 @@ const styles = StyleSheet.create({
   tableHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Theme.separatorDark,
+    borderBottomColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceBorder,
   },
   th: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '800',
-    color: Theme.textMutedDemo,
-    letterSpacing: 1,
+    color: Theme.textMuted,
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
   thEntity: { flex: 1 },
   thDate: { width: 72 },
-  thNum: { width: 56, textAlign: 'right' },
+  thNum: { width: 64, textAlign: 'right' },
   list: {
     flex: 1,
     minHeight: 120,
+    backgroundColor: Theme.screenBackground,
   },
   listContent: {
-    paddingBottom: 16,
+    paddingBottom: 24,
     flexGrow: 1,
   },
   listContentEmpty: {
@@ -438,30 +445,30 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: Theme.separatorDark,
+    borderBottomColor: Theme.borderLight,
   },
   cellEntity: { flex: 1 },
   entityName: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
-    color: Theme.textOnDark,
+    color: Theme.textPrimary,
   },
   entityDesc: {
-    fontSize: 10,
+    fontSize: 11,
     color: Theme.textSecondary,
-    marginTop: 2,
+    marginTop: 4,
   },
   cellDate: {
     width: 72,
-    fontSize: 10,
+    fontSize: 11,
     color: Theme.textSecondary,
   },
   cellNum: {
-    width: 56,
-    fontSize: 11,
+    width: 64,
+    fontSize: 12,
     fontWeight: '700',
     textAlign: 'right',
   },
