@@ -40,6 +40,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 
 type ActiveStatusTab = "all" | "unassigned" | "assigned" | "in_transit";
 type SupplyFilter = "all" | "asset" | "aggregated";
@@ -58,6 +59,11 @@ export default function TripsScreen() {
   const isLargeScreen = Platform.OS === "web" && width >= 1024;
   const isMobile = width < 560;
   const insets = useSafeAreaInsets();
+  const tabBarScrollProps = useTabBarAwareScrollProps();
+  const screenTopPad =
+    Platform.OS === "web" ? 0 : insets.top + Layout.headerPaddingBelowInset;
+  const tripsScrollBottomPad =
+    24 + Layout.demoTabBarScrollBottomInset + insets.bottom + 16;
   const router = useRouter();
   const { t: tr } = useLanguage();
   const { currentOrganization } = useOrganization();
@@ -404,7 +410,7 @@ export default function TripsScreen() {
     <View
       style={[
         styles.container,
-        { paddingTop: insets.top + Layout.tabBarHeight + 20 },
+        { paddingTop: screenTopPad },
       ]}
     >
       <View style={styles.headerBlock}>
@@ -772,9 +778,10 @@ export default function TripsScreen() {
           style={styles.scroll}
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingBottom: 24 + insets.bottom + 80 },
+            { paddingBottom: tripsScrollBottomPad },
           ]}
           showsVerticalScrollIndicator={false}
+          {...tabBarScrollProps}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -824,7 +831,12 @@ export default function TripsScreen() {
         <View
           style={[
             styles.fabWrap,
-            { bottom: Layout.fabBottomOffset + insets.bottom },
+            {
+              bottom:
+                Layout.demoTabBarScrollBottomInset +
+                insets.bottom +
+                Layout.tabBarBottomPaddingMin,
+            },
           ]}
         >
           <FinanceFAB
@@ -925,23 +937,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    flexShrink: 0,
-  },
-  tripsToolbar: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 12,
-    backgroundColor: "#000000",
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.separatorDark,
-    gap: 8,
-  },
-  tripsToolbarActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
     flexShrink: 0,
   },
   tripsSearchWrap: {
