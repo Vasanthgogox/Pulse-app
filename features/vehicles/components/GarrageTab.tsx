@@ -3,6 +3,7 @@
  * Tabs: VEHICLE | TRIPS | REVENUE | PROFIT. Vehicle/revenue/profit show vehicle list; Trips shows trip-level list.
  */
 import { LiquidFillPill } from "@/components/LiquidFillPill";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import Theme from "@/constants/Theme";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import type { EntityListFilter, FinancialRowData, LedgerRow } from "@/features/finance";
@@ -86,6 +87,7 @@ export function GarrageTab({
   onRefresh,
   bottomInset = 100,
 }: GarrageTabProps) {
+  const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const defaultPeriod: GarragePeriodValue = (() => {
@@ -231,6 +233,7 @@ export function GarrageTab({
           { paddingBottom: bottomInset + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
+        {...tabBarScrollProps}
         stickyHeaderIndices={[stickyHeaderIndex]}
         refreshControl={
           onRefresh ? (
