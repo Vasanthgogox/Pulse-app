@@ -325,6 +325,8 @@ export function EntityCompareVerifyView({
   const [disputesRaised, setDisputesRaised] = useState<DisputeRow[]>([]);
   const [disputesReceived, setDisputesReceived] = useState<DisputeRow[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
+  const [pendingAcceptDispute, setPendingAcceptDispute] =
+    useState<DisputeRow | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Non-integrated partner: resolve phone → invitee in app or not → Request vs Invite
@@ -685,9 +687,89 @@ export function EntityCompareVerifyView({
     [organizationId, entity.id, entity.name, onRefresh, refetchDisputes],
   );
 
+  const executeAcceptReceivedDispute = useCallback(
+    async (dispute: DisputeRow) => {
+      if (!organizationId) return;
+      setPendingAcceptDispute(null);
+      setActionLoading(true);
+      try {
+        const { error, rpcUnavailable } = await resolveDispute(
+          dispute.id,
+          "ACCEPT",
+          organizationId,
+        );
+        if (!error) {
+          refetchDisputes();
+          onRefresh?.();
+          Alert.alert(
+            "Ledger updated",
+            "Your book has been updated to match the partner. The trip is now matched.",
+          );
+          setActionLoading(false);
+          return;
+        }
+        if (rpcUnavailable) {
+          const sales = dispute.raised_sales ?? 0;
+          let paid = dispute.raised_paid ?? 0;
+          if (paid === 0) {
+            const row = reconciledRows.find(
+              (r) =>
+                String(r.tripId).toLowerCase() ===
+                String(dispute.transaction_id).toLowerCase(),
+            );
+            if (row?.extPaid != null && row.extPaid > 0) paid = row.extPaid;
+          }
+          if (sales !== 0 || paid !== 0) {
+            const { error: updateError } = await acceptPartnerView(
+              organizationId,
+              dispute.transaction_id,
+              sales,
+              paid,
+              entity.id,
+            );
+            if (updateError) {
+              Alert.alert("Ledger update failed", updateError.message);
+              setActionLoading(false);
+              return;
+            }
+          }
+          const { error: tableError } = await resolveDisputeTableOnly(
+            dispute.id,
+            organizationId,
+          );
+          if (tableError) {
+            Alert.alert("Accept failed", tableError.message);
+            setActionLoading(false);
+            return;
+          }
+          refetchDisputes();
+          onRefresh?.();
+          Alert.alert(
+            "Ledger updated",
+            "Your book has been updated to match the partner. The trip is now matched.",
+          );
+        } else {
+          Alert.alert("Accept failed", error.message);
+        }
+      } catch (e) {
+        Alert.alert(
+          "Error",
+          e instanceof Error ? e.message : "Something went wrong.",
+        );
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [organizationId, entity.id, onRefresh, refetchDisputes, reconciledRows],
+  );
+
   const handleAcceptReceivedDispute = useCallback(
     (dispute: DisputeRow) => {
-      if (!organizationId) return;
+      if (!organizationId || actionLoading) return;
+      if (Platform.OS === "web") {
+        setPendingAcceptDispute(dispute);
+        return;
+      }
       Alert.alert(
         "Accept partner's view?",
         "Your ledger for this trip will be updated to match the partner's numbers. This cannot be undone.",
@@ -696,86 +778,13 @@ export function EntityCompareVerifyView({
           {
             text: "Accept & update",
             onPress: () => {
-              setTimeout(async () => {
-                setActionLoading(true);
-                try {
-                  const { error, rpcUnavailable } = await resolveDispute(
-                    dispute.id,
-                    "ACCEPT",
-                    organizationId,
-                  );
-                  if (!error) {
-                    refetchDisputes();
-                    onRefresh?.();
-                    Alert.alert(
-                      "Ledger updated",
-                      "Your book has been updated to match the partner. The trip is now matched.",
-                    );
-                    setActionLoading(false);
-                    return;
-                  }
-                  if (rpcUnavailable) {
-                    const sales = dispute.raised_sales ?? 0;
-                    let paid = dispute.raised_paid ?? 0;
-                    if (paid === 0) {
-                      const row = reconciledRows.find(
-                        (r) =>
-                          String(r.tripId).toLowerCase() ===
-                          String(dispute.transaction_id).toLowerCase(),
-                      );
-                      if (row?.extPaid != null && row.extPaid > 0)
-                        paid = row.extPaid;
-                    }
-                    if (sales !== 0 || paid !== 0) {
-                      const { error: updateError } = await acceptPartnerView(
-                        organizationId,
-                        dispute.transaction_id,
-                        sales,
-                        paid,
-                        entity.id,
-                      );
-                      if (updateError) {
-                        Alert.alert(
-                          "Ledger update failed",
-                          updateError.message,
-                        );
-                        setActionLoading(false);
-                        return;
-                      }
-                    }
-                    const { error: tableError } = await resolveDisputeTableOnly(
-                      dispute.id,
-                      organizationId,
-                    );
-                    if (tableError) {
-                      Alert.alert("Accept failed", tableError.message);
-                      setActionLoading(false);
-                      return;
-                    }
-                    refetchDisputes();
-                    onRefresh?.();
-                    Alert.alert(
-                      "Ledger updated",
-                      "Your book has been updated to match the partner. The trip is now matched.",
-                    );
-                  } else {
-                    Alert.alert("Accept failed", error.message);
-                  }
-                } catch (e) {
-                  Alert.alert(
-                    "Error",
-                    e instanceof Error ? e.message : "Something went wrong.",
-                  );
-                } finally {
-                  setActionLoading(false);
-                }
-              }, 100);
+              void executeAcceptReceivedDispute(dispute);
             },
           },
         ],
       );
     },
-    [organizationId, entity.id, onRefresh, refetchDisputes, reconciledRows],
+    [organizationId, actionLoading, executeAcceptReceivedDispute],
   );
 
   const handleDeclineReceivedDispute = useCallback(
@@ -1895,6 +1904,49 @@ export function EntityCompareVerifyView({
         </>
       )}
 
+      <Modal
+        visible={Platform.OS === "web" && !!pendingAcceptDispute}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPendingAcceptDispute(null)}
+      >
+        <View style={styles.confirmModalOverlay}>
+          <View style={styles.confirmModalCard}>
+            <Text style={styles.confirmModalTitle}>Accept partner&apos;s view?</Text>
+            <Text style={styles.confirmModalText}>
+              Your ledger for this trip will be updated to match the partner&apos;s
+              numbers. This cannot be undone.
+            </Text>
+            <View style={styles.confirmModalActions}>
+              <TouchableOpacity
+                style={styles.confirmModalCancelBtn}
+                onPress={() => setPendingAcceptDispute(null)}
+                disabled={actionLoading}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.confirmModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.confirmModalConfirmBtn,
+                  actionLoading && styles.btnDisabled,
+                ]}
+                onPress={() =>
+                  pendingAcceptDispute &&
+                  void executeAcceptReceivedDispute(pendingAcceptDispute)
+                }
+                disabled={actionLoading || !pendingAcceptDispute}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.confirmModalConfirmText}>
+                  Accept &amp; update
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Dispute modal */}
       <Modal
         visible={!!selectedDispute}
@@ -2781,6 +2833,67 @@ const styles = StyleSheet.create({
   modalBtnPrimaryText: {
     fontSize: 12,
     fontWeight: "700",
+    color: Theme.textOnPrimary,
+  },
+  confirmModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(11, 16, 32, 0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  confirmModalCard: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: Theme.surfaceLight,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    borderRadius: 10,
+    padding: 16,
+    gap: 10,
+  },
+  confirmModalTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  confirmModalText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: Theme.textMuted,
+  },
+  confirmModalActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 6,
+  },
+  confirmModalCancelBtn: {
+    flex: 1,
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  confirmModalCancelText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  confirmModalConfirmBtn: {
+    flex: 1,
+    minHeight: 44,
+    backgroundColor: Theme.primary,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  confirmModalConfirmText: {
+    fontSize: 12,
+    fontWeight: "800",
     color: Theme.textOnPrimary,
   },
   emptyTable: {

@@ -67,7 +67,7 @@ export function FloatingOpsAgentButton() {
     >
       <TouchableOpacity
         activeOpacity={0.85}
-        onPress={() => router.push('/(tabs)/index' as import('expo-router').Href)}
+        onPress={() => router.navigate('/')}
         style={styles.touchable}
         accessibilityLabel="Open Ops Agent"
       >
