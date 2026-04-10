@@ -5,8 +5,8 @@ import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
-import { useOrganization } from "@/contexts/OrganizationContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
+import { useOrganization } from "@/contexts/OrganizationContext";
 import { InvoicePreviewPanel } from "@/features/invoicing/components/InvoicePreviewPanel";
 import { getCapabilitiesFromProfile } from "@/lib/capabilities";
 import {
@@ -22,11 +22,12 @@ import {
     Modal,
     Platform,
     Pressable,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
     View,
-    useWindowDimensions
+    useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -209,14 +210,17 @@ export function InvoicingExecuteScreen() {
     setStep(1);
   };
 
-  const handlePreview = useCallback((params: any) => {
-    router.push({
-      pathname: '/invoicing/pdf-preview',
-      params: {
-        ...params,
-      },
-    });
-  }, [router]);
+  const handlePreview = useCallback(
+    (params: any) => {
+      router.push({
+        pathname: "/invoicing/pdf-preview",
+        params: {
+          ...params,
+        },
+      });
+    },
+    [router],
+  );
 
   if (!allowed) {
     return (
@@ -341,45 +345,68 @@ export function InvoicingExecuteScreen() {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      <View style={styles.topBar}>
-        <View style={styles.topBarLeft}>
-          <Pressable
-            style={styles.iconBtn}
-            onPress={() => router.back()}
-            hitSlop={12}
-          >
-            <FontAwesome name="arrow-left" size={20} color={Theme.textMuted} />
-          </Pressable>
-          <View style={styles.topTitleWrap}>
-            <View>
-              <Text style={styles.topTitle}>Revenue & Invoicing</Text>
-              <Text style={styles.topSub}>
-                Execute invoices for confirmed trips
-              </Text>
+      <View style={styles.financeHeader}>
+        <View style={styles.financeHeaderInner}>
+          <View style={[styles.heroRow, !isMediumScreen && styles.heroRowMobile]}>
+            <View style={styles.heroTextWrap}>
+              <Text style={styles.heroTitle}>Revenue & Invoicing</Text>
+              <Text style={styles.heroSub}>Execute invoices for confirmed trips</Text>
             </View>
+
+            {isMediumScreen ? (
+              <View style={styles.kpiRowDesktop}>
+                <View style={styles.kpiBlock}>
+                  <Text style={styles.kpiLabelRed}>POD Pending</Text>
+                  <Text style={styles.kpiValue}>
+                    {formatCurrencySimple(summaryData?.pod_pending_sum || 0)}
+                  </Text>
+                </View>
+                <View style={styles.kpiDivider} />
+                <View style={styles.kpiBlock}>
+                  <Text style={styles.kpiLabelMuted}>Needs Action</Text>
+                  <Text style={styles.kpiValueMuted}>
+                    {formatCurrencySimple(summaryData?.received_sum || 0)}
+                  </Text>
+                </View>
+                <View style={styles.kpiDivider} />
+                <View style={styles.kpiBlock}>
+                  <Text style={styles.kpiLabelGreen}>Ready</Text>
+                  <Text style={styles.kpiValueGreen}>
+                    {formatCurrencySimple(summaryData?.approved_sum || 0)}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
           </View>
-        </View>
-        <View style={styles.topBarRight}>
-          <View style={styles.statBox}>
-            <Text style={styles.statLabel}>POD Pending</Text>
-            <Text style={styles.statValError}>
-              {formatCurrencySimple(summaryData?.pod_pending_sum || 0)}
-            </Text>
-          </View>
-          {isMediumScreen && (
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>Needs Action</Text>
-              <Text style={styles.statValWarn}>
-                {formatCurrencySimple(summaryData?.received_sum || 0)}
-              </Text>
-            </View>
-          )}
-          <View style={styles.statBox}>
-            <Text style={styles.statLabel}>Ready</Text>
-            <Text style={styles.statValOk}>
-              {formatCurrencySimple(summaryData?.approved_sum || 0)}
-            </Text>
-          </View>
+
+          {!isMediumScreen ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.kpiRow}
+            >
+              <View style={styles.kpiBlock}>
+                <Text style={styles.kpiLabelRed}>POD Pending</Text>
+                <Text style={styles.kpiValue}>
+                  {formatCurrencySimple(summaryData?.pod_pending_sum || 0)}
+                </Text>
+              </View>
+              <View style={styles.kpiDivider} />
+              <View style={styles.kpiBlock}>
+                <Text style={styles.kpiLabelMuted}>Needs Action</Text>
+                <Text style={styles.kpiValueMuted}>
+                  {formatCurrencySimple(summaryData?.received_sum || 0)}
+                </Text>
+              </View>
+              <View style={styles.kpiDivider} />
+              <View style={styles.kpiBlock}>
+                <Text style={styles.kpiLabelGreen}>Ready</Text>
+                <Text style={styles.kpiValueGreen}>
+                  {formatCurrencySimple(summaryData?.approved_sum || 0)}
+                </Text>
+              </View>
+            </ScrollView>
+          ) : null}
         </View>
       </View>
 
@@ -398,6 +425,7 @@ export function InvoicingExecuteScreen() {
             >
               <TripListContent
                 tabBarScrollProps={tabBarScrollProps}
+                isMediumScreen={isMediumScreen}
                 clientTrips={clientTrips}
                 activeClient={activeClient}
                 selectedTripIds={selectedTripIds}
@@ -467,6 +495,7 @@ export function InvoicingExecuteScreen() {
                 <View style={styles.mobileGridArea}>
                   <TripListContent
                     tabBarScrollProps={tabBarScrollProps}
+                    isMediumScreen={isMediumScreen}
                     clientTrips={clientTrips}
                     activeClient={activeClient}
                     selectedTripIds={selectedTripIds}
@@ -522,8 +551,17 @@ export function InvoicingExecuteScreen() {
       </View>
 
       {isMediumScreen && !isLargeScreen && (
-        <Modal visible={step === 2} animationType="slide" onRequestClose={() => setStep(1)}>
-          <View style={[styles.previewModalContainer, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        <Modal
+          visible={step === 2}
+          animationType="slide"
+          onRequestClose={() => setStep(1)}
+        >
+          <View
+            style={[
+              styles.previewModalContainer,
+              { paddingTop: insets.top, paddingBottom: insets.bottom },
+            ]}
+          >
             <InvoicePreviewPanel
               onClose={() => setStep(1)}
               onPreview={handlePreview}
@@ -584,6 +622,7 @@ export function InvoicingExecuteScreen() {
 
 function TripListContent({
   tabBarScrollProps,
+  isMediumScreen,
   clientTrips,
   activeClient,
   selectedTripIds,
@@ -670,33 +709,35 @@ function TripListContent({
         </View>
       </View>
 
-      <View style={styles.tableHeader}>
-        <Pressable style={styles.selectAllGroup} onPress={onSelectAll}>
-          <View style={styles.selectAllCheckbox}>
-            {allSelected && (
-              <FontAwesome name="check" size={10} color={Theme.primary} />
-            )}
-          </View>
-        </Pressable>
-        <Text style={[styles.tableHeaderText, { width: 100 }]}>Date / ID</Text>
-        <Text style={[styles.tableHeaderText, { flex: 1.5 }]}>Supplier</Text>
-        <Text style={[styles.tableHeaderText, { flex: 2 }]}>Route</Text>
-        <Text
-          style={[styles.tableHeaderText, { width: 80, textAlign: "right" }]}
-        >
-          Freight
-        </Text>
-        <Text
-          style={[styles.tableHeaderText, { width: 60, textAlign: "right" }]}
-        >
-          Extras
-        </Text>
-        <Text
-          style={[styles.tableHeaderText, { width: 80, textAlign: "center" }]}
-        >
-          Status
-        </Text>
-      </View>
+      {isMediumScreen ? (
+        <View style={styles.tableHeader}>
+          <Pressable style={styles.selectAllGroup} onPress={onSelectAll}>
+            <View style={styles.selectAllCheckbox}>
+              {allSelected && (
+                <FontAwesome name="check" size={10} color={Theme.primary} />
+              )}
+            </View>
+          </Pressable>
+          <Text style={[styles.tableHeaderText, { width: 100 }]}>Date / ID</Text>
+          <Text style={[styles.tableHeaderText, { flex: 1.5 }]}>Supplier</Text>
+          <Text style={[styles.tableHeaderText, { flex: 2 }]}>Route</Text>
+          <Text
+            style={[styles.tableHeaderText, { width: 80, textAlign: "right" }]}
+          >
+            Freight
+          </Text>
+          <Text
+            style={[styles.tableHeaderText, { width: 60, textAlign: "right" }]}
+          >
+            Extras
+          </Text>
+          <Text
+            style={[styles.tableHeaderText, { width: 80, textAlign: "center" }]}
+          >
+            Status
+          </Text>
+        </View>
+      ) : null}
 
       <FlatList
         data={clientTrips}
@@ -719,13 +760,62 @@ function TripListContent({
           </View>
         }
         renderItem={({ item: trip }) => {
-          const isPending = trip.status === "pending";
+          const isSelected = selectedTripIds.includes(trip.id);
+          if (!isMediumScreen) {
+            return (
+              <Pressable
+                style={[
+                  styles.tripCardMobile,
+                  isSelected && styles.tripCardMobileSelected,
+                ]}
+                onPress={() => onToggleTrip(trip.id)}
+              >
+                <View style={styles.tripCardMobileTop}>
+                  <View>
+                    <Text style={styles.tripId}>{trip.id}</Text>
+                    <Text style={styles.tripDate}>
+                      {new Date(trip.date).toLocaleDateString("en-GB", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.checkBox,
+                      isSelected && styles.checkBoxOn,
+                    ]}
+                  >
+                    {isSelected ? (
+                      <FontAwesome name="check" size={10} color="#fff" />
+                    ) : null}
+                  </View>
+                </View>
+                <Text style={styles.tripSupplier} numberOfLines={1}>
+                  {trip.supplier_name}
+                </Text>
+                <Text style={styles.tripRoute} numberOfLines={1}>
+                  {trip.route}
+                </Text>
+                <View style={styles.tripCardMobileBottom}>
+                  <Text style={styles.tripAmount}>₹{trip.amount.toLocaleString()}</Text>
+                  {trip.status === "approved" ? (
+                    <Text style={styles.listTagApproved}>Approved</Text>
+                  ) : trip.status === "received" ? (
+                    <Text style={styles.listTagReceived}>Received</Text>
+                  ) : (
+                    <Text style={styles.listTagPending}>Pending</Text>
+                  )}
+                </View>
+              </Pressable>
+            );
+          }
           return (
             <Pressable
               style={[
                 styles.tripTableRow,
-                selectedTripIds.includes(trip.id) &&
-                  styles.tripTableRowSelected,
+                isSelected && styles.tripTableRowSelected,
               ]}
               onPress={() => onToggleTrip(trip.id)}
             >
@@ -733,10 +823,10 @@ function TripListContent({
                 <View
                   style={[
                     styles.checkBox,
-                    selectedTripIds.includes(trip.id) && styles.checkBoxOn,
+                    isSelected && styles.checkBoxOn,
                   ]}
                 >
-                  {selectedTripIds.includes(trip.id) && (
+                  {isSelected && (
                     <FontAwesome name="check" size={10} color="#fff" />
                   )}
                 </View>
@@ -796,16 +886,103 @@ function TripListContent({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Theme.surface },
-  topBar: {
+  root: { flex: 1, backgroundColor: Theme.surfaceGray },
+  financeHeader: {
+    backgroundColor: Theme.darkBackground,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.separatorDark,
+  },
+  financeHeaderInner: {
+    width: "100%",
+    maxWidth: 1600,
+    alignSelf: "center",
+  },
+  heroRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 16,
+  },
+  heroRowMobile: {
+    alignItems: "flex-start",
+  },
+  heroTextWrap: {
+    minWidth: 0,
+  },
+  heroTitle: {
+    marginTop: 10,
+    fontSize: 16,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    letterSpacing: 0.2,
+  },
+  heroSub: {
+    marginTop: 2,
+    fontSize: 11,
+    color: Theme.textOnDarkMuted,
+    fontWeight: "600",
+  },
+  kpiRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
+    gap: 12,
+    paddingTop: 12,
+    paddingBottom: 6,
+  },
+  kpiRowDesktop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingTop: 8,
+  },
+  kpiBlock: {
+    minWidth: 108,
+  },
+  kpiLabelRed: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+    color: Theme.teslaRed,
+  },
+  kpiLabelMuted: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+    color: Theme.textOnDarkMuted,
+  },
+  kpiLabelGreen: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+    color: "#6ee7b7",
+  },
+  kpiValue: {
+    marginTop: 2,
+    fontSize: 24,
+    fontWeight: "900",
+    color: Theme.textOnDark,
+  },
+  kpiValueMuted: {
+    marginTop: 2,
+    fontSize: 24,
+    fontWeight: "900",
+    color: Theme.textOnDarkMuted,
+  },
+  kpiValueGreen: {
+    marginTop: 2,
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#6ee7b7",
+  },
+  kpiDivider: {
+    width: 1,
+    height: 36,
+    backgroundColor: Theme.separatorDark,
   },
   topBarLeft: { flexDirection: "row", alignItems: "center" },
   iconBtn: { padding: 8, marginLeft: -8 },
@@ -830,7 +1007,7 @@ const styles = StyleSheet.create({
   statValWarn: { fontSize: 13, fontWeight: "800", color: "#b45309" },
   statValOk: { fontSize: 13, fontWeight: "800", color: "#059669" },
 
-  contentArea: { flex: 1 },
+  contentArea: { flex: 1, backgroundColor: Theme.surfaceGray },
   splitLayout: { flex: 1, flexDirection: "row" },
   sidebar: {
     width: 280,
@@ -838,7 +1015,7 @@ const styles = StyleSheet.create({
     borderRightColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
   },
-  mainArea: { flex: 1, backgroundColor: "#f8f9fa" },
+  mainArea: { flex: 1, backgroundColor: Theme.surfaceGray },
   rightPanel: { width: 360, backgroundColor: Theme.screenBackground },
 
   sidebarHeader: {
@@ -1158,6 +1335,30 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   tripTableRowSelected: { backgroundColor: "rgba(26,35,126,0.03)" },
+  tripCardMobile: {
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+  },
+  tripCardMobileSelected: {
+    borderColor: Theme.primary,
+    backgroundColor: "rgba(26,35,126,0.05)",
+  },
+  tripCardMobileTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  tripCardMobileBottom: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
 
   checkBox: {
     width: 16,
