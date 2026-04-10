@@ -1463,33 +1463,31 @@ export default function TripDetailScreen({
           />
         }
       >
-        <TripDetailFinanceView
-          trip={trip}
-          tripLedgerEntries={tripLedgerEntries}
-          adjustments={adjustments}
-          viewerOrgId={currentOrganization?.id ?? null}
-          assignmentAuditRows={assignmentAuditRows}
-          assignmentDriverNames={assignmentDriverNames}
-          assignmentVehicleLabels={assignmentVehicleLabels}
-          tripOtp={tripOtp}
-          partnerName={partnerName}
-          driverName={driverName}
-          driverRating={driverRatingAvg}
-          vehicleLabel={
-            isAggregate
-              ? ((displayVehicleFromInput.trim() || vehicleLabel) ?? null)
-              : vehicleLabel
-          }
-          onAddAdjustment={tripCompleted ? undefined : handleAddAdjustment}
-          onRemoveAdjustment={
-            tripCompleted ? undefined : handleRemoveAdjustment
-          }
-          currentUserId={currentUserId}
-          isDriverOffline={isDriverOffline}
-          onOpenTracking={() => setShowTrackingModal(true)}
-          tripDocs={computedTripDocs}
-          onOpenDoc={(doc) => setSelectedDoc(doc)}
-          assignmentBlock={
+          <TripDetailFinanceView
+            trip={trip}
+            tripLedgerEntries={tripLedgerEntries}
+            adjustments={adjustments}
+            viewerOrgId={currentOrganization?.id ?? null}
+            assignmentAuditRows={assignmentAuditRows}
+            assignmentDriverNames={assignmentDriverNames}
+            assignmentVehicleLabels={assignmentVehicleLabels}
+            tripOtp={tripOtp}
+            partnerName={partnerName}
+            driverName={driverName}
+            driverRating={driverRatingAvg}
+            vehicleLabel={
+              isAggregate
+                ? ((displayVehicleFromInput.trim() || vehicleLabel) ?? null)
+                : vehicleLabel
+            }
+            onAddAdjustment={handleAddAdjustment}
+            onRemoveAdjustment={handleRemoveAdjustment}
+            currentUserId={currentUserId}
+            isDriverOffline={isDriverOffline}
+            onOpenTracking={() => setShowTrackingModal(true)}
+            tripDocs={computedTripDocs}
+            onOpenDoc={(doc) => setSelectedDoc(doc)}
+            assignmentBlock={
             trip.organization_id ? (
               <TripAssignmentBlock
                 trip={trip}
