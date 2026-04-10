@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LiquidFillPill } from '@/components/LiquidFillPill';
 import { IntegrationModeTag } from '@/components/IntegrationModeTag';
+import { useTabBarAwareScrollProps } from '@/contexts/DemoTabBarScrollContext';
 import Theme from '@/constants/Theme';
 import { getRatingsForDrivers, averageScore } from '@/features/ratings';
 import type { TripRow } from '@/features/trips';
@@ -70,6 +71,7 @@ export function DriversTab({
   onRefresh,
   bottomInset = 100,
 }: DriversTabProps) {
+  const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [driverRatingsMap, setDriverRatingsMap] = useState<Record<string, { avg: number | null; count: number }>>({});
@@ -208,6 +210,7 @@ export function DriversTab({
           { paddingBottom: bottomInset + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
+        {...tabBarScrollProps}
         stickyHeaderIndices={[stickyHeaderIndex]}
         refreshControl={
           onRefresh ? (
