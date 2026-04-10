@@ -30,6 +30,9 @@ import {
   type TripRow,
 } from "@/features/trips/services/trips.service";
 import {
+  getAvatarUriForSeed,
+} from "@/constants/DriverLevels";
+import {
   canAccessFinance,
   getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
@@ -40,6 +43,7 @@ import {
   formatLedgerDate,
   formatLedgerDateTime,
 } from "@/lib/format";
+import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
   getSalaryRequestsByDriverIds,
   updateSalaryRequestStatus,
@@ -51,6 +55,7 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -63,6 +68,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   attachDriverByContact,
   getDriverById,
+  getDriverProfileDisplay,
   getLatestDriverInviteTermsByUser,
   getDriverInviteSentStatus,
   getDriverLedgerByDriver,
@@ -132,6 +138,15 @@ function formatLedgerDateShort(s: string): string {
   return `${day} ${months[Number(m) - 1] ?? m} ${y}`;
 }
 
+function getDriverFallbackSeed(driverId: string): string {
+  const value = (driverId ?? "").trim() || "driver";
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash + value.charCodeAt(i)) % 10;
+  }
+  return `driver-${hash + 1}`;
+}
+
 /** Same labels as finance tab (Treasury DRIVERS) for consistency. */
 function getSalaryRequestTypeLabel(
   t: (k: string) => string,
@@ -196,6 +211,7 @@ export default function DriverDetailScreen({
     "missions" | "ledger" | "statement"
   >("missions");
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
   const [expandedLedgerRowId, setExpandedLedgerRowId] = useState<string | null>(
     null,
@@ -354,6 +370,54 @@ export default function DriverDetailScreen({
       cancelled = true;
     };
   }, [signupMatch?.matched_user_id, currentOrganization?.id]);
+
+  useEffect(() => {
+    let mounted = true;
+    const resolveAvatar = async () => {
+      if (!driver?.id) {
+        if (mounted) setProfileAvatarUri(null);
+        return;
+      }
+
+      let avatarUrl = (driver.avatar_url ?? "").trim();
+      let avatarSeed = (driver.avatar_seed ?? "").trim();
+
+      if (!avatarUrl && !avatarSeed) {
+        const { profile } = await getDriverProfileDisplay(driver.id);
+        avatarUrl = (profile?.avatarUrl ?? "").trim();
+        avatarSeed = (profile?.avatarSeed ?? "").trim();
+      }
+
+      if (!mounted) return;
+
+      if (avatarUrl.startsWith("http://") || avatarUrl.startsWith("https://")) {
+        setProfileAvatarUri(avatarUrl);
+        return;
+      }
+
+      if (avatarUrl) {
+        const signed = await getSignedAvatarUrl(avatarUrl);
+        if (!mounted) return;
+        if (signed) {
+          setProfileAvatarUri(signed);
+          return;
+        }
+      }
+
+      if (avatarSeed) {
+        setProfileAvatarUri(getAvatarUriForSeed(avatarSeed));
+        return;
+      }
+
+      // Match network page behavior: stable fallback based on driver id.
+      setProfileAvatarUri(getAvatarUriForSeed(getDriverFallbackSeed(driver.id)));
+    };
+
+    void resolveAvatar();
+    return () => {
+      mounted = false;
+    };
+  }, [driver?.id, driver?.avatar_url, driver?.avatar_seed]);
 
   const tripOptions = useMemo(
     () =>
@@ -800,7 +864,14 @@ export default function DriverDetailScreen({
                 : undefined
             }
           >
-            <FontAwesome name="user" size={16} color={Theme.textOnPrimary} />
+            {profileAvatarUri ? (
+              <Image
+                source={{ uri: profileAvatarUri }}
+                style={styles.profileHeaderAvatarImage}
+              />
+            ) : (
+              <FontAwesome name="user" size={16} color={Theme.textOnPrimary} />
+            )}
             {hasPendingSalaryRequests ? (
               <View style={styles.headerProfileBadge} />
             ) : null}
@@ -984,7 +1055,14 @@ export default function DriverDetailScreen({
             <View style={styles.profileCard}>
               <View style={styles.profileCardTop}>
                 <View style={styles.profileAvatarWrap}>
-                  <FontAwesome name="user" size={30} color={Theme.primary} />
+                  {profileAvatarUri ? (
+                    <Image
+                      source={{ uri: profileAvatarUri }}
+                      style={styles.profileAvatarImage}
+                    />
+                  ) : (
+                    <FontAwesome name="user" size={30} color={Theme.primary} />
+                  )}
                 </View>
                 <View style={styles.profileCardTopText}>
                   <Text style={styles.profileEntityName} numberOfLines={2}>
@@ -1993,7 +2071,7 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 15, color: Theme.textSecondary },
   headerTitleSubwrap: {
     alignItems: "center",
-    gap: 2,
+    gap: 4,
   },
   entityHeaderSubtitle: {
     fontSize: 8,
@@ -2020,6 +2098,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
+    overflow: "hidden",
+  },
+  profileHeaderAvatarImage: {
+    width: "100%",
+    height: "100%",
   },
   downloadHeaderBtn: {
     width: 40,
@@ -2095,6 +2178,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  profileAvatarImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 37,
+  },
   profileCardTopText: { flex: 0, minWidth: 0, alignItems: "center" },
   profileEntityName: {
     fontSize: 18,
@@ -2126,7 +2214,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.darkGreen,
   },
   profileBadgeText: {
-    fontSize: 7,
+    fontSize: 11,
     fontWeight: "700",
     color: Theme.darkGreen,
     textTransform: "uppercase",
@@ -2136,7 +2224,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.primary,
   },
   profileBadgeCoreText: {
-    fontSize: 7,
+    fontSize: 11,
     fontWeight: "700",
     color: Theme.primary,
     textTransform: "uppercase",
@@ -2157,7 +2245,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   profileGridLabel: {
-    fontSize: 7,
+    fontSize: 11,
     fontWeight: "700",
     color: Theme.primary,
     textTransform: "uppercase",
@@ -2179,7 +2267,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   profileHealthLabel: {
-    fontSize: 8,
+    fontSize: 12,
     fontWeight: "800",
     color: Theme.textMuted,
     letterSpacing: 1,
@@ -2203,7 +2291,7 @@ const styles = StyleSheet.create({
     color: Theme.primary,
   },
   profileSectionTitle: {
-    fontSize: 8,
+    fontSize: 12,
     fontWeight: "800",
     color: Theme.textMuted,
     letterSpacing: 1,
@@ -2229,7 +2317,7 @@ const styles = StyleSheet.create({
   },
   profileContactText: { flex: 1, minWidth: 0 },
   profileContactLabel: {
-    fontSize: 7,
+    fontSize: 11,
     fontWeight: "700",
     color: Theme.textMuted,
     textTransform: "uppercase",
@@ -2249,7 +2337,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
   },
   profileFiscalLabel: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: "600",
     color: Theme.textMuted,
     textTransform: "uppercase",
