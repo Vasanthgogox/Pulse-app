@@ -31,7 +31,7 @@ export interface PodReconciliationTripView {
   trip_date: string;
   pp_location: string;
   drop_point: string;
-  total_client_value: number;
+  total_client_value?: number;
   trip_status: string;
   pod_status: string;
   pod_received_date: string | null;

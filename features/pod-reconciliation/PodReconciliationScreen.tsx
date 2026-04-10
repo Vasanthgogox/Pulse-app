@@ -6,6 +6,7 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { getCapabilitiesFromProfile } from "@/lib/capabilities";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
@@ -51,6 +52,7 @@ function canAccessPodManagement(
 
 export function PodReconciliationScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const { profile } = useAuth();
   const { currentOrganization, isLoading: orgLoading } = useOrganization();
@@ -627,7 +629,11 @@ export function PodReconciliationScreen() {
             </View>
           ) : viewMode === "table" && isMediumScreen ? (
             <View style={styles.tableWrap}>
-              <ScrollView horizontal showsHorizontalScrollIndicator>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator
+                {...tabBarScrollProps}
+              >
                 <View style={styles.tableInner}>
                   <View style={styles.tableHeadRow}>
                     <TableHeaderCell label="Trip ID" onPress={() => toggleSort("id")} id="id" sortKey={sortKey} sortDirection={sortDirection} />
@@ -761,9 +767,15 @@ export function PodReconciliationScreen() {
               refreshControl={
                 <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={Theme.primary} />
               }
+              {...tabBarScrollProps}
               contentContainerStyle={[
                 styles.listContent,
-                { paddingBottom: Math.max(40, insets.bottom + 20) },
+                {
+                  paddingBottom: Math.max(
+                    40,
+                    insets.bottom + Layout.demoTabBarScrollBottomInset + 12,
+                  ),
+                },
               ]}
             >
               <View style={isLargeScreen ? styles.gridContainer : isMediumScreen ? styles.gridContainerTablet : styles.listContainerMobile}>

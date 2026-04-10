@@ -208,13 +208,12 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
 
       const { error: tripError } = await supabase()
         .from("trips")
-        .update({ 
-          // Keep both fields aligned to avoid downstream summary/list mismatches.
-          client_price: finalAmount,
-          total_client_value: finalAmount,
+        .update({
+          // q-web Supabase schema uses `client_price` as the persisted amount.
           pod_status: 'Received',
           invoice_status_1: 'Pending',
           pod_received_date: trip.pod_received_date || new Date().toISOString().split('T')[0],
+          client_price: finalAmount,
         })
         .eq("id", trip.internal_id);
 
