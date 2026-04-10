@@ -78,8 +78,8 @@ export function TripAdjustmentModal({
             <FontAwesome name="chevron-left" size={18} color={Theme.textMuted} />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>Alteration</Text>
-            <Text style={styles.headerSubtitle}>Grid Blueprint Sync</Text>
+            <Text style={styles.headerTitle}>P&L Adjustment</Text>
+            <Text style={styles.headerSubtitle}>sync transfer data</Text>
           </View>
           <View style={styles.headerBtn} />
         </View>
@@ -187,7 +187,7 @@ export function TripAdjustmentModal({
             activeOpacity={0.9}
           >
             <FontAwesome name="bolt" size={16} color={Theme.primary} style={styles.commitIcon} />
-            <Text style={styles.commitBtnText}>Commit Blueprint Alteration</Text>
+            <Text style={styles.commitBtnText}>Update Transfer Data</Text>
           </TouchableOpacity>
         </View>
       </View>
