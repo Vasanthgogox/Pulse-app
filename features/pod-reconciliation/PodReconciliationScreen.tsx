@@ -5,36 +5,37 @@ import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
-import { useOrganization } from "@/contexts/OrganizationContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
+import { useOrganization } from "@/contexts/OrganizationContext";
 import { getCapabilitiesFromProfile } from "@/lib/capabilities";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Modal,
-  Platform,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  useWindowDimensions
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Modal,
+    Platform,
+    Pressable,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
+    useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LogIncomingPodsScreen } from "../log-pods/LogIncomingPodsScreen";
 import { PodValidationView } from "./components/PodValidationView";
 import {
-  usePodReconciliationSummaryQuery,
-  usePodReconciliationTripsQuery,
+    usePodReconciliationSummaryQuery,
+    usePodReconciliationTripsQuery,
 } from "./lib/usePodReconciliationQueries";
 import type {
-  PodReconciliationTripView,
-  PodTab,
+    PodReconciliationTripView,
+    PodTab,
 } from "./services/podReconciliationService";
 
 function canAccessPodManagement(
@@ -59,6 +60,9 @@ export function PodReconciliationScreen() {
   const orgId = currentOrganization?.id ?? null;
 
   const [activeTab, setActiveTab] = useState<PodTab>("pod_pending");
+  const [financeTab, setFinanceTab] = useState<"OVERVIEW" | "LOG_INCOMING">(
+    "OVERVIEW",
+  );
   const [searchTerm, setSearchTerm] = useState("");
   const [regionFilter, setRegionFilter] = useState("All");
   const [regionModalOpen, setRegionModalOpen] = useState(false);
@@ -69,7 +73,12 @@ export function PodReconciliationScreen() {
     Platform.OS === "web" ? "table" : "cards",
   );
   const [sortKey, setSortKey] = useState<
-    "id" | "trip_date" | "client_name" | "vendor_name" | "amount" | "invoice_status_display"
+    | "id"
+    | "trip_date"
+    | "client_name"
+    | "vendor_name"
+    | "amount"
+    | "invoice_status_display"
   >("trip_date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
@@ -124,6 +133,8 @@ export function PodReconciliationScreen() {
     if (amount >= 100000) return `₹${(amount / 100000).toFixed(2)} L`;
     return "₹" + amount.toLocaleString(undefined, { maximumFractionDigits: 0 });
   };
+  const totalPending = formatCurrencySimple(summaryData?.pod_pending_sum || 0);
+  const totalInvoiced = formatCurrencySimple(summaryData?.invoiced_sum || 0);
 
   const safeDateText = (value: string | null | undefined): string => {
     if (!value) return "—";
@@ -140,12 +151,16 @@ export function PodReconciliationScreen() {
   const getPodStatusLabel = (trip: PodReconciliationTripView): string => {
     const pod = (trip.pod_status || "").trim();
     if (pod) return pod;
-    return trip.invoice_status_display === "Invoice Pending" ? "Pending" : "Not Set";
+    return trip.invoice_status_display === "Invoice Pending"
+      ? "Pending"
+      : "Not Set";
   };
   const getInvStatusLabel = (trip: PodReconciliationTripView): string => {
     const inv = (trip.invoice_status_1 || "").trim();
     if (inv) return inv;
-    return trip.invoice_status_display === "Invoice Pending" ? "Pending" : "Not Set";
+    return trip.invoice_status_display === "Invoice Pending"
+      ? "Pending"
+      : "Not Set";
   };
 
   const sortTrips = (items: PodReconciliationTripView[]) => {
@@ -213,7 +228,13 @@ export function PodReconciliationScreen() {
   }, [sortedTrips, page, pageSize, totalPages]);
 
   const toggleSort = (
-    key: "id" | "trip_date" | "client_name" | "vendor_name" | "amount" | "invoice_status_display",
+    key:
+      | "id"
+      | "trip_date"
+      | "client_name"
+      | "vendor_name"
+      | "amount"
+      | "invoice_status_display",
   ) => {
     setPage(1);
     if (sortKey === key) {
@@ -250,7 +271,9 @@ export function PodReconciliationScreen() {
       const has = prev[key].includes(value);
       return {
         ...prev,
-        [key]: has ? prev[key].filter((v) => v !== value) : [...prev[key], value],
+        [key]: has
+          ? prev[key].filter((v) => v !== value)
+          : [...prev[key], value],
       };
     });
   };
@@ -354,44 +377,248 @@ export function PodReconciliationScreen() {
         },
       ]}
     >
-      <View style={styles.topBar}>
-        <View style={styles.topBarLeft}>
-          <Pressable
-            style={styles.iconBtn}
-            onPress={() => router.back()}
-            hitSlop={12}
+      <View style={styles.financeHeader}>
+        <View style={styles.financeHeaderInner}>
+          <View
+            style={[
+              styles.financeTopTabs,
+              !isMediumScreen && styles.financeTopTabsMobile,
+            ]}
           >
-            <FontAwesome
-              name="arrow-left"
-              size={20}
-              color={Theme.textMuted}
-            />
-          </Pressable>
-          <View style={styles.topTitleWrap}>
-            <View style={{ flexShrink: 1 }}>
-              <Text style={styles.topTitle} numberOfLines={1}>
-                POD
+            <Pressable
+              style={styles.financeBack}
+              onPress={() => router.back()}
+              hitSlop={12}
+            >
+              <FontAwesome name="arrow-left" size={16} color="#fff" />
+            </Pressable>
+            {isMediumScreen ? (
+              <View style={styles.financeTabsGroup}>
+                <Pressable
+                  style={[
+                    styles.financeTabBtn,
+                    activeTab === "pod_pending" && styles.financeTabBtnActive,
+                  ]}
+                  onPress={() => setActiveTab("pod_pending")}
+                >
+                  <Text
+                    style={[
+                      styles.financeTabText,
+                      activeTab === "pod_pending" &&
+                        styles.financeTabTextActive,
+                    ]}
+                  >
+                    Pending ({summaryData?.pod_pending_count || 0})
+                  </Text>
+                  {activeTab === "pod_pending" ? (
+                    <View style={styles.financeTabUnderline} />
+                  ) : null}
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.financeTabBtn,
+                    activeTab === "received" && styles.financeTabBtnActive,
+                  ]}
+                  onPress={() => setActiveTab("received")}
+                >
+                  <Text
+                    style={[
+                      styles.financeTabText,
+                      activeTab === "received" && styles.financeTabTextActive,
+                    ]}
+                  >
+                    Received ({summaryData?.received_count || 0})
+                  </Text>
+                  {activeTab === "received" ? (
+                    <View style={styles.financeTabUnderline} />
+                  ) : null}
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.financeTabBtn,
+                    activeTab === "approved" && styles.financeTabBtnActive,
+                  ]}
+                  onPress={() => setActiveTab("approved")}
+                >
+                  <Text
+                    style={[
+                      styles.financeTabText,
+                      activeTab === "approved" && styles.financeTabTextActive,
+                    ]}
+                  >
+                    Ready ({summaryData?.approved_count || 0})
+                  </Text>
+                  {activeTab === "approved" ? (
+                    <View style={styles.financeTabUnderline} />
+                  ) : null}
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.financeTabBtn,
+                    activeTab === "invoiced" && styles.financeTabBtnActive,
+                  ]}
+                  onPress={() => setActiveTab("invoiced")}
+                >
+                  <Text
+                    style={[
+                      styles.financeTabText,
+                      activeTab === "invoiced" && styles.financeTabTextActive,
+                    ]}
+                  >
+                    Invoiced ({summaryData?.invoiced_count || 0})
+                  </Text>
+                  {activeTab === "invoiced" ? (
+                    <View style={styles.financeTabUnderline} />
+                  ) : null}
+                </Pressable>
+              </View>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.financeTabsScrollMobile}
+              >
+                <Pressable
+                  style={[
+                    styles.financeTabBtn,
+                    styles.financeTabBtnMobile,
+                    activeTab === "pod_pending" && styles.financeTabBtnActive,
+                  ]}
+                  onPress={() => setActiveTab("pod_pending")}
+                >
+                  <Text
+                    style={[
+                      styles.financeTabText,
+                      styles.financeTabTextMobile,
+                      activeTab === "pod_pending" &&
+                        styles.financeTabTextActive,
+                    ]}
+                  >
+                    Pending ({summaryData?.pod_pending_count || 0})
+                  </Text>
+                  {activeTab === "pod_pending" ? (
+                    <View style={styles.financeTabUnderline} />
+                  ) : null}
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.financeTabBtn,
+                    styles.financeTabBtnMobile,
+                    activeTab === "received" && styles.financeTabBtnActive,
+                  ]}
+                  onPress={() => setActiveTab("received")}
+                >
+                  <Text
+                    style={[
+                      styles.financeTabText,
+                      styles.financeTabTextMobile,
+                      activeTab === "received" && styles.financeTabTextActive,
+                    ]}
+                  >
+                    Received ({summaryData?.received_count || 0})
+                  </Text>
+                  {activeTab === "received" ? (
+                    <View style={styles.financeTabUnderline} />
+                  ) : null}
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.financeTabBtn,
+                    styles.financeTabBtnMobile,
+                    activeTab === "approved" && styles.financeTabBtnActive,
+                  ]}
+                  onPress={() => setActiveTab("approved")}
+                >
+                  <Text
+                    style={[
+                      styles.financeTabText,
+                      styles.financeTabTextMobile,
+                      activeTab === "approved" && styles.financeTabTextActive,
+                    ]}
+                  >
+                    Ready ({summaryData?.approved_count || 0})
+                  </Text>
+                  {activeTab === "approved" ? (
+                    <View style={styles.financeTabUnderline} />
+                  ) : null}
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.financeTabBtn,
+                    styles.financeTabBtnMobile,
+                    activeTab === "invoiced" && styles.financeTabBtnActive,
+                  ]}
+                  onPress={() => setActiveTab("invoiced")}
+                >
+                  <Text
+                    style={[
+                      styles.financeTabText,
+                      styles.financeTabTextMobile,
+                      activeTab === "invoiced" && styles.financeTabTextActive,
+                    ]}
+                  >
+                    Invoiced ({summaryData?.invoiced_count || 0})
+                  </Text>
+                  {activeTab === "invoiced" ? (
+                    <View style={styles.financeTabUnderline} />
+                  ) : null}
+                </Pressable>
+              </ScrollView>
+            )}
+          </View>
+          <View
+            style={[
+              styles.financeTotalsRow,
+              !isMediumScreen && styles.financeTotalsRowMobile,
+            ]}
+          >
+            <View>
+              <Text style={styles.financeTotalsLabel}>TOTAL PENDING</Text>
+              <Text style={styles.financeTotalsValue}>{totalPending}</Text>
+            </View>
+            <View style={{ alignItems: "flex-end" }}>
+              <Text style={[styles.financeTotalsLabel, { color: "#6ee7b7" }]}>
+                TOTAL INVOICED
               </Text>
-              <Text style={styles.topSub} numberOfLines={1}>
-                Manage proof of delivery and streamline your AR cycle.
-              </Text>
+              <Text style={styles.financeTotalsValue}>{totalInvoiced}</Text>
             </View>
           </View>
-        </View>
-
-        <View style={styles.topBarRight}>
-          <Pressable
-            style={styles.logPodsBtn}
-            onPress={() => router.push("/log-incoming-pods")}
+          <View
+            style={[
+              styles.financeActionRow,
+              !isMediumScreen && styles.financeActionRowMobile,
+            ]}
           >
-            <FontAwesome name="plus" size={14} color="#fff" />
-            <Text style={styles.logPodsBtnText}>Log Incoming PODs</Text>
-          </Pressable>
+            {financeTab === "OVERVIEW" ? (
+              <View
+                style={[
+                  styles.financeActionRight,
+                  !isMediumScreen && styles.financeActionRightMobile,
+                ]}
+              >
+                <Pressable
+                  style={styles.financePrimaryBtn}
+                  onPress={() => setFinanceTab("LOG_INCOMING")}
+                >
+                  <FontAwesome name="plus" size={12} color="#fff" />
+                  <Text style={styles.financePrimaryBtnText}>
+                    LOG INCOMING PODs
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
         </View>
       </View>
 
-      <View style={styles.metricsContainer}>
-        {/*
+      {financeTab === "LOG_INCOMING" ? (
+        <View style={{ flex: 1 }}>
+          <LogIncomingPodsScreen embedded />
+        </View>
+      ) : (
+        <>
+          <View style={styles.metricsContainer}>
+            {/*
         <View style={styles.velocityBanner}>
           <View style={styles.velocityBannerIcon}>
             <FontAwesome name="line-chart" size={16} color={Theme.primary} />
@@ -428,374 +655,504 @@ export function PodReconciliationScreen() {
         </View>
         */}
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.metricsScroll}
-        >
-          <MetricCard
-            label="POD Pending"
-            value={formatCurrencySimple(summaryData?.pod_pending_sum || 0)}
-            count={summaryData?.pod_pending_count || 0}
-            color="#b00020"
-            icon="warning"
-          />
-          <MetricCard
-            label="Needs Action"
-            value={formatCurrencySimple(summaryData?.received_sum || 0)}
-            count={summaryData?.received_count || 0}
-            color="#b45309"
-            icon="inbox"
-          />
-          <MetricCard
-            label="Ready for Invoice"
-            value={formatCurrencySimple(summaryData?.approved_sum || 0)}
-            count={summaryData?.approved_count || 0}
-            color="#059669"
-            icon="check-circle"
-          />
-          <MetricCard
-            label="Invoiced"
-            value={formatCurrencySimple(summaryData?.invoiced_sum || 0)}
-            count={summaryData?.invoiced_count || 0}
-            color={Theme.primary}
-            icon="file-text-o"
-          />
-        </ScrollView>
-      </View>
-
-      <View style={styles.tabsContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabsScroll}
-        >
-          <TabButton
-            active={activeTab === "pod_pending"}
-            label={`Pending (${summaryData?.pod_pending_count || 0})`}
-            onPress={() => setActiveTab("pod_pending")}
-          />
-          <TabButton
-            active={activeTab === "received"}
-            label={`Received (${summaryData?.received_count || 0})`}
-            onPress={() => setActiveTab("received")}
-          />
-          <TabButton
-            active={activeTab === "approved"}
-            label={`Ready (${summaryData?.approved_count || 0})`}
-            onPress={() => setActiveTab("approved")}
-          />
-          <TabButton
-            active={activeTab === "invoiced"}
-            label={`Invoiced (${summaryData?.invoiced_count || 0})`}
-            onPress={() => setActiveTab("invoiced")}
-          />
-        </ScrollView>
-      </View>
-
-      <View style={{ flex: 1 }}>
-        <View style={styles.mainColumn}>
-          <View style={styles.filtersArea}>
-          <View style={styles.searchBox}>
-            <FontAwesome
-              name="search"
-              size={14}
-              color={Theme.textMuted}
-              style={{ marginRight: 8 }}
-            />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search Trip ID, Client, LR..."
-              placeholderTextColor={Theme.textMuted}
-              value={searchTerm}
-              onChangeText={setSearchTerm}
-            />
-            {searchTerm !== "" && (
-              <Pressable onPress={() => setSearchTerm("")}>
-                <FontAwesome
-                  name="times-circle"
-                  size={16}
-                  color={Theme.textMuted}
-                />
-              </Pressable>
+            {isMediumScreen ? (
+              <View style={styles.metricsGrid}>
+                <View style={styles.metricsGridItem}>
+                  <MetricCard
+                    label="POD Pending"
+                    value={formatCurrencySimple(
+                      summaryData?.pod_pending_sum || 0,
+                    )}
+                    count={summaryData?.pod_pending_count || 0}
+                    color="#b00020"
+                    icon="warning"
+                  />
+                </View>
+                <View style={styles.metricsGridItem}>
+                  <MetricCard
+                    label="Needs Action"
+                    value={formatCurrencySimple(summaryData?.received_sum || 0)}
+                    count={summaryData?.received_count || 0}
+                    color="#b45309"
+                    icon="inbox"
+                  />
+                </View>
+                <View style={styles.metricsGridItem}>
+                  <MetricCard
+                    label="Ready for Invoice"
+                    value={formatCurrencySimple(summaryData?.approved_sum || 0)}
+                    count={summaryData?.approved_count || 0}
+                    color="#059669"
+                    icon="check-circle"
+                  />
+                </View>
+                <View style={styles.metricsGridItem}>
+                  <MetricCard
+                    label="Invoiced"
+                    value={formatCurrencySimple(summaryData?.invoiced_sum || 0)}
+                    count={summaryData?.invoiced_count || 0}
+                    color={Theme.primary}
+                    icon="file-text-o"
+                  />
+                </View>
+              </View>
+            ) : (
+              <View style={styles.metricsGridMobile}>
+                <View
+                  style={[
+                    styles.metricsGridItemMobile,
+                    width < 390 && styles.metricsGridItemMobileNarrow,
+                  ]}
+                >
+                  <MetricCard
+                    compact
+                    label="POD Pending"
+                    value={formatCurrencySimple(
+                      summaryData?.pod_pending_sum || 0,
+                    )}
+                    count={summaryData?.pod_pending_count || 0}
+                    color="#b00020"
+                    icon="warning"
+                  />
+                </View>
+                <View
+                  style={[
+                    styles.metricsGridItemMobile,
+                    width < 390 && styles.metricsGridItemMobileNarrow,
+                  ]}
+                >
+                  <MetricCard
+                    compact
+                    label="Needs Action"
+                    value={formatCurrencySimple(summaryData?.received_sum || 0)}
+                    count={summaryData?.received_count || 0}
+                    color="#b45309"
+                    icon="inbox"
+                  />
+                </View>
+                <View
+                  style={[
+                    styles.metricsGridItemMobile,
+                    width < 390 && styles.metricsGridItemMobileNarrow,
+                  ]}
+                >
+                  <MetricCard
+                    compact
+                    label="Ready for Invoice"
+                    value={formatCurrencySimple(summaryData?.approved_sum || 0)}
+                    count={summaryData?.approved_count || 0}
+                    color="#059669"
+                    icon="check-circle"
+                  />
+                </View>
+                <View
+                  style={[
+                    styles.metricsGridItemMobile,
+                    width < 390 && styles.metricsGridItemMobileNarrow,
+                  ]}
+                >
+                  <MetricCard
+                    compact
+                    label="Invoiced"
+                    value={formatCurrencySimple(summaryData?.invoiced_sum || 0)}
+                    count={summaryData?.invoiced_count || 0}
+                    color={Theme.primary}
+                    icon="file-text-o"
+                  />
+                </View>
+              </View>
             )}
           </View>
-          <Pressable
-            style={styles.regionFilter}
-            onPress={() => setRegionModalOpen(true)}
-          >
-            <FontAwesome
-              name="map-marker"
-              size={14}
-              color={Theme.primary}
-              style={{ marginRight: 6 }}
-            />
-            <Text style={styles.regionFilterText}>
-              {regionFilter === "All" ? "Region: All" : regionFilter}
-            </Text>
-            <FontAwesome
-              name="chevron-down"
-              size={10}
-              color={Theme.textMuted}
-              style={{ marginLeft: 6 }}
-            />
-          </Pressable>
-          {isMediumScreen && (
-            <View style={styles.viewModeWrap}>
-              <Pressable
-                style={[styles.viewModeBtn, viewMode === "cards" && styles.viewModeBtnActive]}
-                onPress={() => setViewMode("cards")}
-              >
-                <FontAwesome
-                  name="th-large"
-                  size={12}
-                  color={viewMode === "cards" ? "#fff" : Theme.textMuted}
-                />
-                <Text
-                  style={[
-                    styles.viewModeText,
-                    viewMode === "cards" && styles.viewModeTextActive,
-                  ]}
-                >
-                  Cards
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.viewModeBtn, viewMode === "table" && styles.viewModeBtnActive]}
-                onPress={() => setViewMode("table")}
-              >
-                <FontAwesome
-                  name="table"
-                  size={12}
-                  color={viewMode === "table" ? "#fff" : Theme.textMuted}
-                />
-                <Text
-                  style={[
-                    styles.viewModeText,
-                    viewMode === "table" && styles.viewModeTextActive,
-                  ]}
-                >
-                  Table
-                </Text>
-              </Pressable>
-            </View>
-          )}
-          {isMediumScreen && viewMode === "table" && (
-            <>
-              <Pressable style={styles.tableUtilityBtn} onPress={() => setFiltersModalOpen(true)}>
-                <FontAwesome name="filter" size={12} color={Theme.textMuted} />
-                <Text style={styles.tableUtilityText}>
-                  Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
-                </Text>
-              </Pressable>
-              <Pressable style={styles.tableUtilityBtn} onPress={handleExportCsv}>
-                <FontAwesome name="download" size={12} color={Theme.textMuted} />
-                <Text style={styles.tableUtilityText}>Export CSV</Text>
-              </Pressable>
-            </>
-          )}
-        </View>
 
-        <View style={styles.contentArea}>
-          {isLoading && !isRefetching ? (
-            <ActivityIndicator
-              size="large"
-              color={Theme.primary}
-              style={{ marginTop: 40 }}
-            />
-          ) : isError ? (
-            <View style={styles.errorArea}>
-              <Text style={styles.errorText}>Could not load data</Text>
-              {error && (
-                <Text style={styles.errorDetail}>
-                  {(error as any).message || String(error)}
-                </Text>
-              )}
-              <Pressable style={styles.retryBtn} onPress={() => refetch()}>
-                <Text style={styles.retryBtnText}>Retry</Text>
-              </Pressable>
-            </View>
-          ) : trips.length === 0 ? (
-            <View style={styles.empty}>
-              <FontAwesome
-                name="folder-open-o"
-                size={48}
-                color={Theme.borderMedium}
-              />
-              <Text style={styles.emptyTitle}>No trips in this queue</Text>
-              <Text style={styles.emptySub}>
-                Try adjusting your filters or tab selection.
-              </Text>
-            </View>
-          ) : viewMode === "table" && isMediumScreen ? (
-            <View style={styles.tableWrap}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator
-                {...tabBarScrollProps}
-              >
-                <View style={styles.tableInner}>
-                  <View style={styles.tableHeadRow}>
-                    <TableHeaderCell label="Trip ID" onPress={() => toggleSort("id")} id="id" sortKey={sortKey} sortDirection={sortDirection} />
-                    <TableHeaderCell label="Trip Date" onPress={() => toggleSort("trip_date")} id="trip_date" sortKey={sortKey} sortDirection={sortDirection} />
-                    <TableHeaderCell label="Client Name" onPress={() => toggleSort("client_name")} id="client_name" sortKey={sortKey} sortDirection={sortDirection} />
-                    <TableHeaderCell label="Vendor Name" onPress={() => toggleSort("vendor_name")} id="vendor_name" sortKey={sortKey} sortDirection={sortDirection} />
-                    <TableHeaderCell label="LR No" />
-                    <TableHeaderCell label="PP Location" />
-                    <TableHeaderCell label="Drop Point" />
-                    <TableHeaderCell label="Value (₹)" onPress={() => toggleSort("amount")} align="right" id="amount" sortKey={sortKey} sortDirection={sortDirection} />
-                    <TableHeaderCell label="Trip Status" />
-                    <TableHeaderCell label="POD Status" onPress={() => toggleSort("invoice_status_display")} id="invoice_status_display" sortKey={sortKey} sortDirection={sortDirection} />
-                    <TableHeaderCell label="POD Date" />
-                    <TableHeaderCell label="Inv Status 1" />
-                    <TableHeaderCell label="Invoice No" />
-                    <TableHeaderCell label="Actions" align="right" />
-                  </View>
-                  {paginatedTrips.map((item, index) => (
-                    <View
-                      key={item.internal_id}
-                      style={[
-                        styles.tableRow,
-                        index % 2 === 0 ? styles.tableRowEven : styles.tableRowOdd,
-                      ]}
-                    >
-                      <TableCell text={item.id || "—"} mono strong color={Theme.primary} />
-                      <TableCell text={safeDateText(item.trip_date || item.date)} />
-                      <TableCell text={item.client_name || "—"} strong />
-                      <TableCell text={item.vendor_name || "—"} />
-                      <TableCell
-                        text={
-                          item.lr_numbers?.length
-                            ? item.lr_numbers.length > 1
-                              ? `${item.lr_numbers[0]} +${item.lr_numbers.length - 1}`
-                              : item.lr_numbers[0]
-                            : "—"
-                        }
-                        mono
+          <View style={{ flex: 1 }}>
+            <View style={styles.mainColumn}>
+              <View style={styles.filtersArea}>
+                <View style={styles.searchBox}>
+                  <FontAwesome
+                    name="search"
+                    size={14}
+                    color={Theme.textMuted}
+                    style={{ marginRight: 8 }}
+                  />
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search Trip ID, Client, LR..."
+                    placeholderTextColor={Theme.textMuted}
+                    value={searchTerm}
+                    onChangeText={setSearchTerm}
+                  />
+                  {searchTerm !== "" && (
+                    <Pressable onPress={() => setSearchTerm("")}>
+                      <FontAwesome
+                        name="times-circle"
+                        size={16}
+                        color={Theme.textMuted}
                       />
-                      <TableCell text={item.pp_location || "—"} />
-                      <TableCell text={item.drop_point || "—"} />
-                      <TableCell
-                        text={(item.amount || 0).toLocaleString()}
-                        mono
-                        strong
-                        align="right"
-                      />
-                      <TableCell text={getTripStatusLabel(item)} />
-                      <TableStatusCell trip={item} />
-                      <TableCell text={safeDateText(item.pod_received_date)} />
-                      <TableCell text={getInvStatusLabel(item)} />
-                      <TableCell text={item.invoice_no || "—"} mono />
-                      <TableActionCell
-                        trip={item}
-                        onReview={() => {
-                          setSelectedTrip(item);
-                          setValidationModalOpen(true);
-                        }}
-                        onLog={() => router.push("/log-incoming-pods")}
-                        onOpenInvoicing={() => router.push("/invoicing-execute")}
-                      />
-                    </View>
-                  ))}
+                    </Pressable>
+                  )}
                 </View>
-              </ScrollView>
-
-              <View style={styles.tableFooter}>
-                <Text style={styles.tableFooterText}>
-                  Showing{" "}
-                  {sortedTrips.length === 0
-                    ? 0
-                    : Math.min((page - 1) * pageSize + 1, sortedTrips.length)}
-                  -
-                  {Math.min(page * pageSize, sortedTrips.length)} of {sortedTrips.length}
-                </Text>
-                <View style={styles.tableFooterControls}>
-                  <Pressable
-                    style={styles.tablePagerBtn}
-                    onPress={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={page <= 1}
-                  >
-                    <FontAwesome
-                      name="chevron-left"
-                      size={12}
-                      color={page <= 1 ? Theme.borderMedium : Theme.textPrimaryDark}
-                    />
-                  </Pressable>
-                  <Text style={styles.tablePagerText}>
-                    Page {Math.min(page, totalPages)} / {totalPages}
+                <Pressable
+                  style={styles.regionFilter}
+                  onPress={() => setRegionModalOpen(true)}
+                >
+                  <FontAwesome
+                    name="map-marker"
+                    size={14}
+                    color={Theme.primary}
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={styles.regionFilterText}>
+                    {regionFilter === "All" ? "Region: All" : regionFilter}
                   </Text>
-                  <Pressable
-                    style={styles.tablePagerBtn}
-                    onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={page >= totalPages}
-                  >
-                    <FontAwesome
-                      name="chevron-right"
-                      size={12}
-                      color={page >= totalPages ? Theme.borderMedium : Theme.textPrimaryDark}
-                    />
-                  </Pressable>
-                  <View style={styles.pageSizeWrap}>
-                    {[20, 50, 100].map((size) => (
-                      <Pressable
-                        key={size}
+                  <FontAwesome
+                    name="chevron-down"
+                    size={10}
+                    color={Theme.textMuted}
+                    style={{ marginLeft: 6 }}
+                  />
+                </Pressable>
+                {isMediumScreen && (
+                  <View style={styles.viewModeWrap}>
+                    <Pressable
+                      style={[
+                        styles.viewModeBtn,
+                        viewMode === "cards" && styles.viewModeBtnActive,
+                      ]}
+                      onPress={() => setViewMode("cards")}
+                    >
+                      <FontAwesome
+                        name="th-large"
+                        size={12}
+                        color={viewMode === "cards" ? "#fff" : Theme.textMuted}
+                      />
+                      <Text
                         style={[
-                          styles.pageSizeBtn,
-                          pageSize === size && styles.pageSizeBtnActive,
+                          styles.viewModeText,
+                          viewMode === "cards" && styles.viewModeTextActive,
                         ]}
-                        onPress={() => {
-                          setPageSize(size as 20 | 50 | 100);
-                          setPage(1);
-                        }}
                       >
-                        <Text
-                          style={[
-                            styles.pageSizeText,
-                            pageSize === size && styles.pageSizeTextActive,
-                          ]}
-                        >
-                          {size}
-                        </Text>
-                      </Pressable>
-                    ))}
+                        Cards
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={[
+                        styles.viewModeBtn,
+                        viewMode === "table" && styles.viewModeBtnActive,
+                      ]}
+                      onPress={() => setViewMode("table")}
+                    >
+                      <FontAwesome
+                        name="table"
+                        size={12}
+                        color={viewMode === "table" ? "#fff" : Theme.textMuted}
+                      />
+                      <Text
+                        style={[
+                          styles.viewModeText,
+                          viewMode === "table" && styles.viewModeTextActive,
+                        ]}
+                      >
+                        Table
+                      </Text>
+                    </Pressable>
                   </View>
-                </View>
+                )}
+              </View>
+
+              <View style={styles.contentArea}>
+                {isLoading && !isRefetching ? (
+                  <ActivityIndicator
+                    size="large"
+                    color={Theme.primary}
+                    style={{ marginTop: 40 }}
+                  />
+                ) : isError ? (
+                  <View style={styles.errorArea}>
+                    <Text style={styles.errorText}>Could not load data</Text>
+                    {error && (
+                      <Text style={styles.errorDetail}>
+                        {(error as any).message || String(error)}
+                      </Text>
+                    )}
+                    <Pressable
+                      style={styles.retryBtn}
+                      onPress={() => refetch()}
+                    >
+                      <Text style={styles.retryBtnText}>Retry</Text>
+                    </Pressable>
+                  </View>
+                ) : trips.length === 0 ? (
+                  <View style={styles.empty}>
+                    <FontAwesome
+                      name="folder-open-o"
+                      size={48}
+                      color={Theme.borderMedium}
+                    />
+                    <Text style={styles.emptyTitle}>
+                      No trips in this queue
+                    </Text>
+                    <Text style={styles.emptySub}>
+                      Try adjusting your filters or tab selection.
+                    </Text>
+                  </View>
+                ) : viewMode === "table" && isMediumScreen ? (
+                  <View style={styles.tableWrap}>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator
+                      {...tabBarScrollProps}
+                    >
+                      <View style={styles.tableInner}>
+                        <View style={styles.tableHeadRow}>
+                          <TableHeaderCell
+                            label="Trip ID"
+                            onPress={() => toggleSort("id")}
+                            id="id"
+                            sortKey={sortKey}
+                            sortDirection={sortDirection}
+                          />
+                          <TableHeaderCell
+                            label="Trip Date"
+                            onPress={() => toggleSort("trip_date")}
+                            id="trip_date"
+                            sortKey={sortKey}
+                            sortDirection={sortDirection}
+                          />
+                          <TableHeaderCell
+                            label="Client Name"
+                            onPress={() => toggleSort("client_name")}
+                            id="client_name"
+                            sortKey={sortKey}
+                            sortDirection={sortDirection}
+                          />
+                          <TableHeaderCell
+                            label="Vendor Name"
+                            onPress={() => toggleSort("vendor_name")}
+                            id="vendor_name"
+                            sortKey={sortKey}
+                            sortDirection={sortDirection}
+                          />
+                          <TableHeaderCell label="LR No" />
+                          <TableHeaderCell label="PP Location" />
+                          <TableHeaderCell label="Drop Point" />
+                          <TableHeaderCell
+                            label="Value (₹)"
+                            onPress={() => toggleSort("amount")}
+                            align="right"
+                            id="amount"
+                            sortKey={sortKey}
+                            sortDirection={sortDirection}
+                          />
+                          <TableHeaderCell label="Trip Status" />
+                          <TableHeaderCell
+                            label="POD Status"
+                            onPress={() => toggleSort("invoice_status_display")}
+                            id="invoice_status_display"
+                            sortKey={sortKey}
+                            sortDirection={sortDirection}
+                          />
+                          <TableHeaderCell label="POD Date" />
+                          <TableHeaderCell label="Inv Status 1" />
+                          <TableHeaderCell label="Invoice No" />
+                          <TableHeaderCell label="Actions" align="right" />
+                        </View>
+                        {paginatedTrips.map((item, index) => (
+                          <View
+                            key={item.internal_id}
+                            style={[
+                              styles.tableRow,
+                              index % 2 === 0
+                                ? styles.tableRowEven
+                                : styles.tableRowOdd,
+                            ]}
+                          >
+                            <TableCell
+                              text={item.id || "—"}
+                              mono
+                              strong
+                              color={Theme.primary}
+                            />
+                            <TableCell
+                              text={safeDateText(item.trip_date || item.date)}
+                            />
+                            <TableCell text={item.client_name || "—"} strong />
+                            <TableCell text={item.vendor_name || "—"} />
+                            <TableCell
+                              text={
+                                item.lr_numbers?.length
+                                  ? item.lr_numbers.length > 1
+                                    ? `${item.lr_numbers[0]} +${item.lr_numbers.length - 1}`
+                                    : item.lr_numbers[0]
+                                  : "—"
+                              }
+                              mono
+                            />
+                            <TableCell text={item.pp_location || "—"} />
+                            <TableCell text={item.drop_point || "—"} />
+                            <TableCell
+                              text={(item.amount || 0).toLocaleString()}
+                              mono
+                              strong
+                              align="right"
+                            />
+                            <TableCell text={getTripStatusLabel(item)} />
+                            <TableStatusCell trip={item} />
+                            <TableCell
+                              text={safeDateText(item.pod_received_date)}
+                            />
+                            <TableCell text={getInvStatusLabel(item)} />
+                            <TableCell text={item.invoice_no || "—"} mono />
+                            <TableActionCell
+                              trip={item}
+                              onReview={() => {
+                                setSelectedTrip(item);
+                                setValidationModalOpen(true);
+                              }}
+                              onLog={() => router.push("/log-incoming-pods")}
+                              onOpenInvoicing={() =>
+                                router.push("/invoicing-execute")
+                              }
+                            />
+                          </View>
+                        ))}
+                      </View>
+                    </ScrollView>
+
+                    <View style={styles.tableFooter}>
+                      <Text style={styles.tableFooterText}>
+                        Showing{" "}
+                        {sortedTrips.length === 0
+                          ? 0
+                          : Math.min(
+                              (page - 1) * pageSize + 1,
+                              sortedTrips.length,
+                            )}
+                        -{Math.min(page * pageSize, sortedTrips.length)} of{" "}
+                        {sortedTrips.length}
+                      </Text>
+                      <View style={styles.tableFooterControls}>
+                        <Pressable
+                          style={styles.tablePagerBtn}
+                          onPress={() => setPage((p) => Math.max(1, p - 1))}
+                          disabled={page <= 1}
+                        >
+                          <FontAwesome
+                            name="chevron-left"
+                            size={12}
+                            color={
+                              page <= 1
+                                ? Theme.borderMedium
+                                : Theme.textPrimaryDark
+                            }
+                          />
+                        </Pressable>
+                        <Text style={styles.tablePagerText}>
+                          Page {Math.min(page, totalPages)} / {totalPages}
+                        </Text>
+                        <Pressable
+                          style={styles.tablePagerBtn}
+                          onPress={() =>
+                            setPage((p) => Math.min(totalPages, p + 1))
+                          }
+                          disabled={page >= totalPages}
+                        >
+                          <FontAwesome
+                            name="chevron-right"
+                            size={12}
+                            color={
+                              page >= totalPages
+                                ? Theme.borderMedium
+                                : Theme.textPrimaryDark
+                            }
+                          />
+                        </Pressable>
+                        <View style={styles.pageSizeWrap}>
+                          {[20, 50, 100].map((size) => (
+                            <Pressable
+                              key={size}
+                              style={[
+                                styles.pageSizeBtn,
+                                pageSize === size && styles.pageSizeBtnActive,
+                              ]}
+                              onPress={() => {
+                                setPageSize(size as 20 | 50 | 100);
+                                setPage(1);
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.pageSizeText,
+                                  pageSize === size &&
+                                    styles.pageSizeTextActive,
+                                ]}
+                              >
+                                {size}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                ) : (
+                  <ScrollView
+                    refreshControl={
+                      <RefreshControl
+                        refreshing={isRefetching}
+                        onRefresh={refetch}
+                        tintColor={Theme.primary}
+                      />
+                    }
+                    {...tabBarScrollProps}
+                    contentContainerStyle={[
+                      styles.listContent,
+                      {
+                        paddingBottom: Math.max(
+                          40,
+                          insets.bottom +
+                            Layout.demoTabBarScrollBottomInset +
+                            12,
+                        ),
+                      },
+                    ]}
+                  >
+                    <View
+                      style={
+                        isLargeScreen
+                          ? styles.gridContainer
+                          : isMediumScreen
+                            ? styles.gridContainerTablet
+                            : styles.listContainerMobile
+                      }
+                    >
+                      {trips.map((item) => (
+                        <View
+                          key={item.internal_id}
+                          style={
+                            isLargeScreen
+                              ? styles.gridItem
+                              : isMediumScreen
+                                ? styles.gridItemTablet
+                                : undefined
+                          }
+                        >
+                          <TripRowItem
+                            trip={item}
+                            onPress={() => {
+                              setSelectedTrip(item);
+                              setValidationModalOpen(true);
+                            }}
+                          />
+                        </View>
+                      ))}
+                    </View>
+                  </ScrollView>
+                )}
               </View>
             </View>
-          ) : (
-            <ScrollView
-              refreshControl={
-                <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={Theme.primary} />
-              }
-              {...tabBarScrollProps}
-              contentContainerStyle={[
-                styles.listContent,
-                {
-                  paddingBottom: Math.max(
-                    40,
-                    insets.bottom + Layout.demoTabBarScrollBottomInset + 12,
-                  ),
-                },
-              ]}
-            >
-              <View style={isLargeScreen ? styles.gridContainer : isMediumScreen ? styles.gridContainerTablet : styles.listContainerMobile}>
-                {trips.map((item) => (
-                  <View key={item.internal_id} style={isLargeScreen ? styles.gridItem : isMediumScreen ? styles.gridItemTablet : undefined}>
-                    <TripRowItem
-                      trip={item}
-                      onPress={() => {
-                        setSelectedTrip(item);
-                        setValidationModalOpen(true);
-                      }}
-                    />
-                  </View>
-                ))}
-              </View>
-            </ScrollView>
-          )}
-        </View>
-      </View>
-      </View>
+          </View>
+        </>
+      )}
 
       {validationModalOpen && (
         <PodValidationView
@@ -890,7 +1247,9 @@ export function PodReconciliationScreen() {
                       style={styles.activeFilterChip}
                       onPress={() => toggleColumnFilterValue("trip_status", v)}
                     >
-                      <Text style={styles.activeFilterChipText}>{`Trip: ${v} x`}</Text>
+                      <Text
+                        style={styles.activeFilterChipText}
+                      >{`Trip: ${v} x`}</Text>
                     </Pressable>
                   ))}
                   {columnFilters.pod_status.map((v) => (
@@ -899,16 +1258,22 @@ export function PodReconciliationScreen() {
                       style={styles.activeFilterChip}
                       onPress={() => toggleColumnFilterValue("pod_status", v)}
                     >
-                      <Text style={styles.activeFilterChipText}>{`POD: ${v} x`}</Text>
+                      <Text
+                        style={styles.activeFilterChipText}
+                      >{`POD: ${v} x`}</Text>
                     </Pressable>
                   ))}
                   {columnFilters.invoice_status_1.map((v) => (
                     <Pressable
                       key={`inv-${v}`}
                       style={styles.activeFilterChip}
-                      onPress={() => toggleColumnFilterValue("invoice_status_1", v)}
+                      onPress={() =>
+                        toggleColumnFilterValue("invoice_status_1", v)
+                      }
                     >
-                      <Text style={styles.activeFilterChipText}>{`Inv1: ${v} x`}</Text>
+                      <Text
+                        style={styles.activeFilterChipText}
+                      >{`Inv1: ${v} x`}</Text>
                     </Pressable>
                   ))}
                 </View>
@@ -953,7 +1318,12 @@ function FilterSection({
                 style={[styles.filterChip, active && styles.filterChipActive]}
                 onPress={() => onToggle(value)}
               >
-                <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    active && styles.filterChipTextActive,
+                  ]}
+                >
                   {`${value} (${count})`}
                 </Text>
               </Pressable>
@@ -976,17 +1346,44 @@ function TableHeaderCell({
   label: string;
   onPress?: () => void;
   align?: "left" | "right";
-  id?: "id" | "trip_date" | "client_name" | "vendor_name" | "amount" | "invoice_status_display";
-  sortKey?: "id" | "trip_date" | "client_name" | "vendor_name" | "amount" | "invoice_status_display";
+  id?:
+    | "id"
+    | "trip_date"
+    | "client_name"
+    | "vendor_name"
+    | "amount"
+    | "invoice_status_display";
+  sortKey?:
+    | "id"
+    | "trip_date"
+    | "client_name"
+    | "vendor_name"
+    | "amount"
+    | "invoice_status_display";
   sortDirection?: "asc" | "desc";
 }) {
   const isSorted = Boolean(id && sortKey === id);
   const content = (
-    <View style={[styles.tableHeadLabelWrap, align === "right" && styles.tableHeadLabelWrapRight]}>
-      <Text style={[styles.tableHeadText, align === "right" && styles.textRight]}>{label}</Text>
+    <View
+      style={[
+        styles.tableHeadLabelWrap,
+        align === "right" && styles.tableHeadLabelWrapRight,
+      ]}
+    >
+      <Text
+        style={[styles.tableHeadText, align === "right" && styles.textRight]}
+      >
+        {label}
+      </Text>
       {onPress ? (
         <FontAwesome
-          name={isSorted ? (sortDirection === "asc" ? "sort-up" : "sort-down") : "sort"}
+          name={
+            isSorted
+              ? sortDirection === "asc"
+                ? "sort-up"
+                : "sort-down"
+              : "sort"
+          }
           size={10}
           color={isSorted ? Theme.primary : Theme.textMuted}
         />
@@ -994,7 +1391,9 @@ function TableHeaderCell({
     </View>
   );
   return (
-    <View style={[styles.tableHeadCell, align === "right" && styles.tableCellRight]}>
+    <View
+      style={[styles.tableHeadCell, align === "right" && styles.tableCellRight]}
+    >
       {onPress ? (
         <Pressable onPress={onPress} style={styles.tableHeadPressable}>
           {content}
@@ -1020,7 +1419,9 @@ function TableCell({
   align?: "left" | "right";
 }) {
   return (
-    <View style={[styles.tableCell, align === "right" && styles.tableCellRight]}>
+    <View
+      style={[styles.tableCell, align === "right" && styles.tableCellRight]}
+    >
       <Text
         numberOfLines={1}
         style={[
@@ -1111,23 +1512,37 @@ function MetricCard({
   count,
   color,
   icon,
+  compact = false,
 }: {
   label: string;
   value: string;
   count: number;
   color: string;
   icon: any;
+  compact?: boolean;
 }) {
   return (
     <View style={[styles.metricCard, { borderColor: `${color}20` }]}>
       <View style={[styles.metricHeader, { backgroundColor: `${color}08` }]} />
-      <View style={styles.metricCardInner}>
+      <View
+        style={[
+          styles.metricCardInner,
+          compact && styles.metricCardInnerCompact,
+        ]}
+      >
         <View style={styles.metricHeaderRow}>
           <Text style={styles.metricLabel}>{label}</Text>
           <FontAwesome name={icon} size={16} color={color} />
         </View>
-        <Text style={styles.metricValue}>{value}</Text>
-        <Text style={styles.metricSub} numberOfLines={2}>
+        <Text
+          style={[styles.metricValue, compact && styles.metricValueCompact]}
+        >
+          {value}
+        </Text>
+        <Text
+          style={[styles.metricSub, compact && styles.metricSubCompact]}
+          numberOfLines={2}
+        >
           {label === "POD Pending"
             ? "Not invoiced due to POD missing"
             : label === "Needs Action"
@@ -1136,8 +1551,14 @@ function MetricCard({
                 ? "POD received & ready for invoice"
                 : "POD received & invoiced"}
         </Text>
-        <View style={styles.metricFooter}>
-          <Text style={styles.metricCount}>{count} Trips</Text>
+        <View
+          style={[styles.metricFooter, compact && styles.metricFooterCompact]}
+        >
+          <Text
+            style={[styles.metricCount, compact && styles.metricCountCompact]}
+          >
+            {count} Trips
+          </Text>
           <Text style={[styles.metricStatusTag, { color }]}>
             {label === "POD Pending"
               ? "Priority"
@@ -1162,6 +1583,7 @@ function TabButton({ active, label, onPress }: any) {
       <Text style={[styles.tabBtnText, active && styles.tabBtnTextActive]}>
         {label}
       </Text>
+      {active ? <View style={styles.tabBtnUnderline} /> : null}
     </Pressable>
   );
 }
@@ -1248,6 +1670,156 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Theme.screenBackground,
     ...Platform.select({ web: { overflow: "hidden" } }),
+  },
+  financeHeader: {
+    backgroundColor: Theme.darkBackground,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.separatorDark,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 8,
+  },
+  financeHeaderInner: {
+    width: "100%",
+    maxWidth: 1600,
+    alignSelf: "center",
+  },
+  financeTopTabs: {
+    minHeight: 40,
+    position: "relative",
+    alignItems: "center",
+  },
+  financeTopTabsMobile: {
+    minHeight: 0,
+    paddingTop: 2,
+    paddingBottom: 6,
+    paddingLeft: 0,
+    alignItems: "stretch",
+    justifyContent: "center",
+  },
+  financeTabsGroup: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    paddingHorizontal: 120,
+  },
+  financeTabsScroll: {
+    gap: 8,
+    paddingRight: 6,
+  },
+  financeTabsScrollMobile: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingLeft: 40,
+    paddingRight: 8,
+    paddingBottom: 2,
+  },
+  financeTabBtn: {
+    minHeight: 24,
+    minWidth: 180,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 0,
+    paddingHorizontal: 10,
+    paddingBottom: 6,
+    position: "relative",
+  },
+  financeTabBtnMobile: {
+    minWidth: 136,
+    minHeight: 22,
+    paddingHorizontal: 6,
+  },
+  financeTabBtnActive: {},
+  financeBack: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  financeTabText: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: Theme.textOnDarkMuted,
+  },
+  financeTabTextMobile: {
+    fontSize: 7,
+    letterSpacing: 1.2,
+  },
+  financeTabTextActive: { color: Theme.textOnDark },
+  financeTabUnderline: {
+    position: "absolute",
+    left: 6,
+    right: 6,
+    bottom: 0,
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: Theme.teslaRed,
+  },
+  financeTotalsRow: {
+    marginTop: 4,
+    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+  },
+  financeTotalsRowMobile: {
+    marginTop: 6,
+  },
+  financeTotalsLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 1.4,
+    color: Theme.teslaRed,
+  },
+  financeTotalsValue: {
+    marginTop: 2,
+    fontSize: 24,
+    fontWeight: "900",
+    color: Theme.textOnDark,
+  },
+  financeActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    justifyContent: "flex-end",
+  },
+  financeActionRowMobile: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 8,
+  },
+  financeActionRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  financeActionRightMobile: {
+    justifyContent: "space-between",
+  },
+  financePrimaryBtn: {
+    height: 34,
+    borderRadius: 8,
+    backgroundColor: Theme.teslaRed,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  financePrimaryBtnText: {
+    color: Theme.textOnDark,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.6,
   },
   mainColumn: {
     flexDirection: "column",
@@ -1382,8 +1954,31 @@ const styles = StyleSheet.create({
 
   metricsContainer: { paddingVertical: 16, width: "100%" },
   metricsScroll: { paddingHorizontal: 16, gap: 16 },
+  metricsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  metricsGridItem: {
+    width: "24%",
+    minWidth: 220,
+    flexGrow: 1,
+  },
+  metricsGridMobile: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  metricsGridItemMobile: {
+    width: "48.5%",
+  },
+  metricsGridItemMobileNarrow: {
+    width: "100%",
+  },
   metricCard: {
-    width: 220,
+    width: "100%",
     backgroundColor: Theme.cardWhite,
     borderRadius: 12,
     borderWidth: 1,
@@ -1405,6 +2000,9 @@ const styles = StyleSheet.create({
   metricCardInner: {
     padding: 20,
   },
+  metricCardInnerCompact: {
+    padding: 12,
+  },
   metricHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1418,8 +2016,28 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  metricValue: { fontSize: 24, fontWeight: "900", color: Theme.textPrimaryDark, marginBottom: 8 },
-  metricSub: { fontSize: 10, color: Theme.textSecondary, fontWeight: "700", marginBottom: 16, height: 28 },
+  metricValue: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    marginBottom: 8,
+  },
+  metricValueCompact: {
+    fontSize: 20,
+    marginBottom: 6,
+  },
+  metricSub: {
+    fontSize: 10,
+    color: Theme.textSecondary,
+    fontWeight: "700",
+    marginBottom: 16,
+    height: 28,
+  },
+  metricSubCompact: {
+    fontSize: 9,
+    marginBottom: 10,
+    height: 24,
+  },
   metricFooter: {
     flexDirection: "row",
     alignItems: "center",
@@ -1428,24 +2046,70 @@ const styles = StyleSheet.create({
     borderTopColor: Theme.borderLight,
     paddingTop: 16,
   },
-  metricCount: { fontSize: 10, color: Theme.textMuted, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.5 },
-  metricStatusTag: { fontSize: 9, fontWeight: "900", textTransform: "uppercase", letterSpacing: -0.5 },
+  metricFooterCompact: {
+    paddingTop: 10,
+  },
+  metricCount: {
+    fontSize: 10,
+    color: Theme.textMuted,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  metricCountCompact: {
+    fontSize: 9,
+  },
+  metricStatusTag: {
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: -0.5,
+  },
 
   tabsContainer: {
+    backgroundColor: Theme.darkBackground,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.separatorDark,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
+    borderBottomColor: Theme.separatorDark,
     width: "100%",
   },
-  tabsScroll: { paddingHorizontal: 16, paddingBottom: 12, gap: 8 },
-  tabBtn: {
+  tabsInner: {
+    width: "100%",
+    maxWidth: 1600,
+    alignSelf: "center",
+  },
+  tabsScroll: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: Theme.surfaceGray,
+    gap: 12,
+    alignItems: "center",
   },
-  tabBtnActive: { backgroundColor: Theme.primary },
-  tabBtnText: { fontSize: 12, fontWeight: "700", color: Theme.textSecondary },
-  tabBtnTextActive: { color: "#fff" },
+  tabBtn: {
+    minHeight: 30,
+    justifyContent: "center",
+    position: "relative",
+    paddingHorizontal: 2,
+    paddingBottom: 4,
+  },
+  tabBtnActive: {},
+  tabBtnText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  tabBtnTextActive: { color: Theme.textOnDark },
+  tabBtnUnderline: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: Theme.teslaRed,
+  },
 
   filtersArea: {
     flexDirection: "row",
