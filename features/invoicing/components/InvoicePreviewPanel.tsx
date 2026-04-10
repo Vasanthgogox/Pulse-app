@@ -1,5 +1,6 @@
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useInvoiceCalc } from "@/features/invoicing/hooks/useInvoiceCalc";
 import type {
     AdditionalCharge,
@@ -46,6 +47,7 @@ export function InvoicePreviewPanel({
   isStandalone = false,
 }: InvoicePreviewPanelProps) {
   const insets = useSafeAreaInsets();
+  const tabBarScrollProps = useTabBarAwareScrollProps();
 
   const [paymentTerms, setPaymentTerms] = useState("Net 30");
   const [showTermsModal, setShowTermsModal] = useState(false);
@@ -151,6 +153,7 @@ export function InvoicePreviewPanel({
       <ScrollView
         style={styles.body}
         contentContainerStyle={styles.bodyContent}
+        {...tabBarScrollProps}
       >
         {/* Header Info */}
         <View style={styles.rowLayout}>
@@ -693,7 +696,11 @@ export function InvoicePreviewPanel({
       <View
         style={[
           styles.footer,
-          !isStandalone && { paddingBottom: insets.bottom + 16 },
+          {
+            paddingBottom: isStandalone
+              ? Layout.demoTabBarScrollBottomInset + 12
+              : insets.bottom + 16,
+          },
         ]}
       >
         <Pressable
