@@ -376,15 +376,58 @@ export function PodReconciliationScreen() {
               !isMediumScreen && styles.financeTopTabsMobile,
             ]}
           >
-            <Pressable
-              style={styles.financeBack}
-              onPress={() => router.back()}
-              hitSlop={12}
+            <View
+              style={[
+                styles.financeModeTabsGroup,
+                !isMediumScreen && styles.financeModeTabsGroupMobile,
+              ]}
             >
-              <FontAwesome name="arrow-left" size={16} color="#fff" />
-            </Pressable>
-            {isMediumScreen ? (
-              <View style={styles.financeTabsGroup}>
+              <Pressable
+                style={[
+                  styles.financeModeTabBtn,
+                  !isMediumScreen && styles.financeModeTabBtnMobile,
+                ]}
+                onPress={() => setFinanceTab("OVERVIEW")}
+              >
+                <Text
+                  style={[
+                    styles.financeModeTabText,
+                    !isMediumScreen && styles.financeModeTabTextMobile,
+                    financeTab === "OVERVIEW" && styles.financeModeTabTextActive,
+                  ]}
+                >
+                  OVERVIEW
+                </Text>
+                {financeTab === "OVERVIEW" ? (
+                  <View style={styles.financeTabUnderline} />
+                ) : null}
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.financeModeTabBtn,
+                  !isMediumScreen && styles.financeModeTabBtnMobile,
+                ]}
+                onPress={() => setFinanceTab("LOG_INCOMING")}
+              >
+                <Text
+                  style={[
+                    styles.financeModeTabText,
+                    !isMediumScreen && styles.financeModeTabTextMobile,
+                    financeTab === "LOG_INCOMING" && styles.financeModeTabTextActive,
+                  ]}
+                >
+                  LOG INCOMING
+                </Text>
+                {financeTab === "LOG_INCOMING" ? (
+                  <View style={styles.financeTabUnderline} />
+                ) : null}
+              </Pressable>
+            </View>
+          </View>
+          {financeTab === "OVERVIEW" ? (
+            isMediumScreen ? (
+              <View style={styles.financeQueueTabsRow}>
+                <View style={styles.financeTabsGroup}>
                 <Pressable
                   style={[
                     styles.financeTabBtn,
@@ -462,11 +505,13 @@ export function PodReconciliationScreen() {
                     <View style={styles.financeTabUnderline} />
                   ) : null}
                 </Pressable>
+                </View>
               </View>
             ) : (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
+                style={styles.financeQueueTabsRow}
                 contentContainerStyle={styles.financeTabsScrollMobile}
               >
                 <Pressable
@@ -555,50 +600,189 @@ export function PodReconciliationScreen() {
                   ) : null}
                 </Pressable>
               </ScrollView>
-            )}
-          </View>
-          <View
-            style={[
-              styles.financeTotalsRow,
-              !isMediumScreen && styles.financeTotalsRowMobile,
-            ]}
-          >
-            <View>
-              <Text style={styles.financeTotalsLabel}>TOTAL PENDING</Text>
-              <Text style={styles.financeTotalsValue}>{totalPending}</Text>
-            </View>
-            <View style={{ alignItems: "flex-end" }}>
-              <Text style={[styles.financeTotalsLabel, { color: "#6ee7b7" }]}>
-                TOTAL INVOICED
-              </Text>
-              <Text style={styles.financeTotalsValue}>{totalInvoiced}</Text>
-            </View>
-          </View>
-          <View
-            style={[
-              styles.financeActionRow,
-              !isMediumScreen && styles.financeActionRowMobile,
-            ]}
-          >
-            {financeTab === "OVERVIEW" ? (
+            )
+          ) : null}
+          {financeTab === "OVERVIEW" ? (
+            <>
               <View
                 style={[
-                  styles.financeActionRight,
-                  !isMediumScreen && styles.financeActionRightMobile,
+                  styles.financeActionRow,
+                  !isMediumScreen && styles.financeActionRowMobile,
                 ]}
               >
-                <Pressable
-                  style={styles.financePrimaryBtn}
-                  onPress={() => setFinanceTab("LOG_INCOMING")}
-                >
-                  <FontAwesome name="plus" size={12} color="#fff" />
-                  <Text style={styles.financePrimaryBtnText}>
-                    LOG INCOMING PODs
-                  </Text>
-                </Pressable>
+                <View style={styles.financeHeaderSearchWrap}>
+                  <FontAwesome
+                    name="search"
+                    size={13}
+                    color={Theme.textOnDarkMuted}
+                    style={{ marginRight: 7 }}
+                  />
+                  <TextInput
+                    style={styles.financeHeaderSearchInput}
+                    placeholder="Search Trip ID, Client, LR..."
+                    placeholderTextColor={Theme.textOnDarkMuted}
+                    value={searchTerm}
+                    onChangeText={setSearchTerm}
+                  />
+                </View>
+                {isMediumScreen ? (
+                  <View style={styles.financeActionRight}>
+                  <Pressable
+                    style={styles.financeRegionBtnDark}
+                    onPress={() => setRegionModalOpen(true)}
+                  >
+                    <FontAwesome
+                      name="map-marker"
+                      size={13}
+                      color={Theme.textOnDarkMuted}
+                    />
+                    <Text style={styles.financeRegionBtnDarkText}>
+                      {regionFilter === "All" ? "Region: All" : regionFilter}
+                    </Text>
+                    <FontAwesome
+                      name="chevron-down"
+                      size={9}
+                      color={Theme.textOnDarkMuted}
+                    />
+                  </Pressable>
+                  <View style={styles.financeViewModeWrapDark}>
+                    <Pressable
+                      style={[
+                        styles.financeViewModeBtnDark,
+                        viewMode === "cards" && styles.financeViewModeBtnDarkActive,
+                      ]}
+                      onPress={() => setViewMode("cards")}
+                    >
+                      <FontAwesome
+                        name="th-large"
+                        size={11}
+                        color={viewMode === "cards" ? "#fff" : Theme.textOnDarkMuted}
+                      />
+                      <Text
+                        style={[
+                          styles.financeViewModeTextDark,
+                          viewMode === "cards" && styles.financeViewModeTextDarkActive,
+                        ]}
+                      >
+                        Cards
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={[
+                        styles.financeViewModeBtnDark,
+                        viewMode === "table" && styles.financeViewModeBtnDarkActive,
+                      ]}
+                      onPress={() => setViewMode("table")}
+                    >
+                      <FontAwesome
+                        name="table"
+                        size={11}
+                        color={viewMode === "table" ? "#fff" : Theme.textOnDarkMuted}
+                      />
+                      <Text
+                        style={[
+                          styles.financeViewModeTextDark,
+                          viewMode === "table" && styles.financeViewModeTextDarkActive,
+                        ]}
+                      >
+                        Table
+                      </Text>
+                    </Pressable>
+                  </View>
+                  <Pressable
+                    style={styles.financePrimaryBtn}
+                    onPress={() => setFinanceTab("LOG_INCOMING")}
+                  >
+                    <FontAwesome name="plus" size={12} color="#fff" />
+                    <Text style={styles.financePrimaryBtnText}>
+                      LOG INCOMING PODs
+                    </Text>
+                  </Pressable>
+                  </View>
+                ) : (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.financeActionControlsScrollMobile}
+                  >
+                    <View style={[styles.financeActionRight, styles.financeActionRightMobile]}>
+                      <Pressable
+                        style={styles.financeRegionBtnDark}
+                        onPress={() => setRegionModalOpen(true)}
+                      >
+                        <FontAwesome
+                          name="map-marker"
+                          size={13}
+                          color={Theme.textOnDarkMuted}
+                        />
+                        <Text style={styles.financeRegionBtnDarkText}>
+                          {regionFilter === "All" ? "Region: All" : regionFilter}
+                        </Text>
+                        <FontAwesome
+                          name="chevron-down"
+                          size={9}
+                          color={Theme.textOnDarkMuted}
+                        />
+                      </Pressable>
+                      <View style={styles.financeViewModeWrapDark}>
+                        <Pressable
+                          style={[
+                            styles.financeViewModeBtnDark,
+                            viewMode === "cards" && styles.financeViewModeBtnDarkActive,
+                          ]}
+                          onPress={() => setViewMode("cards")}
+                        >
+                          <FontAwesome
+                            name="th-large"
+                            size={11}
+                            color={viewMode === "cards" ? "#fff" : Theme.textOnDarkMuted}
+                          />
+                          <Text
+                            style={[
+                              styles.financeViewModeTextDark,
+                              viewMode === "cards" && styles.financeViewModeTextDarkActive,
+                            ]}
+                          >
+                            Cards
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          style={[
+                            styles.financeViewModeBtnDark,
+                            viewMode === "table" && styles.financeViewModeBtnDarkActive,
+                          ]}
+                          onPress={() => setViewMode("table")}
+                        >
+                          <FontAwesome
+                            name="table"
+                            size={11}
+                            color={viewMode === "table" ? "#fff" : Theme.textOnDarkMuted}
+                          />
+                          <Text
+                            style={[
+                              styles.financeViewModeTextDark,
+                              viewMode === "table" && styles.financeViewModeTextDarkActive,
+                            ]}
+                          >
+                            Table
+                          </Text>
+                        </Pressable>
+                      </View>
+                      <Pressable
+                        style={styles.financePrimaryBtn}
+                        onPress={() => setFinanceTab("LOG_INCOMING")}
+                      >
+                        <FontAwesome name="plus" size={12} color="#fff" />
+                        <Text style={styles.financePrimaryBtnText}>
+                          LOG INCOMING PODs
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </ScrollView>
+                )}
               </View>
-            ) : null}
-          </View>
+            </>
+          ) : null}
         </View>
       </View>
 
@@ -757,99 +941,6 @@ export function PodReconciliationScreen() {
 
           <View style={{ flex: 1 }}>
             <View style={styles.mainColumn}>
-              <View style={styles.filtersArea}>
-                <View style={styles.searchBox}>
-                  <FontAwesome
-                    name="search"
-                    size={14}
-                    color={Theme.textMuted}
-                    style={{ marginRight: 8 }}
-                  />
-                  <TextInput
-                    style={styles.searchInput}
-                    placeholder="Search Trip ID, Client, LR..."
-                    placeholderTextColor={Theme.textMuted}
-                    value={searchTerm}
-                    onChangeText={setSearchTerm}
-                  />
-                  {searchTerm !== "" && (
-                    <Pressable onPress={() => setSearchTerm("")}>
-                      <FontAwesome
-                        name="times-circle"
-                        size={16}
-                        color={Theme.textMuted}
-                      />
-                    </Pressable>
-                  )}
-                </View>
-                <Pressable
-                  style={styles.regionFilter}
-                  onPress={() => setRegionModalOpen(true)}
-                >
-                  <FontAwesome
-                    name="map-marker"
-                    size={14}
-                    color={Theme.primary}
-                    style={{ marginRight: 6 }}
-                  />
-                  <Text style={styles.regionFilterText}>
-                    {regionFilter === "All" ? "Region: All" : regionFilter}
-                  </Text>
-                  <FontAwesome
-                    name="chevron-down"
-                    size={10}
-                    color={Theme.textMuted}
-                    style={{ marginLeft: 6 }}
-                  />
-                </Pressable>
-                {isMediumScreen && (
-                  <View style={styles.viewModeWrap}>
-                    <Pressable
-                      style={[
-                        styles.viewModeBtn,
-                        viewMode === "cards" && styles.viewModeBtnActive,
-                      ]}
-                      onPress={() => setViewMode("cards")}
-                    >
-                      <FontAwesome
-                        name="th-large"
-                        size={12}
-                        color={viewMode === "cards" ? "#fff" : Theme.textMuted}
-                      />
-                      <Text
-                        style={[
-                          styles.viewModeText,
-                          viewMode === "cards" && styles.viewModeTextActive,
-                        ]}
-                      >
-                        Cards
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      style={[
-                        styles.viewModeBtn,
-                        viewMode === "table" && styles.viewModeBtnActive,
-                      ]}
-                      onPress={() => setViewMode("table")}
-                    >
-                      <FontAwesome
-                        name="table"
-                        size={12}
-                        color={viewMode === "table" ? "#fff" : Theme.textMuted}
-                      />
-                      <Text
-                        style={[
-                          styles.viewModeText,
-                          viewMode === "table" && styles.viewModeTextActive,
-                        ]}
-                      >
-                        Table
-                      </Text>
-                    </Pressable>
-                  </View>
-                )}
-              </View>
-
               <View style={styles.contentArea}>
                 {isLoading && !isRefetching ? (
                   <ActivityIndicator
@@ -1680,17 +1771,20 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.separatorDark,
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingBottom: 8,
+    paddingBottom: 10,
   },
   financeHeaderInner: {
     width: "100%",
-    maxWidth: 1600,
-    alignSelf: "center",
+    alignSelf: "stretch",
+    paddingHorizontal: 0,
   },
   financeTopTabs: {
-    minHeight: 40,
+    minHeight: 0,
     position: "relative",
-    alignItems: "center",
+    alignItems: "stretch",
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.separatorDark,
+    paddingTop: 2,
   },
   financeTopTabsMobile: {
     minHeight: 0,
@@ -1700,13 +1794,59 @@ const styles = StyleSheet.create({
     alignItems: "stretch",
     justifyContent: "center",
   },
+  financeQueueTabsRow: {
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.separatorDark,
+  },
   financeTabsGroup: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
+    gap: 16,
+    paddingLeft: 0,
+    paddingRight: 24,
+    paddingTop: 0,
+    paddingBottom: 0,
+  },
+  financeModeTabsGroup: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    gap: 16,
+    paddingLeft: 0,
+    paddingRight: 24,
+    paddingBottom: 0,
+  },
+  financeModeTabsGroupMobile: {
     gap: 12,
-    paddingHorizontal: 120,
+    paddingRight: 8,
+  },
+  financeModeTabBtn: {
+    minHeight: 0,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 0,
+    paddingVertical: 8,
+    position: "relative",
+  },
+  financeModeTabBtnMobile: {
+    paddingVertical: 7,
+  },
+  financeModeTabText: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: Theme.textOnDarkMuted,
+  },
+  financeModeTabTextMobile: {
+    fontSize: 7,
+    letterSpacing: 1.2,
+  },
+  financeModeTabTextActive: {
+    color: Theme.textOnDark,
   },
   financeTabsScroll: {
     gap: 8,
@@ -1716,18 +1856,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingLeft: 40,
+    paddingLeft: 0,
     paddingRight: 8,
     paddingBottom: 2,
   },
   financeTabBtn: {
-    minHeight: 24,
-    minWidth: 180,
+    minHeight: 0,
+    minWidth: 0,
     justifyContent: "center",
     alignItems: "center",
     borderRadius: 0,
-    paddingHorizontal: 10,
-    paddingBottom: 6,
+    paddingHorizontal: 0,
+    paddingVertical: 8,
     position: "relative",
   },
   financeTabBtnMobile: {
@@ -1770,48 +1910,137 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.teslaRed,
   },
   financeTotalsRow: {
-    marginTop: 4,
-    marginBottom: 8,
+    marginTop: 8,
+    marginBottom: 10,
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "flex-start",
     justifyContent: "space-between",
   },
   financeTotalsRowMobile: {
-    marginTop: 6,
+    marginTop: 8,
+  },
+  financeTotalsBlock: {
+    minWidth: 160,
+  },
+  financeTotalsBlockRight: {
+    alignItems: "flex-end",
   },
   financeTotalsLabel: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "800",
-    letterSpacing: 1.4,
+    letterSpacing: 1.6,
     color: Theme.teslaRed,
   },
+  financeTotalsLabelInvoiced: {
+    color: "#6ee7b7",
+  },
   financeTotalsValue: {
-    marginTop: 2,
-    fontSize: 24,
+    marginTop: 3,
+    fontSize: 32,
     fontWeight: "900",
     color: Theme.textOnDark,
+    lineHeight: 34,
+  },
+  financeTotalsValueMobile: {
+    fontSize: 26,
+    lineHeight: 28,
   },
   financeActionRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    justifyContent: "flex-end",
+    justifyContent: "flex-start",
+    paddingTop: 6,
+    paddingBottom: 0,
   },
   financeActionRowMobile: {
     flexDirection: "column",
     alignItems: "stretch",
-    gap: 8,
+    gap: 6,
+  },
+  financeHeaderSearchWrap: {
+    flex: 1,
+    minWidth: 220,
+    height: 38,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
+    backgroundColor: Theme.darkSurface,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  financeHeaderSearchInput: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 11,
+    color: Theme.textOnDark,
+    paddingVertical: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   financeActionRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
+    marginLeft: 8,
   },
   financeActionRightMobile: {
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
+    flexWrap: "nowrap",
+    marginLeft: 0,
+    gap: 6,
+  },
+  financeActionControlsScrollMobile: {
+    paddingRight: 8,
+  },
+  financeRegionBtnDark: {
+    height: 38,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
+    backgroundColor: Theme.darkSurface,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+  },
+  financeRegionBtnDarkText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textOnDark,
+  },
+  financeViewModeWrapDark: {
+    flexDirection: "row",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
+    overflow: "hidden",
+    backgroundColor: Theme.darkSurface,
+  },
+  financeViewModeBtnDark: {
+    height: 38,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  financeViewModeBtnDarkActive: {
+    backgroundColor: Theme.primary,
+  },
+  financeViewModeTextDark: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textOnDarkMuted,
+  },
+  financeViewModeTextDarkActive: {
+    color: "#fff",
   },
   financePrimaryBtn: {
-    height: 34,
+    height: 38,
     borderRadius: 8,
     backgroundColor: Theme.teslaRed,
     paddingHorizontal: 14,
