@@ -299,6 +299,30 @@ export default function SalaryRequestScreen() {
     }
   }, [salaryRequestType, selectedSalaryTripIds, selectedTripTotal]);
 
+  /**
+   * Trip commission: set "Needed by" from selected trip dates (completion / updated / created).
+   * Uses the latest date among selected trips so multi-select stays coherent. Clears when none selected.
+   */
+  useEffect(() => {
+    if (salaryRequestType !== 'trip_based') return;
+    if (selectedSalaryTripIds.length === 0) {
+      setNeededByDate(null);
+      return;
+    }
+    const selected = pendingTripsForSalaryOrg.filter((t) => selectedSalaryTripIds.includes(t.id));
+    if (selected.length === 0) return;
+    let maxTs = 0;
+    for (const t of selected) {
+      const raw = t.completed_at ?? t.updated_at ?? t.created_at;
+      if (!raw) continue;
+      const ts = new Date(raw).getTime();
+      if (Number.isFinite(ts) && ts > maxTs) maxTs = ts;
+    }
+    if (maxTs <= 0) return;
+    const d = new Date(maxTs);
+    setNeededByDate(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
+  }, [salaryRequestType, selectedSalaryTripIds, pendingTripsForSalaryOrg]);
+
   useEffect(() => {
     if (salaryRequestType !== 'trip_based') {
       setSelectedSalaryTripIds([]);
@@ -726,7 +750,11 @@ export default function SalaryRequestScreen() {
                           </Text>
                           <FontAwesome name="calendar" size={14} color={colors.textMuted} />
                         </TouchableOpacity>
-                        {salaryRequestType !== 'advance' ? (
+                        {salaryRequestType === 'trip_based' ? (
+                          <Text style={[styles.hint, { color: colors.textMuted, marginTop: 10 }]}>
+                            Auto-filled from your selected trip date(s). Tap to change if needed.
+                          </Text>
+                        ) : salaryRequestType === 'monthly' ? (
                           <Text style={[styles.hint, { color: colors.textMuted, marginTop: 10 }]}>
                             Needed by is required only for Advance requests.
                           </Text>
