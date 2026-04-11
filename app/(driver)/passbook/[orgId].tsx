@@ -25,11 +25,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-function isCompleted(status: string) {
-  const s = (status || '').toLowerCase();
-  return s === 'completed' || s === 'delivered' || s === 'done';
-}
-
 function tripEarnings(t: tripsService.TripRow): number {
   return tripEarningsForDriver(t);
 }
@@ -107,11 +102,18 @@ export default function DriverPassbookDetailScreen() {
       Promise.all([
         tripsService.getTripsByDriver(d.id),
         driversService.getDriverLedgerByDriver(d.id),
-      ]).then(([tRes, ledgerRes]) => {
-        setTrips(tRes.trips ?? []);
-        setLedgerEntries(ledgerRes.entries ?? []);
-        setLoading(false);
-      });
+      ])
+        .then(([tRes, ledgerRes]) => {
+          setTrips(tRes.trips ?? []);
+          setLedgerEntries(ledgerRes.entries ?? []);
+        })
+        .catch(() => {
+          setTrips([]);
+          setLedgerEntries([]);
+        })
+        .finally(() => {
+          setLoading(false);
+        });
     });
   }, [profile?.uid, orgId]);
 
@@ -119,7 +121,15 @@ export default function DriverPassbookDetailScreen() {
     load();
   }, [load]);
 
-  const completedTrips = trips.filter((t) => isCompleted(t.status));
+  const tripsForOrg = useMemo(
+    () => trips.filter((t) => String(t.organization_id ?? '') === String(orgId)),
+    [trips, orgId],
+  );
+
+  const completedTrips = useMemo(
+    () => tripsForOrg.filter((t) => tripsService.isTripCompleted(t)),
+    [tripsForOrg],
+  );
   const { receivedByTripId, nonTripLedgerEntries } = useMemo(() => {
     const byTrip: Record<string, number> = {};
     const nonTrip: driversService.DriverLedgerRow[] = [];
