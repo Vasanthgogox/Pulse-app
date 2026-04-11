@@ -112,6 +112,8 @@ export function EditProfileModal({
   const [showAvatarActions, setShowAvatarActions] = useState(false);
 
   const heroRoleLine = (heroSubtitle?.trim() || 'DRIVER').toUpperCase();
+  const emailTrimmed = email?.trim() ?? '';
+  const hasEmail = emailTrimmed.length > 0;
 
   useEffect(() => {
     if (visible) {
@@ -302,6 +304,14 @@ export function EditProfileModal({
     Alert.alert(
       'Request account deactivation',
       'Your request will be reviewed by your fleet administrator. They will contact you if further action is needed.',
+      [{ text: 'OK' }]
+    );
+  };
+
+  const showEmailOnboardingHint = () => {
+    Alert.alert(
+      'Add email to your account',
+      'Email is set when you sign in with email, or your fleet administrator can link one. If you use phone sign-in only, ask your administrator to add an email to your profile.',
       [{ text: 'OK' }]
     );
   };
@@ -530,6 +540,7 @@ export function EditProfileModal({
                 spellCheck={false}
                 autoComplete="off"
                 editable={!saving}
+                underlineColorAndroid="transparent"
               />
 
               <Text style={styles.driverFieldLabel}>Bio / Status</Text>
@@ -546,32 +557,52 @@ export function EditProfileModal({
                 spellCheck
                 editable={!saving}
                 textAlignVertical="top"
+                underlineColorAndroid="transparent"
               />
               <Text style={styles.driverBioHint}>
                 Visible to passengers and fleet managers
               </Text>
 
-              <Text style={[styles.driverSectionLegend, { marginTop: Layout.sectionSpacing }]}>
+              <Text style={[styles.driverSectionLegend, styles.driverSectionLegendSpaced]}>
                 Contact details
               </Text>
 
               <Text style={styles.driverFieldLabel}>Email Address</Text>
-              <View style={styles.driverEmailWrap}>
-                <TextInput
-                  style={[styles.driverInput, styles.driverInputReadonly, { marginBottom: 0, paddingRight: 40 }]}
-                  value={email}
-                  editable={false}
-                  placeholder="—"
-                  placeholderTextColor={Theme.textMuted}
-                />
-                <FontAwesome
-                  name="lock"
-                  size={14}
-                  color={Theme.textMuted}
-                  style={styles.driverEmailLock}
-                />
-              </View>
-              <Text style={styles.driverEmailAdminHint}>Managed by corporate administrator.</Text>
+              {hasEmail ? (
+                <>
+                  <View style={styles.driverEmailShell}>
+                    <Text style={styles.driverEmailReadonlyText} numberOfLines={1}>
+                      {emailTrimmed}
+                    </Text>
+                    <FontAwesome name="lock" size={14} color={Theme.textMuted} />
+                  </View>
+                  <Text style={styles.driverEmailAdminHint}>
+                    Managed by corporate administrator.
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={styles.driverEmailEmptyCard}
+                    onPress={showEmailOnboardingHint}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add email, more information"
+                  >
+                    <View style={styles.driverEmailEmptyRow}>
+                      <FontAwesome name="envelope-o" size={16} color={DRIVER_FOREST} />
+                      <Text style={styles.driverEmailEmptyCta}>Add email</Text>
+                      <FontAwesome name="chevron-right" size={12} color={Theme.textMuted} />
+                    </View>
+                    <Text style={styles.driverEmailEmptySub}>
+                      Tap for how email is added to your driver account
+                    </Text>
+                  </TouchableOpacity>
+                  <Text style={styles.driverEmailAdminHint}>
+                    No email on file yet. Your administrator can help if needed.
+                  </Text>
+                </>
+              )}
 
               <Text style={styles.driverFieldLabel}>Phone Number</Text>
               <View style={styles.driverPhoneRow}>
@@ -597,10 +628,11 @@ export function EditProfileModal({
                   spellCheck={false}
                   autoComplete="off"
                   editable={!saving}
+                  underlineColorAndroid="transparent"
                 />
               </View>
 
-              <Text style={[styles.driverSectionLegend, { marginTop: Layout.sectionSpacing }]}>
+              <Text style={[styles.driverSectionLegend, styles.driverSectionLegendSpaced]}>
                 Account details
               </Text>
 
@@ -616,6 +648,7 @@ export function EditProfileModal({
                 spellCheck={false}
                 autoComplete="off"
                 editable={!saving}
+                underlineColorAndroid="transparent"
               />
 
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -914,15 +947,15 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceBorder,
   },
   driverHeaderTitle: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 18,
+    fontWeight: '700',
     color: DRIVER_FOREST,
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
     flexShrink: 1,
   },
   driverHeaderSave: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '600',
     color: DRIVER_FOREST,
   },
   driverHeroBlock: {
@@ -986,10 +1019,10 @@ const styles = StyleSheet.create({
     }),
   },
   driverHeroName: {
-    fontSize: 22,
-    fontWeight: '800',
+    fontSize: 20,
+    fontWeight: '700',
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.4,
+    letterSpacing: -0.3,
     textAlign: 'center',
     maxWidth: '100%',
     paddingHorizontal: 8,
@@ -997,8 +1030,8 @@ const styles = StyleSheet.create({
   driverHeroSubtitle: {
     marginTop: 6,
     fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1.2,
+    fontWeight: '600',
+    letterSpacing: 1,
     color: Theme.textMuted,
     textTransform: 'uppercase',
     textAlign: 'center',
@@ -1006,14 +1039,18 @@ const styles = StyleSheet.create({
   driverSectionLegend: {
     ...Typography.headerTitle,
     fontSize: 10,
+    fontWeight: '700',
     letterSpacing: 2,
     color: Theme.textSection,
-    marginBottom: 14,
+    marginBottom: 12,
     marginTop: 4,
+  },
+  driverSectionLegendSpaced: {
+    marginTop: Layout.sectionSpacing,
   },
   driverFieldLabel: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '600',
     color: Theme.textPrimary,
     marginBottom: 8,
     paddingHorizontal: 2,
@@ -1021,12 +1058,12 @@ const styles = StyleSheet.create({
   driverInput: {
     backgroundColor: DRIVER_INPUT_BG,
     borderRadius: 16,
-    borderWidth: 2,
-    borderColor: 'transparent',
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
     paddingHorizontal: 20,
     paddingVertical: 16,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '400',
     color: Theme.textPrimaryDark,
     marginBottom: 20,
   },
@@ -1039,41 +1076,84 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
   },
   driverBioHint: {
-    fontSize: 11,
+    fontSize: 12,
     fontStyle: 'italic',
+    fontWeight: '400',
     color: Theme.textMuted,
     textAlign: 'right',
-    marginTop: -12,
-    marginBottom: 8,
+    marginTop: 8,
+    marginBottom: 20,
     paddingHorizontal: 4,
+    lineHeight: 16,
   },
-  driverEmailWrap: {
-    position: 'relative',
-    marginBottom: 6,
+  driverEmailShell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Theme.surfaceBorder,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    minHeight: 52,
+    marginBottom: 0,
   },
-  driverEmailLock: {
-    position: 'absolute',
-    right: 18,
-    top: '50%',
-    marginTop: -16,
+  driverEmailReadonlyText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 16,
+    fontWeight: '400',
+    color: Theme.textSecondary,
+    marginRight: 10,
+  },
+  driverEmailEmptyCard: {
+    backgroundColor: DRIVER_INPUT_BG,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    marginBottom: 0,
+  },
+  driverEmailEmptyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  driverEmailEmptyCta: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: Theme.textPrimaryDark,
+  },
+  driverEmailEmptySub: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: '400',
+    color: Theme.textMuted,
+    lineHeight: 16,
   },
   driverEmailAdminHint: {
-    fontSize: 11,
+    fontSize: 12,
+    fontWeight: '400',
     color: Theme.textMuted,
-    marginTop: -12,
-    marginBottom: 16,
+    marginTop: 8,
+    marginBottom: 20,
     paddingHorizontal: 2,
+    lineHeight: 17,
   },
   driverPhoneRow: {
     flexDirection: 'row',
     alignItems: 'stretch',
     gap: 12,
-    marginBottom: 4,
+    marginTop: 0,
   },
   driverPhonePrefix: {
     width: 88,
     backgroundColor: DRIVER_INPUT_BG,
     borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -1082,7 +1162,7 @@ const styles = StyleSheet.create({
   },
   driverPhonePrefixText: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '600',
     color: Theme.textPrimaryDark,
   },
   driverPhoneInput: {
@@ -1109,7 +1189,7 @@ const styles = StyleSheet.create({
   },
   driverSaveChangesBtnText: {
     fontSize: 17,
-    fontWeight: '800',
+    fontWeight: '700',
     color: Theme.textOnPrimary,
     letterSpacing: 0.2,
   },
@@ -1120,7 +1200,7 @@ const styles = StyleSheet.create({
   },
   driverDeactivateBtnText: {
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '700',
     letterSpacing: 2,
     color: Theme.negative,
     textTransform: 'uppercase',
@@ -1136,12 +1216,12 @@ const styles = StyleSheet.create({
   },
   driverAvatarPickerTitle: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
     color: Theme.textPrimaryDark,
   },
   driverAvatarPickerDone: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '600',
     color: DRIVER_FOREST,
   },
   scrollContentDriver: {
