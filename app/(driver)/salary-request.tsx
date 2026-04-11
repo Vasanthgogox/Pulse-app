@@ -25,6 +25,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -181,6 +182,31 @@ export default function SalaryRequestScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  /**
+   * Tabs/stack keep this screen mounted, so UI state survives navigation. On every visit, reset
+   * success + all form fields so users never see stale “cached” entries from a prior session.
+   * (Single-fleet `salaryRequestOrg` is restored immediately by the effect on `salaryRequestOrgOptions`.)
+   */
+  useFocusEffect(
+    useCallback(() => {
+      setIsSuccess(false);
+      setSuccessPayload(null);
+      setWidgetPage(0);
+      setSalaryRequestAmount('');
+      setSalaryRequestReason('');
+      setSelectedSalaryTripIds([]);
+      setNeededByDate(null);
+      setSalaryRequestDate(null);
+      setSalaryRequestType('advance');
+      setSalaryRequestOrg(null);
+      setSalaryRequestSubmitting(false);
+      setShowSalaryMonthDropdown(false);
+      setShowRequestTypeMenu(false);
+      setShowNeededByPicker(false);
+      setShowTripsDropdown(false);
+    }, [])
+  );
 
   useEffect(() => {
     const interval = setInterval(() => setBlink((prev) => !prev), 600);
