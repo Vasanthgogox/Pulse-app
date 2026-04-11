@@ -3,31 +3,16 @@
  */
 import { getAvatarUriForSeed } from '@/constants/DriverLevels';
 import Layout from '@/constants/Layout';
-import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { EditProfileModal } from '@/features/auth/components/EditProfileModal';
-import * as authService from '@/features/auth/services/auth.service';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
-import { VALIDATION, maxLength } from '@/lib/validation';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import {
-    ActivityIndicator,
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from 'react-native';
+import { useState } from 'react';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /** Horizontal padding aligned with Layout. */
@@ -57,10 +42,6 @@ export default function DriverProfileScreen() {
   const { avatarUri } = useDriverAvatarUri();
   const [avatarError, setAvatarError] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
-  const [showEditQuoteModal, setShowEditQuoteModal] = useState(false);
-  const [quoteDraft, setQuoteDraft] = useState('');
-  const [quoteSaving, setQuoteSaving] = useState(false);
-  const [quoteError, setQuoteError] = useState<string | null>(null);
 
   const displayName =
     profile?.full_name ||
@@ -72,32 +53,6 @@ export default function DriverProfileScreen() {
 
   const handleCloseEditProfile = () => {
     setShowEditProfileModal(false);
-    refreshSession();
-  };
-
-  useEffect(() => {
-    if (showEditQuoteModal) {
-      setQuoteDraft(profile?.status_text?.trim() ?? '');
-      setQuoteError(null);
-    }
-  }, [showEditQuoteModal, profile?.status_text]);
-
-  const handleSaveQuote = async () => {
-    const trimmed = quoteDraft.trim();
-    const err = maxLength(VALIDATION.STATUS_TEXT_MAX_LENGTH, 'Quote must be at most ' + VALIDATION.STATUS_TEXT_MAX_LENGTH + ' characters.')(trimmed);
-    if (err) {
-      setQuoteError(err);
-      return;
-    }
-    setQuoteError(null);
-    setQuoteSaving(true);
-    const { error } = await authService.updateProfile({ status_text: trimmed || null });
-    setQuoteSaving(false);
-    if (error) {
-      setQuoteError(error.message);
-      return;
-    }
-    setShowEditQuoteModal(false);
     refreshSession();
   };
 
@@ -177,11 +132,11 @@ export default function DriverProfileScreen() {
                 {tagline}
               </Text>
               <TouchableOpacity
-                onPress={() => setShowEditQuoteModal(true)}
+                onPress={() => setShowEditProfileModal(true)}
                 style={styles.pencilBtn}
                 hitSlop={12}
                 activeOpacity={0.7}
-                accessibilityLabel="Edit quote"
+                accessibilityLabel="Edit profile and bio"
                 accessibilityRole="button"
               >
                 <FontAwesome name="pencil" size={14} color={colors.primary} />
@@ -242,69 +197,6 @@ export default function DriverProfileScreen() {
         }}
         initialStatusText={profile?.status_text ?? ''}
       />
-
-      <Modal
-        visible={showEditQuoteModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => !quoteSaving && setShowEditQuoteModal(false)}
-      >
-        <KeyboardAvoidingView
-          style={[styles.quoteModalOuter, { paddingTop: insets.top, paddingBottom: insets.bottom + 16, backgroundColor: colors.background }]}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
-          keyboardVerticalOffset={0}
-        >
-          <View style={[styles.quoteModalHeader, { borderBottomColor: colors.border }]}>
-            <TouchableOpacity
-              onPress={() => !quoteSaving && setShowEditQuoteModal(false)}
-              style={styles.quoteModalHeaderBtn}
-              hitSlop={12}
-              disabled={quoteSaving}
-              accessibilityLabel="Cancel"
-            >
-              <Text style={[styles.quoteModalCancelText, { color: colors.textMuted }]}>Cancel</Text>
-            </TouchableOpacity>
-            <Text style={[styles.quoteModalTitle, { color: colors.text }]}>Edit quote</Text>
-            <TouchableOpacity
-              onPress={handleSaveQuote}
-              style={[styles.quoteModalHeaderBtn, styles.quoteModalHeaderBtnRight]}
-              hitSlop={12}
-              disabled={quoteSaving}
-              accessibilityLabel="Save"
-            >
-              {quoteSaving ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Text style={[styles.quoteModalSaveText, { color: colors.primary }]}>Save</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-          <ScrollView
-            style={styles.quoteModalScroll}
-            contentContainerStyle={styles.quoteModalScrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <TextInput
-              style={[styles.quoteInput, { borderColor: colors.border, backgroundColor: colors.inputBg, color: colors.text }]}
-              placeholder="e.g. Trust your feelings, be a good human being"
-              placeholderTextColor={colors.placeholder}
-              value={quoteDraft}
-              onChangeText={(t) => { setQuoteDraft(t); setQuoteError(null); }}
-              multiline
-              numberOfLines={3}
-              maxLength={VALIDATION.STATUS_TEXT_MAX_LENGTH}
-              autoCorrect
-              spellCheck
-              editable={!quoteSaving}
-            />
-            <Text style={[styles.quoteCharCount, { color: colors.textMuted }]}>
-              {quoteDraft.length}/{VALIDATION.STATUS_TEXT_MAX_LENGTH}
-            </Text>
-            {quoteError ? <Text style={styles.quoteError}>{quoteError}</Text> : null}
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
     </View>
   );
 }
@@ -416,60 +308,5 @@ const styles = StyleSheet.create({
   signOutText: {
     fontSize: 15,
     fontWeight: '600',
-  },
-  quoteModalOuter: {
-    flex: 1,
-  },
-  quoteModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-  },
-  quoteModalHeaderBtn: {
-    minWidth: 60,
-    alignItems: 'flex-start',
-  },
-  quoteModalHeaderBtnRight: {
-    alignItems: 'flex-end',
-  },
-  quoteModalCancelText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  quoteModalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  quoteModalSaveText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  quoteModalScroll: { flex: 1 },
-  quoteModalScrollContent: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 20,
-    paddingBottom: 20,
-  },
-  quoteInput: {
-    borderWidth: 1.5,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  quoteCharCount: {
-    fontSize: 12,
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  quoteError: {
-    fontSize: 13,
-    color: Theme.negative,
-    marginTop: 4,
   },
 });
