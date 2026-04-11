@@ -1,5 +1,6 @@
 /**
- * Month-grid date picker for "Needed by" (salary advance). Works on iOS, Android (in-modal), and web.
+ * Month-grid date picker for "Needed by" (salary request). Works on iOS, Android (in-modal), and web.
+ * Past dates are selectable (no minDate) so users can navigate prior months/years; future span is capped by maxDate.
  */
 import Theme from '@/constants/Theme';
 import { Calendar, type DateData } from 'react-native-calendars';
@@ -30,7 +31,7 @@ export interface NeededByCalendarProps {
 
 export function NeededByCalendar({ value, onDayPress, colors }: NeededByCalendarProps) {
   const today = new Date();
-  const min = toYmd(today);
+  const todayYmd = toYmd(today);
   const selectedKey = value ? toYmd(value) : undefined;
   const max = new Date(today);
   max.setFullYear(max.getFullYear() + 2);
@@ -50,8 +51,7 @@ export function NeededByCalendar({ value, onDayPress, colors }: NeededByCalendar
   return (
     <View style={styles.wrap}>
       <Calendar
-        current={selectedKey ?? min}
-        minDate={min}
+        current={selectedKey ?? todayYmd}
         maxDate={maxStr}
         onDayPress={(day: DateData) => {
           const next = new Date(day.year, day.month - 1, day.day);
