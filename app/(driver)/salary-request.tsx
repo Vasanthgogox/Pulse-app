@@ -24,9 +24,9 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter, useSegments } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -183,29 +183,51 @@ export default function SalaryRequestScreen() {
     load();
   }, [load]);
 
+  /** Full reset of local UI state (success card + form). */
+  const resetSalaryRequestScreen = useCallback(() => {
+    setIsSuccess(false);
+    setSuccessPayload(null);
+    setWidgetPage(0);
+    setSalaryRequestAmount('');
+    setSalaryRequestReason('');
+    setSelectedSalaryTripIds([]);
+    setNeededByDate(null);
+    setSalaryRequestDate(null);
+    setSalaryRequestType('advance');
+    setSalaryRequestOrg(null);
+    setSalaryRequestSubmitting(false);
+    setShowSalaryMonthDropdown(false);
+    setShowRequestTypeMenu(false);
+    setShowNeededByPicker(false);
+    setShowTripsDropdown(false);
+  }, []);
+
+  const pathname = usePathname();
+  const segments = useSegments();
+  const routeFingerprint = `${pathname ?? ''}|${(segments ?? []).join('/')}`;
+  const routeFingerprintPrevRef = useRef<string>('');
+
   /**
-   * Tabs/stack keep this screen mounted, so UI state survives navigation. On every visit, reset
-   * success + all form fields so users never see stale “cached” entries from a prior session.
-   * (Single-fleet `salaryRequestOrg` is restored immediately by the effect on `salaryRequestOrgOptions`.)
+   * Hidden tab + web: `useFocusEffect` often does not run when switching tabs, so success/form
+   * state stayed mounted. Reset when route fingerprint shows we *entered* salary-request from
+   * another screen (pathname + segments covers Expo Router web + native).
    */
+  useEffect(() => {
+    const current = routeFingerprint;
+    const prev = routeFingerprintPrevRef.current;
+    const onSalary = current.includes('salary-request');
+    const wasOnSalary = prev.length > 0 && prev.includes('salary-request');
+    if (onSalary && !wasOnSalary) {
+      resetSalaryRequestScreen();
+    }
+    routeFingerprintPrevRef.current = current;
+  }, [routeFingerprint, resetSalaryRequestScreen]);
+
+  /** Native tab focus (when it fires); pathname effect is the reliable fix for hidden tabs + web. */
   useFocusEffect(
     useCallback(() => {
-      setIsSuccess(false);
-      setSuccessPayload(null);
-      setWidgetPage(0);
-      setSalaryRequestAmount('');
-      setSalaryRequestReason('');
-      setSelectedSalaryTripIds([]);
-      setNeededByDate(null);
-      setSalaryRequestDate(null);
-      setSalaryRequestType('advance');
-      setSalaryRequestOrg(null);
-      setSalaryRequestSubmitting(false);
-      setShowSalaryMonthDropdown(false);
-      setShowRequestTypeMenu(false);
-      setShowNeededByPicker(false);
-      setShowTripsDropdown(false);
-    }, [])
+      resetSalaryRequestScreen();
+    }, [resetSalaryRequestScreen])
   );
 
   useEffect(() => {
