@@ -18,9 +18,10 @@ import { VALIDATION } from '@/lib/validation';
 import * as driversService from '@/services/driversService';
 import * as salaryRequestsService from '@/services/salaryRequestsService';
 import * as tripsService from '@/services/tripsService';
+import { NeededByCalendar } from '@/components/driver/NeededByCalendar';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
+import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -40,11 +41,6 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-function isCompleted(status: string) {
-  const s = (status || '').toLowerCase();
-  return s === 'completed' || s === 'delivered' || s === 'done';
-}
 
 function tripEarnings(t: tripsService.TripRow): number {
   return tripEarningsForDriver(t);
@@ -232,7 +228,7 @@ export default function SalaryRequestScreen() {
   const effectiveSalaryOrg = salaryRequestOrg ?? (salaryRequestOrgOptions.length === 1 ? salaryRequestOrgOptions[0] : null);
 
   const completedTrips = useMemo(() => {
-    const list = trips.filter((t) => isCompleted(t.status));
+    const list = trips.filter((t) => tripsService.isTripCompleted(t));
     return [...list].sort((a, b) => {
       const da = new Date(a.completed_at ?? a.updated_at ?? a.created_at).getTime();
       const db = new Date(b.completed_at ?? b.updated_at ?? b.created_at).getTime();
@@ -804,44 +800,50 @@ export default function SalaryRequestScreen() {
           animationType="fade"
           onRequestClose={() => setShowRequestTypeMenu(false)}
         >
-          <Pressable style={styles.monthModalBackdrop} onPress={() => setShowRequestTypeMenu(false)}>
+          <View style={[styles.modalScreenRoot, Platform.OS === 'web' && styles.modalScreenRootWeb]}>
             <Pressable
-              style={[styles.monthModalCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              onPress={() => {}}
-            >
-              <Text style={[styles.monthModalTitle, { color: colors.text }]}>Request type</Text>
-              <ScrollView style={styles.monthModalList} keyboardShouldPersistTaps="handled">
-                {REQUEST_TYPES.map(({ type, label, hint }, idx) => {
-                  const selected = salaryRequestType === type;
-                  const isLast = idx === REQUEST_TYPES.length - 1;
-                  return (
-                    <TouchableOpacity
-                      key={type}
-                      style={[
-                        styles.monthModalRow,
-                        { borderBottomColor: colors.border },
-                        isLast && styles.monthDropdownRowLast,
-                        selected && { backgroundColor: colors.emeraldMuted },
-                      ]}
-                      onPress={() => {
-                        setSalaryRequestType(type);
-                        setShowRequestTypeMenu(false);
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      <View style={{ flex: 1, minWidth: 0, paddingRight: 10 }}>
-                        <Text style={[styles.monthModalRowText, { color: selected ? colors.emerald : colors.text }]}>{label}</Text>
-                        <Text style={[styles.hint, { color: colors.textMuted, marginTop: 2 }]} numberOfLines={1}>
-                          {hint}
-                        </Text>
-                      </View>
-                      {selected ? <FontAwesome name="check" size={16} color={colors.emerald} /> : null}
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </Pressable>
-          </Pressable>
+              style={styles.modalScreenBackdrop}
+              onPress={() => setShowRequestTypeMenu(false)}
+              accessibilityLabel="Close"
+            />
+            <View pointerEvents="box-none" style={styles.modalScreenCenter}>
+              <View
+                style={[styles.monthModalCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              >
+                <Text style={[styles.monthModalTitle, { color: colors.text }]}>Request type</Text>
+                <ScrollView style={styles.monthModalList} keyboardShouldPersistTaps="handled">
+                  {REQUEST_TYPES.map(({ type, label, hint }, idx) => {
+                    const selected = salaryRequestType === type;
+                    const isLast = idx === REQUEST_TYPES.length - 1;
+                    return (
+                      <TouchableOpacity
+                        key={type}
+                        style={[
+                          styles.monthModalRow,
+                          { borderBottomColor: colors.border },
+                          isLast && styles.monthDropdownRowLast,
+                          selected && { backgroundColor: colors.emeraldMuted },
+                        ]}
+                        onPress={() => {
+                          setSalaryRequestType(type);
+                          setShowRequestTypeMenu(false);
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <View style={{ flex: 1, minWidth: 0, paddingRight: 10 }}>
+                          <Text style={[styles.monthModalRowText, { color: selected ? colors.emerald : colors.text }]}>{label}</Text>
+                          <Text style={[styles.hint, { color: colors.textMuted, marginTop: 2 }]} numberOfLines={1}>
+                            {hint}
+                          </Text>
+                        </View>
+                        {selected ? <FontAwesome name="check" size={16} color={colors.emerald} /> : null}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            </View>
+          </View>
         </Modal>
 
         {/* Trips dropdown modal (Trip commission) */}
@@ -851,115 +853,143 @@ export default function SalaryRequestScreen() {
           animationType="fade"
           onRequestClose={() => setShowTripsDropdown(false)}
         >
-          <Pressable style={styles.monthModalBackdrop} onPress={() => setShowTripsDropdown(false)}>
+          <View style={[styles.modalScreenRoot, Platform.OS === 'web' && styles.modalScreenRootWeb]}>
             <Pressable
-              style={[styles.monthModalCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              onPress={() => {}}
-            >
-              <View style={styles.tripsModalHeader}>
-                <Text style={[styles.monthModalTitle, { color: colors.text }]}>Select trips</Text>
-                <Text style={[styles.hint, { color: colors.textMuted }]}>
-                  {selectedSalaryTripIds.length} selected
-                </Text>
-              </View>
-              {!effectiveSalaryOrg ? (
-                <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+              style={styles.modalScreenBackdrop}
+              onPress={() => setShowTripsDropdown(false)}
+              accessibilityLabel="Close"
+            />
+            <View pointerEvents="box-none" style={styles.modalScreenCenter}>
+              <View
+                style={[styles.monthModalCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              >
+                <View style={styles.tripsModalHeader}>
+                  <Text style={[styles.monthModalTitle, { color: colors.text }]}>Select trips</Text>
                   <Text style={[styles.hint, { color: colors.textMuted }]}>
-                    Select a fleet above to see pending trips.
+                    {selectedSalaryTripIds.length} selected
                   </Text>
                 </View>
-              ) : pendingTripsForSalaryOrg.length === 0 ? (
-                <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
-                  <Text style={[styles.hint, { color: colors.textMuted }]}>
-                    No pending trips for {effectiveSalaryOrg.orgName}.
-                  </Text>
-                </View>
-              ) : (
-                <ScrollView style={styles.monthModalList} keyboardShouldPersistTaps="handled">
-                  {pendingTripsForSalaryOrg.map((t, idx) => {
-                    const isSelected = selectedSalaryTripIds.includes(t.id);
-                    const isLast = idx === pendingTripsForSalaryOrg.length - 1;
-                    const earned = tripEarnings(t);
-                    const date = formatLedgerDate(t.completed_at ?? t.updated_at ?? t.created_at);
-                    return (
-                      <TouchableOpacity
-                        key={t.id}
-                        style={[
-                          styles.tripSelectRow,
-                          { borderBottomColor: colors.border },
-                          isLast && styles.monthDropdownRowLast,
-                          isSelected && { backgroundColor: colors.emeraldMuted },
-                        ]}
-                        onPress={() => toggleSalaryTripSelection(t.id)}
-                        activeOpacity={0.85}
-                      >
-                        <FontAwesome
-                          name={isSelected ? 'check-square' : 'square-o'}
-                          size={18}
-                          color={isSelected ? colors.emerald : colors.textMuted}
-                        />
-                        <View style={styles.tripSelectText}>
-                          <Text style={[styles.tripSelectTitle, { color: colors.text }]} numberOfLines={1}>
-                            {tripsService.getTripDisplayNumber(t)}
-                          </Text>
-                          <Text style={[styles.tripSelectSubtitle, { color: colors.textMuted }]} numberOfLines={1}>
-                            {date} · ₹{earned.toLocaleString('en-IN')}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              )}
+                {!effectiveSalaryOrg ? (
+                  <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+                    <Text style={[styles.hint, { color: colors.textMuted }]}>
+                      Select a fleet above to see pending trips.
+                    </Text>
+                  </View>
+                ) : pendingTripsForSalaryOrg.length === 0 ? (
+                  <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+                    <Text style={[styles.hint, { color: colors.textMuted }]}>
+                      No pending trips for {effectiveSalaryOrg.orgName}.
+                    </Text>
+                  </View>
+                ) : (
+                  <ScrollView style={styles.monthModalList} keyboardShouldPersistTaps="handled">
+                    {pendingTripsForSalaryOrg.map((t, idx) => {
+                      const isSelected = selectedSalaryTripIds.includes(t.id);
+                      const isLast = idx === pendingTripsForSalaryOrg.length - 1;
+                      const earned = tripEarnings(t);
+                      const date = formatLedgerDate(t.completed_at ?? t.updated_at ?? t.created_at);
+                      return (
+                        <TouchableOpacity
+                          key={t.id}
+                          style={[
+                            styles.tripSelectRow,
+                            { borderBottomColor: colors.border },
+                            isLast && styles.monthDropdownRowLast,
+                            isSelected && { backgroundColor: colors.emeraldMuted },
+                          ]}
+                          onPress={() => toggleSalaryTripSelection(t.id)}
+                          activeOpacity={0.85}
+                        >
+                          <FontAwesome
+                            name={isSelected ? 'check-square' : 'square-o'}
+                            size={18}
+                            color={isSelected ? colors.emerald : colors.textMuted}
+                          />
+                          <View style={styles.tripSelectText}>
+                            <Text style={[styles.tripSelectTitle, { color: colors.text }]} numberOfLines={1}>
+                              {tripsService.getTripDisplayNumber(t)}
+                            </Text>
+                            <Text style={[styles.tripSelectSubtitle, { color: colors.textMuted }]} numberOfLines={1}>
+                              {date} · ₹{earned.toLocaleString('en-IN')}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                )}
 
-              <View style={styles.tripsModalFooter}>
-                <TouchableOpacity
-                  style={[styles.tripsModalBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                  onPress={() => {
-                    deselectAllSalaryTrips();
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <Text style={[styles.tripsModalBtnText, { color: colors.textMuted }]}>Clear</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.tripsModalBtn, { backgroundColor: colors.text }]}
-                  onPress={() => setShowTripsDropdown(false)}
-                  activeOpacity={0.85}
-                >
-                  <Text style={[styles.tripsModalBtnText, { color: Theme.textOnPrimary }]}>Done</Text>
-                </TouchableOpacity>
+                <View style={styles.tripsModalFooter}>
+                  <TouchableOpacity
+                    style={[styles.tripsModalBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    onPress={() => {
+                      deselectAllSalaryTrips();
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.tripsModalBtnText, { color: colors.textMuted }]}>Clear</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.tripsModalBtn, { backgroundColor: colors.text }]}
+                    onPress={() => setShowTripsDropdown(false)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.tripsModalBtnText, { color: Theme.textOnPrimary }]}>Done</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </Pressable>
-          </Pressable>
+            </View>
+          </View>
         </Modal>
 
         {/* Needed-by date picker */}
         {showNeededByPicker ? (
           <Modal transparent animationType="fade" visible onRequestClose={() => setShowNeededByPicker(false)}>
-            <Pressable style={styles.monthModalBackdrop} onPress={() => setShowNeededByPicker(false)}>
+            <View style={[styles.modalScreenRoot, Platform.OS === 'web' && styles.modalScreenRootWeb]}>
               <Pressable
-                style={[styles.monthModalCard, { backgroundColor: colors.surface, borderColor: colors.border, paddingBottom: 14 }]}
-                onPress={() => {}}
-              >
-                <Text style={[styles.monthModalTitle, { color: colors.text }]}>Needed by</Text>
-                <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
-                  <DateTimePicker
-                    value={neededByDate ?? new Date()}
-                    mode="date"
-                    display="spinner"
-                    onChange={(_, date) => date && setNeededByDate(date)}
-                  />
-                  <TouchableOpacity
-                    style={[styles.modalDoneBtn, { backgroundColor: colors.text }]}
-                    onPress={() => setShowNeededByPicker(false)}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.modalDoneBtnText}>Done</Text>
-                  </TouchableOpacity>
+                style={styles.modalScreenBackdrop}
+                onPress={() => setShowNeededByPicker(false)}
+                accessibilityLabel="Close"
+              />
+              <View pointerEvents="box-none" style={styles.modalScreenCenter}>
+                <View
+                  style={[
+                    styles.monthModalCard,
+                    styles.monthModalCardCalendar,
+                    { backgroundColor: colors.surface, borderColor: colors.border, paddingBottom: 14 },
+                  ]}
+                >
+                  <Text style={[styles.monthModalTitle, { color: colors.text }]}>Needed by</Text>
+                  <View style={{ paddingHorizontal: 8, paddingBottom: 8 }}>
+                    <ScrollView
+                      style={styles.neededByCalendarScroll}
+                      keyboardShouldPersistTaps="handled"
+                      showsVerticalScrollIndicator={false}
+                    >
+                      <NeededByCalendar
+                        value={neededByDate}
+                        onDayPress={(d) => setNeededByDate(d)}
+                        colors={{
+                          surface: colors.surface,
+                          text: colors.text,
+                          textMuted: colors.textMuted,
+                          placeholder: colors.placeholder,
+                          emerald: colors.emerald,
+                          emeraldMuted: colors.emeraldMuted,
+                        }}
+                      />
+                    </ScrollView>
+                    <TouchableOpacity
+                      style={[styles.modalDoneBtn, { backgroundColor: colors.text }]}
+                      onPress={() => setShowNeededByPicker(false)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.modalDoneBtnText}>Done</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </Pressable>
-            </Pressable>
+              </View>
+            </View>
           </Modal>
         ) : null}
 
@@ -1672,6 +1702,22 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   monthDropdownRowLast: { borderBottomWidth: 0 },
+  /** Modal layout: backdrop + centered card (avoids nested Pressable touch bugs on web). */
+  modalScreenRoot: {
+    flex: 1,
+  },
+  modalScreenRootWeb: {
+    zIndex: 20000,
+  },
+  modalScreenBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(8, 12, 20, 0.35)',
+  },
+  modalScreenCenter: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
   monthModalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(8, 12, 20, 0.35)',
@@ -1686,6 +1732,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
   },
+  monthModalCardCalendar: {
+    maxWidth: 400,
+  },
   monthModalTitle: {
     fontSize: 16,
     fontWeight: '700',
@@ -1693,6 +1742,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   monthModalList: { maxHeight: 360 },
+  neededByCalendarScroll: { maxHeight: 400 },
   monthModalRow: {
     minHeight: 50,
     paddingHorizontal: 16,
