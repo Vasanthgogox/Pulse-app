@@ -14,6 +14,7 @@ import { useIsOnline } from '@/contexts/NetworkContext';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import { tripEarningsForDriver } from '@/lib/driverUtils';
 import { getInitials } from '@/lib/stringUtils';
+import { showAppAlert } from '@/lib/appAlert';
 import { VALIDATION } from '@/lib/validation';
 import * as driversService from '@/services/driversService';
 import * as salaryRequestsService from '@/services/salaryRequestsService';
@@ -26,9 +27,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
+  ActivityIndicator,
+  Image,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -70,6 +70,14 @@ function formatRupeeDisplay(raw: string): string {
   const cleaned = raw.replace(/[^0-9]/g, '');
   const amount = Number(cleaned || '0');
   return amount.toLocaleString('en-IN');
+}
+
+/** Parsed integer ₹ from keypad / TextInput (non-digits stripped). Empty → 0 (invalid for submit). */
+function parseRupeeAmountInput(raw: string): number {
+  const cleaned = String(raw).replace(/[^0-9]/g, '');
+  if (cleaned === '') return 0;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : NaN;
 }
 
 const REQUEST_TYPES: { type: salaryRequestsService.SalaryRequestType; label: string; hint: string }[] = [
@@ -352,9 +360,9 @@ export default function SalaryRequestScreen() {
     };
     try {
       await AsyncStorage.setItem(SALARY_REQUEST_DRAFT_KEY, JSON.stringify(payload));
-      Alert.alert('Saved', 'Draft saved on this device.');
+      showAppAlert('Saved', 'Draft saved on this device.');
     } catch {
-      Alert.alert('Error', 'Could not save draft.');
+      showAppAlert('Error', 'Could not save draft.');
     }
   }, [salaryRequestType, salaryRequestAmount, neededByDate, salaryRequestReason]);
 
@@ -365,29 +373,33 @@ export default function SalaryRequestScreen() {
 
   const submitSalaryRequest = useCallback(async () => {
     if (!isOnline) {
-      Alert.alert('Offline', 'You are offline. Save as draft and submit when connected.');
+      showAppAlert('Offline', 'You are offline. Save as draft and submit when connected.');
       return;
     }
     const org = salaryRequestOrg ?? (salaryRequestOrgOptions.length === 1 ? salaryRequestOrgOptions[0] : null);
     if (!org) {
-      Alert.alert('Select fleet', 'Choose which fleet to request salary from.');
+      showAppAlert('Select fleet', 'Choose which fleet to request salary from.');
       return;
     }
     if (!salaryRequestType) {
-      Alert.alert('Select type', 'Choose Monthly salary, Advance, or Trip-based.');
+      showAppAlert('Select type', 'Choose Monthly salary, Advance, or Trip-based.');
       return;
     }
     if (salaryRequestType === 'advance' && !neededByDate) {
-      Alert.alert('Needed by date', 'Select when you need the advance by.');
+      showAppAlert('Needed by date', 'Select when you need the advance by.');
       return;
     }
-    const amount = Number(salaryRequestAmount.replace(/,/g, '').trim());
+    if (salaryRequestType === 'trip_based' && selectedSalaryTripIds.length === 0) {
+      showAppAlert('Select trips', 'Select at least one trip to be paid.');
+      return;
+    }
+    const amount = parseRupeeAmountInput(salaryRequestAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
-      Alert.alert('Enter amount', 'Enter a valid amount in ₹.');
+      showAppAlert('Enter amount', 'Enter a valid amount in ₹.');
       return;
     }
     if (amount > VALIDATION.AMOUNT_MAX) {
-      Alert.alert(
+      showAppAlert(
         'Amount too large',
         `Amount cannot exceed ₹${VALIDATION.AMOUNT_MAX.toLocaleString('en-IN')}.`,
       );
@@ -395,7 +407,7 @@ export default function SalaryRequestScreen() {
     }
     const trimmedReason = salaryRequestReason.trim();
     if (trimmedReason.length > VALIDATION.NOTES_MAX_LENGTH) {
-      Alert.alert(
+      showAppAlert(
         'Reason too long',
         `Reason must be at most ${VALIDATION.NOTES_MAX_LENGTH} characters.`,
       );
@@ -418,7 +430,7 @@ export default function SalaryRequestScreen() {
     );
     setSalaryRequestSubmitting(false);
     if (error) {
-      Alert.alert('Request failed', error.message);
+      showAppAlert('Request failed', error.message);
       return;
     }
     setSuccessPayload({
@@ -1018,21 +1030,28 @@ export default function SalaryRequestScreen() {
               onPress={() => {
                 if (salaryRequestSubmitting) return;
                 if (widgetPage === 0) {
-                  const amount = Number(salaryRequestAmount.replace(/[^0-9]/g, '').trim());
+                  const amount = parseRupeeAmountInput(salaryRequestAmount);
                   if (!salaryRequestType) {
-                    Alert.alert('Select type', 'Choose Advance, Reimbursement, or Salary correction.');
+                    showAppAlert('Select type', 'Choose Monthly salary, Advance, or Trip-based.');
                     return;
                   }
                   if (!Number.isFinite(amount) || amount <= 0) {
-                    Alert.alert('Enter amount', 'Enter a valid amount in ₹.');
+                    showAppAlert('Enter amount', 'Enter a valid amount in ₹.');
+                    return;
+                  }
+                  if (amount > VALIDATION.AMOUNT_MAX) {
+                    showAppAlert(
+                      'Amount too large',
+                      `Amount cannot exceed ₹${VALIDATION.AMOUNT_MAX.toLocaleString('en-IN')}.`,
+                    );
                     return;
                   }
                   if (salaryRequestType === 'advance' && !neededByDate) {
-                    Alert.alert('Needed by', 'Select when you need the advance by.');
+                    showAppAlert('Needed by', 'Select when you need the advance by.');
                     return;
                   }
                   if (salaryRequestType === 'trip_based' && selectedSalaryTripIds.length === 0) {
-                    Alert.alert('Select trips', 'Select at least one trip to be paid.');
+                    showAppAlert('Select trips', 'Select at least one trip to be paid.');
                     return;
                   }
                   setWidgetPage(1);
