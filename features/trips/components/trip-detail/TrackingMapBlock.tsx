@@ -445,7 +445,6 @@ export function TrackingMapBlock({
         : null);
     const pastOnePoint = selectHistoryWaypoint(historyCoordinates, 0.33);
     const pastTwoPoint = selectHistoryWaypoint(historyCoordinates, 0.66);
-    const currentPoint = latestCoordinate ?? historyCoordinates[historyCoordinates.length - 1] ?? null;
 
     pushMarker(
       originPoint
@@ -491,24 +490,8 @@ export function TrackingMapBlock({
           }
         : null
     );
-    pushMarker(
-      currentPoint
-        ? {
-            id: "current",
-            coordinate: currentPoint,
-            kind: "current",
-            title: current,
-            subtitle:
-              locationAddress?.trim() ||
-              vehicleLabel?.trim() ||
-              (latestLocation ? formatLocationUpdatedAt(latestLocation.recorded_at) : "Live driver location"),
-          }
-        : null
-    );
-
     return nextMarkers;
   }, [
-    current,
     destination,
     historyCoordinates,
     latestCoordinate,
@@ -525,13 +508,11 @@ export function TrackingMapBlock({
   useEffect(() => {
     if (!mapRef.current) return;
     if (displayedRouteCoordinates.length > 1) {
-      const timer = setTimeout(() => {
-        mapRef.current?.fitToCoordinates(displayedRouteCoordinates, {
-          edgePadding: { top: 72, right: 48, bottom: 48, left: 48 },
-          animated: true,
-        });
-      }, 120);
-      return () => clearTimeout(timer);
+      mapRef.current?.fitToCoordinates(displayedRouteCoordinates, {
+        edgePadding: { top: 72, right: 48, bottom: 48, left: 48 },
+        animated: false,
+      });
+      return;
     }
     const focusPoint =
       displayedRouteCoordinates[0] ??
@@ -539,17 +520,14 @@ export function TrackingMapBlock({
       normalizedOriginCoordinate ??
       normalizedDestinationCoordinate;
     if (!focusPoint) return;
-    const timer = setTimeout(() => {
-      mapRef.current?.animateToRegion(
-        {
-          ...focusPoint,
-          latitudeDelta: 0.02,
-          longitudeDelta: 0.02,
-        },
-        300
-      );
-    }, 120);
-    return () => clearTimeout(timer);
+    mapRef.current?.animateToRegion(
+      {
+        ...focusPoint,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      },
+      0
+    );
   }, [
     displayedRouteCoordinates,
     latestCoordinate,
