@@ -66,7 +66,7 @@ const LIGHT = {
   inputBg: '#ffffff',
   placeholder: '#94a3b8',
   accent: Theme.driverEmerald,
-  buttonPrimary: '#0f172a',
+  buttonPrimary: Theme.driverEmerald,
 };
 
 // Validation limits (aligned with lib/validation.ts)
