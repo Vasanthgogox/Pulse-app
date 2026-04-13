@@ -192,6 +192,14 @@ export default function InvoicePdfPreviewScreen() {
         Alert.alert('Error', 'Organization not loaded. Cannot finalize invoice.');
         return;
       }
+      const nonApproved = selectedTrips.filter((t) => t.status !== 'approved');
+      if (nonApproved.length > 0) {
+        Alert.alert(
+          'Only approved trips allowed',
+          `These trips are not approved and cannot be invoiced: ${nonApproved.map((t) => t.id).join(', ')}`,
+        );
+        return;
+      }
       const internalIds = selectedTrips.map((t) => t.internal_id);
       await executeMutation.mutateAsync({
         internalIds,

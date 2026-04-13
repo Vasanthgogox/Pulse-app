@@ -277,6 +277,41 @@ export async function executeInvoiceCreation(
   payload?: any,
 ): Promise<{ error: Error | null }> {
   try {
+    const sanitizedIds = Array.from(new Set(internalIds.filter(Boolean)));
+    if (sanitizedIds.length === 0) {
+      throw new Error("No approved trips selected for invoice issuance.");
+    }
+
+    const { data: candidates, error: candidateError } = await supabase()
+      .from("trips")
+      .select("id, trip_number, display_trip_id, pod_status, invoice_status_1, invoice_no")
+      .in("id", sanitizedIds);
+
+    if (candidateError) throw candidateError;
+
+    const rows = (candidates ?? []) as TripRecord[];
+    const nonInvoiceable = rows.filter((row) => {
+      const podStatus = str((row as { pod_status?: string | null }).pod_status).toLowerCase();
+      const inv1 = str((row as { invoice_status_1?: string | null }).invoice_status_1).toLowerCase();
+      const invoiceNo = str((row as { invoice_no?: string | null }).invoice_no);
+      const approved =
+        podStatus === "received" &&
+        (inv1.includes("pending") || inv1.includes("data shared"));
+      const alreadyRaised = inv1.includes("raised") || invoiceNo.trim() !== "";
+      return !approved || alreadyRaised;
+    });
+
+    if (rows.length !== sanitizedIds.length || nonInvoiceable.length > 0) {
+      const blockedIds = nonInvoiceable
+        .map((row) => getTripStringId(row))
+        .filter(Boolean);
+      throw new Error(
+        blockedIds.length > 0
+          ? `Only approved trips can be issued. Not invoiceable: ${blockedIds.join(", ")}`
+          : "Some selected trips are no longer available for invoicing. Please refresh.",
+      );
+    }
+
     const candidateInvoiceNo =
       payload && typeof payload.invoiceNo === "string" ? payload.invoiceNo.trim() : "";
     const invoiceNo =
@@ -292,11 +327,11 @@ export async function executeInvoiceCreation(
         invoice_no: invoiceNo,
         invoice_status_1: "Raised",
       })
-      .in("id", internalIds);
+      .in("id", sanitizedIds);
 
     if (error) throw error;
 
-    for (const id of internalIds) {
+    for (const id of sanitizedIds) {
       await supabase().rpc("log_activity", {
         p_action: "INVOICE_GENERATED",
         p_entity_type: "trip",

@@ -15,7 +15,8 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Theme from "@/constants/Theme";
 import type { DriverLocationRow } from "@/services/driverLocationService";
 import { getOptimalRoute, type RouteResult } from "@/services/routingService";
-import MapView, { Callout, Marker, Polyline } from "react-native-maps";
+import { LeafletMap } from "@/components/driver/LeafletMap";
+import MapView, { Callout, Marker, Polyline } from "@/lib/reactNativeMapsCompat";
 
 type MapCoordinate = {
   latitude: number;
@@ -544,6 +545,54 @@ export function TrackingMapBlock({
         : routeCoordinates.length > 0
           ? "Showing recorded route"
           : "Waiting for driver location";
+
+  if (Platform.OS === "web") {
+    const leafletMarkers = markers.map((m) => ({
+      id: m.id,
+      coordinate: m.coordinate,
+      label: m.title,
+      color:
+        m.kind === "origin"
+          ? Theme.negative
+          : m.kind === "destination"
+            ? Theme.positive
+            : m.kind === "current"
+              ? Theme.primary
+              : Theme.primaryLight,
+    }));
+
+    const mapCenter =
+      latestCoordinate ??
+      normalizedOriginCoordinate ??
+      normalizedDestinationCoordinate ??
+      DEFAULT_MAP_REGION;
+
+    return (
+      <View style={[styles.trackingPageMapArea, { height: mapHeight }]}>
+        <LeafletMap
+          center={mapCenter}
+          zoom={13}
+          markers={leafletMarkers}
+          polyline={displayedRouteCoordinates}
+          polylineColor={Theme.primary}
+          style={styles.map}
+        />
+        <View style={styles.trackingRouteHalo} pointerEvents="none">
+          <Text style={styles.trackingRouteHaloLabel}>{statusLabel}</Text>
+          <Text style={styles.trackingRouteHaloText} numberOfLines={2}>
+            {locationAddress?.trim() ||
+              vehicleLabel?.trim() ||
+              "Trip route and live driver movement appear here."}
+          </Text>
+        </View>
+        {driverLocationLoading ? (
+          <View style={styles.mapLoadingOverlay} pointerEvents="none">
+            <ActivityIndicator size="small" color={Theme.primary} />
+          </View>
+        ) : null}
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.trackingPageMapArea, { height: mapHeight }]}>

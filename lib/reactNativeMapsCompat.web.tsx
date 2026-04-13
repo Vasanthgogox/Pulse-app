@@ -13,5 +13,6 @@ function NullMapPrimitive({ children, style }: CompatProps) {
 export const Callout = NullMapPrimitive;
 export const Marker = NullMapPrimitive;
 export const Polyline = NullMapPrimitive;
+export const PROVIDER_GOOGLE = 'google';
 
 export default NullMapPrimitive;

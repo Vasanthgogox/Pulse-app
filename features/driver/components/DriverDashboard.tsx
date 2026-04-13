@@ -44,7 +44,7 @@ import {
   View
 } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import MapView, { Callout, Marker, Polyline } from 'react-native-maps';
+import MapView, { Callout, Marker, Polyline } from '@/lib/reactNativeMapsCompat';
 import Reanimated, {
   useAnimatedProps,
   useAnimatedStyle,
