@@ -24,6 +24,7 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from "react-native";
@@ -267,6 +268,8 @@ export default function DriverTripsScreen() {
   const [detailTab, setDetailTab] = useState<"journey" | "settlement">(
     "journey",
   );
+  const [searchQuery, setSearchQuery] = useState("");
+  const [tripView, setTripView] = useState<"active" | "history">("active");
 
   const fetch = useCallback(() => {
     if (!profile?.uid) {
@@ -329,6 +332,39 @@ export default function DriverTripsScreen() {
     () => splitLocationPrimarySecondary(selectedTrip?.drop_location),
     [selectedTrip?.drop_location],
   );
+  const filteredTrips = useMemo(() => {
+    let list = [...trips];
+
+    list = list.filter((trip) =>
+      tripView === "history" ? isCompleted(trip.status) : !isCompleted(trip.status),
+    );
+
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter((trip) => {
+        const ref = tripsService.getTripDisplayNumber(trip).toLowerCase();
+        const pickup = (trip.pickup_area ?? "").toLowerCase();
+        const drop = (trip.drop_location ?? "").toLowerCase();
+        const status = (trip.status ?? "").toLowerCase();
+        return (
+          ref.includes(q) ||
+          pickup.includes(q) ||
+          drop.includes(q) ||
+          status.includes(q)
+        );
+      });
+    }
+
+    list.sort((a, b) => {
+      const dateA = new Date(a.pickup_date ?? a.created_at ?? "").getTime();
+      const dateB = new Date(b.pickup_date ?? b.created_at ?? "").getTime();
+      const safeA = Number.isFinite(dateA) ? dateA : 0;
+      const safeB = Number.isFinite(dateB) ? dateB : 0;
+      return safeB - safeA;
+    });
+
+    return list;
+  }, [trips, tripView, searchQuery]);
 
   const renderItem = ({ item }: { item: tripsService.TripRow }) => {
     const completed = isCompleted(item.status);
@@ -518,8 +554,106 @@ export default function DriverTripsScreen() {
           Trip history & route archive.
         </Text>
       </View>
+      <View
+        style={[
+          styles.toolbarWrap,
+          { backgroundColor: colors.background },
+        ]}
+      >
+        <View style={styles.toolbarTopRow}>
+          <View
+            style={[
+              styles.searchWrap,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <FontAwesome name="search" size={14} color={colors.textMuted} />
+            <TextInput
+              style={[styles.searchInput, { color: colors.text }]}
+              placeholder="Search by BOL, Destination, or Trailer..."
+              placeholderTextColor={colors.textMuted}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCorrect={false}
+              spellCheck={false}
+              autoComplete="off"
+              returnKeyType="search"
+            />
+          </View>
+          <View
+            style={[
+              styles.segmentWrap,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <TouchableOpacity
+              style={[
+                styles.segmentBtn,
+                tripView === "active" && [
+                  styles.segmentBtnActive,
+                  { backgroundColor: colors.background, borderColor: colors.border },
+                ],
+              ]}
+              onPress={() => setTripView("active")}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.segmentLabel,
+                  {
+                    color: tripView === "active" ? colors.text : colors.textMuted,
+                  },
+                ]}
+              >
+                ACTIVE
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.segmentBtn,
+                tripView === "history" && [
+                  styles.segmentBtnActive,
+                  { backgroundColor: colors.background, borderColor: colors.border },
+                ],
+              ]}
+              onPress={() => setTripView("history")}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.segmentLabel,
+                  {
+                    color: tripView === "history" ? colors.emerald : colors.textMuted,
+                  },
+                ]}
+              >
+                HISTORY
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        <View style={styles.toolbarFooter}>
+          <Text style={[styles.resultMeta, { color: colors.textMuted }]}>
+            Showing {filteredTrips.length} of {trips.length}
+          </Text>
+          {searchQuery.trim().length > 0 ? (
+            <TouchableOpacity
+              style={[
+                styles.clearBtn,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+              onPress={() => setSearchQuery("")}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.clearBtnText, { color: colors.text }]}>Clear</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.clearBtnPlaceholder} />
+          )}
+        </View>
+      </View>
       <FlatList
-        data={trips}
+        data={filteredTrips}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         contentContainerStyle={[
@@ -527,7 +661,7 @@ export default function DriverTripsScreen() {
           { backgroundColor: colors.background, paddingBottom: insets.bottom + 80 },
         ]}
         ListEmptyComponent={
-          trips.length === 0 ? (
+          filteredTrips.length === 0 ? (
             <View style={styles.empty}>
               <FontAwesome
                 name="history"
@@ -535,7 +669,7 @@ export default function DriverTripsScreen() {
                 color={colors.tabInactive}
               />
               <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-                No trips completed yet
+                {trips.length === 0 ? "No trips completed yet" : "No trips found"}
               </Text>
             </View>
           ) : null
@@ -1266,6 +1400,87 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginTop: 8,
     textTransform: "uppercase",
+  },
+  toolbarWrap: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  toolbarTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  searchWrap: {
+    flex: 1,
+    minHeight: 50,
+    borderWidth: 1,
+    borderRadius: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 14,
+    fontWeight: "500",
+    paddingVertical: 10,
+  },
+  segmentWrap: {
+    height: 50,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    minWidth: 170,
+  },
+  segmentBtn: {
+    flex: 1,
+    height: "100%",
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  segmentBtnActive: {
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  segmentLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  toolbarFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 2,
+  },
+  resultMeta: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  clearBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  clearBtnText: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  clearBtnPlaceholder: {
+    width: 50,
   },
   listContent: {
     paddingHorizontal: 24,
