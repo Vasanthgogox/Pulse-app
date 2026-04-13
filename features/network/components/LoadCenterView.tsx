@@ -19,6 +19,7 @@ import {
   type DirectQuoteRow,
   type IndentRow,
 } from "@/features/indents";
+import { shareDraftIndent } from "@/features/indents/services/indents.service";
 import { acceptAwardedQuote } from "@/features/indents/services/accept-awarded-quote.service";
 import {
   assignAggregateTripDriverByPhone,
@@ -713,6 +714,17 @@ export function LoadCenterView({
     setSuccessMsg(msg);
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 1500);
+  };
+
+  const handleBroadcastDraft = async (load: IndentRow) => {
+    if (!orgId) return;
+    const { error } = await shareDraftIndent(load.id);
+    if (error) {
+      Alert.alert("Could not broadcast", error.message);
+      return;
+    }
+    invalidateIndents(orgId);
+    triggerSuccess("Load broadcasted to network");
   };
 
   const handleShareIndent = async (load: IndentRow) => {
@@ -1440,6 +1452,7 @@ export function LoadCenterView({
                 <View style={useGridLayout ? styles.gridList : undefined}>
                   {filteredHirePartnerLoads.map((load) => {
                   const status = (load.status || "").toLowerCase();
+                  const isDraft = status === "draft";
                   const isAwardedPendingTrip =
                     status === "awarded" && !indentIdsWithTrip.has(load.id);
                   const isDone = statusMatchesFilter(status, "DONE");
@@ -1570,13 +1583,17 @@ export function LoadCenterView({
                             <TouchableOpacity
                               style={styles.reviewBidsBtn}
                               onPress={() => {
+                                if (isDraft) {
+                                  handleBroadcastDraft(load);
+                                  return;
+                                }
                                 setSelectedQuoteId(null);
                                 setLoadAction({ type: "AWARD", load });
                               }}
                               activeOpacity={0.9}
                             >
                               <Text style={styles.reviewBidsBtnText}>
-                                Review Hub
+                                {isDraft ? "Broadcast" : "Review Hub"}
                               </Text>
                             </TouchableOpacity>
                           )}
