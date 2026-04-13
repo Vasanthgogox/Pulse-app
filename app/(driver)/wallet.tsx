@@ -350,11 +350,21 @@ export default function DriverWalletScreen() {
           </TouchableOpacity>
           <View style={styles.headerTextWrap}>
             <Text style={[styles.brand, { color: colors.textMuted }]}>Q PILOT</Text>
-            <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>Wallet</Text>
+            <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>Cash</Text>
           </View>
         </View>
         <TouchableOpacity
-          onPress={() => router.push('/(driver)/requests')}
+          onPress={() => {
+            if (salaryRequestOrgOptions.length > 0) {
+              const fleet = salaryRequestOrgOptions[0];
+              router.push({
+                pathname: `/(driver)/passbook/${fleet.orgId}`,
+                params: { orgName: fleet.orgName, from: 'wallet' },
+              } as Parameters<typeof router.push>[0]);
+            } else {
+              router.push('/(driver)/requests');
+            }
+          }}
           style={[styles.passbookHeaderBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
           activeOpacity={0.8}
           accessibilityLabel="Passbook"

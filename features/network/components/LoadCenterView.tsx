@@ -83,7 +83,7 @@ const STATUS_TABS: {
   label: string;
   statuses: string[];
 }[] = [
-  { id: "OPEN", label: "Open", statuses: ["open", "pending"] },
+  { id: "OPEN", label: "Open", statuses: ["open", "pending", "broadcast", "draft"] },
   { id: "QUOTED", label: "Quoted", statuses: ["quoted"] },
   { id: "AWARDED", label: "Awarded", statuses: ["awarded"] },
   {
@@ -2229,9 +2229,16 @@ export function LoadCenterView({
                       <Text style={styles.bidIndentStatusLabel}>Status</Text>
                       <View style={styles.bidIndentStatusPill}>
                         <Text style={styles.bidIndentStatusPillText}>
-                          {(loadAction.load.status || "—")
-                            .replace(/_/g, " ")
-                            .replace(/\b\w/g, (c) => c.toUpperCase())}
+                          {(() => {
+                            const status = String(loadAction.load.status || "—")
+                              .trim()
+                              .toLowerCase();
+                            if (status === "draft") return "Draft (Editable)";
+                            if (status === "broadcast") return "Broadcast";
+                            return status
+                              .replace(/_/g, " ")
+                              .replace(/\b\w/g, (c) => c.toUpperCase());
+                          })()}
                         </Text>
                       </View>
                     </View>

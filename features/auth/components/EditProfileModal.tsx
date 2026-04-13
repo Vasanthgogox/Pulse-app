@@ -3,7 +3,7 @@
  * Driver layout matches reference: hero avatar + sectioned form + primary Save; avatar tap opens action sheet.
  * Avatar: profile.avatar_url (signed) or preset (driver / user-2d). Colors from Theme only.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -110,6 +110,9 @@ export function EditProfileModal({
   const [selectedPresetSeed, setSelectedPresetSeed] = useState<string>(initialAvatarSeed);
   const [showAvatarDropdown, setShowAvatarDropdown] = useState(false);
   const [showAvatarActions, setShowAvatarActions] = useState(false);
+  const [bioSuggestions, setBioSuggestions] = useState<string[]>([]);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<string | null>(null);
+  const [generateRound, setGenerateRound] = useState(0);
 
   const heroRoleLine = (heroSubtitle?.trim() || 'DRIVER').toUpperCase();
   const emailTrimmed = email?.trim() ?? '';
@@ -125,6 +128,9 @@ export function EditProfileModal({
       setSelectedPresetSeed(initialAvatarSeed);
       setShowAvatarDropdown(false);
       setShowAvatarActions(false);
+      setBioSuggestions([]);
+      setSelectedSuggestion(null);
+      setGenerateRound(0);
     }
   }, [visible, initialFullName, initialPhone, initialCompanyName, initialStatusText, initialAvatarSeed]);
 
@@ -307,6 +313,50 @@ export function EditProfileModal({
       [{ text: 'OK' }]
     );
   };
+
+  const bioSuggestionLibrary = useMemo(
+    () => [
+      "Safety-focused driver committed to on-time delivery, careful handling, and clear communication throughout each trip.",
+      "Reliable route driver with disciplined execution, punctual pickups, and secure end-to-end cargo movement.",
+      "Professional transport driver known for smooth coordination, proactive updates, and responsible road behavior.",
+      "Dependable delivery driver focused on trip accuracy, clean documentation, and respectful customer interaction.",
+      "Experienced fleet driver who prioritizes safety, route efficiency, and consistent delivery performance.",
+      "Detail-oriented commercial driver dedicated to timely dispatch, careful load handling, and service reliability.",
+      "Operations-first driver ensuring secure transit, transparent trip updates, and professional handovers.",
+    ],
+    []
+  );
+
+  const buildBioSuggestions = useCallback((round: number) => {
+    const cleanName = fullName.trim();
+    const cleanCompany = companyName.trim();
+    const seed = `${cleanName}|${cleanCompany}|${round}`;
+    const baseValue = seed.split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+    const pool = [...bioSuggestionLibrary];
+    const suggestions: string[] = [];
+
+    for (let i = 0; i < 3; i += 1) {
+      if (pool.length === 0) break;
+      const index = (baseValue + i * 7) % pool.length;
+      const template = pool.splice(index, 1)[0];
+      const withCompany = cleanCompany
+        ? `${template} Supporting ${cleanCompany} operations with accountability and delivery discipline.`
+        : template;
+      suggestions.push(
+        withCompany.replace(/\s+/g, " ").trim().slice(0, VALIDATION.STATUS_TEXT_MAX_LENGTH)
+      );
+    }
+
+    return suggestions;
+  }, [bioSuggestionLibrary, companyName, fullName]);
+
+  const handleAutoGenerateBio = useCallback(() => {
+    const nextRound = generateRound + 1;
+    const nextSuggestions = buildBioSuggestions(nextRound);
+    setGenerateRound(nextRound);
+    setBioSuggestions(nextSuggestions);
+    setSelectedSuggestion(null);
+  }, [buildBioSuggestions, generateRound]);
 
   const showEmailOnboardingHint = () => {
     Alert.alert(
@@ -543,7 +593,61 @@ export function EditProfileModal({
                 underlineColorAndroid="transparent"
               />
 
-              <Text style={styles.driverFieldLabel}>Bio / Status</Text>
+              <View style={styles.driverFieldLabelRow}>
+                <Text style={styles.driverFieldLabel}>Bio / Status</Text>
+                <TouchableOpacity
+                  style={styles.autoGenerateBioBtn}
+                  onPress={handleAutoGenerateBio}
+                  activeOpacity={0.85}
+                  disabled={saving}
+                  accessibilityRole="button"
+                  accessibilityLabel="Auto generate bio"
+                >
+                  <FontAwesome name="magic" size={12} color={DRIVER_FOREST} />
+                  <Text style={styles.autoGenerateBioBtnText}>Generate</Text>
+                </TouchableOpacity>
+              </View>
+              {bioSuggestions.length > 0 ? (
+                <View style={styles.bioSuggestionBlock}>
+                  <Text style={styles.bioSuggestionTitle}>Suggested bios</Text>
+                  {bioSuggestions.map((suggestion) => {
+                    const isSelected = selectedSuggestion === suggestion;
+                    return (
+                      <TouchableOpacity
+                        key={suggestion}
+                        style={[
+                          styles.bioSuggestionCard,
+                          isSelected && styles.bioSuggestionCardSelected,
+                        ]}
+                        onPress={() => {
+                          setSelectedSuggestion(suggestion);
+                          setStatusText(suggestion);
+                        }}
+                        activeOpacity={0.9}
+                        accessibilityRole="button"
+                        accessibilityLabel="Use this bio suggestion"
+                      >
+                        <Text
+                          style={[
+                            styles.bioSuggestionText,
+                            isSelected && styles.bioSuggestionTextSelected,
+                          ]}
+                        >
+                          {suggestion}
+                        </Text>
+                        <View style={styles.bioSuggestionFooter}>
+                          <Text style={styles.bioSuggestionUseText}>
+                            {isSelected ? 'Applied' : 'Tap to use'}
+                          </Text>
+                          {isSelected ? (
+                            <FontAwesome name="check-circle" size={14} color={DRIVER_FOREST} />
+                          ) : null}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : null}
               <TextInput
                 style={[styles.driverInput, styles.driverInputMultiline]}
                 placeholder="e.g. Trust your feelings, be a good human being"
@@ -1054,6 +1158,74 @@ const styles = StyleSheet.create({
     color: Theme.textPrimary,
     marginBottom: 8,
     paddingHorizontal: 2,
+  },
+  driverFieldLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  autoGenerateBioBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 6,
+    marginBottom: 8,
+  },
+  autoGenerateBioBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: DRIVER_FOREST,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  bioSuggestionBlock: {
+    marginBottom: 14,
+  },
+  bioSuggestionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1.1,
+    marginBottom: 8,
+  },
+  bioSuggestionCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
+  bioSuggestionCardSelected: {
+    borderColor: Theme.darkGreen,
+    backgroundColor: Theme.positiveMuted,
+  },
+  bioSuggestionText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: Theme.textPrimary,
+    fontWeight: '500',
+  },
+  bioSuggestionTextSelected: {
+    color: Theme.textPrimaryDark,
+    fontWeight: '600',
+  },
+  bioSuggestionFooter: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  bioSuggestionUseText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Theme.darkGreen,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   driverInput: {
     backgroundColor: DRIVER_INPUT_BG,

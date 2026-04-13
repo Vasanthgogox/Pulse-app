@@ -7,6 +7,7 @@ import { FinanceFAB } from "@/components/FinanceFAB";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { TripExpandableCard, type TripRow } from "@/features/trips";
@@ -14,33 +15,32 @@ import { canAccessTrips, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatLedgerDate } from "@/lib/format";
 import {
-  useAssignmentAuditQuery,
-  useRealtimeTransactionsInvalidation,
-  useRealtimeTripsInvalidation,
-  useShipperDisplayNamesQuery,
-  useTransactionsQuery,
-  useTripsQuery,
+    useAssignmentAuditQuery,
+    useRealtimeTransactionsInvalidation,
+    useRealtimeTripsInvalidation,
+    useShipperDisplayNamesQuery,
+    useTransactionsQuery,
+    useTripsQuery,
 } from "@/lib/queries";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  useWindowDimensions,
-  View,
-  type TextStyle,
-  type ViewStyle,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    useWindowDimensions,
+    View,
+    type TextStyle,
+    type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 
 type ActiveStatusTab = "all" | "unassigned" | "assigned" | "in_transit";
 type SupplyFilter = "all" | "asset" | "aggregated";
