@@ -1141,7 +1141,7 @@ export default function SalaryRequestScreen() {
               accessibilityLabel={salaryRequestSubmitting ? 'Submitting' : widgetPage === 0 ? 'Next' : 'Submit request'}
             >
               <LinearGradient
-                colors={salaryRequestSubmitting ? [colors.surface, colors.surface] : [Theme.darkBackground, Theme.primary]}
+                colors={salaryRequestSubmitting ? [colors.surface, colors.surface] : [colors.emeraldDark, colors.emerald]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}

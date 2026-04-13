@@ -48,6 +48,7 @@ export function getDriverThemeColors(mode: DriverThemeMode) {
     textOnPrimary: Theme.textOnPrimary,
     primary: Theme.driverPrimary,
     emerald: Theme.driverEmerald,
+    emeraldDark: Theme.driverEmeraldDark,
     gold: Theme.driverGold,
     tabBarBg: isDark ? Theme.driverTabBarBg : Theme.surface,
     tabInactive: isDark ? Theme.driverTabInactive : Theme.textMuted,

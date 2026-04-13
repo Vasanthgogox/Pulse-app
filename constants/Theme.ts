@@ -186,6 +186,7 @@ export const Theme = {
   driverPlaceholder: "#52525b",
   /** Updated reference: emerald accent */
   driverEmerald: "#10B981",
+  driverEmeraldDark: "#0B8F62",
   /** Updated reference: gold for ETA, rank */
   driverGold: "#F59E0B",
   /** Overlay on driver screens */
