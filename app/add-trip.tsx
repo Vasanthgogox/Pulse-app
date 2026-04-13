@@ -18,8 +18,8 @@ export default function AddTripPage() {
   const invalidateTrips = useInvalidateTrips();
 
   const closeAndGoBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace('/(tabs)/trips');
+    // If we're coming from Ops Agent or want to force Trips view:
+    router.replace('/(tabs)/trips');
   };
 
   const handleComplete = async (data: AddTripFormData, options?: { supplySource: string; driverPhone?: string }) => {
