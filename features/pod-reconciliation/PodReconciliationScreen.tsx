@@ -11,7 +11,7 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { getCapabilitiesFromProfile } from "@/lib/capabilities";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -118,6 +118,12 @@ export function PodReconciliationScreen() {
   const isLargeScreen = width >= 1024;
   const isMediumScreen = width >= 768;
   const allowed = canAccessPodManagement(profile);
+
+  useEffect(() => {
+    if (!isMediumScreen && viewMode === "table") {
+      setViewMode("cards");
+    }
+  }, [isMediumScreen, viewMode]);
 
   const regions = [
     "All",
@@ -751,46 +757,6 @@ export function PodReconciliationScreen() {
                       />
                     </View>
                     <View style={styles.podTripsLikeToolbarActions}>
-                      <View style={styles.podTripsLikeChipRail}>
-                        <Pressable
-                          style={[
-                            styles.podTripsLikeChip,
-                            viewMode === "cards" && styles.podTripsLikeChipActive,
-                            Platform.OS === "web" && styles.podTripsLikeChipWeb,
-                          ]}
-                          onPress={() => setViewMode("cards")}
-                        >
-                          <Text
-                            style={[
-                              styles.podTripsLikeChipText,
-                              viewMode === "cards" &&
-                                styles.podTripsLikeChipTextActive,
-                            ]}
-                            numberOfLines={1}
-                          >
-                            Cards
-                          </Text>
-                        </Pressable>
-                        <Pressable
-                          style={[
-                            styles.podTripsLikeChip,
-                            viewMode === "table" && styles.podTripsLikeChipActive,
-                            Platform.OS === "web" && styles.podTripsLikeChipWeb,
-                          ]}
-                          onPress={() => setViewMode("table")}
-                        >
-                          <Text
-                            style={[
-                              styles.podTripsLikeChipText,
-                              viewMode === "table" &&
-                                styles.podTripsLikeChipTextActive,
-                            ]}
-                            numberOfLines={1}
-                          >
-                            Table
-                          </Text>
-                        </Pressable>
-                      </View>
                       <Pressable
                         style={[
                           styles.podTripsLikeIconBtn,
@@ -2013,13 +1979,13 @@ const styles = StyleSheet.create({
     width: "100%",
     minWidth: 0,
   },
-  /** Mobile toolbar aligned with `app/(tabs)/trips.tsx` (search flex + pill rail + icon actions). */
+  /** Mobile: search (flex) + region + log — cards-only; no view toggle (table is md+ only). */
   podTripsLikeToolbar: {
     flexDirection: "row",
     alignItems: "center",
     width: "100%",
     minWidth: 0,
-    gap: 12,
+    gap: 16,
   },
   podTripsLikeSearchWrap: {
     flexDirection: "row",
@@ -2054,40 +2020,10 @@ const styles = StyleSheet.create({
   podTripsLikeToolbarActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
     flexShrink: 0,
-  },
-  podTripsLikeChipRail: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexShrink: 0,
-    backgroundColor: Theme.darkSurface,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    gap: 3,
-  },
-  podTripsLikeChip: {
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-    borderRadius: 999,
   },
   podTripsLikeChipWeb: { cursor: "pointer" } as ViewStyle,
-  podTripsLikeChipActive: {
-    backgroundColor: "rgba(255,255,255,0.15)",
-  },
-  podTripsLikeChipText: {
-    fontSize: 8,
-    fontWeight: "500",
-    color: Theme.textOnDarkMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  podTripsLikeChipTextActive: {
-    color: Theme.textOnDark,
-  },
   podTripsLikeIconBtn: {
     width: 32,
     height: 32,
