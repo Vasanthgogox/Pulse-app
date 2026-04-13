@@ -280,7 +280,7 @@ export default function SignIn() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.screenBackground,
     padding: Layout.screenPaddingHorizontal + 8,
   },
   scrollContent: {
@@ -320,13 +320,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 34,
     fontWeight: '800',
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
     marginBottom: 8,
     letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 16,
-    color: Theme.authTextMuted,
+    color: Theme.textMuted,
     letterSpacing: 0.5,
   },
   languageRow: {
@@ -336,28 +336,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     marginBottom: 24,
     borderBottomWidth: 1,
-    borderBottomColor: Theme.authBorder,
+    borderBottomColor: Theme.border,
   },
   languageLabel: {
     fontSize: 14,
-    color: Theme.authTextMuted,
+    color: Theme.textMuted,
     marginLeft: 8,
   },
   languageValue: {
     flex: 1,
     fontSize: 15,
     fontWeight: '600',
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
     marginLeft: 4,
   },
   input: {
-    backgroundColor: Theme.authInputBg,
+    backgroundColor: Theme.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.authBorder,
+    borderColor: Theme.border,
     padding: 16,
     fontSize: 16,
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
     marginBottom: 16,
   },
   passwordRow: {
@@ -365,14 +365,14 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   inputPassword: {
-    backgroundColor: Theme.authInputBg,
+    backgroundColor: Theme.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.authBorder,
+    borderColor: Theme.border,
     padding: 16,
     paddingRight: 48,
     fontSize: 16,
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
   },
   eyeButton: {
     position: 'absolute',
@@ -391,7 +391,7 @@ const styles = StyleSheet.create({
   },
   keepSignedInLabel: {
     fontSize: 15,
-    color: Theme.authTextMuted,
+    color: Theme.textMuted,
     fontWeight: '500',
     flex: 1,
   },
@@ -420,7 +420,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 14,
     fontWeight: '500',
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
     textAlign: 'center',
   },
   footer: {
@@ -433,12 +433,12 @@ const styles = StyleSheet.create({
   },
   footerMuted: {
     fontSize: 14,
-    color: Theme.authTextMuted,
+    color: Theme.textMuted,
     fontWeight: '500',
   },
   footerLink: {
     fontSize: 14,
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
     fontWeight: '700',
   },
 });

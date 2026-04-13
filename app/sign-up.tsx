@@ -458,7 +458,7 @@ export default function SignUp() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.screenBackground,
     padding: Layout.screenPaddingHorizontal + 8,
   },
   scrollContent: {
@@ -495,19 +495,19 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 34,
     fontWeight: '800',
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
     marginBottom: 8,
     letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 16,
-    color: Theme.authTextMuted,
+    color: Theme.textMuted,
     letterSpacing: 0.5,
   },
   errorAlert: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: Theme.authSurface,
+    backgroundColor: Theme.surface,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.authPrimary + '80',
@@ -527,7 +527,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 12,
     fontWeight: '700',
-    color: Theme.authTextMuted,
+    color: Theme.textMuted,
     marginBottom: 12,
     letterSpacing: 1,
   },
@@ -541,8 +541,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.authBorder,
-    backgroundColor: Theme.authSurface,
+    borderColor: Theme.border,
+    backgroundColor: Theme.surface,
     alignItems: 'center',
   },
   modelChipActive: {
@@ -552,19 +552,19 @@ const styles = StyleSheet.create({
   modelChipText: {
     fontSize: 14,
     fontWeight: '600',
-    color: Theme.authTextMuted,
+    color: Theme.textMuted,
   },
   modelChipTextActive: {
     color: '#ffffff',
   },
   input: {
-    backgroundColor: Theme.authInputBg,
+    backgroundColor: Theme.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.authBorder,
+    borderColor: Theme.border,
     padding: 16,
     fontSize: 16,
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
     marginBottom: 16,
   },
   inputWrap: {
@@ -575,7 +575,7 @@ const styles = StyleSheet.create({
   },
   phoneExistsHint: {
     fontSize: 13,
-    color: Theme.authTextMuted,
+    color: Theme.textMuted,
     marginTop: -8,
     marginBottom: 12,
   },
@@ -601,14 +601,14 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   inputPassword: {
-    backgroundColor: Theme.authInputBg,
+    backgroundColor: Theme.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.authBorder,
+    borderColor: Theme.border,
     padding: 16,
     paddingRight: 48,
     fontSize: 16,
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
   },
   eyeButton: {
     position: 'absolute',
@@ -648,12 +648,12 @@ const styles = StyleSheet.create({
   },
   footerMuted: {
     fontSize: 14,
-    color: Theme.authTextMuted,
+    color: Theme.textMuted,
     fontWeight: '500',
   },
   footerLink: {
     fontSize: 14,
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
     fontWeight: '700',
   },
 });
