@@ -104,6 +104,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
   const [phoneValidationError, setPhoneValidationError] = useState<string | null>(null);
   const [emergencyPhoneValidationError, setEmergencyPhoneValidationError] = useState<string | null>(null);
   const [selectedMatchUserId, setSelectedMatchUserId] = useState<string | null>(null);
+  const [fleetWarningMatch, setFleetWarningMatch] = useState<ExistingDriverMatch | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const searchIdRef = useRef(0);
 
@@ -144,6 +145,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
       setPhoneValidationError(null);
       setEmergencyPhoneValidationError(null);
       setSelectedMatchUserId(null);
+      setFleetWarningMatch(null);
       setImportLoading(false);
     }
   }, [visible]);
@@ -207,6 +209,13 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
   const reviewUseInvite = Boolean(onComplete) && existingMatches.length > 0;
 
   const handleNext = () => {
+    if (step.id === 'driver') {
+      const inFleetMatch = existingMatches.find((m) => m.is_in_fleet === true) ?? null;
+      if (inFleetMatch) {
+        setFleetWarningMatch(inFleetMatch);
+        return;
+      }
+    }
     if (isReview) {
       setError(null);
       setSubmitting(true);
@@ -392,6 +401,10 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
                         selectedMatchUserId === match.user_id && styles.existingItemSelected,
                       ]}
                       onPress={() => {
+                        if (inFleet) {
+                          setFleetWarningMatch(match);
+                          return;
+                        }
                         setFormData((p) => ({
                           ...p,
                           phone: match.phone,
@@ -418,6 +431,11 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
                       >
                         {inFleet ? t('existingDriverInFleet') : t('existingDriverNotInFleet')}
                       </Text>
+                      {inFleet ? (
+                        <Text style={styles.existingFleetStatusDetail}>
+                          {t('existingDriverInFleetDetail')}
+                        </Text>
+                      ) : null}
                     </TouchableOpacity>
                   );
                 })}
@@ -546,35 +564,86 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
         return (
           <ScrollView style={styles.reviewScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <View style={styles.reviewCard}>
-              <Text style={styles.reviewName}>{formData.name || 'New Driver'}</Text>
-              <Text style={styles.reviewSub}>
-                {formData.driverSource === 'organization' ? t('organizationDriver') : t('partnerDriver')}
-              </Text>
-              <Text style={styles.reviewSub}>Pending Invitation</Text>
-              <Text style={[styles.reviewSub, { marginTop: 8 }]}>{formData.phone}</Text>
-              {formData.email ? <Text style={styles.reviewSub}>{formData.email}</Text> : null}
-              {formData.licenseNumber ? (
-                <Text style={styles.reviewSub}>License: {formData.licenseNumber}</Text>
-              ) : null}
-              {(formData.payableAmount != null && formData.payableAmount > 0) ||
-              (formData.commissionPercent != null && formData.commissionPercent > 0) ||
-              (formData.commissionPerKm != null && formData.commissionPerKm > 0) ? (
-                <View style={styles.emergencyReview}>
-                  <Text style={styles.reviewLabel}>Offer</Text>
-                  <Text style={styles.reviewValue}>
-                    {formData.payableAmount != null && formData.payableAmount > 0 && `Salary: ₹${formData.payableAmount.toLocaleString('en-IN')} `}
-                    {formData.commissionPercent != null && formData.commissionPercent > 0 && `Commission: ${formData.commissionPercent}% `}
-                    {formData.commissionPerKm != null && formData.commissionPerKm > 0 && `Per km: ₹${formData.commissionPerKm}/km`}
-                  </Text>
+              <View style={styles.reviewHeader}>
+                <View style={styles.reviewAvatar}>
+                  <FontAwesome name="user" size={24} color={Theme.textMutedDemo} />
                 </View>
-              ) : null}
+                <View style={styles.reviewHeaderContent}>
+                  <Text style={styles.reviewName}>{formData.name || 'New Driver'}</Text>
+                  <Text style={styles.reviewSub}>
+                    {formData.driverSource === 'organization' ? t('organizationDriver') : t('partnerDriver')}
+                  </Text>
+                  {reviewUseInvite && (
+                    <View style={styles.pendingBadge}>
+                      <Text style={styles.pendingBadgeText}>Pending Invitation</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              <View style={styles.reviewDivider} />
+
+              <View style={styles.reviewSection}>
+                <View style={styles.reviewRow}>
+                  <FontAwesome name="phone" size={14} color={Theme.textMutedDemo} style={styles.reviewIcon} />
+                  <Text style={styles.reviewValue}>{formData.phone}</Text>
+                </View>
+                {formData.email ? (
+                  <View style={styles.reviewRow}>
+                    <FontAwesome name="envelope" size={14} color={Theme.textMutedDemo} style={styles.reviewIcon} />
+                    <Text style={styles.reviewValue}>{formData.email}</Text>
+                  </View>
+                ) : null}
+                {formData.licenseNumber ? (
+                  <View style={styles.reviewRow}>
+                    <FontAwesome name="id-card" size={14} color={Theme.textMutedDemo} style={styles.reviewIcon} />
+                    <Text style={styles.reviewValue}>DL: {formData.licenseNumber}</Text>
+                  </View>
+                ) : null}
+              </View>
+
+              {((formData.payableAmount != null && formData.payableAmount > 0) ||
+                (formData.commissionPercent != null && formData.commissionPercent > 0) ||
+                (formData.commissionPerKm != null && formData.commissionPerKm > 0)) && (
+                <>
+                  <View style={styles.reviewDivider} />
+                  <View style={styles.reviewSection}>
+                    <Text style={styles.reviewLabel}>Offer</Text>
+                    {formData.payableAmount != null && formData.payableAmount > 0 && (
+                      <View style={styles.reviewOfferRow}>
+                        <Text style={styles.reviewOfferLabel}>Salary</Text>
+                        <Text style={styles.reviewOfferValue}>₹{formData.payableAmount.toLocaleString('en-IN')}</Text>
+                      </View>
+                    )}
+                    {formData.commissionPercent != null && formData.commissionPercent > 0 && (
+                      <View style={styles.reviewOfferRow}>
+                        <Text style={styles.reviewOfferLabel}>Commission</Text>
+                        <Text style={styles.reviewOfferValue}>{formData.commissionPercent}%</Text>
+                      </View>
+                    )}
+                    {formData.commissionPerKm != null && formData.commissionPerKm > 0 && (
+                      <View style={styles.reviewOfferRow}>
+                        <Text style={styles.reviewOfferLabel}>Per km</Text>
+                        <Text style={styles.reviewOfferValue}>₹{formData.commissionPerKm}/km</Text>
+                      </View>
+                    )}
+                  </View>
+                </>
+              )}
+
               {(formData.emergencyName || formData.emergencyContact) && (
-                <View style={styles.emergencyReview}>
-                  <Text style={styles.reviewLabel}>{t('emergencyContactLabel')}</Text>
-                  <Text style={styles.reviewValue}>
-                    {formData.emergencyName} - {formData.emergencyContact}
-                  </Text>
-                </View>
+                <>
+                  <View style={styles.reviewDivider} />
+                  <View style={styles.reviewSection}>
+                    <Text style={styles.reviewLabel}>{t('emergencyContactLabel')}</Text>
+                    <View style={styles.reviewRow}>
+                      <FontAwesome name="heart" size={14} color={Theme.negative} style={styles.reviewIcon} />
+                      <Text style={styles.reviewValue}>
+                        {formData.emergencyName} - {formData.emergencyContact}
+                      </Text>
+                    </View>
+                  </View>
+                </>
               )}
             </View>
             {onAddDriver && (
@@ -616,6 +685,42 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
   };
 
   if (visible === false) return null;
+
+  const fleetWarningModal = (
+    <Modal
+      transparent
+      animationType="fade"
+      visible={fleetWarningMatch != null}
+      onRequestClose={() => setFleetWarningMatch(null)}
+    >
+      <View style={styles.fleetWarningBackdrop}>
+        <View style={styles.fleetWarningCard}>
+          <View style={styles.fleetWarningIconWrap}>
+            <FontAwesome name="exclamation-triangle" size={18} color={Theme.negative} />
+          </View>
+          <Text style={styles.fleetWarningEyebrow}>Action needed</Text>
+          <Text style={styles.fleetWarningTitle}>{t('existingDriverInFleet')}</Text>
+          <Text style={styles.fleetWarningBody}>
+            {t('existingDriverInFleetDetail')}
+          </Text>
+          {fleetWarningMatch?.full_name ? (
+            <View style={styles.fleetWarningDriverChip}>
+              <Text style={styles.fleetWarningDriverName}>
+                Driver: {fleetWarningMatch.full_name}
+              </Text>
+            </View>
+          ) : null}
+          <TouchableOpacity
+            style={styles.fleetWarningActionBtn}
+            onPress={() => setFleetWarningMatch(null)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.fleetWarningActionText}>OK</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
 
   if (visible === true) {
     const windowHeight = Dimensions.get('window').height;
@@ -688,6 +793,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
               </View>
             </View>
           </View>
+          {fleetWarningModal}
         </KeyboardAvoidingView>
       </Modal>
     );
@@ -715,6 +821,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
       footerRightTestID={isReview ? 'invite-submit-btn' : undefined}
     >
       {renderStep()}
+      {fleetWarningModal}
     </WizardStepLayout>
   );
 }
@@ -859,6 +966,95 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.2,
   },
+  existingFleetStatusDetail: {
+    fontSize: 11,
+    marginTop: 4,
+    color: Theme.textSecondary,
+    lineHeight: 16,
+  },
+  fleetWarningBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  fleetWarningCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    alignItems: 'center',
+  },
+  fleetWarningIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(244,63,94,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  fleetWarningTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    textAlign: 'center',
+  },
+  fleetWarningEyebrow: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Theme.negative,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  fleetWarningBody: {
+    marginTop: 8,
+    fontSize: 12,
+    lineHeight: 18,
+    color: Theme.textSecondary,
+    textAlign: 'center',
+  },
+  fleetWarningDriverChip: {
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: Theme.surfaceLight,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  fleetWarningDriverName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+    textAlign: 'center',
+  },
+  fleetWarningActionBtn: {
+    marginTop: 16,
+    width: '100%',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: 'rgba(244,63,94,0.14)',
+    borderWidth: 1,
+    borderColor: Theme.negative,
+    alignItems: 'center',
+  },
+  fleetWarningActionText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: Theme.negative,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
   input: {
     borderWidth: 1,
     borderRadius: 14,
@@ -871,17 +1067,81 @@ const styles = StyleSheet.create({
   emergencyBox: { gap: 12 },
   reviewScroll: { flex: 1 },
   reviewCard: {
-    padding: 16,
     borderRadius: 16,
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     marginBottom: 12,
+    overflow: 'hidden',
   },
-  reviewName: { fontSize: 14, fontWeight: '700', color: Theme.textPrimaryDark, textTransform: 'uppercase' },
-  reviewSub: { fontSize: 12, color: Theme.textMutedDemo },
-  reviewLabel: { fontSize: 10, color: Theme.textMutedDemo, marginTop: 8, textTransform: 'uppercase' },
-  reviewValue: { fontSize: 14, color: Theme.textPrimary },
+  reviewHeader: {
+    flexDirection: 'row',
+    padding: 16,
+    alignItems: 'center',
+    gap: 16,
+    backgroundColor: Theme.surfaceLight,
+  },
+  reviewAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Theme.surfaceBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reviewHeaderContent: {
+    flex: 1,
+  },
+  reviewName: { fontSize: 16, fontWeight: '700', color: Theme.textPrimaryDark, textTransform: 'uppercase' },
+  reviewSub: { fontSize: 12, color: Theme.textMutedDemo, marginTop: 2 },
+  pendingBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: Theme.warningMuted,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginTop: 6,
+  },
+  pendingBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Theme.warning,
+    textTransform: 'uppercase',
+  },
+  reviewDivider: {
+    height: 1,
+    backgroundColor: Theme.borderLight,
+  },
+  reviewSection: {
+    padding: 16,
+    gap: 12,
+  },
+  reviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  reviewIcon: {
+    width: 16,
+    textAlign: 'center',
+  },
+  reviewLabel: { fontSize: 10, color: Theme.textMutedDemo, textTransform: 'uppercase', fontWeight: '700', letterSpacing: 0.5, marginBottom: -4 },
+  reviewValue: { fontSize: 14, color: Theme.textPrimary, fontWeight: '500' },
+  reviewOfferRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  reviewOfferLabel: {
+    fontSize: 13,
+    color: Theme.textSecondary,
+  },
+  reviewOfferValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Theme.textPrimaryDark,
+  },
   emergencyReview: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: Theme.borderLight },
   addDriverBtn: {
     alignSelf: 'stretch',

@@ -1111,16 +1111,16 @@ export function LoadCenterView({
     }
   }, [deployOtpCode, handshakeStep]);
 
-  /** Keep FAB above the floating demo tab bar (same offset pattern as Trips screen). */
+  /** Keep FAB above the floating demo tab bar + safe area insets. */
   const hirePartnerFabBottom =
     Layout.demoTabBarScrollBottomInset +
     insets.bottom +
     Layout.tabBarBottomPaddingMin;
   const paddingBottom = useMemo(() => {
-    const base = 24 + Layout.tabBarHeight + insets.bottom + 24;
+    const base = 24 + Layout.demoTabBarScrollBottomInset + insets.bottom + 24;
     if (loadSubTab !== "GIVE_LOAD") return base;
-    return base + Layout.fabSize + Layout.fabBottomOffset;
-  }, [insets.bottom, loadSubTab]);
+    return hirePartnerFabBottom + Layout.fabSize + Layout.fabBottomOffset;
+  }, [hirePartnerFabBottom, insets.bottom, loadSubTab]);
   const statusTabsForRole = useMemo(() => {
     return isClaimedTab
       ? STATUS_TABS.filter((t) => t.id === "AWARDED")
@@ -4159,6 +4159,7 @@ const styles = StyleSheet.create({
     marginTop: 28,
     width: "100%",
     alignSelf: "stretch",
+    marginBottom: 16,
   },
   bidIndentCard: {
     backgroundColor: Theme.screenBackground,
@@ -4199,6 +4200,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
+    gap: 10,
     marginBottom: 14,
   },
   bidIndentCardTopLeft: {
@@ -4209,6 +4211,7 @@ const styles = StyleSheet.create({
   bidIndentCardTopRight: {
     flexShrink: 0,
     alignItems: "flex-end",
+    minWidth: 116,
     maxWidth: "42%",
   },
   bidIndentCardOrg: {
@@ -4283,6 +4286,8 @@ const styles = StyleSheet.create({
   },
   bidIndentSpecValue: {
     flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
     textAlign: "right",
     fontSize: 13,
     fontWeight: "600",
@@ -4321,6 +4326,7 @@ const styles = StyleSheet.create({
   bidInputBlock: {
     width: "100%",
     alignSelf: "stretch",
+    marginTop: 6,
     marginBottom: 24,
   },
   quoteLabel: {

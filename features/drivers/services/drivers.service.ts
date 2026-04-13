@@ -1254,6 +1254,25 @@ export async function rejectDriverInvite(
 }
 
 /**
+ * Cancel a driver invite that you have sent.
+ * Deletes the pending invite row.
+ */
+export async function cancelDriverInvite(inviteId: string): Promise<{
+  error: Error | null;
+  deleted: boolean;
+}> {
+  const { data: deleteData, error } = await supabase()
+    .from("driver_invites")
+    .delete()
+    .eq("id", inviteId)
+    .eq("status", "pending")
+    .select("id");
+  if (error) return { error: new Error(error.message), deleted: false };
+  const deleted = Array.isArray(deleteData) && deleteData.length > 0;
+  return { error: null, deleted };
+}
+
+/**
  * Leave a fleet (set driver's left_at for that org). Requires RPC leave_fleet in Q-unified-base.
  * Driver must be linked to current user; after success the connection appears in passbook history.
  */

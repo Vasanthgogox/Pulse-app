@@ -326,3 +326,22 @@ export async function rejectConnectionRequest(requestId: string): Promise<{
   const updated = Array.isArray(updateData) && updateData.length > 0;
   return { error: null, updated };
 }
+
+/**
+ * Cancel a connection request that you have sent (caller must be member of from_organization_id).
+ * Deletes the request so it can be re-sent later if needed. Only works when status is pending.
+ */
+export async function cancelConnectionRequest(requestId: string): Promise<{
+  error: Error | null;
+  deleted: boolean;
+}> {
+  const { data: deleteData, error } = await supabase()
+    .from('connection_requests')
+    .delete()
+    .eq('id', requestId)
+    .eq('status', 'pending')
+    .select('id');
+  if (error) return { error: new Error(error.message), deleted: false };
+  const deleted = Array.isArray(deleteData) && deleteData.length > 0;
+  return { error: null, deleted };
+}
