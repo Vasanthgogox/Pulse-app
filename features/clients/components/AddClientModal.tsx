@@ -127,6 +127,7 @@ export function AddClientModal({
   const phoneError = phone.trim() ? validatePhone(phone.trim()) : null;
   const canSubmit =
     !blockedByNoOrg &&
+    organizationName.trim().length > 0 &&
     contactPerson.trim().length > 0 &&
     phone.trim().length > 0 &&
     !phoneError &&
@@ -304,7 +305,7 @@ export function AddClientModal({
           style={[styles.ledgerFieldBlock, styles.ledgerFieldBlockCol]}
           onPress={() => orgInputRef.current?.focus()}
         >
-          <Text style={styles.ledgerFieldLabelCol}>ORGANIZATION</Text>
+          <Text style={styles.ledgerFieldLabelCol}>ORGANIZATION *</Text>
           <TextInput
             ref={orgInputRef}
             style={styles.ledgerFieldInput}
@@ -566,7 +567,10 @@ export function AddClientModal({
                 onPress={() => orgInputRef.current?.focus()}
                 style={styles.screenFieldCard}
               >
-                <Text style={styles.screenInputLabel}>{t("organizationName")}</Text>
+                <Text style={styles.screenInputLabel}>
+                  {t("organizationName")}{" "}
+                  <Text style={styles.screenRequiredMark}>*</Text>
+                </Text>
                 <TextInput
                   ref={orgInputRef}
                   style={styles.screenInput}

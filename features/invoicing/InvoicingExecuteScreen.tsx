@@ -16,7 +16,7 @@ import {
 } from "@/lib/queries/useInvoicingExecuteQueries";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     Alert,
     FlatList,
@@ -179,19 +179,35 @@ export function InvoicingExecuteScreen() {
     return selectedTripIds.map((id) => tripsById.get(id)).filter(Boolean);
   }, [tripsById, selectedTripIds]);
 
-  const invoiceableTrips = useMemo(() => clientTrips, [clientTrips]);
+  const invoiceableTrips = useMemo(
+    () => clientTrips.filter((t) => t.status === "approved"),
+    [clientTrips],
+  );
   const allClientTripsSelected =
     invoiceableTrips.length > 0 &&
     invoiceableTrips.every((t) => selectedTripIds.includes(t.id));
 
+  useEffect(() => {
+    const allowedIds = new Set(invoiceableTrips.map((t) => t.id));
+    setSelectedTripIds((prev) => prev.filter((id) => allowedIds.has(id)));
+  }, [invoiceableTrips]);
+
   const handleToggleTrip = useCallback((id: string) => {
+    const trip = tripsById.get(id);
+    if (!trip || trip.status !== "approved") {
+      Alert.alert(
+        "Not invoiceable",
+        "Only trips with Approved status can be selected for invoice issuance.",
+      );
+      return;
+    }
     setSelectedTripIds((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
     );
-  }, []);
+  }, [tripsById]);
 
   const handleSelectAll = useCallback(() => {
-    const invoiceableTrips = clientTrips;
+    const invoiceableTrips = clientTrips.filter((t) => t.status === "approved");
 
     if (invoiceableTrips.length === 0) {
       return;
@@ -289,7 +305,7 @@ export function InvoicingExecuteScreen() {
     }
     Alert.alert(
       "Bulk actions",
-      `${clientTrips.length} trip(s) in view · ${selectedTripIds.length} selected`,
+      `${invoiceableTrips.length}/${clientTrips.length} approved in view · ${selectedTripIds.length} selected`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -310,6 +326,7 @@ export function InvoicingExecuteScreen() {
     activeClient,
     clientTrips,
     selectedTripIds.length,
+    invoiceableTrips.length,
     handleSelectAll,
     exportTripsToCsv,
   ]);
@@ -607,6 +624,7 @@ export function InvoicingExecuteScreen() {
                 onSelectAll={handleSelectAll}
                 onToggleTrip={handleToggleTrip}
                 onBulkMenuPress={handleBulkActions}
+                isTripInvoiceable={(trip: any) => trip?.status === "approved"}
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
                 startDate={startDate}
@@ -704,6 +722,7 @@ export function InvoicingExecuteScreen() {
                     onSelectAll={handleSelectAll}
                     onToggleTrip={handleToggleTrip}
                     onBulkMenuPress={handleBulkActions}
+                    isTripInvoiceable={(trip: any) => trip?.status === "approved"}
                     searchQuery={searchQuery}
                     setSearchQuery={setSearchQuery}
                     startDate={startDate}
@@ -790,6 +809,7 @@ function TripListContent({
   onSelectAll,
   onToggleTrip,
   onBulkMenuPress,
+  isTripInvoiceable,
   searchQuery,
   setSearchQuery,
   isRefetching,
@@ -964,6 +984,7 @@ function TripListContent({
           </View>
         }
         renderItem={({ item: trip }) => {
+          const isInvoiceable = Boolean(isTripInvoiceable?.(trip));
           const isSelected = selectedTripIds.includes(trip.id);
           if (!isDesktopTripTable) {
             return (
@@ -971,6 +992,7 @@ function TripListContent({
                 style={[
                   styles.tripCardMobile,
                   isSelected && styles.tripCardMobileSelected,
+                  !isInvoiceable && styles.tripRowDisabled,
                 ]}
                 onPress={() => onToggleTrip(trip.id)}
               >
@@ -1012,6 +1034,11 @@ function TripListContent({
                     <Text style={styles.listTagPending}>Pending</Text>
                   )}
                 </View>
+                {!isInvoiceable ? (
+                  <Text style={styles.nonInvoiceableHint}>
+                    Only approved trips can be issued as invoice.
+                  </Text>
+                ) : null}
               </Pressable>
             );
           }
@@ -1020,6 +1047,7 @@ function TripListContent({
               style={[
                 styles.tripTableRow,
                 isSelected && styles.tripTableRowSelected,
+                !isInvoiceable && styles.tripRowDisabled,
               ]}
               onPress={() => onToggleTrip(trip.id)}
             >
@@ -1028,6 +1056,7 @@ function TripListContent({
                   style={[
                     styles.checkBox,
                     isSelected && styles.checkBoxOn,
+                    !isInvoiceable && styles.checkBoxDisabled,
                   ]}
                 >
                   {isSelected && (
@@ -1725,6 +1754,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   tripTableRowSelected: { backgroundColor: "rgba(26,35,126,0.03)" },
+  tripRowDisabled: { opacity: 0.6 },
   tripCardMobile: {
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
@@ -1749,6 +1779,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  nonInvoiceableHint: {
+    marginTop: 8,
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+  },
 
   checkBox: {
     width: 16,
@@ -1760,6 +1797,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   checkBoxOn: { backgroundColor: Theme.primary, borderColor: Theme.primary },
+  checkBoxDisabled: {
+    backgroundColor: Theme.surfaceBorder,
+    borderColor: Theme.borderLight,
+  },
 
   tripDate: { fontSize: 11, fontWeight: "800", color: Theme.textPrimaryDark },
   tripId: {
