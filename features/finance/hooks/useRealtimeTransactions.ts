@@ -4,6 +4,10 @@
 import { useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 
+function uniqueTopic(base: string) {
+  return `${base}:${Math.random().toString(36).slice(2, 10)}`;
+}
+
 /** Subscribe to transactions for an organization; call onInvalidate when any change (refetch once). */
 export function useRealtimeTransactions(organizationId: string | null, onInvalidate: () => void) {
   const onInvalidateRef = useRef(onInvalidate);
@@ -12,7 +16,7 @@ export function useRealtimeTransactions(organizationId: string | null, onInvalid
   useEffect(() => {
     if (!organizationId) return;
     const channel = supabase()
-      .channel(`transactions:${organizationId}`)
+      .channel(uniqueTopic(`transactions:${organizationId}`))
       .on(
         'postgres_changes',
         {
