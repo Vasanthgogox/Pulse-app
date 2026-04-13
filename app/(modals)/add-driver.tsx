@@ -45,7 +45,7 @@ export default function AddDriverScreen() {
       );
       return;
     }
-    closeModal(router as CloseModalRouter);
+    // Invite sent in-app: modal onClose runs after onComplete resolves.
   };
 
   /** Add Driver (direct) — creates driver row without invite wording. */
@@ -55,7 +55,7 @@ export default function AddDriverScreen() {
     const { error } = await createDriver(orgId, data);
     if (error) throw error;
     await queryClient.refetchQueries({ queryKey: queryKeys.drivers.all(orgId) });
-    closeModal(router as CloseModalRouter);
+    // Dismiss: AddDriverModal calls onClose after this promise resolves — avoid double navigation.
   };
 
   return (
