@@ -1200,7 +1200,7 @@ export function LoadCenterView({
 
     return (
       <TouchableOpacity
-        style={styles.awardedCard}
+        style={styles.loadCard}
         onPress={() => onIndentPress(load)}
         activeOpacity={0.7}
       >

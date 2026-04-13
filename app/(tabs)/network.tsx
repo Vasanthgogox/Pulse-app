@@ -1297,6 +1297,13 @@ export default function NetworkScreen() {
                         !isLargeScreen && styles.networkCardElevated,
                       ]}
                     >
+                      <View style={styles.networkCardCornerChevron}>
+                        <FontAwesome
+                          name="chevron-right"
+                          size={12}
+                          color={Theme.textMuted}
+                        />
+                      </View>
                       <View
                         style={styles.networkCardOrb}
                         pointerEvents="none"
@@ -1357,28 +1364,7 @@ export default function NetworkScreen() {
                               </Text>
                             </View>
                           </View>
-                          <View style={styles.networkCardTopRight}>
-                            <View
-                              style={[styles.networkStagePill, stagePillStyle]}
-                            >
-                              <Text
-                                style={[
-                                  styles.networkStagePillText,
-                                  node.status === "DISCONNECTED"
-                                    ? styles.networkStagePillTextDark
-                                    : null,
-                                ]}
-                              >
-                                {stageLabel}
-                              </Text>
-                            </View>
-                            <FontAwesome
-                              name="chevron-right"
-                              size={12}
-                              color={Theme.textMuted}
-                              style={styles.networkCardChevron}
-                            />
-                          </View>
+                          <View style={styles.networkCardTopRight} />
                         </View>
                         <Text style={styles.networkCardTitle} numberOfLines={2}>
                           {node.name}
@@ -2139,6 +2125,7 @@ const styles = StyleSheet.create({
   networkCardBody: {
     flex: 1,
     minWidth: 0,
+    position: "relative",
   },
   networkCardTop: {
     flexDirection: "row",
@@ -2153,13 +2140,22 @@ const styles = StyleSheet.create({
     gap: 6,
     flex: 1,
     minWidth: 0,
+    paddingRight: 18,
   },
   networkCardTopRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
+    position: "absolute",
+    top: 0,
+    right: 0,
+    alignItems: "flex-end",
+    justifyContent: "flex-start",
   },
-  networkCardChevron: { marginLeft: 2 },
+  networkCardChevron: { marginLeft: 0 },
+  networkCardCornerChevron: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    zIndex: 3,
+  },
   networkTypePill: {
     paddingHorizontal: 6,
     paddingVertical: 3,
