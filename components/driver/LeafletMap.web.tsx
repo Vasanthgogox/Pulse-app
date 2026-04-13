@@ -1,7 +1,6 @@
 // components/driver/LeafletMap.web.tsx
 import React, { useEffect, useRef } from "react";
 import { View, type StyleProp, type ViewStyle } from "react-native";
-import "leaflet/dist/leaflet.css";
 
 // Declare L as any global for now to avoid TS errors before dynamic import
 declare const L: any;
@@ -52,6 +51,15 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
     useEffect(() => {
       if (typeof window === "undefined" || !mapContainerRef.current || mapRef.current) {
         return;
+      }
+
+      // Inject Leaflet CSS if not already present
+      if (!document.getElementById("leaflet-css")) {
+        const link = document.createElement("link");
+        link.id = "leaflet-css";
+        link.rel = "stylesheet";
+        link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+        document.head.appendChild(link);
       }
 
       // Dynamically import Leaflet only in the browser
