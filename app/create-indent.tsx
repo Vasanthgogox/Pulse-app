@@ -775,7 +775,7 @@ export default function CreateIndentScreen() {
           ) : null}
 
           <View style={styles.sheetSection}>
-            <Text style={styles.sheetLabel}>Budget Specification (₹)</Text>
+            <Text style={styles.sheetLabel}>Client Rate (₹)</Text>
             <TextInput
               style={[styles.sheetInput, errors.client_price && styles.inputError]}
               value={form.client_price}
