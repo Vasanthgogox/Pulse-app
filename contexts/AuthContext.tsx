@@ -253,6 +253,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!result.error) {
       setSessionExpired(false);
       await setKeepSignedIn(keepSignedIn);
+      // Wait for the session state to be fully populated before returning,
+      // ensuring the redirect doesn't hit an empty state and bounce back.
+      await refreshSession();
     }
     return result;
   };
@@ -266,7 +269,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     phone?: string,
     companyName?: string,
   ) => {
-    return authService.signUp({
+    const result = await authService.signUp({
       email,
       password,
       fullName,
@@ -275,6 +278,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role,
       operatingModel,
     });
+    if (!result.error) {
+      await refreshSession();
+    }
+    return result;
   };
 
   const refreshSession = async () => {

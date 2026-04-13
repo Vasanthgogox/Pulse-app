@@ -40,7 +40,7 @@ function getEmailFromParams(params: { email?: string | string[] }): string {
 export default function SignIn() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ email?: string | string[] }>();
-  const { signIn } = useAuth();
+  const { signIn, user } = useAuth();
   const { t, locale, localeOptions } = useLanguage();
   const isOnline = useIsOnline();
   const router = useRouter();
@@ -65,6 +65,13 @@ export default function SignIn() {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    // Automatically redirect to home if the user is already or becomes logged in.
+    if (user) {
+      router.replace('/');
+    }
+  }, [user, router]);
 
   useEffect(() => {
     const next = getEmailFromParams(params);
@@ -124,7 +131,7 @@ export default function SignIn() {
       );
       return;
     }
-    router.replace('/');
+    // Navigation is handled automatically by the useEffect watching `user`
   };
 
   const scrollContentStyle = [
