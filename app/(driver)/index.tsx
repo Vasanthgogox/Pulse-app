@@ -2231,14 +2231,6 @@ export default function DriverRadarScreen() {
         color: Theme.primary,
       },
     ];
-    if (truckPosition) {
-      leafletMarkers.push({
-        id: "truck",
-        coordinate: truckPosition,
-        label: "Truck",
-        color: "#111827",
-      });
-    }
     if (pickup) {
       leafletMarkers.push({
         id: "pickup",
@@ -2351,25 +2343,6 @@ export default function DriverRadarScreen() {
                 </Callout>
               </OlaAnimatedMarker>
             ) : null}
-
-            {enableDriverMapAnimations && truckPosition && (
-              <Marker
-                coordinate={truckPosition}
-                anchor={{ x: 0.5, y: 0.5 }}
-              >
-                <View style={styles.customMapMarkerTruck}>
-                  <FontAwesome name="truck" size={14} color={Theme.textOnPrimary} />
-                </View>
-                <Callout tooltip>
-                  <View style={[styles.assignedMapCallout, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                    <Text style={[styles.assignedMapCalloutTitle, { color: colors.text }]}>Truck</Text>
-                    <Text style={[styles.assignedMapCalloutSub, { color: colors.textMuted }]} numberOfLines={2}>
-                      {activeGuidanceStep === 'transit' ? 'Moving to drop-off' : 'On trip'}
-                    </Text>
-                  </View>
-                </Callout>
-              </Marker>
-            )}
 
             {shouldShowMap && (effectiveFirstIncoming || activeMission) && (
               <>
