@@ -22,7 +22,9 @@ import {
   createConnectionRequest,
   getConnectionInviteeByPhone,
   rejectConnectionRequest,
+  cancelConnectionRequest,
 } from "@/services/connectionRequestsService";
+import { cancelDriverInvite } from "@/features/drivers/services/drivers.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { Building2, CircleCheck, Truck, User } from "lucide-react-native";
@@ -31,6 +33,7 @@ import {
   ActivityIndicator,
   Animated,
   Image,
+  Modal,
   Platform,
   RefreshControl,
   ScrollView,
@@ -486,6 +489,15 @@ export default function NetworkScreen() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actingRequestId, setActingRequestId] = useState<string | null>(null);
   const [sendingNodeId, setSendingNodeId] = useState<string | null>(null);
+  const [confirmCancelItem, setConfirmCancelItem] = useState<RequestItem | null>(
+    null,
+  );
+  const [acceptTermsItem, setAcceptTermsItem] = useState<RequestItem | null>(
+    null,
+  );
+  const [dismissedSentRequestIds, setDismissedSentRequestIds] = useState<
+    Record<string, true>
+  >({});
 
   const {
     data: clients = [],
@@ -635,6 +647,61 @@ export default function NetworkScreen() {
     triggerSyncToast();
   };
 
+  const handleOpenAcceptTerms = (item: RequestItem) => {
+    setAcceptTermsItem(item);
+  };
+
+  const confirmAcceptWithTerms = async () => {
+    if (!acceptTermsItem) return;
+    const item = acceptTermsItem;
+    setAcceptTermsItem(null);
+    await handleApprove(item.id);
+  };
+
+  const runCancelRequest = async (item: RequestItem) => {
+    setActionError(null);
+    setActingRequestId(item.id);
+    let err: Error | null = null;
+    let deleted = false;
+    if (item.kind === "DRIVER_INVITE") {
+      const res = await cancelDriverInvite(item.id);
+      err = res.error;
+      deleted = res.deleted;
+    } else {
+      const res = await cancelConnectionRequest(item.id);
+      err = res.error;
+      deleted = res.deleted;
+    }
+    if (err) {
+      setActingRequestId(null);
+      setActionError(err.message);
+      return;
+    }
+    if (!deleted) {
+      setActingRequestId(null);
+      setActionError(
+        "Could not cancel this invitation. It may have already been accepted or updated.",
+      );
+      return;
+    }
+    // Optimistic removal from list so card disappears immediately.
+    setDismissedSentRequestIds((prev) => ({ ...prev, [item.id]: true }));
+    invalidateNetwork();
+    triggerSyncToast();
+    setActingRequestId(null);
+  };
+
+  const handleCancelRequest = (item: RequestItem) => {
+    setConfirmCancelItem(item);
+  };
+
+  const confirmCancelRequest = async () => {
+    if (!confirmCancelItem) return;
+    const item = confirmCancelItem;
+    setConfirmCancelItem(null);
+    await runCancelRequest(item);
+  };
+
   const handleSendInviteOrRequest = useCallback(
     async (node: NetworkNode) => {
       if (!orgId) {
@@ -700,6 +767,7 @@ export default function NetworkScreen() {
 
   const filteredRequests = useMemo(() => {
     return requestItems.filter((item) => {
+      if (dismissedSentRequestIds[item.id]) return false;
       if (segment === "SENT" && item.type !== "SENT") return false;
       if (segment === "RECEIVED" && item.type !== "RECEIVED") return false;
       if (!searchQuery.trim()) return true;
@@ -708,7 +776,7 @@ export default function NetworkScreen() {
         item.type === "RECEIVED" ? item.from_org_name : item.to_org_name;
       return (displayName ?? "").toLowerCase().includes(q);
     });
-  }, [requestItems, searchQuery, segment]);
+  }, [dismissedSentRequestIds, requestItems, searchQuery, segment]);
 
   const pendingRequestCount = requestItems.filter(
     (item) => item.type === "RECEIVED" && item.status === "pending",
@@ -1009,6 +1077,8 @@ export default function NetworkScreen() {
                     : item.to_org_name;
                 const isReceivedPending =
                   item.type === "RECEIVED" && item.status === "pending";
+                const isSentPending =
+                  item.type === "SENT" && item.status === "pending";
                 const kindLabel =
                   item.kind === "DRIVER_INVITE"
                     ? "DRIVER INVITE"
@@ -1049,6 +1119,25 @@ export default function NetworkScreen() {
                               </View>
                             </View>
                             <View style={styles.networkCardTopRight}>
+                              {isSentPending ? (
+                                <TouchableOpacity
+                                  style={styles.cancelInlineBtn}
+                                  onPress={() => handleCancelRequest(item)}
+                                  disabled={actingRequestId === item.id}
+                                  activeOpacity={0.8}
+                                >
+                                  {actingRequestId === item.id ? (
+                                    <ActivityIndicator
+                                      size="small"
+                                      color={ROSE_500}
+                                    />
+                                  ) : (
+                                    <Text style={styles.cancelInlineBtnText}>
+                                      Cancel
+                                    </Text>
+                                  )}
+                                </TouchableOpacity>
+                              ) : null}
                               <View
                                 style={[
                                   styles.networkStagePill,
@@ -1129,7 +1218,7 @@ export default function NetworkScreen() {
                           <View style={styles.networkCardActionsCol}>
                             <TouchableOpacity
                               style={styles.acceptBtn}
-                              onPress={() => handleApprove(item.id)}
+                              onPress={() => handleOpenAcceptTerms(item)}
                               disabled={actingRequestId === item.id}
                               activeOpacity={0.8}
                             >
@@ -1450,6 +1539,139 @@ export default function NetworkScreen() {
       </View>
 
       {/* Add screens are full-screen routes to ensure exact parity. */}
+      <Modal
+        transparent
+        animationType="fade"
+        visible={confirmCancelItem != null}
+        onRequestClose={() => setConfirmCancelItem(null)}
+      >
+        <View style={styles.confirmModalBackdrop}>
+          <View style={styles.confirmModalCard}>
+            <Text style={styles.confirmModalTitle}>Cancel Invitation</Text>
+            <Text style={styles.confirmModalBody}>
+              Are you sure you want to cancel this invitation?
+            </Text>
+            <View style={styles.confirmModalActions}>
+              <TouchableOpacity
+                style={styles.confirmModalKeepBtn}
+                onPress={() => setConfirmCancelItem(null)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.confirmModalKeepText}>Keep</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmModalCancelBtn}
+                onPress={() => void confirmCancelRequest()}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.confirmModalCancelText}>Yes, Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        transparent
+        animationType="fade"
+        visible={acceptTermsItem != null}
+        onRequestClose={() => setAcceptTermsItem(null)}
+      >
+        <View
+          style={[
+            styles.confirmModalBackdrop,
+            {
+              paddingTop: Math.max(insets.top, 12),
+              paddingBottom: Math.max(insets.bottom, 12),
+            },
+          ]}
+        >
+          <View style={[styles.confirmModalCard, styles.termsModalCard]}>
+            <View style={styles.termsModalHeaderRow}>
+              <View style={styles.termsModalHeaderIcon}>
+                <CircleCheck
+                  size={16}
+                  strokeWidth={2}
+                  color={Theme.darkGreen}
+                />
+              </View>
+              <View style={styles.termsModalHeaderTextWrap}>
+                <Text style={styles.confirmModalTitle}>Accept Invitation</Text>
+                <Text style={styles.termsModalSubtitle}>
+                  Review terms before activating this connection.
+                </Text>
+              </View>
+            </View>
+            <ScrollView
+              style={styles.termsModalScroll}
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={styles.confirmModalBody}>
+                Please review and accept these Terms and Conditions before
+                continuing:
+              </Text>
+              <View style={styles.termsModalClauseCard}>
+                <Text style={styles.termsModalClause}>
+                  1. You confirm this organization invitation is legitimate and
+                  authorized by your company.
+                </Text>
+                <Text style={styles.termsModalClause}>
+                  2. Accepting this invitation creates an active business
+                  connection between both organizations.
+                </Text>
+                <Text style={styles.termsModalClause}>
+                  3. Shared data may include invoices, trip records, contact
+                  details, and related business metadata.
+                </Text>
+                <Text style={styles.termsModalClause}>
+                  4. You agree to use this connection lawfully and maintain
+                  confidentiality of shared information.
+                </Text>
+                <Text style={styles.termsModalClause}>
+                  5. Your organization remains responsible for actions performed
+                  by its authorized team members.
+                </Text>
+                <Text style={styles.termsModalClause}>
+                  6. Access can be revoked later using available controls and
+                  role permissions.
+                </Text>
+              </View>
+              <View style={styles.termsModalNotice}>
+                <Text style={styles.termsModalNoticeText}>
+                  By tapping Confirm, you acknowledge and agree to these terms
+                  on behalf of your organization.
+                </Text>
+              </View>
+            </ScrollView>
+            <View style={[styles.confirmModalActions, styles.termsModalActions]}>
+              <TouchableOpacity
+                style={styles.confirmModalKeepBtn}
+                onPress={() => setAcceptTermsItem(null)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.confirmModalKeepText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.confirmModalCancelBtn,
+                  actingRequestId === acceptTermsItem?.id
+                    ? styles.modalActionDisabled
+                    : null,
+                ]}
+                onPress={() => void confirmAcceptWithTerms()}
+                disabled={actingRequestId === acceptTermsItem?.id}
+                activeOpacity={0.8}
+              >
+                {actingRequestId === acceptTermsItem?.id ? (
+                  <ActivityIndicator size="small" color={ROSE_500} />
+                ) : (
+                  <Text style={styles.confirmModalCancelText}>Confirm</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -2066,7 +2288,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   networkCardActionsCol: {
-    justifyContent: "center",
+    justifyContent: "flex-end",
     alignItems: "flex-end",
     gap: 8,
     paddingLeft: 4,
@@ -2241,6 +2463,159 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#fff",
     letterSpacing: 0.2,
+  },
+  cancelInlineBtn: {
+    minWidth: 72,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: "rgba(244,63,94,0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(244,63,94,0.3)",
+  },
+  cancelInlineBtnText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: ROSE_500,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  confirmModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15,23,42,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  confirmModalCard: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 16,
+  },
+  termsModalCard: {
+    maxHeight: "88%",
+    paddingBottom: 12,
+  },
+  termsModalHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  termsModalHeaderIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  termsModalHeaderTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  termsModalSubtitle: {
+    marginTop: 4,
+    fontSize: 11,
+    color: Theme.textMuted,
+    lineHeight: 16,
+  },
+  termsModalScroll: {
+    marginTop: 8,
+    maxHeight: 280,
+  },
+  termsModalClauseCard: {
+    marginTop: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  termsModalClause: {
+    fontSize: 12,
+    color: Theme.textSecondary,
+    lineHeight: 18,
+    marginTop: 8,
+  },
+  termsModalNotice: {
+    marginTop: 12,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  termsModalNoticeText: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: Theme.textPrimaryDark,
+    fontWeight: "600",
+  },
+  confirmModalTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  confirmModalBody: {
+    fontSize: 12,
+    color: Theme.textSecondary,
+    marginTop: 8,
+    lineHeight: 18,
+  },
+  confirmModalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
+    marginTop: 16,
+  },
+  termsModalActions: {
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+    paddingTop: 12,
+    marginTop: 12,
+  },
+  confirmModalKeepBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    backgroundColor: Theme.surface,
+  },
+  confirmModalKeepText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+  },
+  confirmModalCancelBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(244,63,94,0.35)",
+    backgroundColor: "rgba(244,63,94,0.15)",
+  },
+  confirmModalCancelText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: ROSE_500,
+    textTransform: "uppercase",
+  },
+  modalActionDisabled: {
+    opacity: 0.65,
   },
   modalBackdrop: {
     flex: 1,
