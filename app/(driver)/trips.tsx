@@ -574,7 +574,7 @@ export default function DriverTripsScreen() {
             <FontAwesome name="search" size={14} color={colors.textMuted} />
             <TextInput
               style={[styles.searchInput, { color: colors.text }]}
-              placeholder="Search by BOL, Destination, or Trailer..."
+              placeholder="Search"
               placeholderTextColor={colors.textMuted}
               value={searchQuery}
               onChangeText={setSearchQuery}
