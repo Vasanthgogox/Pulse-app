@@ -5,9 +5,11 @@
  * When visible is true, shows as Ledger-style bottom-sheet popup; when undefined, full-screen wizard (e.g. route).
  */
 import { WizardStepLayout } from '@/components/WizardStepLayout';
+import { getAvatarUriForSeed } from '@/constants/DriverLevels';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { getSignedAvatarUrl } from '@/lib/avatarUpload';
 import { pickContactForNameAndPhone } from '@/lib/contactPicker';
 import { validatePhone } from '@/lib/phoneValidation';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -15,6 +17,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Dimensions,
+  Image,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -27,7 +30,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ExistingDriverMatch } from '../services/drivers.service';
-import { searchExistingDriversByPhone } from '../services/drivers.service';
+import { getDriverProfileAvatar, searchExistingDriversByPhone } from '../services/drivers.service';
 
 export type DriverSource = 'organization' | 'partner';
 
@@ -104,6 +107,8 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
   const [phoneValidationError, setPhoneValidationError] = useState<string | null>(null);
   const [emergencyPhoneValidationError, setEmergencyPhoneValidationError] = useState<string | null>(null);
   const [selectedMatchUserId, setSelectedMatchUserId] = useState<string | null>(null);
+  const [existingMatchAvatarByUserId, setExistingMatchAvatarByUserId] = useState<Record<string, string>>({});
+  const [avatarLoadFailedByUserId, setAvatarLoadFailedByUserId] = useState<Record<string, boolean>>({});
   const [fleetWarningMatch, setFleetWarningMatch] = useState<ExistingDriverMatch | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const searchIdRef = useRef(0);
@@ -145,10 +150,64 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
       setPhoneValidationError(null);
       setEmergencyPhoneValidationError(null);
       setSelectedMatchUserId(null);
+      setExistingMatchAvatarByUserId({});
+      setAvatarLoadFailedByUserId({});
       setFleetWarningMatch(null);
       setImportLoading(false);
     }
   }, [visible]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadExistingDriverAvatars = async () => {
+      if (existingMatches.length === 0) {
+        setExistingMatchAvatarByUserId({});
+        setAvatarLoadFailedByUserId({});
+        return;
+      }
+      const pairs = await Promise.all(
+        existingMatches.map(async (match) => {
+          const directAvatarUrl = (match.avatar_url ?? '').trim();
+          if (directAvatarUrl) {
+            if (directAvatarUrl.startsWith('http://') || directAvatarUrl.startsWith('https://')) {
+              return [match.user_id, directAvatarUrl] as const;
+            }
+            const directSignedUrl = await getSignedAvatarUrl(directAvatarUrl);
+            if (directSignedUrl) return [match.user_id, directSignedUrl] as const;
+          }
+
+          const directSeed = (match.avatar_seed ?? '').trim();
+          if (directSeed) return [match.user_id, getAvatarUriForSeed(directSeed)] as const;
+
+          const { avatar } = await getDriverProfileAvatar(match.user_id);
+          const avatarUrl = (avatar?.avatar_url ?? '').trim();
+          if (avatarUrl) {
+            if (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://')) {
+              return [match.user_id, avatarUrl] as const;
+            }
+            const signedUrl = await getSignedAvatarUrl(avatarUrl);
+            if (signedUrl) return [match.user_id, signedUrl] as const;
+          }
+          const avatarSeed = (avatar?.avatar_seed ?? '').trim();
+          if (avatarSeed) return [match.user_id, getAvatarUriForSeed(avatarSeed)] as const;
+          const userPathFallback = await getSignedAvatarUrl(match.user_id);
+          if (userPathFallback) return [match.user_id, userPathFallback] as const;
+          return [match.user_id, ''] as const;
+        }),
+      );
+      if (cancelled) return;
+      const next: Record<string, string> = {};
+      pairs.forEach(([userId, uri]) => {
+        if (uri) next[userId] = uri;
+      });
+      setExistingMatchAvatarByUserId(next);
+      setAvatarLoadFailedByUserId({});
+    };
+    loadExistingDriverAvatars();
+    return () => {
+      cancelled = true;
+    };
+  }, [existingMatches]);
 
   const step = STEPS[stepIndex];
 
@@ -393,6 +452,9 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
                 <Text style={styles.existingLabel}>{t('existingDriverOnPlatform')}</Text>
                 {existingMatches.map((match) => {
                   const inFleet = match.is_in_fleet === true;
+                  const avatarUri = existingMatchAvatarByUserId[match.user_id] ?? '';
+                  const avatarFailed = avatarLoadFailedByUserId[match.user_id] === true;
+                  const initial = (match.full_name || match.phone || 'D').trim().charAt(0).toUpperCase();
                   return (
                     <TouchableOpacity
                       key={match.user_id}
@@ -418,14 +480,34 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
                       }}
                       activeOpacity={0.7}
                     >
-                      <Text style={styles.existingItemName} numberOfLines={1}>
-                        {match.full_name || match.phone || 'Driver'}
-                      </Text>
-                      {match.phone ? (
-                        <Text style={styles.existingItemPhone} numberOfLines={1}>
-                          {match.phone}
-                        </Text>
-                      ) : null}
+                      <View style={styles.existingHeadRow}>
+                        <View style={styles.existingAvatar}>
+                          {avatarUri && !avatarFailed ? (
+                            <Image
+                              source={{ uri: avatarUri }}
+                              style={styles.existingAvatarImage}
+                              onError={() =>
+                                setAvatarLoadFailedByUserId((prev) => ({
+                                  ...prev,
+                                  [match.user_id]: true,
+                                }))
+                              }
+                            />
+                          ) : (
+                            <Text style={styles.existingAvatarInitial}>{initial}</Text>
+                          )}
+                        </View>
+                        <View style={styles.existingHeadInfo}>
+                          <Text style={styles.existingItemName} numberOfLines={1}>
+                            {match.full_name || match.phone || 'Driver'}
+                          </Text>
+                          {match.phone ? (
+                            <Text style={styles.existingItemPhone} numberOfLines={1}>
+                              {match.phone}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </View>
                       <Text
                         style={inFleet ? styles.existingFleetStatusInFleet : styles.existingFleetStatusNeutral}
                       >
@@ -938,6 +1020,35 @@ const styles = StyleSheet.create({
   existingItemSelected: {
     borderColor: Theme.primary,
     backgroundColor: Theme.surfaceLight,
+  },
+  existingHeadRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  existingAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceGray,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  existingAvatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  existingAvatarInitial: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+  },
+  existingHeadInfo: {
+    flex: 1,
+    minWidth: 0,
   },
   existingItemName: {
     fontSize: 14,

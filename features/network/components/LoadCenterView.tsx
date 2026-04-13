@@ -4,6 +4,7 @@
  */
 import { SemanticAddIcon } from "@/components/SemanticAddIcon";
 import { SubTabs } from "@/components/SubTabs";
+import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -28,6 +29,7 @@ import {
 } from "@/features/trips";
 import { formatINR } from "@/lib/format";
 import { validatePhone } from "@/lib/phoneValidation";
+import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
   useDirectQuoteCountsQuery,
   useDriversQuery,
@@ -53,6 +55,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -65,6 +68,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -110,6 +114,7 @@ export function LoadCenterView({
   onIndentPress,
 }: LoadCenterViewProps) {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const router = useRouter();
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
@@ -118,6 +123,9 @@ export function LoadCenterView({
   const [statusFilterTab, setStatusFilterTab] =
     useState<StatusFilterTab>("OPEN");
   const [searchQuery, setSearchQuery] = useState("");
+  const [loadAvatarByIndentId, setLoadAvatarByIndentId] = useState<
+    Record<string, string>
+  >({});
   const [showPostModal, setShowPostModal] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
@@ -190,6 +198,7 @@ export function LoadCenterView({
   const queryClient = useQueryClient();
 
   const isClaimedTab = loadSubTab === "AWARDED";
+  const useGridLayout = width >= 1024;
 
   /** O(myQuotes.length): map indent_id -> quote for Find Work "Quote Sent" / "Update quote" and modal prefill. */
   const myQuoteByIndentId = useMemo(() => {
@@ -557,6 +566,57 @@ export function LoadCenterView({
 
   const filteredFindWorkList =
     statusFilterTab === "DONE" ? filteredFindWorkDoneLoads : filteredFindWorkLoads;
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadCardAvatars = async () => {
+      if (filteredFindWorkList.length === 0) {
+        setLoadAvatarByIndentId({});
+        return;
+      }
+      const pairs = await Promise.all(
+        filteredFindWorkList.map(async (load) => {
+          const row = load as Record<string, unknown>;
+          const rawAvatarUrl = String(
+            row.creator_avatar_url ??
+              row.creatorAvatarUrl ??
+              row.avatar_url ??
+              row.avatarUrl ??
+              "",
+          ).trim();
+          if (rawAvatarUrl) {
+            if (
+              rawAvatarUrl.startsWith("http://") ||
+              rawAvatarUrl.startsWith("https://")
+            ) {
+              return [load.id, rawAvatarUrl] as const;
+            }
+            const signed = await getSignedAvatarUrl(rawAvatarUrl);
+            if (signed) return [load.id, signed] as const;
+          }
+          const rawSeed = String(
+            row.creator_avatar_seed ??
+              row.creatorAvatarSeed ??
+              row.avatar_seed ??
+              row.avatarSeed ??
+              "",
+          ).trim();
+          if (rawSeed) return [load.id, getAvatarUriForSeed(rawSeed)] as const;
+          return [load.id, ""] as const;
+        }),
+      );
+      if (cancelled) return;
+      const next: Record<string, string> = {};
+      pairs.forEach(([indentId, uri]) => {
+        if (uri) next[indentId] = uri;
+      });
+      setLoadAvatarByIndentId(next);
+    };
+    loadCardAvatars();
+    return () => {
+      cancelled = true;
+    };
+  }, [filteredFindWorkList]);
 
   const filteredClaimedLoads = useMemo(() => {
     return awardedLoads.filter((load) => loadMatchesSearch(load, searchQuery));
@@ -1140,22 +1200,25 @@ export function LoadCenterView({
 
     return (
       <TouchableOpacity
-        key={`${isDone ? "done" : "active"}-${load.id}`}
         style={styles.awardedCard}
         onPress={() => onIndentPress(load)}
         activeOpacity={0.7}
       >
         <View style={styles.awardedCardTop}>
-          <View style={styles.awardedBadge}>
-            <FontAwesome
-              name={isDone ? "check-circle" : "trophy"}
-              size={14}
-              color={isDone ? Theme.positive : Theme.driverGold}
-              style={{ marginRight: 6 }}
-            />
-            <Text style={styles.awardedBadgeText}>
-              {isDone ? "Deployed" : "Contract Claimed"}
-            </Text>
+          <View style={styles.loadPillRow}>
+            <View style={styles.loadTypePill}>
+              <Text style={styles.loadTypePillText}>CLAIMED</Text>
+            </View>
+            <View
+              style={[
+                styles.loadStatePill,
+                { backgroundColor: isDone ? Theme.positive : Theme.driverGold },
+              ]}
+            >
+              <Text style={styles.loadStatePillText}>
+                {isDone ? "DEPLOYED" : "AWARDED"}
+              </Text>
+            </View>
           </View>
           <Text style={styles.awardedId}>{getIndentDisplayNumber(load)}</Text>
         </View>
@@ -1374,7 +1437,8 @@ export function LoadCenterView({
                   </Text>
                 </View>
               ) : (
-                filteredHirePartnerLoads.map((load) => {
+                <View style={useGridLayout ? styles.gridList : undefined}>
+                  {filteredHirePartnerLoads.map((load) => {
                   const status = (load.status || "").toLowerCase();
                   const isAwardedPendingTrip =
                     status === "awarded" && !indentIdsWithTrip.has(load.id);
@@ -1388,33 +1452,43 @@ export function LoadCenterView({
                   const isAwaitingSupplierDeploy =
                     isAwardedPendingTrip || hasDirectSupplier;
                   return (
-                    <TouchableOpacity
-                      key={load.id}
-                      style={styles.loadCard}
-                      onPress={() => onIndentPress(load)}
-                      activeOpacity={0.7}
-                    >
+                    <View key={load.id} style={useGridLayout ? styles.gridCardWrap : undefined}>
+                      <TouchableOpacity
+                        style={styles.loadCard}
+                        onPress={() => onIndentPress(load)}
+                        activeOpacity={0.7}
+                      >
                       <View style={styles.loadCardTop}>
-                        <View style={styles.loadCardTopLeft}>
-                          <Text style={styles.loadCardRoute} numberOfLines={3}>
-                            {(load.pickup_area || "—").toUpperCase()} TO{" "}
-                            {(load.drop_location || "—").toUpperCase()}
-                          </Text>
+                        <View style={styles.loadPillRow}>
+                          <View style={styles.loadTypePill}>
+                            <Text style={styles.loadTypePillText}>HIRE PARTNER</Text>
+                          </View>
+                          <View style={styles.loadStatePill}>
+                            <Text style={styles.loadStatePillText}>
+                              {status.toUpperCase()}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                      <Text style={styles.loadCardRoute} numberOfLines={2}>
+                        {(load.pickup_area || "—").toUpperCase()} TO{" "}
+                        {(load.drop_location || "—").toUpperCase()}
+                      </Text>
+                      <View style={styles.loadCardInner}>
+                        <View style={styles.loadCardInnerTopRow}>
                           <Text style={styles.loadCardId} numberOfLines={1}>
                             ID: {getIndentDisplayNumber(load)}
                           </Text>
-                        </View>
-                        <View
-                          style={[styles.loadCardDate, styles.loadCardTopRight]}
-                        >
-                          <Text style={styles.loadCardDateText}>
-                            {load.pickup_date
-                              ? new Date(load.pickup_date).toLocaleDateString(
-                                  "en-IN",
-                                  { day: "numeric", month: "short" },
-                                )
-                              : "—"}
-                          </Text>
+                          <View style={styles.loadCardDate}>
+                            <Text style={styles.loadCardDateText}>
+                              {load.pickup_date
+                                ? new Date(load.pickup_date).toLocaleDateString(
+                                    "en-IN",
+                                    { day: "numeric", month: "short" },
+                                  )
+                                : "—"}
+                            </Text>
+                          </View>
                         </View>
                       </View>
                       <View style={styles.loadCardFooter}>
@@ -1508,9 +1582,11 @@ export function LoadCenterView({
                           )}
                         </View>
                       </View>
-                    </TouchableOpacity>
+                      </TouchableOpacity>
+                    </View>
                   );
-                })
+                })}
+                </View>
               )}
             </>
           )}
@@ -1565,7 +1641,8 @@ export function LoadCenterView({
                 </Text>
               </View>
             ) : (
-              filteredFindWorkList.map((load) => {
+              <View style={useGridLayout ? styles.gridList : undefined}>
+                {filteredFindWorkList.map((load) => {
                 const existingQuote = myQuoteByIndentId.get(load.id);
                 const quoteStatus = (existingQuote?.status ?? "").toLowerCase();
                 const isPending = quoteStatus === "pending";
@@ -1578,116 +1655,151 @@ export function LoadCenterView({
                   setLoadAction({ type: "BID", load });
                 };
                 return (
-                  <TouchableOpacity
-                    key={load.id}
-                    style={styles.loadCard}
-                    onPress={() => onIndentPress(load)}
-                    activeOpacity={0.7}
-                  >
+                  <View key={load.id} style={useGridLayout ? styles.gridCardWrap : undefined}>
+                    <TouchableOpacity
+                      style={styles.loadCard}
+                      onPress={() => onIndentPress(load)}
+                      activeOpacity={0.7}
+                    >
                     <View style={styles.loadCardTop}>
-                      <View style={styles.loadCardTopLeft}>
-                        <Text style={styles.getLoadCompany} numberOfLines={2}>
-                          {(
-                            load.creator_organization_name ||
-                            load.client_name ||
-                            "—"
-                          ).toUpperCase()}
-                        </Text>
-                        <Text style={styles.loadCardRouteGet} numberOfLines={4}>
-                          {load.pickup_area || "—"} →{" "}
-                          {load.drop_location || "—"}
-                        </Text>
-                      </View>
-                      <View style={styles.loadCardTopRight}>
-                        <Text style={styles.getLoadTargetLabel}>
-                          Target rate
-                        </Text>
-                        <Text style={styles.getLoadTargetValue}>
-                          {formatINR(
-                            Number(
-                              load.supplier_target ?? load.client_price ?? 0,
-                            ),
-                          )}
-                        </Text>
+                      <View style={styles.loadPillRow}>
+                        <View style={styles.loadTypePill}>
+                          <Text style={styles.loadTypePillText}>FIND WORK</Text>
+                        </View>
+                        <View style={styles.loadStatePill}>
+                          <Text style={styles.loadStatePillText}>
+                            {existingQuote
+                              ? (existingQuote.status || "quoted").toUpperCase()
+                              : "OPEN"}
+                          </Text>
+                        </View>
                       </View>
                     </View>
-                    {existingQuote ? (
-                      isAccepted ? (
-                        <View style={styles.quoteSentRow}>
-                          <View style={styles.quoteSentBadge}>
-                            <FontAwesome
-                              name="trophy"
-                              size={12}
-                              color={Theme.teslaRed}
-                              style={{ marginRight: 6 }}
-                            />
-                            <Text style={styles.quoteSentText}>
-                              Awarded — see Claimed
-                            </Text>
+                    <Text style={styles.loadCardRouteGet} numberOfLines={2}>
+                      {(load.pickup_area || "—").toUpperCase()} TO{" "}
+                      {(load.drop_location || "—").toUpperCase()}
+                    </Text>
+                    <View style={styles.loadCardInner}>
+                      <View style={styles.loadCardInnerTopRow}>
+                        <View style={styles.getLoadCompanyWrap}>
+                          <View style={styles.getLoadAvatarWrap}>
+                            {loadAvatarByIndentId[load.id] ? (
+                              <Image
+                                source={{ uri: loadAvatarByIndentId[load.id] }}
+                                style={styles.getLoadAvatarImage}
+                              />
+                            ) : (
+                              <Text style={styles.getLoadAvatarInitial}>
+                                {(
+                                  load.creator_organization_name ||
+                                  load.client_name ||
+                                  "U"
+                                )
+                                  .trim()
+                                  .charAt(0)
+                                  .toUpperCase()}
+                              </Text>
+                            )}
                           </View>
+                          <Text style={styles.getLoadCompany} numberOfLines={1}>
+                            {(
+                              load.creator_organization_name ||
+                              load.client_name ||
+                              "—"
+                            ).toUpperCase()}
+                          </Text>
                         </View>
-                      ) : isRejected ? (
-                        <View style={styles.quoteSentRow}>
-                          <View style={styles.quoteSentBadge}>
-                            <Text style={styles.quoteDeclinedText}>
-                              Quote declined
-                            </Text>
+                        <View style={styles.loadCardTopRight}>
+                          <Text style={styles.getLoadTargetLabel}>Target rate</Text>
+                          <Text style={styles.getLoadTargetValue}>
+                            {formatINR(
+                              Number(
+                                load.supplier_target ?? load.client_price ?? 0,
+                              ),
+                            )}
+                          </Text>
+                        </View>
+                      </View>
+                      {existingQuote ? (
+                        isAccepted ? (
+                          <View style={styles.quoteSentRow}>
+                            <View style={styles.quoteSentBadge}>
+                              <FontAwesome
+                                name="trophy"
+                                size={12}
+                                color={Theme.teslaRed}
+                                style={{ marginRight: 6 }}
+                              />
+                              <Text style={styles.quoteSentText}>
+                                Awarded — see Claimed
+                              </Text>
+                            </View>
                           </View>
-                          <TouchableOpacity
-                            style={styles.updateQuoteBtn}
-                            onPress={openBidModal}
-                            activeOpacity={0.9}
-                          >
-                            <Text style={styles.updateQuoteBtnText}>
-                              Send new quote
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
+                        ) : isRejected ? (
+                          <View style={styles.quoteSentRow}>
+                            <View style={styles.quoteSentBadge}>
+                              <Text style={styles.quoteDeclinedText}>
+                                Quote declined
+                              </Text>
+                            </View>
+                            <TouchableOpacity
+                              style={styles.updateQuoteBtn}
+                              onPress={openBidModal}
+                              activeOpacity={0.9}
+                            >
+                              <Text style={styles.updateQuoteBtnText}>
+                                Send new quote
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : (
+                          <View style={styles.quoteSentRow}>
+                            <View style={styles.quoteSentBadge}>
+                              <FontAwesome
+                                name="check"
+                                size={12}
+                                color={Theme.textMuted}
+                                style={{ marginRight: 6 }}
+                              />
+                              <Text style={styles.quoteSentText}>
+                                Quote Sent{" "}
+                                {formatINR(Number(existingQuote.amount))}
+                              </Text>
+                            </View>
+                            <TouchableOpacity
+                              style={styles.updateQuoteBtn}
+                              onPress={openBidModal}
+                              activeOpacity={0.9}
+                            >
+                              <Text style={styles.updateQuoteBtnText}>
+                                Update quote
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        )
                       ) : (
-                        <View style={styles.quoteSentRow}>
-                          <View style={styles.quoteSentBadge}>
-                            <FontAwesome
-                              name="check"
-                              size={12}
-                              color={Theme.textMuted}
-                              style={{ marginRight: 6 }}
-                            />
-                            <Text style={styles.quoteSentText}>
-                              Quote Sent{" "}
-                              {formatINR(Number(existingQuote.amount))}
-                            </Text>
-                          </View>
-                          <TouchableOpacity
-                            style={styles.updateQuoteBtn}
-                            onPress={openBidModal}
-                            activeOpacity={0.9}
-                          >
-                            <Text style={styles.updateQuoteBtnText}>
-                              Update quote
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      )
-                    ) : (
-                      <TouchableOpacity
-                        style={styles.quoteBtn}
-                        onPress={openBidModal}
-                        activeOpacity={0.9}
-                      >
-                        <FontAwesome
-                          name="arrow-up"
-                          size={14}
-                          color={Theme.teslaRed}
-                          style={{ marginRight: 8 }}
-                        />
-                        <Text style={styles.quoteBtnText}>
-                          Send Price Quote
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                  </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.quoteBtn}
+                          onPress={openBidModal}
+                          activeOpacity={0.9}
+                        >
+                          <FontAwesome
+                            name="arrow-up"
+                            size={14}
+                            color={Theme.teslaRed}
+                            style={{ marginRight: 8 }}
+                          />
+                          <Text style={styles.quoteBtnText}>
+                            Send Price Quote
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    </TouchableOpacity>
+                  </View>
                 );
-              })
+              })}
+              </View>
             ))}
 
           {loadSubTab === "AWARDED" &&
@@ -1713,9 +1825,13 @@ export function LoadCenterView({
                     {filteredClaimedLoads.length}
                   </Text>
                 </View>
-                {filteredClaimedLoads.map((load) =>
-                  renderClaimedLoadCard(load, false),
-                )}
+                <View style={useGridLayout ? styles.gridList : undefined}>
+                  {filteredClaimedLoads.map((load) => (
+                    <View key={`claimed-${load.id}`} style={useGridLayout ? styles.gridCardWrap : undefined}>
+                      {renderClaimedLoadCard(load, false)}
+                    </View>
+                  ))}
+                </View>
               </View>
             ))}
         </ScrollView>
@@ -3068,26 +3184,66 @@ const styles = StyleSheet.create({
   scrollContentClaimed: {
     paddingTop: 12,
   },
+  gridList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginHorizontal: -6,
+    alignItems: "flex-start",
+  },
+  gridCardWrap: {
+    width: "33.333%",
+    paddingHorizontal: 6,
+  },
   loadingWrap: { paddingVertical: 32, alignItems: "center", gap: 12 },
   loadingText: { fontSize: 10, fontWeight: "700", color: Theme.textMuted },
   loadCard: {
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
-    borderColor: "#F0F0F0",
+    borderColor: Theme.borderLight,
     borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 10,
-    elevation: 2,
+    padding: 12,
+    marginBottom: 8,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+    overflow: "hidden",
+    minHeight: 132,
   },
   loadCardTop: {
+    marginBottom: 8,
+  },
+  loadPillRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 14,
+    alignItems: "center",
+    gap: 6,
+  },
+  loadTypePill: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: Theme.primary,
+    backgroundColor: Theme.surfaceGray,
+  },
+  loadTypePillText: {
+    fontSize: 6,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+    color: Theme.primary,
+  },
+  loadStatePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: Theme.positive,
+  },
+  loadStatePillText: {
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    color: Theme.textOnPrimary,
   },
   loadCardTopLeft: {
     flex: 1,
@@ -3100,58 +3256,65 @@ const styles = StyleSheet.create({
     maxWidth: "40%",
   },
   loadCardRoute: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: LOAD_ROUTE_RED,
+    fontSize: 11,
+    fontWeight: "800",
+    color: TESLA_BLACK,
     textTransform: "uppercase",
     flexShrink: 1,
-    lineHeight: 16,
+    lineHeight: 15,
+    marginBottom: 6,
   },
   loadCardId: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#A0A0A0",
+    color: Theme.textMuted,
     marginTop: 6,
     textTransform: "uppercase",
     letterSpacing: 1,
   },
   loadCardDate: {
     backgroundColor: LOAD_CONTENT_BG,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 6,
   },
   loadCardDateText: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#A0A0A0",
+    color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 1,
   },
   loadCardFooter: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
+    marginTop: 0,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: Theme.surfaceBorder,
   },
-  loadCardMeta: { flexDirection: "row", alignItems: "center", gap: 8 },
+  loadCardMeta: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8 },
   loadCardMetaText: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#A0A0A0",
+    color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 1,
   },
   loadCardActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
+    gap: 8,
+    marginLeft: 8,
+    flexShrink: 0,
   },
   shareIndentBtn: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
     backgroundColor: "#f8f9fa",
     borderWidth: 1,
     borderColor: "#EAEAEA",
@@ -3160,6 +3323,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.02,
     shadowRadius: 2,
     elevation: 1,
+    minHeight: 30,
   },
   shareIndentBtnText: {
     fontSize: 10,
@@ -3173,9 +3337,10 @@ const styles = StyleSheet.create({
   },
   reviewBidsBtn: {
     backgroundColor: TESLA_BLACK,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    minHeight: 30,
   },
   reviewBidsBtnText: {
     fontSize: 9,
@@ -3185,7 +3350,7 @@ const styles = StyleSheet.create({
   },
   deployPendingWrap: {
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    minHeight: 30,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -3211,43 +3376,90 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   getLoadCompany: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "700",
-    color: Theme.teslaRed,
+    color: Theme.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
+    flex: 1,
+    minWidth: 0,
+  },
+  getLoadCompanyWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
+  },
+  getLoadAvatarWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  getLoadAvatarImage: {
+    width: "100%",
+    height: "100%",
+  },
+  getLoadAvatarInitial: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textSecondary,
   },
   loadCardRouteGet: {
     fontSize: 11,
     fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    marginTop: 4,
+    color: TESLA_BLACK,
+    marginBottom: 8,
     textTransform: "uppercase",
     flexShrink: 1,
-    lineHeight: 16,
+    lineHeight: 15,
   },
   getLoadTargetLabel: {
     fontSize: 6,
     fontWeight: "700",
     color: Theme.textMuted,
     textTransform: "uppercase",
+    textAlign: "right",
   },
   getLoadTargetValue: {
     fontSize: 12,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
+    textAlign: "right",
+  },
+  loadCardInner: {
+    backgroundColor: Theme.surfaceGray,
+    borderRadius: 12,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+    marginTop: 6,
+  },
+  loadCardInnerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    marginBottom: 6,
   },
   quoteBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    width: "100%",
-    paddingVertical: 12,
+    alignSelf: "flex-start",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
     borderColor: Theme.surfaceBorder,
-    borderRadius: 12,
-    marginTop: 12,
+    borderRadius: 8,
+    minHeight: 30,
   },
   quoteBtnText: {
     fontSize: 10,
@@ -3256,7 +3468,6 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   quoteSentRow: {
-    marginTop: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -3271,12 +3482,13 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
   },
   updateQuoteBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     backgroundColor: Theme.surfaceGray,
-    borderRadius: 8,
+    borderRadius: 7,
     borderWidth: 1,
     borderColor: Theme.surfaceBorder,
+    minHeight: 30,
   },
   updateQuoteBtnText: {
     fontSize: 10,
@@ -3288,20 +3500,22 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 8,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 2,
     elevation: 1,
+    overflow: "hidden",
+    minHeight: 132,
   },
   awardedCardTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 8,
   },
   awardedBadge: { flexDirection: "row", alignItems: "center" },
   awardedBadgeText: {
@@ -3318,14 +3532,14 @@ const styles = StyleSheet.create({
   },
   awardedRouteWrap: {
     backgroundColor: Theme.surfaceGray,
-    padding: 12,
-    borderRadius: 12,
+    padding: 9,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: Theme.surfaceBorder,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 8,
   },
   awardedRoute: {
     fontSize: 10,
@@ -3342,9 +3556,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
+    paddingVertical: 8,
     backgroundColor: TESLA_BLACK,
-    borderRadius: 10,
+    borderRadius: 8,
+    minHeight: 32,
   },
   handshakeBtnText: {
     fontSize: 9,
