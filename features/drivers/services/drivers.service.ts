@@ -244,8 +244,17 @@ export interface ExistingDriverMatch {
   emergency_contact_phone: string | null;
   /** Driving license number (from profiles.license_number when RPC returns it). */
   license_number: string | null;
+  /** Optional avatar path/url from profile metadata (when RPC provides it). */
+  avatar_url?: string | null;
+  /** Optional avatar preset seed (when RPC provides it). */
+  avatar_seed?: string | null;
   /** True when driver is currently connected to at least one fleet (left_at is null). */
   is_in_fleet?: boolean;
+}
+
+export interface DriverProfileAvatar {
+  avatar_url: string | null;
+  avatar_seed: string | null;
 }
 
 /**
@@ -270,6 +279,10 @@ export async function searchExistingDriversByPhone(phone: string): Promise<{
     emergency_contact_name?: string | null;
     emergency_contact_phone?: string | null;
     license_number?: string | null;
+    avatar_url?: string | null;
+    avatarUrl?: string | null;
+    avatar_seed?: string | null;
+    avatarSeed?: string | null;
     is_in_fleet?: boolean | null;
   }[];
   const matches: ExistingDriverMatch[] = [];
@@ -284,10 +297,36 @@ export async function searchExistingDriversByPhone(phone: string): Promise<{
         emergency_contact_name: r.emergency_contact_name ?? null,
         emergency_contact_phone: r.emergency_contact_phone ?? null,
         license_number: r.license_number ?? null,
+        avatar_url: r.avatar_url ?? r.avatarUrl ?? null,
+        avatar_seed: r.avatar_seed ?? r.avatarSeed ?? null,
         is_in_fleet: r.is_in_fleet === true,
       });
   }
   return { error: null, matches };
+}
+
+/** Fetch avatar metadata for a matched driver profile. */
+export async function getDriverProfileAvatar(
+  userId: string,
+): Promise<{ error: Error | null; avatar: DriverProfileAvatar | null }> {
+  const id = (userId || "").trim();
+  if (!id) return { error: null, avatar: null };
+  const { data, error } = await supabase()
+    .from("profiles")
+    .select("avatar_url, avatar_seed")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), avatar: null };
+  const row = data as { avatar_url?: string | null; avatar_seed?: string | null } | null;
+  return {
+    error: null,
+    avatar: row
+      ? {
+          avatar_url: row.avatar_url ?? null,
+          avatar_seed: row.avatar_seed ?? null,
+        }
+      : null,
+  };
 }
 
 /**
