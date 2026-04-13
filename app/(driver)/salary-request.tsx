@@ -14,6 +14,7 @@ import { useIsOnline } from '@/contexts/NetworkContext';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import { tripEarningsForDriver } from '@/lib/driverUtils';
 import { getInitials } from '@/lib/stringUtils';
+import { showAppAlert } from '@/lib/appAlert';
 import { VALIDATION } from '@/lib/validation';
 import * as driversService from '@/services/driversService';
 import * as salaryRequestsService from '@/services/salaryRequestsService';
@@ -23,12 +24,12 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { usePathname, useRouter, useSegments } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
+  ActivityIndicator,
+  Image,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -70,6 +71,14 @@ function formatRupeeDisplay(raw: string): string {
   const cleaned = raw.replace(/[^0-9]/g, '');
   const amount = Number(cleaned || '0');
   return amount.toLocaleString('en-IN');
+}
+
+/** Parsed integer ₹ from keypad / TextInput (non-digits stripped). Empty → 0 (invalid for submit). */
+function parseRupeeAmountInput(raw: string): number {
+  const cleaned = String(raw).replace(/[^0-9]/g, '');
+  if (cleaned === '') return 0;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : NaN;
 }
 
 const REQUEST_TYPES: { type: salaryRequestsService.SalaryRequestType; label: string; hint: string }[] = [
@@ -173,6 +182,53 @@ export default function SalaryRequestScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  /** Full reset of local UI state (success card + form). */
+  const resetSalaryRequestScreen = useCallback(() => {
+    setIsSuccess(false);
+    setSuccessPayload(null);
+    setWidgetPage(0);
+    setSalaryRequestAmount('');
+    setSalaryRequestReason('');
+    setSelectedSalaryTripIds([]);
+    setNeededByDate(null);
+    setSalaryRequestDate(null);
+    setSalaryRequestType('advance');
+    setSalaryRequestOrg(null);
+    setSalaryRequestSubmitting(false);
+    setShowSalaryMonthDropdown(false);
+    setShowRequestTypeMenu(false);
+    setShowNeededByPicker(false);
+    setShowTripsDropdown(false);
+  }, []);
+
+  const pathname = usePathname();
+  const segments = useSegments();
+  const routeFingerprint = `${pathname ?? ''}|${(segments ?? []).join('/')}`;
+  const routeFingerprintPrevRef = useRef<string>('');
+
+  /**
+   * Hidden tab + web: `useFocusEffect` often does not run when switching tabs, so success/form
+   * state stayed mounted. Reset when route fingerprint shows we *entered* salary-request from
+   * another screen (pathname + segments covers Expo Router web + native).
+   */
+  useEffect(() => {
+    const current = routeFingerprint;
+    const prev = routeFingerprintPrevRef.current;
+    const onSalary = current.includes('salary-request');
+    const wasOnSalary = prev.length > 0 && prev.includes('salary-request');
+    if (onSalary && !wasOnSalary) {
+      resetSalaryRequestScreen();
+    }
+    routeFingerprintPrevRef.current = current;
+  }, [routeFingerprint, resetSalaryRequestScreen]);
+
+  /** Native tab focus (when it fires); pathname effect is the reliable fix for hidden tabs + web. */
+  useFocusEffect(
+    useCallback(() => {
+      resetSalaryRequestScreen();
+    }, [resetSalaryRequestScreen])
+  );
 
   useEffect(() => {
     const interval = setInterval(() => setBlink((prev) => !prev), 600);
@@ -291,6 +347,30 @@ export default function SalaryRequestScreen() {
     }
   }, [salaryRequestType, selectedSalaryTripIds, selectedTripTotal]);
 
+  /**
+   * Trip commission: set "Needed by" from selected trip dates (completion / updated / created).
+   * Uses the latest date among selected trips so multi-select stays coherent. Clears when none selected.
+   */
+  useEffect(() => {
+    if (salaryRequestType !== 'trip_based') return;
+    if (selectedSalaryTripIds.length === 0) {
+      setNeededByDate(null);
+      return;
+    }
+    const selected = pendingTripsForSalaryOrg.filter((t) => selectedSalaryTripIds.includes(t.id));
+    if (selected.length === 0) return;
+    let maxTs = 0;
+    for (const t of selected) {
+      const raw = t.completed_at ?? t.updated_at ?? t.created_at;
+      if (!raw) continue;
+      const ts = new Date(raw).getTime();
+      if (Number.isFinite(ts) && ts > maxTs) maxTs = ts;
+    }
+    if (maxTs <= 0) return;
+    const d = new Date(maxTs);
+    setNeededByDate(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
+  }, [salaryRequestType, selectedSalaryTripIds, pendingTripsForSalaryOrg]);
+
   useEffect(() => {
     if (salaryRequestType !== 'trip_based') {
       setSelectedSalaryTripIds([]);
@@ -352,9 +432,9 @@ export default function SalaryRequestScreen() {
     };
     try {
       await AsyncStorage.setItem(SALARY_REQUEST_DRAFT_KEY, JSON.stringify(payload));
-      Alert.alert('Saved', 'Draft saved on this device.');
+      showAppAlert('Saved', 'Draft saved on this device.');
     } catch {
-      Alert.alert('Error', 'Could not save draft.');
+      showAppAlert('Error', 'Could not save draft.');
     }
   }, [salaryRequestType, salaryRequestAmount, neededByDate, salaryRequestReason]);
 
@@ -365,29 +445,33 @@ export default function SalaryRequestScreen() {
 
   const submitSalaryRequest = useCallback(async () => {
     if (!isOnline) {
-      Alert.alert('Offline', 'You are offline. Save as draft and submit when connected.');
+      showAppAlert('Offline', 'You are offline. Save as draft and submit when connected.');
       return;
     }
     const org = salaryRequestOrg ?? (salaryRequestOrgOptions.length === 1 ? salaryRequestOrgOptions[0] : null);
     if (!org) {
-      Alert.alert('Select fleet', 'Choose which fleet to request salary from.');
+      showAppAlert('Select fleet', 'Choose which fleet to request salary from.');
       return;
     }
     if (!salaryRequestType) {
-      Alert.alert('Select type', 'Choose Monthly salary, Advance, or Trip-based.');
+      showAppAlert('Select type', 'Choose Monthly salary, Advance, or Trip-based.');
       return;
     }
     if (salaryRequestType === 'advance' && !neededByDate) {
-      Alert.alert('Needed by date', 'Select when you need the advance by.');
+      showAppAlert('Needed by date', 'Select when you need the advance by.');
       return;
     }
-    const amount = Number(salaryRequestAmount.replace(/,/g, '').trim());
+    if (salaryRequestType === 'trip_based' && selectedSalaryTripIds.length === 0) {
+      showAppAlert('Select trips', 'Select at least one trip to be paid.');
+      return;
+    }
+    const amount = parseRupeeAmountInput(salaryRequestAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
-      Alert.alert('Enter amount', 'Enter a valid amount in ₹.');
+      showAppAlert('Enter amount', 'Enter a valid amount in ₹.');
       return;
     }
     if (amount > VALIDATION.AMOUNT_MAX) {
-      Alert.alert(
+      showAppAlert(
         'Amount too large',
         `Amount cannot exceed ₹${VALIDATION.AMOUNT_MAX.toLocaleString('en-IN')}.`,
       );
@@ -395,7 +479,7 @@ export default function SalaryRequestScreen() {
     }
     const trimmedReason = salaryRequestReason.trim();
     if (trimmedReason.length > VALIDATION.NOTES_MAX_LENGTH) {
-      Alert.alert(
+      showAppAlert(
         'Reason too long',
         `Reason must be at most ${VALIDATION.NOTES_MAX_LENGTH} characters.`,
       );
@@ -418,7 +502,7 @@ export default function SalaryRequestScreen() {
     );
     setSalaryRequestSubmitting(false);
     if (error) {
-      Alert.alert('Request failed', error.message);
+      showAppAlert('Request failed', error.message);
       return;
     }
     setSuccessPayload({
@@ -714,7 +798,11 @@ export default function SalaryRequestScreen() {
                           </Text>
                           <FontAwesome name="calendar" size={14} color={colors.textMuted} />
                         </TouchableOpacity>
-                        {salaryRequestType !== 'advance' ? (
+                        {salaryRequestType === 'trip_based' ? (
+                          <Text style={[styles.hint, { color: colors.textMuted, marginTop: 10 }]}>
+                            Auto-filled from your selected trip date(s). Tap to change if needed.
+                          </Text>
+                        ) : salaryRequestType === 'monthly' ? (
                           <Text style={[styles.hint, { color: colors.textMuted, marginTop: 10 }]}>
                             Needed by is required only for Advance requests.
                           </Text>
@@ -1018,21 +1106,28 @@ export default function SalaryRequestScreen() {
               onPress={() => {
                 if (salaryRequestSubmitting) return;
                 if (widgetPage === 0) {
-                  const amount = Number(salaryRequestAmount.replace(/[^0-9]/g, '').trim());
+                  const amount = parseRupeeAmountInput(salaryRequestAmount);
                   if (!salaryRequestType) {
-                    Alert.alert('Select type', 'Choose Advance, Reimbursement, or Salary correction.');
+                    showAppAlert('Select type', 'Choose Monthly salary, Advance, or Trip-based.');
                     return;
                   }
                   if (!Number.isFinite(amount) || amount <= 0) {
-                    Alert.alert('Enter amount', 'Enter a valid amount in ₹.');
+                    showAppAlert('Enter amount', 'Enter a valid amount in ₹.');
+                    return;
+                  }
+                  if (amount > VALIDATION.AMOUNT_MAX) {
+                    showAppAlert(
+                      'Amount too large',
+                      `Amount cannot exceed ₹${VALIDATION.AMOUNT_MAX.toLocaleString('en-IN')}.`,
+                    );
                     return;
                   }
                   if (salaryRequestType === 'advance' && !neededByDate) {
-                    Alert.alert('Needed by', 'Select when you need the advance by.');
+                    showAppAlert('Needed by', 'Select when you need the advance by.');
                     return;
                   }
                   if (salaryRequestType === 'trip_based' && selectedSalaryTripIds.length === 0) {
-                    Alert.alert('Select trips', 'Select at least one trip to be paid.');
+                    showAppAlert('Select trips', 'Select at least one trip to be paid.');
                     return;
                   }
                   setWidgetPage(1);

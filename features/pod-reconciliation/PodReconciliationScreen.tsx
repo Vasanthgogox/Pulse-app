@@ -5,12 +5,13 @@ import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { getCapabilitiesFromProfile } from "@/lib/capabilities";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -25,6 +26,8 @@ import {
     TextInput,
     View,
     useWindowDimensions,
+    type TextStyle,
+    type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LogIncomingPodsScreen } from "../log-pods/LogIncomingPodsScreen";
@@ -53,6 +56,7 @@ function canAccessPodManagement(
 
 export function PodReconciliationScreen() {
   const insets = useSafeAreaInsets();
+  const { t: tr } = useLanguage();
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const { profile } = useAuth();
@@ -114,6 +118,12 @@ export function PodReconciliationScreen() {
   const isLargeScreen = width >= 1024;
   const isMediumScreen = width >= 768;
   const allowed = canAccessPodManagement(profile);
+
+  useEffect(() => {
+    if (!isMediumScreen && viewMode === "table") {
+      setViewMode("cards");
+    }
+  }, [isMediumScreen, viewMode]);
 
   const regions = [
     "All",
@@ -511,7 +521,10 @@ export function PodReconciliationScreen() {
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                style={styles.financeQueueTabsRow}
+                style={[
+                  styles.financeQueueTabsRow,
+                  styles.financeQueueTabsScrollMobile,
+                ]}
                 contentContainerStyle={styles.financeTabsScrollMobile}
               >
                 <Pressable
@@ -610,102 +623,24 @@ export function PodReconciliationScreen() {
                   !isMediumScreen && styles.financeActionRowMobile,
                 ]}
               >
-                <View style={styles.financeHeaderSearchWrap}>
-                  <FontAwesome
-                    name="search"
-                    size={13}
-                    color={Theme.textOnDarkMuted}
-                    style={{ marginRight: 7 }}
-                  />
-                  <TextInput
-                    style={styles.financeHeaderSearchInput}
-                    placeholder="Search Trip ID, Client, LR..."
-                    placeholderTextColor={Theme.textOnDarkMuted}
-                    value={searchTerm}
-                    onChangeText={setSearchTerm}
-                  />
-                </View>
                 {isMediumScreen ? (
-                  <View style={styles.financeActionRight}>
-                  <Pressable
-                    style={styles.financeRegionBtnDark}
-                    onPress={() => setRegionModalOpen(true)}
-                  >
-                    <FontAwesome
-                      name="map-marker"
-                      size={13}
-                      color={Theme.textOnDarkMuted}
-                    />
-                    <Text style={styles.financeRegionBtnDarkText}>
-                      {regionFilter === "All" ? "Region: All" : regionFilter}
-                    </Text>
-                    <FontAwesome
-                      name="chevron-down"
-                      size={9}
-                      color={Theme.textOnDarkMuted}
-                    />
-                  </Pressable>
-                  <View style={styles.financeViewModeWrapDark}>
-                    <Pressable
-                      style={[
-                        styles.financeViewModeBtnDark,
-                        viewMode === "cards" && styles.financeViewModeBtnDarkActive,
-                      ]}
-                      onPress={() => setViewMode("cards")}
-                    >
+                  <>
+                    <View style={styles.financeHeaderSearchWrap}>
                       <FontAwesome
-                        name="th-large"
-                        size={11}
-                        color={viewMode === "cards" ? "#fff" : Theme.textOnDarkMuted}
+                        name="search"
+                        size={13}
+                        color={Theme.textOnDarkMuted}
+                        style={{ marginRight: 7 }}
                       />
-                      <Text
-                        style={[
-                          styles.financeViewModeTextDark,
-                          viewMode === "cards" && styles.financeViewModeTextDarkActive,
-                        ]}
-                      >
-                        Cards
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      style={[
-                        styles.financeViewModeBtnDark,
-                        viewMode === "table" && styles.financeViewModeBtnDarkActive,
-                      ]}
-                      onPress={() => setViewMode("table")}
-                    >
-                      <FontAwesome
-                        name="table"
-                        size={11}
-                        color={viewMode === "table" ? "#fff" : Theme.textOnDarkMuted}
+                      <TextInput
+                        style={styles.financeHeaderSearchInput}
+                        placeholder="Search Trip ID, Client, LR..."
+                        placeholderTextColor={Theme.textOnDarkMuted}
+                        value={searchTerm}
+                        onChangeText={setSearchTerm}
                       />
-                      <Text
-                        style={[
-                          styles.financeViewModeTextDark,
-                          viewMode === "table" && styles.financeViewModeTextDarkActive,
-                        ]}
-                      >
-                        Table
-                      </Text>
-                    </Pressable>
-                  </View>
-                  <Pressable
-                    style={styles.financePrimaryBtn}
-                    onPress={() => setFinanceTab("LOG_INCOMING")}
-                  >
-                    <FontAwesome name="plus" size={12} color="#fff" />
-                    <Text style={styles.financePrimaryBtnText}>
-                      LOG INCOMING PODs
-                    </Text>
-                  </Pressable>
-                  </View>
-                ) : (
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.financeActionControlsScrollMobile}
-                  >
-                    <View style={[styles.financeActionRight, styles.financeActionRightMobile]}>
+                    </View>
+                    <View style={styles.financeActionRight}>
                       <Pressable
                         style={styles.financeRegionBtnDark}
                         onPress={() => setRegionModalOpen(true)}
@@ -728,19 +663,25 @@ export function PodReconciliationScreen() {
                         <Pressable
                           style={[
                             styles.financeViewModeBtnDark,
-                            viewMode === "cards" && styles.financeViewModeBtnDarkActive,
+                            viewMode === "cards" &&
+                              styles.financeViewModeBtnDarkActive,
                           ]}
                           onPress={() => setViewMode("cards")}
                         >
                           <FontAwesome
                             name="th-large"
                             size={11}
-                            color={viewMode === "cards" ? "#fff" : Theme.textOnDarkMuted}
+                            color={
+                              viewMode === "cards"
+                                ? "#fff"
+                                : Theme.textOnDarkMuted
+                            }
                           />
                           <Text
                             style={[
                               styles.financeViewModeTextDark,
-                              viewMode === "cards" && styles.financeViewModeTextDarkActive,
+                              viewMode === "cards" &&
+                                styles.financeViewModeTextDarkActive,
                             ]}
                           >
                             Cards
@@ -749,19 +690,25 @@ export function PodReconciliationScreen() {
                         <Pressable
                           style={[
                             styles.financeViewModeBtnDark,
-                            viewMode === "table" && styles.financeViewModeBtnDarkActive,
+                            viewMode === "table" &&
+                              styles.financeViewModeBtnDarkActive,
                           ]}
                           onPress={() => setViewMode("table")}
                         >
                           <FontAwesome
                             name="table"
                             size={11}
-                            color={viewMode === "table" ? "#fff" : Theme.textOnDarkMuted}
+                            color={
+                              viewMode === "table"
+                                ? "#fff"
+                                : Theme.textOnDarkMuted
+                            }
                           />
                           <Text
                             style={[
                               styles.financeViewModeTextDark,
-                              viewMode === "table" && styles.financeViewModeTextDarkActive,
+                              viewMode === "table" &&
+                                styles.financeViewModeTextDarkActive,
                             ]}
                           >
                             Table
@@ -778,7 +725,70 @@ export function PodReconciliationScreen() {
                         </Text>
                       </Pressable>
                     </View>
-                  </ScrollView>
+                  </>
+                ) : (
+                  <View style={styles.podTripsLikeToolbar}>
+                    <View
+                      style={[
+                        styles.podTripsLikeSearchWrap,
+                        Platform.OS === "web" && styles.podTripsLikeSearchWrapWeb,
+                      ]}
+                    >
+                      <FontAwesome
+                        name="search"
+                        size={12}
+                        color={Theme.textOnDarkMuted}
+                        style={styles.podTripsLikeSearchIcon}
+                      />
+                      <TextInput
+                        style={[
+                          styles.podTripsLikeSearchInput,
+                          Platform.OS === "web" &&
+                            styles.podTripsLikeSearchInputWeb,
+                        ]}
+                        placeholder={tr("searchTripsPlaceholder")}
+                        placeholderTextColor={Theme.textOnDarkMuted}
+                        value={searchTerm}
+                        onChangeText={setSearchTerm}
+                        returnKeyType="search"
+                        autoCorrect={false}
+                        spellCheck={false}
+                        autoComplete="off"
+                      />
+                    </View>
+                    <View style={styles.podTripsLikeToolbarActions}>
+                      <Pressable
+                        style={[
+                          styles.podTripsLikeIconBtn,
+                          Platform.OS === "web" && styles.podTripsLikeChipWeb,
+                        ]}
+                        onPress={() => setRegionModalOpen(true)}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          regionFilter === "All"
+                            ? "Region filter"
+                            : `Region: ${regionFilter}`
+                        }
+                      >
+                        <FontAwesome
+                          name="map-marker"
+                          size={12}
+                          color={Theme.textOnDark}
+                        />
+                      </Pressable>
+                      <Pressable
+                        style={[
+                          styles.podTripsLikeIconBtnPrimary,
+                          Platform.OS === "web" && styles.podTripsLikeChipWeb,
+                        ]}
+                        onPress={() => setFinanceTab("LOG_INCOMING")}
+                        accessibilityRole="button"
+                        accessibilityLabel="Log incoming PODs"
+                      >
+                        <FontAwesome name="plus" size={12} color="#fff" />
+                      </Pressable>
+                    </View>
+                  </View>
                 )}
               </View>
             </>
@@ -1798,6 +1808,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.separatorDark,
   },
+  financeQueueTabsScrollMobile: {
+    width: "100%",
+    maxWidth: "100%",
+    ...Platform.select({
+      web: {
+        overflowX: "auto" as const,
+      },
+    }),
+  },
   financeTabsGroup: {
     flex: 1,
     flexDirection: "row",
@@ -1855,9 +1874,10 @@ const styles = StyleSheet.create({
   financeTabsScrollMobile: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    flexGrow: 0,
+    gap: 4,
     paddingLeft: 0,
-    paddingRight: 8,
+    paddingRight: Layout.screenPaddingHorizontal,
     paddingBottom: 2,
   },
   financeTabBtn: {
@@ -1871,9 +1891,9 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   financeTabBtnMobile: {
-    minWidth: 136,
-    minHeight: 22,
-    paddingHorizontal: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    alignSelf: "flex-start",
   },
   financeTabBtnActive: {},
   financeBack: {
@@ -1902,8 +1922,8 @@ const styles = StyleSheet.create({
   financeTabTextActive: { color: Theme.textOnDark },
   financeTabUnderline: {
     position: "absolute",
-    left: 6,
-    right: 6,
+    left: 0,
+    right: 0,
     bottom: 0,
     height: 2,
     borderRadius: 2,
@@ -1954,9 +1974,75 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
   },
   financeActionRowMobile: {
-    flexDirection: "column",
-    alignItems: "stretch",
-    gap: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    width: "100%",
+    minWidth: 0,
+  },
+  /** Mobile: search (flex) + region + log — cards-only; no view toggle (table is md+ only). */
+  podTripsLikeToolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: "100%",
+    minWidth: 0,
+    gap: 16,
+  },
+  podTripsLikeSearchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 11,
+    backgroundColor: Theme.darkSurface,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    paddingHorizontal: 12,
+    minWidth: 0,
+  },
+  podTripsLikeSearchWrapWeb: {
+    outlineStyle: "none",
+    outlineWidth: 0,
+  } as unknown as ViewStyle,
+  podTripsLikeSearchIcon: { marginRight: 8 },
+  podTripsLikeSearchInput: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "600",
+    color: Theme.textOnDark,
+    paddingVertical: 0,
+  },
+  podTripsLikeSearchInputWeb: {
+    outlineStyle: "none",
+    outlineWidth: 0,
+  } as unknown as TextStyle,
+  podTripsLikeToolbarActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flexShrink: 0,
+  },
+  podTripsLikeChipWeb: { cursor: "pointer" } as ViewStyle,
+  podTripsLikeIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1,
+    borderColor: Theme.separatorDark,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  podTripsLikeIconBtnPrimary: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: Theme.teslaRed,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   financeHeaderSearchWrap: {
     flex: 1,
@@ -1987,15 +2073,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     marginLeft: 8,
-  },
-  financeActionRightMobile: {
-    justifyContent: "flex-start",
-    flexWrap: "nowrap",
-    marginLeft: 0,
-    gap: 6,
-  },
-  financeActionControlsScrollMobile: {
-    paddingRight: 8,
   },
   financeRegionBtnDark: {
     height: 38,

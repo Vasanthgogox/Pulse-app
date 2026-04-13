@@ -3,18 +3,15 @@ import { useOrganization } from '@/contexts/OrganizationContext';
 import { AddVehicleModal, type AddVehicleCompletePayload, createVehicle } from '@/features/vehicles';
 import { queryKeys } from '@/lib/queryKeys';
 import { useQueryClient } from '@tanstack/react-query';
-import { useSafeBack } from '@/lib/useSafeBack';
 
 /** Dismiss modal: go back to the page that opened it. */
 function closeModal(router: ReturnType<typeof useRouter>) {
-  if (router.canGoBack()) router.back();
-  else router.replace('/(tabs)/finance');
+  router.replace('/(tabs)/resources');
 }
 
 export default function AddVehicleScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const safeBack = useSafeBack();
   const { currentOrganization } = useOrganization();
 
   const handleComplete = async (payload: AddVehicleCompletePayload) => {
