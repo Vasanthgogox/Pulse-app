@@ -2,55 +2,54 @@
  * Create Indent — Deploy New Load.
  * Full-screen form: origin, destination, client, budget, supplier target, vehicle, load type, weight, pickup date.
  */
-import { useState, useCallback, useEffect, useMemo } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  Modal,
-  KeyboardAvoidingView,
-  Platform,
-  Dimensions,
-} from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { useLocalSearchParams, useRouter } from 'expo-router';
 import { TeslaHeader } from '@/components/TeslaHeader';
-import { useSafeBack } from '@/lib/useSafeBack';
-import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
-import { useOrganization } from '@/contexts/OrganizationContext';
+import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
-import { LocationSearchField } from '@/features/trips/components/add-trip/LocationSearchField';
-import { getCapabilitiesFromProfile, getEffectivePermissions } from '@/lib/capabilities';
-import { createIndent, type CreateIndentInput } from '@/features/indents';
-import { getIndentById } from '@/features/indents/services/indents.service';
-import { getOptimalRoute } from '@/services/routingService';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import {
   AddClientModal,
   createClient,
   getClientsByOrganization,
   type ClientRow,
 } from '@/features/clients';
-import { VEHICLE_CATEGORY_LABELS, BODY_LENGTH_SELECT_OPTIONS, normalizeBodyLengthKey, OTHER_LABEL } from '@/features/vehicles/utils/vehicleFormOptions.util';
+import { createIndent, type CreateIndentInput } from '@/features/indents';
+import { getIndentById, shareDraftIndent, updateIndentDraft } from '@/features/indents/services/indents.service';
+import { LocationSearchField } from '@/features/trips/components/add-trip/LocationSearchField';
+import { BODY_LENGTH_SELECT_OPTIONS, normalizeBodyLengthKey, OTHER_LABEL, VEHICLE_CATEGORY_LABELS } from '@/features/vehicles/utils/vehicleFormOptions.util';
+import { getCapabilitiesFromProfile, getEffectivePermissions } from '@/lib/capabilities';
+import { useInvalidateIndents } from '@/lib/queries';
+import { useSafeBack } from '@/lib/useSafeBack';
 import {
-  VALIDATION,
   dateISO,
   maxLength,
   nonNegativeAmount,
   positiveAmount,
   required,
   runValidators,
+  VALIDATION,
 } from '@/lib/validation';
-import { useInvalidateIndents } from '@/lib/queries';
-import { updateIndentDraft, shareDraftIndent } from '@/features/indents/services/indents.service';
+import { getOptimalRoute } from '@/services/routingService';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function validateForm(state: FormState): Record<string, string> {
   const errors: Record<string, string> = {};

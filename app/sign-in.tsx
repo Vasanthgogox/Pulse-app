@@ -40,7 +40,7 @@ function getEmailFromParams(params: { email?: string | string[] }): string {
 export default function SignIn() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ email?: string | string[] }>();
-  const { signIn } = useAuth();
+  const { signIn, user, profile, loading: authLoading } = useAuth();
   const { t, locale, localeOptions } = useLanguage();
   const isOnline = useIsOnline();
   const router = useRouter();
@@ -49,6 +49,7 @@ export default function SignIn() {
   const [showPassword, setShowPassword] = useState(false);
   const [keepSignedIn, setKeepSignedInState] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [waitingForAuthState, setWaitingForAuthState] = useState(false);
   const emailPrefilled = Boolean(getEmailFromParams(params));
   const scrollRef = useRef<ScrollView>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -70,6 +71,17 @@ export default function SignIn() {
     const next = getEmailFromParams(params);
     if (next) setEmail(next);
   }, [params.email]);
+
+  useEffect(() => {
+    // Wait for AuthContext to finish hydration/auth events before navigating.
+    if (authLoading) return;
+    if (!user || !profile) return;
+    if (profile.role === 'driver') {
+      router.replace('/(driver)');
+      return;
+    }
+    router.replace('/(tabs)/finance');
+  }, [authLoading, user, profile, router]);
 
   useEffect(() => {
     const show = () => {
@@ -124,7 +136,7 @@ export default function SignIn() {
       );
       return;
     }
-    router.replace('/');
+    setWaitingForAuthState(true);
   };
 
   const scrollContentStyle = [
@@ -233,11 +245,11 @@ export default function SignIn() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.button, (loading || !isOnline) && styles.buttonDisabled]}
+            style={[styles.button, (loading || waitingForAuthState || !isOnline) && styles.buttonDisabled]}
             onPress={handleSignIn}
-            disabled={loading || !isOnline}
+            disabled={loading || waitingForAuthState || !isOnline}
           >
-            {loading ? (
+            {loading || waitingForAuthState ? (
               <ActivityIndicator color="#ffffff" />
             ) : (
               <Text style={styles.buttonText}>{t('logIn')}</Text>
