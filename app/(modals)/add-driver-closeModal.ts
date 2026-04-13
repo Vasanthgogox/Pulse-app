@@ -3,8 +3,7 @@ import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 
 export function closeModal(router: ReturnType<typeof useRouter>) {
-  if (router.canGoBack()) router.back();
-  else router.replace("/(tabs)/network");
+  router.replace("/(tabs)/resources");
 }
 
 export default function AddDriverCloseModal() {

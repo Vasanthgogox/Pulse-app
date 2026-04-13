@@ -18,10 +18,9 @@ import {
 const NO_ORG_MESSAGE =
   "No organization loaded. Sign out and sign in again to refresh, or ensure you are added as a member of an organization in the dashboard.";
 
-/** Close modal: go back when possible. */
+/** Close modal: go back to network. */
 function closeModal(router: ReturnType<typeof useRouter>) {
-  if (router.canGoBack()) router.back();
-  else router.replace("/(tabs)/network");
+  router.replace("/(tabs)/network");
 }
 
 export default function AddClientScreen() {

@@ -12,15 +12,15 @@ import {
 } from '@/services/connectionRequestsService';
 import { queryKeys } from '@/lib/queryKeys';
 import { useQueryClient } from '@tanstack/react-query';
-import { useSafeBack } from '@/lib/useSafeBack';
 
 export default function AddSupplierScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const safeBack = useSafeBack("/(tabs)/network");
   const { currentOrganization } = useOrganization();
 
-  const closeModal = () => safeBack();
+  const closeModal = () => {
+    router.replace("/(tabs)/network");
+  };
 
   const handleComplete = async (data: SupplierFormData) => {
     if (!currentOrganization?.id) return;
