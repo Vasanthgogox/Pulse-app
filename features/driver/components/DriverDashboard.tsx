@@ -30,6 +30,7 @@ import {
   Animated,
   AppState,
   Dimensions,
+  Image,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -44,7 +45,8 @@ import {
   View
 } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import MapView, { Callout, Marker, Polyline } from '@/lib/reactNativeMapsCompat';
+// @ts-ignore
+import MapView, { Callout, Marker, Polyline } from '../../../lib/reactNativeMapsCompat';
 import Reanimated, {
   useAnimatedProps,
   useAnimatedStyle,
@@ -327,7 +329,7 @@ export default function DriverDashboard() {
     return { transform: [{ rotate: `${youHeadingSv.value}deg` }] };
   });
 
-  const OlaAnimatedMarker = Reanimated.createAnimatedComponent(Marker);
+  const OlaAnimatedMarker = Reanimated.createAnimatedComponent(Marker) as any;
   const [stopsExpanded, setStopsExpanded] = useState(false);
   const [justCompletedTrip, setJustCompletedTrip] = useState(false);
   const [isFullMapVisible, setIsFullMapVisible] = useState(false);
@@ -1463,7 +1465,7 @@ export default function DriverDashboard() {
         }}
       >
         <MapView
-          ref={(instance) => {
+          ref={(instance: any) => {
             targetRef.current = instance;
           }}
           style={isFullScreen ? styles.fullMapView : styles.assignedMapInHalf}
@@ -2006,53 +2008,86 @@ export default function DriverDashboard() {
                                         { backgroundColor: colors.surface, borderColor: colors.border },
                                       ]}
                                     >
+                                      <TouchableOpacity style={styles.inviteCloseBtn} onPress={() => {
+                                          setInviteActionId(inv.id);
+                                          driversService.rejectDriverInvite(inv.id).then(() => {
+                                              setInviteActionId(null);
+                                              fetch();
+                                          });
+                                      }}>
+                                          <FontAwesome name="times" size={14} color={Theme.textMuted} />
+                                      </TouchableOpacity>
                                       <View style={styles.inviteCardHeader}>
-                                        <FontAwesome name="building" size={20} color={colors.emerald} />
-                                        <Text style={[styles.inviteOrgName, { color: colors.text }]}>
-                                          {inv.from_org_name || 'Organisation'}
-                                        </Text>
+                                          <View style={styles.inviteAvatarWrap}>
+                                              {inv.from_org_logo_url ? (
+                                                  <Image source={{ uri: inv.from_org_logo_url }} style={styles.inviteAvatarImg} />
+                                              ) : (
+                                                  <FontAwesome name="building" size={20} color={colors.emerald} />
+                                              )}
+                                          </View>
+                                          <View style={styles.inviteOrgInfo}>
+                                              <View style={styles.inviteOrgNameRow}>
+                                                  <Text style={[styles.inviteOrgName, { color: colors.text }]}>
+                                                  {inv.from_org_name || 'Organisation'}
+                                                  </Text>
+                                                  <View style={styles.inviteVerifiedBadge}>
+                                                      <Text style={styles.inviteVerifiedText}>VERIFIED</Text>
+                                                  </View>
+                                              </View>
+                                              <View style={styles.inviteOrgStats}>
+                                                  <FontAwesome name="star" size={12} color={Theme.driverGold} style={{ marginRight: 4 }} />
+                                                  <Text style={[styles.inviteOrgStatsText, { color: colors.textMuted }]}>4.9</Text>
+                                                  <View style={styles.inviteOrgStatsDot} />
+                                                  <Text style={[styles.inviteOrgStatsText, { color: colors.textMuted }]}>1.2k+ drivers</Text>
+                                              </View>
+                                          </View>
                                       </View>
-                                      <Text style={[styles.inviteOffer, { color: colors.textMuted }]}>
-                                        {buildInviteOfferText(inv)}
-                                      </Text>
+                                      
                                       <View style={styles.inviteActions}>
-                                        <TouchableOpacity
-                                          style={[
-                                            styles.inviteRejectBtn,
-                                            { borderColor: colors.border },
-                                            inviteActionId === inv.id && styles.inviteBtnDisabled,
-                                          ]}
-                                          onPress={async () => {
-                                            setInviteActionId(inv.id);
-                                            await driversService.rejectDriverInvite(inv.id);
-                                            setInviteActionId(null);
-                                            fetch();
-                                          }}
-                                          disabled={!!inviteActionId}
-                                          activeOpacity={0.8}
-                                        >
-                                          <Text style={[styles.inviteRejectBtnText, { color: colors.text }]}>Decline</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
-                                          style={[
-                                            styles.inviteAcceptBtn,
-                                            {
-                                              backgroundColor: colors.emerald,
-                                              borderColor: colors.emerald,
-                                            },
-                                            inviteActionId === inv.id && styles.inviteBtnDisabled,
-                                          ]}
-                                          onPress={async () => {
-                                            setInviteActionId(inv.id);
-                                            const { error } = await driversService.acceptDriverInvite(inv.id);
-                                            setInviteActionId(null);
-                                            if (!error) fetch();
-                                          }}
-                                          disabled={!!inviteActionId}
-                                          activeOpacity={0.8}
-                                        >
-                                          <Text style={styles.inviteAcceptBtnText}>Accept</Text>
-                                        </TouchableOpacity>
+                                          <View style={[styles.inviteOfferBadge, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
+                                              <FontAwesome name="bolt" size={12} color={colors.primary} />
+                                              <Text style={[styles.inviteOfferText, { color: colors.text }]}>
+                                              {buildInviteOfferText(inv)}
+                                              </Text>
+                                          </View>
+
+                                        <View style={styles.inviteActionBtns}>
+                                            <TouchableOpacity
+                                            style={[
+                                                styles.inviteRejectBtn,
+                                                inviteActionId === inv.id && styles.inviteBtnDisabled,
+                                            ]}
+                                            onPress={async () => {
+                                                setInviteActionId(inv.id);
+                                                await driversService.rejectDriverInvite(inv.id);
+                                                setInviteActionId(null);
+                                                fetch();
+                                            }}
+                                            disabled={!!inviteActionId}
+                                            activeOpacity={0.8}
+                                            >
+                                            <Text style={[styles.inviteRejectBtnText, { color: colors.textMuted }]}>Ignore</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                            style={[
+                                                styles.inviteAcceptBtn,
+                                                {
+                                                backgroundColor: colors.primary,
+                                                },
+                                                inviteActionId === inv.id && styles.inviteBtnDisabled,
+                                            ]}
+                                            onPress={async () => {
+                                                setInviteActionId(inv.id);
+                                                const { error } = await driversService.acceptDriverInvite(inv.id);
+                                                setInviteActionId(null);
+                                                if (!error) fetch();
+                                            }}
+                                            disabled={!!inviteActionId}
+                                            activeOpacity={0.8}
+                                            >
+                                            <Text style={styles.inviteAcceptBtnText}>Accept Invite</Text>
+                                            </TouchableOpacity>
+                                        </View>
                                       </View>
                                     </View>
                                   ))}
@@ -2369,40 +2404,75 @@ export default function DriverDashboard() {
                   .filter((i) => i.status === 'pending')
                   .map((inv) => (
                     <View key={inv.id} style={[styles.inviteCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                      <TouchableOpacity style={styles.inviteCloseBtn} onPress={() => {
+                          setInviteActionId(inv.id);
+                          driversService.rejectDriverInvite(inv.id).then(() => {
+                              setInviteActionId(null);
+                              fetch();
+                          });
+                      }}>
+                          <FontAwesome name="times" size={14} color={Theme.textMuted} />
+                      </TouchableOpacity>
                       <View style={styles.inviteCardHeader}>
-                        <FontAwesome name="building" size={20} color={colors.emerald} />
-                        <Text style={[styles.inviteOrgName, { color: colors.text }]}>{inv.from_org_name || 'Organisation'}</Text>
+                          <View style={styles.inviteAvatarWrap}>
+                              {inv.from_org_logo_url ? (
+                                  <Image source={{ uri: inv.from_org_logo_url }} style={styles.inviteAvatarImg} />
+                              ) : (
+                                  <FontAwesome name="building" size={20} color={colors.emerald} />
+                              )}
+                          </View>
+                          <View style={styles.inviteOrgInfo}>
+                              <View style={styles.inviteOrgNameRow}>
+                                  <Text style={[styles.inviteOrgName, { color: colors.text }]}>
+                                  {inv.from_org_name || 'Organisation'}
+                                  </Text>
+                                  <View style={styles.inviteVerifiedBadge}>
+                                      <Text style={styles.inviteVerifiedText}>VERIFIED</Text>
+                                  </View>
+                              </View>
+                              <View style={styles.inviteOrgStats}>
+                                  <FontAwesome name="star" size={12} color={Theme.driverGold} style={{ marginRight: 4 }} />
+                                  <Text style={[styles.inviteOrgStatsText, { color: colors.textMuted }]}>4.9</Text>
+                                  <View style={styles.inviteOrgStatsDot} />
+                                  <Text style={[styles.inviteOrgStatsText, { color: colors.textMuted }]}>1.2k+ drivers</Text>
+                              </View>
+                          </View>
                       </View>
-                      <Text style={[styles.inviteOffer, { color: colors.textMuted }]}>
-                        {buildInviteOfferText(inv)}
-                      </Text>
                       <View style={styles.inviteActions}>
-                        <TouchableOpacity
-                          style={[styles.inviteRejectBtn, { borderColor: colors.border }, inviteActionId === inv.id && styles.inviteBtnDisabled]}
-                          onPress={async () => {
-                            setInviteActionId(inv.id);
-                            await driversService.rejectDriverInvite(inv.id);
-                            setInviteActionId(null);
-                            fetch();
-                          }}
-                          disabled={!!inviteActionId}
-                          activeOpacity={0.8}
-                        >
-                          <Text style={[styles.inviteRejectBtnText, { color: colors.text }]}>Decline</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.inviteAcceptBtn, { backgroundColor: colors.emerald, borderColor: colors.emerald }, inviteActionId === inv.id && styles.inviteBtnDisabled]}
-                          onPress={async () => {
-                            setInviteActionId(inv.id);
-                            const { error } = await driversService.acceptDriverInvite(inv.id);
-                            setInviteActionId(null);
-                            if (!error) fetch();
-                          }}
-                          disabled={!!inviteActionId}
-                          activeOpacity={0.8}
-                        >
-                          <Text style={styles.inviteAcceptBtnText}>Accept</Text>
-                        </TouchableOpacity>
+                        <View style={[styles.inviteOfferBadge, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
+                            <FontAwesome name="bolt" size={12} color={colors.primary} />
+                            <Text style={[styles.inviteOfferText, { color: colors.text }]}>
+                            {buildInviteOfferText(inv)}
+                            </Text>
+                        </View>
+                        <View style={styles.inviteActionBtns}>
+                            <TouchableOpacity
+                            style={[styles.inviteRejectBtn, inviteActionId === inv.id && styles.inviteBtnDisabled]}
+                            onPress={async () => {
+                                setInviteActionId(inv.id);
+                                await driversService.rejectDriverInvite(inv.id);
+                                setInviteActionId(null);
+                                fetch();
+                            }}
+                            disabled={!!inviteActionId}
+                            activeOpacity={0.8}
+                            >
+                            <Text style={[styles.inviteRejectBtnText, { color: colors.textMuted }]}>Ignore</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                            style={[styles.inviteAcceptBtn, { backgroundColor: colors.primary }, inviteActionId === inv.id && styles.inviteBtnDisabled]}
+                            onPress={async () => {
+                                setInviteActionId(inv.id);
+                                const { error } = await driversService.acceptDriverInvite(inv.id);
+                                setInviteActionId(null);
+                                if (!error) fetch();
+                            }}
+                            disabled={!!inviteActionId}
+                            activeOpacity={0.8}
+                            >
+                            <Text style={styles.inviteAcceptBtnText}>Accept Invite</Text>
+                            </TouchableOpacity>
+                        </View>
                       </View>
                     </View>
                   ))}
@@ -2827,51 +2897,131 @@ const styles = StyleSheet.create({
   },
   inviteCard: {
     width: '100%',
-    backgroundColor: Theme.driverWhiteMuted,
     borderWidth: 1,
-    borderColor: Theme.driverBorder,
-    borderRadius: 12,
-    padding: 20,
+    borderRadius: 24,
+    padding: 16,
+    marginBottom: 12,
+  },
+  inviteCloseBtn: {
+      position: 'absolute',
+      top: 12,
+      right: 12,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: 'rgba(255,255,255,0.1)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 10,
   },
   inviteCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     marginBottom: 12,
+    gap: 12,
+  },
+  inviteAvatarWrap: {
+      width: 48,
+      height: 48,
+      borderRadius: 16,
+      backgroundColor: 'rgba(255,255,255,0.05)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.1)',
+      overflow: 'hidden',
+  },
+  inviteAvatarImg: {
+      width: '100%',
+      height: '100%',
+  },
+  inviteOrgInfo: {
+      flex: 1,
+  },
+  inviteOrgNameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
   },
   inviteOrgName: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: Theme.textOnDark,
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  inviteVerifiedBadge: {
+      backgroundColor: '#E6F4EA',
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 4,
+  },
+  inviteVerifiedText: {
+      color: '#137333',
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 0.5,
+  },
+  inviteOrgStats: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 2,
+  },
+  inviteOrgStatsText: {
+      fontSize: 12,
+      fontWeight: '600',
+  },
+  inviteOrgStatsDot: {
+      width: 4,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: Theme.textMuted,
+      marginHorizontal: 6,
+      opacity: 0.5,
   },
   inviteOffer: {
-    fontSize: 11,
-    color: Theme.textMuted,
+    fontSize: 14,
+    fontWeight: '500',
     marginBottom: 16,
   },
   inviteActions: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
   },
+  inviteOfferBadge: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 12,
+      borderWidth: 1,
+      gap: 6,
+  },
+  inviteOfferText: {
+      fontSize: 12,
+      fontWeight: '700',
+  },
+  inviteActionBtns: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+  },
   inviteRejectBtn: {
-    flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Theme.driverBorder,
-    borderRadius: 4,
   },
-  inviteRejectBtnText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5, color: Theme.textOnDark },
+  inviteRejectBtnText: { fontSize: 13, fontWeight: '700' },
   inviteAcceptBtn: {
-    flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Theme.driverPrimary,
-    borderRadius: 4,
+    borderRadius: 12,
+    ...(Platform.OS === 'ios' ? { shadowColor: '#3B82F6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8 } : { elevation: 4 })
   },
-  inviteAcceptBtnText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5, color: Theme.textOnPrimary },
+  inviteAcceptBtnText: { fontSize: 13, fontWeight: '700', color: Theme.textOnPrimary },
   inviteBtnDisabled: { opacity: 0.6 },
   activeMissionWrap: {
     alignSelf: 'stretch',

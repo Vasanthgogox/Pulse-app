@@ -377,6 +377,7 @@ export default function DriverRadarScreen() {
       setShowNotification(false);
     }
   }, [invites, invitationAccepted, invitationDeclined, invitationDismissed]);
+  const pendingInvite = invites.find((i) => i.status === "pending") ?? null;
 
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);
   const [acceptLoading, setAcceptLoading] = useState(false);
@@ -3283,63 +3284,88 @@ export default function DriverRadarScreen() {
                 ]}
               >
                 <View style={styles.assignedSheetContent}>
-                  {showNotification && (
+                  {showNotification && pendingInvite && (
                     <View
                       style={[
-                        styles.notificationCard,
+                        styles.inviteCard,
                         { backgroundColor: colors.surface, borderColor: colors.border },
                       ]}
                     >
                       <TouchableOpacity
-                        style={styles.notificationContent}
-                        onPress={() => {
-                          router.push("/(driver)/requests");
-                        }}
-                        activeOpacity={0.8}
+                        style={styles.inviteCloseBtn}
+                        onPress={() => setInvitationDismissed(true)}
+                        hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+                        activeOpacity={0.7}
                       >
-                        <View style={styles.notificationIconWrap}>
-                          <FontAwesome name="building" size={20} color={colors.emerald} />
-                        </View>
-                        <View style={styles.notificationTextContent}>
-                          <Text style={[
-                            styles.notificationTitle,
-                            { color: colors.emerald },
-                          ]}>
-                            NEW INVITATION
-                          </Text>
-                          <Text style={[
-                            styles.notificationOrgName,
-                            { color: colors.text },
-                          ]}>
-                            {invites.find((i) => i.status === "pending")?.from_org_name || "An organization"}
-                          </Text>
-                          <Text style={[
-                            styles.notificationSubtitle,
-                            { color: colors.textMuted },
-                          ]}>
-                            You have been invited to join the team. Tap to view details.
-                          </Text>
-                        </View>
-                        <View style={styles.notificationRightWrap}>
-                          <TouchableOpacity
-                            onPress={(e) => {
-                              e.stopPropagation();
-                              setInvitationDismissed(true);
-                            }}
-                            hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
-                            style={styles.notificationCloseBtn}
-                            activeOpacity={0.6}
-                          >
-                            <FontAwesome name="times" size={16} color={colors.textMuted} />
-                          </TouchableOpacity>
-                          <Text style={[
-                            styles.notificationTime,
-                            { color: colors.textMuted },
-                          ]}>
-                            now
-                          </Text>
-                        </View>
+                        <FontAwesome name="times" size={14} color={Theme.textMuted} />
                       </TouchableOpacity>
+                      <View style={styles.inviteCardHeader}>
+                        <View style={styles.inviteAvatarWrap}>
+                          {pendingInvite.from_org_logo_url ? (
+                            <Image source={{ uri: pendingInvite.from_org_logo_url }} style={styles.inviteAvatarImg} />
+                          ) : (
+                            <FontAwesome name="building" size={20} color={colors.emerald} />
+                          )}
+                        </View>
+                        <View style={styles.inviteOrgInfo}>
+                          <View style={styles.inviteOrgNameRow}>
+                            <Text style={[styles.inviteOrgName, { color: colors.text }]}>
+                              {pendingInvite.from_org_name || "An organization"}
+                            </Text>
+                            <View style={styles.inviteVerifiedBadge}>
+                              <Text style={styles.inviteVerifiedText}>VERIFIED</Text>
+                            </View>
+                          </View>
+                          <View style={styles.inviteOrgStats}>
+                            <FontAwesome name="star" size={12} color={Theme.driverGold} style={{ marginRight: 4 }} />
+                            <Text style={[styles.inviteOrgStatsText, { color: colors.textMuted }]}>4.9</Text>
+                            <View style={styles.inviteOrgStatsDot} />
+                            <Text style={[styles.inviteOrgStatsText, { color: colors.textMuted }]}>1.2k+ drivers</Text>
+                          </View>
+                        </View>
+                      </View>
+                      <View style={styles.inviteActions}>
+                        <View style={[styles.inviteOfferBadge, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
+                          <FontAwesome name="bolt" size={12} color={colors.primary} />
+                          <Text style={[styles.inviteOfferText, { color: colors.text }]}>
+                            {pendingInvite.commission_percent != null && pendingInvite.commission_percent > 0
+                              ? `+${pendingInvite.commission_percent}% Earnings`
+                              : "Tap to view invitation details"}
+                          </Text>
+                        </View>
+                        <View style={styles.inviteActionBtns}>
+                          <TouchableOpacity
+                            style={[styles.inviteRejectBtn, inviteActionId === pendingInvite.id && styles.inviteBtnDisabled]}
+                            onPress={async () => {
+                              setInviteActionId(pendingInvite.id);
+                              await driversService.rejectDriverInvite(pendingInvite.id);
+                              setInviteActionId(null);
+                              setInvitationDeclined(true);
+                              fetch();
+                            }}
+                            disabled={!!inviteActionId}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={[styles.inviteRejectBtnText, { color: colors.textMuted }]}>Ignore</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.inviteAcceptBtn, { backgroundColor: colors.primary }, inviteActionId === pendingInvite.id && styles.inviteBtnDisabled]}
+                            onPress={async () => {
+                              setInviteActionId(pendingInvite.id);
+                              const { error } = await driversService.acceptDriverInvite(pendingInvite.id);
+                              setInviteActionId(null);
+                              if (!error) {
+                                setInvitationAccepted(true);
+                                fetch();
+                              }
+                            }}
+                            disabled={!!inviteActionId}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={styles.inviteAcceptBtnText}>Accept Invite</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
                     </View>
                   )}
                   {loading && !assignmentFeedback ? (
@@ -3449,63 +3475,88 @@ export default function DriverRadarScreen() {
                 </TouchableOpacity>
               ) : null}
 
-              {showNotification && (
+              {showNotification && pendingInvite && (
                 <View
                   style={[
-                    styles.notificationCard,
+                    styles.inviteCard,
                     { backgroundColor: colors.surface, borderColor: colors.border },
                   ]}
                 >
                   <TouchableOpacity
-                    style={styles.notificationContent}
-                    onPress={() => {
-                      router.push("/(driver)/requests");
-                    }}
-                    activeOpacity={0.8}
+                    style={styles.inviteCloseBtn}
+                    onPress={() => setInvitationDismissed(true)}
+                    hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+                    activeOpacity={0.7}
                   >
-                    <View style={styles.notificationIconWrap}>
-                      <FontAwesome name="building" size={20} color={colors.emerald} />
-                    </View>
-                    <View style={styles.notificationTextContent}>
-                      <Text style={[
-                        styles.notificationTitle,
-                        { color: colors.emerald },
-                      ]}>
-                        NEW INVITATION
-                      </Text>
-                      <Text style={[
-                        styles.notificationOrgName,
-                        { color: colors.text },
-                      ]}>
-                        {invites.find((i) => i.status === "pending")?.from_org_name || "An organization"}
-                      </Text>
-                      <Text style={[
-                        styles.notificationSubtitle,
-                        { color: colors.textMuted },
-                      ]}>
-                        You have been invited to join the team. Tap to view details.
-                      </Text>
-                    </View>
-                    <View style={styles.notificationRightWrap}>
-                      <TouchableOpacity
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          setInvitationDismissed(true);
-                        }}
-                        hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
-                        style={styles.notificationCloseBtn}
-                        activeOpacity={0.6}
-                      >
-                        <FontAwesome name="times" size={16} color={colors.textMuted} />
-                      </TouchableOpacity>
-                      <Text style={[
-                        styles.notificationTime,
-                        { color: colors.textMuted },
-                      ]}>
-                        now
-                      </Text>
-                    </View>
+                    <FontAwesome name="times" size={14} color={Theme.textMuted} />
                   </TouchableOpacity>
+                  <View style={styles.inviteCardHeader}>
+                    <View style={styles.inviteAvatarWrap}>
+                      {pendingInvite.from_org_logo_url ? (
+                        <Image source={{ uri: pendingInvite.from_org_logo_url }} style={styles.inviteAvatarImg} />
+                      ) : (
+                        <FontAwesome name="building" size={20} color={colors.emerald} />
+                      )}
+                    </View>
+                    <View style={styles.inviteOrgInfo}>
+                      <View style={styles.inviteOrgNameRow}>
+                        <Text style={[styles.inviteOrgName, { color: colors.text }]}>
+                          {pendingInvite.from_org_name || "An organization"}
+                        </Text>
+                        <View style={styles.inviteVerifiedBadge}>
+                          <Text style={styles.inviteVerifiedText}>VERIFIED</Text>
+                        </View>
+                      </View>
+                      <View style={styles.inviteOrgStats}>
+                        <FontAwesome name="star" size={12} color={Theme.driverGold} style={{ marginRight: 4 }} />
+                        <Text style={[styles.inviteOrgStatsText, { color: colors.textMuted }]}>4.9</Text>
+                        <View style={styles.inviteOrgStatsDot} />
+                        <Text style={[styles.inviteOrgStatsText, { color: colors.textMuted }]}>1.2k+ drivers</Text>
+                      </View>
+                    </View>
+                  </View>
+                  <View style={styles.inviteActions}>
+                    <View style={[styles.inviteOfferBadge, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
+                      <FontAwesome name="bolt" size={12} color={colors.primary} />
+                      <Text style={[styles.inviteOfferText, { color: colors.text }]}>
+                        {pendingInvite.commission_percent != null && pendingInvite.commission_percent > 0
+                          ? `+${pendingInvite.commission_percent}% Earnings`
+                          : "Tap to view invitation details"}
+                      </Text>
+                    </View>
+                    <View style={styles.inviteActionBtns}>
+                      <TouchableOpacity
+                        style={[styles.inviteRejectBtn, inviteActionId === pendingInvite.id && styles.inviteBtnDisabled]}
+                        onPress={async () => {
+                          setInviteActionId(pendingInvite.id);
+                          await driversService.rejectDriverInvite(pendingInvite.id);
+                          setInviteActionId(null);
+                          setInvitationDeclined(true);
+                          fetch();
+                        }}
+                        disabled={!!inviteActionId}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.inviteRejectBtnText, { color: colors.textMuted }]}>Ignore</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.inviteAcceptBtn, { backgroundColor: colors.primary }, inviteActionId === pendingInvite.id && styles.inviteBtnDisabled]}
+                        onPress={async () => {
+                          setInviteActionId(pendingInvite.id);
+                          const { error } = await driversService.acceptDriverInvite(pendingInvite.id);
+                          setInviteActionId(null);
+                          if (!error) {
+                            setInvitationAccepted(true);
+                            fetch();
+                          }
+                        }}
+                        disabled={!!inviteActionId}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.inviteAcceptBtnText}>Accept Invite</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
                 </View>
               )}
             </View>
@@ -3818,62 +3869,132 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   inviteCard: {
-    width: "100%",
-    backgroundColor: Theme.driverWhiteMuted,
+    width: '100%',
     borderWidth: 1,
-    borderColor: Theme.driverBorder,
-    borderRadius: 12,
-    padding: 20,
-  },
-  inviteCardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
+    borderRadius: 24,
+    padding: 16,
     marginBottom: 12,
   },
+  inviteCloseBtn: {
+      position: 'absolute',
+      top: 12,
+      right: 12,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: 'rgba(255,255,255,0.1)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 10,
+  },
+  inviteCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 12,
+  },
+  inviteAvatarWrap: {
+      width: 48,
+      height: 48,
+      borderRadius: 16,
+      backgroundColor: 'rgba(255,255,255,0.05)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.1)',
+      overflow: 'hidden',
+  },
+  inviteAvatarImg: {
+      width: '100%',
+      height: '100%',
+  },
+  inviteOrgInfo: {
+      flex: 1,
+  },
+  inviteOrgNameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+  },
   inviteOrgName: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: Theme.textOnDark,
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  inviteVerifiedBadge: {
+      backgroundColor: '#E6F4EA',
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 4,
+  },
+  inviteVerifiedText: {
+      color: '#137333',
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 0.5,
+  },
+  inviteOrgStats: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 2,
+  },
+  inviteOrgStatsText: {
+      fontSize: 12,
+      fontWeight: '600',
+  },
+  inviteOrgStatsDot: {
+      width: 4,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: Theme.textMuted,
+      marginHorizontal: 6,
+      opacity: 0.5,
   },
   inviteOffer: {
-    fontSize: 11,
-    color: Theme.textMuted,
+    fontSize: 14,
+    fontWeight: '500',
     marginBottom: 16,
   },
   inviteActions: {
-    flexDirection: "row",
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
   },
+  inviteOfferBadge: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 12,
+      borderWidth: 1,
+      gap: 6,
+  },
+  inviteOfferText: {
+      fontSize: 12,
+      fontWeight: '700',
+  },
+  inviteActionBtns: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+  },
   inviteRejectBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: Theme.driverBorder,
-    borderRadius: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  inviteRejectBtnText: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    color: Theme.textOnDark,
-  },
+  inviteRejectBtnText: { fontSize: 13, fontWeight: '700' },
   inviteAcceptBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Theme.driverPrimary,
-    borderRadius: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    ...(Platform.OS === 'ios' ? { shadowColor: '#3B82F6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8 } : { elevation: 4 })
   },
-  inviteAcceptBtnText: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    color: Theme.textOnPrimary,
-  },
+  inviteAcceptBtnText: { fontSize: 13, fontWeight: '700', color: Theme.textOnPrimary },
   inviteBtnDisabled: { opacity: 0.6 },
   activeMissionWrap: {
     alignSelf: "stretch",
