@@ -167,6 +167,9 @@ export function LoadCenterView({
   const [handshakeStep, setHandshakeStep] = useState<
     "flow_choice" | "roster" | "ad_hoc_vehicle"
   >("flow_choice");
+  const [localBidHistoryByIndentId, setLocalBidHistoryByIndentId] = useState<
+    Record<string, { amount: number; updatedAt: string }[]>
+  >({});
 
   const { data: indents = [], isLoading } = useIndentsQuery(orgId);
   const {
@@ -194,6 +197,32 @@ export function LoadCenterView({
     for (const q of myQuotes) m.set(q.indent_id, q);
     return m;
   }, [myQuotes]);
+  const activeBidQuote = useMemo(() => {
+    if (loadAction?.type !== "BID") return null;
+    return myQuoteByIndentId.get(loadAction.load.id) ?? null;
+  }, [loadAction, myQuoteByIndentId]);
+  const activeBidQuoteUpdatedAt = useMemo(() => {
+    if (!activeBidQuote?.updated_at) return null;
+    const parsed = new Date(activeBidQuote.updated_at);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed.toLocaleString("en-IN", {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }, [activeBidQuote?.updated_at]);
+  const activeBidHistory = useMemo(() => {
+    if (loadAction?.type !== "BID") return [];
+    const indentId = loadAction.load.id;
+    const localHistory = localBidHistoryByIndentId[indentId] ?? [];
+    return localHistory
+      .filter((entry) => Number.isFinite(Number(entry.amount)))
+      .sort(
+        (a, b) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      );
+  }, [loadAction, localBidHistoryByIndentId]);
 
   const isIntegratedSupplierRow = useCallback((s: { supplier_type?: string | null; linked_organization_id?: string | null }) => {
     return s.supplier_type === "integrated" && !!s.linked_organization_id;
@@ -2114,6 +2143,50 @@ export function LoadCenterView({
                   value={quoteAmount}
                   onChangeText={setQuoteAmount}
                 />
+                {activeBidQuote ? (
+                  <View style={styles.previousBidWrap}>
+                    <Text style={styles.previousBidLabel}>Previous bid</Text>
+                    <Text style={styles.previousBidValue}>
+                      {formatINR(Number(activeBidQuote.amount ?? 0))}
+                    </Text>
+                    {activeBidQuoteUpdatedAt ? (
+                      <Text style={styles.previousBidMeta}>
+                        Last updated: {activeBidQuoteUpdatedAt}
+                      </Text>
+                    ) : null}
+                    {activeBidHistory.length > 0 ? (
+                      <View style={styles.previousBidHistoryWrap}>
+                        <Text style={styles.previousBidHistoryTitle}>
+                          Earlier updates
+                        </Text>
+                        {activeBidHistory.map((entry, idx) => {
+                          const dt = new Date(entry.updatedAt);
+                          const readable = Number.isNaN(dt.getTime())
+                            ? "Unknown time"
+                            : dt.toLocaleString("en-IN", {
+                                day: "numeric",
+                                month: "short",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              });
+                          return (
+                            <View
+                              key={`${entry.updatedAt}-${entry.amount}-${idx}`}
+                              style={styles.previousBidHistoryRow}
+                            >
+                              <Text style={styles.previousBidHistoryAmount}>
+                                {formatINR(Number(entry.amount ?? 0))}
+                              </Text>
+                              <Text style={styles.previousBidHistoryDate}>
+                                {readable}
+                              </Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
               </View>
               <TouchableOpacity
                 style={styles.modalSubmit}
@@ -2133,6 +2206,7 @@ export function LoadCenterView({
                   }
                   const load = loadAction.load;
                   const hadExistingQuote = !!myQuoteByIndentId.get(load.id);
+                  const existingQuoteBeforeSave = myQuoteByIndentId.get(load.id);
                   try {
                     setSubmittingQuote(true);
                     const { error } = await createDirectQuote(
@@ -2159,6 +2233,28 @@ export function LoadCenterView({
                     triggerSuccess(
                       hadExistingQuote ? "Quote updated" : "Offer Published",
                     );
+                    if (existingQuoteBeforeSave) {
+                      setLocalBidHistoryByIndentId((prev) => {
+                        const indentId = load.id;
+                        const prior = prev[indentId] ?? [];
+                        const nextEntry = {
+                          amount: Number(existingQuoteBeforeSave.amount ?? 0),
+                          updatedAt:
+                            existingQuoteBeforeSave.updated_at ??
+                            new Date().toISOString(),
+                        };
+                        const alreadyExists = prior.some(
+                          (row) =>
+                            Number(row.amount) === Number(nextEntry.amount) &&
+                            row.updatedAt === nextEntry.updatedAt,
+                        );
+                        if (alreadyExists) return prev;
+                        return {
+                          ...prev,
+                          [indentId]: [nextEntry, ...prior].slice(0, 10),
+                        };
+                      });
+                    }
                     setLoadAction(null);
                   } catch (e) {
                     setSubmittingQuote(false);
@@ -4245,6 +4341,61 @@ const styles = StyleSheet.create({
         outlineStyle: "none",
       } as any,
     }),
+  },
+  previousBidWrap: {
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 10,
+    backgroundColor: Theme.surfaceGray,
+  },
+  previousBidLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  previousBidValue: {
+    marginTop: 2,
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  previousBidMeta: {
+    marginTop: 2,
+    fontSize: 10,
+    color: Theme.textSecondary,
+  },
+  previousBidHistoryWrap: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+    gap: 6,
+  },
+  previousBidHistoryTitle: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+  previousBidHistoryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  previousBidHistoryAmount: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  previousBidHistoryDate: {
+    fontSize: 10,
+    color: Theme.textSecondary,
   },
   quotePlaceholder: {
     fontSize: 36,
