@@ -5,20 +5,21 @@ import { formatINR } from '@/lib/format';
 import * as tripDocumentsService from '@/services/tripDocumentsService';
 import * as tripsService from '@/services/tripsService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  Linking,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+    import {
+      ActivityIndicator,
+      Image,
+      Linking,
+      Modal,
+      Platform,
+      Pressable,
+      StyleSheet,
+      Text,
+      TouchableOpacity,
+      View,
+    } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isAggregateTrip } from '@/lib/driverUtils';
 
@@ -271,8 +272,15 @@ export function DriverTripFlowCard({
     const fileName = result.assets[0].fileName ?? `pod-${Date.now()}.jpg`;
     const mimeType = result.assets[0].mimeType ?? 'image/jpeg';
     try {
-      const file = new File(uri);
-      const arrayBuffer = await file.arrayBuffer();
+      let arrayBuffer: ArrayBuffer;
+      if (Platform.OS === 'web') {
+        const response = await fetch(uri);
+        arrayBuffer = await response.arrayBuffer();
+      } else {
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        arrayBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0)).buffer;
+      }
+      
       if (!arrayBuffer || arrayBuffer.byteLength === 0) {
         setStepError('Could not read image file');
         setPodUploading(false);

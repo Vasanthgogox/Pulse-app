@@ -1,7 +1,8 @@
 import * as tripDocumentsService from "@/services/tripDocumentsService";
-import { File } from "expo-file-system";
+import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Platform } from "react-native";
 
 export function usePodDocuments(
   tripId: string | undefined,
@@ -49,7 +50,15 @@ export function usePodDocuments(
     setPodUploading(true);
 
     try {
-      const arrayBuffer = await new File(uri).arrayBuffer();
+      let arrayBuffer: ArrayBuffer;
+      if (Platform.OS === 'web') {
+        const response = await fetch(uri);
+        arrayBuffer = await response.arrayBuffer();
+      } else {
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        arrayBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0)).buffer;
+      }
+      
       if (!arrayBuffer?.byteLength) return onError?.("Could not read image file");
 
       const { doc, error } = await tripDocumentsService.uploadTripDocument(tripId, userId, {
