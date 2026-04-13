@@ -1,18 +1,29 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { AddVehicleModal, type AddVehicleCompletePayload, createVehicle } from '@/features/vehicles';
 import { queryKeys } from '@/lib/queryKeys';
 import { useQueryClient } from '@tanstack/react-query';
 
+const DEFAULT_FALLBACK_ROUTE = '/(tabs)/resources';
+
 /** Dismiss modal: go back to the page that opened it. */
-function closeModal(router: ReturnType<typeof useRouter>) {
-  router.replace('/(tabs)/resources');
+function closeModal(router: ReturnType<typeof useRouter>, returnTo?: string) {
+  if (router.canGoBack()) {
+    router.back();
+  } else if (returnTo) {
+    router.replace(returnTo as Parameters<typeof router.replace>[0]);
+  } else {
+    router.replace(DEFAULT_FALLBACK_ROUTE);
+  }
 }
 
 export default function AddVehicleScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ returnTo?: string | string[] }>();
   const queryClient = useQueryClient();
   const { currentOrganization } = useOrganization();
+  const returnToParam = Array.isArray(params.returnTo) ? params.returnTo[0] : params.returnTo;
+  const returnTo = returnToParam?.startsWith('/') ? returnToParam : undefined;
 
   const handleComplete = async (payload: AddVehicleCompletePayload) => {
     if (!currentOrganization?.id) return;
@@ -31,12 +42,11 @@ export default function AddVehicleScreen() {
     });
     if (error) throw error;
     await queryClient.refetchQueries({ queryKey: queryKeys.vehicles.all(orgId) });
-    closeModal(router);
   };
 
   return (
     <AddVehicleModal
-      onClose={() => closeModal(router)}
+      onClose={() => closeModal(router, returnTo)}
       onComplete={handleComplete}
       ownAssetOnly
     />

@@ -18,8 +18,8 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
+    Alert,
     FlatList,
-    Modal,
     Platform,
     Pressable,
     ScrollView,
@@ -73,9 +73,12 @@ export function InvoicingExecuteScreen() {
   const [step, setStep] = useState<0 | 1 | 2>(0);
 
   const { width } = useWindowDimensions();
-  const isLargeScreen = width >= 1024;
-  const isMediumScreen = width >= 768;
+  /** Below this width: stacked mobile wizard (matches POD / preview column split). */
+  const INVOICING_DESKTOP_MIN = 1024;
+  const isLargeScreen = width >= INVOICING_DESKTOP_MIN;
   const allowed = canAccessInvoicing(profile);
+  const mobileBottomPad =
+    insets.bottom + Layout.demoTabBarScrollBottomInset + 16;
 
   const formatCurrencySimple = (amount: number) => {
     if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(2)} Cr`;
@@ -138,10 +141,12 @@ export function InvoicingExecuteScreen() {
       .filter((t) => {
         if (t.client !== activeClient) return false;
 
+        const supplier = (t.supplier_name || "").toLowerCase();
         if (
           q &&
           !t.id.toLowerCase().includes(q) &&
-          !t.route.toLowerCase().includes(q)
+          !t.route.toLowerCase().includes(q) &&
+          !supplier.includes(q)
         )
           return false;
 
@@ -223,6 +228,92 @@ export function InvoicingExecuteScreen() {
     [router],
   );
 
+  const exportTripsToCsv = useCallback(
+    (trips: any[], kind: "selected" | "filtered") => {
+      if (!trips.length) {
+        Alert.alert("Export", "No trips to export.");
+        return;
+      }
+      const rows = trips.map((t) => ({
+        trip_id: t?.id ?? "",
+        internal_id: t?.internal_id ?? "",
+        client: t?.client ?? "",
+        date: t?.date ?? "",
+        supplier: t?.supplier_name ?? "",
+        route: t?.route ?? "",
+        amount_inr: t?.amount ?? 0,
+        status: t?.status ?? "",
+      }));
+      const headers = Object.keys(rows[0] || {});
+      const csv = [
+        headers.join(","),
+        ...rows.map((r) =>
+          headers
+            .map((h) => {
+              const value = String((r as Record<string, unknown>)[h] ?? "");
+              return `"${value.replace(/"/g, '""')}"`;
+            })
+            .join(","),
+        ),
+      ].join("\n");
+
+      const slug = (activeClient || "export").replace(/[^\w\-]+/g, "_").slice(0, 48);
+      const filename = `invoicing_${kind}_${slug}_${new Date().toISOString().slice(0, 10)}.csv`;
+
+      if (Platform.OS === "web" && typeof document !== "undefined") {
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      Alert.alert("Export", "CSV export is available on web.");
+    },
+    [activeClient],
+  );
+
+  const handleBulkActions = useCallback(() => {
+    if (!activeClient) {
+      Alert.alert("Bulk actions", "Select a strategic partner first.");
+      return;
+    }
+    if (clientTrips.length === 0) {
+      Alert.alert("Bulk actions", "No trips in the current view.");
+      return;
+    }
+    Alert.alert(
+      "Bulk actions",
+      `${clientTrips.length} trip(s) in view · ${selectedTripIds.length} selected`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Select all in view",
+          onPress: () => handleSelectAll(),
+        },
+        {
+          text: "Clear selection",
+          onPress: () => setSelectedTripIds([]),
+        },
+        {
+          text: "Export filtered list",
+          onPress: () => exportTripsToCsv(clientTrips, "filtered"),
+        },
+      ],
+    );
+  }, [
+    activeClient,
+    clientTrips,
+    selectedTripIds.length,
+    handleSelectAll,
+    exportTripsToCsv,
+  ]);
+
   if (!allowed) {
     return (
       <View
@@ -269,6 +360,9 @@ export function InvoicingExecuteScreen() {
       data={clientStats}
       keyExtractor={(item) => item.name}
       {...tabBarScrollProps}
+      contentContainerStyle={{
+        paddingBottom: isLargeScreen ? 0 : mobileBottomPad,
+      }}
       renderItem={({ item: client }) => (
         <Pressable
           style={[
@@ -352,13 +446,13 @@ export function InvoicingExecuteScreen() {
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.financeHeader}>
         <View style={styles.financeHeaderInner}>
-          <View style={[styles.heroRow, !isMediumScreen && styles.heroRowMobile]}>
+          <View style={[styles.heroRow, !isLargeScreen && styles.heroRowMobile]}>
             <View style={styles.heroTextWrap}>
               <Text style={styles.heroTitle}>Revenue & Invoicing</Text>
               <Text style={styles.heroSub}>Execute invoices for confirmed trips</Text>
             </View>
 
-            {isMediumScreen ? (
+            {isLargeScreen ? (
               <View style={styles.kpiRowDesktop}>
                 <View style={styles.kpiBlock}>
                   <Text style={styles.kpiLabelRed}>POD Pending</Text>
@@ -384,7 +478,7 @@ export function InvoicingExecuteScreen() {
             ) : null}
           </View>
 
-          {!isMediumScreen ? (
+          {!isLargeScreen ? (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -413,11 +507,85 @@ export function InvoicingExecuteScreen() {
               </View>
             </ScrollView>
           ) : null}
+
+          {isLargeScreen ? (
+            <View style={styles.invHeaderToolbar}>
+              <View
+                style={[
+                  styles.invHeaderSearchWrap,
+                  Platform.OS === "web" && styles.invHeaderSearchWrapWeb,
+                ]}
+              >
+                <FontAwesome
+                  name="search"
+                  size={12}
+                  color={Theme.textOnDarkMuted}
+                  style={{ marginRight: 8 }}
+                />
+                <TextInput
+                  style={[
+                    styles.invHeaderSearchInput,
+                    Platform.OS === "web" && styles.invHeaderSearchInputWeb,
+                  ]}
+                  placeholder="Search transactions..."
+                  placeholderTextColor={Theme.textOnDarkMuted}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  returnKeyType="search"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  autoComplete="off"
+                  maxLength={120}
+                />
+              </View>
+
+              <View style={styles.invHeaderToolbarActions}>
+                <View style={styles.invHeaderDateWrap}>
+                  <FontAwesome
+                    name="calendar"
+                    size={12}
+                    color={Theme.textOnDarkMuted}
+                    style={{ marginRight: 6 }}
+                  />
+                  <TextInput
+                    style={styles.invHeaderDateInput}
+                    placeholder="DD/MM/YYYY"
+                    placeholderTextColor={Theme.textOnDarkMuted}
+                    value={startDate}
+                    onChangeText={setStartDate}
+                  />
+                  <Text style={styles.invHeaderDateTo}>TO</Text>
+                  <TextInput
+                    style={styles.invHeaderDateInput}
+                    placeholder="DD/MM/YYYY"
+                    placeholderTextColor={Theme.textOnDarkMuted}
+                    value={endDate}
+                    onChangeText={setEndDate}
+                  />
+                  {startDate || endDate ? (
+                    <Pressable
+                      onPress={() => {
+                        setStartDate("");
+                        setEndDate("");
+                      }}
+                      style={{ marginLeft: 6 }}
+                    >
+                      <FontAwesome
+                        name="times"
+                        size={12}
+                        color={Theme.textOnDarkMuted}
+                      />
+                    </Pressable>
+                  ) : null}
+                </View>
+              </View>
+            </View>
+          ) : null}
         </View>
       </View>
 
       <View style={styles.contentArea}>
-        {isMediumScreen ? (
+        {isLargeScreen ? (
           <View style={styles.splitLayout}>
             <View style={styles.sidebar}>{renderSidebar()}</View>
             <View
@@ -431,13 +599,14 @@ export function InvoicingExecuteScreen() {
             >
               <TripListContent
                 tabBarScrollProps={tabBarScrollProps}
-                isMediumScreen={isMediumScreen}
+                isDesktopTripTable={isLargeScreen}
                 clientTrips={clientTrips}
                 activeClient={activeClient}
                 selectedTripIds={selectedTripIds}
                 allSelected={allClientTripsSelected}
                 onSelectAll={handleSelectAll}
                 onToggleTrip={handleToggleTrip}
+                onBulkMenuPress={handleBulkActions}
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
                 startDate={startDate}
@@ -446,6 +615,7 @@ export function InvoicingExecuteScreen() {
                 setEndDate={setEndDate}
                 isRefetching={isRefetching}
                 refetch={refetch}
+                mobileBottomPad={mobileBottomPad}
               />
             </View>
             {isLargeScreen && (
@@ -526,13 +696,14 @@ export function InvoicingExecuteScreen() {
                 <View style={styles.mobileGridArea}>
                   <TripListContent
                     tabBarScrollProps={tabBarScrollProps}
-                    isMediumScreen={isMediumScreen}
+                    isDesktopTripTable={isLargeScreen}
                     clientTrips={clientTrips}
                     activeClient={activeClient}
                     selectedTripIds={selectedTripIds}
                     allSelected={allClientTripsSelected}
                     onSelectAll={handleSelectAll}
                     onToggleTrip={handleToggleTrip}
+                    onBulkMenuPress={handleBulkActions}
                     searchQuery={searchQuery}
                     setSearchQuery={setSearchQuery}
                     startDate={startDate}
@@ -581,31 +752,7 @@ export function InvoicingExecuteScreen() {
         )}
       </View>
 
-      {isMediumScreen && !isLargeScreen && (
-        <Modal
-          visible={step === 2}
-          animationType="slide"
-          onRequestClose={() => setStep(1)}
-        >
-          <View
-            style={[
-              styles.previewModalContainer,
-              { paddingTop: insets.top, paddingBottom: insets.bottom },
-            ]}
-          >
-            <InvoicePreviewPanel
-              onClose={() => setStep(1)}
-              onPreview={handlePreview}
-              isFinalizing={executeMutation.isPending}
-              activeClient={activeClient}
-              selectedTrips={selectedTrips}
-              isStandalone
-            />
-          </View>
-        </Modal>
-      )}
-
-      {!isMediumScreen && step === 1 && (
+      {!isLargeScreen && step === 1 && (
         <View
           style={[
             styles.footer,
@@ -629,37 +776,20 @@ export function InvoicingExecuteScreen() {
           </Pressable>
         </View>
       )}
-
-      {isMediumScreen && !isLargeScreen && (
-        <View style={styles.desktopFooter}>
-          <Pressable
-            style={[
-              styles.footerBtn,
-              { alignSelf: "flex-end", minWidth: 240 },
-              selectedTripIds.length === 0 && styles.footerBtnDisabled,
-            ]}
-            onPress={() => setStep(2)}
-            disabled={selectedTripIds.length === 0}
-          >
-            <Text style={styles.footerBtnText}>
-              Preview Invoice ({selectedTripIds.length})
-            </Text>
-          </Pressable>
-        </View>
-      )}
     </View>
   );
 }
 
 function TripListContent({
   tabBarScrollProps,
-  isMediumScreen,
+  isDesktopTripTable,
   clientTrips,
   activeClient,
   selectedTripIds,
   allSelected,
   onSelectAll,
   onToggleTrip,
+  onBulkMenuPress,
   searchQuery,
   setSearchQuery,
   isRefetching,
@@ -668,13 +798,14 @@ function TripListContent({
   setStartDate,
   endDate,
   setEndDate,
+  mobileBottomPad,
 }: any) {
   const filterRow = (
     <>
       <View
         style={[
           styles.searchRow,
-          !isMediumScreen && styles.searchRowMobileInline,
+          !isDesktopTripTable && styles.searchRowMobileInline,
         ]}
       >
         <FontAwesome
@@ -695,7 +826,7 @@ function TripListContent({
       <View
         style={[
           styles.dateFilterContainer,
-          !isMediumScreen && styles.dateFilterMobileInline,
+          !isDesktopTripTable && styles.dateFilterMobileInline,
         ]}
       >
         <View style={styles.dateRow}>
@@ -739,7 +870,10 @@ function TripListContent({
   return (
     <View style={{ flex: 1 }}>
       <View
-        style={[styles.listHeader, !isMediumScreen && styles.listHeaderMobile]}
+        style={[
+          styles.listHeader,
+          !isDesktopTripTable && styles.listHeaderMobile,
+        ]}
       >
         <View style={styles.listHeaderTextCol}>
           <Text style={styles.listHeaderTitle}>Ready-to-Invoice Trips</Text>
@@ -752,19 +886,20 @@ function TripListContent({
         </View>
         <Pressable
           style={
-            isMediumScreen ? styles.bulkActionBtn : styles.bulkActionBtnMobile
+            isDesktopTripTable ? styles.bulkActionBtn : styles.bulkActionBtnMobile
           }
+          onPress={() => onBulkMenuPress?.()}
+          accessibilityRole="button"
+          accessibilityLabel="Bulk actions"
         >
-          {isMediumScreen ? (
+          {isDesktopTripTable ? (
             <Text style={styles.bulkActionText}>Bulk Action</Text>
           ) : (
             <FontAwesome name="sliders" size={14} color="#fff" />
           )}
         </Pressable>
       </View>
-      {isMediumScreen ? (
-        <View style={styles.listFilters}>{filterRow}</View>
-      ) : (
+      {!isDesktopTripTable ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -774,9 +909,9 @@ function TripListContent({
         >
           {filterRow}
         </ScrollView>
-      )}
+      ) : null}
 
-      {isMediumScreen ? (
+      {isDesktopTripTable ? (
         <View style={styles.tableHeader}>
           <Pressable style={styles.selectAllGroup} onPress={onSelectAll}>
             <View style={styles.selectAllCheckbox}>
@@ -814,7 +949,9 @@ function TripListContent({
         onRefresh={refetch}
         contentContainerStyle={{
           padding: 16,
-          paddingBottom: Layout.demoTabBarScrollBottomInset + 24,
+          paddingBottom: isDesktopTripTable
+            ? Layout.demoTabBarScrollBottomInset + 24
+            : (mobileBottomPad ?? Layout.demoTabBarScrollBottomInset + 24) + 84,
         }}
         ListEmptyComponent={
           <View style={styles.empty}>
@@ -828,7 +965,7 @@ function TripListContent({
         }
         renderItem={({ item: trip }) => {
           const isSelected = selectedTripIds.includes(trip.id);
-          if (!isMediumScreen) {
+          if (!isDesktopTripTable) {
             return (
               <Pressable
                 style={[
@@ -1009,6 +1146,80 @@ const styles = StyleSheet.create({
         overflowX: "auto" as const,
       },
     }),
+  },
+  invHeaderToolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingTop: 12,
+    paddingBottom: 10,
+    gap: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.separatorDark,
+  },
+  invHeaderSearchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 11,
+    backgroundColor: Theme.darkSurface,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    paddingHorizontal: 12,
+    paddingVertical: 0,
+    minWidth: 0,
+  },
+  invHeaderSearchWrapWeb: {
+    outlineStyle: "none",
+    outlineWidth: 0,
+  } as unknown as ViewStyle,
+  invHeaderSearchInput: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "600",
+    color: Theme.textOnDark,
+    paddingVertical: 0,
+  },
+  invHeaderSearchInputWeb: {
+    outlineStyle: "none",
+    outlineWidth: 0,
+  } as unknown as any,
+  invHeaderToolbarActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flexShrink: 0,
+  },
+  invHeaderDateWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    height: 38,
+    borderRadius: 11,
+    backgroundColor: Theme.darkSurface,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    paddingHorizontal: 12,
+  },
+  invHeaderDateInput: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    padding: 0,
+    margin: 0,
+    minWidth: 86,
+    textTransform: "uppercase",
+    ...Platform.select({
+      web: { outlineStyle: "none" } as any,
+    }),
+  },
+  invHeaderDateTo: {
+    marginHorizontal: 8,
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 1,
   },
   kpiRowDesktop: {
     flexDirection: "row",
@@ -1662,17 +1873,6 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
   },
-  desktopFooter: {
-    position: "absolute",
-    left: 280,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-    backgroundColor: Theme.screenBackground,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
-  },
   footerBtn: {
     backgroundColor: Theme.primary,
     paddingVertical: 14,
@@ -1729,8 +1929,4 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   blockedBtnText: { color: Theme.buttonPrimaryText, fontWeight: "700" },
-  previewModalContainer: {
-    flex: 1,
-    backgroundColor: Theme.screenBackground,
-  },
 });
