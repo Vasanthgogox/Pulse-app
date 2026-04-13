@@ -28,6 +28,7 @@ import {
     TextInput,
     View,
     useWindowDimensions,
+    type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -263,6 +264,65 @@ export function InvoicingExecuteScreen() {
     );
   }
 
+  const renderPartnerList = () => (
+    <FlatList
+      data={clientStats}
+      keyExtractor={(item) => item.name}
+      {...tabBarScrollProps}
+      renderItem={({ item: client }) => (
+        <Pressable
+          style={[
+            styles.clientRow,
+            activeClient === client.name && styles.clientRowActive,
+          ]}
+          onPress={() => selectClient(client.name)}
+        >
+          {activeClient === client.name && (
+            <View style={styles.clientRowIndicator} />
+          )}
+          <View style={{ flex: 1 }}>
+            <View style={styles.clientRowTop}>
+              <Text
+                style={[
+                  styles.clientName,
+                  activeClient === client.name && { color: Theme.primary },
+                ]}
+              >
+                {client.name}
+              </Text>
+              {client.approved > 0 ? (
+                <Text style={styles.tagApproved}>Invoice Pending</Text>
+              ) : client.received > 0 ? (
+                <Text style={styles.tagReceived}>Audit Required</Text>
+              ) : client.pending > 0 ? (
+                <Text style={styles.tagPending}>POD Pending</Text>
+              ) : (
+                <Text style={styles.tagSettled}>Settled</Text>
+              )}
+            </View>
+            <View style={styles.clientRowBottom}>
+              <View style={styles.clientBilled}>
+                <View style={styles.dot} />
+                <Text style={styles.clientBilledText}>
+                  Last Billed: Today
+                </Text>
+              </View>
+              <FontAwesome
+                name="chevron-right"
+                size={12}
+                color={
+                  activeClient === client.name
+                    ? Theme.primary
+                    : Theme.textMuted
+                }
+              />
+            </View>
+          </View>
+        </Pressable>
+      )}
+    />
+  );
+
   const renderSidebar = () => (
     <>
       <View style={styles.sidebarHeader}>
@@ -284,62 +344,7 @@ export function InvoicingExecuteScreen() {
           onChangeText={setClientSearch}
         />
       </View>
-      <FlatList
-        data={clientStats}
-        keyExtractor={(item) => item.name}
-        {...tabBarScrollProps}
-        renderItem={({ item: client }) => (
-          <Pressable
-            style={[
-              styles.clientRow,
-              activeClient === client.name && styles.clientRowActive,
-            ]}
-            onPress={() => selectClient(client.name)}
-          >
-            {activeClient === client.name && (
-              <View style={styles.clientRowIndicator} />
-            )}
-            <View style={{ flex: 1 }}>
-              <View style={styles.clientRowTop}>
-                <Text
-                  style={[
-                    styles.clientName,
-                    activeClient === client.name && { color: Theme.primary },
-                  ]}
-                >
-                  {client.name}
-                </Text>
-                {client.approved > 0 ? (
-                  <Text style={styles.tagApproved}>Invoice Pending</Text>
-                ) : client.received > 0 ? (
-                  <Text style={styles.tagReceived}>Audit Required</Text>
-                ) : client.pending > 0 ? (
-                  <Text style={styles.tagPending}>POD Pending</Text>
-                ) : (
-                  <Text style={styles.tagSettled}>Settled</Text>
-                )}
-              </View>
-              <View style={styles.clientRowBottom}>
-                <View style={styles.clientBilled}>
-                  <View style={styles.dot} />
-                  <Text style={styles.clientBilledText}>
-                    Last Billed: Today
-                  </Text>
-                </View>
-                <FontAwesome
-                  name="chevron-right"
-                  size={12}
-                  color={
-                    activeClient === client.name
-                      ? Theme.primary
-                      : Theme.textMuted
-                  }
-                />
-              </View>
-            </View>
-          </Pressable>
-        )}
-      />
+      {renderPartnerList()}
     </>
   );
 
@@ -383,6 +388,7 @@ export function InvoicingExecuteScreen() {
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
+              style={styles.kpiScrollMobile}
               contentContainerStyle={styles.kpiRow}
             >
               <View style={styles.kpiBlock}>
@@ -459,14 +465,39 @@ export function InvoicingExecuteScreen() {
             {step === 0 && (
               <View style={styles.mobileStepContainer}>
                 <Text
-                  style={[
-                    styles.sectionLabel,
-                    { paddingHorizontal: 16, paddingTop: 16 },
-                  ]}
+                  style={[styles.sectionLabel, styles.mobilePartnerSectionLabel]}
                 >
                   Select Strategic Partner
                 </Text>
-                {renderSidebar()}
+                <View style={styles.invMobilePartnerToolbar}>
+                  <View
+                    style={[
+                      styles.invMobilePartnerSearchWrap,
+                      Platform.OS === "web" &&
+                        styles.invMobilePartnerSearchWrapWeb,
+                    ]}
+                  >
+                    <FontAwesome
+                      name="search"
+                      size={12}
+                      color={Theme.textMuted}
+                      style={{ marginRight: 8 }}
+                    />
+                    <TextInput
+                      style={styles.invMobilePartnerSearchInput}
+                      placeholder="Search partners..."
+                      placeholderTextColor={Theme.textMuted}
+                      value={clientSearch}
+                      onChangeText={setClientSearch}
+                    />
+                  </View>
+                  <View style={styles.invMobilePartnerBadge}>
+                    <Text style={styles.sidebarBadge}>
+                      {clientStats.length} Online
+                    </Text>
+                  </View>
+                </View>
+                {renderPartnerList()}
               </View>
             )}
 
@@ -638,76 +669,112 @@ function TripListContent({
   endDate,
   setEndDate,
 }: any) {
+  const filterRow = (
+    <>
+      <View
+        style={[
+          styles.searchRow,
+          !isMediumScreen && styles.searchRowMobileInline,
+        ]}
+      >
+        <FontAwesome
+          name="search"
+          size={14}
+          color={Theme.textMuted}
+          style={{ marginRight: 8 }}
+        />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search transactions..."
+          placeholderTextColor={Theme.textMuted}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+      </View>
+
+      <View
+        style={[
+          styles.dateFilterContainer,
+          !isMediumScreen && styles.dateFilterMobileInline,
+        ]}
+      >
+        <View style={styles.dateRow}>
+          <FontAwesome
+            name="calendar"
+            size={12}
+            color={Theme.textMuted}
+            style={{ marginRight: 6 }}
+          />
+          <TextInput
+            style={styles.dateInput}
+            placeholder="DD/MM/YYYY"
+            placeholderTextColor={Theme.textMuted}
+            value={startDate}
+            onChangeText={setStartDate}
+          />
+          <Text style={styles.dateToText}>TO</Text>
+          <TextInput
+            style={styles.dateInput}
+            placeholder="DD/MM/YYYY"
+            placeholderTextColor={Theme.textMuted}
+            value={endDate}
+            onChangeText={setEndDate}
+          />
+          {startDate || endDate ? (
+            <Pressable
+              onPress={() => {
+                setStartDate("");
+                setEndDate("");
+              }}
+              style={{ marginLeft: 4 }}
+            >
+              <FontAwesome name="times" size={12} color={Theme.textMuted} />
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+    </>
+  );
+
   return (
     <View style={{ flex: 1 }}>
-      <View style={styles.listHeader}>
-        <View>
+      <View
+        style={[styles.listHeader, !isMediumScreen && styles.listHeaderMobile]}
+      >
+        <View style={styles.listHeaderTextCol}>
           <Text style={styles.listHeaderTitle}>Ready-to-Invoice Trips</Text>
-          <Text style={styles.listHeaderSub}>
+          <Text style={styles.listHeaderSub} numberOfLines={1}>
             Partner:{" "}
             <Text style={{ color: Theme.primary }}>
               {activeClient || "None Selected"}
             </Text>
           </Text>
         </View>
-        <Pressable style={styles.bulkActionBtn}>
-          <Text style={styles.bulkActionText}>Bulk Action</Text>
+        <Pressable
+          style={
+            isMediumScreen ? styles.bulkActionBtn : styles.bulkActionBtnMobile
+          }
+        >
+          {isMediumScreen ? (
+            <Text style={styles.bulkActionText}>Bulk Action</Text>
+          ) : (
+            <FontAwesome name="sliders" size={14} color="#fff" />
+          )}
         </Pressable>
       </View>
-      <View style={styles.listFilters}>
-        <View style={styles.searchRow}>
-          <FontAwesome
-            name="search"
-            size={14}
-            color={Theme.textMuted}
-            style={{ marginRight: 8 }}
-          />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search transactions..."
-            placeholderTextColor={Theme.textMuted}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
-
-        <View style={styles.dateFilterContainer}>
-          <View style={styles.dateRow}>
-            <FontAwesome
-              name="calendar"
-              size={12}
-              color={Theme.textMuted}
-              style={{ marginRight: 6 }}
-            />
-            <TextInput
-              style={styles.dateInput}
-              placeholder="DD/MM/YYYY"
-              placeholderTextColor={Theme.textMuted}
-              value={startDate}
-              onChangeText={setStartDate}
-            />
-            <Text style={styles.dateToText}>TO</Text>
-            <TextInput
-              style={styles.dateInput}
-              placeholder="DD/MM/YYYY"
-              placeholderTextColor={Theme.textMuted}
-              value={endDate}
-              onChangeText={setEndDate}
-            />
-            {startDate || endDate ? (
-              <Pressable
-                onPress={() => {
-                  setStartDate("");
-                  setEndDate("");
-                }}
-                style={{ marginLeft: 4 }}
-              >
-                <FontAwesome name="times" size={12} color={Theme.textMuted} />
-              </Pressable>
-            ) : null}
-          </View>
-        </View>
-      </View>
+      {isMediumScreen ? (
+        <View style={styles.listFilters}>{filterRow}</View>
+      ) : (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          style={styles.listFiltersScrollMobile}
+          contentContainerStyle={styles.listFiltersScrollMobileContent}
+        >
+          {filterRow}
+        </ScrollView>
+      )}
 
       {isMediumScreen ? (
         <View style={styles.tableHeader}>
@@ -927,9 +994,21 @@ const styles = StyleSheet.create({
   kpiRow: {
     flexDirection: "row",
     alignItems: "center",
+    flexGrow: 0,
     gap: 12,
     paddingTop: 12,
     paddingBottom: 6,
+    paddingRight: Layout.screenPaddingHorizontal,
+  },
+  kpiScrollMobile: {
+    width: "100%",
+    maxWidth: "100%",
+    minWidth: 0,
+    ...Platform.select({
+      web: {
+        overflowX: "auto" as const,
+      },
+    }),
   },
   kpiRowDesktop: {
     flexDirection: "row",
@@ -1155,6 +1234,54 @@ const styles = StyleSheet.create({
   },
 
   mobileStepContainer: { flex: 1, backgroundColor: Theme.screenBackground },
+  mobilePartnerSectionLabel: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 12,
+    marginBottom: 8,
+  },
+  invMobilePartnerToolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+  },
+  invMobilePartnerSearchWrap: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 38,
+    paddingHorizontal: 12,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    borderRadius: 11,
+  },
+  invMobilePartnerSearchWrapWeb: {
+    outlineStyle: "none",
+    outlineWidth: 0,
+  } as unknown as ViewStyle,
+  invMobilePartnerSearchInput: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    paddingVertical: Platform.OS === "web" ? 8 : 6,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
+  },
+  invMobilePartnerBadge: {
+    flexShrink: 0,
+    justifyContent: "center",
+  },
   mobileConfig: {
     padding: Layout.screenPaddingHorizontal,
     paddingTop: 16,
@@ -1199,6 +1326,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
+  listHeaderMobile: {
+    alignItems: "flex-start",
+    gap: 10,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingVertical: 12,
+  },
+  listHeaderTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
   listHeaderTitle: {
     fontSize: 10,
     fontWeight: "800",
@@ -1226,6 +1363,16 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1,
   },
+  bulkActionBtnMobile: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: Theme.textPrimaryDark,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    marginTop: 2,
+  },
   listFilters: {
     padding: 16,
     backgroundColor: Theme.screenBackground,
@@ -1247,6 +1394,35 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
+  },
+  searchRowMobileInline: {
+    flex: 0,
+    flexGrow: 0,
+    width: 220,
+    minWidth: 200,
+    maxWidth: 280,
+  },
+  listFiltersScrollMobile: {
+    width: "100%",
+    maxWidth: "100%",
+    minWidth: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    ...Platform.select({
+      web: {
+        overflowX: "auto" as const,
+      },
+    }),
+  },
+  listFiltersScrollMobileContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexGrow: 0,
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingRight: Layout.screenPaddingHorizontal + 8,
   },
   searchInput: {
     flex: 1,
@@ -1271,6 +1447,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
+  },
+  dateFilterMobileInline: {
+    flexShrink: 0,
   },
   dateRow: { flexDirection: "row", alignItems: "center" },
   dateInput: {
