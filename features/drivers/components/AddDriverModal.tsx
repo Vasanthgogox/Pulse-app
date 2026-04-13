@@ -418,6 +418,11 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
                       >
                         {inFleet ? t('existingDriverInFleet') : t('existingDriverNotInFleet')}
                       </Text>
+                      {inFleet ? (
+                        <Text style={styles.existingFleetStatusDetail}>
+                          {t('existingDriverInFleetDetail')}
+                        </Text>
+                      ) : null}
                     </TouchableOpacity>
                   );
                 })}
@@ -858,6 +863,12 @@ const styles = StyleSheet.create({
     color: Theme.textMutedDemo,
     fontWeight: '600',
     letterSpacing: 0.2,
+  },
+  existingFleetStatusDetail: {
+    fontSize: 11,
+    marginTop: 4,
+    color: Theme.textSecondary,
+    lineHeight: 16,
   },
   input: {
     borderWidth: 1,
