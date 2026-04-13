@@ -365,6 +365,10 @@ export default function DriverTripsScreen() {
 
     return list;
   }, [trips, tripView, searchQuery]);
+  const historyTripsCount = useMemo(
+    () => trips.filter((trip) => isCompleted(trip.status)).length,
+    [trips],
+  );
 
   const renderItem = ({ item }: { item: tripsService.TripRow }) => {
     const completed = isCompleted(item.status);
@@ -662,16 +666,64 @@ export default function DriverTripsScreen() {
         ]}
         ListEmptyComponent={
           filteredTrips.length === 0 ? (
-            <View style={styles.empty}>
-              <FontAwesome
-                name="history"
-                size={40}
-                color={colors.tabInactive}
-              />
-              <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-                {trips.length === 0 ? "No trips completed yet" : "No trips found"}
-              </Text>
-            </View>
+            tripView === "active" && searchQuery.trim().length === 0 ? (
+              <View style={styles.emptyActiveWrap}>
+                <View
+                  style={[
+                    styles.emptyActiveIconCircle,
+                    {
+                      backgroundColor: colors.whiteMuted,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <FontAwesome name="send-o" size={26} color={colors.emerald} />
+                </View>
+                <Text style={[styles.emptyActiveTitle, { color: colors.text }]}>
+                  No active trips right now
+                </Text>
+                <Text
+                  style={[styles.emptyActiveSubtitle, { color: colors.textMuted }]}
+                >
+                  Fresh assignments appear here instantly once dispatched.
+                </Text>
+                {historyTripsCount > 0 ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.emptyActiveButton,
+                      { backgroundColor: colors.surface, borderColor: colors.border },
+                    ]}
+                    onPress={() => setTripView("history")}
+                    activeOpacity={0.85}
+                  >
+                    <FontAwesome
+                      name="history"
+                      size={12}
+                      color={colors.text}
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text
+                      style={[styles.emptyActiveButtonText, { color: colors.text }]}
+                    >
+                      View history
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : (
+              <View style={styles.empty}>
+                <FontAwesome
+                  name="history"
+                  size={40}
+                  color={colors.tabInactive}
+                />
+                <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+                  {trips.length === 0
+                    ? "No trips completed yet"
+                    : "No trips found"}
+                </Text>
+              </View>
+            )
           ) : null
         }
       />
@@ -1618,6 +1670,50 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 48,
     gap: 12,
+  },
+  emptyActiveWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 68,
+    paddingHorizontal: 30,
+  },
+  emptyActiveIconCircle: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 18,
+  },
+  emptyActiveTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    letterSpacing: -0.2,
+    textAlign: "center",
+  },
+  emptyActiveSubtitle: {
+    marginTop: 8,
+    fontSize: 13,
+    fontWeight: "500",
+    lineHeight: 20,
+    textAlign: "center",
+    maxWidth: 320,
+  },
+  emptyActiveButton: {
+    marginTop: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  emptyActiveButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   emptyText: {
     fontSize: 14,
