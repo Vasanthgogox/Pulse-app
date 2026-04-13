@@ -127,6 +127,7 @@ export function AddClientModal({
   const phoneError = phone.trim() ? validatePhone(phone.trim()) : null;
   const canSubmit =
     !blockedByNoOrg &&
+    organizationName.trim().length > 0 &&
     contactPerson.trim().length > 0 &&
     phone.trim().length > 0 &&
     !phoneError &&
@@ -258,18 +259,22 @@ export function AddClientModal({
       {/* First block: same layout as Ledger amount block (label on top, input row). Tappable so label/block focuses input. */}
       <Pressable
         style={styles.ledgerAmountBlock}
-        onPress={() => orgInputRef.current?.focus()}
+        onPress={() => phoneInputRef.current?.focus()}
       >
-        <Text style={styles.ledgerAmountLabel}>ORGANIZATION</Text>
+        <Text style={styles.ledgerAmountLabel}>PHONE</Text>
         <View style={styles.ledgerAmountRow}>
           <TextInput
-            ref={orgInputRef}
+            ref={phoneInputRef}
             style={styles.ledgerAmountInput}
-            placeholder="Company or organization"
+            placeholder="+91 …"
             placeholderTextColor={Theme.textMutedDemo}
-            value={organizationName}
-            onChangeText={setOrganizationName}
-            autoCapitalize="words"
+            value={phone}
+            onChangeText={(t) => {
+              setPhone(t);
+              setInviteeMatch(null);
+              setSearchedNoResult(false);
+            }}
+            keyboardType="phone-pad"
             autoCorrect={false}
             spellCheck={false}
             autoComplete="off"
@@ -298,21 +303,17 @@ export function AddClientModal({
         </Pressable>
         <Pressable
           style={[styles.ledgerFieldBlock, styles.ledgerFieldBlockCol]}
-          onPress={() => phoneInputRef.current?.focus()}
+          onPress={() => orgInputRef.current?.focus()}
         >
-          <Text style={styles.ledgerFieldLabelCol}>PHONE</Text>
+          <Text style={styles.ledgerFieldLabelCol}>ORGANIZATION *</Text>
           <TextInput
-            ref={phoneInputRef}
+            ref={orgInputRef}
             style={styles.ledgerFieldInput}
-            placeholder="+91 …"
+            placeholder="Company or organization"
             placeholderTextColor={Theme.textMutedDemo}
-            value={phone}
-            onChangeText={(t) => {
-              setPhone(t);
-              setInviteeMatch(null);
-              setSearchedNoResult(false);
-            }}
-            keyboardType="phone-pad"
+            value={organizationName}
+            onChangeText={setOrganizationName}
+            autoCapitalize="words"
             autoCorrect={false}
             spellCheck={false}
             autoComplete="off"
@@ -511,18 +512,24 @@ export function AddClientModal({
             ) : null}
 
             <Pressable
-              onPress={() => orgInputRef.current?.focus()}
+              onPress={() => phoneInputRef.current?.focus()}
               style={styles.screenInputCard}
             >
-              <Text style={styles.screenInputLabel}>{t("organizationName")}</Text>
+              <Text style={styles.screenInputLabel}>
+                Phone number <Text style={styles.screenRequiredMark}>*</Text>
+              </Text>
               <TextInput
-                ref={orgInputRef}
+                ref={phoneInputRef}
                 style={styles.screenInput}
-                placeholder={t("company")}
+                placeholder="+91 98765 43210"
                 placeholderTextColor={Theme.textMutedDemo}
-                value={organizationName}
-                onChangeText={setOrganizationName}
-                autoCapitalize="words"
+                value={phone}
+                onChangeText={(t) => {
+                  setPhone(t);
+                  setInviteeMatch(null);
+                  setSearchedNoResult(false);
+                }}
+                keyboardType="phone-pad"
                 autoCorrect={false}
                 spellCheck={false}
                 autoComplete="off"
@@ -557,24 +564,21 @@ export function AddClientModal({
               </Pressable>
 
               <Pressable
-                onPress={() => phoneInputRef.current?.focus()}
+                onPress={() => orgInputRef.current?.focus()}
                 style={styles.screenFieldCard}
               >
                 <Text style={styles.screenInputLabel}>
-                  Phone number <Text style={styles.screenRequiredMark}>*</Text>
+                  {t("organizationName")}{" "}
+                  <Text style={styles.screenRequiredMark}>*</Text>
                 </Text>
                 <TextInput
-                  ref={phoneInputRef}
+                  ref={orgInputRef}
                   style={styles.screenInput}
-                  placeholder="+91 98765 43210"
+                  placeholder={t("company")}
                   placeholderTextColor={Theme.textMutedDemo}
-                  value={phone}
-                  onChangeText={(t) => {
-                    setPhone(t);
-                    setInviteeMatch(null);
-                    setSearchedNoResult(false);
-                  }}
-                  keyboardType="phone-pad"
+                  value={organizationName}
+                  onChangeText={setOrganizationName}
+                  autoCapitalize="words"
                   autoCorrect={false}
                   spellCheck={false}
                   autoComplete="off"

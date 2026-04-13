@@ -16,10 +16,10 @@ import {
 } from "@/lib/queries/useInvoicingExecuteQueries";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+    Alert,
     FlatList,
-    Modal,
     Platform,
     Pressable,
     ScrollView,
@@ -30,6 +30,7 @@ import {
     useWindowDimensions,
     type ViewStyle,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 function canAccessInvoicing(
@@ -71,11 +72,16 @@ export function InvoicingExecuteScreen() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [step, setStep] = useState<0 | 1 | 2>(0);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
 
   const { width } = useWindowDimensions();
-  const isLargeScreen = width >= 1024;
-  const isMediumScreen = width >= 768;
+  /** Below this width: stacked mobile wizard (matches POD / preview column split). */
+  const INVOICING_DESKTOP_MIN = 1024;
+  const isLargeScreen = width >= INVOICING_DESKTOP_MIN;
   const allowed = canAccessInvoicing(profile);
+  const mobileBottomPad =
+    insets.bottom + Layout.demoTabBarScrollBottomInset + 16;
 
   const formatCurrencySimple = (amount: number) => {
     if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(2)} Cr`;
@@ -138,10 +144,12 @@ export function InvoicingExecuteScreen() {
       .filter((t) => {
         if (t.client !== activeClient) return false;
 
+        const supplier = (t.supplier_name || "").toLowerCase();
         if (
           q &&
           !t.id.toLowerCase().includes(q) &&
-          !t.route.toLowerCase().includes(q)
+          !t.route.toLowerCase().includes(q) &&
+          !supplier.includes(q)
         )
           return false;
 
@@ -174,19 +182,113 @@ export function InvoicingExecuteScreen() {
     return selectedTripIds.map((id) => tripsById.get(id)).filter(Boolean);
   }, [tripsById, selectedTripIds]);
 
-  const invoiceableTrips = useMemo(() => clientTrips, [clientTrips]);
+  const invoiceableTrips = useMemo(
+    () => clientTrips.filter((t) => t.status === "approved"),
+    [clientTrips],
+  );
   const allClientTripsSelected =
     invoiceableTrips.length > 0 &&
     invoiceableTrips.every((t) => selectedTripIds.includes(t.id));
 
+  useEffect(() => {
+    const allowedIds = new Set(invoiceableTrips.map((t) => t.id));
+    setSelectedTripIds((prev) => prev.filter((id) => allowedIds.has(id)));
+  }, [invoiceableTrips]);
+
+  useEffect(() => {
+    const restoreDraft = async () => {
+      if (!orgId || draftRestored) return;
+      try {
+        const raw = await AsyncStorage.getItem(`invoicing_execute_draft_${orgId}`);
+        if (!raw) {
+          setDraftRestored(true);
+          return;
+        }
+        const parsed = JSON.parse(raw) as {
+          activeClient?: string;
+          selectedTripIds?: string[];
+          clientSearch?: string;
+          searchQuery?: string;
+          startDate?: string;
+          endDate?: string;
+          step?: 0 | 1 | 2;
+        };
+
+        if (parsed.activeClient) setActiveClient(parsed.activeClient);
+        if (Array.isArray(parsed.selectedTripIds)) {
+          const approvedIds = new Set(
+            allTrips.filter((t) => t.status === "approved").map((t) => t.id),
+          );
+          setSelectedTripIds(parsed.selectedTripIds.filter((id) => approvedIds.has(id)));
+        }
+        if (typeof parsed.clientSearch === "string") setClientSearch(parsed.clientSearch);
+        if (typeof parsed.searchQuery === "string") setSearchQuery(parsed.searchQuery);
+        if (typeof parsed.startDate === "string") setStartDate(parsed.startDate);
+        if (typeof parsed.endDate === "string") setEndDate(parsed.endDate);
+        if (parsed.step === 0 || parsed.step === 1 || parsed.step === 2) setStep(parsed.step);
+        if (typeof (parsed as { savedAt?: string }).savedAt === "string") {
+          setDraftSavedAt((parsed as { savedAt?: string }).savedAt ?? null);
+        }
+      } catch {
+        // Ignore draft restore errors.
+      } finally {
+        setDraftRestored(true);
+      }
+    };
+    restoreDraft();
+  }, [orgId, draftRestored, allTrips]);
+
+  useEffect(() => {
+    const persistDraft = async () => {
+      if (!orgId || !draftRestored) return;
+      try {
+        await AsyncStorage.setItem(
+          `invoicing_execute_draft_${orgId}`,
+          JSON.stringify({
+            activeClient,
+            selectedTripIds,
+            clientSearch,
+            searchQuery,
+            startDate,
+            endDate,
+            step,
+            savedAt: new Date().toISOString(),
+          }),
+        );
+        setDraftSavedAt(new Date().toISOString());
+      } catch {
+        // Ignore draft persistence errors.
+      }
+    };
+    persistDraft();
+  }, [
+    orgId,
+    draftRestored,
+    activeClient,
+    selectedTripIds,
+    clientSearch,
+    searchQuery,
+    startDate,
+    endDate,
+    step,
+  ]);
+
   const handleToggleTrip = useCallback((id: string) => {
+    const trip = tripsById.get(id);
+    if (!trip || trip.status !== "approved") {
+      Alert.alert(
+        "Not invoiceable",
+        "Only trips with Approved status can be selected for invoice issuance.",
+      );
+      return;
+    }
     setSelectedTripIds((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
     );
-  }, []);
+  }, [tripsById]);
 
   const handleSelectAll = useCallback(() => {
-    const invoiceableTrips = clientTrips;
+    const invoiceableTrips = clientTrips.filter((t) => t.status === "approved");
 
     if (invoiceableTrips.length === 0) {
       return;
@@ -222,6 +324,110 @@ export function InvoicingExecuteScreen() {
     },
     [router],
   );
+
+  const exportTripsToCsv = useCallback(
+    (trips: any[], kind: "selected" | "filtered") => {
+      if (!trips.length) {
+        Alert.alert("Export", "No trips to export.");
+        return;
+      }
+      const rows = trips.map((t) => ({
+        trip_id: t?.id ?? "",
+        internal_id: t?.internal_id ?? "",
+        client: t?.client ?? "",
+        date: t?.date ?? "",
+        supplier: t?.supplier_name ?? "",
+        route: t?.route ?? "",
+        amount_inr: t?.amount ?? 0,
+        status: t?.status ?? "",
+      }));
+      const headers = Object.keys(rows[0] || {});
+      const csv = [
+        headers.join(","),
+        ...rows.map((r) =>
+          headers
+            .map((h) => {
+              const value = String((r as Record<string, unknown>)[h] ?? "");
+              return `"${value.replace(/"/g, '""')}"`;
+            })
+            .join(","),
+        ),
+      ].join("\n");
+
+      const slug = (activeClient || "export").replace(/[^\w\-]+/g, "_").slice(0, 48);
+      const filename = `invoicing_${kind}_${slug}_${new Date().toISOString().slice(0, 10)}.csv`;
+
+      if (Platform.OS === "web" && typeof document !== "undefined") {
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      Alert.alert("Export", "CSV export is available on web.");
+    },
+    [activeClient],
+  );
+
+  const handleBulkActions = useCallback(() => {
+    if (!activeClient) {
+      Alert.alert("Bulk actions", "Select a strategic partner first.");
+      return;
+    }
+    if (clientTrips.length === 0) {
+      Alert.alert("Bulk actions", "No trips in the current view.");
+      return;
+    }
+    Alert.alert(
+      "Bulk actions",
+      `${invoiceableTrips.length}/${clientTrips.length} approved in view · ${selectedTripIds.length} selected`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Select all in view",
+          onPress: () => handleSelectAll(),
+        },
+        {
+          text: "Clear selection",
+          onPress: () => setSelectedTripIds([]),
+        },
+        {
+          text: "Reset invoice draft",
+          onPress: async () => {
+            setSelectedTripIds([]);
+            setSearchQuery("");
+            setStartDate("");
+            setEndDate("");
+            setClientSearch("");
+            setActiveClient(null);
+            setStep(0);
+            setDraftSavedAt(null);
+            if (orgId) {
+              await AsyncStorage.removeItem(`invoicing_execute_draft_${orgId}`);
+            }
+          },
+        },
+        {
+          text: "Export filtered list",
+          onPress: () => exportTripsToCsv(clientTrips, "filtered"),
+        },
+      ],
+    );
+  }, [
+    activeClient,
+    clientTrips,
+    selectedTripIds.length,
+    invoiceableTrips.length,
+    handleSelectAll,
+    exportTripsToCsv,
+    orgId,
+  ]);
 
   if (!allowed) {
     return (
@@ -269,6 +475,9 @@ export function InvoicingExecuteScreen() {
       data={clientStats}
       keyExtractor={(item) => item.name}
       {...tabBarScrollProps}
+      contentContainerStyle={{
+        paddingBottom: isLargeScreen ? 0 : mobileBottomPad,
+      }}
       renderItem={({ item: client }) => (
         <Pressable
           style={[
@@ -352,13 +561,22 @@ export function InvoicingExecuteScreen() {
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.financeHeader}>
         <View style={styles.financeHeaderInner}>
-          <View style={[styles.heroRow, !isMediumScreen && styles.heroRowMobile]}>
+          <View style={[styles.heroRow, !isLargeScreen && styles.heroRowMobile]}>
             <View style={styles.heroTextWrap}>
               <Text style={styles.heroTitle}>Revenue & Invoicing</Text>
               <Text style={styles.heroSub}>Execute invoices for confirmed trips</Text>
+              {draftSavedAt ? (
+                <Text style={styles.heroDraftMeta}>
+                  Draft auto-saved:{" "}
+                  {new Date(draftSavedAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </Text>
+              ) : null}
             </View>
 
-            {isMediumScreen ? (
+            {isLargeScreen ? (
               <View style={styles.kpiRowDesktop}>
                 <View style={styles.kpiBlock}>
                   <Text style={styles.kpiLabelRed}>POD Pending</Text>
@@ -384,7 +602,7 @@ export function InvoicingExecuteScreen() {
             ) : null}
           </View>
 
-          {!isMediumScreen ? (
+          {!isLargeScreen ? (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -413,11 +631,85 @@ export function InvoicingExecuteScreen() {
               </View>
             </ScrollView>
           ) : null}
+
+          {isLargeScreen ? (
+            <View style={styles.invHeaderToolbar}>
+              <View
+                style={[
+                  styles.invHeaderSearchWrap,
+                  Platform.OS === "web" && styles.invHeaderSearchWrapWeb,
+                ]}
+              >
+                <FontAwesome
+                  name="search"
+                  size={12}
+                  color={Theme.textOnDarkMuted}
+                  style={{ marginRight: 8 }}
+                />
+                <TextInput
+                  style={[
+                    styles.invHeaderSearchInput,
+                    Platform.OS === "web" && styles.invHeaderSearchInputWeb,
+                  ]}
+                  placeholder="Search transactions..."
+                  placeholderTextColor={Theme.textOnDarkMuted}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  returnKeyType="search"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  autoComplete="off"
+                  maxLength={120}
+                />
+              </View>
+
+              <View style={styles.invHeaderToolbarActions}>
+                <View style={styles.invHeaderDateWrap}>
+                  <FontAwesome
+                    name="calendar"
+                    size={12}
+                    color={Theme.textOnDarkMuted}
+                    style={{ marginRight: 6 }}
+                  />
+                  <TextInput
+                    style={styles.invHeaderDateInput}
+                    placeholder="DD/MM/YYYY"
+                    placeholderTextColor={Theme.textOnDarkMuted}
+                    value={startDate}
+                    onChangeText={setStartDate}
+                  />
+                  <Text style={styles.invHeaderDateTo}>TO</Text>
+                  <TextInput
+                    style={styles.invHeaderDateInput}
+                    placeholder="DD/MM/YYYY"
+                    placeholderTextColor={Theme.textOnDarkMuted}
+                    value={endDate}
+                    onChangeText={setEndDate}
+                  />
+                  {startDate || endDate ? (
+                    <Pressable
+                      onPress={() => {
+                        setStartDate("");
+                        setEndDate("");
+                      }}
+                      style={{ marginLeft: 6 }}
+                    >
+                      <FontAwesome
+                        name="times"
+                        size={12}
+                        color={Theme.textOnDarkMuted}
+                      />
+                    </Pressable>
+                  ) : null}
+                </View>
+              </View>
+            </View>
+          ) : null}
         </View>
       </View>
 
       <View style={styles.contentArea}>
-        {isMediumScreen ? (
+        {isLargeScreen ? (
           <View style={styles.splitLayout}>
             <View style={styles.sidebar}>{renderSidebar()}</View>
             <View
@@ -431,13 +723,15 @@ export function InvoicingExecuteScreen() {
             >
               <TripListContent
                 tabBarScrollProps={tabBarScrollProps}
-                isMediumScreen={isMediumScreen}
+                isDesktopTripTable={isLargeScreen}
                 clientTrips={clientTrips}
                 activeClient={activeClient}
                 selectedTripIds={selectedTripIds}
                 allSelected={allClientTripsSelected}
                 onSelectAll={handleSelectAll}
                 onToggleTrip={handleToggleTrip}
+                onBulkMenuPress={handleBulkActions}
+                isTripInvoiceable={(trip: any) => trip?.status === "approved"}
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
                 startDate={startDate}
@@ -446,6 +740,7 @@ export function InvoicingExecuteScreen() {
                 setEndDate={setEndDate}
                 isRefetching={isRefetching}
                 refetch={refetch}
+                mobileBottomPad={mobileBottomPad}
               />
             </View>
             {isLargeScreen && (
@@ -526,13 +821,15 @@ export function InvoicingExecuteScreen() {
                 <View style={styles.mobileGridArea}>
                   <TripListContent
                     tabBarScrollProps={tabBarScrollProps}
-                    isMediumScreen={isMediumScreen}
+                    isDesktopTripTable={isLargeScreen}
                     clientTrips={clientTrips}
                     activeClient={activeClient}
                     selectedTripIds={selectedTripIds}
                     allSelected={allClientTripsSelected}
                     onSelectAll={handleSelectAll}
                     onToggleTrip={handleToggleTrip}
+                    onBulkMenuPress={handleBulkActions}
+                    isTripInvoiceable={(trip: any) => trip?.status === "approved"}
                     searchQuery={searchQuery}
                     setSearchQuery={setSearchQuery}
                     startDate={startDate}
@@ -581,31 +878,7 @@ export function InvoicingExecuteScreen() {
         )}
       </View>
 
-      {isMediumScreen && !isLargeScreen && (
-        <Modal
-          visible={step === 2}
-          animationType="slide"
-          onRequestClose={() => setStep(1)}
-        >
-          <View
-            style={[
-              styles.previewModalContainer,
-              { paddingTop: insets.top, paddingBottom: insets.bottom },
-            ]}
-          >
-            <InvoicePreviewPanel
-              onClose={() => setStep(1)}
-              onPreview={handlePreview}
-              isFinalizing={executeMutation.isPending}
-              activeClient={activeClient}
-              selectedTrips={selectedTrips}
-              isStandalone
-            />
-          </View>
-        </Modal>
-      )}
-
-      {!isMediumScreen && step === 1 && (
+      {!isLargeScreen && step === 1 && (
         <View
           style={[
             styles.footer,
@@ -629,37 +902,21 @@ export function InvoicingExecuteScreen() {
           </Pressable>
         </View>
       )}
-
-      {isMediumScreen && !isLargeScreen && (
-        <View style={styles.desktopFooter}>
-          <Pressable
-            style={[
-              styles.footerBtn,
-              { alignSelf: "flex-end", minWidth: 240 },
-              selectedTripIds.length === 0 && styles.footerBtnDisabled,
-            ]}
-            onPress={() => setStep(2)}
-            disabled={selectedTripIds.length === 0}
-          >
-            <Text style={styles.footerBtnText}>
-              Preview Invoice ({selectedTripIds.length})
-            </Text>
-          </Pressable>
-        </View>
-      )}
     </View>
   );
 }
 
 function TripListContent({
   tabBarScrollProps,
-  isMediumScreen,
+  isDesktopTripTable,
   clientTrips,
   activeClient,
   selectedTripIds,
   allSelected,
   onSelectAll,
   onToggleTrip,
+  onBulkMenuPress,
+  isTripInvoiceable,
   searchQuery,
   setSearchQuery,
   isRefetching,
@@ -668,13 +925,14 @@ function TripListContent({
   setStartDate,
   endDate,
   setEndDate,
+  mobileBottomPad,
 }: any) {
   const filterRow = (
     <>
       <View
         style={[
           styles.searchRow,
-          !isMediumScreen && styles.searchRowMobileInline,
+          !isDesktopTripTable && styles.searchRowMobileInline,
         ]}
       >
         <FontAwesome
@@ -695,7 +953,7 @@ function TripListContent({
       <View
         style={[
           styles.dateFilterContainer,
-          !isMediumScreen && styles.dateFilterMobileInline,
+          !isDesktopTripTable && styles.dateFilterMobileInline,
         ]}
       >
         <View style={styles.dateRow}>
@@ -739,7 +997,10 @@ function TripListContent({
   return (
     <View style={{ flex: 1 }}>
       <View
-        style={[styles.listHeader, !isMediumScreen && styles.listHeaderMobile]}
+        style={[
+          styles.listHeader,
+          !isDesktopTripTable && styles.listHeaderMobile,
+        ]}
       >
         <View style={styles.listHeaderTextCol}>
           <Text style={styles.listHeaderTitle}>Ready-to-Invoice Trips</Text>
@@ -749,22 +1010,24 @@ function TripListContent({
               {activeClient || "None Selected"}
             </Text>
           </Text>
+          <Text style={styles.listHeaderRule}>Approved status only</Text>
         </View>
         <Pressable
           style={
-            isMediumScreen ? styles.bulkActionBtn : styles.bulkActionBtnMobile
+            isDesktopTripTable ? styles.bulkActionBtn : styles.bulkActionBtnMobile
           }
+          onPress={() => onBulkMenuPress?.()}
+          accessibilityRole="button"
+          accessibilityLabel="Bulk actions"
         >
-          {isMediumScreen ? (
+          {isDesktopTripTable ? (
             <Text style={styles.bulkActionText}>Bulk Action</Text>
           ) : (
             <FontAwesome name="sliders" size={14} color="#fff" />
           )}
         </Pressable>
       </View>
-      {isMediumScreen ? (
-        <View style={styles.listFilters}>{filterRow}</View>
-      ) : (
+      {!isDesktopTripTable ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -774,9 +1037,9 @@ function TripListContent({
         >
           {filterRow}
         </ScrollView>
-      )}
+      ) : null}
 
-      {isMediumScreen ? (
+      {isDesktopTripTable ? (
         <View style={styles.tableHeader}>
           <Pressable style={styles.selectAllGroup} onPress={onSelectAll}>
             <View style={styles.selectAllCheckbox}>
@@ -814,7 +1077,9 @@ function TripListContent({
         onRefresh={refetch}
         contentContainerStyle={{
           padding: 16,
-          paddingBottom: Layout.demoTabBarScrollBottomInset + 24,
+          paddingBottom: isDesktopTripTable
+            ? Layout.demoTabBarScrollBottomInset + 24
+            : (mobileBottomPad ?? Layout.demoTabBarScrollBottomInset + 24) + 84,
         }}
         ListEmptyComponent={
           <View style={styles.empty}>
@@ -824,16 +1089,21 @@ function TripListContent({
               color={Theme.borderMedium}
             />
             <Text style={styles.emptyTitle}>No Active Transactions</Text>
+            <Text style={styles.emptySubTitle}>
+              Only approved trips are selectable for invoice issuance.
+            </Text>
           </View>
         }
         renderItem={({ item: trip }) => {
+          const isInvoiceable = Boolean(isTripInvoiceable?.(trip));
           const isSelected = selectedTripIds.includes(trip.id);
-          if (!isMediumScreen) {
+          if (!isDesktopTripTable) {
             return (
               <Pressable
                 style={[
                   styles.tripCardMobile,
                   isSelected && styles.tripCardMobileSelected,
+                  !isInvoiceable && styles.tripRowDisabled,
                 ]}
                 onPress={() => onToggleTrip(trip.id)}
               >
@@ -875,6 +1145,11 @@ function TripListContent({
                     <Text style={styles.listTagPending}>Pending</Text>
                   )}
                 </View>
+                {!isInvoiceable ? (
+                  <Text style={styles.nonInvoiceableHint}>
+                    Only approved trips can be issued as invoice.
+                  </Text>
+                ) : null}
               </Pressable>
             );
           }
@@ -883,6 +1158,7 @@ function TripListContent({
               style={[
                 styles.tripTableRow,
                 isSelected && styles.tripTableRowSelected,
+                !isInvoiceable && styles.tripRowDisabled,
               ]}
               onPress={() => onToggleTrip(trip.id)}
             >
@@ -891,6 +1167,7 @@ function TripListContent({
                   style={[
                     styles.checkBox,
                     isSelected && styles.checkBoxOn,
+                    !isInvoiceable && styles.checkBoxDisabled,
                   ]}
                 >
                   {isSelected && (
@@ -963,12 +1240,12 @@ const styles = StyleSheet.create({
   },
   financeHeaderInner: {
     width: "100%",
-    maxWidth: 1600,
+    maxWidth: "100%",
     alignSelf: "center",
   },
   heroRow: {
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "center",
     justifyContent: "space-between",
     gap: 16,
   },
@@ -979,7 +1256,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   heroTitle: {
-    marginTop: 10,
+    marginTop: 8,
     fontSize: 16,
     fontWeight: "800",
     color: Theme.textOnDark,
@@ -990,6 +1267,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Theme.textOnDarkMuted,
     fontWeight: "600",
+  },
+  heroDraftMeta: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textOnDarkMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   kpiRow: {
     flexDirection: "row",
@@ -1009,6 +1294,80 @@ const styles = StyleSheet.create({
         overflowX: "auto" as const,
       },
     }),
+  },
+  invHeaderToolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingTop: 12,
+    paddingBottom: 10,
+    gap: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.separatorDark,
+  },
+  invHeaderSearchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 11,
+    backgroundColor: Theme.darkSurface,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    paddingHorizontal: 12,
+    paddingVertical: 0,
+    minWidth: 0,
+  },
+  invHeaderSearchWrapWeb: {
+    outlineStyle: "none",
+    outlineWidth: 0,
+  } as unknown as ViewStyle,
+  invHeaderSearchInput: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "600",
+    color: Theme.textOnDark,
+    paddingVertical: 0,
+  },
+  invHeaderSearchInputWeb: {
+    outlineStyle: "none",
+    outlineWidth: 0,
+  } as unknown as any,
+  invHeaderToolbarActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flexShrink: 0,
+  },
+  invHeaderDateWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    height: 38,
+    borderRadius: 11,
+    backgroundColor: Theme.darkSurface,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    paddingHorizontal: 12,
+  },
+  invHeaderDateInput: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    padding: 0,
+    margin: 0,
+    minWidth: 86,
+    textTransform: "uppercase",
+    ...Platform.select({
+      web: { outlineStyle: "none" } as any,
+    }),
+  },
+  invHeaderDateTo: {
+    marginHorizontal: 8,
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 1,
   },
   kpiRowDesktop: {
     flexDirection: "row",
@@ -1318,13 +1677,15 @@ const styles = StyleSheet.create({
   mobileGridArea: { flex: 1, backgroundColor: "#f8f9fa" },
 
   listHeader: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    minHeight: 68,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
     backgroundColor: "rgba(248,250,252,0.3)",
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
   },
   listHeaderMobile: {
     alignItems: "flex-start",
@@ -1350,11 +1711,20 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     marginTop: 2,
   },
+  listHeaderRule: {
+    marginTop: 3,
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
   bulkActionBtn: {
     backgroundColor: Theme.textPrimaryDark,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
+    alignSelf: "flex-start",
   },
   bulkActionText: {
     color: Theme.buttonPrimaryText,
@@ -1514,6 +1884,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   tripTableRowSelected: { backgroundColor: "rgba(26,35,126,0.03)" },
+  tripRowDisabled: { opacity: 0.6 },
   tripCardMobile: {
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
@@ -1538,6 +1909,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  nonInvoiceableHint: {
+    marginTop: 8,
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+  },
 
   checkBox: {
     width: 16,
@@ -1549,6 +1927,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   checkBoxOn: { backgroundColor: Theme.primary, borderColor: Theme.primary },
+  checkBoxDisabled: {
+    backgroundColor: Theme.surfaceBorder,
+    borderColor: Theme.borderLight,
+  },
 
   tripDate: { fontSize: 11, fontWeight: "800", color: Theme.textPrimaryDark },
   tripId: {
@@ -1650,6 +2032,13 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1,
   },
+  emptySubTitle: {
+    marginTop: 8,
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textAlign: "center",
+  },
 
   footer: {
     position: "absolute",
@@ -1658,17 +2047,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 10,
-    backgroundColor: Theme.screenBackground,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
-  },
-  desktopFooter: {
-    position: "absolute",
-    left: 280,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 32,
-    paddingVertical: 16,
     backgroundColor: Theme.screenBackground,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
@@ -1729,8 +2107,4 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   blockedBtnText: { color: Theme.buttonPrimaryText, fontWeight: "700" },
-  previewModalContainer: {
-    flex: 1,
-    backgroundColor: Theme.screenBackground,
-  },
 });

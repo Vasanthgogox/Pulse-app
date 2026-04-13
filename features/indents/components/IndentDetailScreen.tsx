@@ -11,6 +11,7 @@ import {
   cancelIndent,
   getVisibleIndentById,
   getIndentDisplayNumber,
+  shareDraftIndent,
   updateIndent,
   type IndentRow,
 } from '@/features/indents/services/indents.service';
@@ -50,6 +51,19 @@ function normalizeStatus(value: string | null | undefined): string {
   return (value ?? '').trim().toLowerCase();
 }
 
+function getShareValidationErrors(indent: IndentRow): string[] {
+  const issues: string[] = [];
+  if (!(indent.pickup_area ?? '').trim()) issues.push('Origin is required');
+  if (!(indent.drop_location ?? '').trim()) issues.push('Destination is required');
+  if (!(indent.client_name ?? '').trim()) issues.push('Client is required');
+  if (!Number(indent.client_price ?? 0) || Number(indent.client_price ?? 0) <= 0) issues.push('Budget must be greater than 0');
+  if (Number(indent.supplier_target ?? 0) < 0) issues.push('Supplier target cannot be negative');
+  if (!(indent.vehicle_type ?? '').trim()) issues.push('Vehicle is required');
+  if (!(indent.load_type ?? '').trim()) issues.push('Load type is required');
+  if (!Number(indent.weight ?? 0) || Number(indent.weight ?? 0) <= 0) issues.push('Weight must be greater than 0');
+  return issues;
+}
+
 const LOCKED_INDENT_STATUSES = new Set([
   'awarded',
   'assigned',
@@ -58,6 +72,7 @@ const LOCKED_INDENT_STATUSES = new Set([
   'cancelled',
   'closed',
   'expired',
+  'broadcast',
 ]);
 
 function formatIndentDate(pickupDate: string | null, createdAt: string): string {
@@ -102,6 +117,9 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
   const [refreshing, setRefreshing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [confirmShareVisible, setConfirmShareVisible] = useState(false);
+  const [sharingDraft, setSharingDraft] = useState(false);
+  const [broadcastError, setBroadcastError] = useState<string | null>(null);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
   const [awarding, setAwarding] = useState(false);
   const isRefreshingRef = useRef(false);
@@ -134,16 +152,54 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
     refetchQuotes();
   }, [load, refetchQuotes]);
 
-  const handleBroadcast = useCallback(() => {
-    setIsBroadcasting(true);
-    // Simulate broadcast; close after 2s. Wire to actual API when available.
-    setTimeout(() => setIsBroadcasting(false), 2000);
-  }, []);
-
   const handleEditAll = useCallback(() => {
+    if (indent && normalizeStatus(indent.status) === 'broadcast') {
+      Alert.alert('Read-only indent', 'This indent has been shared and cannot be edited');
+      return;
+    }
     if (indent && onEditPress) onEditPress(indent);
     else Alert.alert('Edit', 'Edit indent flow coming soon.');
   }, [indent, onEditPress]);
+
+  const executeBroadcast = useCallback(async () => {
+    if (!indent) return;
+    setSharingDraft(true);
+    setBroadcastError(null);
+    const { error } = await shareDraftIndent(indent.id);
+    setSharingDraft(false);
+    if (error) {
+      setBroadcastError(error.message);
+      Alert.alert('Could not share', error.message);
+      return;
+    }
+    setConfirmShareVisible(false);
+    if (orgId) invalidateIndents(orgId);
+    await load();
+    setIsBroadcasting(true);
+    setTimeout(() => setIsBroadcasting(false), 1800);
+  }, [indent, orgId, invalidateIndents, load]);
+
+  const handleBroadcast = useCallback(() => {
+    if (!indent) return;
+    if (normalizeStatus(indent.status) !== 'draft') {
+      Alert.alert('Already shared', 'This indent has already been shared with the network.');
+      return;
+    }
+    const validationIssues = getShareValidationErrors(indent);
+    if (validationIssues.length > 0) {
+      Alert.alert(
+        'Complete draft before sharing',
+        `Please fix the following before sharing:\n\n• ${validationIssues.join('\n• ')}`,
+        [
+          { text: 'Close', style: 'cancel' },
+          { text: 'Edit Draft', onPress: handleEditAll },
+        ],
+      );
+      return;
+    }
+    setBroadcastError(null);
+    setConfirmShareVisible(true);
+  }, [indent, handleEditAll]);
 
   const handleAwardQuote = useCallback(async () => {
     if (!indentId || !indent || !selectedQuoteId) return;
@@ -260,7 +316,7 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
   const isLockedStatus = LOCKED_INDENT_STATUSES.has(statusLower);
   const canCancelLoad = isOwner && !isLockedStatus;
   const canEditLoad = isOwner && !isLockedStatus;
-  const canBroadcast = isOwner && !isLockedStatus;
+  const canBroadcast = isOwner && statusLower === 'draft';
   const canAward = statusLower !== 'awarded' && statusLower !== 'completed' && statusLower !== 'deployed';
 
   return (
@@ -319,6 +375,15 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
           />
         }
       >
+        {statusLower === 'draft' ? (
+          <View style={styles.draftBanner}>
+            <FontAwesome name="pencil-square-o" size={12} color={Theme.textPrimaryDark} />
+            <Text style={styles.draftBannerText}>
+              Draft saved. You can edit this indent and share it with network when ready.
+            </Text>
+          </View>
+        ) : null}
+
         {/* Route Card */}
         <View style={styles.routeCard}>
           <View style={styles.routeCardHeader}>
@@ -472,9 +537,9 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
                 style={styles.broadcastBtn}
                 onPress={handleBroadcast}
                 activeOpacity={0.9}
-                disabled={isBroadcasting}
+                disabled={isBroadcasting || sharingDraft}
               >
-                {isBroadcasting ? (
+                {isBroadcasting || sharingDraft ? (
                   <ActivityIndicator size="small" color={Theme.textOnPrimary} />
                 ) : (
                   <>
@@ -486,9 +551,16 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
             ) : (
               <View style={styles.broadcastLockedPill}>
                 <FontAwesome name="lock" size={12} color={Theme.textMuted} />
-                <Text style={styles.broadcastLockedText}>Broadcast unavailable for current status</Text>
+                <Text style={styles.broadcastLockedText}>
+                  {statusLower === 'broadcast'
+                    ? 'This indent has been shared and cannot be edited'
+                    : 'Broadcast unavailable for current status'}
+                </Text>
               </View>
             )}
+            {broadcastError ? (
+              <Text style={styles.broadcastErrorText}>{broadcastError}</Text>
+            ) : null}
           </View>
         ) : (
           <View style={styles.offersListWrap}>
@@ -621,6 +693,44 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
 
       {/* Broadcast modal */}
       <Modal
+        visible={confirmShareVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmShareVisible(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setConfirmShareVisible(false)}>
+          <Pressable style={styles.shareConfirmCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.shareConfirmTitle}>Share with Network?</Text>
+            <Text style={styles.shareConfirmSubtitle}>
+              Once shared, this indent becomes read-only and cannot be edited.
+            </Text>
+            <View style={styles.shareConfirmActions}>
+              <TouchableOpacity
+                style={styles.shareConfirmCancelBtn}
+                onPress={() => setConfirmShareVisible(false)}
+                activeOpacity={0.9}
+                disabled={sharingDraft}
+              >
+                <Text style={styles.shareConfirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.shareConfirmShareBtn}
+                onPress={executeBroadcast}
+                activeOpacity={0.9}
+                disabled={sharingDraft}
+              >
+                {sharingDraft ? (
+                  <ActivityIndicator size="small" color={Theme.textOnDark} />
+                ) : (
+                  <Text style={styles.shareConfirmShareText}>Share now</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
         visible={isBroadcasting}
         transparent
         animationType="slide"
@@ -737,6 +847,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 12,
     backgroundColor: Theme.surface,
+  },
+  draftBanner: {
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: Theme.surfaceLight,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  draftBannerText: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '600',
+    color: Theme.textPrimaryDark,
+    lineHeight: 16,
   },
 
   // Route card (compact, matches DetailPageLayout section density)
@@ -1127,6 +1256,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Theme.textMuted,
   },
+  broadcastErrorText: {
+    marginTop: 10,
+    fontSize: 11,
+    color: Theme.negative,
+    textAlign: 'center',
+  },
 
   // Quote rows
   offersListWrap: {
@@ -1263,6 +1398,58 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Theme.overlayBackdrop,
     justifyContent: 'flex-end',
+  },
+  shareConfirmCard: {
+    marginHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 14,
+  },
+  shareConfirmTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+    marginBottom: 6,
+  },
+  shareConfirmSubtitle: {
+    fontSize: 12,
+    color: Theme.textSecondary,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  shareConfirmActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  shareConfirmCancelBtn: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shareConfirmCancelText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+  },
+  shareConfirmShareBtn: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 10,
+    backgroundColor: Theme.darkBackground,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shareConfirmShareText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Theme.textOnDark,
+    textTransform: 'uppercase',
   },
   modalContent: {
     backgroundColor: Theme.screenBackground,

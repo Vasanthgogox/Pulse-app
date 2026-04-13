@@ -1,6 +1,10 @@
 // __tests__/AddDriverScreen.unit.test.ts
 import { closeModal } from '../app/(modals)/add-driver-closeModal';
 
+jest.mock('expo-router', () => ({
+  useRouter: jest.fn(),
+}));
+
 describe('closeModal', () => {
   it('calls back when navigation history exists', () => {
     const mockRouter = { canGoBack: () => true, back: jest.fn(), replace: jest.fn() };

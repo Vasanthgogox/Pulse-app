@@ -16,6 +16,14 @@ import { View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Theme from '@/constants/Theme';
 
+function getIndentStatusLabel(status: string | null | undefined): string {
+  const s = String(status ?? '').trim().toLowerCase();
+  if (!s) return '—';
+  if (s === 'draft') return 'Draft (Editable)';
+  if (s === 'broadcast') return 'Broadcast';
+  return s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export default function IndentsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -91,7 +99,7 @@ export default function IndentsScreen() {
           title={getIndentDisplayNumber(i)}
           subtitle={`${i.pickup_area} → ${i.drop_location} • ${i.client_name}`}
           amount={formatINR(i.client_price)}
-          amountLabel={i.status}
+          amountLabel={getIndentStatusLabel(i.status)}
           onPress={() => router.push(`/indent/${i.id}` as import('expo-router').Href)}
         />
       )}

@@ -21,7 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { TeslaHeader } from '@/components/TeslaHeader';
 import { useSafeBack } from '@/lib/useSafeBack';
 import Theme from '@/constants/Theme';
@@ -31,6 +31,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { LocationSearchField } from '@/features/trips/components/add-trip/LocationSearchField';
 import { getCapabilitiesFromProfile, getEffectivePermissions } from '@/lib/capabilities';
 import { createIndent, type CreateIndentInput } from '@/features/indents';
+import { getIndentById } from '@/features/indents/services/indents.service';
 import { getOptimalRoute } from '@/services/routingService';
 import {
   AddClientModal,
@@ -49,6 +50,7 @@ import {
   runValidators,
 } from '@/lib/validation';
 import { useInvalidateIndents } from '@/lib/queries';
+import { updateIndentDraft, shareDraftIndent } from '@/features/indents/services/indents.service';
 
 function validateForm(state: FormState): Record<string, string> {
   const errors: Record<string, string> = {};
@@ -146,8 +148,14 @@ const initialFormState: FormState = {
   pickup_date: getToday(),
 };
 
+function isUuid(value: string | null | undefined): value is string {
+  if (!value) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.trim());
+}
+
 export default function CreateIndentScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ draftId?: string | string[] }>();
   const safeBack = useSafeBack();
   const insets = useSafeAreaInsets();
   const { currentOrganization } = useOrganization();
@@ -155,6 +163,8 @@ export default function CreateIndentScreen() {
   const [form, setForm] = useState<FormState>(initialFormState);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [draftIndentId, setDraftIndentId] = useState<string | null>(null);
+  const [lastSavedForm, setLastSavedForm] = useState<FormState>(initialFormState);
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [clientsLoading, setClientsLoading] = useState(false);
   const [clientSearch, setClientSearch] = useState('');
@@ -180,6 +190,8 @@ export default function CreateIndentScreen() {
 
   const orgId = currentOrganization?.id ?? null;
   const invalidateIndents = useInvalidateIndents();
+  const routeDraftIdRaw = Array.isArray(params.draftId) ? params.draftId[0] : params.draftId;
+  const routeDraftId = isUuid(routeDraftIdRaw) ? routeDraftIdRaw : null;
 
   useEffect(() => {
     if (!orgId) return;
@@ -196,11 +208,39 @@ export default function CreateIndentScreen() {
     const loadDraft = async () => {
       if (!orgId) return;
       try {
+        if (routeDraftId) {
+          const { error, indent } = await getIndentById(routeDraftId);
+          if (!error && indent) {
+            const nextForm: FormState = {
+              client_name: String(indent.client_name ?? ''),
+              client_id: null,
+              pickup_area: String(indent.pickup_area ?? ''),
+              drop_location: String(indent.drop_location ?? ''),
+              vehicle_type: String(indent.vehicle_type ?? ''),
+              load_type: String(indent.load_type ?? ''),
+              weight:
+                indent.weight != null && Number(indent.weight) > 0
+                  ? String((Number(indent.weight) / 1000).toFixed(2))
+                  : '',
+              client_price:
+                indent.client_price != null ? String(Number(indent.client_price)) : '',
+              supplier_target:
+                indent.supplier_target != null ? String(Number(indent.supplier_target)) : '',
+              pickup_date: String(indent.pickup_date ?? getToday()),
+            };
+            setDraftIndentId(indent.id);
+            setForm(nextForm);
+            setLastSavedForm(nextForm);
+            await AsyncStorage.setItem(`indent_draft_id_${orgId}`, indent.id);
+            return;
+          }
+        }
+
         const key = `indent_draft_${orgId}`;
         const raw = await AsyncStorage.getItem(key);
         if (raw) {
           const parsed = JSON.parse(raw) as Partial<FormState>;
-          setForm({
+          const nextForm = {
             client_name: parsed.client_name ?? '',
             client_id: parsed.client_id ?? null,
             pickup_area: parsed.pickup_area ?? '',
@@ -211,14 +251,22 @@ export default function CreateIndentScreen() {
             client_price: parsed.client_price ?? '',
             supplier_target: parsed.supplier_target ?? '',
             pickup_date: parsed.pickup_date ?? getToday(),
-          });
+          };
+          setForm(nextForm);
+          setLastSavedForm(nextForm);
+        }
+        const draftId = await AsyncStorage.getItem(`indent_draft_id_${orgId}`);
+        if (isUuid(draftId)) {
+          setDraftIndentId(draftId);
+        } else if (draftId != null) {
+          await AsyncStorage.removeItem(`indent_draft_id_${orgId}`);
         }
       } catch {
         // Ignore draft load errors.
       }
     };
     loadDraft();
-  }, [orgId]);
+  }, [orgId, routeDraftId]);
 
   const update = useCallback((updates: Partial<FormState>) => {
     setForm((prev) => ({ ...prev, ...updates }));
@@ -356,6 +404,84 @@ export default function CreateIndentScreen() {
     return matches;
   }, [clientSearch, clients, form.client_id]);
 
+  const handleBackPress = useCallback(() => {
+    const hasUnsavedChanges = JSON.stringify(form) !== JSON.stringify(lastSavedForm);
+    if (!hasUnsavedChanges) {
+      safeBack();
+      return;
+    }
+    Alert.alert(
+      'Unsaved changes',
+      'You have unsaved indent changes. Save as Draft to continue editing later.',
+      [
+        { text: 'Keep editing', style: 'cancel' },
+        { text: 'Discard', style: 'destructive', onPress: () => safeBack() },
+      ],
+    );
+  }, [form, lastSavedForm, safeBack]);
+
+  const buildPayload = useCallback((): CreateIndentInput => {
+    const payload: CreateIndentInput = {
+      pickup_area: form.pickup_area.trim(),
+      drop_location: form.drop_location.trim(),
+      client_name: form.client_name.trim(),
+      client_price: parseFloat(String(form.client_price).replace(/,/g, '')) || 0,
+      supplier_target: parseFloat(String(form.supplier_target).replace(/,/g, '')) || 0,
+      vehicle_type: form.vehicle_type.trim(),
+      load_type: form.load_type.trim(),
+      weight: (parseFloat((form.weight ?? '').replace(/,/g, '')) || 0) * 1000,
+      pickup_date: form.pickup_date.trim() || null,
+      circulation_target: 'integrated_supplier',
+    };
+    if (form.client_id) payload.client_id = form.client_id;
+    return payload;
+  }, [form]);
+
+  const persistDraft = useCallback(async () => {
+    if (!orgId) {
+      Alert.alert('Organization required', 'Please select an organization before saving a draft.');
+      return;
+    }
+    const payload = buildPayload();
+    setSubmitting(true);
+    try {
+      if (isUuid(draftIndentId)) {
+        const { error, indent } = await updateIndentDraft(draftIndentId, payload);
+        if (!error) {
+          setLastSavedForm(form);
+          invalidateIndents(orgId);
+          if (indent?.id) {
+            router.replace(`/indent/${indent.id}` as import('expo-router').Href);
+          } else {
+            Alert.alert('Draft saved', 'This indent stays editable until you share it.');
+          }
+          return;
+        }
+
+        // Stale/invalid draft pointer should not block creating a fresh draft.
+        setDraftIndentId(null);
+        await AsyncStorage.removeItem(`indent_draft_id_${orgId}`);
+      }
+
+      const { error, indent } = await createIndent(orgId, payload, { action: 'draft' });
+      if (error) {
+        Alert.alert('Could not save draft', error.message);
+        return;
+      }
+      if (indent) {
+        setDraftIndentId(indent.id);
+        await AsyncStorage.setItem(`indent_draft_id_${orgId}`, indent.id);
+        router.replace(`/indent/${indent.id}` as import('expo-router').Href);
+        return;
+      }
+      setLastSavedForm(form);
+      invalidateIndents(orgId);
+      Alert.alert('Draft saved', 'This indent stays editable until you share it.');
+    } finally {
+      setSubmitting(false);
+    }
+  }, [orgId, buildPayload, draftIndentId, form, invalidateIndents, router]);
+
   const handleSubmit = useCallback(async () => {
     if (!orgId) {
       Alert.alert('Organization required', 'Please select an organization before creating an indent.');
@@ -364,45 +490,55 @@ export default function CreateIndentScreen() {
     const errs = validateForm(form);
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
-
-    const clientPrice = parseFloat(String(form.client_price).replace(/,/g, ''));
-    const supplierTarget = parseFloat(String(form.supplier_target).replace(/,/g, ''));
-    const weightValInTons = parseFloat(form.weight.replace(/,/g, ''));
-    const weightValInKg = weightValInTons * 1000;
-    const payload: CreateIndentInput = {
-      pickup_area: form.pickup_area.trim(),
-      drop_location: form.drop_location.trim(),
-      client_name: form.client_name.trim(),
-      client_price: clientPrice,
-      supplier_target: supplierTarget,
-      vehicle_type: form.vehicle_type.trim(),
-      load_type: form.load_type.trim(),
-      weight: weightValInKg,
-      pickup_date: form.pickup_date.trim() || null,
-      circulation_target: 'integrated_supplier',
-    };
-    if (form.client_id) payload.client_id = form.client_id;
-
-    setSubmitting(true);
-    const { error, indent } = await createIndent(orgId, payload);
-    setSubmitting(false);
-    if (error) {
-      Alert.alert('Could not create indent', error.message);
-      return;
-    }
-    if (indent) {
-      // Clear draft on successful create so next visit starts fresh.
-      try {
-        const key = `indent_draft_${orgId}`;
-        await AsyncStorage.removeItem(key);
-      } catch {
-        // Ignore draft clear errors.
-      }
-      // Refresh indents lists (Indents tab, Load Hub) and open detail so user can preview.
-      invalidateIndents(orgId);
-      router.replace(`/indent/${indent.id}` as import('expo-router').Href);
-    }
-  }, [orgId, form, invalidateIndents, router]);
+    Alert.alert(
+      'Share with Network?',
+      'Once shared, this indent becomes read-only and cannot be edited.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Share now',
+          onPress: async () => {
+            const payload = buildPayload();
+            setSubmitting(true);
+            try {
+              if (draftIndentId) {
+                const { error: draftError } = await updateIndentDraft(draftIndentId, payload);
+                if (draftError) {
+                  Alert.alert('Could not update draft', draftError.message);
+                  return;
+                }
+                const { error: shareError, indent } = await shareDraftIndent(draftIndentId);
+                if (shareError) {
+                  Alert.alert('Could not share indent', shareError.message);
+                  return;
+                }
+                if (indent) {
+                  await AsyncStorage.removeItem(`indent_draft_${orgId}`);
+                  await AsyncStorage.removeItem(`indent_draft_id_${orgId}`);
+                  invalidateIndents(orgId);
+                  router.replace(`/indent/${indent.id}` as import('expo-router').Href);
+                }
+                return;
+              }
+              const { error, indent } = await createIndent(orgId, payload, { action: 'share' });
+              if (error) {
+                Alert.alert('Could not create indent', error.message);
+                return;
+              }
+              if (indent) {
+                await AsyncStorage.removeItem(`indent_draft_${orgId}`);
+                await AsyncStorage.removeItem(`indent_draft_id_${orgId}`);
+                invalidateIndents(orgId);
+                router.replace(`/indent/${indent.id}` as import('expo-router').Href);
+              }
+            } finally {
+              setSubmitting(false);
+            }
+          },
+        },
+      ],
+    );
+  }, [orgId, form, invalidateIndents, router, buildPayload, draftIndentId]);
 
   if (!canCreate) {
     return (
@@ -417,7 +553,7 @@ export default function CreateIndentScreen() {
             subtitle="Deploy New Load"
             variant="dark"
             showBack
-            onBack={safeBack}
+            onBack={handleBackPress}
             hideRightIcons
           />
           <View style={styles.noAccessWrap}>
@@ -455,7 +591,7 @@ export default function CreateIndentScreen() {
           subtitle="Deploy New Load"
           variant="dark"
           showBack
-          onBack={safeBack}
+          onBack={handleBackPress}
           hideRightIcons
         />
 
@@ -639,7 +775,7 @@ export default function CreateIndentScreen() {
           ) : null}
 
           <View style={styles.sheetSection}>
-            <Text style={styles.sheetLabel}>Budget Specification (₹)</Text>
+            <Text style={styles.sheetLabel}>Client Rate (₹)</Text>
             <TextInput
               style={[styles.sheetInput, errors.client_price && styles.inputError]}
               value={form.client_price}
@@ -926,18 +1062,39 @@ export default function CreateIndentScreen() {
             </Modal>
           ) : null}
 
-            <TouchableOpacity
-              style={[styles.submitBtn, (!canSubmit || submitting) && styles.submitBtnDisabled]}
-              onPress={handleSubmit}
-              disabled={!canSubmit || submitting}
-              activeOpacity={0.8}
-            >
-              {submitting ? (
-                <ActivityIndicator size="small" color={Theme.buttonPrimaryText} />
-              ) : (
-                <Text style={styles.submitBtnText}>Share with Network</Text>
-              )}
-            </TouchableOpacity>
+            <View style={styles.actionHelpBox}>
+              <Text style={styles.actionHelpTitle}>Save as Draft</Text>
+              <Text style={styles.actionHelpText}>Indent stays editable. You can save updates again and share later.</Text>
+              <Text style={styles.actionHelpTitle}>Share with Network</Text>
+              <Text style={styles.actionHelpText}>Shared indents are broadcast and become read-only.</Text>
+            </View>
+
+            <View style={styles.actionButtonsRow}>
+              <TouchableOpacity
+                style={[styles.draftBtn, submitting && styles.submitBtnDisabled]}
+                onPress={persistDraft}
+                disabled={submitting}
+                activeOpacity={0.8}
+              >
+                {submitting ? (
+                  <ActivityIndicator size="small" color={Theme.textPrimaryDark} />
+                ) : (
+                  <Text style={styles.draftBtnText}>Save as Draft</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitBtn, (!canSubmit || submitting) && styles.submitBtnDisabled]}
+                onPress={handleSubmit}
+                disabled={!canSubmit || submitting}
+                activeOpacity={0.8}
+              >
+                {submitting ? (
+                  <ActivityIndicator size="small" color={Theme.buttonPrimaryText} />
+                ) : (
+                  <Text style={styles.submitBtnText}>Share with Network</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
       </View>
@@ -1232,7 +1389,50 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: Theme.textOnDark,
   },
+  actionHelpBox: {
+    marginTop: 8,
+    backgroundColor: Theme.surfaceLight,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 12,
+    gap: 4,
+  },
+  actionHelpTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+  },
+  actionHelpText: {
+    fontSize: 11,
+    color: Theme.textSecondary,
+    marginBottom: 4,
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  draftBtn: {
+    flex: 1,
+    marginTop: 12,
+    minHeight: Layout.minTouchTargetSize + 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    backgroundColor: Theme.surface,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  draftBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
   submitBtn: {
+    flex: 1,
     marginTop: 12,
     minHeight: Layout.minTouchTargetSize + 12,
     paddingVertical: 12,

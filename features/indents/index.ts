@@ -9,11 +9,14 @@ export const createIndent = indentsService.createIndent;
 export const insertIndentStops = indentsService.insertIndentStops;
 export const getMarketIndentsForOrganization = indentsService.getMarketIndentsForOrganization;
 export const updateIndent = indentsService.updateIndent;
+export const updateIndentDraft = indentsService.updateIndentDraft;
+export const shareDraftIndent = indentsService.shareDraftIndent;
 export const cancelIndent = indentsService.cancelIndent;
 export type IndentRow = indentsService.IndentRow;
 export type CreateIndentInput = indentsService.CreateIndentInput;
 export type IndentStopInput = indentsService.IndentStopInput;
 export type CirculationTarget = indentsService.CirculationTarget;
+export type IndentAction = indentsService.IndentAction;
 
 export const createDirectQuote = directQuotesService.createDirectQuote;
 export const getMyDirectQuotes = directQuotesService.getMyDirectQuotes;
