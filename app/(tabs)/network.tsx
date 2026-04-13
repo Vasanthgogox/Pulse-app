@@ -1353,7 +1353,7 @@ export default function NetworkScreen() {
                                     : styles.networkPlatformPillTextOff,
                                 ]}
                               >
-                                {onPlatform ? "ON APP" : "OFF-GRID"}
+                                {onPlatform ? "ON APP" : "OFFLINE"}
                               </Text>
                             </View>
                           </View>
@@ -1424,7 +1424,7 @@ export default function NetworkScreen() {
                                 numberOfLines={2}
                               >
                                 {node.type} •{" "}
-                                {onPlatform ? "ON APP" : "OFF-GRID"}
+                                {onPlatform ? "ON APP" : "OFFLINE"}
                               </Text>
                             </View>
                           </View>
