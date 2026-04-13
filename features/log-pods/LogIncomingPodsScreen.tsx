@@ -444,6 +444,12 @@ export function LogIncomingPodsScreen({ embedded = false }: LogIncomingPodsScree
     setAttachmentModalOpen(true);
   }, [courierValue, customCourierName, totalSelectedPODs]);
 
+  const isLogDisabled =
+    !courierValue ||
+    (courierValue === "custom" && !customCourierName.trim()) ||
+    totalSelectedPODs === 0 ||
+    logMutation.isPending;
+
   if (!allowed) {
     return (
       <View
@@ -683,6 +689,26 @@ export function LogIncomingPodsScreen({ embedded = false }: LogIncomingPodsScree
             </Pressable>
           </View>
         ) : null}
+        {embedded && isMediumScreen ? (
+          <Pressable
+            style={[styles.headerLogBtn, isLogDisabled && styles.headerLogBtnDisabled]}
+            onPress={openLogFlow}
+            disabled={isLogDisabled}
+          >
+            {logMutation.isPending ? (
+              <>
+                <ActivityIndicator
+                  color={Theme.buttonPrimaryText}
+                  size="small"
+                  style={{ marginRight: 8 }}
+                />
+                <Text style={styles.headerLogBtnText}>Logging...</Text>
+              </>
+            ) : (
+              <Text style={styles.headerLogBtnText}>Log {totalSelectedPODs} PODs</Text>
+            )}
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
@@ -908,19 +934,10 @@ export function LogIncomingPodsScreen({ embedded = false }: LogIncomingPodsScree
           <Pressable
             style={[
               styles.headerLogBtn,
-              (!courierValue ||
-                (courierValue === "custom" && !customCourierName.trim()) ||
-                totalSelectedPODs === 0 ||
-                logMutation.isPending) &&
-                styles.headerLogBtnDisabled,
+              isLogDisabled && styles.headerLogBtnDisabled,
             ]}
             onPress={openLogFlow}
-            disabled={
-              !courierValue ||
-              (courierValue === "custom" && !customCourierName.trim()) ||
-              totalSelectedPODs === 0 ||
-              logMutation.isPending
-            }
+            disabled={isLogDisabled}
           >
             {logMutation.isPending ? (
               <>
@@ -993,19 +1010,10 @@ export function LogIncomingPodsScreen({ embedded = false }: LogIncomingPodsScree
           <Pressable
             style={[
               styles.logBtn,
-              (!courierValue ||
-                (courierValue === "custom" && !customCourierName.trim()) ||
-                totalSelectedPODs === 0 ||
-                logMutation.isPending) &&
-                styles.logBtnDisabled,
+              isLogDisabled && styles.logBtnDisabled,
             ]}
             onPress={openLogFlow}
-            disabled={
-              !courierValue ||
-              (courierValue === "custom" && !customCourierName.trim()) ||
-              totalSelectedPODs === 0 ||
-              logMutation.isPending
-            }
+            disabled={isLogDisabled}
           >
             {logMutation.isPending ? (
               <ActivityIndicator color={Theme.buttonPrimaryText} />

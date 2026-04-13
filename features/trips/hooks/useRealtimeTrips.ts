@@ -4,6 +4,10 @@
 import { useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 
+function uniqueTopic(base: string) {
+  return `${base}:${Math.random().toString(36).slice(2, 10)}`;
+}
+
 /** Subscribe to trips for an organization; call onInvalidate when any change. */
 export function useRealtimeTrips(organizationId: string | null, onInvalidate: () => void) {
   const onInvalidateRef = useRef(onInvalidate);
@@ -12,7 +16,7 @@ export function useRealtimeTrips(organizationId: string | null, onInvalidate: ()
   useEffect(() => {
     if (!organizationId) return;
     const channel = supabase()
-      .channel(`trips:org:${organizationId}`)
+      .channel(uniqueTopic(`trips:org:${organizationId}`))
       .on(
         'postgres_changes',
         {
@@ -40,7 +44,7 @@ export function useRealtimeTrip(tripId: string | null, onInvalidate: () => void)
   useEffect(() => {
     if (!tripId) return;
     const channel = supabase()
-      .channel(`trip:${tripId}`)
+      .channel(uniqueTopic(`trip:${tripId}`))
       .on(
         'postgres_changes',
         {

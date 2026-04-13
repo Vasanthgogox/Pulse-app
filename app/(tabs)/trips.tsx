@@ -42,7 +42,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-type ActiveStatusTab = "all" | "unassigned" | "assigned" | "in_transit";
+type ActiveStatusTab = "unassigned" | "assigned" | "in_transit";
 type SupplyFilter = "all" | "asset" | "aggregated";
 type SortBy =
   | "date_desc"
@@ -69,12 +69,10 @@ export default function TripsScreen() {
   const { currentOrganization } = useOrganization();
   const { profile } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
-  const [tripFilter, setTripFilter] = useState<"Active" | "Completed">(
-    "Active",
-  );
+  const [tripFilter, setTripFilter] = useState<"Active" | "History">("Active");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeStatusTab, setActiveStatusTab] =
-    useState<ActiveStatusTab>("all");
+    useState<ActiveStatusTab>("unassigned");
   const [supplyFilter, setSupplyFilter] = useState<SupplyFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("date_desc");
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
@@ -134,16 +132,14 @@ export default function TripsScreen() {
     return raw ? formatLedgerDate(raw) : "—";
   };
 
-  /** Show completed trips only on the History tab. */
-  const showCompletedList = tripFilter === "Completed";
+  /** Show completed/done trips only on the History tab. */
+  const showCompletedList = tripFilter === "History";
 
   const tripsByStatus = useMemo(
     () =>
       showCompletedList
-        ? // History tab: show only completed trips that had a driver assigned (no filtering)
-          trips.filter(
-            (t) => isCompletedStatus(t.status) && t.driver_id != null,
-          )
+        ? // History tab: show completed trips only.
+          trips.filter((t) => isCompletedStatus(t.status))
         : trips.filter((t) => !isCompletedStatus(t.status)),
     [showCompletedList, trips],
   );
@@ -167,7 +163,6 @@ export default function TripsScreen() {
         const completed = isCompletedStatus(t.status);
         const inTransitLike = isInTransitStatus(t.status);
         const hasDriver = t.driver_id != null;
-        if (activeStatusTab === "all") return true;
         if (activeStatusTab === "unassigned") return !hasDriver;
         if (activeStatusTab === "assigned")
           return hasDriver && !completed && !inTransitLike;
@@ -314,52 +309,52 @@ export default function TripsScreen() {
     return map;
   }, [transactions]);
 
-  const statusTabs = useMemo(
+  const mainTabs = useMemo(
     () => [
       {
-        id: "all" as const,
+        id: "active" as const,
         label: tr("active"),
-        isActive: tripFilter === "Active" && activeStatusTab === "all",
-        onPress: () => {
-          setTripFilter("Active");
-          setActiveStatusTab("all");
-        },
+        isActive: tripFilter === "Active",
+        onPress: () => setTripFilter("Active"),
       },
+      {
+        id: "history" as const,
+        label: tr("history"),
+        isActive: tripFilter === "History",
+        onPress: () => setTripFilter("History"),
+      },
+    ],
+    [tr, tripFilter],
+  );
+
+  const activeStatusTabs = useMemo(
+    () => [
       {
         id: "unassigned" as const,
         label: tr("unassigned"),
-        isActive: tripFilter === "Active" && activeStatusTab === "unassigned",
+        isActive: activeStatusTab === "unassigned",
         onPress: () => {
-          setTripFilter("Active");
           setActiveStatusTab("unassigned");
         },
       },
       {
         id: "assigned" as const,
         label: tr("tripAssigned"),
-        isActive: tripFilter === "Active" && activeStatusTab === "assigned",
+        isActive: activeStatusTab === "assigned",
         onPress: () => {
-          setTripFilter("Active");
           setActiveStatusTab("assigned");
         },
       },
       {
         id: "in_transit" as const,
         label: tr("tripInTransit"),
-        isActive: tripFilter === "Active" && activeStatusTab === "in_transit",
+        isActive: activeStatusTab === "in_transit",
         onPress: () => {
-          setTripFilter("Active");
           setActiveStatusTab("in_transit");
         },
       },
-      {
-        id: "history" as const,
-        label: tr("history"),
-        isActive: tripFilter === "Completed",
-        onPress: () => setTripFilter("Completed"),
-      },
     ],
-    [tr, tripFilter, activeStatusTab],
+    [tr, activeStatusTab],
   );
 
   const sortOptions = useMemo(
@@ -416,7 +411,7 @@ export default function TripsScreen() {
       <View style={styles.headerBlock}>
         {Platform.OS === "web" ? (
           <View style={styles.tabRowWeb}>
-            {statusTabs.map((tab) => (
+            {mainTabs.map((tab) => (
               <TouchableOpacity
                 key={tab.id}
                 style={[styles.tabWeb, tab.isActive && styles.tabActive]}
@@ -439,7 +434,7 @@ export default function TripsScreen() {
             contentContainerStyle={styles.tabRowScrollContent}
             style={styles.tabRowScroll}
           >
-            {statusTabs.map((tab) => (
+            {mainTabs.map((tab) => (
               <TouchableOpacity
                 key={tab.id}
                 style={[styles.tab, tab.isActive && styles.tabActive]}
@@ -456,6 +451,50 @@ export default function TripsScreen() {
             ))}
           </ScrollView>
         )}
+        {tripFilter === "Active" ? (
+          Platform.OS === "web" ? (
+            <View style={styles.tabRowWebSub}>
+              {activeStatusTabs.map((tab) => (
+                <TouchableOpacity
+                  key={tab.id}
+                  style={[styles.tabWeb, tab.isActive && styles.tabActive]}
+                  onPress={tab.onPress}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[styles.tabText, tab.isActive && styles.tabTextActive]}
+                  >
+                    {tab.label}
+                  </Text>
+                  {tab.isActive ? <View style={styles.tabUnderline} /> : null}
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.tabRowScrollContent}
+              style={styles.tabRowScrollSub}
+            >
+              {activeStatusTabs.map((tab) => (
+                <TouchableOpacity
+                  key={tab.id}
+                  style={[styles.tab, tab.isActive && styles.tabActive]}
+                  onPress={tab.onPress}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[styles.tabText, tab.isActive && styles.tabTextActive]}
+                  >
+                    {tab.label}
+                  </Text>
+                  {tab.isActive ? <View style={styles.tabUnderline} /> : null}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )
+        ) : null}
 
         <View style={styles.tripsToolbar}>
           <View
@@ -875,6 +914,21 @@ const styles = StyleSheet.create({
     borderBottomColor: Theme.separatorDark,
   },
   tabRowScroll: {
+    flexGrow: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.separatorDark,
+  },
+  tabRowWebSub: {
+    flexDirection: "row",
+    justifyContent: "center",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    marginTop: 2,
+    marginBottom: 4,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.separatorDark,
+  },
+  tabRowScrollSub: {
     flexGrow: 0,
     borderBottomWidth: 1,
     borderBottomColor: Theme.separatorDark,

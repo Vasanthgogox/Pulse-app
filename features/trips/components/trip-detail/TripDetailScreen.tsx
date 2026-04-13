@@ -1485,9 +1485,10 @@ export default function TripDetailScreen({
             currentUserId={currentUserId}
             isDriverOffline={isDriverOffline}
             onOpenTracking={() => setShowTrackingModal(true)}
-            tripDocs={computedTripDocs}
-            onOpenDoc={(doc) => setSelectedDoc(doc)}
-            assignmentBlock={
+          tripDocs={computedTripDocs}
+          onOpenDoc={(doc) => setSelectedDoc(doc)}
+          clientName={displayClientName}
+          assignmentBlock={
             trip.organization_id ? (
               <TripAssignmentBlock
                 trip={trip}

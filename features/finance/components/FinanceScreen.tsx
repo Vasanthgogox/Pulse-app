@@ -1231,7 +1231,11 @@ export function FinanceScreen() {
               : financeSubTab === "suppliers"
                 ? () => router.push("/(modals)/add-supplier" as const)
                 : financeSubTab === "garage"
-                  ? () => router.push("/(modals)/add-vehicle" as const)
+                  ? () =>
+                      router.push({
+                        pathname: "/(modals)/add-vehicle",
+                        params: { returnTo: "/(tabs)/finance" },
+                      })
                   : financeSubTab === "drivers"
                     ? () => router.push("/(modals)/add-driver" as const)
                     : undefined;
