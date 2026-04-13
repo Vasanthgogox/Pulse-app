@@ -1240,7 +1240,7 @@ const styles = StyleSheet.create({
   },
   financeHeaderInner: {
     width: "100%",
-    maxWidth: 1600,
+    maxWidth: "100%",
     alignSelf: "center",
   },
   heroRow: {
