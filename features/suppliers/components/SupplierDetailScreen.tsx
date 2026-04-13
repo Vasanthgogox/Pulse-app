@@ -109,7 +109,18 @@ export default function SupplierDetailScreen({
   const [successTitle, setSuccessTitle] = useState("NODE_SYNCED");
   const [isLinked, setIsLinked] = useState(false);
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
+  const [isInApp, setIsInApp] = useState(false);
   const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    if (supplier?.phone) {
+      import("@/services/connectionRequestsService").then(({ getConnectionInviteeByPhone }) => {
+        getConnectionInviteeByPhone(supplier.phone).then(({ invitee }) => {
+          if (invitee) setIsInApp(true);
+        });
+      });
+    }
+  }, [supplier?.phone]);
 
   const load = useCallback(() => {
     if (!supplierId || !currentOrganization?.id) {
@@ -903,9 +914,15 @@ export default function SupplierDetailScreen({
                         <Text style={styles.profileBadgeText}>Verified</Text>
                       </View>
                     ) : null}
-                    <View style={[styles.profileBadge, styles.profileBadgeCore]}>
-                      <Text style={styles.profileBadgeCoreText}>Core Node</Text>
-                    </View>
+                    {supplier?.supplier_type === 'integrated' || supplier?.linked_organization_id || isInApp ? (
+                      <View style={[styles.profileBadge, { backgroundColor: Theme.positive + '20', borderColor: Theme.positive }]}>
+                        <Text style={[styles.profileBadgeCoreText, { color: Theme.positive }]}>Integrated</Text>
+                      </View>
+                    ) : (
+                      <View style={[styles.profileBadge, styles.profileBadgeCore]}>
+                        <Text style={styles.profileBadgeCoreText}>Core Node</Text>
+                      </View>
+                    )}
                   </View>
                 </View>
               </View>
@@ -982,6 +999,22 @@ export default function SupplierDetailScreen({
               <FontAwesome name="refresh" size={14} color={Theme.primary} />
               <Text style={styles.profileEditBtnText}>Edit Node Profile</Text>
             </TouchableOpacity>
+            {!supplier?.linked_organization_id && !isInApp && (
+              <TouchableOpacity
+                style={[
+                  styles.profileEditBtn,
+                  { backgroundColor: Theme.surface, borderWidth: 1, borderColor: Theme.borderLight, marginTop: 12 }
+                ]}
+                onPress={() => {
+                  const message = `Join me on Q to sync our ledger and compare books with ${supplierName}. Download the Q app to get started.`;
+                  Share.share({ message, title: "Invite to Q" });
+                }}
+                activeOpacity={0.8}
+              >
+                <FontAwesome name="link" size={14} color={Theme.primary} />
+                <Text style={styles.profileEditBtnText}>{t("linkToAppAccount")}</Text>
+              </TouchableOpacity>
+            )}
           </ScrollView>
         </View>
       </Modal>

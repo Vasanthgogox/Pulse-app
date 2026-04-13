@@ -422,6 +422,7 @@ export function SharedLedgerContent({
       }
       if (inv) {
         setInvitee(inv);
+        // If the offline contact is already in our contact list and matches an app user, treat them as integrated
         setInviteeStatus("in_app");
         // Check if we already sent a pending connection request to this org
         const { requests } = await getConnectionRequestsSent(organizationId);
