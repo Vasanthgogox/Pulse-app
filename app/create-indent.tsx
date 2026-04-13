@@ -193,6 +193,30 @@ export default function CreateIndentScreen() {
   const routeDraftIdRaw = Array.isArray(params.draftId) ? params.draftId[0] : params.draftId;
   const routeDraftId = isUuid(routeDraftIdRaw) ? routeDraftIdRaw : null;
 
+  const showDialog = useCallback((title: string, message?: string) => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.alert === 'function') {
+      const body = message && message.trim().length > 0 ? `${title}\n\n${message}` : title;
+      window.alert(body);
+      return;
+    }
+    Alert.alert(title, message);
+  }, []);
+
+  const confirmDialog = useCallback(
+    async (title: string, message: string, confirmText = 'Confirm'): Promise<boolean> => {
+      if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        return window.confirm(`${title}\n\n${message}`);
+      }
+      return new Promise((resolve) => {
+        Alert.alert(title, message, [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          { text: confirmText, onPress: () => resolve(true) },
+        ]);
+      });
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!orgId) return;
     setClientsLoading(true);
@@ -410,15 +434,14 @@ export default function CreateIndentScreen() {
       safeBack();
       return;
     }
-    Alert.alert(
+    confirmDialog(
       'Unsaved changes',
       'You have unsaved indent changes. Save as Draft to continue editing later.',
-      [
-        { text: 'Keep editing', style: 'cancel' },
-        { text: 'Discard', style: 'destructive', onPress: () => safeBack() },
-      ],
-    );
-  }, [form, lastSavedForm, safeBack]);
+      'Discard',
+    ).then((confirmed) => {
+      if (confirmed) safeBack();
+    });
+  }, [form, lastSavedForm, safeBack, confirmDialog]);
 
   const buildPayload = useCallback((): CreateIndentInput => {
     const payload: CreateIndentInput = {
@@ -439,7 +462,7 @@ export default function CreateIndentScreen() {
 
   const persistDraft = useCallback(async () => {
     if (!orgId) {
-      Alert.alert('Organization required', 'Please select an organization before saving a draft.');
+      showDialog('Organization required', 'Please select an organization before saving a draft.');
       return;
     }
     const payload = buildPayload();
@@ -453,7 +476,7 @@ export default function CreateIndentScreen() {
           if (indent?.id) {
             router.replace(`/indent/${indent.id}` as import('expo-router').Href);
           } else {
-            Alert.alert('Draft saved', 'This indent stays editable until you share it.');
+            showDialog('Draft saved', 'This indent stays editable until you share it.');
           }
           return;
         }
@@ -465,7 +488,7 @@ export default function CreateIndentScreen() {
 
       const { error, indent } = await createIndent(orgId, payload, { action: 'draft' });
       if (error) {
-        Alert.alert('Could not save draft', error.message);
+        showDialog('Could not save draft', error.message);
         return;
       }
       if (indent) {
@@ -476,69 +499,64 @@ export default function CreateIndentScreen() {
       }
       setLastSavedForm(form);
       invalidateIndents(orgId);
-      Alert.alert('Draft saved', 'This indent stays editable until you share it.');
+      showDialog('Draft saved', 'This indent stays editable until you share it.');
     } finally {
       setSubmitting(false);
     }
-  }, [orgId, buildPayload, draftIndentId, form, invalidateIndents, router]);
+  }, [orgId, buildPayload, draftIndentId, form, invalidateIndents, router, showDialog]);
 
   const handleSubmit = useCallback(async () => {
     if (!orgId) {
-      Alert.alert('Organization required', 'Please select an organization before creating an indent.');
+      showDialog('Organization required', 'Please select an organization before creating an indent.');
       return;
     }
     const errs = validateForm(form);
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
-    Alert.alert(
+    const shouldShare = await confirmDialog(
       'Share with Network?',
       'Once shared, this indent becomes read-only and cannot be edited.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Share now',
-          onPress: async () => {
-            const payload = buildPayload();
-            setSubmitting(true);
-            try {
-              if (draftIndentId) {
-                const { error: draftError } = await updateIndentDraft(draftIndentId, payload);
-                if (draftError) {
-                  Alert.alert('Could not update draft', draftError.message);
-                  return;
-                }
-                const { error: shareError, indent } = await shareDraftIndent(draftIndentId);
-                if (shareError) {
-                  Alert.alert('Could not share indent', shareError.message);
-                  return;
-                }
-                if (indent) {
-                  await AsyncStorage.removeItem(`indent_draft_${orgId}`);
-                  await AsyncStorage.removeItem(`indent_draft_id_${orgId}`);
-                  invalidateIndents(orgId);
-                  router.replace(`/indent/${indent.id}` as import('expo-router').Href);
-                }
-                return;
-              }
-              const { error, indent } = await createIndent(orgId, payload, { action: 'share' });
-              if (error) {
-                Alert.alert('Could not create indent', error.message);
-                return;
-              }
-              if (indent) {
-                await AsyncStorage.removeItem(`indent_draft_${orgId}`);
-                await AsyncStorage.removeItem(`indent_draft_id_${orgId}`);
-                invalidateIndents(orgId);
-                router.replace(`/indent/${indent.id}` as import('expo-router').Href);
-              }
-            } finally {
-              setSubmitting(false);
-            }
-          },
-        },
-      ],
+      'Share now',
     );
-  }, [orgId, form, invalidateIndents, router, buildPayload, draftIndentId]);
+    if (!shouldShare) return;
+
+    const payload = buildPayload();
+    setSubmitting(true);
+    try {
+      if (draftIndentId) {
+        const { error: draftError } = await updateIndentDraft(draftIndentId, payload);
+        if (draftError) {
+          showDialog('Could not update draft', draftError.message);
+          return;
+        }
+        const { error: shareError, indent } = await shareDraftIndent(draftIndentId);
+        if (shareError) {
+          showDialog('Could not share indent', shareError.message);
+          return;
+        }
+        if (indent) {
+          await AsyncStorage.removeItem(`indent_draft_${orgId}`);
+          await AsyncStorage.removeItem(`indent_draft_id_${orgId}`);
+          invalidateIndents(orgId);
+          router.replace(`/indent/${indent.id}` as import('expo-router').Href);
+        }
+        return;
+      }
+      const { error, indent } = await createIndent(orgId, payload, { action: 'share' });
+      if (error) {
+        showDialog('Could not create indent', error.message);
+        return;
+      }
+      if (indent) {
+        await AsyncStorage.removeItem(`indent_draft_${orgId}`);
+        await AsyncStorage.removeItem(`indent_draft_id_${orgId}`);
+        invalidateIndents(orgId);
+        router.replace(`/indent/${indent.id}` as import('expo-router').Href);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }, [orgId, form, invalidateIndents, router, buildPayload, draftIndentId, showDialog, confirmDialog]);
 
   if (!canCreate) {
     return (
@@ -757,7 +775,7 @@ export default function CreateIndentScreen() {
                     organization_name: data.organizationName || undefined,
                   });
                   if (error) {
-                    Alert.alert('Could not add client', error.message);
+                    showDialog('Could not add client', error.message);
                     throw error;
                   }
                   if (client) {
@@ -1194,7 +1212,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Theme.textPrimaryDark,
     paddingVertical: 0,
-    ...(Platform.OS === 'web' && { outlineStyle: 'none' }),
   },
   clientSearchClear: {
     padding: 4,
