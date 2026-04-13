@@ -740,7 +740,12 @@ export default function SalaryRequestScreen() {
                         </View>
                         <View style={styles.formCol}>
                           <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Amount</Text>
-                          <View style={[styles.inputShell, { borderColor: colors.border, backgroundColor: colors.background }]}>
+                          <View
+                            style={[
+                              styles.inputShell,
+                              { borderColor: colors.border, backgroundColor: colors.background },
+                            ]}
+                          >
                             <Text style={[styles.currencyPrefix, { color: colors.textMuted }]}>₹</Text>
                             <TextInput
                               style={[styles.amountInput, { color: colors.text }]}
@@ -1412,7 +1417,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     gap: 10,
   },
   inputText: {
@@ -1427,6 +1432,7 @@ const styles = StyleSheet.create({
   },
   amountInput: {
     flex: 1,
+    minWidth: 0,
     fontSize: 16,
     fontWeight: '900',
     paddingVertical: 10,
