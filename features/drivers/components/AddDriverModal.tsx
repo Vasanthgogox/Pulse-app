@@ -104,6 +104,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
   const [phoneValidationError, setPhoneValidationError] = useState<string | null>(null);
   const [emergencyPhoneValidationError, setEmergencyPhoneValidationError] = useState<string | null>(null);
   const [selectedMatchUserId, setSelectedMatchUserId] = useState<string | null>(null);
+  const [fleetWarningMatch, setFleetWarningMatch] = useState<ExistingDriverMatch | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const searchIdRef = useRef(0);
 
@@ -144,6 +145,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
       setPhoneValidationError(null);
       setEmergencyPhoneValidationError(null);
       setSelectedMatchUserId(null);
+      setFleetWarningMatch(null);
       setImportLoading(false);
     }
   }, [visible]);
@@ -207,6 +209,13 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
   const reviewUseInvite = Boolean(onComplete) && existingMatches.length > 0;
 
   const handleNext = () => {
+    if (step.id === 'driver') {
+      const inFleetMatch = existingMatches.find((m) => m.is_in_fleet === true) ?? null;
+      if (inFleetMatch) {
+        setFleetWarningMatch(inFleetMatch);
+        return;
+      }
+    }
     if (isReview) {
       setError(null);
       setSubmitting(true);
@@ -392,6 +401,10 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
                         selectedMatchUserId === match.user_id && styles.existingItemSelected,
                       ]}
                       onPress={() => {
+                        if (inFleet) {
+                          setFleetWarningMatch(match);
+                          return;
+                        }
                         setFormData((p) => ({
                           ...p,
                           phone: match.phone,
@@ -673,6 +686,42 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
 
   if (visible === false) return null;
 
+  const fleetWarningModal = (
+    <Modal
+      transparent
+      animationType="fade"
+      visible={fleetWarningMatch != null}
+      onRequestClose={() => setFleetWarningMatch(null)}
+    >
+      <View style={styles.fleetWarningBackdrop}>
+        <View style={styles.fleetWarningCard}>
+          <View style={styles.fleetWarningIconWrap}>
+            <FontAwesome name="exclamation-triangle" size={18} color={Theme.negative} />
+          </View>
+          <Text style={styles.fleetWarningEyebrow}>Action needed</Text>
+          <Text style={styles.fleetWarningTitle}>{t('existingDriverInFleet')}</Text>
+          <Text style={styles.fleetWarningBody}>
+            {t('existingDriverInFleetDetail')}
+          </Text>
+          {fleetWarningMatch?.full_name ? (
+            <View style={styles.fleetWarningDriverChip}>
+              <Text style={styles.fleetWarningDriverName}>
+                Driver: {fleetWarningMatch.full_name}
+              </Text>
+            </View>
+          ) : null}
+          <TouchableOpacity
+            style={styles.fleetWarningActionBtn}
+            onPress={() => setFleetWarningMatch(null)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.fleetWarningActionText}>OK</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
   if (visible === true) {
     const windowHeight = Dimensions.get('window').height;
     const panelHeight = Math.min(
@@ -744,6 +793,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
               </View>
             </View>
           </View>
+          {fleetWarningModal}
         </KeyboardAvoidingView>
       </Modal>
     );
@@ -771,6 +821,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
       footerRightTestID={isReview ? 'invite-submit-btn' : undefined}
     >
       {renderStep()}
+      {fleetWarningModal}
     </WizardStepLayout>
   );
 }
@@ -920,6 +971,89 @@ const styles = StyleSheet.create({
     marginTop: 4,
     color: Theme.textSecondary,
     lineHeight: 16,
+  },
+  fleetWarningBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  fleetWarningCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    alignItems: 'center',
+  },
+  fleetWarningIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(244,63,94,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  fleetWarningTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    textAlign: 'center',
+  },
+  fleetWarningEyebrow: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Theme.negative,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  fleetWarningBody: {
+    marginTop: 8,
+    fontSize: 12,
+    lineHeight: 18,
+    color: Theme.textSecondary,
+    textAlign: 'center',
+  },
+  fleetWarningDriverChip: {
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: Theme.surfaceLight,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  fleetWarningDriverName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+    textAlign: 'center',
+  },
+  fleetWarningActionBtn: {
+    marginTop: 16,
+    width: '100%',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: 'rgba(244,63,94,0.14)',
+    borderWidth: 1,
+    borderColor: Theme.negative,
+    alignItems: 'center',
+  },
+  fleetWarningActionText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: Theme.negative,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
   input: {
     borderWidth: 1,
