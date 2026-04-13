@@ -7,7 +7,12 @@ import {
   View,
   Share,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
+import * as FileSystem from 'expo-file-system';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import * as XLSX from 'xlsx';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DetailScreenLayout } from '@/components/DetailScreenLayout';
 import { TransactionRow } from '@/components/TransactionRow';
@@ -27,6 +32,17 @@ function formatReportDate(d: Date): string {
   const mon = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ')[d.getMonth()];
   const yy = String(d.getFullYear()).slice(2);
   return `${day} ${mon} ${yy}`;
+}
+
+function triggerWebDownload(blob: Blob, fileName: string): void {
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(objectUrl);
 }
 
 const DATE_PRESETS = [
@@ -51,6 +67,7 @@ export default function ReportScreen() {
   const [dateModalVisible, setDateModalVisible] = useState(false);
   const [dateModalTarget, setDateModalTarget] = useState<'start' | 'end' | null>(null);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [downloadModalVisible, setDownloadModalVisible] = useState(false);
 
   const applyDatePreset = (preset: (typeof DATE_PRESETS)[0]) => {
     const { start, end } = preset.getRange();
@@ -101,7 +118,79 @@ export default function ReportScreen() {
     }
   };
 
-  const handleDownload = async () => {
+  const handleDownloadExcel = async () => {
+    const rows = filteredTransactions.map((t) => ({
+      dateTime: t.dateTime,
+      name: t.name,
+      amount: t.amount,
+      type: t.color === 'green' ? 'In' : 'Out',
+    }));
+    const sheetRows: (string | number)[][] = [
+      ['Date/Time', 'Name', 'Amount', 'Type'],
+      ...rows.map((r) => [r.dateTime, r.name, r.amount, r.type]),
+    ];
+    const worksheet = XLSX.utils.aoa_to_sheet(sheetRows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Report');
+    try {
+      if (Platform.OS === 'web') {
+        const arrayBuffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
+        const blob = new Blob(
+          [arrayBuffer],
+          { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
+        );
+        triggerWebDownload(blob, `report-${Date.now()}.xlsx`);
+        return;
+      }
+      if (!FileSystem.cacheDirectory) throw new Error('No cache directory available');
+      const base64 = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' });
+      const uri = `${FileSystem.cacheDirectory}report-${Date.now()}.xlsx`;
+      await FileSystem.writeAsStringAsync(uri, base64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const sharingAvailable = await Sharing.isAvailableAsync();
+      if (sharingAvailable) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          dialogTitle: 'Save or share report Excel',
+          UTI: 'org.openxmlformats.spreadsheetml.sheet',
+        });
+      } else {
+        await Share.share({ url: uri, title: 'Report' });
+      }
+    } catch {
+      /* user cancelled */
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    try {
+      const html = `<html><body><h2>Report ${startDate} - ${endDate}</h2><pre>${buildReportMessage().replace(/</g, '&lt;')}</pre></body></html>`;
+      if (Platform.OS === 'web') {
+        await Print.printAsync({ html });
+        return;
+      }
+      const { uri } = await Print.printToFileAsync({ html });
+      const sharingAvailable = await Sharing.isAvailableAsync();
+      if (sharingAvailable) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'Save or share report PDF',
+          UTI: 'com.adobe.pdf',
+        });
+      } else {
+        await Share.share({ url: uri, title: 'Report' });
+      }
+    } catch {
+      /* user cancelled */
+    }
+  };
+
+  const handleDownload = () => {
+    setDownloadModalVisible(true);
+  };
+
+  const handleDownloadCsv = async () => {
     const csv = [
       'Date/Time,Name,Amount,Type',
       ...filteredTransactions.map((t) =>
@@ -109,6 +198,11 @@ export default function ReportScreen() {
       ),
     ].join('\n');
     try {
+      if (Platform.OS === 'web') {
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        triggerWebDownload(blob, `report-${Date.now()}.csv`);
+        return;
+      }
       await Share.share({ message: csv, title: 'Report.csv' });
     } catch {
       /* user cancelled */
@@ -184,6 +278,61 @@ export default function ReportScreen() {
       </Modal>
 
       <Modal
+        visible={downloadModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDownloadModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={[styles.modalOverlay, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
+          activeOpacity={1}
+          onPress={() => setDownloadModalVisible(false)}
+        >
+          <View style={[styles.downloadModalCard, { maxWidth: width * 0.85 }]}>
+            <Text style={styles.downloadModalTitle}>Download format</Text>
+            <Text style={styles.downloadModalSubtitle}>Choose your preferred report file type</Text>
+            <TouchableOpacity
+              style={styles.downloadOption}
+              onPress={() => {
+                setDownloadModalVisible(false);
+                void handleDownloadPdf();
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.downloadOptionText}>PDF</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.downloadOption}
+              onPress={() => {
+                setDownloadModalVisible(false);
+                void handleDownloadExcel();
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.downloadOptionText}>Excel (.xlsx)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.downloadOption}
+              onPress={() => {
+                setDownloadModalVisible(false);
+                void handleDownloadCsv();
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.downloadOptionText}>CSV</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.downloadOption, styles.downloadCancelOption]}
+              onPress={() => setDownloadModalVisible(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.downloadOptionText, styles.downloadCancelOptionText]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal
         visible={filterModalVisible}
         transparent
         animationType="fade"
@@ -251,6 +400,46 @@ const styles = StyleSheet.create({
   modalOptionText: {
     fontSize: 16,
     color: Theme.textPrimary,
+  },
+  downloadModalCard: {
+    width: '100%',
+    backgroundColor: Theme.surface,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  downloadModalTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+  },
+  downloadModalSubtitle: {
+    fontSize: 12,
+    color: Theme.textSecondary,
+    marginTop: 4,
+    marginBottom: 14,
+  },
+  downloadOption: {
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+  },
+  downloadOptionText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Theme.textPrimary,
+  },
+  downloadCancelOption: {
+    backgroundColor: Theme.surfaceGray,
+    marginBottom: 0,
+  },
+  downloadCancelOptionText: {
+    color: Theme.textSecondary,
   },
 });
 

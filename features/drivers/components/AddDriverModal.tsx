@@ -91,6 +91,16 @@ interface AddDriverModalProps {
 
 const PHONE_DEBOUNCE_MS = 400;
 const MIN_PHONE_LENGTH_FOR_SEARCH = 8;
+const DL_SANITIZE_REGEX = /[\s-]/g;
+const DL_FORMAT_REGEX = /^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}$/;
+
+const validateDrivingLicenseNumber = (licenseNumber: string): string | null => {
+  const trimmed = licenseNumber.trim();
+  if (!trimmed) return null;
+  const normalized = trimmed.toUpperCase().replace(DL_SANITIZE_REGEX, '');
+  if (DL_FORMAT_REGEX.test(normalized)) return null;
+  return 'Enter a valid DL number (e.g. MH12 20180001234).';
+};
 
 export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, salariedOnly = false }: AddDriverModalProps) {
   const { t } = useLanguage();
@@ -106,6 +116,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
   const [phoneSearchError, setPhoneSearchError] = useState<string | null>(null);
   const [phoneValidationError, setPhoneValidationError] = useState<string | null>(null);
   const [emergencyPhoneValidationError, setEmergencyPhoneValidationError] = useState<string | null>(null);
+  const [licenseValidationError, setLicenseValidationError] = useState<string | null>(null);
   const [selectedMatchUserId, setSelectedMatchUserId] = useState<string | null>(null);
   const [existingMatchAvatarByUserId, setExistingMatchAvatarByUserId] = useState<Record<string, string>>({});
   const [avatarLoadFailedByUserId, setAvatarLoadFailedByUserId] = useState<Record<string, boolean>>({});
@@ -149,6 +160,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
       setPhoneSearchError(null);
       setPhoneValidationError(null);
       setEmergencyPhoneValidationError(null);
+      setLicenseValidationError(null);
       setSelectedMatchUserId(null);
       setExistingMatchAvatarByUserId({});
       setAvatarLoadFailedByUserId({});
@@ -255,9 +267,16 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
     }, PHONE_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [formData.phone]);
+  useEffect(() => {
+    setLicenseValidationError(validateDrivingLicenseNumber(formData.licenseNumber));
+  }, [formData.licenseNumber]);
   const isReview = step.id === 'review';
   const canProceedDriver = salariedOnly
-    ? !!formData.name.trim() && !!formData.phone.trim() && !!formData.licenseNumber.trim() && !phoneValidationError
+    ? !!formData.name.trim() &&
+      !!formData.phone.trim() &&
+      !!formData.licenseNumber.trim() &&
+      !phoneValidationError &&
+      !licenseValidationError
     : !!formData.phone.trim() && !phoneValidationError;
   const canProceed = step.id === 'driver' ? canProceedDriver : true;
 
@@ -436,6 +455,11 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
                   autoComplete="off"
                   autoCapitalize="characters"
                 />
+                {licenseValidationError && (
+                  <Text style={[styles.errorText, { color: Theme.negative }]}>
+                    {licenseValidationError}
+                  </Text>
+                )}
               </>
             ) : null}
             {phoneSearchLoading && (
@@ -589,6 +613,11 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
               spellCheck={false}
               autoComplete="off"
             />
+            {licenseValidationError && (
+              <Text style={[styles.errorText, { color: Theme.negative }]}>
+                {licenseValidationError}
+              </Text>
+            )}
           </View>
         );
       case 'salary':
