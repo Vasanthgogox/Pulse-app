@@ -93,6 +93,8 @@ export interface TripDetailFinanceViewProps {
   onOpenDoc?: (doc: TripDocItem) => void;
   /** When set, used to determine if we're the trip owner. Owner + indent => revenue = supplier_rate. Client (non-owner) => client_price. */
   viewerOrgId?: string | null;
+  /** Display name of the client for this trip */
+  clientName?: string | null;
 }
 
 export type DocCategory = "vehicle" | "trip" | "driver";
@@ -228,6 +230,7 @@ export function TripDetailFinanceView({
   tripDocs = DEFAULT_TRIP_DOCS,
   onOpenDoc,
   viewerOrgId = null,
+  clientName,
 }: TripDetailFinanceViewProps) {
   const { t } = useLanguage();
   const routeStr = `${trip.pickup_area ?? "—"} → ${trip.drop_location ?? "—"}`.trim() || "—";
@@ -394,7 +397,11 @@ export function TripDetailFinanceView({
       <View style={styles.blueprintCard}>
         <View style={styles.blueprintHeader}>
           <Text style={styles.blueprintHeaderTitle}>Financial summary</Text>
-          <FontAwesome name="crosshairs" size={12} color="rgba(255,255,255,0.2)" />
+          {clientName ? (
+            <Text style={styles.blueprintHeaderClient} numberOfLines={1}>{clientName}</Text>
+          ) : (
+            <FontAwesome name="crosshairs" size={12} color="rgba(255,255,255,0.2)" />
+          )}
         </View>
         <View style={styles.blueprintBody}>
           <View style={styles.blueprintTopRow}>
@@ -934,6 +941,14 @@ const styles = StyleSheet.create({
     color: Theme.textOnDark,
     letterSpacing: 0.8,
     textTransform: "uppercase",
+  },
+  blueprintHeaderClient: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#ffffff",
+    flexShrink: 1,
+    marginLeft: 8,
+    textAlign: "right",
   },
   blueprintBody: { padding: CARD_PADDING },
   blueprintTopRow: {
