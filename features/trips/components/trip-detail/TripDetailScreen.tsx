@@ -183,7 +183,14 @@ function trackingStepAndLabel(status: string | null | undefined): {
 /** Unified row for Driver Activity Timeline: assignment audit or driver status change. */
 type DriverActivityTimelineRow =
   | { kind: "assignment"; row: TripAssignmentAuditRow }
-  | { kind: "status"; id: string; status_label: string; changed_at: string };
+  | {
+      kind: "status";
+      id: string;
+      status_label: string;
+      changed_at: string;
+      status_context: "started" | "in_transit" | "completed";
+      detail_line: string;
+    };
 
 export interface TripDetailScreenProps {
   tripId: string;
@@ -238,6 +245,7 @@ export default function TripDetailScreen({
   } | null>(null);
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
   const [showTrackingModal, setShowTrackingModal] = useState(false);
+  const [expandedTimelineEntryIds, setExpandedTimelineEntryIds] = useState<Record<string, boolean>>({});
   const [showFullScreenMap, setShowFullScreenMap] = useState(false);
   const [showDriverRejectedModal, setShowDriverRejectedModal] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<TripDocItem | null>(null);
@@ -1177,7 +1185,18 @@ export default function TripDetailScreen({
         : [];
   }, [trip, assignmentAuditRows]);
 
-  /** Driver activity timeline: assignment/reassignment + driver status changes (started, completed), newest first. */
+  const tripStatusLower = (trip?.status ?? "").toLowerCase();
+  const showInTransitStatusEvent =
+    tripStatusLower === "in_progress" ||
+    tripStatusLower === "in_transit" ||
+    tripStatusLower === "picked_up" ||
+    tripStatusLower === "arrived" ||
+    tripStatusLower === "at_destination" ||
+    tripStatusLower === "completed" ||
+    tripStatusLower === "delivered" ||
+    tripStatusLower === "done";
+
+  /** Driver activity timeline: assignment/reassignment + status changes, newest first. */
   const driverActivityTimelineRows =
     useMemo((): DriverActivityTimelineRow[] => {
       const assignmentRows: DriverActivityTimelineRow[] =
@@ -1192,6 +1211,23 @@ export default function TripDetailScreen({
           id: "status-started",
           status_label: "Started trip",
           changed_at: trip.started_at,
+          status_context: "started",
+          detail_line: "Trip started after pickup confirmation",
+        });
+      }
+      if (showInTransitStatusEvent) {
+        const inTransitTime =
+          trip?.started_at ??
+          trip?.updated_at ??
+          trip?.created_at ??
+          new Date().toISOString();
+        statusRows.push({
+          kind: "status",
+          id: "status-in-transit",
+          status_label: "In-transit",
+          changed_at: inTransitTime,
+          status_context: "in_transit",
+          detail_line: "Vehicle is moving between pickup and destination",
         });
       }
       if (trip?.completed_at && String(trip.completed_at).trim()) {
@@ -1200,6 +1236,8 @@ export default function TripDetailScreen({
           id: "status-completed",
           status_label: "Completed trip",
           changed_at: trip.completed_at,
+          status_context: "completed",
+          detail_line: "Trip marked complete at destination",
         });
       }
       const combined: DriverActivityTimelineRow[] = [
@@ -1212,7 +1250,14 @@ export default function TripDetailScreen({
         return new Date(bt).getTime() - new Date(at).getTime();
       });
       return combined;
-    }, [effectiveActivityRows, trip?.started_at, trip?.completed_at]);
+    }, [
+      effectiveActivityRows,
+      showInTransitStatusEvent,
+      trip?.created_at,
+      trip?.updated_at,
+      trip?.started_at,
+      trip?.completed_at,
+    ]);
 
   /** Driver status change events only (for "Status changes" block below current step). Newest first. */
   const statusChangeRowsOnly = useMemo(() => {
@@ -1222,6 +1267,13 @@ export default function TripDetailScreen({
         id: "status-started",
         status_label: "Started trip",
         changed_at: trip.started_at,
+      });
+    }
+    if (showInTransitStatusEvent) {
+      rows.push({
+        id: "status-in-transit",
+        status_label: "In-transit",
+        changed_at: trip?.started_at ?? trip?.updated_at ?? trip?.created_at ?? new Date().toISOString(),
       });
     }
     if (trip?.completed_at && String(trip.completed_at).trim()) {
@@ -1236,7 +1288,26 @@ export default function TripDetailScreen({
         new Date(b.changed_at).getTime() - new Date(a.changed_at).getTime(),
     );
     return rows;
-  }, [trip?.started_at, trip?.completed_at]);
+  }, [
+    showInTransitStatusEvent,
+    trip?.created_at,
+    trip?.updated_at,
+    trip?.started_at,
+    trip?.completed_at,
+  ]);
+
+  const timelineItemId = useCallback((item: DriverActivityTimelineRow) => {
+    if (item.kind === "status") return item.id;
+    return item.row.id;
+  }, []);
+
+  const toggleTimelineItemExpanded = useCallback((itemId: string) => {
+    setExpandedTimelineEntryIds((prev) => ({ ...prev, [itemId]: !prev[itemId] }));
+  }, []);
+
+  useEffect(() => {
+    setExpandedTimelineEntryIds({});
+  }, [trip?.id, showTrackingModal]);
 
   const openAddEntry = useCallback(() => {
     if (!trip?.id) return;
@@ -1765,8 +1836,16 @@ export default function TripDetailScreen({
                       <>
                         <View style={styles.trackingPageTimelineLine} />
                         {driverActivityTimelineRows.map((item, idx) => {
+                          const itemId = timelineItemId(item);
+                          const isExpanded = !!expandedTimelineEntryIds[itemId];
                           if (item.kind === "status") {
                             const dateStr = formatAssignmentDate(item.changed_at);
+                            const statusEventLabel =
+                              item.status_context === "completed"
+                                ? "Delivery completed"
+                                : item.status_context === "in_transit"
+                                  ? "Movement update"
+                                  : "Driver status change";
                             return (
                               <View key={item.id} style={styles.trackingPageTimelineItem}>
                                 <View
@@ -1785,7 +1864,11 @@ export default function TripDetailScreen({
                                     idx < driverActivityTimelineRows.length - 1 && styles.trackingPageTimelineItemBorder,
                                   ]}
                                 >
-                                  <View style={styles.trackingPageTimelineItemRow}>
+                                  <TouchableOpacity
+                                    style={styles.trackingPageTimelineItemRow}
+                                    activeOpacity={0.85}
+                                    onPress={() => toggleTimelineItemExpanded(itemId)}
+                                  >
                                     <View style={styles.trackingPageTimelineItemLeft}>
                                       <Text
                                         style={[
@@ -1796,12 +1879,12 @@ export default function TripDetailScreen({
                                       >
                                         {item.status_label}
                                       </Text>
-                                      <Text style={styles.trackingPageTimelineCoords}>Driver status change</Text>
+                                      <Text style={styles.trackingPageTimelineCoords}>{statusEventLabel}</Text>
                                     </View>
                                     <View style={styles.trackingPageTimelineTimeBadge}>
                                       <Text style={styles.trackingPageTimelineTimeText}>{dateStr}</Text>
                                     </View>
-                                  </View>
+                                  </TouchableOpacity>
                                   <View style={styles.trackingPageTimelineStatusRow}>
                                     <View
                                       style={[
@@ -1829,6 +1912,22 @@ export default function TripDetailScreen({
                                       {dateStr}
                                     </Text>
                                   </View>
+                                  {isExpanded ? (
+                                    <View style={styles.trackingPageTimelineExpandedPanel}>
+                                      <Text style={styles.trackingPageTimelineExpandedTitle}>
+                                        Activity details
+                                      </Text>
+                                      <Text style={styles.trackingPageTimelineExpandedLine}>
+                                        Event: {item.status_label}
+                                      </Text>
+                                      <Text style={styles.trackingPageTimelineExpandedLine}>
+                                        Context: {item.detail_line}
+                                      </Text>
+                                      <Text style={styles.trackingPageTimelineExpandedLine}>
+                                        Recorded at: {dateStr}
+                                      </Text>
+                                    </View>
+                                  ) : null}
                                 </View>
                               </View>
                             );
@@ -1897,7 +1996,11 @@ export default function TripDetailScreen({
                                   idx < driverActivityTimelineRows.length - 1 && styles.trackingPageTimelineItemBorder,
                                 ]}
                               >
-                                <View style={styles.trackingPageTimelineItemRow}>
+                                <TouchableOpacity
+                                  style={styles.trackingPageTimelineItemRow}
+                                  activeOpacity={0.85}
+                                  onPress={() => toggleTimelineItemExpanded(itemId)}
+                                >
                                   <View style={styles.trackingPageTimelineItemLeft}>
                                     <Text
                                       style={[
@@ -1913,7 +2016,7 @@ export default function TripDetailScreen({
                                   <View style={styles.trackingPageTimelineTimeBadge}>
                                     <Text style={styles.trackingPageTimelineTimeText}>{dateStr}</Text>
                                   </View>
-                                </View>
+                                </TouchableOpacity>
                                 <View style={styles.trackingPageTimelineStatusRow}>
                                   <View
                                     style={[
@@ -1944,6 +2047,28 @@ export default function TripDetailScreen({
                                     {byLabel}
                                   </Text>
                                 </View>
+                                {isExpanded ? (
+                                  <View style={styles.trackingPageTimelineExpandedPanel}>
+                                    <Text style={styles.trackingPageTimelineExpandedTitle}>
+                                      Activity details
+                                    </Text>
+                                    <Text style={styles.trackingPageTimelineExpandedLine}>
+                                      Event type: {eventLabel}
+                                    </Text>
+                                    <Text style={styles.trackingPageTimelineExpandedLine}>
+                                      Driver update: {driverLine ?? "No driver change recorded"}
+                                    </Text>
+                                    <Text style={styles.trackingPageTimelineExpandedLine}>
+                                      Vehicle update: {vehicleLine ?? "No vehicle change recorded"}
+                                    </Text>
+                                    <Text style={styles.trackingPageTimelineExpandedLine}>
+                                      Updated by: {byLabel ? byLabel.replace(" • ", "") : "System"}
+                                    </Text>
+                                    <Text style={styles.trackingPageTimelineExpandedLine}>
+                                      Recorded at: {dateStr}
+                                    </Text>
+                                  </View>
+                                ) : null}
                               </View>
                             </View>
                           );
@@ -2885,6 +3010,30 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     flexShrink: 0,
     marginLeft: 8,
+  },
+  trackingPageTimelineExpandedPanel: {
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceGray,
+    gap: 4,
+  },
+  trackingPageTimelineExpandedTitle: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginBottom: 2,
+  },
+  trackingPageTimelineExpandedLine: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    lineHeight: 14,
   },
   trackingPageFooter: {
     shadowColor: Theme.shadow,
