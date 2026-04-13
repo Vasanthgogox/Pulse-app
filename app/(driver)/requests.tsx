@@ -406,7 +406,7 @@ export default function DriverRequestsScreen() {
                       >
                         <View style={styles.viewPassbookBtnLargeLeft}>
                           <FontAwesome name="credit-card" size={22} color={colors.textOnPrimary} />
-                          <Text style={[styles.viewPassbookBtnLargeText, { color: colors.textOnPrimary }]}>VIEW PASSBOOK</Text>
+                          <Text style={[styles.viewPassbookBtnLargeText, { color: colors.textOnPrimary }]}>VIEW DETAILS</Text>
                         </View>
                         <View style={styles.viewPassbookBtnLargeSpacer} />
                         <FontAwesome name="chevron-right" size={20} color={colors.textOnPrimary} style={styles.viewPassbookBtnLargeArrow} />
