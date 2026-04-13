@@ -2608,108 +2608,172 @@ export function LoadCenterView({
                         : null;
                     return (
                       <>
-                        {selectedDriver ? (
-                          <View
-                            style={[
-                              styles.assignRow,
-                              styles.assignRowActive,
-                              { marginBottom: 8 },
-                            ]}
-                          >
-                            <Text style={styles.assignRowText}>
-                              Driver:{" "}
-                              {selectedDriver.name ??
-                                selectedDriver.phone ??
-                                "—"}
-                            </Text>
-                            <FontAwesome
-                              name="check"
-                              size={16}
-                              color={Theme.primary}
-                            />
+                        <View
+                          style={[
+                            styles.assignSelectionGrid,
+                            width >= 980 && styles.assignSelectionGridDesktop,
+                          ]}
+                        >
+                          <View style={styles.assignPickerCard}>
+                            <View style={styles.assignPickerHeader}>
+                              <Text style={styles.assignPickerTitle}>
+                                Select Driver
+                              </Text>
+                              <View style={styles.assignPickerBadge}>
+                                <Text style={styles.assignPickerBadgeText}>
+                                  {activeDrivers.length} Total
+                                </Text>
+                              </View>
+                            </View>
+                            {activeDrivers.map((d) => (
+                              <TouchableOpacity
+                                key={d.id}
+                                style={[
+                                  styles.assignEntityRow,
+                                  assignDriverId === d.id &&
+                                    styles.assignEntityRowActive,
+                                ]}
+                                onPress={() => setAssignDriverId(d.id)}
+                                activeOpacity={0.85}
+                              >
+                                <View style={styles.assignEntityIconWrap}>
+                                  <FontAwesome
+                                    name="user"
+                                    size={16}
+                                    color={
+                                      assignDriverId === d.id
+                                        ? Theme.textOnPrimary
+                                        : Theme.textMuted
+                                    }
+                                  />
+                                </View>
+                                <View style={styles.assignEntityTextCol}>
+                                  <Text style={styles.assignEntityTitle}>
+                                    {d.name ?? d.phone ?? "—"}
+                                  </Text>
+                                  <Text style={styles.assignEntitySubtitle}>
+                                    {d.phone ? `Phone: ${d.phone}` : "Available"}
+                                  </Text>
+                                </View>
+                                <FontAwesome
+                                  name={
+                                    assignDriverId === d.id
+                                      ? "check-circle"
+                                      : "chevron-right"
+                                  }
+                                  size={15}
+                                  color={
+                                    assignDriverId === d.id
+                                      ? Theme.primary
+                                      : Theme.textMuted
+                                  }
+                                />
+                              </TouchableOpacity>
+                            ))}
+                            {activeDrivers.length === 0 ? (
+                              <Text style={styles.assignEmptyText}>
+                                No asset drivers. Use Aggregate flow from the
+                                previous step.
+                              </Text>
+                            ) : null}
                           </View>
-                        ) : null}
-                        {selectedVehicle ? (
-                          <View
-                            style={[
-                              styles.assignRow,
-                              styles.assignRowActive,
-                              { marginBottom: 16 },
-                            ]}
-                          >
-                            <Text style={styles.assignRowText}>
-                              Vehicle: {selectedVehicle.vehicle_number}
-                              {selectedVehicle.vehicle_type
-                                ? ` · ${selectedVehicle.vehicle_type}`
-                                : ""}
-                            </Text>
-                            <FontAwesome
-                              name="check"
-                              size={16}
-                              color={Theme.primary}
-                            />
+
+                          <View style={styles.assignPickerCard}>
+                            <View style={styles.assignPickerHeader}>
+                              <Text style={styles.assignPickerTitle}>
+                                Select Vehicle
+                              </Text>
+                              <View style={styles.assignPickerBadge}>
+                                <Text style={styles.assignPickerBadgeText}>
+                                  {vehicles.length} Total
+                                </Text>
+                              </View>
+                            </View>
+                            {vehicles.map((v) => (
+                              <TouchableOpacity
+                                key={v.id}
+                                style={[
+                                  styles.assignEntityRow,
+                                  assignVehicleId === v.id &&
+                                    styles.assignEntityRowActive,
+                                ]}
+                                onPress={() => setAssignVehicleId(v.id)}
+                                activeOpacity={0.85}
+                              >
+                                <View style={styles.assignEntityIconWrap}>
+                                  <FontAwesome
+                                    name="truck"
+                                    size={16}
+                                    color={
+                                      assignVehicleId === v.id
+                                        ? Theme.textOnPrimary
+                                        : Theme.textMuted
+                                    }
+                                  />
+                                </View>
+                                <View style={styles.assignEntityTextCol}>
+                                  <Text style={styles.assignEntityTitle}>
+                                    {v.vehicle_number}
+                                  </Text>
+                                  <Text style={styles.assignEntitySubtitle}>
+                                    {v.vehicle_type
+                                      ? `${v.vehicle_type}${
+                                          v.body_type ? ` · ${v.body_type}` : ""
+                                        }`
+                                      : "Fleet vehicle"}
+                                  </Text>
+                                </View>
+                                <FontAwesome
+                                  name={
+                                    assignVehicleId === v.id
+                                      ? "check-circle"
+                                      : "chevron-right"
+                                  }
+                                  size={15}
+                                  color={
+                                    assignVehicleId === v.id
+                                      ? Theme.primary
+                                      : Theme.textMuted
+                                  }
+                                />
+                              </TouchableOpacity>
+                            ))}
+                            {vehicles.length === 0 ? (
+                              <Text style={styles.assignEmptyText}>
+                                No vehicles in your fleet. Add a vehicle in
+                                Resources first.
+                              </Text>
+                            ) : null}
                           </View>
-                        ) : null}
+                        </View>
+
+                        <View style={styles.assignSummaryBar}>
+                          <View style={styles.assignSummaryRow}>
+                            <View style={styles.assignSummaryBlock}>
+                              <Text style={styles.assignSummaryLabel}>
+                                Selected Driver
+                              </Text>
+                              <Text style={styles.assignSummaryValue}>
+                                {selectedDriver?.name ??
+                                  selectedDriver?.phone ??
+                                  "Not selected"}
+                              </Text>
+                            </View>
+                            <View style={styles.assignSummaryDivider} />
+                            <View style={styles.assignSummaryBlock}>
+                              <Text style={styles.assignSummaryLabel}>
+                                Selected Vehicle
+                              </Text>
+                              <Text style={styles.assignSummaryValue}>
+                                {selectedVehicle?.vehicle_number ??
+                                  "Not selected"}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
                       </>
                     );
                   })()}
-                  <Text style={styles.assignSectionLabel}>Driver</Text>
-                  {activeDrivers.map((d) => (
-                    <TouchableOpacity
-                      key={d.id}
-                      style={[
-                        styles.assignRow,
-                        assignDriverId === d.id && styles.assignRowActive,
-                      ]}
-                      onPress={() => setAssignDriverId(d.id)}
-                    >
-                      <Text style={styles.assignRowText}>
-                        {d.name ?? d.phone ?? "—"}
-                      </Text>
-                      {assignDriverId === d.id ? (
-                        <FontAwesome
-                          name="check"
-                          size={16}
-                          color={Theme.primary}
-                        />
-                      ) : null}
-                    </TouchableOpacity>
-                  ))}
-                  {activeDrivers.length === 0 ? (
-                    <Text style={styles.modalHint}>
-                      No asset drivers. Use Aggregate flow from the previous
-                      step.
-                    </Text>
-                  ) : null}
-                  <Text style={styles.assignSectionLabel}>Vehicle</Text>
-                  {vehicles.map((v) => (
-                    <TouchableOpacity
-                      key={v.id}
-                      style={[
-                        styles.assignRow,
-                        assignVehicleId === v.id && styles.assignRowActive,
-                      ]}
-                      onPress={() => setAssignVehicleId(v.id)}
-                    >
-                      <Text style={styles.assignRowText}>
-                        {v.vehicle_number}
-                        {v.vehicle_type ? ` · ${v.vehicle_type}` : ""}
-                      </Text>
-                      {assignVehicleId === v.id ? (
-                        <FontAwesome
-                          name="check"
-                          size={16}
-                          color={Theme.primary}
-                        />
-                      ) : null}
-                    </TouchableOpacity>
-                  ))}
-                  {vehicles.length === 0 ? (
-                    <Text style={styles.modalHint}>
-                      No vehicles in your fleet. Add a vehicle in Resources
-                      first.
-                    </Text>
-                  ) : null}
                   {assigningTripId === loadAction.load.id ? (
                     <View style={styles.loadingWrap}>
                       <ActivityIndicator size="small" color={Theme.primary} />
@@ -3753,10 +3817,11 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
   modalHint: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
     color: Theme.textMuted,
-    marginBottom: 24,
+    lineHeight: 18,
+    marginBottom: 16,
   },
   modalSubmit: {
     flexDirection: "row",
@@ -3767,20 +3832,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   modalSubmitText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
     color: Theme.textOnPrimary,
     textTransform: "uppercase",
-    letterSpacing: 2,
+    letterSpacing: 1.4,
   },
   handshakeBtnModal: { backgroundColor: Theme.buttonPrimary },
   sourceOfSupplySectionTitle: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "800",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 1,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   sourceRow: {
     flexDirection: "row",
@@ -3834,7 +3899,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingVertical: 18,
+    paddingVertical: 16,
     backgroundColor: Theme.screenBackground,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
@@ -3861,7 +3926,12 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   assignModalScroll: { flex: 1 },
-  assignModalScrollContent: { paddingHorizontal: 20, paddingTop: 20 },
+  assignModalScrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    width: "100%",
+    alignSelf: "stretch",
+  },
   /** Aggregate deploy — mirrors TripAssignmentBlock card on trip detail */
   tripAssignCard: {
     backgroundColor: Theme.screenBackground,
@@ -3998,33 +4068,136 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     lineHeight: 16,
   },
-  assignSectionLabel: {
+  assignSelectionGrid: {
+    gap: 12,
+    marginBottom: 14,
+  },
+  assignSelectionGridDesktop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  assignPickerCard: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 14,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  assignPickerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  assignPickerTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  assignPickerBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: Theme.surfaceLight,
+  },
+  assignPickerBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.primary,
+    textTransform: "uppercase",
+  },
+  assignEntityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    backgroundColor: Theme.screenBackground,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    minHeight: 56,
+    marginBottom: 8,
+    gap: 10,
+  },
+  assignEntityRowActive: {
+    borderColor: Theme.primary,
+    backgroundColor: Theme.surfaceLight,
+  },
+  assignEntityIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: Theme.surfaceGray,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  assignEntityTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  assignEntityTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  assignEntitySubtitle: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    marginTop: 2,
+  },
+  assignEmptyText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    marginTop: 2,
+  },
+  assignSummaryBar: {
+    backgroundColor: Theme.surfaceLight,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 14,
+  },
+  assignSummaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  assignSummaryBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  assignSummaryDivider: {
+    width: 1,
+    alignSelf: "stretch",
+    backgroundColor: Theme.borderLight,
+    marginHorizontal: 12,
+  },
+  assignSummaryLabel: {
     fontSize: 10,
     fontWeight: "800",
     color: Theme.textMuted,
     textTransform: "uppercase",
-    marginTop: 16,
-    marginBottom: 8,
+    letterSpacing: 0.8,
+    marginBottom: 4,
   },
-  assignRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    marginBottom: 6,
-    backgroundColor: Theme.surfaceGray,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  assignRowActive: {
-    borderColor: Theme.primary,
-    backgroundColor: Theme.screenBackground,
-  },
-  assignRowText: {
+  assignSummaryValue: {
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
   assignInputWrap: {
@@ -4175,7 +4348,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginBottom: 16,
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    marginBottom: 14,
   },
   wizardBackText: {
     fontSize: 12,
