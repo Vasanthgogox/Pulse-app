@@ -1082,13 +1082,16 @@ export function LoadCenterView({
     }
   }, [deployOtpCode, handshakeStep]);
 
-  /** Same coordinate system as FinanceScreen: parent already ends above the demo tab bar. */
-  const hirePartnerFabBottom = Layout.fabBottomOffset + insets.bottom;
+  /** Above floating demo tab bar + safe area — same basis as Trips FinanceFAB. */
+  const hirePartnerFabBottom =
+    Layout.demoTabBarScrollBottomInset +
+    insets.bottom +
+    Layout.tabBarBottomPaddingMin;
   const paddingBottom = useMemo(() => {
-    const base = 24 + Layout.tabBarHeight + insets.bottom + 24;
+    const base = 24 + Layout.demoTabBarScrollBottomInset + insets.bottom + 24;
     if (loadSubTab !== "GIVE_LOAD") return base;
-    return base + Layout.fabSize + Layout.fabBottomOffset;
-  }, [insets.bottom, loadSubTab]);
+    return hirePartnerFabBottom + Layout.fabSize + Layout.fabBottomOffset;
+  }, [hirePartnerFabBottom, insets.bottom, loadSubTab]);
   const statusTabsForRole = useMemo(() => {
     return isClaimedTab
       ? STATUS_TABS.filter((t) => t.id === "AWARDED")
