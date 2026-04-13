@@ -56,7 +56,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
 
       // Dynamically import Leaflet only in the browser
       import("leaflet").then((LModule) => {
-        const L = LModule.default;
+        const L = (LModule as any).default ?? LModule;
 
         // Fix for default marker icon in Webpack (Leaflet's default icons don't play well with Webpack)
         // @ts-ignore
@@ -82,6 +82,10 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
 
         mapRef.current = map;
         markerLayerRef.current = L.layerGroup().addTo(map);
+        // Ensure tiles render after layout settles on web.
+        setTimeout(() => {
+          map.invalidateSize();
+        }, 0);
       });
 
       return () => {
@@ -99,7 +103,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
       }
 
       import("leaflet").then((LModule) => {
-        const L = LModule.default;
+        const L = (LModule as any).default ?? LModule;
         const mapInstance = mapRef.current;
 
         // Clear existing layers
@@ -162,6 +166,8 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
             });
           }
         }
+        // Recalculate viewport whenever layers change.
+        mapInstance.invalidateSize();
       });
     }, [center, zoom, markers, polyline, polylineColor, lowPower]);
 

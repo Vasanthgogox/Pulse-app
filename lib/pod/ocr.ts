@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI, type Content } from '@google/genai';
 import { BASE_OCR_PROMPT, buildUserPrompt } from './prompts';
 import type { PODExtraction } from '@/types/pod';
 
@@ -18,16 +18,13 @@ export interface OCROutput {
   processingTime: number;
 }
 
-let genAIClient: GoogleGenerativeAI | null = null;
+let genAIClient: GoogleGenAI | null = null;
 function getGenAIClient() {
-  if (!genAIClient) genAIClient = new GoogleGenerativeAI(GEMINI_API_KEY);
+  if (!GEMINI_API_KEY) {
+    throw new Error('Missing Gemini API key. Set EXPO_PUBLIC_GEMINI_API_KEY in your .env.');
+  }
+  if (!genAIClient) genAIClient = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
   return genAIClient;
-}
-
-const modelCache = new Map();
-function getModel(modelName: string) {
-  if (!modelCache.has(modelName)) modelCache.set(modelName, getGenAIClient().getGenerativeModel({ model: modelName }));
-  return modelCache.get(modelName);
 }
 
 function timeoutPromise(ms: number) {
@@ -333,23 +330,30 @@ function arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array) {
 }
 
 async function performOCR(buffer: Uint8Array | ArrayBuffer, mimeType: string, modelName: string, fileName?: string) {
-  const model = getModel(modelName);
   const base64Data = arrayBufferToBase64(buffer);
-  const part = { inlineData: { data: base64Data, mimeType } };
   const fullPrompt = BASE_OCR_PROMPT + buildUserPrompt(fileName);
   
-  const request = {
-    contents: [{ role: 'user', parts: [{ text: fullPrompt }, part] }],
-    generationConfig: {
+  const contents: Content[] = [
+    {
+      role: 'user',
+      parts: [
+        { text: fullPrompt } as any,
+        { inlineData: { data: base64Data, mimeType } } as any,
+      ],
+    },
+  ];
+
+  const response = await getGenAIClient().models.generateContent({
+    model: modelName,
+    contents,
+    config: {
       responseMimeType: 'application/json',
       // We reduced generation tokens required by asking to omit missing fields, this drastically speeds up output!
       temperature: 0.1, // Lower temperature = faster and more deterministic JSON parsing
       topK: 10,
-    },
-  };
-  
-  const result = await model.generateContent(request as any);
-  const text = result.response?.text() ?? '';
+    } as any,
+  });
+  const text = response.text ?? '';
   if (!text) throw new Error('Empty response from OCR model');
   const parsed = parseExtractionJson(text);
   return normalizeToPodsArray(parsed);

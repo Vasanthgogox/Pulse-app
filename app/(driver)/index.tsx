@@ -2034,7 +2034,7 @@ export default function DriverRadarScreen() {
 
       if (!currentPos) return false;
 
-      const showLeaflet = useLeafletFallback || leafLetForced;
+      const showLeaflet = Platform.OS === "web" || useLeafletFallback || leafLetForced;
 
       if (showLeaflet) {
         const targetRef = isFullMapVisible ? fullLeafletRef : leafletRef;
@@ -2127,7 +2127,7 @@ export default function DriverRadarScreen() {
             youLonSv.value = withTiming(next.longitude, { duration: 450 });
 
             // Keep the visible map centered while following.
-            const showLeaflet = useLeafletFallback || leafLetForced;
+            const showLeaflet = Platform.OS === "web" || useLeafletFallback || leafLetForced;
             if (showLeaflet) {
               const targetRef = isFullMapVisible ? fullLeafletRef : leafletRef;
               targetRef.current?.focusCurrentLocation?.(next, 15);
@@ -2206,7 +2206,7 @@ export default function DriverRadarScreen() {
 
     const mapCenter = driverMapPosition ?? DEFAULT_MAP_REGION;
 
-    const showLeaflet = useLeafletFallback || leafLetForced;
+    const showLeaflet = Platform.OS === "web" || useLeafletFallback || leafLetForced;
 
     const pickup =
       shouldShowMap && (effectiveFirstIncoming || activeMission)

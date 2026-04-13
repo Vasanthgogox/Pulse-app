@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { jsPDF } from 'jspdf/dist/jspdf.es.min';
+import { jsPDF } from 'jspdf/dist/jspdf.es.min.js';
 import html2canvas from 'html2canvas';
 import type { InvoicePdfData } from '@/components/InvoicePdf.types';
 
@@ -31,7 +31,7 @@ export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = 
   const printRef = useRef<HTMLDivElement>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
-  const logoUrl = logoFailed ? null : invoiceData.brandingLogoUrl;
+  const logoUrl = logoFailed ? null : invoiceData.brandingLogoUrl;        
 
   const handleDownloadPdf = async () => {
     if (!printRef.current) return;
