@@ -271,7 +271,7 @@ export default function DriverPassbookDetailScreen() {
                 ? colors.text
                 : Theme.gpayListTitle;
             const primary = isCredit ? 'Payment received' : 'Adjustment';
-            const metaRight = isCredit ? 'Credited to wallet' : 'Updated in passbook';
+            const metaRight = isCredit ? 'Added to cash balance' : 'Updated in passbook';
             const listDivider = isDark ? colors.borderSubtle : Theme.borderMedium;
             const subColor = colors.textMuted;
             const metaColor = colors.textMuted;
@@ -396,7 +396,7 @@ export default function DriverPassbookDetailScreen() {
                           : 'Trip earnings';
                     const metaRight =
                       receivedAmt > 0
-                        ? 'Credited to wallet'
+                        ? 'Added to cash balance'
                         : isAggregate && earned === 0
                           ? 'Pending'
                           : 'Pending from fleet';
