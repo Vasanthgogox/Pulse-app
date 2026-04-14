@@ -230,6 +230,7 @@ export interface DriverInviteRow {
   responded_by: string | null;
   from_org_name: string | null;
   from_org_logo_url?: string | null;
+  from_org_avatar_url?: string | null;
   payable_amount: number | null;
   commission_percent: number | null;
   commission_per_km: number | null;

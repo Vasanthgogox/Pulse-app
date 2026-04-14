@@ -1,4 +1,5 @@
 import { DriverHeader } from '@/components/driver/DriverHeader';
+import { DriverInviteCard } from '@/components/driver/DriverInviteCard';
 import { LeafletMap, type LeafletMapRef, type LeafletMarker } from '@/components/driver/LeafletMap';
 import { DriverTripFlowCard } from '@/components/DriverTripFlowCard';
 import { JobRequestCard } from '@/components/JobRequestCard';
@@ -10,7 +11,7 @@ import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeCont
 import { computeDriverCommissionForTrip } from '@/features/finance/aggregation/aggregateDrivers';
 import { claimTripByOtp, getPendingOtpTrips } from '@/features/trips';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
-import { isActiveMission, isAggregateTrip, isAssignedNotStarted, isCompletedStatus, isRosterTrip } from '@/lib/driverUtils';
+import { buildOfferText, isActiveMission, isAggregateTrip, isAssignedNotStarted, isCompletedStatus, isRosterTrip } from '@/lib/driverUtils';
 import { formatINR } from '@/lib/format';
 import { formatEstimatedDuration } from '@/lib/formatEstimatedDuration';
 import { darkMapStyle } from '@/lib/mapStyles';
@@ -3285,88 +3286,30 @@ export default function DriverRadarScreen() {
               >
                 <View style={styles.assignedSheetContent}>
                   {showNotification && pendingInvite && (
-                    <View
-                      style={[
-                        styles.inviteCard,
-                        { backgroundColor: colors.surface, borderColor: colors.border },
-                      ]}
-                    >
-                      <TouchableOpacity
-                        style={styles.inviteCloseBtn}
-                        onPress={() => setInvitationDismissed(true)}
-                        hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
-                        activeOpacity={0.7}
-                      >
-                        <FontAwesome name="times" size={14} color={Theme.textMuted} />
-                      </TouchableOpacity>
-                      <View style={styles.inviteCardHeader}>
-                        <View style={styles.inviteAvatarWrap}>
-                          {pendingInvite.from_org_logo_url ? (
-                            <Image source={{ uri: pendingInvite.from_org_logo_url }} style={styles.inviteAvatarImg} />
-                          ) : (
-                            <FontAwesome name="building" size={20} color={colors.emerald} />
-                          )}
-                        </View>
-                        <View style={styles.inviteOrgInfo}>
-                          <View style={styles.inviteOrgNameRow}>
-                            <Text style={[styles.inviteOrgName, { color: colors.text }]}>
-                              {pendingInvite.from_org_name || "An organization"}
-                            </Text>
-                            <View style={styles.inviteVerifiedBadge}>
-                              <Text style={styles.inviteVerifiedText}>VERIFIED</Text>
-                            </View>
-                          </View>
-                          <View style={styles.inviteOrgStats}>
-                            <FontAwesome name="star" size={12} color={Theme.driverGold} style={{ marginRight: 4 }} />
-                            <Text style={[styles.inviteOrgStatsText, { color: colors.textMuted }]}>4.9</Text>
-                            <View style={styles.inviteOrgStatsDot} />
-                            <Text style={[styles.inviteOrgStatsText, { color: colors.textMuted }]}>1.2k+ drivers</Text>
-                          </View>
-                        </View>
-                      </View>
-                      <View style={styles.inviteActions}>
-                        <View style={[styles.inviteOfferBadge, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
-                          <FontAwesome name="bolt" size={12} color={colors.primary} />
-                          <Text style={[styles.inviteOfferText, { color: colors.text }]}>
-                            {pendingInvite.commission_percent != null && pendingInvite.commission_percent > 0
-                              ? `+${pendingInvite.commission_percent}% Earnings`
-                              : "Tap to view invitation details"}
-                          </Text>
-                        </View>
-                        <View style={styles.inviteActionBtns}>
-                          <TouchableOpacity
-                            style={[styles.inviteRejectBtn, inviteActionId === pendingInvite.id && styles.inviteBtnDisabled]}
-                            onPress={async () => {
-                              setInviteActionId(pendingInvite.id);
-                              await driversService.rejectDriverInvite(pendingInvite.id);
-                              setInviteActionId(null);
-                              setInvitationDeclined(true);
-                              fetch();
-                            }}
-                            disabled={!!inviteActionId}
-                            activeOpacity={0.8}
-                          >
-                            <Text style={[styles.inviteRejectBtnText, { color: colors.textMuted }]}>Ignore</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={[styles.inviteAcceptBtn, { backgroundColor: colors.primary }, inviteActionId === pendingInvite.id && styles.inviteBtnDisabled]}
-                            onPress={async () => {
-                              setInviteActionId(pendingInvite.id);
-                              const { error } = await driversService.acceptDriverInvite(pendingInvite.id);
-                              setInviteActionId(null);
-                              if (!error) {
-                                setInvitationAccepted(true);
-                                fetch();
-                              }
-                            }}
-                            disabled={!!inviteActionId}
-                            activeOpacity={0.8}
-                          >
-                            <Text style={styles.inviteAcceptBtnText}>Accept Invite</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    </View>
+                    <DriverInviteCard
+                      invite={pendingInvite}
+                      colors={colors}
+                      offerText={buildOfferText(pendingInvite)}
+                      busy={inviteActionId === pendingInvite.id}
+                      fallbackAvatarUri={avatarUri}
+                      onClose={() => setInvitationDismissed(true)}
+                      onIgnore={async () => {
+                        setInviteActionId(pendingInvite.id);
+                        await driversService.rejectDriverInvite(pendingInvite.id);
+                        setInviteActionId(null);
+                        setInvitationDeclined(true);
+                        fetch();
+                      }}
+                      onAccept={async () => {
+                        setInviteActionId(pendingInvite.id);
+                        const { error } = await driversService.acceptDriverInvite(pendingInvite.id);
+                        setInviteActionId(null);
+                        if (!error) {
+                          setInvitationAccepted(true);
+                          fetch();
+                        }
+                      }}
+                    />
                   )}
                   {loading && !assignmentFeedback ? (
                     <ActivityIndicator
@@ -3476,88 +3419,30 @@ export default function DriverRadarScreen() {
               ) : null}
 
               {showNotification && pendingInvite && (
-                <View
-                  style={[
-                    styles.inviteCard,
-                    { backgroundColor: colors.surface, borderColor: colors.border },
-                  ]}
-                >
-                  <TouchableOpacity
-                    style={styles.inviteCloseBtn}
-                    onPress={() => setInvitationDismissed(true)}
-                    hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
-                    activeOpacity={0.7}
-                  >
-                    <FontAwesome name="times" size={14} color={Theme.textMuted} />
-                  </TouchableOpacity>
-                  <View style={styles.inviteCardHeader}>
-                    <View style={styles.inviteAvatarWrap}>
-                      {pendingInvite.from_org_logo_url ? (
-                        <Image source={{ uri: pendingInvite.from_org_logo_url }} style={styles.inviteAvatarImg} />
-                      ) : (
-                        <FontAwesome name="building" size={20} color={colors.emerald} />
-                      )}
-                    </View>
-                    <View style={styles.inviteOrgInfo}>
-                      <View style={styles.inviteOrgNameRow}>
-                        <Text style={[styles.inviteOrgName, { color: colors.text }]}>
-                          {pendingInvite.from_org_name || "An organization"}
-                        </Text>
-                        <View style={styles.inviteVerifiedBadge}>
-                          <Text style={styles.inviteVerifiedText}>VERIFIED</Text>
-                        </View>
-                      </View>
-                      <View style={styles.inviteOrgStats}>
-                        <FontAwesome name="star" size={12} color={Theme.driverGold} style={{ marginRight: 4 }} />
-                        <Text style={[styles.inviteOrgStatsText, { color: colors.textMuted }]}>4.9</Text>
-                        <View style={styles.inviteOrgStatsDot} />
-                        <Text style={[styles.inviteOrgStatsText, { color: colors.textMuted }]}>1.2k+ drivers</Text>
-                      </View>
-                    </View>
-                  </View>
-                  <View style={styles.inviteActions}>
-                    <View style={[styles.inviteOfferBadge, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
-                      <FontAwesome name="bolt" size={12} color={colors.primary} />
-                      <Text style={[styles.inviteOfferText, { color: colors.text }]}>
-                        {pendingInvite.commission_percent != null && pendingInvite.commission_percent > 0
-                          ? `+${pendingInvite.commission_percent}% Earnings`
-                          : "Tap to view invitation details"}
-                      </Text>
-                    </View>
-                    <View style={styles.inviteActionBtns}>
-                      <TouchableOpacity
-                        style={[styles.inviteRejectBtn, inviteActionId === pendingInvite.id && styles.inviteBtnDisabled]}
-                        onPress={async () => {
-                          setInviteActionId(pendingInvite.id);
-                          await driversService.rejectDriverInvite(pendingInvite.id);
-                          setInviteActionId(null);
-                          setInvitationDeclined(true);
-                          fetch();
-                        }}
-                        disabled={!!inviteActionId}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={[styles.inviteRejectBtnText, { color: colors.textMuted }]}>Ignore</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.inviteAcceptBtn, { backgroundColor: colors.primary }, inviteActionId === pendingInvite.id && styles.inviteBtnDisabled]}
-                        onPress={async () => {
-                          setInviteActionId(pendingInvite.id);
-                          const { error } = await driversService.acceptDriverInvite(pendingInvite.id);
-                          setInviteActionId(null);
-                          if (!error) {
-                            setInvitationAccepted(true);
-                            fetch();
-                          }
-                        }}
-                        disabled={!!inviteActionId}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.inviteAcceptBtnText}>Accept Invite</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
+                <DriverInviteCard
+                  invite={pendingInvite}
+                  colors={colors}
+                  offerText={buildOfferText(pendingInvite)}
+                  busy={inviteActionId === pendingInvite.id}
+                  fallbackAvatarUri={avatarUri}
+                  onClose={() => setInvitationDismissed(true)}
+                  onIgnore={async () => {
+                    setInviteActionId(pendingInvite.id);
+                    await driversService.rejectDriverInvite(pendingInvite.id);
+                    setInviteActionId(null);
+                    setInvitationDeclined(true);
+                    fetch();
+                  }}
+                  onAccept={async () => {
+                    setInviteActionId(pendingInvite.id);
+                    const { error } = await driversService.acceptDriverInvite(pendingInvite.id);
+                    setInviteActionId(null);
+                    if (!error) {
+                      setInvitationAccepted(true);
+                      fetch();
+                    }
+                  }}
+                />
               )}
             </View>
           </View>

@@ -73,7 +73,11 @@ export function DriverHeader({
               { borderColor: colors.border, backgroundColor: colors.emeraldMuted },
             ]}
           >
-            <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+            ) : (
+              <FontAwesome name="user" size={16} color={colors.text} />
+            )}
           </View>
         </TouchableOpacity>
 
