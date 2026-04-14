@@ -97,7 +97,9 @@ export default function IndentsScreen() {
       renderListItem={({ item: i }) => (
         <EntityRow
           title={getIndentDisplayNumber(i)}
-          subtitle={`${i.pickup_area} → ${i.drop_location} • ${i.client_name}`}
+          subtitleLeft={i.pickup_area ?? '—'}
+          subtitleRight={i.drop_location ?? '—'}
+          subtitle={i.client_name ?? '—'}
           amount={formatINR(i.client_price)}
           amountLabel={getIndentStatusLabel(i.status)}
           onPress={() => router.push(`/indent/${i.id}` as import('expo-router').Href)}

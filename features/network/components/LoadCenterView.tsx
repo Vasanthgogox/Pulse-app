@@ -1209,6 +1209,13 @@ export function LoadCenterView({
       acceptedQuote?.amount != null
         ? Number(acceptedQuote.amount)
         : Number(load.client_price || 0);
+    const vehicleDetail = load.vehicle_type || "—";
+    const weightValue = Number(load.weight);
+    const weightDetail =
+      Number.isFinite(weightValue) && weightValue > 0
+        ? `${weightValue} KG`
+        : "—";
+    const loadTypeDetail = load.load_type || "—";
 
     return (
       <TouchableOpacity
@@ -1234,11 +1241,40 @@ export function LoadCenterView({
           </View>
           <Text style={styles.awardedId}>{getIndentDisplayNumber(load)}</Text>
         </View>
-        <View style={styles.awardedRouteWrap}>
-          <Text style={styles.awardedRoute}>
-            {load.pickup_area || "—"} → {load.drop_location || "—"}
-          </Text>
-          <Text style={styles.awardedAmount}>{formatINR(supplierRate)}</Text>
+        <Text style={styles.loadCardRouteGet} numberOfLines={2}>
+          {(load.pickup_area || "—").toUpperCase()} TO{" "}
+          {(load.drop_location || "—").toUpperCase()}
+        </Text>
+        <View style={styles.loadCardInner}>
+          <View style={styles.loadCardInnerTopRow}>
+            <Text style={styles.loadCardId} numberOfLines={1}>
+              ID: {getIndentDisplayNumber(load)}
+            </Text>
+            <View style={styles.loadCardTopRight}>
+              <Text style={styles.getLoadTargetLabel}>Supplier rate</Text>
+              <Text style={styles.getLoadTargetValue}>{formatINR(supplierRate)}</Text>
+            </View>
+          </View>
+          <View style={styles.loadCardSpecsRow}>
+            <View style={styles.loadCardSpecItem}>
+              <Text style={styles.loadCardSpecLabel}>Vehicle</Text>
+              <Text style={styles.loadCardSpecValue} numberOfLines={1}>
+                {vehicleDetail}
+              </Text>
+            </View>
+            <View style={styles.loadCardSpecItem}>
+              <Text style={styles.loadCardSpecLabel}>Weight</Text>
+              <Text style={styles.loadCardSpecValue} numberOfLines={1}>
+                {weightDetail}
+              </Text>
+            </View>
+            <View style={styles.loadCardSpecItem}>
+              <Text style={styles.loadCardSpecLabel}>Load Type</Text>
+              <Text style={styles.loadCardSpecValue} numberOfLines={1}>
+                {loadTypeDetail}
+              </Text>
+            </View>
+          </View>
         </View>
         {isDone ? (
           <TouchableOpacity
@@ -1450,12 +1486,19 @@ export function LoadCenterView({
                 </View>
               ) : (
                 <View style={useGridLayout ? styles.gridList : undefined}>
-                  {filteredHirePartnerLoads.map((load) => {
+                {filteredHirePartnerLoads.map((load) => {
                   const status = (load.status || "").toLowerCase();
                   const isDraft = status === "draft";
                   const isAwardedPendingTrip =
                     status === "awarded" && !indentIdsWithTrip.has(load.id);
                   const isDone = statusMatchesFilter(status, "DONE");
+                  const vehicleDetail = load.vehicle_type || "—";
+                  const weightValue = Number(load.weight);
+                  const weightDetail =
+                    Number.isFinite(weightValue) && weightValue > 0
+                      ? `${weightValue} KG`
+                      : "—";
+                  const loadTypeDetail = load.load_type || "—";
                   // Indent was assigned a supplier directly (no quote needed).
                   const hasDirectSupplier = !!load["assigned_supplier_id"];
                   // Shipper view: never show "Create Trip". The supplier creates the trip from
@@ -1500,6 +1543,26 @@ export function LoadCenterView({
                                     { day: "numeric", month: "short" },
                                   )
                                 : "—"}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.loadCardSpecsRow}>
+                          <View style={styles.loadCardSpecItem}>
+                            <Text style={styles.loadCardSpecLabel}>Vehicle</Text>
+                            <Text style={styles.loadCardSpecValue} numberOfLines={1}>
+                              {vehicleDetail}
+                            </Text>
+                          </View>
+                          <View style={styles.loadCardSpecItem}>
+                            <Text style={styles.loadCardSpecLabel}>Weight</Text>
+                            <Text style={styles.loadCardSpecValue} numberOfLines={1}>
+                              {weightDetail}
+                            </Text>
+                          </View>
+                          <View style={styles.loadCardSpecItem}>
+                            <Text style={styles.loadCardSpecLabel}>Load Type</Text>
+                            <Text style={styles.loadCardSpecValue} numberOfLines={1}>
+                              {loadTypeDetail}
                             </Text>
                           </View>
                         </View>
@@ -1665,6 +1728,13 @@ export function LoadCenterView({
                 const isPending = quoteStatus === "pending";
                 const isRejected = quoteStatus === "rejected";
                 const isAccepted = quoteStatus === "accepted";
+                const vehicleDetail = load.vehicle_type || "—";
+                const weightValue = Number(load.weight);
+                const weightDetail =
+                  Number.isFinite(weightValue) && weightValue > 0
+                    ? `${weightValue} KG`
+                    : "—";
+                const loadTypeDetail = load.load_type || "—";
                 const openBidModal = () => {
                   setQuoteAmount(
                     existingQuote ? String(existingQuote.amount) : "",
@@ -1734,6 +1804,26 @@ export function LoadCenterView({
                                 load.supplier_target ?? load.client_price ?? 0,
                               ),
                             )}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.loadCardSpecsRow}>
+                        <View style={styles.loadCardSpecItem}>
+                          <Text style={styles.loadCardSpecLabel}>Vehicle</Text>
+                          <Text style={styles.loadCardSpecValue} numberOfLines={1}>
+                            {vehicleDetail}
+                          </Text>
+                        </View>
+                        <View style={styles.loadCardSpecItem}>
+                          <Text style={styles.loadCardSpecLabel}>Weight</Text>
+                          <Text style={styles.loadCardSpecValue} numberOfLines={1}>
+                            {weightDetail}
+                          </Text>
+                        </View>
+                        <View style={styles.loadCardSpecItem}>
+                          <Text style={styles.loadCardSpecLabel}>Load Type</Text>
+                          <Text style={styles.loadCardSpecValue} numberOfLines={1}>
+                            {loadTypeDetail}
                           </Text>
                         </View>
                       </View>
@@ -3536,6 +3626,30 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 6,
   },
+  loadCardSpecsRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  loadCardSpecItem: {
+    flex: 1,
+    minWidth: 0,
+  },
+  loadCardSpecLabel: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  loadCardSpecValue: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+  },
   quoteBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -3644,6 +3758,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    alignSelf: "stretch",
+    marginTop: 10,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     backgroundColor: TESLA_BLACK,
     borderRadius: 8,
