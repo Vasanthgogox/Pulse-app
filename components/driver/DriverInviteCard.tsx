@@ -118,6 +118,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 24,
     padding: 16,
+    paddingRight: 14,
+    overflow: 'hidden',
   },
   closeBtn: {
     position: 'absolute',
@@ -160,6 +162,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    paddingRight: 28,
   },
   orgName: {
     fontSize: 19,
@@ -203,6 +206,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    minWidth: 0,
   },
   offerBadge: {
     flex: 1,
@@ -213,6 +217,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     gap: 6,
+    minWidth: 0,
+    marginRight: 2,
   },
   offerText: {
     fontSize: 12,
@@ -223,23 +229,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexShrink: 0,
   },
   ignoreBtn: {
     paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   ignoreText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
   },
   acceptBtn: {
     paddingVertical: 10,
-    paddingHorizontal: 20,
+    paddingHorizontal: 18,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
+    minWidth: 120,
   },
   acceptText: {
     fontSize: 13,

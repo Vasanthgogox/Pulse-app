@@ -57,6 +57,8 @@ function ledgerTypeLabel(type: string): string {
   return LEDGER_TYPE_LABELS[type] ?? type;
 }
 
+const AMBER_50 = 'rgba(245,158,11,0.12)';
+
 export default function DriverPassbookDetailScreen() {
   usePreventScreenCapture();
   const insets = useSafeAreaInsets();
@@ -274,26 +276,38 @@ export default function DriverPassbookDetailScreen() {
             const subColor = colors.textMuted;
             const metaColor = colors.textMuted;
             const isLastEntry = entryIdx === nonTripLedgerEntries.length - 1;
+            const statusLabel = isCredit ? 'RECEIVED' : 'PENDING';
+            const statusPillBg = isCredit ? colors.emeraldMuted : AMBER_50;
+            const statusPillTextColor = isCredit ? colors.emerald : Theme.warning;
+            const statusPillBorderColor = isCredit ? colors.emeraldBorderSoft : 'rgba(180,83,9,0.25)';
+            const rowToneBorder = isCredit ? colors.emeraldBorderSoft : 'rgba(180,83,9,0.25)';
+            const iconSqBg = isCredit ? colors.emeraldMuted : AMBER_50;
+            const iconColor = isCredit ? colors.emerald : Theme.warning;
             return (
               <View
                 key={entry.id}
                 style={[
                   styles.ppTxCard,
-                  !isLastEntry && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: listDivider },
+                  { borderWidth: 1, borderColor: rowToneBorder, borderRadius: 12, paddingHorizontal: 12, marginBottom: 6 },
                 ]}
               >
                 <View style={styles.ppTxTopRow}>
-                  <View style={[styles.ppIconSq, { backgroundColor: colors.emerald }]}>
+                  <View style={[styles.ppIconSq, { backgroundColor: iconSqBg }]}>
                     <FontAwesome
                       name={isCredit ? 'arrow-down' : 'arrow-up'}
                       size={18}
-                      color={Theme.textOnPrimary}
+                      color={iconColor}
                     />
                   </View>
                   <View style={styles.ppMiddle}>
-                    <Text style={[styles.ppPrimary, { color: colors.text }]} numberOfLines={1}>
-                      {primary}
-                    </Text>
+                    <View style={styles.ppPrimaryRow}>
+                      <Text style={[styles.ppPrimary, { color: colors.text }]} numberOfLines={1}>
+                        {primary}
+                      </Text>
+                      <View style={[styles.txStatusPill, { backgroundColor: statusPillBg, borderColor: statusPillBorderColor }]}>
+                        <Text style={[styles.txStatusPillText, { color: statusPillTextColor }]}>{statusLabel}</Text>
+                      </View>
+                    </View>
                     <Text style={[styles.ppSecondary, { color: subColor }]} numberOfLines={2}>
                       {label}
                     </Text>
@@ -389,22 +403,35 @@ export default function DriverPassbookDetailScreen() {
                     const isLastTrip = tripIdx === trips.length - 1;
                     const iconName =
                       isAggregate && earned === 0 ? 'exchange' : receivedAmt > 0 ? 'arrow-down' : 'clock-o';
+                    const isReceived = receivedAmt > 0;
+                    const statusLabel = isReceived ? 'RECEIVED' : 'PENDING';
+                    const statusPillBg = isReceived ? colors.emeraldMuted : AMBER_50;
+                    const statusPillTextColor = isReceived ? colors.emerald : Theme.warning;
+                    const statusPillBorderColor = isReceived ? colors.emeraldBorderSoft : 'rgba(180,83,9,0.25)';
+                    const rowToneBorder = isReceived ? colors.emeraldBorderSoft : 'rgba(180,83,9,0.25)';
+                    const iconSqBg = isReceived ? colors.emeraldMuted : AMBER_50;
+                    const iconColor = isReceived ? colors.emerald : Theme.warning;
                     return (
                       <View
                         key={trip.id}
                         style={[
                           styles.ppTxCard,
-                          !isLastTrip && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: listDivider },
+                          { borderWidth: 1, borderColor: rowToneBorder, borderRadius: 12, paddingHorizontal: 12, marginBottom: 6 },
                         ]}
                       >
                         <View style={styles.ppTxTopRow}>
-                          <View style={[styles.ppIconSq, { backgroundColor: colors.emerald }]}>
-                            <FontAwesome name={iconName} size={18} color={Theme.textOnPrimary} />
+                          <View style={[styles.ppIconSq, { backgroundColor: iconSqBg }]}>
+                            <FontAwesome name={iconName} size={18} color={iconColor} />
                           </View>
                           <View style={styles.ppMiddle}>
-                            <Text style={[styles.ppPrimary, { color: colors.text }]} numberOfLines={1}>
-                              {primaryLine}
-                            </Text>
+                            <View style={styles.ppPrimaryRow}>
+                              <Text style={[styles.ppPrimary, { color: colors.text }]} numberOfLines={1}>
+                                {primaryLine}
+                              </Text>
+                              <View style={[styles.txStatusPill, { backgroundColor: statusPillBg, borderColor: statusPillBorderColor }]}>
+                                <Text style={[styles.txStatusPillText, { color: statusPillTextColor }]}>{statusLabel}</Text>
+                              </View>
+                            </View>
                             <Text style={[styles.ppSecondary, { color: subColor }]} numberOfLines={2}>
                               {secondaryLine}
                             </Text>
@@ -515,10 +542,31 @@ const styles = StyleSheet.create({
     minWidth: 0,
     paddingRight: 8,
   },
+  ppPrimaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minWidth: 0,
+  },
   ppPrimary: {
     fontSize: 15,
     fontWeight: '500',
     letterSpacing: 0.1,
+    flexShrink: 1,
+  },
+  txStatusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  txStatusPillText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.7,
   },
   ppSecondary: {
     fontSize: 13,
