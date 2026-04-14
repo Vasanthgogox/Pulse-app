@@ -2778,10 +2778,39 @@ export function LoadCenterView({
                               </TouchableOpacity>
                             ))}
                             {activeDrivers.length === 0 ? (
-                              <Text style={styles.assignEmptyText}>
-                                No asset drivers. Use Aggregate flow from the
-                                previous step.
-                              </Text>
+                              <View style={styles.assignEmptyState}>
+                                <Text style={styles.assignEmptyText}>
+                                  No asset drivers were found in your organization.
+                                  Add a salaried driver to continue with Asset-based
+                                  assignment, or use the Aggregate flow from the
+                                  previous step.
+                                </Text>
+                                <TouchableOpacity
+                                  style={styles.assignEmptyActionBtn}
+                                  onPress={() => {
+                                    setLoadAction(null);
+                                    setDeployOtpCode(null);
+                                    setDeployOtpExpiresAt(null);
+                                    setDeployTripIdForOtp(null);
+                                    setHandshakeStep("flow_choice");
+                                    setTimeout(() => {
+                                      router.push(
+                                        "/(modals)/add-driver" as import("expo-router").Href,
+                                      );
+                                    }, RNPlatform.OS === "ios" ? 100 : 0);
+                                  }}
+                                  activeOpacity={0.9}
+                                >
+                                  <FontAwesome
+                                    name="plus"
+                                    size={12}
+                                    color={Theme.textOnPrimary}
+                                  />
+                                  <Text style={styles.assignEmptyActionBtnText}>
+                                    Add Driver
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
                             ) : null}
                           </View>
 
@@ -2846,10 +2875,37 @@ export function LoadCenterView({
                               </TouchableOpacity>
                             ))}
                             {vehicles.length === 0 ? (
-                              <Text style={styles.assignEmptyText}>
-                                No vehicles in your fleet. Add a vehicle in
-                                Resources first.
-                              </Text>
+                              <View style={styles.assignEmptyState}>
+                                <Text style={styles.assignEmptyText}>
+                                  No vehicles were found in your fleet. Add an own
+                                  vehicle to continue with Asset-based assignment.
+                                </Text>
+                                <TouchableOpacity
+                                  style={styles.assignEmptyActionBtn}
+                                  onPress={() => {
+                                    setLoadAction(null);
+                                    setDeployOtpCode(null);
+                                    setDeployOtpExpiresAt(null);
+                                    setDeployTripIdForOtp(null);
+                                    setHandshakeStep("flow_choice");
+                                    setTimeout(() => {
+                                      router.push(
+                                        "/(modals)/add-vehicle" as import("expo-router").Href,
+                                      );
+                                    }, RNPlatform.OS === "ios" ? 100 : 0);
+                                  }}
+                                  activeOpacity={0.9}
+                                >
+                                  <FontAwesome
+                                    name="plus"
+                                    size={12}
+                                    color={Theme.textOnPrimary}
+                                  />
+                                  <Text style={styles.assignEmptyActionBtnText}>
+                                    Add Vehicle
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
                             ) : null}
                           </View>
                         </View>
@@ -4296,6 +4352,29 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textMuted,
     marginTop: 2,
+    lineHeight: 18,
+  },
+  assignEmptyState: {
+    marginTop: 2,
+    gap: 10,
+  },
+  assignEmptyActionBtn: {
+    minHeight: 44,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: Theme.primary,
+  },
+  assignEmptyActionBtnText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textOnPrimary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   assignSummaryBar: {
     backgroundColor: Theme.surfaceLight,
