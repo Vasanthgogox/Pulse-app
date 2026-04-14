@@ -2245,14 +2245,17 @@ const styles = StyleSheet.create({
   valueCardColLeftV2: {
     flex: 1,
     textAlign: "left",
+    alignItems: "flex-start",
   },
   valueCardColCenterV2: {
     flex: 1,
     textAlign: "center",
+    alignItems: "center",
   },
   valueCardColRightV2: {
     flex: 0.8,
     textAlign: "right",
+    alignItems: "flex-end",
   },
   valueCardRowValuesV2: {
     flexDirection: "row",
@@ -2573,14 +2576,17 @@ const styles = StyleSheet.create({
   valueCardColLeft: {
     flex: 1,
     textAlign: "left",
+    alignItems: "flex-start",
   },
   valueCardColCenter: {
     flex: 1,
     textAlign: "center",
+    alignItems: "center",
   },
   valueCardColRight: {
     flex: 0.8,
     textAlign: "right",
+    alignItems: "flex-end",
   },
   valueCardRowValues: {
     flexDirection: "row",

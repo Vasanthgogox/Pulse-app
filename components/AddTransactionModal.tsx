@@ -132,6 +132,16 @@ export const VEHICLE_CATEGORIES = [
 ] as const;
 export type VehicleCategory = (typeof VEHICLE_CATEGORIES)[number];
 
+export const PAYMENT_MODES = [
+  { id: 'CASH', name: 'Cash' },
+  { id: 'UPI', name: 'UPI' },
+  { id: 'BANK', name: 'Bank Transfer' },
+  { id: 'CHEQUE', name: 'Cheque' },
+  { id: 'FUEL_CARD', name: 'Fuel Card' },
+  { id: 'FASTAG', name: 'FASTag' },
+  { id: 'CREDIT', name: 'Credit' },
+] as const;
+
 /** Vehicle expense "parties" — vehicle cannot be party; user selects expense type. id = name = stored in description. */
 export const VEHICLE_EXPENSE_PARTIES: PartyOption[] = [
   ...VEHICLE_CATEGORIES,
@@ -169,6 +179,10 @@ export interface AddTransactionData {
   indentId?: string | null;
   /** Entry date (YYYY-MM-DD). When not set, parent uses today or editing entry's date. */
   transactionDate?: string | null;
+  /** Payment mode (e.g. CASH, UPI, BANK) */
+  paymentMode?: string | null;
+  /** Reference number / UTR for online transactions */
+  paymentReference?: string | null;
 }
 
 export interface PartyOption {
@@ -325,11 +339,14 @@ export function AddTransactionModal({
   const [partyId, setPartyId] = useState<string | null>(null);
   const [tripId, setTripId] = useState<string | null>(null);
   const [category, setCategory] = useState<string | null>(null);
+  const [paymentModeId, setPaymentModeId] = useState<string>(PAYMENT_MODES[0].id);
+  const [paymentReference, setPaymentReference] = useState<string>("");
   const [driverPaymentType, setDriverPaymentType] =
     useState<DriverPaymentType | null>(null);
   const [showPartyPicker, setShowPartyPicker] = useState(false);
   const [showTripPicker, setShowTripPicker] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [showPaymentPicker, setShowPaymentPicker] = useState(false);
   const [showDriverPaymentTypePicker, setShowDriverPaymentTypePicker] =
     useState(false);
   /** When party is "Driver salary", which driver this salary is for. */
@@ -1165,6 +1182,8 @@ export function AddTransactionModal({
       transactionDate: /^\d{4}-\d{2}-\d{2}$/.test(entryDate)
         ? entryDate
         : undefined,
+      paymentMode: paymentModeId,
+      paymentReference: paymentReference.trim() || null,
     };
     if (isEditMode && initialEntry?.id) {
       onSubmit(data, { entryId: initialEntry.id });
@@ -1201,6 +1220,7 @@ export function AddTransactionModal({
     setShowDriverPaymentTypePicker(false);
     setShowDriverForSalaryPicker(false);
     setShowVehiclePicker(false);
+    setShowPaymentPicker(false);
   };
 
   const pickerModalVisible =
@@ -1210,7 +1230,8 @@ export function AddTransactionModal({
       showCategoryPicker ||
       showDriverPaymentTypePicker ||
       showDriverForSalaryPicker ||
-      showVehiclePicker);
+      showVehiclePicker ||
+      showPaymentPicker);
 
   if (!visible && !fullPage) return null;
   if (fullPage && !visible) return null;
@@ -1573,6 +1594,51 @@ export function AddTransactionModal({
               </TouchableOpacity>
             )}
 
+            <TouchableOpacity
+              style={styles.fieldBlockFull}
+              onPress={() => {
+                setShowPartyPicker(false);
+                setShowTripPicker(false);
+                setShowCategoryPicker(false);
+                setShowDriverPaymentTypePicker(false);
+                setShowDriverForSalaryPicker(false);
+                setShowPaymentPicker((v) => !v);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.tagLabel, styles.fieldLabel]}>PAYMENT MODE</Text>
+              <Text style={styles.fieldValue} numberOfLines={1}>
+                {PAYMENT_MODES.find((p) => p.id === paymentModeId)?.name ?? "Cash"}
+              </Text>
+              <FontAwesome
+                name="chevron-down"
+                size={10}
+                color={Theme.textMutedDemo}
+                style={styles.fieldChevron}
+              />
+            </TouchableOpacity>
+
+            {paymentModeId !== 'CASH' && (
+              <View style={[styles.fieldBlockFull, { marginTop: 0, borderTopWidth: 0 }]}>
+                <Text style={[styles.tagLabel, styles.fieldLabel]}>REFERENCE NO / UTR</Text>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={paymentReference}
+                  onChangeText={setPaymentReference}
+                  placeholder="Refer the bank to validate"
+                  placeholderTextColor={Theme.textMutedDemo}
+                  autoCorrect={false}
+                  autoCapitalize="characters"
+                  accessibilityLabel="Reference Number or UTR"
+                  onFocus={() => {
+                    if (fullPage && scrollRef.current) {
+                      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+                    }
+                  }}
+                />
+              </View>
+            )}
+
             {showDriverForSalaryPicker && !fullPage && (
               <View style={styles.pickerList}>
                 <ScrollView
@@ -1692,6 +1758,33 @@ export function AddTransactionModal({
                       }}
                     >
                       <Text style={styles.pickerItemText}>{cat}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {showPaymentPicker && !fullPage && (
+              <View style={styles.pickerList}>
+                <ScrollView
+                  style={styles.pickerScroll}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={true}
+                  nestedScrollEnabled={true}
+                >
+                  {PAYMENT_MODES.map((opt) => (
+                    <TouchableOpacity
+                      key={opt.id}
+                      style={[
+                        styles.pickerItem,
+                        paymentModeId === opt.id && styles.pickerItemActive,
+                      ]}
+                      onPress={() => {
+                        setPaymentModeId(opt.id);
+                        setShowPaymentPicker(false);
+                      }}
+                    >
+                      <Text style={styles.pickerItemText}>{opt.name}</Text>
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
@@ -1992,6 +2085,17 @@ export function AddTransactionModal({
         </ScrollView>
       );
     }
+    if (showPaymentPicker) {
+      return (
+        <ScrollView style={pickerModalScrollStyle} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
+          {PAYMENT_MODES.map((opt) => (
+            <TouchableOpacity key={opt.id} style={[styles.pickerItem, paymentModeId === opt.id && styles.pickerItemActive]} onPress={() => { setPaymentModeId(opt.id); setShowPaymentPicker(false); }}>
+              <Text style={styles.pickerItemText}>{opt.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      );
+    }
     if (showVehiclePicker && safeVehicles.length > 0) {
       return (
         <ScrollView style={pickerModalScrollStyle} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
@@ -2197,6 +2301,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.textPrimaryDark,
     paddingVertical: 0,
+    borderWidth: 0,
     letterSpacing: -0.5,
     ...Platform.select({
       web: {
@@ -2275,6 +2380,20 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textPrimaryDark,
     paddingVertical: 6,
+    borderWidth: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
+  },
+  fieldInput: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    paddingVertical: 0,
+    borderWidth: 0,
     ...Platform.select({
       web: {
         outlineStyle: "none",

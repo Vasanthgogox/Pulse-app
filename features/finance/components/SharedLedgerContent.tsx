@@ -2082,14 +2082,17 @@ const styles = StyleSheet.create({
   valueCardColLeft: {
     flex: 1,
     textAlign: "left",
+    alignItems: "flex-start",
   },
   valueCardColCenter: {
     flex: 1,
     textAlign: "center",
+    alignItems: "center",
   },
   valueCardColRight: {
     flex: 0.8,
     textAlign: "right",
+    alignItems: "flex-end",
   },
   valueCardRowValues: {
     flexDirection: "row",
