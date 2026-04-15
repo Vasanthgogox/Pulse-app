@@ -9,7 +9,6 @@ import React, { useEffect, useRef, useState } from "react";
 import {
     Platform,
     Pressable,
-    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -193,110 +192,103 @@ export function JobRequestCard({
         </TouchableOpacity>
       ) : null}
       {otpMode ? (
-        <ScrollView
-          style={styles.otpScroll}
-          contentContainerStyle={styles.otpScrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.otpPageWrap}>
-            <Text
-              style={[styles.otpPageTitle, { color: primaryTextColor }]}
-            >
-              Enter trip OTP
-            </Text>
-            <Text style={[styles.otpPageSubtitle, { color: mutedTextColor }]}>
-              Enter the 6-digit OTP shared by your dispatcher to claim this
-              trip.
-            </Text>
-            <Text
-              style={[styles.otpPageRoute, { color: primaryTextColor }]}
-              numberOfLines={2}
-            >
-              {pickup || "Pickup"} to {dropoff || "Drop-off"}
-            </Text>
-            <TouchableOpacity
-              style={styles.otpBoxRow}
-              onPress={() => otpInputRef.current?.focus()}
-              activeOpacity={1}
-            >
-              {Array.from({ length: OTP_LENGTH }).map((_, i) => (
-                <View
-                  key={i}
+        <View style={styles.otpPageWrap}>
+          <Text
+            style={[styles.otpPageTitle, { color: primaryTextColor }]}
+          >
+            Enter trip OTP
+          </Text>
+          <Text style={[styles.otpPageSubtitle, { color: mutedTextColor }]}>
+            Enter the 6-digit OTP shared by your dispatcher to claim this
+            trip.
+          </Text>
+          <Text
+            style={[styles.otpPageRoute, { color: primaryTextColor }]}
+            numberOfLines={2}
+          >
+            {pickup || "Pickup"} to {dropoff || "Drop-off"}
+          </Text>
+          <TouchableOpacity
+            style={styles.otpBoxRow}
+            onPress={() => otpInputRef.current?.focus()}
+            activeOpacity={1}
+          >
+            {Array.from({ length: OTP_LENGTH }).map((_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.otpBox,
+                  {
+                    borderColor:
+                      otpValue.length === i ? accentColor : Theme.border,
+                    backgroundColor: Theme.surfaceLight,
+                  },
+                ]}
+              >
+                <Text
                   style={[
-                    styles.otpBox,
-                    {
-                      borderColor:
-                        otpValue.length === i ? accentColor : Theme.border,
-                      backgroundColor: Theme.surfaceLight,
-                    },
+                    styles.otpBoxDigit,
+                    { color: primaryTextColor },
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.otpBoxDigit,
-                      { color: primaryTextColor },
-                    ]}
-                  >
-                    {otpValue[i] ?? ""}
-                  </Text>
-                </View>
-              ))}
-            </TouchableOpacity>
-            <TextInput
-              ref={otpInputRef}
-              value={otpValue}
-              onChangeText={(value) =>
-                onOtpChange?.(value.replace(/\D/g, "").slice(0, OTP_LENGTH))
-              }
-              keyboardType="number-pad"
-              maxLength={OTP_LENGTH}
-              style={styles.otpHiddenInput}
-              caretHidden
-              autoFocus
-            />
-            {otpError ? (
-              <Text style={[styles.errorText, { color: Theme.negative }]}>
-                {otpError}
-              </Text>
-            ) : null}
-            <TouchableOpacity
-              onPress={onOtpSubmit}
-              style={[
-                styles.otpSubmitBtn,
-                { backgroundColor: accentColor },
-                (otpSubmitting || otpValue.length !== OTP_LENGTH) &&
-                  styles.holdBtnDisabled,
-              ]}
-              disabled={otpSubmitting || otpValue.length !== OTP_LENGTH}
-              activeOpacity={0.85}
-            >
-              {otpSubmitting ? (
-                <Text style={styles.otpSubmitText}>Verifying...</Text>
-              ) : (
-                <>
-                  <FontAwesome
-                    name="check"
-                    size={16}
-                    color={Theme.textOnPrimary}
-                  />
-                  <Text style={styles.otpSubmitText}>Verify OTP</Text>
-                </>
-              )}
-            </TouchableOpacity>
-            {onOtpCancel ? (
-              <TouchableOpacity
-                onPress={onOtpCancel}
-                style={styles.declineLinkWrap}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.declineLink, { color: mutedTextColor }]}>
-                  Cancel
+                  {otpValue[i] ?? ""}
                 </Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-        </ScrollView>
+              </View>
+            ))}
+          </TouchableOpacity>
+          <TextInput
+            ref={otpInputRef}
+            value={otpValue}
+            onChangeText={(value) =>
+              onOtpChange?.(value.replace(/\D/g, "").slice(0, OTP_LENGTH))
+            }
+            keyboardType="number-pad"
+            maxLength={OTP_LENGTH}
+            style={styles.otpHiddenInput}
+            caretHidden
+            autoFocus
+          />
+          {otpError ? (
+            <Text style={[styles.errorText, { color: Theme.negative }]}>
+              {otpError}
+            </Text>
+          ) : null}
+          <TouchableOpacity
+            onPress={onOtpSubmit}
+            style={[
+              styles.otpSubmitBtn,
+              { backgroundColor: accentColor },
+              (otpSubmitting || otpValue.length !== OTP_LENGTH) &&
+                styles.holdBtnDisabled,
+            ]}
+            disabled={otpSubmitting || otpValue.length !== OTP_LENGTH}
+            activeOpacity={0.85}
+          >
+            {otpSubmitting ? (
+              <Text style={styles.otpSubmitText}>Verifying...</Text>
+            ) : (
+              <>
+                <FontAwesome
+                  name="check"
+                  size={16}
+                  color={Theme.textOnPrimary}
+                />
+                <Text style={styles.otpSubmitText}>Verify OTP</Text>
+              </>
+            )}
+          </TouchableOpacity>
+          {onOtpCancel ? (
+            <TouchableOpacity
+              onPress={onOtpCancel}
+              style={styles.declineLinkWrap}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.declineLink, { color: mutedTextColor }]}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       ) : (
         <>
           {/* Header: earnings only (no close button) */}
@@ -517,7 +509,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     paddingTop: 16,
     paddingHorizontal: 24,
-    paddingBottom: 24,
+    paddingBottom: 16,
     borderRadius: 24,
     backgroundColor: Theme.screenBackground,
     overflow: "hidden",
@@ -528,9 +520,9 @@ const styles = StyleSheet.create({
   page: {
     marginHorizontal: 0,
     marginBottom: 0,
-    paddingTop: 12,
+    paddingTop: 8,
     paddingHorizontal: 0,
-    paddingBottom: 18,
+    paddingBottom: 0,
     borderRadius: 0,
     backgroundColor: "transparent",
     overflow: "visible",
@@ -775,7 +767,8 @@ const styles = StyleSheet.create({
   },
   declineLinkWrap: {
     alignSelf: "center",
-    paddingVertical: 10,
+    paddingTop: 10,
+    paddingBottom: 2,
     paddingHorizontal: 16,
     marginTop: 2,
   },
