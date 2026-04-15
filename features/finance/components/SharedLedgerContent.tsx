@@ -1,6 +1,6 @@
 /**
  * Compare & Verify — trip-level shared ledger audit for a single partner (client/supplier).
- * Shows Mission | Sales (My Book / Partner) | Paid (My Book / Partner) with expandable
+ * Shows Trip | Sales (My Book / Partner) | Paid (My Book / Partner) with expandable
  * reconciliation statement and Raise Dispute. Matches reference UX; uses Theme and app terms.
  */
 import Layout from "@/constants/Layout";
@@ -1115,7 +1115,7 @@ export function SharedLedgerContent({
                       color={Theme.textMuted}
                     />
                     <Text style={styles.emptyTableText}>
-                      No missions to compare yet.
+                      No trips to compare yet.
                     </Text>
                   </View>
                 ) : (

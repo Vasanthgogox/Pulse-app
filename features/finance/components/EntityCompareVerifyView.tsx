@@ -1,6 +1,6 @@
 /**
  * Compare & Verify — trip-level shared ledger audit for a single partner (client/supplier).
- * Shows Mission | Sales (My Book / Partner) | Paid (My Book / Partner) with expandable
+ * Shows Trip | Sales (My Book / Partner) | Paid (My Book / Partner) with expandable
  * reconciliation statement and Raise Dispute. Matches reference UX; uses Theme and app terms.
  */
 import Layout from "@/constants/Layout";
@@ -586,7 +586,7 @@ export function EntityCompareVerifyView({
       entity.name ?? "—",
       entityType,
     );
-    // Sort descending by trip ID so newest missions appear first (e.g. TRP019 → TRP005).
+    // Sort descending by trip ID so newest trips appear first (e.g. TRP019 → TRP005).
     return [...rows].sort((a, b) =>
       (b.tripId ?? "").localeCompare(a.tripId ?? "", undefined, { numeric: true }),
     );
@@ -1292,7 +1292,7 @@ export function EntityCompareVerifyView({
                         color={Theme.textMuted}
                       />
                       <Text style={styles.emptyTableText}>
-                        No missions to compare yet.
+                        No trips to compare yet.
                       </Text>
                     </View>
                   ) : (
@@ -1653,7 +1653,7 @@ export function EntityCompareVerifyView({
                         color={Theme.textMuted}
                       />
                       <Text style={styles.emptyTableText}>
-                        No missions to compare yet.
+                        No trips to compare yet.
                       </Text>
                     </View>
                   ) : (
@@ -2163,7 +2163,7 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     letterSpacing: 0.3,
   },
-  /** Mission column: same row height and layout as amount columns */
+  /** Trip column: same row height and layout as amount columns */
   thMissionWrap: {
     flex: 0.25,
     minWidth: 0,

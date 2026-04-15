@@ -1,5 +1,5 @@
 /**
- * Load Board — full-page screen (root level). Mission Exchange, GIVE LOAD | GET LOAD, indents, CREATE INDENT.
+ * Load Board — full-page screen (root level). Trip Exchange, GIVE LOAD | GET LOAD, indents, CREATE INDENT.
  */
 import { useRouter } from 'expo-router';
 import { useOrganization } from '@/contexts/OrganizationContext';

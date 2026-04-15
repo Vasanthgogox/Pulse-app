@@ -1,6 +1,6 @@
 # Tesla Logistics OS → Q-Mobile Integration Plan
 
-This plan maps the **Canvas Tesla Logistics OS** update (Mission Telemetry, Fiscal Matrix adjustments, Treasury summary, Network handshake) into **q-mobile** while following `.cursor/rules/q-mobile-standards.mdc` and using `@/constants/Theme`.
+This plan maps the **Canvas Tesla Logistics OS** update (Mission Telemetry, Financial Summary adjustments, Treasury summary, Network handshake) into **q-mobile** while following `.cursor/rules/q-mobile-standards.mdc` and using `@/constants/Theme`.
 
 ---
 
@@ -9,11 +9,11 @@ This plan maps the **Canvas Tesla Logistics OS** update (Mission Telemetry, Fisc
 | Canvas feature | q-mobile target | Notes |
 |----------------|-----------------|--------|
 | **Mission Telemetry** (trip tracking + timeline) | `app/trip/[id].tsx` | Add Tracking vs Finance tabs; telemetry-style route + mission log timeline |
-| **Fiscal Matrix (trip P&L + adjustments)** | `app/trip/[id].tsx` (Finance tab) | Revenue/Due summary, base sale value, credit/deduct adjustments, commit ledger |
+| **Financial Summary (trip P&L + adjustments)** | `app/trip/[id].tsx` (Finance tab) | Revenue/Due summary, base sale value, credit/deduct adjustments, commit ledger |
 | **Treasury summary banner** | `app/(tabs)/finance.tsx` | Dark banner: Total Cash In / Total Cash Out; period filter TODAY / MONTH / RANGE |
 | **Treasury period filter** | Same + `financeService` | Filter ledger/aggregates by period (backend or client-side from existing APIs) |
 | **Network handshake notification** | Reusable overlay component | “Partner Synced” / “Handshake Sent” modal with progress bar (use when integrating network/partner flows later) |
-| **Ops Autopilot (AI chat)** | `app/(tabs)/ops-agent.tsx` | Already aligned; optional: “Neural Mission Control” subtitle, Sparkles icon, success toast “SYNC COMPLETE” |
+| **Ops Autopilot (AI chat)** | `app/(tabs)/ops-agent.tsx` | Already aligned; optional: “Neural Trip Control” subtitle, Sparkles icon, success toast “SYNC COMPLETE” |
 | **Load Board** | `LoadBoardModal` + `app/(tabs)/indents.tsx` | Already present; keep GIVE/GET and styling consistent |
 
 ---
@@ -43,7 +43,7 @@ This plan maps the **Canvas Tesla Logistics OS** update (Mission Telemetry, Fisc
   - **Summary card:** Two columns:
     - Revenue (sale/client price) – green up icon; `formatINR(trip.client_price)`.
     - Due (client price − amount_paid) – red down icon; `formatINR(trip.client_price - trip.amount_paid)`.
-  - **Net Mission P&L:** Single row: margin or (client_price − supplier_rate); color by sign (`Theme.positive` / `Theme.negative`).
+  - **Net Trip P&L:** Single row: margin or (client_price − supplier_rate); color by sign (`Theme.positive` / `Theme.negative`).
   - **Revenue adjustment (optional v1):**
     - Base amount input (₹).
     - List of adjustments (plus/credit, minus/deduct) with reason placeholder and remove; compute `netSaleValue = base + sum(credits) − sum(deductions)`.
@@ -79,7 +79,7 @@ This plan maps the **Canvas Tesla Logistics OS** update (Mission Telemetry, Fisc
   - **Other tabs:** same period can apply to aggregated data if/when API supports it; otherwise show “MONTH” as default and disable or hide filter for non-ledger until backend is ready.
 
 - **B3. Labels**
-  - `summaryLabels` per tab: ledger → “Total Cash In” / “Total Cash Out”; customers → “Total Billing” / “Total Balance”; suppliers → “Total Payables” / “Unsettled Due”; garrage → “Asset Revenue” / “Net Profit”; drivers → “Payroll Vol” / “Salary Due”.
+  - `summaryLabels` per tab: ledger → “Total Cash In” / “Total Cash Out”; customers → “Total Billing” / “Total Balance”; suppliers → “Total Payables” / “Unsettled Due”; garrage → “Vehicle Revenue” / “Net Profit”; drivers → “Total Payroll” / “Salary Due”.
 
 **New:** Optional `components/finance/TreasurySummaryBanner.tsx` (props: `totalIn`, `totalOut`, `labelIn`, `labelOut`, `periodFilter`, `onPeriodChange`).
 
@@ -101,7 +101,7 @@ This plan maps the **Canvas Tesla Logistics OS** update (Mission Telemetry, Fisc
 
 **File:** `app/(tabs)/ops-agent.tsx`
 
-- Subtitle: “Neural Mission Control” (already “AUTOPILOT INTERFACE”).
+- Subtitle: “Neural Trip Control” (already “AUTOPILOT INTERFACE”).
 - On “sync complete” response: show a short-lived success toast: “SYNC COMPLETE” with checkmark (reuse or add a small `SuccessToast` using Theme).
 - Optional: use Sparkles-style icon (e.g. FontAwesome “bolt” already used) for bot label; keep Tesla accent `Theme.teslaRed`.
 
@@ -148,6 +148,6 @@ This plan maps the **Canvas Tesla Logistics OS** update (Mission Telemetry, Fisc
 - **Phase A:** `app/trip/[id].tsx` — Tracking | Finance tabs; `TripTrackingBlock`, `TripFinanceBlock`; single read `getTripById`, refetch on focus + realtime.
 - **Phase B:** `app/(tabs)/finance.tsx` — `TreasurySummaryBanner`, period filter (TODAY/MONTH/RANGE), single ledger fetch + client-side filter; tab totals via `onTotals`.
 - **Phase C:** `components/NetworkHandshakeOverlay.tsx` — reusable; wire when partner flows exist.
-- **Phase D:** `app/(tabs)/ops-agent.tsx` — subtitle "Neural Mission Control", "SYNC COMPLETE" toast.
+- **Phase D:** `app/(tabs)/ops-agent.tsx` — subtitle "Neural Trip Control", "SYNC COMPLETE" toast.
 - **Realtime:** `lib/useRealtime.ts` — subscriptions for `transactions` and `trips`; one refetch only when Postgres changes (no polling, reduced reads).
 - **Cleanup:** Draft file removed per plan §5.

@@ -208,8 +208,8 @@ export default function DriverDetailScreen({
   >([]);
   const [driverTransactions, setDriverTransactions] = useState<LedgerRow[]>([]);
   const [driverDetailTab, setDriverDetailTab] = useState<
-    "missions" | "ledger" | "statement"
-  >("missions");
+    "trips" | "ledger" | "statement"
+  >("trips");
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -935,7 +935,7 @@ export default function DriverDetailScreen({
       <View style={styles.scorecard}>
         <View style={styles.scorecardTop}>
           <View style={styles.scorecardLeft}>
-            <Text style={styles.scorecardLabel}>GRID FISCAL DNA</Text>
+            <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
             <Text style={styles.scorecardSalesLabel}>DRIVER PAYMENTS</Text>
             <Text style={styles.scorecardAmount}>
               {formatINR(totalDriverEarnings)}
@@ -971,18 +971,18 @@ export default function DriverDetailScreen({
         <TouchableOpacity
           style={[
             styles.tabItem,
-            driverDetailTab === "missions" && styles.tabItemActive,
+            driverDetailTab === "trips" && styles.tabItemActive,
           ]}
-          onPress={() => setDriverDetailTab("missions")}
+          onPress={() => setDriverDetailTab("trips")}
           activeOpacity={0.8}
         >
           <Text
             style={[
               styles.tabItemText,
-              driverDetailTab === "missions" && styles.tabItemTextActive,
+              driverDetailTab === "trips" && styles.tabItemTextActive,
             ]}
           >
-            MISSIONS
+            TRIPS
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -1386,7 +1386,7 @@ export default function DriverDetailScreen({
         </View>
       </Modal>
 
-      {driverDetailTab === "missions" && (
+      {driverDetailTab === "trips" && (
         <ScrollView
           style={styles.tabScroll}
           contentContainerStyle={[

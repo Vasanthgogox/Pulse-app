@@ -1,5 +1,5 @@
 /**
- * Treasury Fiscal Matrix — Drivers tab. O(n): due = trips (commission), paid = ledger only (no trip.amount_paid).
+ * Treasury Financial Summary — Drivers tab. O(n): due = trips (commission), paid = ledger only (no trip.amount_paid).
  * Layout aligned with Customers tab: wrap, header, summary row, table card.
  */
 import type { ReactNode } from 'react';

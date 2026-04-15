@@ -1,5 +1,5 @@
 /**
- * Expanded card for a Ledger row in the Treasury Fiscal Matrix. Shows ledger details,
+ * Expanded card for a Ledger row in the Treasury Financial Summary. Shows ledger details,
  * associated trip, trip statement (Sale/Received/Due etc.), and associated transactions.
  * Transaction list styled like Google Pay / PhonePe history.
  */
@@ -104,7 +104,7 @@ export interface LedgerExpandedCardProps {
   formatNumSignedFn?: (n: number) => string;
   /** Id of the current ledger entry (expanded row); this transaction is highlighted in the list. */
   highlightTransactionId?: string | null;
-  /** Optional: called when user taps "Download Mission Protocol". */
+  /** Optional: called when user taps "Download Trip Protocol". */
   onDownloadPress?: () => void;
 }
 
@@ -496,7 +496,7 @@ export function LedgerExpandedCard({
                 activeOpacity={0.8}
               >
                 <FontAwesome name="download" size={12} color={Theme.primary} />
-                <Text style={styles.downloadBtnText}>Download Mission Protocol</Text>
+                <Text style={styles.downloadBtnText}>Download Trip Protocol</Text>
               </TouchableOpacity>
             ) : null}
           </View>

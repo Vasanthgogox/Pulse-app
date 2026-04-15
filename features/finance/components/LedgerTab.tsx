@@ -1,5 +1,5 @@
 /**
- * Treasury Fiscal Matrix — Ledger tab. Table view (default) or Transaction view (GPay-style).
+ * Treasury Financial Summary — Ledger tab. Table view (default) or Transaction view (GPay-style).
  * When transactions prop is provided, uses it (single read from parent); otherwise uses TanStack Query cache.
  */
 import { ALL_LEDGER_CATEGORY_VALUES } from "@/components/AddTransactionModal";

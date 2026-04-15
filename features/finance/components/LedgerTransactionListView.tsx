@@ -277,7 +277,7 @@ function TimelineExpandedDetail({
       <View style={styles.timelineExpandedMissionBlock}>
         <View style={styles.timelineExpandedMissionHeader}>
           <Text style={styles.timelineExpandedMissionHeaderText}>
-            Associated Mission
+            Associated Trip
           </Text>
         </View>
         <View style={styles.timelineExpandedMissionInner}>

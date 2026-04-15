@@ -629,7 +629,7 @@ export default function SupplierDetailScreen({
   const lockedPartyName = supplierName.trim() || t("supplier");
 
   const tabConfig = [
-    { id: "trips" as const, label: "Missions" },
+    { id: "trips" as const, label: "Trips" },
     { id: "cash" as const, label: "Cash Flow" },
     { id: "shared" as const, label: "Shared" },
   ];
@@ -695,7 +695,7 @@ export default function SupplierDetailScreen({
         <View style={styles.scorecard}>
           <View style={styles.scorecardTop}>
             <View style={styles.scorecardLeft}>
-              <Text style={styles.scorecardLabel}>GRID FISCAL DNA</Text>
+              <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
               <Text style={styles.scorecardSalesLabel}>CONTRACT VALUE</Text>
               <Text style={styles.scorecardAmount}>{formatINR(contractValue)}</Text>
             </View>
@@ -744,7 +744,7 @@ export default function SupplierDetailScreen({
         {detailSubTab === "trips" && (
           <View style={styles.tableCard}>
             <View style={styles.tableHeader}>
-              <Text style={[styles.th, styles.thMission]}>Mission</Text>
+              <Text style={[styles.th, styles.thMission]}>Trip</Text>
               <Text style={[styles.th, styles.thSales]}>Contract</Text>
               <Text style={[styles.th, styles.thRight]}>Paid</Text>
               <Text style={[styles.th, styles.thRight]}>Due</Text>
@@ -774,7 +774,7 @@ export default function SupplierDetailScreen({
               ))
             ) : (
               <View style={styles.emptyRow}>
-                <Text style={styles.emptyRowText}>No missions</Text>
+                <Text style={styles.emptyRowText}>No trips</Text>
               </View>
             )}
           </View>

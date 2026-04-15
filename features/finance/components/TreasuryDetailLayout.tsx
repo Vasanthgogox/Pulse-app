@@ -1,6 +1,6 @@
 /**
  * Shared detail-page layout: black header (TeslaHeader) + optional black card (tabs + summary + search).
- * Use for all entity/trip detail screens so they match the Treasury Fiscal Matrix UI globally.
+ * Use for all entity/trip detail screens so they match the Treasury Financial Summary UI globally.
  */
 import { TeslaHeader } from "@/components/TeslaHeader";
 import Layout from "@/constants/Layout";
@@ -100,7 +100,7 @@ export function TreasuryDetailLayout({
               labelOut={summaryCard.labelOut}
               searchQuery={summaryCard.searchQuery}
               onSearchChange={summaryCard.onSearchChange}
-              searchPlaceholder={summaryCard.searchPlaceholder ?? "Search mission, destination…"}
+              searchPlaceholder={summaryCard.searchPlaceholder ?? "Search trip, destination…"}
               onReportPress={summaryCard.onReportPress}
             />
           </View>
