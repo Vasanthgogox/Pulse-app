@@ -1162,15 +1162,17 @@ export default function NetworkScreen() {
                               </View>
                             </View>
                           </View>
-                          <Text
-                            style={styles.networkCardTitle}
-                            numberOfLines={2}
-                          >
-                            {displayName}
-                          </Text>
-                          <Text style={styles.cardTimeAgo}>
-                            {shortRelativeTime(item.created_at)}
-                          </Text>
+                          <View style={styles.titleRow}>
+                            <Text
+                              style={styles.networkCardTitleInline}
+                              numberOfLines={1}
+                            >
+                              {displayName}
+                            </Text>
+                            <Text style={styles.cardTimeAgoInline}>
+                              {shortRelativeTime(item.created_at)}
+                            </Text>
+                          </View>
                           <View style={styles.networkCardInner}>
                             <View style={styles.networkCardInnerRow}>
                               <View
@@ -2229,6 +2231,23 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     marginBottom: 12,
   },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 8,
+    marginBottom: 12,
+  },
+  networkCardTitleInline: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: TESLA_BLACK,
+    textTransform: "uppercase",
+  },
+  cardTimeAgoInline: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+  },
   networkCardInner: {
     backgroundColor: Theme.surfaceGray,
     borderRadius: 12,
@@ -2461,22 +2480,21 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   cancelInlineBtn: {
-    minWidth: 72,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: "rgba(244,63,94,0.1)",
+    marginBottom: 4,
+    minWidth: 64,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: "rgba(244,63,94,0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(244,63,94,0.3)",
   },
   cancelInlineBtnText: {
-    fontSize: 9,
-    fontWeight: "700",
+    fontSize: 7,
+    fontWeight: "800",
     color: ROSE_500,
     textTransform: "uppercase",
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
   },
   confirmModalBackdrop: {
     flex: 1,
