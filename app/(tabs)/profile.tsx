@@ -148,7 +148,11 @@ export default function ProfileScreen() {
     capabilities.includes("dispatch_for_own_fleet");
 
   const handleClose = () => {
-    router.back();
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.navigate("/");
+    }
   };
 
   const handleSignOut = async () => {

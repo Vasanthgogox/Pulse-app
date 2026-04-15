@@ -85,7 +85,13 @@ export default function DriverProfileScreen() {
         ]}
       >
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.navigate("/");
+            }
+          }}
           style={styles.backBtn}
           activeOpacity={0.7}
           accessibilityLabel="Back"

@@ -11,6 +11,7 @@ import { Tabs } from 'expo-router';
 function DriverTabsNavigator() {
   return (
     <Tabs
+      backBehavior="history"
       tabBar={(props) => <DriverTabBar {...props} />}
       screenOptions={{
         headerShown: false,

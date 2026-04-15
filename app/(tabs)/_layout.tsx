@@ -88,6 +88,7 @@ export default function TabLayout() {
   return (
     <DemoTabBarScrollProvider>
       <Tabs
+        backBehavior="history"
         tabBar={(props) => <DemoCustomTabBar {...props} />}
         screenOptions={{
           headerShown: false,
