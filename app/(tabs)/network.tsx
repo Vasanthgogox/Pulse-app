@@ -1129,7 +1129,7 @@ export default function NetworkScreen() {
                                   {actingRequestId === item.id ? (
                                     <ActivityIndicator
                                       size="small"
-                                      color={ROSE_500}
+                                      color={Theme.screenBackground}
                                     />
                                   ) : (
                                     <Text style={styles.cancelInlineBtnText}>
@@ -2483,16 +2483,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-    backgroundColor: "rgba(244,63,94,0.1)",
-    marginBottom: 4,
-    minWidth: 64,
+    backgroundColor: ROSE_500,
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: 4,
   },
   cancelInlineBtnText: {
     fontSize: 7,
     fontWeight: "800",
-    color: ROSE_500,
+    color: Theme.screenBackground,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
