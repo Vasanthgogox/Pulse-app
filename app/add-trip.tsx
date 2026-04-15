@@ -65,7 +65,7 @@ export default function AddTripPage() {
       if (trip) {
         invalidateTrips(currentOrganization.id);
       }
-      if (trip && otp) return { trip, otp };
+      if (trip && otp && options?.driverPhone?.trim()) return { trip, otp };
       closeAndGoBack();
       return;
     }

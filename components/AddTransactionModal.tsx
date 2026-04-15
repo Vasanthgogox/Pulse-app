@@ -21,6 +21,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -1306,7 +1307,22 @@ export function AddTransactionModal({
             },
           ]}
         >
-          <View style={styles.panelScrollInner}>
+          <TouchableWithoutFeedback
+            onPress={() => {
+              Keyboard.dismiss();
+              const hasOpenPicker =
+                showPartyPicker ||
+                showTripPicker ||
+                showCategoryPicker ||
+                showDriverPaymentTypePicker ||
+                showDriverForSalaryPicker ||
+                showVehiclePicker ||
+                showPaymentPicker;
+              if (hasOpenPicker) closeAllPickers();
+            }}
+            accessible={false}
+          >
+            <View style={styles.panelScrollInner}>
             {/* Header: LEDGER SYNC + optional "Entry for [name]" + IN/OUT toggle */}
             <View style={styles.headerRow}>
               <View style={styles.titleBlock}>
@@ -1986,6 +2002,7 @@ export function AddTransactionModal({
 
             {!fullPage && submitButton}
           </View>
+          </TouchableWithoutFeedback>
         </ScrollView>
 
         {fullPage && (
@@ -2119,9 +2136,9 @@ export function AddTransactionModal({
         {formContent}
         {pickerModalVisible ? (
           <Modal transparent visible animationType="fade" onRequestClose={closeAllPickers}>
-            <TouchableOpacity style={StyleSheet.absoluteFill} onPress={closeAllPickers} activeOpacity={1} />
-            <View style={[styles.pickerModalContainer, { paddingBottom: insets.bottom + 16 }]}>
-              <View style={[styles.pickerModalPanel, { height: Math.min(windowHeight * 0.5, 380) }]}>
+            <View style={[styles.pickerModalContainer, { paddingBottom: insets.bottom + 16 }]} pointerEvents="box-none">
+              <TouchableOpacity style={StyleSheet.absoluteFill} onPress={closeAllPickers} activeOpacity={1} />
+              <View style={[styles.pickerModalPanel, { height: Math.min(windowHeight * 0.5, 380) }]} pointerEvents="auto">
                 {renderPickerModalContent()}
               </View>
             </View>
@@ -2142,7 +2159,21 @@ export function AddTransactionModal({
       <View style={styles.backdrop}>
         <TouchableOpacity
           style={StyleSheet.absoluteFill}
-          onPress={handleClose}
+          onPress={() => {
+            const hasOpenPicker =
+              showPartyPicker ||
+              showTripPicker ||
+              showCategoryPicker ||
+              showDriverPaymentTypePicker ||
+              showDriverForSalaryPicker ||
+              showVehiclePicker ||
+              showPaymentPicker;
+            if (hasOpenPicker) {
+              closeAllPickers();
+            } else {
+              handleClose();
+            }
+          }}
           activeOpacity={1}
         />
         {formContent}
