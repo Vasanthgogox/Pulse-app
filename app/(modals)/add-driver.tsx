@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { AddDriverModal, type DriverFormData, inviteDriver, createDriver } from '@/features/drivers';
-import { queryKeys } from '@/lib/queryKeys';
+import { queryKeys } from '@/lib/supabase';
 import { closeModal } from './add-driver-closeModal';
 
 export { closeModal };

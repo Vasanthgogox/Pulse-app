@@ -4,10 +4,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { getTripsWhereOrgIsClient, getTripsWhereOrgIsSupplier } from '@/features/trips/services/trips.service';
 import { getDriverOffersByOrganization } from '@/features/drivers/services/drivers.service';
-import { getSalaryRequestsByOrganization } from '@/services/salaryRequestsService';
+import { getSalaryRequestsByOrganization } from '@/features/drivers/services/salary-requests.service';
 import { getIndentsByOrganization } from '@/features/indents/services/indents.service';
 import { getAcceptedDirectQuotesByOrg } from '@/features/indents/services/direct-quotes.service';
-import { queryKeys } from '@/lib/queryKeys';
+import { queryKeys } from '@/lib/supabase';
 
 export function useTripsWhereOrgIsClientQuery(orgId: string | null) {
   return useQuery({

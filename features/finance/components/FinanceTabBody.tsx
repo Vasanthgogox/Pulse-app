@@ -1,7 +1,7 @@
 /**
  * Renders the body of the selected finance tab: Ledger, Customers, Suppliers, Garage, or Drivers.
  */
-import type { TripOption } from "@/components/AddTransactionModal";
+import type { TripOption } from "@/components/modals/AddTransactionModal";
 import { CustomersTab } from "@/features/clients/components/CustomersTab";
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import { DriversTab } from "@/features/drivers/components/DriversTab";
@@ -17,7 +17,7 @@ import type { TripRow } from "@/features/trips";
 import type { GarrageViewTab } from "@/features/vehicles/components/GarrageTab";
 import { GarrageTab } from "@/features/vehicles/components/GarrageTab";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
-import type { ConnectionRequestRow } from "@/services/connectionRequestsService";
+import type { ConnectionRequestRow } from "@/features/network/services/connection-requests.service";
 import type { ReactNode } from "react";
 import { Platform, Text, View, useWindowDimensions } from "react-native";
 import type { LedgerRow } from "../services/finance.service";

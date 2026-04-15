@@ -1,5 +1,5 @@
-import type { DriverPaymentType, PartyOption, TripOption } from "@/components/AddTransactionModal";
-import { FinanceFAB } from "@/components/FinanceFAB";
+import type { DriverPaymentType, PartyOption, TripOption } from "@/components/modals/AddTransactionModal";
+import { FinanceFAB } from "@/components/navigation/FinanceFAB";
 import { Layout } from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -25,10 +25,10 @@ import {
   getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
 import { formatIndianVehicleNumber, formatLedgerDate } from "@/lib/format";
-import { queryKeys } from "@/lib/queryKeys";
+import { queryKeys } from "@/lib/supabase";
 import {
   updateSalaryRequestStatus
-} from "@/services/salaryRequestsService";
+} from "@/features/drivers/services/salary-requests.service";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -243,7 +243,7 @@ export function FinanceScreen() {
   const [garageViewTab, setGarageViewTab] = useState<GarrageViewTab>("vehicle");
 
   const onSuccessNavigateToDetail = useCallback(
-    (data: import("@/components/AddTransactionModal").AddTransactionData) => {
+    (data: import("@/components/modals/AddTransactionModal").AddTransactionData) => {
       if (data.tripId) {
         router.push(`/trip/${data.tripId}` as const);
         return;

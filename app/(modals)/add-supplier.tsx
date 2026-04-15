@@ -9,8 +9,8 @@ import { createSupplier } from '@/features/suppliers/services/suppliers.service'
 import {
   getConnectionInviteeByPhone,
   createConnectionRequest,
-} from '@/services/connectionRequestsService';
-import { queryKeys } from '@/lib/queryKeys';
+} from '@/features/network/services/connection-requests.service';
+import { queryKeys } from '@/lib/supabase';
 import { useQueryClient } from '@tanstack/react-query';
 
 export default function AddSupplierScreen() {

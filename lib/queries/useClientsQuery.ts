@@ -3,7 +3,7 @@
  */
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getClientsByOrganization } from '@/features/clients/services/clients.service';
-import { queryKeys } from '@/lib/queryKeys';
+import { queryKeys } from '@/lib/supabase';
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
 
 /** Full list (no pagination). Use for dropdowns, Finance entities. */

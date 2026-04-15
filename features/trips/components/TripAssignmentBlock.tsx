@@ -31,7 +31,7 @@ import {
   formatIndianVehicleNumber,
   formatIndianVehicleNumberInput,
 } from "@/lib/format";
-import { validatePhone } from "@/lib/phoneValidation";
+import { validatePhone } from "@/lib/validation";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {

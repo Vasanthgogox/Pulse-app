@@ -5,7 +5,7 @@
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { formatIndianVehicleNumber, formatIndianVehicleNumberInput } from "@/lib/format";
-import { validatePhone } from "@/lib/phoneValidation";
+import { validatePhone } from "@/lib/validation";
 import { type ClientRow } from "@/features/clients/services/clients.service";
 import {
     getDriversByOrganization,

@@ -3,7 +3,7 @@
  * Single source of truth: clients, trips, suppliers, vehicles, drivers, etc. read from cache.
  * No duplicate fetch on sub-tab change; refreshKey no longer triggers refetch (cache staleTime handles refocus).
  */
-import type { PartyOption, TripOption } from "@/components/AddTransactionModal";
+import type { PartyOption, TripOption } from "@/components/modals/AddTransactionModal";
 import { type ClientRow } from "@/features/clients/services/clients.service";
 import { type DriverOffer, type DriverRow } from "@/features/drivers/services/drivers.service";
 import type { DirectQuoteRow } from "@/features/indents/services/direct-quotes.service";
@@ -14,8 +14,8 @@ import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import { getAvailablePeriodOptions } from "@/features/vehicles/pnl";
 import { type VehicleRow } from "@/features/vehicles/services/vehicles.service";
 import { formatLedgerDate } from "@/lib/format";
-import type { ConnectionRequestRow } from "@/services/connectionRequestsService";
-import type { SalaryRequestWithDriverRow } from "@/services/salaryRequestsService";
+import type { ConnectionRequestRow } from "@/features/network/services/connection-requests.service";
+import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salary-requests.service";
 import {
   useAcceptedDirectQuotesForFinanceQuery,
   useClientsQuery,

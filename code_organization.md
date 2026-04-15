@@ -531,26 +531,26 @@
   Summary: 13 Changes, Ranked                                                                                                    
                   
   IMMEDIATE (this week):
-    1. Add index.ts to: invoicing, log-pods, network, ops-agent, pod-reconciliation                                              
-    2. Move root-level screens into each feature's components/                                                                   
-    3. Add contexts/index.ts                                                                                                     
-    4. Add constants/index.ts                                                                                                    
-    5. Rename courierCategories.ts → courier-categories.ts                                                                       
+    ✅  1. Add index.ts to: invoicing, log-pods, network, ops-agent, pod-reconciliation
+    ✅  2. Move root-level screens into each feature's components/
+    ✅  3. Add contexts/index.ts
+    ✅  4. Add constants/index.ts
+    ✅  5. Rename courierCategories.ts → courier-categories.ts
    
   NEXT SPRINT:                                                                                                                   
-    6. Move services/connectionRequestsService → features/network/services/
-    7. Move services/driverLocationService → features/drivers/services/                                                          
-    8. Move services/salaryRequestsService → features/drivers/services/
-    9. Move services/sharedLedgerService → features/finance/services/                                                            
-   10. Move services/tripDocumentsService → features/trips/services/                                                             
-   11. Move services/routingService → features/trips/services/
-   12. Categorize components/ into 7 sub-dirs + add barrel                                                                       
-   13. Delete 3 redundant services/ re-export facades                                                                            
+    ✅  6. Move services/connectionRequestsService → features/network/services/
+    ✅  7. Move services/driverLocationService → features/drivers/services/
+    ✅  8. Move services/salaryRequestsService → features/drivers/services/
+    ✅  9. Move services/sharedLedgerService → features/finance/services/
+    ✅ 10. Move services/tripDocumentsService → features/trips/services/
+    ✅ 11. Move services/routingService → features/trips/services/
+    ✅ 12. Categorize components/ into 7 sub-dirs + add barrel
+    ✅ 13. Delete 3 redundant services/ re-export facades
                                                                                                                                  
   LONG-TERM:                                                                                                                     
-   14. Reorganize lib/ into supabase/, format/, validation/, platform/
-   15. Group app/(auth)/ routes                                                                                                  
-   16. Split lib/format.ts by domain
+    ✅ 14. Reorganize lib/ into supabase/, format/, validation/, platform/
+    ✅ 15. Group app/(auth)/ routes
+    ✅ 16. Split lib/format.ts by domain
                                                                                                                                  
   The existing feature architecture is already top 20%. These 13 changes bring it to top 1% — consistent, navigable, zero        
   ambiguity about where any new file belongs.

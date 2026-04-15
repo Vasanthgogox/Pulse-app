@@ -32,7 +32,7 @@ import {
 } from '@/constants/UserAvatars';
 import { useAuth } from '@/contexts/AuthContext';
 import { pickAndUploadAvatar, getSignedAvatarUrl } from '@/lib/avatarUpload';
-import { validatePhone } from '@/lib/phoneValidation';
+import { validatePhone } from '@/lib/validation';
 import { VALIDATION, maxLength, validateFullName } from '@/lib/validation';
 import * as authService from '../services/auth.service';
 

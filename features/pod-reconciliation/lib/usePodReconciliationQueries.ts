@@ -4,7 +4,7 @@ import {
   type PodTab 
 } from '../services/podReconciliationService';
 import { fetchPodReconciliationSummary } from '@/features/invoicing/services/invoicing.service';
-import { queryKeys } from '@/lib/queryKeys';
+import { queryKeys } from '@/lib/supabase';
 
 export function usePodReconciliationTripsQuery(
   orgId: string | null,

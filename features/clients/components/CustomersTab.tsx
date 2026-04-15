@@ -2,9 +2,9 @@
  * Treasury Financial Summary — Customers tab. O(n) aggregation: received = ledger only, billed = trips only.
  * Supports matrix (table) view and ledger (transaction cards) view with toggle.
  */
-import { FAB } from "@/components/FAB";
-import { IntegrationModeTag } from "@/components/IntegrationModeTag";
-import { LiquidFillPill } from "@/components/LiquidFillPill";
+import { FAB } from "@/components/navigation/FAB";
+import { IntegrationModeTag } from "@/components/display/IntegrationModeTag";
+import { LiquidFillPill } from "@/components/feedback/LiquidFillPill";
 import Theme from "@/constants/Theme";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import {

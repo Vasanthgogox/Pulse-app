@@ -1,7 +1,7 @@
 /**
  * Ops Agent utils — natural language reply, HTML escape, report to HTML/plain text.
  */
-import type { ChatReportData } from "@/services/opsAgentService";
+import type { ChatReportData } from "@/features/ops-agent/services/ops-agent.service";
 
 /** Strip code blocks (e.g. ```tool_code ... ```) so we show only natural language to the user. */
 export function toNaturalLanguageReply(text: string): string {

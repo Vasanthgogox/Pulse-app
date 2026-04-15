@@ -1,6 +1,6 @@
 import { Text, StyleSheet, Alert } from 'react-native';
-import { PaymentCaptureLayout } from '@/components/PaymentCaptureLayout';
-import { PaymentTransactionRow } from '@/components/PaymentTransactionRow';
+import { PaymentCaptureLayout } from '@/components/layout/PaymentCaptureLayout';
+import { PaymentTransactionRow } from '@/components/display/PaymentTransactionRow';
 import { formatINR } from '@/lib/format';
 import Theme from '@/constants/Theme';
 import { usePreventScreenCapture } from '@/lib/usePreventScreenCapture';

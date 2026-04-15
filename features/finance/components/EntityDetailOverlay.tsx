@@ -2,9 +2,9 @@
  * Entity detail overlay — TeslaHeader, summary bar, toolbar (search + report + filter), "Transaction Ledger" table.
  * Report fetches ledger at client/entity level and offers download.
  */
-import { ALL_LEDGER_CATEGORY_VALUES } from "@/components/AddTransactionModal";
-import { FinanceFAB } from "@/components/FinanceFAB";
-import { TeslaHeader } from "@/components/TeslaHeader";
+import { ALL_LEDGER_CATEGORY_VALUES } from "@/components/modals/AddTransactionModal";
+import { FinanceFAB } from "@/components/navigation/FinanceFAB";
+import { TeslaHeader } from "@/components/navigation/TeslaHeader";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -28,7 +28,7 @@ import {
     formatLedgerDateTime,
     formatRelative,
 } from "@/lib/format";
-import type { SalaryRequestWithDriverRow } from "@/services/salaryRequestsService";
+import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salary-requests.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";

@@ -4,7 +4,7 @@
  * trip rate or commission derived from client_price/supplier_rate to the driver.
  */
 
-import * as driversService from "@/services/driversService";
+import * as driversService from "@/features/drivers/services/drivers.service";
 
 export interface TripWithSupplier {
   supplier_id?: string | null;

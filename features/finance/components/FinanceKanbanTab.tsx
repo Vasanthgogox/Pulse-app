@@ -3,7 +3,7 @@
  * Categorizes ledger entries into Customers, Suppliers, Garage, and Drivers columns.
  * Card style matches the Timeline layout from Client Detail / Cash Flow.
  */
-import { ALL_LEDGER_CATEGORY_VALUES } from "@/components/AddTransactionModal";
+import { ALL_LEDGER_CATEGORY_VALUES } from "@/components/modals/AddTransactionModal";
 import Theme from '@/constants/Theme';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatIndianVehicleNumber, formatLedgerAmount } from '@/lib/format';

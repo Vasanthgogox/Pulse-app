@@ -3,7 +3,7 @@
  */
 import { useRouter } from 'expo-router';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { LoadBoardModal } from '@/components/LoadBoardModal';
+import { LoadBoardModal } from '@/components/modals/LoadBoardModal';
 import { useSafeBack } from '@/lib/useSafeBack';
 
 export default function LoadBoardFullScreen() {

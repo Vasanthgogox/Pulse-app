@@ -15,7 +15,7 @@ import {
   type LastMessageImage,
   type OpsContext,
   type OpsSessionState,
-} from "@/services/opsAgentService";
+} from "@/features/ops-agent/services/ops-agent.service";
 import { updateClient } from "@/features/clients";
 import { updateSupplier } from "@/features/suppliers";
 import { updateVehicle } from "@/features/vehicles";

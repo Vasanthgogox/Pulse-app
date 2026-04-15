@@ -13,9 +13,9 @@ import Typography from '@/constants/Typography';
 import { LEVELS_CONFIG } from '@/constants/DriverLevels';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { CenteredLoadingView } from '@/components/CenteredLoadingView';
-import * as driversService from '@/services/driversService';
-import * as tripsService from '@/services/tripsService';
+import { CenteredLoadingView } from '@/components/feedback/CenteredLoadingView';
+import * as driversService from '@/features/drivers/services/drivers.service';
+import * as tripsService from '@/features/trips/services/trips.service';
 
 
 const DARK_HERO_BG = '#0f0f0f';

@@ -1,5 +1,5 @@
 /**
  * Home tab: Ops Agent (Autopilot Interface).
- * Screen implementation lives in features/ops-agent/OpsAgentScreen.tsx.
+ * Screen implementation lives in features/ops-agent/components/OpsAgentScreen.tsx.
  */
-export { default } from "@/features/ops-agent/OpsAgentScreen";
+export { default } from "@/features/ops-agent/components/OpsAgentScreen";

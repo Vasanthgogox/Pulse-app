@@ -2,9 +2,9 @@
  * Create Indent — Deploy New Load.
  * Full-screen form: origin, destination, client, budget, supplier target, vehicle, load type, weight, pickup date.
  */
-import { ThemedAlertModal } from "@/components/ThemedAlertModal";
-import { ThemedConfirmModal } from "@/components/ThemedConfirmModal";
-import { TeslaHeader } from "@/components/TeslaHeader";
+import { ThemedAlertModal } from "@/components/modals/ThemedAlertModal";
+import { ThemedConfirmModal } from "@/components/modals/ThemedConfirmModal";
+import { TeslaHeader } from "@/components/navigation/TeslaHeader";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -43,7 +43,7 @@ import {
   runValidators,
   VALIDATION,
 } from "@/lib/validation";
-import { getOptimalRoute } from "@/services/routingService";
+import { getOptimalRoute } from "@/features/trips/services/routing.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";

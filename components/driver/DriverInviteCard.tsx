@@ -1,5 +1,5 @@
 import Theme from '@/constants/Theme';
-import type { DriverInviteRow } from '@/services/driversService';
+import type { DriverInviteRow } from '@/features/drivers/services/drivers.service';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import React from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';

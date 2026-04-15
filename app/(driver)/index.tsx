@@ -1,8 +1,8 @@
 import { DriverHeader } from '@/components/driver/DriverHeader';
 import { DriverInviteCard } from '@/components/driver/DriverInviteCard';
 import { LeafletMap, type LeafletMapRef, type LeafletMarker } from '@/components/driver/LeafletMap';
-import { DriverTripFlowCard } from '@/components/DriverTripFlowCard';
-import { JobRequestCard } from '@/components/JobRequestCard';
+import { DriverTripFlowCard } from '@/components/driver/DriverTripFlowCard';
+import { JobRequestCard } from '@/components/driver/JobRequestCard';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,19 +13,19 @@ import { claimTripByOtp, getPendingOtpTrips } from '@/features/trips';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import { buildOfferText, isActiveMission, isAggregateTrip, isAssignedNotStarted, isCompletedStatus, isRosterTrip } from '@/lib/driverUtils';
 import { formatINR } from '@/lib/format';
-import { formatEstimatedDuration } from '@/lib/formatEstimatedDuration';
+import { formatEstimatedDuration } from '@/lib/format';
 import { darkMapStyle } from '@/lib/mapStyles';
 import { getPopularPlacesInIndia } from '@/lib/placesService';
-import MapView, { Callout, Marker, Polyline } from '@/lib/reactNativeMapsCompat';
-import * as driverLocationService from '@/services/driverLocationService';
-import * as driversService from '@/services/driversService';
+import MapView, { Callout, Marker, Polyline } from '@/lib/platform/maps-compat';
+import * as driverLocationService from '@/features/drivers/services/driver-location.service';
+import * as driversService from '@/features/drivers/services/drivers.service';
 import {
   buildRouteFetchKey,
   getOptimalRoute,
   parseRouteFetchKey,
   type RouteResult,
-} from '@/services/routingService';
-import * as tripsService from '@/services/tripsService';
+} from '@/features/trips/services/routing.service';
+import * as tripsService from '@/features/trips/services/trips.service';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput, BottomSheetView } from '@gorhom/bottom-sheet';
 import AsyncStorage from '@react-native-async-storage/async-storage';

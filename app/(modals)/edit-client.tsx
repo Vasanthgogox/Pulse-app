@@ -1,4 +1,4 @@
-import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { CenteredLoadingView } from "@/components/feedback/CenteredLoadingView";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { EditClientModal } from "@/features/clients/components/EditClientModal";
 import {
@@ -8,7 +8,7 @@ import {
   type ClientRow,
   type UpdateClientData,
 } from "@/features/clients/services/clients.service";
-import { queryKeys } from "@/lib/queryKeys";
+import { queryKeys } from "@/lib/supabase";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";

@@ -1,4 +1,4 @@
-import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { CenteredLoadingView } from "@/components/feedback/CenteredLoadingView";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
@@ -17,11 +17,11 @@ import { computeDriverCommissionForTrip } from "@/features/finance/aggregation/a
 import { useDriverAvatarUri } from "@/lib/avatarUpload";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatINR } from "@/lib/format";
-import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
+import { formatEstimatedDuration } from "@/lib/format";
 import { useSafeBack } from "@/lib/useSafeBack";
-import * as driversService from "@/services/driversService";
-import * as tripDocumentsService from "@/services/tripDocumentsService";
-import * as tripsService from "@/services/tripsService";
+import * as driversService from "@/features/drivers/services/drivers.service";
+import * as tripDocumentsService from "@/features/trips/services/trip-documents.service";
+import * as tripsService from "@/features/trips/services/trips.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";

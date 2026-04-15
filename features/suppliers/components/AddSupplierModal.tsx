@@ -7,9 +7,9 @@
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { pickContactForNameAndPhone } from "@/lib/contactPicker";
-import { validatePhone } from "@/lib/phoneValidation";
-import { inviteeSuggestedCompanyName } from "@/services/connectionRequestsService";
+import { pickContactForNameAndPhone } from "@/lib/platform";
+import { validatePhone } from "@/lib/validation";
+import { inviteeSuggestedCompanyName } from "@/features/network/services/connection-requests.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useEffect, useRef, useState } from "react";
 import {

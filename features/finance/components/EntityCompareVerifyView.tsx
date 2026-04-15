@@ -14,7 +14,7 @@ import {
     getConnectionInviteeByPhone,
     getConnectionRequestsSent,
     type ConnectionInviteeByPhone,
-} from "@/services/connectionRequestsService";
+} from "@/features/network/services/connection-requests.service";
 import {
     acceptPartnerView,
     createDispute,
@@ -26,7 +26,7 @@ import {
     resolveDispute,
     resolveDisputeTableOnly,
     type DisputeRow,
-} from "@/services/sharedLedgerService";
+} from "@/features/finance/services/shared-ledger.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {

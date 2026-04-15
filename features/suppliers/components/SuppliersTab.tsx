@@ -2,8 +2,8 @@
  * Treasury Financial Summary — Suppliers tab. O(n): due = trips only, paid = ledger only, unsettled = max(0, due - paid).
  * Layout aligned with Customers tab: wrap, header, summary row, table card.
  */
-import { IntegrationModeTag } from "@/components/IntegrationModeTag";
-import { LiquidFillPill } from "@/components/LiquidFillPill";
+import { IntegrationModeTag } from "@/components/display/IntegrationModeTag";
+import { LiquidFillPill } from "@/components/feedback/LiquidFillPill";
 import Theme from "@/constants/Theme";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import type { EntityListFilter } from "@/features/finance/components/TreasurySummaryCard";

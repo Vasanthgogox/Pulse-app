@@ -3,7 +3,7 @@
  * Vehicle category (text chips) replaces legacy brand; body length uses a scroll picker + Other (manual).
  * When visible is true, shows as Ledger-style bottom-sheet popup; when undefined, full-screen wizard (e.g. route).
  */
-import { WizardStepLayout } from "@/components/WizardStepLayout";
+import { WizardStepLayout } from "@/components/layout/WizardStepLayout";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useEffect, useMemo, useState } from "react";

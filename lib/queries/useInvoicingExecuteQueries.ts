@@ -6,7 +6,7 @@ import {
   type InvoicingTripView,
   type PodReconciliationSummary,
 } from '@/features/invoicing/services/invoicing.service';
-import { queryKeys } from '@/lib/queryKeys';
+import { queryKeys } from '@/lib/supabase';
 
 export function useInvoicingExecuteTripsQuery(orgId: string | null) {
   return useQuery({

@@ -6,7 +6,7 @@ import {
   DRIVER_PAYMENT_TYPES,
   type AddTransactionData,
   type AddTransactionSubmitOptions,
-} from "@/components/AddTransactionModal";
+} from "@/components/modals/AddTransactionModal";
 import { createDriverLedgerEntry } from "@/features/drivers/services/drivers.service";
 import {
   createLedgerEntry,
@@ -14,7 +14,7 @@ import {
   type LedgerRow,
 } from "../services/finance.service";
 import type { TripEntryContext } from "../components/EntityDetailOverlay";
-import { updateSalaryRequestStatus } from "@/services/salaryRequestsService";
+import { updateSalaryRequestStatus } from "@/features/drivers/services/salary-requests.service";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useCallback } from "react";
 import { Alert } from "react-native";
@@ -35,7 +35,7 @@ export interface UseFinanceTransactionSubmitArgs {
   setAddEntryContext: (c: TripEntryContext | null) => void;
   setShowTransactionModal: (v: boolean) => void;
   setEntitiesRefreshKey: (fn: (k: number) => number) => void;
-  setPendingDriverSalaryRequests: React.Dispatch<React.SetStateAction<import("@/services/salaryRequestsService").SalaryRequestWithDriverRow[]>>;
+  setPendingDriverSalaryRequests: React.Dispatch<React.SetStateAction<import("@/features/drivers/services/salary-requests.service").SalaryRequestWithDriverRow[]>>;
   salaryRequestIdToPayAfterSubmitRef: React.MutableRefObject<string | null>;
   /** When set, called after a new entry is created so the app can navigate to trip/entity detail to show the transaction. */
   onSuccessNavigate?: (data: AddTransactionData) => void;
@@ -57,7 +57,7 @@ function doSubmit(
   setAddEntryContext: (c: TripEntryContext | null) => void,
   setShowTransactionModal: (v: boolean) => void,
   setEntitiesRefreshKey: (fn: (k: number) => number) => void,
-  setPendingDriverSalaryRequests: React.Dispatch<React.SetStateAction<import("@/services/salaryRequestsService").SalaryRequestWithDriverRow[]>>,
+  setPendingDriverSalaryRequests: React.Dispatch<React.SetStateAction<import("@/features/drivers/services/salary-requests.service").SalaryRequestWithDriverRow[]>>,
   salaryRequestIdToPayAfterSubmitRef: React.MutableRefObject<string | null>,
   onSuccessNavigate?: (data: AddTransactionData) => void,
 ) {

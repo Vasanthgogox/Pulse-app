@@ -3,8 +3,8 @@ import { Platform, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Theme from '@/constants/Theme';
 
-import EditScreenInfo from '@/components/EditScreenInfo';
-import { Text, View } from '@/components/Themed';
+import EditScreenInfo from '@/components/demo/EditScreenInfo';
+import { Text, View } from '@/components/display/Themed';
 
 export default function ModalScreen() {
   const insets = useSafeAreaInsets();

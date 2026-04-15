@@ -1,5 +1,5 @@
-import { CenteredLoadingView } from "@/components/CenteredLoadingView";
-import { FinanceFAB } from "@/components/FinanceFAB";
+import { CenteredLoadingView } from "@/components/feedback/CenteredLoadingView";
+import { FinanceFAB } from "@/components/navigation/FinanceFAB";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -115,7 +115,7 @@ export default function SupplierDetailScreen({
 
   useEffect(() => {
     if (supplier?.phone) {
-      import("@/services/connectionRequestsService").then(({ getConnectionInviteeByPhone }) => {
+      import("@/features/network/services/connection-requests.service").then(({ getConnectionInviteeByPhone }) => {
         getConnectionInviteeByPhone(supplier.phone).then(({ invitee }) => {
           if (invitee) setIsInApp(true);
         });

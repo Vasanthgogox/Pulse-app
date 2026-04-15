@@ -9,12 +9,12 @@ import type { DriverFormData } from "@/features/drivers/components/AddDriverModa
 import {
   createConnectionRequest,
   getConnectionInviteeByPhone,
-} from "@/services/connectionRequestsService";
+} from "@/features/network/services/connection-requests.service";
 import { createSupplier } from "@/features/suppliers/services/suppliers.service";
 import type { SupplierFormData } from "@/features/suppliers/components/AddSupplierModal";
 import { createVehicle } from "@/features/vehicles/services/vehicles.service";
 import type { AddVehicleCompletePayload } from "@/features/vehicles/components/AddVehicleModal";
-import { queryKeys } from "@/lib/queryKeys";
+import { queryKeys } from "@/lib/supabase";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { Alert } from "react-native";

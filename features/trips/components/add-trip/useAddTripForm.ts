@@ -5,8 +5,8 @@
  */
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import type { AddTripFormData, AddTripFormState } from './types';
-import { validatePhone } from '@/lib/phoneValidation';
-import { getOptimalRoute } from '@/services/routingService';
+import { validatePhone } from '@/lib/validation';
+import { getOptimalRoute } from '@/features/trips/services/routing.service';
 import {
   VALIDATION,
   maxLength,

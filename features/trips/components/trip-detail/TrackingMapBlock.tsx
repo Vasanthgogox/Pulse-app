@@ -13,10 +13,10 @@ import {
 } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Theme from "@/constants/Theme";
-import type { DriverLocationRow } from "@/services/driverLocationService";
-import { getOptimalRoute, type RouteResult } from "@/services/routingService";
+import type { DriverLocationRow } from "@/features/drivers/services/driver-location.service";
+import { getOptimalRoute, type RouteResult } from "@/features/trips/services/routing.service";
 import { LeafletMap } from "@/components/driver/LeafletMap";
-import MapView, { Callout, Marker, Polyline } from "@/lib/reactNativeMapsCompat";
+import MapView, { Callout, Marker, Polyline } from "@/lib/platform/maps-compat";
 
 type MapCoordinate = {
   latitude: number;

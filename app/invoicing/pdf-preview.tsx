@@ -11,12 +11,12 @@ import { useOrganization } from '@/contexts/OrganizationContext';
 import type { AdditionalCharge, InvoiceConfig, InvoicingTripView } from '@/features/invoicing/services/invoicing.service';
 import { getInvoiceBrandingSettings } from '@/features/invoicing/services/invoiceBranding.service';
 import { useInvoiceCalc } from '@/features/invoicing/hooks/useInvoiceCalc';
-import { CenteredLoadingView } from '@/components/CenteredLoadingView';
+import { CenteredLoadingView } from '@/components/feedback/CenteredLoadingView';
 import { useAuth } from '@/contexts/AuthContext';
 import { getCapabilitiesFromProfile } from '@/lib/capabilities';
-import type { InvoicePdfData } from '@/components/InvoicePdf.types';
+import type { InvoicePdfData } from '@/components/document/InvoicePdf.types';
 
-import InvoicePdf from '@/components/InvoicePdf';
+import InvoicePdf from '@/components/document/InvoicePdf';
 
 interface InvoicePreviewParams extends Record<string, string | undefined> {
   activeClient: string;

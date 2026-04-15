@@ -8,7 +8,7 @@ import {
   getTripsWhereOrgIsSupplier,
   getShipperDisplayNamesForSupplierTrips,
 } from '@/features/trips/services/trips.service';
-import { queryKeys } from '@/lib/queryKeys';
+import { queryKeys } from '@/lib/supabase';
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
 
 /** Merge owner trips + shared supplier-side load trips (dedupe by id), sort by created_at desc. */

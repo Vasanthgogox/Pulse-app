@@ -7,8 +7,8 @@ import {
   type CourierPartnerRow,
   type LogPodsPayload,
   type LogPodsTripView,
-} from '@/services/logPodsService';
-import { queryKeys } from '@/lib/queryKeys';
+} from '@/features/log-pods/services/log-pods.service';
+import { queryKeys } from '@/lib/supabase';
 
 export function useLogIncomingPodsTripsQuery(orgId: string | null) {
   return useQuery({

@@ -4,8 +4,8 @@
  * One service per domain (microservices). Same DB as Q-unified-base.
  * Service-layer validation: single pass over inputs before Supabase calls.
  */
-import { validateEmail } from "@/lib/emailValidation";
-import { validatePhone } from "@/lib/phoneValidation";
+import { validateEmail } from "@/lib/validation";
+import { validatePhone } from "@/lib/validation";
 import { supabase } from "@/lib/supabase";
 import {
     VALIDATION,

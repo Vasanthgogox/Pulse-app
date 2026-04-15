@@ -1,7 +1,7 @@
 /**
  * Ops Agent UI types — message model, theme ref, and confirmation types.
  */
-import type { ChatReportData, CreatedEntitySnapshot } from "@/services/opsAgentService";
+import type { ChatReportData, CreatedEntitySnapshot } from "@/features/ops-agent/services/ops-agent.service";
 
 export type MessageRole = "user" | "system";
 

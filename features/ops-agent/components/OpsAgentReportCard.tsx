@@ -1,6 +1,6 @@
 import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import type { ChatReportData } from "@/services/opsAgentService";
+import type { ChatReportData } from "@/features/ops-agent/services/ops-agent.service";
 import type { OpsRef } from "../types";
 import type { OpsAgentStyles } from "../opsAgentStyles";
 

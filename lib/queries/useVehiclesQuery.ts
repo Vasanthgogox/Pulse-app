@@ -3,7 +3,7 @@
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getVehiclesByOrganization } from '@/features/vehicles/services/vehicles.service';
-import { queryKeys } from '@/lib/queryKeys';
+import { queryKeys } from '@/lib/supabase';
 
 export function useVehiclesQuery(orgId: string | null) {
   return useQuery({

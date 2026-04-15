@@ -3,7 +3,7 @@
  * Uses TanStack Query cache so data is shared with rest of app.
  */
 import { useMemo } from "react";
-import type { OpsContext } from "@/services/opsAgentService";
+import type { OpsContext } from "@/features/ops-agent/services/ops-agent.service";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import {
   useClientsQuery,

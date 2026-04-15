@@ -3,7 +3,7 @@
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDriversByOrganization } from '@/features/drivers/services/drivers.service';
-import { queryKeys } from '@/lib/queryKeys';
+import { queryKeys } from '@/lib/supabase';
 
 export function useDriversQuery(orgId: string | null) {
   return useQuery({

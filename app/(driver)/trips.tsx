@@ -8,10 +8,10 @@ import {
 } from "@/contexts/DriverThemeContext";
 import { useDriverAvatarUri } from "@/lib/avatarUpload";
 import { isAggregateTrip, tripEarningsForDriver } from "@/lib/driverUtils";
-import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
+import { formatEstimatedDuration } from "@/lib/format";
 import { formatTime } from "@/lib/format";
-import * as driversService from "@/services/driversService";
-import * as tripsService from "@/services/tripsService";
+import * as driversService from "@/features/drivers/services/drivers.service";
+import * as tripsService from "@/features/trips/services/trips.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";

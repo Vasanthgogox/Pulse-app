@@ -12,7 +12,7 @@ import {
   getDirectQuoteCountsByIndentIds,
   type DirectQuoteRow,
 } from '@/features/indents/services/direct-quotes.service';
-import { queryKeys } from '@/lib/queryKeys';
+import { queryKeys } from '@/lib/supabase';
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
 
 /** Full list. Use for Load Board, Create Indent when list is small. */

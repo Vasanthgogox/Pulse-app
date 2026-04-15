@@ -1,5 +1,5 @@
-import { CenteredLoadingView } from "@/components/CenteredLoadingView";
-import { FinanceFAB } from "@/components/FinanceFAB";
+import { CenteredLoadingView } from "@/components/feedback/CenteredLoadingView";
+import { FinanceFAB } from "@/components/navigation/FinanceFAB";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -117,7 +117,7 @@ export default function ClientDetailScreen({
   
   useEffect(() => {
     if (client?.phone) {
-      import("@/services/connectionRequestsService").then(({ getConnectionInviteeByPhone }) => {
+      import("@/features/network/services/connection-requests.service").then(({ getConnectionInviteeByPhone }) => {
         getConnectionInviteeByPhone(client.phone).then(({ invitee }) => {
           if (invitee) setIsInApp(true);
         });

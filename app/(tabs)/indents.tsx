@@ -6,10 +6,10 @@ import { getCapabilitiesFromProfile, canAccessIndents } from '@/lib/capabilities
 import { getIndentDisplayNumber, type IndentRow } from '@/features/indents';
 import { useIndentsQuery } from '@/lib/queries';
 import { useRefreshWithFeedback } from '@/lib/useRefreshWithFeedback';
-import { ListScreenLayout } from '@/components/ListScreenLayout';
-import { SummaryCard } from '@/components/SummaryCard';
-import { EntityRow } from '@/components/EntityRow';
-import { FAB } from '@/components/FAB';
+import { ListScreenLayout } from '@/components/layout/ListScreenLayout';
+import { SummaryCard } from '@/components/display/SummaryCard';
+import { EntityRow } from '@/components/display/EntityRow';
+import { FAB } from '@/components/navigation/FAB';
 import { formatINR } from '@/lib/format';
 import { Package } from 'lucide-react-native';
 import { View, Text, StyleSheet } from 'react-native';

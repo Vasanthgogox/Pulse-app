@@ -8,7 +8,7 @@ import { useRouter } from 'expo-router';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
-import { TeslaHeader } from '@/components/TeslaHeader';
+import { TeslaHeader } from '@/components/navigation/TeslaHeader';
 import { useSafeBack } from '@/lib/useSafeBack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 

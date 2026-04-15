@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
-import { TeslaHeader } from '@/components/TeslaHeader';
+import { TeslaHeader } from '@/components/navigation/TeslaHeader';
 import { useSafeBack } from '@/lib/useSafeBack';
 
 function getTierData(level: number): { label: string; color: string; nextTier: string; levelsToNext: number; unlock: string } {

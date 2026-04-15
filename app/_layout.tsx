@@ -1,4 +1,4 @@
-import { FloatingOpsAgentButton } from '@/components/FloatingOpsAgentButton';
+import { FloatingOpsAgentButton } from '@/components/navigation/FloatingOpsAgentButton';
 import { DemoTabBar, type DemoTabId } from '@/components/demo';
 import Theme from '@/constants/Theme';
 import {
@@ -8,7 +8,7 @@ import {
 } from '@/contexts/DemoTabBarScrollContext';
 import * as authService from '@/features/auth';
 import { isSessionExpiredError } from '@/features/auth';
-import { makeQueryClient } from '@/lib/queryClient';
+import { makeQueryClient } from '@/lib/supabase';
 import { hasSupabaseConfig, SUPABASE_CONFIG_MISSING_MESSAGE } from '@/lib/supabase';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
@@ -232,8 +232,7 @@ function RootLayoutNav() {
         <View style={{ flex: 1 }}>
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="index" />
-            <Stack.Screen name="sign-in" />
-            <Stack.Screen name="sign-up" />
+            <Stack.Screen name="(auth)" />
             <Stack.Screen name="(driver)" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="add-trip" />

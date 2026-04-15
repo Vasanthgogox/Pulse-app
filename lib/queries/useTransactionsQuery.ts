@@ -3,7 +3,7 @@
  */
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getTransactionsByOrganization } from '@/features/finance/services/finance.service';
-import { queryKeys } from '@/lib/queryKeys';
+import { queryKeys } from '@/lib/supabase';
 import { LEDGER_PAGE_SIZE } from '@/lib/pagination';
 
 /** Full list (no pagination). Use for aggregation e.g. Trips tab "received by trip". */

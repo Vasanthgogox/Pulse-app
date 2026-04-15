@@ -2,7 +2,7 @@
  * Treasury Financial Summary — Ledger tab. Table view (default) or Transaction view (GPay-style).
  * When transactions prop is provided, uses it (single read from parent); otherwise uses TanStack Query cache.
  */
-import { ALL_LEDGER_CATEGORY_VALUES } from "@/components/AddTransactionModal";
+import { ALL_LEDGER_CATEGORY_VALUES } from "@/components/modals/AddTransactionModal";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatIndianVehicleNumber } from "@/lib/format";

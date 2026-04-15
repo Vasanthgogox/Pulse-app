@@ -14,8 +14,8 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as XLSX from 'xlsx';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { DetailScreenLayout } from '@/components/DetailScreenLayout';
-import { TransactionRow } from '@/components/TransactionRow';
+import { DetailScreenLayout } from '@/components/layout/DetailScreenLayout';
+import { TransactionRow } from '@/components/display/TransactionRow';
 import { formatINR } from '@/lib/format';
 import Theme from '@/constants/Theme';
 

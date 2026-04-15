@@ -3,7 +3,7 @@
  * Route card with MapPin boxes, freight card with gradient, Shipment Profile,
  * Live Bids section, light footer, and Broadcast modal.
  */
-import { CenteredLoadingView } from '@/components/CenteredLoadingView';
+import { CenteredLoadingView } from '@/components/feedback/CenteredLoadingView';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useOrganization } from '@/contexts/OrganizationContext';

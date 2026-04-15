@@ -2,8 +2,8 @@
  * Load Center — reference UI: Hire Partners | Find Work | Awarded.
  * Header "Load Center" / "Find or Hire Work", three sub-tabs, cards, modals.
  */
-import { SemanticAddIcon } from "@/components/SemanticAddIcon";
-import { SubTabs } from "@/components/SubTabs";
+import { SemanticAddIcon } from "@/components/navigation/SemanticAddIcon";
+import { SubTabs } from "@/components/navigation/SubTabs";
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -29,7 +29,7 @@ import {
   setInitialTripForDetail,
 } from "@/features/trips";
 import { formatINR } from "@/lib/format";
-import { validatePhone } from "@/lib/phoneValidation";
+import { validatePhone } from "@/lib/validation";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
   useDirectQuoteCountsQuery,
@@ -45,7 +45,7 @@ import {
   useVehiclesQuery,
 } from "@/lib/queries";
 import { searchExistingDriversByPhone } from "@/features/drivers/services/drivers.service";
-import { queryKeys } from "@/lib/queryKeys";
+import { queryKeys } from "@/lib/supabase";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";

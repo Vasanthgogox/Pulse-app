@@ -3,7 +3,7 @@
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getSuppliersByOrganization } from '@/features/suppliers/services/suppliers.service';
-import { queryKeys } from '@/lib/queryKeys';
+import { queryKeys } from '@/lib/supabase';
 
 export function useSuppliersQuery(orgId: string | null) {
   return useQuery({

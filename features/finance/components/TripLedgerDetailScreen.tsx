@@ -29,7 +29,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
-import { FinanceFAB } from "@/components/FinanceFAB";
+import { FinanceFAB } from "@/components/navigation/FinanceFAB";
 import {
   getTransactionsByOrganization,
   type LedgerRow,

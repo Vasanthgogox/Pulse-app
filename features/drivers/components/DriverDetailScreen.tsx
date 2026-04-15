@@ -1,6 +1,6 @@
-import { CenteredLoadingView } from "@/components/CenteredLoadingView";
-import { DetailPageLayout, DetailSection } from "@/components/DetailPageLayout";
-import { FinanceFAB } from "@/components/FinanceFAB";
+import { CenteredLoadingView } from "@/components/feedback/CenteredLoadingView";
+import { DetailPageLayout, DetailSection } from "@/components/layout/DetailPageLayout";
+import { FinanceFAB } from "@/components/navigation/FinanceFAB";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -48,7 +48,7 @@ import {
   getSalaryRequestsByDriverIds,
   updateSalaryRequestStatus,
   type SalaryRequestRow,
-} from "@/services/salaryRequestsService";
+} from "@/features/drivers/services/salary-requests.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";

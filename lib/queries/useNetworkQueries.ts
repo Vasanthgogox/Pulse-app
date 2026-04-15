@@ -5,9 +5,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getConnectionRequestsReceived,
   getConnectionRequestsSent,
-} from '@/services/connectionRequestsService';
+} from '@/features/network/services/connection-requests.service';
 import { getDriverInvitesSent } from '@/features/drivers/services/drivers.service';
-import { queryKeys } from '@/lib/queryKeys';
+import { queryKeys } from '@/lib/supabase';
 
 export function useConnectionRequestsReceivedQuery(orgId: string | null) {
   return useQuery({

@@ -1,4 +1,4 @@
-import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { CenteredLoadingView } from "@/components/feedback/CenteredLoadingView";
 import Theme from "@/constants/Theme";
 import * as authService from "@/features/auth";
 import { supabase } from "@/lib/supabase";

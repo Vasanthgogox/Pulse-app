@@ -11,7 +11,7 @@ import {
   getVerifiedBalances,
   getSharedLedgerConnections,
   getOpenDisputesByOrg,
-} from '@/services/sharedLedgerService';
+} from '@/features/finance/services/shared-ledger.service';
 import { SharedLedgerContent } from './SharedLedgerContent';
 import type { SharedLedgerContentProps, SharedLedgerPartyRow } from './SharedLedgerContent';
 import { DisputeAuditSheet } from './DisputeAuditSheet';

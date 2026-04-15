@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import * as driverLocationService from "@/services/driverLocationService";
+import * as driverLocationService from "@/features/drivers/services/driver-location.service";
 import type * as ExpoLocationTypes from "expo-location";
 
 export function useDriverLocation(tripId: string | undefined) {

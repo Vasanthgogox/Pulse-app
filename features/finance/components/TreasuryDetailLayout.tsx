@@ -2,7 +2,7 @@
  * Shared detail-page layout: black header (TeslaHeader) + optional black card (tabs + summary + search).
  * Use for all entity/trip detail screens so they match the Treasury Financial Summary UI globally.
  */
-import { TeslaHeader } from "@/components/TeslaHeader";
+import { TeslaHeader } from "@/components/navigation/TeslaHeader";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import type { ReactNode } from "react";

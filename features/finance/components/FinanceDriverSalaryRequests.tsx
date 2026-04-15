@@ -3,9 +3,9 @@ import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Alert, Text, TouchableOpacity, View } from "react-native";
 import { styles } from "./FinanceScreen.styles";
-import type { SalaryRequestWithDriverRow } from "@/services/salaryRequestsService";
+import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salary-requests.service";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
-import { updateSalaryRequestStatus } from "@/services/salaryRequestsService";
+import { updateSalaryRequestStatus } from "@/features/drivers/services/salary-requests.service";
 
 export interface FinanceDriverSalaryRequestsProps {
   requests: SalaryRequestWithDriverRow[];

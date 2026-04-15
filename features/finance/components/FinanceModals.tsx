@@ -3,9 +3,9 @@
  * Entity Detail, Trip P&L, Ledger Report, Shared Ledger.
  */
 import { useLanguage } from "@/contexts/LanguageContext";
-import type { AddTransactionData } from "@/components/AddTransactionModal";
-import type { PartyOption, TripOption } from "@/components/AddTransactionModal";
-import { AddTransactionModal } from "@/components/AddTransactionModal";
+import type { AddTransactionData } from "@/components/modals/AddTransactionModal";
+import type { PartyOption, TripOption } from "@/components/modals/AddTransactionModal";
+import { AddTransactionModal } from "@/components/modals/AddTransactionModal";
 import { AddClientModal } from "@/features/clients/components/AddClientModal";
 import type {
   AddClientFormData,
@@ -25,7 +25,7 @@ import { AddVehicleModal } from "@/features/vehicles/components/AddVehicleModal"
 import type { AddVehicleCompletePayload } from "@/features/vehicles/components/AddVehicleModal";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
 import type { LedgerRow } from "../services/finance.service";
-import type { SalaryRequestWithDriverRow } from "@/services/salaryRequestsService";
+import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salary-requests.service";
 import { EntityDetailOverlay } from "./EntityDetailOverlay";
 import type { FinancialRowData } from "./FinancialRow";
 import { LedgerReportModal } from "./LedgerReportModal";
@@ -61,7 +61,7 @@ export interface FinanceModalsProps {
   defaultType: "in" | "out" | undefined;
   defaultContactId: string | undefined;
   defaultContactType: "client" | "supplier" | "driver" | undefined;
-  defaultDriverPaymentType: import("@/components/AddTransactionModal").DriverPaymentType | null | undefined;
+  defaultDriverPaymentType: import("@/components/modals/AddTransactionModal").DriverPaymentType | null | undefined;
   /** Map linked_organization_id -> local_client_id (for integrated trips). */
   linkedClientIdByOrgId?: Record<string, string> | Map<string, string>;
   /** Map linked_organization_id -> local_supplier_id. */

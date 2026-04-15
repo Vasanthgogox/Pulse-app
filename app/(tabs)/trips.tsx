@@ -2,8 +2,8 @@
  * Trips Control — demo2 trips tab. Active | History, trip cards, Add Trip.
  * Private Book = driver/vehicle assigned by you; Shared Ledger = assigned by another user.
  */
-import { CenteredLoadingView } from "@/components/CenteredLoadingView";
-import { FinanceFAB } from "@/components/FinanceFAB";
+import { CenteredLoadingView } from "@/components/feedback/CenteredLoadingView";
+import { FinanceFAB } from "@/components/navigation/FinanceFAB";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";

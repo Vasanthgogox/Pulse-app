@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { TeslaHeader } from "@/components/TeslaHeader";
+import { TeslaHeader } from "@/components/navigation/TeslaHeader";
 
 export interface AddTripModalLayoutProps {
   title: string;

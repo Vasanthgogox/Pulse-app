@@ -2,13 +2,13 @@
  * Full-page Ledger Sync — add or edit a ledger entry (double-entry aligned).
  * Reuses AddTransactionModal in fullPage mode; data flow per docs/CORE_ACCOUNTING_MODEL.md.
  */
-import type { PartyOption, TripOption, VehicleOption } from "@/components/AddTransactionModal";
+import type { PartyOption, TripOption, VehicleOption } from "@/components/modals/AddTransactionModal";
 import {
   AddTransactionModal,
   DRIVER_PAYMENT_TYPES,
   type AddTransactionData,
   type AddTransactionSubmitOptions,
-} from "@/components/AddTransactionModal";
+} from "@/components/modals/AddTransactionModal";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -34,7 +34,7 @@ import {
   getVehiclesByOrganization,
   type VehicleEntryTripOption,
 } from "@/features/vehicles";
-import { updateSalaryRequestStatus } from "@/services/salaryRequestsService";
+import { updateSalaryRequestStatus } from "@/features/drivers/services/salary-requests.service";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatLedgerDate } from "@/lib/format";
 import { useSafeBack } from "@/lib/useSafeBack";

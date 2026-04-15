@@ -23,7 +23,7 @@ import {
   getConnectionInviteeByPhone,
   rejectConnectionRequest,
   cancelConnectionRequest,
-} from "@/services/connectionRequestsService";
+} from "@/features/network/services/connection-requests.service";
 import { cancelDriverInvite } from "@/features/drivers/services/drivers.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
@@ -88,7 +88,7 @@ interface RequestItem {
   to_org_name: string;
   status: string;
   created_at: string;
-  row?: import("@/services/connectionRequestsService").ConnectionRequestRow;
+  row?: import("@/features/network/services/connection-requests.service").ConnectionRequestRow;
   nodeInfo?: Partial<NetworkNode>;
 }
 

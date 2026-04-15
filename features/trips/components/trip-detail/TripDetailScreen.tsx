@@ -1,6 +1,6 @@
-import { CenteredLoadingView } from "@/components/CenteredLoadingView";
-import { SemanticAddIcon } from "@/components/SemanticAddIcon";
-import { TeslaHeader } from "@/components/TeslaHeader";
+import { CenteredLoadingView } from "@/components/feedback/CenteredLoadingView";
+import { SemanticAddIcon } from "@/components/navigation/SemanticAddIcon";
+import { TeslaHeader } from "@/components/navigation/TeslaHeader";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -43,8 +43,8 @@ import { useRealtimeTrip } from "../../hooks/useRealtimeTrips";
 import type { TripAssignmentAuditRow } from "../../services/trip-assignment-audit.service";
 import { getTripAssignmentAuditHistory } from "../../services/trip-assignment-audit.service";
 import type { TripAdjustment } from "../../services/tripAdjustments";
-import * as tripDocumentsService from "@/services/tripDocumentsService";
-import * as driverLocationService from "@/services/driverLocationService";
+import * as tripDocumentsService from "@/features/trips/services/trip-documents.service";
+import * as driverLocationService from "@/features/drivers/services/driver-location.service";
 import {
     addTripAdjustment,
     getTripAdjustments,
@@ -71,7 +71,7 @@ import {
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import { TripDetailFinanceView, type TripDocItem } from "./TripDetailFinanceView";
 import { TrackingMapBlock, VehicleTrackingCard } from "./TrackingMapBlock";
-import { ThemedAlertModal } from "@/components/ThemedAlertModal";
+import { ThemedAlertModal } from "@/components/modals/ThemedAlertModal";
 import type * as ExpoLocationTypes from "expo-location";
 
 let ExpoLocationModule: typeof ExpoLocationTypes | null = null;

@@ -2,7 +2,7 @@
  * Garrage tab — P&L view: Vehicles Portfolio with period selector and view tabs.
  * Tabs: VEHICLE | TRIPS | REVENUE | PROFIT. Vehicle/revenue/profit show vehicle list; Trips shows trip-level list.
  */
-import { LiquidFillPill } from "@/components/LiquidFillPill";
+import { LiquidFillPill } from "@/components/feedback/LiquidFillPill";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import Theme from "@/constants/Theme";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";

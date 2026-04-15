@@ -4,14 +4,14 @@
  * Driver Source: Organization Driver | Partner Driver (clean, scalable terminology).
  * When visible is true, shows as Ledger-style bottom-sheet popup; when undefined, full-screen wizard (e.g. route).
  */
-import { WizardStepLayout } from '@/components/WizardStepLayout';
+import { WizardStepLayout } from '@/components/layout/WizardStepLayout';
 import { getAvatarUriForSeed } from '@/constants/DriverLevels';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getSignedAvatarUrl } from '@/lib/avatarUpload';
-import { pickContactForNameAndPhone } from '@/lib/contactPicker';
-import { validatePhone } from '@/lib/phoneValidation';
+import { pickContactForNameAndPhone } from '@/lib/platform';
+import { validatePhone } from '@/lib/validation';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useEffect, useRef, useState } from 'react';
 import {
