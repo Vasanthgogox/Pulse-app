@@ -476,6 +476,8 @@ export default function DriverRadarScreen() {
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [isFollowingLocation, setIsFollowingLocation] = useState(false);
   const locationWatchRef = useRef<any>(null);
+  const initialLoadDoneRef = useRef(false);
+  const isRefreshingRef = useRef(false);
 
   // Map fallback:
   // - Force Leaflet via env (debug): EXPO_PUBLIC_DRIVER_MAP_FALLBACK=leaflet
@@ -537,7 +539,7 @@ export default function DriverRadarScreen() {
       return Promise.resolve();
     }
     setAcceptError(null);
-    setLoading(true);
+    if (!initialLoadDoneRef.current && !isRefreshingRef.current) setLoading(true);
     return Promise.all([
       driversService.getLinkedDriversForCurrentUser(profile.uid),
       driversService.getDriverInvitesReceived(),
@@ -577,6 +579,9 @@ export default function DriverRadarScreen() {
               hasActiveTrip,
           );
           setLoading(false);
+          initialLoadDoneRef.current = true;
+          isRefreshingRef.current = false;
+          setRefreshing(false);
           setAcceptedTripId((prev) => {
             if (prev == null) return prev;
             const trip = trips.find((t) => t.id === prev);
@@ -604,7 +609,15 @@ export default function DriverRadarScreen() {
         setIsOnline(false);
         previousTripsRef.current = new Map();
         setLoading(false);
+        initialLoadDoneRef.current = true;
+        isRefreshingRef.current = false;
+        setRefreshing(false);
       }
+    }).finally(() => {
+      setLoading(false);
+      initialLoadDoneRef.current = true;
+      isRefreshingRef.current = false;
+      setRefreshing(false);
     });
   }, [profile?.uid]);
 

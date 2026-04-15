@@ -267,6 +267,7 @@ export default function TripDetailScreen({
   const [vehiclePreviewUrls, setVehiclePreviewUrls] = useState<Record<string, string | null>>({});
   const [vehiclePreviewIndex, setVehiclePreviewIndex] = useState(0);
   const isRefreshingRef = useRef(false);
+  const initialLoadDoneRef = useRef(false);
   const refetchTransactionsRef = useRef<() => void>(() => {});
   const prevDriverIdRef = useRef<string | null>(null);
   const podModalRefetchDoneRef = useRef(false);
@@ -392,7 +393,7 @@ export default function TripDetailScreen({
     const isRepeatLoadForSameId = loadCompletedForIdRef.current === tripId;
     if (isRepeatLoadForSameId || isRefreshingRef.current) {
       isRefreshingRef.current = true;
-    } else {
+    } else if (!initialLoadDoneRef.current) {
       setLoading(true);
     }
     setError(null);
@@ -431,6 +432,7 @@ export default function TripDetailScreen({
       .finally(() => {
         loadCompletedForIdRef.current = tripId;
         setLoading(false);
+        initialLoadDoneRef.current = true;
         isRefreshingRef.current = false;
         setRefreshing(false);
       });

@@ -218,6 +218,7 @@ export default function DriverDetailScreen({
   );
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
+  const initialLoadDoneRef = useRef(false);
   const insets = useSafeAreaInsets();
 
   const load = useCallback(() => {
@@ -225,7 +226,7 @@ export default function DriverDetailScreen({
       setLoading(false);
       return;
     }
-    if (!isRefreshingRef.current) setLoading(true);
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
     Promise.all([
@@ -334,6 +335,7 @@ export default function DriverDetailScreen({
       )
       .finally(() => {
         setLoading(false);
+        initialLoadDoneRef.current = true;
         isRefreshingRef.current = false;
         setRefreshing(false);
       });

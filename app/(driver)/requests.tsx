@@ -60,6 +60,8 @@ export default function DriverRequestsScreen() {
   const [allLedger, setAllLedger] = useState<driversService.DriverLedgerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const isRefreshingRef = useRef(false);
+  const initialLoadDoneRef = useRef(false);
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);
   const [leavingOrgId, setLeavingOrgId] = useState<string | null>(null);
   const [leaveFleetPressedOrgId, setLeaveFleetPressedOrgId] = useState<string | null>(null);
@@ -69,7 +71,7 @@ export default function DriverRequestsScreen() {
       setLoading(false);
       return Promise.resolve();
     }
-    setLoading(true);
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
     return Promise.all([
       driversService.getDriverInvitesReceived(),
       driversService.getLinkedDriversForCurrentUser(profile.uid),
@@ -82,6 +84,9 @@ export default function DriverRequestsScreen() {
         setAllTrips([]);
         setAllLedger([]);
         setLoading(false);
+        initialLoadDoneRef.current = true;
+        isRefreshingRef.current = false;
+        setRefreshing(false);
         return Promise.resolve();
       }
       return Promise.all([
@@ -91,8 +96,16 @@ export default function DriverRequestsScreen() {
         setAllTrips(tRes.trips ?? []);
         setAllLedger(ledgerRes.entries ?? []);
         setLoading(false);
+        initialLoadDoneRef.current = true;
+        isRefreshingRef.current = false;
+        setRefreshing(false);
       });
-    }).catch(() => setLoading(false));
+    }).catch(() => {
+      setLoading(false);
+      initialLoadDoneRef.current = true;
+      isRefreshingRef.current = false;
+      setRefreshing(false);
+    });
   }, [profile?.uid]);
 
   useEffect(() => {
