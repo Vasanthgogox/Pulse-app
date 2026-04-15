@@ -112,14 +112,16 @@ export function useAddTripForm() {
         state.supplierId &&
         sr >= 0 &&
         sr <= VALIDATION.AMOUNT_MAX &&
-        state.aggregateVehicleText.trim().length > 0
+        (state.assignLater || state.aggregateVehicleText.trim().length > 0)
       );
 
       // If we found a driver by phone, require explicit confirmation before enabling "Create Trip".
       const driverFound = !!(state.driverPhoneName && state.driverPhone.trim());
-      const driverOk = !driverFound || state.driverPhoneConfirmed;
+      const driverOk = state.assignLater
+        ? (state.driverPhone.trim() ? (!driverFound || state.driverPhoneConfirmed) : true)
+        : (state.driverPhone.trim() && (!driverFound || state.driverPhoneConfirmed));
 
-      return supplierOk && driverOk;
+      return supplierOk && !!driverOk;
     }
     return false;
   })();
@@ -266,10 +268,12 @@ export function useAddTripForm() {
     if (state.supplySource === 'aggregate') {
       const err5 = nonNegativeAmount()(state.supplierRate);
       if (err5) return `Supplier rate: ${err5}`;
-      const vehicleTrimmed = state.aggregateVehicleText.trim();
-      if (!vehicleTrimmed) return 'Vehicle: required for aggregate trips';
-      const driverPhoneTrimmed = state.driverPhone.trim();
-      if (!driverPhoneTrimmed) return 'Driver for tracking: required for aggregate trips';
+      if (!state.assignLater) {
+        const vehicleTrimmed = state.aggregateVehicleText.trim();
+        if (!vehicleTrimmed) return 'Vehicle: required for aggregate trips';
+        const driverPhoneTrimmed = state.driverPhone.trim();
+        if (!driverPhoneTrimmed) return 'Driver for tracking: required for aggregate trips';
+      }
     }
     if (state.supplySource === 'asset' && !state.assignLater) {
       if (!state.driverId) return 'Driver: required';

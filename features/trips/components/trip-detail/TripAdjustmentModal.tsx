@@ -78,8 +78,8 @@ export function TripAdjustmentModal({
             <FontAwesome name="chevron-left" size={18} color={Theme.textMuted} />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>P&L Adjustment</Text>
-            <Text style={styles.headerSubtitle}>sync transfer data</Text>
+            <Text style={styles.headerTitle}>Add Adjustment</Text>
+            <Text style={styles.headerSubtitle}>modify trip amounts</Text>
           </View>
           <View style={styles.headerBtn} />
         </View>
@@ -91,7 +91,7 @@ export function TripAdjustmentModal({
           showsVerticalScrollIndicator={false}
         >
           {/* Type: Revenue (Sale) | Cost (Supplier) */}
-          <Text style={styles.sectionLabel}>Type Registry</Text>
+          <Text style={styles.sectionLabel}>Adjustment Type</Text>
           <View style={styles.typeRow}>
             <TouchableOpacity
               style={[styles.typeBtn, type === "revenue" && styles.typeBtnActive]}
@@ -139,7 +139,7 @@ export function TripAdjustmentModal({
           </View>
 
           {/* Amount */}
-          <Text style={styles.sectionLabel}>Synchronize Alteration Node</Text>
+          <Text style={styles.sectionLabel}>Amount</Text>
           <View style={styles.amountWrap}>
             <Text style={styles.currencyPrefix}>₹</Text>
             <TextInput
@@ -154,7 +154,7 @@ export function TripAdjustmentModal({
           </View>
 
           {/* Reason */}
-          <Text style={styles.sectionLabel}>Reason Manifest</Text>
+          <Text style={styles.sectionLabel}>Reason</Text>
           <View style={styles.chipWrap}>
             {reasonOptions.map((r) => (
               <TouchableOpacity
@@ -186,8 +186,8 @@ export function TripAdjustmentModal({
             disabled={!canCommit}
             activeOpacity={0.9}
           >
-            <FontAwesome name="bolt" size={16} color={Theme.primary} style={styles.commitIcon} />
-            <Text style={styles.commitBtnText}>Update Transfer Data</Text>
+            <FontAwesome name="check" size={16} color={Theme.primary} style={styles.commitIcon} />
+            <Text style={styles.commitBtnText}>Save Adjustment</Text>
           </TouchableOpacity>
         </View>
       </View>
