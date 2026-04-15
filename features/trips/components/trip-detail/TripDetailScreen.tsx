@@ -5,7 +5,7 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { getDriverById } from "@/features/drivers/services/drivers.service";
+import { getDriverById, getDriverProfileDisplay } from "@/features/drivers/services/drivers.service";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { getSupplierById } from "@/features/suppliers/services/suppliers.service";
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
@@ -14,6 +14,7 @@ import type { VehicleDocuments } from "@/features/vehicles/utils/vehicleDocument
 import { DOCUMENT_LABELS, DOCUMENT_EXPIRY_ORDER } from "@/features/vehicles/utils/vehicleDocuments.util";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { canAssignTrip, getCapabilitiesFromProfile } from "@/lib/capabilities";
+import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import { useShipperDisplayNamesQuery, useTransactionsQuery } from "@/lib/queries";
@@ -223,6 +224,7 @@ export default function TripDetailScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [driverName, setDriverName] = useState<string | null>(null);
+  const [driverAvatarUri, setDriverAvatarUri] = useState<string | null>(null);
   const [vehicleLabel, setVehicleLabel] = useState<string | null>(null);
   const [vehicleDocs, setVehicleDocs] = useState<VehicleDocuments | null>(null);
   const [displayVehicleFromInput, setDisplayVehicleFromInput] = useState("");
@@ -932,6 +934,7 @@ export default function TripDetailScreen({
   useEffect(() => {
     if (!trip?.organization_id) {
       setDriverName(null);
+      setDriverAvatarUri(null);
       setVehicleLabel(null);
       setPartnerName(null);
       setDriverLinked(false);
@@ -940,8 +943,22 @@ export default function TripDetailScreen({
     const fallbackDriverName = (trip.driver_display_name ?? "").trim() || null;
     let cancelled = false;
     const orgId = trip.organization_id;
+    const resolveDriverAvatarUri = async (driverId: string, candidateUrl?: string | null) => {
+      let rawAvatar = (candidateUrl ?? "").trim();
+      if (!rawAvatar) {
+        const profileRes = await getDriverProfileDisplay(driverId);
+        rawAvatar = (profileRes.profile?.avatarUrl ?? "").trim();
+      }
+      if (!rawAvatar) return null;
+      if (rawAvatar.startsWith("http://") || rawAvatar.startsWith("https://")) {
+        return rawAvatar;
+      }
+      const signed = await getSignedAvatarUrl(rawAvatar);
+      return signed ?? null;
+    };
     if (trip.driver_id) {
       setDriverName(fallbackDriverName);
+      setDriverAvatarUri(null);
       setDriverLinked(false);
       getDriverById(orgId, trip.driver_id).then((res) => {
         if (cancelled) return;
@@ -950,6 +967,11 @@ export default function TripDetailScreen({
           const fromDriver = (d.name || d.phone || "").trim() || null;
           setDriverName(fromDriver ?? fallbackDriverName ?? "—");
           setDriverLinked(!!d.user_id);
+          void resolveDriverAvatarUri(trip.driver_id!, d.avatar_url ?? null).then(
+            (uri) => {
+              if (!cancelled) setDriverAvatarUri(uri);
+            },
+          );
           return;
         }
         // Driver not in trip org: for load-based (aggregate) trips the driver may live in the supplier's org
@@ -969,6 +991,11 @@ export default function TripDetailScreen({
                   const fromDriver2 = (d2.name || d2.phone || "").trim() || null;
                   setDriverName(fromDriver2 ?? fallbackDriverName ?? "—");
                   setDriverLinked(!!d2.user_id);
+                  void resolveDriverAvatarUri(trip.driver_id!, d2.avatar_url ?? null).then(
+                    (uri) => {
+                      if (!cancelled) setDriverAvatarUri(uri);
+                    },
+                  );
                   return;
                 }
                 tryViewerOrg();
@@ -982,6 +1009,9 @@ export default function TripDetailScreen({
           const viewerOrgId = currentOrganization?.id;
           if (!viewerOrgId || viewerOrgId === orgId) {
             setDriverName(fallbackDriverName ?? "—");
+            void resolveDriverAvatarUri(trip.driver_id!, null).then((uri) => {
+              if (!cancelled) setDriverAvatarUri(uri);
+            });
             setDriverLinked(false);
             return;
           }
@@ -990,6 +1020,11 @@ export default function TripDetailScreen({
             const d3 = res3.driver;
             const fromDriver3 = d3 ? (d3.name || d3.phone || "").trim() || null : null;
             setDriverName(fromDriver3 ?? fallbackDriverName ?? "—");
+            void resolveDriverAvatarUri(trip.driver_id!, d3?.avatar_url ?? null).then(
+              (uri) => {
+                if (!cancelled) setDriverAvatarUri(uri);
+              },
+            );
             setDriverLinked(!!d3?.user_id);
           });
         };
@@ -997,6 +1032,7 @@ export default function TripDetailScreen({
       });
     } else {
       setDriverName(fallbackDriverName);
+      setDriverAvatarUri(null);
       setDriverLinked(false);
     }
     if (trip.vehicle_id) {
@@ -1600,6 +1636,7 @@ export default function TripDetailScreen({
             organizationId={currentOrganization.id}
             partnerName={partnerName}
             driverName={driverName}
+            driverAvatarUri={driverAvatarUri}
             onRatingsLoaded={handleRatingsLoaded}
           />
         )}
