@@ -456,7 +456,7 @@ export default function DriverWalletScreen() {
                 ? colors.text
                 : Theme.gpayListTitle;
             const primary = isCredit ? 'Payment received' : 'Adjustment';
-            const metaRight = isCredit ? 'Credited to wallet' : 'Updated in passbook';
+            const metaRight = isCredit ? 'Added to cash balance' : 'Updated in passbook';
             const listDivider = isDark ? colors.borderSubtle : Theme.borderMedium;
             const subColor = colors.textMuted;
             const metaColor = colors.textMuted;
@@ -647,26 +647,40 @@ export default function DriverWalletScreen() {
                         : 'Trip earnings';
                     const metaRight =
                       receivedAmt > 0
-                        ? 'Credited to wallet'
+                        ? 'Added to cash balance'
                         : isOtpAdHocPending
                           ? 'Pending'
                           : 'Pending from fleet';
                     const showRowDivider = isExpanded || idx < trips.length - 1;
                     const iconName =
                       isOtpAdHocPending ? 'exchange' : receivedAmt > 0 ? 'arrow-down' : 'clock-o';
+                    const statusLabel = receivedAmt > 0 ? 'RECEIVED' : 'PENDING';
+                    const statusPillBg = receivedAmt > 0 ? colors.emeraldMuted : AMBER_50;
+                    const statusPillTextColor = receivedAmt > 0 ? colors.emerald : Theme.warning;
+                    const statusPillBorderColor = receivedAmt > 0 ? colors.emeraldBorderSoft : 'rgba(180,83,9,0.25)';
+                    const rowToneBg = isExpanded ? colors.surface : colors.surface;
+                    const rowToneBorder = receivedAmt > 0 ? colors.emeraldBorderSoft : 'rgba(180,83,9,0.25)';
+                    const iconSqBg = receivedAmt > 0 ? colors.emeraldMuted : AMBER_50;
+                    const iconColor = receivedAmt > 0 ? colors.emerald : Theme.warning;
                     return (
                       <View
                         key={trip.id}
                         style={[
                           styles.tripCard,
-                          { backgroundColor: 'transparent' },
-                          isExpanded && { backgroundColor: colors.surface, borderRadius: 14, overflow: 'hidden' },
+                          {
+                            backgroundColor: isExpanded ? colors.surface : rowToneBg,
+                            borderColor: rowToneBorder,
+                            borderRadius: 12,
+                            borderWidth: 1,
+                            overflow: 'hidden',
+                            marginBottom: 6,
+                          },
                         ]}
                       >
                         <TouchableOpacity
                           style={[
                             styles.ppTxCard,
-                            isExpanded && { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12 },
+                            { backgroundColor: 'transparent', paddingHorizontal: 12 },
                             showRowDivider && {
                               borderBottomWidth: StyleSheet.hairlineWidth,
                               borderBottomColor: listDivider,
@@ -680,13 +694,20 @@ export default function DriverWalletScreen() {
                           accessibilityState={{ expanded: isExpanded }}
                         >
                           <View style={styles.ppTxTopRow}>
-                            <View style={[styles.ppIconSq, { backgroundColor: EMERALD_600 }]}>
-                              <FontAwesome name={iconName} size={18} color={Theme.textOnPrimary} />
+                            <View style={[styles.ppIconSq, { backgroundColor: iconSqBg }]}>
+                              <FontAwesome name={iconName} size={18} color={iconColor} />
                             </View>
                             <View style={styles.ppMiddle}>
-                              <Text style={[styles.ppPrimary, { color: colors.text }]} numberOfLines={1}>
-                                {primaryLine}
-                              </Text>
+                              <View style={styles.ppPrimaryRow}>
+                                <Text style={[styles.ppPrimary, { color: colors.text }]} numberOfLines={1}>
+                                  {primaryLine}
+                                </Text>
+                                <View style={[styles.txStatusPill, { backgroundColor: statusPillBg, borderColor: statusPillBorderColor }]}>
+                                  <Text style={[styles.txStatusPillText, { color: statusPillTextColor }]}>
+                                    {statusLabel}
+                                  </Text>
+                                </View>
+                              </View>
                               <Text style={[styles.ppSecondary, { color: subColor }]} numberOfLines={2}>
                                 {secondaryLine}
                               </Text>
@@ -1261,6 +1282,12 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 0,
   },
+  ppPrimaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minWidth: 0,
+  },
   ppTxTopRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1283,6 +1310,21 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     /* classic body emphasis — not heavy display bold */
     letterSpacing: 0.1,
+    flexShrink: 1,
+  },
+  txStatusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  txStatusPillText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.7,
   },
   ppSecondary: {
     fontSize: 13,
@@ -1337,7 +1379,7 @@ const styles = StyleSheet.create({
   dropdownWrap: {
     marginTop: 0,
     borderRadius: 0,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingTop: 0,
     paddingBottom: 14,
     overflow: 'hidden',

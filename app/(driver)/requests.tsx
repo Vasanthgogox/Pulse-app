@@ -7,6 +7,7 @@ const EMERALD_500 = '#10b981';
 const GRAY_700 = '#374151';
 
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
+import { DriverInviteCard } from '@/components/driver/DriverInviteCard';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { tripEarningsForDriver } from '@/lib/driverUtils';
@@ -33,7 +34,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { isCompleted, buildOfferText } from '@/lib/driverUtils';
-import { getInitials } from '@/lib/stringUtils';
 
 /** Per-org passbook stats (trips, earned, received from DB). */
 export interface ConnectionPassbook {
@@ -220,7 +220,11 @@ export default function DriverRequestsScreen() {
         <View style={styles.headerLeft}>
           <TouchableOpacity onPress={() => router.push('/(driver)/profile')} style={styles.avatarBtn} activeOpacity={0.8}>
             <View style={[styles.avatarCircle, { borderColor: colors.border, backgroundColor: colors.emeraldMuted }]}>
-              <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+              ) : (
+                <FontAwesome name="user" size={14} color={colors.text} />
+              )}
             </View>
           </TouchableOpacity>
           <View style={styles.headerTextWrap}>
@@ -271,68 +275,34 @@ export default function DriverRequestsScreen() {
                   : 'Accept to join and receive trip assignments.'}
               </Text>
               {pendingInvites.map((inv) => (
-                <View
+                <DriverInviteCard
                   key={inv.id}
-                  style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                >
-                  <View style={styles.cardHeader}>
-                    <View style={[styles.cardIconWrap, { backgroundColor: colors.emeraldMuted, borderRadius: 24 }]}>
-                      {inv.from_org_avatar_url ? (
-                        <Image source={{ uri: inv.from_org_avatar_url }} style={styles.cardOrgAvatar} resizeMode="cover" />
-                      ) : (
-                        <View style={[styles.cardOrgAvatar, { backgroundColor: colors.surface, borderColor: colors.text, borderWidth: 1 }]}>
-                          <Text style={[styles.cardOrgAvatarText, { color: colors.text }]}>
-                            {getInitials(inv.from_org_name || 'O')}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                    <View style={styles.cardHeaderText}>
-                      <Text style={[styles.cardOrgName, { color: colors.text }]} numberOfLines={1}>
-                        {inv.from_org_name || 'Organisation'}
-                      </Text>
-                      <Text style={[styles.cardOffer, { color: colors.textMuted }]} numberOfLines={2}>
-                        {buildOfferText(inv)}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.cardActions}>
-                    <TouchableOpacity
-                      style={[styles.btnSecondary, { borderColor: colors.border }, inviteActionId === inv.id && styles.btnDisabled]}
-                      onPress={async () => {
-                        setInviteActionId(inv.id);
-                        const { error } = await driversService.rejectDriverInvite(inv.id);
-                        setInviteActionId(null);
-                        if (error) {
-                          Alert.alert('Decline failed', error.message ?? 'Could not decline. Try again.', [{ text: 'OK' }]);
-                        }
-                        fetch();
-                      }}
-                      disabled={!!inviteActionId}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.btnSecondaryText, { color: colors.text }]}>Ignore</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.btnPrimary, { backgroundColor: colors.emerald }, inviteActionId === inv.id && styles.btnDisabled]}
-                      onPress={async () => {
-                        setInviteActionId(inv.id);
-                        const { error } = await driversService.acceptDriverInvite(inv.id);
-                        setInviteActionId(null);
-                        if (error) {
-                          Alert.alert('Accept failed', error.message ?? 'Could not accept. Try again.', [{ text: 'OK' }]);
-                          fetch();
-                          return;
-                        }
-                        fetch();
-                      }}
-                      disabled={!!inviteActionId}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.btnPrimaryText}>Accept</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                  invite={inv}
+                  colors={colors}
+                  offerText={buildOfferText(inv)}
+                  busy={inviteActionId === inv.id}
+                  fallbackAvatarUri={avatarUri}
+                  onIgnore={async () => {
+                    setInviteActionId(inv.id);
+                    const { error } = await driversService.rejectDriverInvite(inv.id);
+                    setInviteActionId(null);
+                    if (error) {
+                      Alert.alert('Decline failed', error.message ?? 'Could not decline. Try again.', [{ text: 'OK' }]);
+                    }
+                    fetch();
+                  }}
+                  onAccept={async () => {
+                    setInviteActionId(inv.id);
+                    const { error } = await driversService.acceptDriverInvite(inv.id);
+                    setInviteActionId(null);
+                    if (error) {
+                      Alert.alert('Accept failed', error.message ?? 'Could not accept. Try again.', [{ text: 'OK' }]);
+                      fetch();
+                      return;
+                    }
+                    fetch();
+                  }}
+                />
               ))}
             </View>
           )}

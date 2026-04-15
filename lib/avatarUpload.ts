@@ -139,6 +139,28 @@ function normalizeAvatarPath(path: string): string {
   return `${p}/avatar.jpg`;
 }
 
+function extractPathFromStorageUrl(
+  rawUrl: string
+): { bucket: string; path: string } | null {
+  try {
+    const parsed = new URL(rawUrl);
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const objectIdx = segments.indexOf('object');
+    if (objectIdx < 0 || objectIdx + 2 >= segments.length) return null;
+    const accessType = segments[objectIdx + 1]; // public | sign | authenticated
+    if (!['public', 'sign', 'authenticated'].includes(accessType)) return null;
+    const bucket = segments[objectIdx + 2] ?? '';
+    const pathParts = segments.slice(objectIdx + 3);
+    if (!bucket || pathParts.length === 0) return null;
+    return {
+      bucket,
+      path: decodeURIComponent(pathParts.join('/')),
+    };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Get a signed URL for an avatar storage path (private bucket).
  * Returns null if path is empty or signed URL fails.
@@ -198,6 +220,15 @@ export function useDriverAvatarUri(): { avatarUri: string; loading: boolean } {
       return;
     }
     if (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://')) {
+      const storageRef = extractPathFromStorageUrl(avatarUrl);
+      // Backward compatibility: old profiles may store full storage URL instead of object path.
+      if (storageRef && (storageRef.bucket === AVATAR_BUCKET || storageRef.bucket === LEGACY_AVATAR_BUCKET)) {
+        setLoading(true);
+        const signed = await getSignedAvatarUrl(storageRef.path);
+        setAvatarUri(signed ?? presetUri);
+        setLoading(false);
+        return;
+      }
       setAvatarUri(avatarUrl);
       return;
     }
