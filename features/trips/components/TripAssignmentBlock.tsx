@@ -36,6 +36,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Image,
   Modal,
   Platform,
   ScrollView,
@@ -623,6 +624,43 @@ export function TripAssignmentBlock({
     );
   }, [vehicles, assignSearch]);
 
+  const getDriverRatingMeta = useCallback((driver: DriverRow) => {
+    const data = driver as DriverRow & {
+      rating?: number | string | null;
+      rating_avg?: number | string | null;
+      avg_rating?: number | string | null;
+      rating_count?: number | string | null;
+      ratings_count?: number | string | null;
+      total_ratings?: number | string | null;
+    };
+
+    const rawRating = data.rating ?? data.rating_avg ?? data.avg_rating ?? null;
+    const numericRating =
+      rawRating == null
+        ? NaN
+        : typeof rawRating === "number"
+          ? rawRating
+          : Number(rawRating);
+    if (!Number.isFinite(numericRating)) return null;
+
+    const rawCount =
+      data.rating_count ?? data.ratings_count ?? data.total_ratings ?? null;
+    const numericCount =
+      rawCount == null
+        ? NaN
+        : typeof rawCount === "number"
+          ? rawCount
+          : Number(rawCount);
+
+    return {
+      ratingLabel: numericRating.toFixed(1),
+      countLabel:
+        Number.isFinite(numericCount) && numericCount > 0
+          ? `(${Math.round(numericCount)})`
+          : null,
+    };
+  }, []);
+
   return (
     <View style={[styles.wrapper, styles.wrapperStretch]}>
       <View style={styles.card}>
@@ -813,9 +851,11 @@ export function TripAssignmentBlock({
           <View style={styles.assignModalHeader}>
             <View style={styles.assignModalHeaderText}>
               <Text style={styles.assignModalTitle}>
-                {assignMode === "driver" ? "Assign Driver" : "Registry Vehicle"}
+                {assignMode === "driver" ? "Assign Driver" : "Select Vehicle"}
               </Text>
-              <Text style={styles.assignModalSubtitle}>Network Node Selection</Text>
+              <Text style={styles.assignModalSubtitle}>
+                {assignMode === "driver" ? "Choose a driver" : "Choose a vehicle"}
+              </Text>
             </View>
             <TouchableOpacity
               onPress={() => setAssignMode(null)}
@@ -833,7 +873,7 @@ export function TripAssignmentBlock({
               style={styles.assignSearchInput}
               value={assignSearch}
               onChangeText={setAssignSearch}
-              placeholder={assignMode === "driver" ? "Search driver node…" : "Search vehicle node…"}
+              placeholder={assignMode === "driver" ? "Search driver..." : "Search vehicle..."}
               placeholderTextColor={Theme.textMuted}
             />
           </View>
@@ -855,8 +895,10 @@ export function TripAssignmentBlock({
                   const isOnTrip = activeDriverIds.has(d.id) && d.id !== trip.driver_id;
                   const isAvailable = !d.left_at && !isOnTrip;
                   const initial = (d.name ?? "D").trim().charAt(0).toUpperCase();
+                  const ratingMeta = getDriverRatingMeta(d);
+                  const hasAvatar = !!(d.avatar_url && d.avatar_url.trim());
                   const statusText = isOnTrip
-                    ? "On active trip"
+                    ? "On trip"
                     : isAvailable
                       ? "Available"
                       : "On leave";
@@ -872,15 +914,25 @@ export function TripAssignmentBlock({
                       activeOpacity={isOnTrip ? 1 : 0.98}
                     >
                       <View style={styles.assignRegistryCardLeft}>
-                        <View style={[
-                          styles.assignDriverAvatarRegistry,
-                          isOnTrip && styles.assignDriverAvatarBusy,
-                        ]}>
-                          <Text style={[
-                            styles.assignDriverInitialRegistry,
-                            isOnTrip && styles.assignDriverInitialBusy,
-                          ]}>{initial}</Text>
-                        </View>
+                        {hasAvatar ? (
+                          <Image
+                            source={{ uri: d.avatar_url!.trim() }}
+                            style={[
+                              styles.assignDriverAvatarImage,
+                              isOnTrip && styles.assignDriverAvatarBusy,
+                            ]}
+                          />
+                        ) : (
+                          <View style={[
+                            styles.assignDriverAvatarRegistry,
+                            isOnTrip && styles.assignDriverAvatarBusy,
+                          ]}>
+                            <Text style={[
+                              styles.assignDriverInitialRegistry,
+                              isOnTrip && styles.assignDriverInitialBusy,
+                            ]}>{initial}</Text>
+                          </View>
+                        )}
                         <View style={styles.assignCardBody}>
                           <Text style={[
                             styles.assignCardTitle,
@@ -894,15 +946,24 @@ export function TripAssignmentBlock({
                           ]}>
                             {statusText}
                           </Text>
+                          {ratingMeta ? (
+                            <View style={styles.assignRatingRow}>
+                              <FontAwesome name="star" size={10} color={Theme.driverGold} />
+                              <Text style={styles.assignRatingText}>
+                                Rating {ratingMeta.ratingLabel}
+                                {ratingMeta.countLabel ? ` ${ratingMeta.countLabel}` : ""}
+                              </Text>
+                            </View>
+                          ) : null}
                         </View>
                       </View>
                       {isOnTrip ? (
                         <View style={styles.assignBusyBadge}>
-                          <Text style={styles.assignBusyBadgeText}>In Trip</Text>
+                          <Text style={styles.assignBusyBadgeText}>On Trip</Text>
                         </View>
                       ) : (
                         <View style={styles.assignSyncBadge}>
-                          <Text style={styles.assignSyncBadgeText}>Sync Node</Text>
+                          <Text style={styles.assignSyncBadgeText}>Assign</Text>
                         </View>
                       )}
                     </TouchableOpacity>
@@ -963,17 +1024,17 @@ export function TripAssignmentBlock({
                       >
                       <View style={styles.assignRegistryCardLeft}>
                         <View style={styles.assignVehicleIconWrapRegistry}>
-                          <FontAwesome name="truck" size={16} color="#ffffff" />
+                          <FontAwesome name="truck" size={16} color={Theme.textPrimaryDark} />
                         </View>
                         <View style={styles.assignCardBody}>
                           <Text style={styles.assignCardTitle} numberOfLines={1}>
                             {plate}
                           </Text>
-                          <Text style={styles.assignRegistrySubtext}>{typeLabel} Node</Text>
+                          <Text style={styles.assignRegistrySubtext}>{typeLabel}</Text>
                         </View>
                       </View>
                       <View style={styles.assignUpdateLinkBadge}>
-                        <Text style={styles.assignUpdateLinkBadgeText}>Update Link</Text>
+                        <Text style={styles.assignUpdateLinkBadgeText}>Select</Text>
                       </View>
                     </TouchableOpacity>
                   );
@@ -995,7 +1056,7 @@ export function TripAssignmentBlock({
               onPress={() => setAssignMode(null)}
               activeOpacity={0.9}
             >
-              <Text style={styles.assignCancelBtnText}>Cancel Registry</Text>
+              <Text style={styles.assignCancelBtnText}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1557,7 +1618,7 @@ const styles = StyleSheet.create({
   // Premium assignment picker modal
   assignModalWrap: {
     flex: 1,
-    backgroundColor: "#f4f5f7",
+    backgroundColor: Theme.surfaceGray,
   },
   assignModalHeader: {
     flexDirection: "row",
@@ -1788,7 +1849,7 @@ const styles = StyleSheet.create({
     marginVertical: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: Theme.screenBackground,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -1833,22 +1894,29 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: Theme.fiscalTabActiveBg ?? "#e8eaf6",
+    backgroundColor: "transparent",
     borderWidth: 1,
-    borderColor: Theme.primary,
+    borderColor: Theme.textPrimaryDark,
     alignItems: "center",
     justifyContent: "center",
+  },
+  assignDriverAvatarImage: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
   },
   assignDriverInitialRegistry: {
     fontSize: 12,
     fontWeight: "800",
-    color: Theme.primary,
+    color: Theme.textPrimaryDark,
   },
   assignSyncBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: Theme.positiveMuted,
+    backgroundColor: "transparent",
     borderWidth: 1,
     borderColor: Theme.darkGreen,
   },
@@ -1859,8 +1927,8 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   assignRegistryCardBusy: {
-    opacity: 0.6,
-    backgroundColor: Theme.surfaceGray,
+    opacity: 0.75,
+    backgroundColor: Theme.screenBackground,
   },
   assignDriverAvatarBusy: {
     backgroundColor: Theme.surfaceGray,
@@ -1879,7 +1947,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: (Theme as any).warningMuted ?? "#FEF3C7",
+    backgroundColor: "transparent",
     borderWidth: 1,
     borderColor: (Theme as any).warning ?? "#D97706",
   },
@@ -1893,24 +1961,24 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: Theme.primary,
+    backgroundColor: "transparent",
     borderWidth: 1,
-    borderColor: Theme.primary,
+    borderColor: Theme.textPrimaryDark,
     alignItems: "center",
     justifyContent: "center",
   },
   assignUpdateLinkBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: Theme.fiscalTabActiveBg ?? "#e8eaf6",
+    backgroundColor: "transparent",
     borderWidth: 1,
-    borderColor: Theme.primary,
+    borderColor: Theme.textPrimaryDark,
   },
   assignUpdateLinkBadgeText: {
     fontSize: 8,
     fontWeight: "800",
-    color: Theme.primary,
+    color: Theme.textPrimaryDark,
     textTransform: "uppercase",
   },
   assignRegistrySubtext: {
@@ -1920,6 +1988,17 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.8,
     marginTop: 2,
+  },
+  assignRatingRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  assignRatingText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textSecondary,
   },
   assignCancelBtn: {
     paddingVertical: 16,
