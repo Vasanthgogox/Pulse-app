@@ -12,6 +12,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { getSignedAvatarUrl } from '@/lib/avatarUpload';
 import { pickContactForNameAndPhone } from '@/lib/contactPicker';
 import { validatePhone } from '@/lib/phoneValidation';
+import { formatMobileNumber } from '@/lib/format';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -392,7 +393,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
               placeholder="+91 98765 43210"
               placeholderTextColor={Theme.placeholder}
               value={formData.phone}
-              onChangeText={(v) => setFormData((p) => ({ ...p, phone: v }))}
+              onChangeText={(v) => setFormData((p) => ({ ...p, phone: formatMobileNumber(v) }))}
               keyboardType="phone-pad"
               autoCorrect={false}
               spellCheck={false}
@@ -583,8 +584,9 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
                 placeholderTextColor={Theme.placeholder}
                 value={formData.emergencyContact}
                 onChangeText={(v) => {
-                  setFormData((p) => ({ ...p, emergencyContact: v }));
-                  validateEmergencyPhone(v);
+                  const formatted = formatMobileNumber(v);
+                  setFormData((p) => ({ ...p, emergencyContact: formatted }));
+                  validateEmergencyPhone(formatted);
                 }}
                 keyboardType="phone-pad"
                 autoCorrect={false}

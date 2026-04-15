@@ -95,6 +95,23 @@ export function formatIndianVehicleNumber(raw: string | null | undefined): strin
 }
 
 /**
+ * Format mobile number to exactly 10 digits when fully typed.
+ * Strips non-digits and handles common +91 or 0 prefixes when pasted.
+ */
+export function formatMobileNumber(raw: string | null | undefined): string {
+  if (!raw) return '';
+  let digits = raw.replace(/\D/g, '');
+  if (digits.length > 10) {
+    if (digits.startsWith('91')) {
+      digits = digits.slice(2);
+    } else if (digits.startsWith('0')) {
+      digits = digits.slice(1);
+    }
+  }
+  return digits.slice(0, 10);
+}
+
+/**
  * Format as user types in vehicle number input. Applies Indian spacing when pattern matches; otherwise uppercase + trim.
  * Use in onChangeText so pasted "tn25cm7892" or "TN 25 CM 7892" and typing both show "TN 25 CM 7892".
  */

@@ -13,6 +13,7 @@ import { useIsOnline } from '@/contexts/NetworkContext';
 import { checkExistingUserByPhone } from '@/features/auth';
 import { validateEmail } from '@/lib/emailValidation';
 import { isPhoneValid, validatePhone } from '@/lib/phoneValidation';
+import { formatMobileNumber } from '@/lib/format';
 import { useSafeBack } from '@/lib/useSafeBack';
 import { VALIDATION, validatePassword } from '@/lib/validation';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -409,7 +410,7 @@ export default function DriverSignUpScreen() {
                   placeholder="000 000 0000"
                   placeholderTextColor={LIGHT.placeholder}
                   value={phone}
-                  onChangeText={(text) => setPhone(text.replace(/\D/g, '').slice(0, 10))}
+                  onChangeText={(text) => setPhone(formatMobileNumber(text))}
                   keyboardType="phone-pad"
                   maxLength={10}
                   autoCorrect={false}

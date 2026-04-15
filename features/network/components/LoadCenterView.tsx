@@ -7,6 +7,7 @@ import { SubTabs } from "@/components/SubTabs";
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { formatMobileNumber } from "@/lib/format";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { upsertTripSubcontract } from "@/features/finance/services/tripSubcontracts.service";
 import {
@@ -3031,7 +3032,7 @@ export function LoadCenterView({
                             placeholder="Phone for OTP (optional)"
                             placeholderTextColor={Theme.textMuted}
                             value={aggregateDriverPhone}
-                            onChangeText={setAggregateDriverPhone}
+                            onChangeText={(t) => setAggregateDriverPhone(formatMobileNumber(t))}
                             keyboardType="phone-pad"
                             autoComplete="tel"
                           />

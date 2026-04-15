@@ -9,6 +9,7 @@ import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { pickContactForNameAndPhone } from "@/lib/contactPicker";
 import { validatePhone } from "@/lib/phoneValidation";
+import { formatMobileNumber } from "@/lib/format";
 import { inviteeSuggestedCompanyName } from "@/services/connectionRequestsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useEffect, useRef, useState } from "react";
@@ -270,7 +271,7 @@ export function AddClientModal({
             placeholderTextColor={Theme.textMutedDemo}
             value={phone}
             onChangeText={(t) => {
-              setPhone(t);
+              setPhone(formatMobileNumber(t));
               setInviteeMatch(null);
               setSearchedNoResult(false);
             }}
@@ -525,7 +526,7 @@ export function AddClientModal({
                 placeholderTextColor={Theme.textMutedDemo}
                 value={phone}
                 onChangeText={(t) => {
-                  setPhone(t);
+                  setPhone(formatMobileNumber(t));
                   setInviteeMatch(null);
                   setSearchedNoResult(false);
                 }}
