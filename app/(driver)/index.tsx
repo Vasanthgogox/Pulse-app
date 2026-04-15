@@ -1218,6 +1218,14 @@ export default function DriverRadarScreen() {
           justClaimedOldTripIdRef.current &&
         !activeMission)),
   );
+  const isAcceptedIncomingFlow = Boolean(
+    effectiveFirstIncoming &&
+      String(acceptedTripId ?? "").toLowerCase() ===
+        String(effectiveFirstIncoming.id).toLowerCase(),
+  );
+  const shouldUseStaticMapSheetCard = Boolean(
+    showNewAssignmentCard || activeMission || isAcceptedIncomingFlow,
+  );
   useEffect(() => {
     if (!showNewAssignmentCard) return;
     newAssignmentBlinkAnim.setValue(0);
@@ -1263,7 +1271,7 @@ export default function DriverRadarScreen() {
   const olaMapBottomPaddingPx = Math.round(Dimensions.get('window').height * 0.5);
   const screenHeight = Dimensions.get('window').height;
   const sheetSnapPoints = useMemo(() => {
-    if (showNewAssignmentCard || acceptedTripId) {
+    if (shouldUseStaticMapSheetCard) {
       // In dynamic sizing mode (v5), we still need to provide valid snap points.
       // They will be used as fallback or initial points before content height is measured.
       return ["100%"];
@@ -1284,7 +1292,7 @@ export default function DriverRadarScreen() {
       ),
     );
     return [min, mid, expanded];
-  }, [screenHeight, insets.top, showNewAssignmentCard, acceptedTripId]);
+  }, [screenHeight, insets.top, shouldUseStaticMapSheetCard]);
 
   const snapSheetToIndex = useCallback((idx: number) => {
     try {
@@ -3260,19 +3268,19 @@ export default function DriverRadarScreen() {
               index={
                 sheetSnapPoints.length === 1
                   ? 0
-                  : showNewAssignmentCard || acceptedTripId
+                  : shouldUseStaticMapSheetCard
                   ? 0
                   : 1
               }
               enablePanDownToClose={false}
               enableHandlePanningGesture={
-                !(showNewAssignmentCard || acceptedTripId)
+                !shouldUseStaticMapSheetCard
               }
               enableContentPanningGesture={
-                !(showNewAssignmentCard || acceptedTripId)
+                !shouldUseStaticMapSheetCard
               }
-              enableOverDrag={!(showNewAssignmentCard || acceptedTripId)}
-              enableDynamicSizing={showNewAssignmentCard || !!acceptedTripId}
+              enableOverDrag={!shouldUseStaticMapSheetCard}
+              enableDynamicSizing={shouldUseStaticMapSheetCard}
               ref={bottomSheetRef}
               keyboardBehavior="interactive"
               keyboardBlurBehavior="restore"
@@ -3281,7 +3289,7 @@ export default function DriverRadarScreen() {
                 // Only dismiss keyboard if we're snapping to a very low point or closing
                 if (
                   index <= 0 &&
-                  !(showNewAssignmentCard || acceptedTripId)
+                  !shouldUseStaticMapSheetCard
                 ) {
                   Keyboard.dismiss();
                 }
@@ -3295,7 +3303,7 @@ export default function DriverRadarScreen() {
               }}
               handleIndicatorStyle={{
                 backgroundColor:
-                  showNewAssignmentCard || acceptedTripId
+                  shouldUseStaticMapSheetCard
                     ? "transparent"
                     : colors.border,
                 width: 50,
@@ -3303,7 +3311,7 @@ export default function DriverRadarScreen() {
                 borderRadius: 999,
               }}
             >
-              {showNewAssignmentCard || acceptedTripId ? (
+              {shouldUseStaticMapSheetCard ? (
                 <BottomSheetView
                   style={[
                     styles.olaSheetContent,
