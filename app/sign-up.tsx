@@ -225,31 +225,33 @@ export default function SignUp() {
       return;
     }
     const companyTrim = companyName.trim();
-    if (companyTrim.length > 0) {
-      const companyErr = maxLength(
-        VALIDATION.COMPANY_NAME_MAX_LENGTH,
-        `Company name must be at most ${VALIDATION.COMPANY_NAME_MAX_LENGTH} characters.`,
-      )(companyTrim);
-      if (companyErr) {
-        setErrorMsg(companyErr);
+    if (companyTrim.length === 0) {
+      setErrorMsg('Please enter company name.');
+      return;
+    }
+    const companyErr = maxLength(
+      VALIDATION.COMPANY_NAME_MAX_LENGTH,
+      `Company name must be at most ${VALIDATION.COMPANY_NAME_MAX_LENGTH} characters.`,
+    )(companyTrim);
+    if (companyErr) {
+      setErrorMsg(companyErr);
+      return;
+    }
+    if (companyNameTakenCheck?.taken) {
+      setErrorMsg('Company name already exists.');
+      return;
+    }
+    if (companyNameTakenCheck?.loading) {
+      setLoading(true);
+      const dup = await checkOrganizationNameTaken(companyTrim);
+      setLoading(false);
+      if (dup.error) {
+        setErrorMsg(dup.error.message);
         return;
       }
-      if (companyNameTakenCheck?.taken) {
+      if (dup.taken) {
         setErrorMsg('Company name already exists.');
         return;
-      }
-      if (companyNameTakenCheck?.loading) {
-        setLoading(true);
-        const dup = await checkOrganizationNameTaken(companyTrim);
-        setLoading(false);
-        if (dup.error) {
-          setErrorMsg(dup.error.message);
-          return;
-        }
-        if (dup.taken) {
-          setErrorMsg('Company name already exists.');
-          return;
-        }
       }
     }
     if (!trimmedEmail) {
@@ -257,46 +259,48 @@ export default function SignUp() {
       return;
     }
     const normalizedPhone = normalizePhone(phone);
-    if (normalizedPhone.length > 0) {
-      const phoneErr = validatePhone(phone);
-      if (phoneErr) {
-        setErrorMsg(phoneErr);
-        return;
-      }
-      setLoading(true);
-      const existing = await checkExistingUserByPhone(normalizedPhone);
-      setLoading(false);
-      if (existing.error) {
-        setErrorMsg(existing.error.message);
-        return;
-      }
-      if (existing.exists && existing.email) {
-        Alert.alert(
-          'Account already exists',
-          existing.masked_email
-            ? `Sign in with ${existing.masked_email}. We've filled your email—enter your password.`
-            : 'An account with this phone already exists. Sign in below—we\'ve filled your email.',
-          [
-            {
-              text: 'OK',
-              onPress: () =>
-                router.replace(`/sign-in?email=${encodeURIComponent(existing.email!)}`),
-            },
-          ]
-        );
-        return;
-      }
+    if (normalizedPhone.length === 0) {
+      setErrorMsg('Please enter your phone number.');
+      return;
+    }
+    const phoneErr = validatePhone(phone);
+    if (phoneErr) {
+      setErrorMsg(phoneErr);
+      return;
     }
     setLoading(true);
-    const phoneToSave = normalizedPhone.length > 0 ? normalizedPhone : undefined;
+    const existing = await checkExistingUserByPhone(normalizedPhone);
+    setLoading(false);
+    if (existing.error) {
+      setErrorMsg(existing.error.message);
+      return;
+    }
+    if (existing.exists && existing.email) {
+      Alert.alert(
+        'Account already exists',
+        existing.masked_email
+          ? `Sign in with ${existing.masked_email}. We've filled your email—enter your password.`
+          : 'An account with this phone already exists. Sign in below—we\'ve filled your email.',
+        [
+          {
+            text: 'OK',
+            onPress: () =>
+              router.replace(`/sign-in?email=${encodeURIComponent(existing.email!)}`),
+          },
+        ]
+      );
+      return;
+    }
+
+    setLoading(true);
     const { error } = await signUp(
       trimmedEmail,
       password,
       fullName.trim() || undefined,
       'user',
       operatingModel,
-      phoneToSave,
-      companyTrim || undefined,
+      normalizedPhone,
+      companyTrim,
     );
     setLoading(false);
     if (error) {
@@ -378,7 +382,7 @@ export default function SignUp() {
           >
             <TextInput
               style={[styles.input, styles.inputNoMargin]}
-              placeholder="Company name (optional)"
+              placeholder="Company Name"
               placeholderTextColor={Theme.authTextMuted}
               value={companyName}
               onChangeText={setCompanyName}
@@ -405,7 +409,7 @@ export default function SignUp() {
           >
             <TextInput
               style={[styles.input, styles.inputNoMargin]}
-              placeholder="Phone (Optional)"
+              placeholder="10-digit Phone"
               placeholderTextColor={Theme.authTextMuted}
               value={phone}
               onChangeText={(text) => setPhone(text.replace(/\D/g, '').slice(0, 10))}
