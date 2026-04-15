@@ -733,7 +733,8 @@ export function AddTransactionModal({
       !isDriverPayment &&
       !isVehicleExpenseOut &&
       category != null &&
-      (EXPENSE_CATEGORIES as readonly string[]).includes(category));
+      ((EXPENSE_CATEGORIES as readonly string[]).includes(category) ||
+        category === "SUPPLIER COST"));
 
   /** Entry date: when non-empty must be valid YYYY-MM-DD; empty falls back to today in submit. */
   const entryDateError =
@@ -982,7 +983,7 @@ export function AddTransactionModal({
     )
       setCategory(null);
   }, [visible, hidePartyForCashOut, type, category]);
-  // Default category by party: Receivables (Cash IN) → Trip Payment; Supplier (Cash OUT) → Trip Payment; legacy Cash OUT → SUPPLIER COST or DRIVER SALARY.
+  // Default category by party: Receivables (Cash IN) -> Trip Payment; Supplier (Cash OUT) -> Trip Payment; legacy Cash OUT -> SUPPLIER PAYMENT or DRIVER SALARY.
   useEffect(() => {
     if (!visible) return;
     if (type === "in") {
@@ -1001,8 +1002,8 @@ export function AddTransactionModal({
       return;
     }
     if (type === "out") {
-      if (category !== "SUPPLIER COST" && category !== "DRIVER SALARY")
-        setCategory("SUPPLIER COST");
+      if (category !== "SUPPLIER PAYMENT" && category !== "DRIVER SALARY")
+        setCategory("SUPPLIER PAYMENT");
     }
   }, [
     visible,
@@ -1146,6 +1147,9 @@ export function AddTransactionModal({
           : isUnlinkedMisc
             ? "Misc / Unlinked"
             : (effectivePartyName ?? null);
+    const normalizedCategory =
+      category === "SUPPLIER COST" ? "SUPPLIER PAYMENT" : category;
+
     const data: AddTransactionData = {
       type,
       amount,
@@ -1161,12 +1165,12 @@ export function AddTransactionModal({
       category:
         type === "in"
           ? (isClientPayment || tripLocked)
-            ? (category ?? undefined)
+            ? (normalizedCategory ?? undefined)
             : undefined
           : type === "out" && !isDriverPayment
             ? isVehicleExpenseOut
               ? (effectivePartyId ?? undefined)
-              : (category ?? undefined)
+              : (normalizedCategory ?? undefined)
             : undefined,
       driverPaymentType: finalDriverPaymentType,
       contactId: finalContactId ?? undefined,

@@ -1061,8 +1061,45 @@ export function LoadCenterView({
         );
         return;
       }
+      const subSupplierId = (subcontractSupplierId ?? "").trim();
+      const subRateNum = Number(subcontractRate);
+      const shouldSaveSubcontract =
+        subSupplierId !== "" &&
+        Number.isFinite(subRateNum) &&
+        subRateNum >= 0;
+
+      const saveSubcontract = async () => {
+        if (!shouldSaveSubcontract) return;
+        const isTripOwner = trip.organization_id === orgId;
+        
+        if (isTripOwner) {
+          const { error: supplierUpdateErr } = await updateTripSupplier(trip.id, {
+            supplier_id: subSupplierId,
+            supplier_rate: subRateNum,
+          });
+          if (supplierUpdateErr) {
+            Alert.alert(
+              "Trip created",
+              `Partner was saved, but trip supplier link could not be updated. ${supplierUpdateErr.message}`,
+            );
+          }
+        }
+        
+        const { error: subErr } = await upsertTripSubcontract({
+          viewerOrgId: orgId,
+          tripId: trip.id,
+          supplierId: subSupplierId,
+          rate: subRateNum,
+        });
+        if (subErr) Alert.alert("Trip created", `Partner could not be saved. ${subErr.message}`);
+        queryClient.invalidateQueries({
+          queryKey: ["q", "trips", "subcontracts", orgId],
+        });
+      };
+
       // Driver + OTP are optional: require phone only for OTP generation (not for trip creation).
       if (!phoneTrimmed || phoneErr) {
+        await saveSubcontract();
         await updateIndent(load.id, { status: "completed" });
         invalidateTrips(orgId);
         invalidateIndents(orgId);
@@ -1081,6 +1118,7 @@ export function LoadCenterView({
         regNum || null,
       );
       if (assignAggErr) {
+        await saveSubcontract();
         await updateIndent(load.id, { status: "completed" });
         invalidateTrips(orgId);
         invalidateIndents(orgId);
@@ -1099,6 +1137,7 @@ export function LoadCenterView({
 
       const { error: otpErr, code, expires_at } = await generateTripOtp(trip.id);
       if (otpErr || !code) {
+        await saveSubcontract();
         await updateIndent(load.id, { status: "completed" });
         invalidateTrips(orgId);
         invalidateIndents(orgId);
@@ -1119,38 +1158,7 @@ export function LoadCenterView({
       setDeployOtpExpiresAt(expires_at ?? null);
       setDeployTripIdForOtp(trip.id);
 
-      const subSupplierId = (subcontractSupplierId ?? "").trim();
-      const subRateNum = Number(subcontractRate);
-      const shouldSaveSubcontract =
-        subSupplierId !== "" &&
-        Number.isFinite(subRateNum) &&
-        subRateNum >= 0;
-      if (shouldSaveSubcontract) {
-        // Mirror aggregate-trip behavior: chosen partner becomes trip supplier
-        // and entered amount becomes supplier payable baseline.
-        const { error: supplierUpdateErr } = await updateTripSupplier(trip.id, {
-          supplier_id: subSupplierId,
-          supplier_rate: subRateNum,
-        });
-        if (supplierUpdateErr) {
-          Alert.alert(
-            "Trip created",
-            `Partner was saved, but trip supplier link could not be updated. ${supplierUpdateErr.message}`,
-          );
-        }
-        const { error: subErr } = await upsertTripSubcontract({
-          viewerOrgId: orgId,
-          tripId: trip.id,
-          supplierId: subSupplierId,
-          rate: subRateNum,
-        });
-        if (subErr) Alert.alert("Trip created", `Partner could not be saved. ${subErr.message}`);
-        // Ensure Finance → Suppliers reflects the saved partner payable immediately
-        // (covers both backend RPC success and local fallback).
-        queryClient.invalidateQueries({
-          queryKey: ["q", "trips", "subcontracts", orgId],
-        });
-      }
+      await saveSubcontract();
 
       await updateIndent(load.id, { status: "completed" });
       invalidateTrips(orgId);

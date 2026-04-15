@@ -93,6 +93,8 @@ export interface TripDetailFinanceViewProps {
   viewerOrgId?: string | null;
   /** Display name of the client for this trip */
   clientName?: string | null;
+  /** If the viewer is the supplier and subcontracted the trip, the subcontract rate. */
+  subcontractRate?: number | null;
 }
 
 export type DocCategory = "vehicle" | "trip" | "driver";
@@ -229,6 +231,7 @@ export function TripDetailFinanceView({
   onOpenDoc,
   viewerOrgId = null,
   clientName,
+  subcontractRate,
 }: TripDetailFinanceViewProps) {
   const { t } = useLanguage();
   const routeStr = `${trip.pickup_area ?? "—"} → ${trip.drop_location ?? "—"}`.trim() || "—";
@@ -242,9 +245,11 @@ export function TripDetailFinanceView({
   /** Non-owner + indent: supplier_rate. Otherwise: client_price. */
   const sales =
     trip.indent_id != null && !isTripOwner ? supplierCost : customerSales;
-  /** Owner + indent: cost = supplier_rate. Non-owner + indent: no cost. Non-indent: supplier_rate. */
+  /** Owner + indent: cost = supplier_rate. Non-owner + indent: cost = subcontractRate (or 0). Non-indent: supplier_rate. */
   const cost =
-    trip.indent_id != null && !isTripOwner ? 0 : supplierCost;
+    trip.indent_id != null && !isTripOwner
+      ? (subcontractRate ?? supplierCost) // Fallback to supplierCost if no subcontractRate
+      : supplierCost;
   const isPartnerSettlementView = trip.indent_id != null && !isTripOwner;
   const billingOriginalLabel = isPartnerSettlementView ? "Partner Amount" : "Original Price";
   const billingFinalLabel = isPartnerSettlementView ? "Final Partner Amount" : "Final Price";

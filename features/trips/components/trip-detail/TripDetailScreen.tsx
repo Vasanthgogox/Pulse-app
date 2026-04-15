@@ -17,7 +17,7 @@ import { canAssignTrip, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatIndianVehicleNumber } from "@/lib/format";
-import { useShipperDisplayNamesQuery, useTransactionsQuery } from "@/lib/queries";
+import { useShipperDisplayNamesQuery, useTransactionsQuery, useTripSubcontractsQuery } from "@/lib/queries";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -527,6 +527,19 @@ export default function TripDetailScreen({
   const tripLedgerEntries = useMemo(() => {
     return getTripLedgerEntries(transactions, trip?.id);
   }, [transactions, trip?.id]);
+
+  const { data: tripSubcontracts = [] } = useTripSubcontractsQuery(
+    currentOrganization?.id ?? null,
+    trip ? [trip.id] : []
+  );
+
+  const subcontractRate = useMemo(() => {
+    if (tripSubcontracts.length > 0 && trip) {
+      const exact = tripSubcontracts.find((row) => row.trip_id === trip.id);
+      return exact?.rate ?? null;
+    }
+    return null;
+  }, [tripSubcontracts, trip]);
 
   /** When opening from load flow (supplier Authorize Voyage), use stashed trip so we never show "Trip not found". */
   useEffect(() => {
@@ -1056,7 +1069,13 @@ export default function TripDetailScreen({
     const fallbackSupplierName = (trip.supplier_name ?? "").trim() || null;
     if (trip.supplier_id) {
       setPartnerName(fallbackSupplierName);
-      getSupplierById(orgId, trip.supplier_id).then((r) => {
+      
+      // We might be looking at a shared trip owned by another org.
+      // To get the supplier name correctly, use the viewer's org ID if we have it,
+      // because the supplier record lives in the viewer's org, not the trip owner's org.
+      const orgIdToUse = currentOrganization?.id ?? orgId;
+      
+      getSupplierById(orgIdToUse, trip.supplier_id).then((r) => {
         if (!cancelled) {
           const s = r.supplier;
           setPartnerName(
@@ -1584,6 +1603,8 @@ export default function TripDetailScreen({
             tripLedgerEntries={tripLedgerEntries}
             adjustments={adjustments}
             viewerOrgId={currentOrganization?.id ?? null}
+            clientName={displayClientName}
+            subcontractRate={subcontractRate}
             assignmentAuditRows={assignmentAuditRows}
             assignmentDriverNames={assignmentDriverNames}
             assignmentVehicleLabels={assignmentVehicleLabels}
