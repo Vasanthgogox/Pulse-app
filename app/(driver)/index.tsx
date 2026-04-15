@@ -281,6 +281,9 @@ function bearingDegrees(
   return (deg + 360) % 360;
 }
 
+const DECLINE_WARNING_TITLE = "Decline this trip?";
+const DECLINE_WARNING_MSG = "Warning: you will no longer be assigned to this trip. The fleet can reassign it to another driver.";
+
 /** Keep fitToCoordinates responsive on long hauls (many vertices). */
 function subsampleRouteCoordinates<T extends { latitude: number; longitude: number }>(
   coords: T[],
@@ -621,41 +624,78 @@ export default function DriverRadarScreen() {
     });
   }, [profile?.uid]);
 
+  const runDeclineTrip = useCallback(
+    async (tripId: string) => {
+      if (declineLoading) return;
+      setAcceptError(null);
+      if (otpClaimTripId === tripId) {
+        setOtpClaimTripId(null);
+        setOtpValue("");
+        setOtpError(null);
+      }
+      setDeclineLoading(true);
+      const { error } = await tripsService.driverRejectTrip(tripId);
+      setDeclineLoading(false);
+      if (error) {
+        Alert.alert(
+          "Decline failed",
+          error.message ?? "Could not decline. Try again.",
+          [{ text: "OK" }],
+        );
+        return;
+      }
+      if (String(acceptedTripId ?? "").toLowerCase() === String(tripId).toLowerCase()) {
+        setAcceptedTripId(null);
+        await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
+      }
+      setAssignmentFeedback("declined");
+      setDeclinedTripId(tripId);
+      fetch();
+      if (assignmentFeedbackTimeoutRef.current)
+        clearTimeout(assignmentFeedbackTimeoutRef.current);
+      assignmentFeedbackTimeoutRef.current = setTimeout(() => {
+        setAssignmentFeedback(null);
+        assignmentFeedbackTimeoutRef.current = null;
+      }, 1200);
+    },
+    [
+      declineLoading,
+      otpClaimTripId,
+      acceptedTripId,
+      fetch,
+      setDeclinedTripId,
+    ],
+  );
+
+  const confirmDeclineTrip = useCallback(
+    (tripId: string) => {
+      // Use web-native confirm window for the web, otherwise Expo's Alert.alert 
+      // silently fails to block/render if window.confirm isn't hooked up correctly
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        const confirmed = window.confirm(`${DECLINE_WARNING_TITLE}\n\n${DECLINE_WARNING_MSG}`);
+        if (confirmed) {
+          void runDeclineTrip(tripId);
+        }
+        return;
+      }
+      
+      Alert.alert(DECLINE_WARNING_TITLE, DECLINE_WARNING_MSG, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Decline trip",
+          style: "destructive",
+          onPress: () => runDeclineTrip(tripId),
+        },
+      ]);
+    },
+    [runDeclineTrip],
+  );
+
   const handleDeclineTrip = useCallback(
     async (tripId: string) => {
-      Alert.alert(
-        "Decline this trip?",
-        "You will no longer be assigned to this trip. The fleet can reassign it to another driver.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Decline trip",
-            style: "destructive",
-            onPress: async () => {
-              const res = await tripsService.driverRejectTrip(tripId);
-              if (res.error) {
-                Alert.alert(
-                  "Decline failed",
-                  res.error.message ?? "Could not decline. Try again.",
-                  [{ text: "OK" }],
-                );
-                return;
-              }
-              setDeclinedTripId(tripId);
-              fetch();
-              setAssignmentFeedback("declined");
-              if (assignmentFeedbackTimeoutRef.current)
-                clearTimeout(assignmentFeedbackTimeoutRef.current);
-              assignmentFeedbackTimeoutRef.current = setTimeout(() => {
-                setAssignmentFeedback(null);
-                assignmentFeedbackTimeoutRef.current = null;
-              }, 1200);
-            },
-          },
-        ],
-      );
+      confirmDeclineTrip(tripId);
     },
-    [fetch, setDeclinedTripId],
+    [confirmDeclineTrip],
   );
 
   useEffect(() => {
@@ -774,11 +814,17 @@ export default function DriverRadarScreen() {
     return () => sub.remove();
   }, [profile?.uid, fetch]);
 
-  // Clear declinedTripId once the declined trip is no longer in the driver's list (RPC unassigned it).
+  // Clear declinedTripId once the declined trip is no longer present in any assignment source.
   useEffect(() => {
-    if (!declinedTripId || allTrips.length === 0) return;
-    if (!allTrips.some((t) => t.id === declinedTripId)) setDeclinedTripId(null);
-  }, [declinedTripId, allTrips]);
+    if (!declinedTripId) return;
+    const stillVisibleInAssigned = allTrips.some((t) => t.id === declinedTripId);
+    const stillVisibleInPendingOtp = pendingOtpTrips.some(
+      (t) => t.id === declinedTripId,
+    );
+    if (!stillVisibleInAssigned && !stillVisibleInPendingOtp) {
+      setDeclinedTripId(null);
+    }
+  }, [declinedTripId, allTrips, pendingOtpTrips]);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
@@ -878,42 +924,7 @@ export default function DriverRadarScreen() {
   };
 
   const handleDeclineAssignment = (tripId: string) => {
-    Alert.alert(
-      "Decline this trip?",
-      "You will no longer be assigned to this trip. The fleet can reassign it to another driver.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Decline trip",
-          style: "destructive",
-          onPress: async () => {
-            if (declineLoading) return;
-            setAcceptError(null);
-            if (otpClaimTripId === tripId) closeOtpClaim();
-            setDeclineLoading(true);
-            const { error } = await tripsService.driverRejectTrip(tripId);
-            setDeclineLoading(false);
-            if (error) {
-              Alert.alert(
-                "Decline failed",
-                error.message ?? "Could not decline. Try again.",
-                [{ text: "OK" }],
-              );
-              return;
-            }
-            setAssignmentFeedback("declined");
-            setDeclinedTripId(tripId);
-            fetch();
-            if (assignmentFeedbackTimeoutRef.current)
-              clearTimeout(assignmentFeedbackTimeoutRef.current);
-            assignmentFeedbackTimeoutRef.current = setTimeout(() => {
-              setAssignmentFeedback(null);
-              assignmentFeedbackTimeoutRef.current = null;
-            }, 1200);
-          },
-        },
-      ],
-    );
+    confirmDeclineTrip(tripId);
   };
 
   const renderOtpClaimCard = (
@@ -1044,7 +1055,9 @@ export default function DriverRadarScreen() {
   const firstIncoming =
     incomingTrips.find((t) => t.id !== declinedTripId) ?? null;
   // Load-based (assign by phone): trip is in pendingOtpTrips, not allTrips. Use same assignment card and flow.
-  const effectiveFirstIncoming = firstIncoming ?? pendingOtpTrips[0] ?? null;
+  const firstPendingOtpIncoming =
+    pendingOtpTrips.find((t) => t.id !== declinedTripId) ?? null;
+  const effectiveFirstIncoming = firstIncoming ?? firstPendingOtpIncoming ?? null;
   // OTP only for non-roster (ad-hoc) trips; connected/roster trips accept directly.
   const pendingOtpTripsRequiringOtp = pendingOtpTrips.filter(
     (t) => !isRosterTrip(t),
@@ -1066,9 +1079,12 @@ export default function DriverRadarScreen() {
         ...allTrips,
       ].find(
         (trip): trip is tripsService.TripRow =>
-          Boolean(trip) && trip.id === otpClaimTripId,
+          trip != null && trip.id === otpClaimTripId,
       ) ?? null)
     : null;
+
+  const hasIncomingTrip = Boolean(effectiveFirstIncoming);
+  const effectiveIncomingId = String(effectiveFirstIncoming?.id ?? "").toLowerCase();
 
   // Use driver's accepted offer (commission % or per km) for this org so commission matches control screen
   const acceptedInviteForOrg =
@@ -1217,17 +1233,15 @@ export default function DriverRadarScreen() {
     return () => loop.stop();
   }, [showOfflineAssignedCard, pickupDotPingAnim]);
 
-  const hasIncomingTrip = Boolean(effectiveFirstIncoming);
-
   // Blink for "New assignment" card (pending accept, or showing accept/decline feedback).
   const showNewAssignmentCard = Boolean(
     hasIncomingTrip &&
     (assignmentFeedback != null ||
-      (String(effectiveFirstIncoming.id).toLowerCase() !==
+      (effectiveIncomingId !==
         String(acceptedTripId ?? "").toLowerCase() &&
-        String(effectiveFirstIncoming.id).toLowerCase() !==
+        effectiveIncomingId !==
           justClaimedTripIdRef.current &&
-        String(effectiveFirstIncoming.id).toLowerCase() !==
+        effectiveIncomingId !==
           justClaimedOldTripIdRef.current &&
         !activeMission)),
   );

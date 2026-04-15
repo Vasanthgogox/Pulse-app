@@ -17,7 +17,7 @@ export interface ThemedConfirmModalProps {
   onConfirm: () => void;
   onRequestClose?: () => void;
   variant?: ThemedConfirmModalVariant;
-  confirmVariant?: "primary" | "secondary";
+  confirmVariant?: "primary" | "secondary" | "destructive";
 }
 
 export function ThemedConfirmModal({
@@ -52,9 +52,13 @@ export function ThemedConfirmModal({
   }, [variant]);
 
   const confirmButtonStyle =
-    confirmVariant === "primary" ? styles.buttonPrimary : styles.buttonSecondary;
+    confirmVariant === "destructive"
+      ? styles.buttonDestructive
+      : confirmVariant === "secondary"
+      ? styles.buttonSecondary
+      : styles.buttonPrimary;
   const confirmTextStyle =
-    confirmVariant === "primary" ? styles.textPrimary : styles.textSecondary;
+    confirmVariant === "secondary" ? styles.textSecondary : styles.textPrimary;
 
   return (
     <Modal
@@ -194,6 +198,9 @@ const styles = StyleSheet.create({
   buttonSecondary: {
     backgroundColor: Theme.surfaceGray,
     borderWidth: 0,
+  },
+  buttonDestructive: {
+    backgroundColor: Theme.negative,
   },
   textBase: {
     fontSize: 16,

@@ -40,3 +40,19 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# test coverage
+coverage/
+
+# logs
+*.log
+
+# backup / temp files
+*.bak
+*.old
+*.tmp
+tmp_*
+*.reference
+
+# IDE
+.idea/
