@@ -28,6 +28,7 @@ import {
   isTripCompleted,
   regenerateTripOtp,
   setInitialTripForDetail,
+  updateTripSupplier,
 } from "@/features/trips";
 import { formatINR } from "@/lib/format";
 import { validatePhone } from "@/lib/phoneValidation";
@@ -1125,6 +1126,18 @@ export function LoadCenterView({
         Number.isFinite(subRateNum) &&
         subRateNum >= 0;
       if (shouldSaveSubcontract) {
+        // Mirror aggregate-trip behavior: chosen partner becomes trip supplier
+        // and entered amount becomes supplier payable baseline.
+        const { error: supplierUpdateErr } = await updateTripSupplier(trip.id, {
+          supplier_id: subSupplierId,
+          supplier_rate: subRateNum,
+        });
+        if (supplierUpdateErr) {
+          Alert.alert(
+            "Trip created",
+            `Partner was saved, but trip supplier link could not be updated. ${supplierUpdateErr.message}`,
+          );
+        }
         const { error: subErr } = await upsertTripSubcontract({
           viewerOrgId: orgId,
           tripId: trip.id,
@@ -4029,7 +4042,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1.4,
   },
-  handshakeBtnModal: { backgroundColor: Theme.buttonPrimary },
+  handshakeBtnModal: { backgroundColor: Theme.textPrimaryDark },
   sourceOfSupplySectionTitle: {
     fontSize: 11,
     fontWeight: "800",
@@ -4099,7 +4112,7 @@ const styles = StyleSheet.create({
   assignModalTitle: {
     fontSize: 18,
     fontWeight: "800",
-    color: Theme.primary,
+    color: Theme.textPrimaryDark,
   },
   assignModalSubtitle: {
     fontSize: 11,
@@ -4631,7 +4644,7 @@ const styles = StyleSheet.create({
   otpBtn: {
     paddingVertical: 10,
     paddingHorizontal: 16,
-    backgroundColor: Theme.buttonPrimary,
+    backgroundColor: Theme.textPrimaryDark,
     borderRadius: 8,
   },
   otpBtnText: {

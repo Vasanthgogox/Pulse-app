@@ -349,6 +349,11 @@ export interface UpdateTripAssignmentData {
   vehicle_display_number?: string | null;
 }
 
+export interface UpdateTripSupplierData {
+  supplier_id?: string | null;
+  supplier_rate?: number;
+}
+
 /** Optional audit context for Private Book vs Shared Network (who last assigned). */
 export interface UpdateTripAssignmentOptions {
   /** Current user id (profiles.id / auth.uid()). When set, an audit row is written so this trip is "Private" for this user. */
@@ -412,6 +417,32 @@ export async function updateTripAssignment(
   }
 
   return { error: null, trip: updatedTrip };
+}
+
+/**
+ * Update trip supplier link and/or supplier rate.
+ * Used when load-based aggregate flow re-assigns the supplying partner at deploy time.
+ */
+export async function updateTripSupplier(
+  tripId: string,
+  data: UpdateTripSupplierData,
+): Promise<{ error: Error | null; trip: TripRow | null }> {
+  const updates: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+  if (data.supplier_id !== undefined) updates.supplier_id = data.supplier_id;
+  if (data.supplier_rate !== undefined) {
+    const n = Number(data.supplier_rate ?? 0);
+    updates.supplier_rate = Number.isFinite(n) ? n : 0;
+  }
+  const { data: row, error } = await supabase()
+    .from("trips")
+    .update(updates)
+    .eq("id", tripId)
+    .select()
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), trip: null };
+  return { error: null, trip: (row ?? null) as TripRow | null };
 }
 
 /**

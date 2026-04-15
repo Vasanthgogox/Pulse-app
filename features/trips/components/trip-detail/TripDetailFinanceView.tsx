@@ -218,7 +218,7 @@ export function TripDetailFinanceView({
   assignmentDriverNames = {},
   assignmentVehicleLabels = {},
   tripOtp: _tripOtp = null,
-  partnerName: _partnerName = null,
+  partnerName = null,
   onAddAdjustment,
   onRemoveAdjustment,
   assignmentBlock,
@@ -245,6 +245,12 @@ export function TripDetailFinanceView({
   /** Owner + indent: cost = supplier_rate. Non-owner + indent: no cost. Non-indent: supplier_rate. */
   const cost =
     trip.indent_id != null && !isTripOwner ? 0 : supplierCost;
+  const isPartnerSettlementView = trip.indent_id != null && !isTripOwner;
+  const billingOriginalLabel = isPartnerSettlementView ? "Partner Amount" : "Original Price";
+  const billingFinalLabel = isPartnerSettlementView ? "Final Partner Amount" : "Final Price";
+  const billingSectionTitle = isPartnerSettlementView ? "Partner Settlement" : "Customer Billing";
+  const supplierDisplayName =
+    (partnerName ?? trip.supplier_name ?? "").trim() || null;
 
   const adjSales = useMemo(() => adjustedRevenue(sales, adjustments), [sales, adjustments]);
   const adjCost = useMemo(() => adjustedCost(cost, adjustments), [cost, adjustments]);
@@ -392,7 +398,9 @@ export function TripDetailFinanceView({
         <View style={styles.financeHeader}>
           <View>
             <Text style={styles.financeTitle}>Trip Finances</Text>
-            {clientName && <Text style={styles.financeSubtitle}>{clientName}</Text>}
+            {(clientName ?? partnerName) && (
+              <Text style={styles.financeSubtitle}>{clientName ?? partnerName}</Text>
+            )}
           </View>
           <View style={styles.financeProfitWrap}>
             <Text style={styles.financeProfitLabel}>Profit</Text>
@@ -402,9 +410,9 @@ export function TripDetailFinanceView({
 
         {/* Customer Billing Section */}
         <View style={styles.financeSection}>
-          <Text style={styles.financeSectionTitle}>Customer Billing</Text>
+          <Text style={styles.financeSectionTitle}>{billingSectionTitle}</Text>
           <View style={styles.financeRow}>
-            <Text style={styles.financeLabel}>Original Price</Text>
+            <Text style={styles.financeLabel}>{billingOriginalLabel}</Text>
             <Text style={styles.financeValue}>{formatINR(sales)}</Text>
           </View>
           
@@ -433,7 +441,7 @@ export function TripDetailFinanceView({
           )}
 
           <View style={styles.financeTotalRow}>
-            <Text style={styles.financeTotalLabel}>Final Price</Text>
+            <Text style={styles.financeTotalLabel}>{billingFinalLabel}</Text>
             <Text style={styles.financeTotalValue}>{formatINR(adjSales)}</Text>
           </View>
 
@@ -457,6 +465,9 @@ export function TripDetailFinanceView({
         {/* Supplier Payments Section */}
         <View style={styles.financeSection}>
           <Text style={styles.financeSectionTitle}>Supplier Payments</Text>
+          {supplierDisplayName ? (
+            <Text style={styles.financeSectionSubtitle}>{supplierDisplayName}</Text>
+          ) : null}
           <View style={styles.financeRow}>
             <Text style={styles.financeLabel}>Original Cost</Text>
             <Text style={styles.financeValue}>{formatINR(cost)}</Text>
@@ -975,6 +986,13 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  financeSectionSubtitle: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    marginTop: -4,
+    marginBottom: 8,
   },
   financeRow: {
     flexDirection: "row",

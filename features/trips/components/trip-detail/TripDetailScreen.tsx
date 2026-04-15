@@ -509,7 +509,12 @@ export default function TripDetailScreen({
     loadTripOtp,
   ]);
 
-  const orgIdForTransactions = trip?.organization_id ?? null;
+  /**
+   * Always read ledger from the viewer org.
+   * In shared/partner trip views, trip.organization_id can be the counterparty org,
+   * which would hide current-org entries and keep finance totals stale.
+   */
+  const orgIdForTransactions = currentOrganization?.id ?? null;
   const { data: transactionsData = [], refetch: refetchTransactions } =
     useTransactionsQuery(orgIdForTransactions);
   refetchTransactionsRef.current = refetchTransactions;
@@ -1012,18 +1017,21 @@ export default function TripDetailScreen({
       setVehicleLabel(null);
       setVehicleDocs(null);
     }
+    const fallbackSupplierName = (trip.supplier_name ?? "").trim() || null;
     if (trip.supplier_id) {
+      setPartnerName(fallbackSupplierName);
       getSupplierById(orgId, trip.supplier_id).then((r) => {
         if (!cancelled) {
           const s = r.supplier;
           setPartnerName(
-            r.error
-              ? null
-              : s?.company_name || s?.name || s?.contact_person || null,
+            s?.company_name ||
+              s?.name ||
+              s?.contact_person ||
+              fallbackSupplierName,
           );
         }
       });
-    } else setPartnerName(null);
+    } else setPartnerName(fallbackSupplierName);
     return () => {
       cancelled = true;
     };
@@ -1035,6 +1043,7 @@ export default function TripDetailScreen({
     trip?.vehicle_id,
     trip?.vehicle_display_number,
     trip?.supplier_id,
+    trip?.supplier_name,
     currentOrganization?.id,
   ]);
 

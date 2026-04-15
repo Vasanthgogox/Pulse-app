@@ -26,6 +26,7 @@ export {
   createTrip,
   createTripWithOtp,
   updateTripAssignment,
+  updateTripSupplier,
   assignTripDriverByPhone,
   assignAggregateTripDriverByPhone,
   updateTripStatus,
@@ -35,6 +36,7 @@ export {
   type CreateTripData,
   type TripOtpInfo,
   type UpdateTripAssignmentOptions,
+  type UpdateTripSupplierData,
   type UpdateTripStatusData,
   type UpdateTripPaymentData,
 } from './services/trips.service';

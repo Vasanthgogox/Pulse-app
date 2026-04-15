@@ -21,7 +21,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -1286,6 +1285,10 @@ export function AddTransactionModal({
           ref={scrollRef}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          onScrollBeginDrag={() => {
+            Keyboard.dismiss();
+            closeAllPickers();
+          }}
           scrollEnabled={
             fullPage ||
             (!showPartyPicker &&
@@ -1307,22 +1310,7 @@ export function AddTransactionModal({
             },
           ]}
         >
-          <TouchableWithoutFeedback
-            onPress={() => {
-              Keyboard.dismiss();
-              const hasOpenPicker =
-                showPartyPicker ||
-                showTripPicker ||
-                showCategoryPicker ||
-                showDriverPaymentTypePicker ||
-                showDriverForSalaryPicker ||
-                showVehiclePicker ||
-                showPaymentPicker;
-              if (hasOpenPicker) closeAllPickers();
-            }}
-            accessible={false}
-          >
-            <View style={styles.panelScrollInner}>
+          <View style={styles.panelScrollInner}>
             {/* Header: LEDGER SYNC + optional "Entry for [name]" + IN/OUT toggle */}
             <View style={styles.headerRow}>
               <View style={styles.titleBlock}>
@@ -2002,7 +1990,6 @@ export function AddTransactionModal({
 
             {!fullPage && submitButton}
           </View>
-          </TouchableWithoutFeedback>
         </ScrollView>
 
         {fullPage && (
