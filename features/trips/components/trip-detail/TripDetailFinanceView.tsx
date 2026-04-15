@@ -21,8 +21,6 @@ import {
   View,
 } from "react-native";
 
-const BLUEPRINT_BG = "#111827";
-
 function formatLedgerDateShort(s: string | null | undefined): string {
   if (!s) return "—";
   const d = (s ?? "").slice(0, 10);
@@ -251,7 +249,6 @@ export function TripDetailFinanceView({
   const adjSales = useMemo(() => adjustedRevenue(sales, adjustments), [sales, adjustments]);
   const adjCost = useMemo(() => adjustedCost(cost, adjustments), [cost, adjustments]);
   const adjMargin = adjSales - adjCost;
-  const marginPerc = adjSales > 0 ? ((adjMargin / adjSales) * 100).toFixed(1) : "0";
 
   const receivedFromCustomer = useMemo(
     () => tripLedgerEntries.reduce((s, tx) => s + Number(tx.amount_in ?? 0), 0),
@@ -297,9 +294,6 @@ export function TripDetailFinanceView({
     () => adjustments.filter((a) => a.type === "cost"),
     [adjustments],
   );
-
-  const receivableStatus = dueFromCustomer <= 0 ? "Cleared" : "Pending";
-  const payableStatus = supplierDue <= 0 ? "Cleared" : "Pending";
 
   const trackingStep = useMemo(
     () => trackingStepFromStatus(trip.status),
@@ -393,138 +387,145 @@ export function TripDetailFinanceView({
         <TripDocsGrid tripDocs={tripDocs} onOpenDoc={onOpenDoc} />
       )}
 
-      {/* Financial summary */}
-      <View style={styles.blueprintCard}>
-        <View style={styles.blueprintHeader}>
-          <Text style={styles.blueprintHeaderTitle}>Financial summary</Text>
-          {clientName ? (
-            <Text style={styles.blueprintHeaderClient} numberOfLines={1}>{clientName}</Text>
-          ) : (
-            <FontAwesome name="crosshairs" size={12} color="rgba(255,255,255,0.2)" />
-          )}
-        </View>
-        <View style={styles.blueprintBody}>
-          <View style={styles.blueprintTopRow}>
-            <View>
-              <Text style={styles.blueprintLabel}>Base contract</Text>
-              <Text style={styles.blueprintValue}>{formatINR(sales)}</Text>
-            </View>
-            <View style={styles.blueprintTopRight}>
-              <Text style={styles.blueprintLabelEmphasis}>Net margin</Text>
-              <Text style={styles.blueprintMargin}>{formatINR(adjMargin)}</Text>
-            </View>
+      {/* Unified Trip Finances Card */}
+      <View style={styles.financeCard}>
+        <View style={styles.financeHeader}>
+          <View>
+            <Text style={styles.financeTitle}>Trip Finances</Text>
+            {clientName && <Text style={styles.financeSubtitle}>{clientName}</Text>}
           </View>
-          <View style={styles.blueprintGrid}>
-            <View style={styles.blueprintGridItem}>
-              <Text style={styles.blueprintLabel}>Adj. sales</Text>
-              <Text style={styles.blueprintGridValue}>{formatINR(adjSales)}</Text>
-            </View>
-            <View style={[styles.blueprintGridItem, styles.blueprintGridItemRight]}>
-              <Text style={styles.blueprintLabel}>Adj. cost</Text>
-              <Text style={styles.blueprintGridValue}>{formatINR(adjCost)}</Text>
-            </View>
-            <View style={styles.blueprintGridItem}>
-              <Text style={styles.blueprintLabelAccent}>Route</Text>
-              <Text style={styles.blueprintGridValue} numberOfLines={1}>{routeStr}</Text>
-            </View>
-            <View style={[styles.blueprintGridItem, styles.blueprintGridItemRight]}>
-              <Text style={styles.blueprintLabelGreen}>Efficiency</Text>
-              <Text style={styles.blueprintGridValueGreen}>+{marginPerc}%</Text>
-            </View>
+          <View style={styles.financeProfitWrap}>
+            <Text style={styles.financeProfitLabel}>Profit</Text>
+            <Text style={styles.financeProfitValue}>{formatINR(adjMargin)}</Text>
           </View>
         </View>
-      </View>
 
-      {/* Adjustment Registry */}
-      <View style={styles.adjSection}>
-        <View style={styles.adjSectionHeader}>
-          <Text style={styles.adjSectionTitle}>Adjustments</Text>
+        {/* Customer Billing Section */}
+        <View style={styles.financeSection}>
+          <Text style={styles.financeSectionTitle}>Customer Billing</Text>
+          <View style={styles.financeRow}>
+            <Text style={styles.financeLabel}>Original Price</Text>
+            <Text style={styles.financeValue}>{formatINR(sales)}</Text>
+          </View>
+          
+          {revenueAdjustments.length > 0 && (
+            <View style={styles.financeAdjustmentsWrap}>
+              {revenueAdjustments.map((adj) => (
+                <View key={adj.id} style={styles.financeAdjRow}>
+                  <Text style={styles.financeAdjReason} numberOfLines={1}>{adj.impact === "plus" ? "+" : "−"} {adj.reason}</Text>
+                  <View style={styles.financeAdjRight}>
+                    <Text style={[styles.financeAdjAmount, adj.impact === "plus" ? { color: Theme.darkGreen } : { color: Theme.teslaRed }]}>
+                      {adj.impact === "plus" ? "+" : "−"}{formatINR(adj.amount)}
+                    </Text>
+                    {onRemoveAdjustment && (
+                      <TouchableOpacity
+                        onPress={() => onRemoveAdjustment(adj.id)}
+                        hitSlop={8}
+                        style={styles.financeAdjRemoveBtn}
+                      >
+                        <FontAwesome name="times" size={14} color={Theme.textMuted} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <View style={styles.financeTotalRow}>
+            <Text style={styles.financeTotalLabel}>Final Price</Text>
+            <Text style={styles.financeTotalValue}>{formatINR(adjSales)}</Text>
+          </View>
+
+          <View style={styles.financeStatusBox}>
+            <View style={styles.financeStatusCol}>
+              <Text style={styles.financeStatusLabel}>Received</Text>
+              <Text style={styles.financeStatusValueGreen}>{formatINR(receivedFromCustomer)}</Text>
+            </View>
+            <View style={styles.financeStatusDivider} />
+            <View style={styles.financeStatusColRight}>
+              <Text style={styles.financeStatusLabel}>Pending to Collect</Text>
+              <Text style={[styles.financeStatusValue, dueFromCustomer > 0 && styles.financeStatusValueRed]}>
+                {formatINR(dueFromCustomer)}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.financeSectionDivider} />
+
+        {/* Supplier Payments Section */}
+        <View style={styles.financeSection}>
+          <Text style={styles.financeSectionTitle}>Supplier Payments</Text>
+          <View style={styles.financeRow}>
+            <Text style={styles.financeLabel}>Original Cost</Text>
+            <Text style={styles.financeValue}>{formatINR(cost)}</Text>
+          </View>
+          
+          {costAdjustments.length > 0 && (
+            <View style={styles.financeAdjustmentsWrap}>
+              {costAdjustments.map((adj) => (
+                <View key={adj.id} style={styles.financeAdjRow}>
+                  <Text style={styles.financeAdjReason} numberOfLines={1}>{adj.impact === "plus" ? "+" : "−"} {adj.reason}</Text>
+                  <View style={styles.financeAdjRight}>
+                    <Text style={[styles.financeAdjAmount, adj.impact === "plus" ? { color: Theme.darkGreen } : { color: Theme.teslaRed }]}>
+                      {adj.impact === "plus" ? "+" : "−"}{formatINR(adj.amount)}
+                    </Text>
+                    {onRemoveAdjustment && (
+                      <TouchableOpacity
+                        onPress={() => onRemoveAdjustment(adj.id)}
+                        hitSlop={8}
+                        style={styles.financeAdjRemoveBtn}
+                      >
+                        <FontAwesome name="times" size={14} color={Theme.textMuted} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <View style={styles.financeTotalRow}>
+            <Text style={styles.financeTotalLabel}>Final Cost</Text>
+            <Text style={styles.financeTotalValue}>{formatINR(adjCost)}</Text>
+          </View>
+
+          <View style={styles.financeStatusBox}>
+            <View style={styles.financeStatusCol}>
+              <Text style={styles.financeStatusLabel}>Paid</Text>
+              <Text style={styles.financeStatusValueDark}>{formatINR(paidToSupplier)}</Text>
+            </View>
+            <View style={styles.financeStatusDivider} />
+            <View style={styles.financeStatusColRight}>
+              <Text style={styles.financeStatusLabel}>Pending to Pay</Text>
+              <Text style={[styles.financeStatusValue, supplierDue > 0 && styles.financeStatusValueRed]}>
+                {formatINR(supplierDue)}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Actions & Commissions */}
+        <View style={styles.financeFooter}>
           {onAddAdjustment && (
-            <TouchableOpacity onPress={onAddAdjustment} style={styles.adjAddBtn} activeOpacity={0.8}>
-              <FontAwesome name="plus" size={12} color={Theme.textPrimaryDark} />
+            <TouchableOpacity onPress={onAddAdjustment} style={styles.financeAddBtn} activeOpacity={0.8}>
+              <FontAwesome name="plus" size={12} color={Theme.primary} style={{ marginRight: 6 }} />
+              <Text style={styles.financeAddBtnText}>Add Adjustment</Text>
             </TouchableOpacity>
           )}
-        </View>
-        <View style={styles.adjTableCard}>
-          <View style={styles.adjTableHeader}>
-            <Text style={[styles.adjTh, styles.adjThReason]}>Reason</Text>
-            <Text style={[styles.adjTh, styles.adjThNode]}>Type</Text>
-            <Text style={[styles.adjTh, styles.adjThImpact]}>Impact</Text>
-          </View>
-          {adjustments.length === 0 ? (
-            <View style={styles.adjEmpty}>
-              <Text style={styles.adjEmptyText}>No adjustments recorded</Text>
+          
+          {(supplierCommission > 0 || driverCommission > 0) && (
+            <View style={styles.financeCommissionsWrap}>
+              {supplierCommission > 0 && (
+                <Text style={styles.financeCommissionText}>Supplier Commission: {formatINR(supplierCommission)}</Text>
+              )}
+              {driverCommission > 0 && (
+                <Text style={styles.financeCommissionText}>Driver Commission: {formatINR(driverCommission)}</Text>
+              )}
             </View>
-          ) : (
-            adjustments.map((adj) => (
-              <View key={adj.id} style={styles.adjRow}>
-                <Text style={[styles.adjCell, styles.adjCellReason]} numberOfLines={1}>{adj.reason}</Text>
-                <Text style={[styles.adjCell, styles.adjCellNode]} numberOfLines={1}>{adj.type === "revenue" ? "Revenue" : "Cost"}</Text>
-                <View style={styles.adjCellImpactWrap}>
-                  {onRemoveAdjustment && (
-                    <TouchableOpacity
-                      onPress={() => onRemoveAdjustment(adj.id)}
-                      style={styles.adjRemoveBtn}
-                      hitSlop={8}
-                      accessibilityLabel="Remove adjustment"
-                    >
-                      <FontAwesome name="times-circle" size={14} color={Theme.textMuted} />
-                    </TouchableOpacity>
-                  )}
-                  <Text style={[styles.adjCell, styles.adjCellImpact, adj.impact === "plus" ? styles.adjImpactPlus : styles.adjImpactMinus]}>
-                    {adj.impact === "plus" ? "+" : "−"}{formatINR(adj.amount)}
-                  </Text>
-                </View>
-              </View>
-            ))
           )}
         </View>
-      </View>
-
-      {/* Receivable & Payable Status — due to collect, due to pay, and commission if any */}
-      <View style={styles.statusCard}>
-        <View style={styles.statusRow}>
-          <View style={styles.statusBlock}>
-            <Text style={styles.statusBlockTitle}>Receivable</Text>
-            <Text style={styles.statusLabel}>Contract</Text>
-            <Text style={styles.statusValue}>{formatINR(adjSales)}</Text>
-            <Text style={styles.statusLabel}>Received</Text>
-            <Text style={styles.statusValueGreen}>{formatINR(receivedFromCustomer)}</Text>
-            <Text style={styles.statusLabelEmphasis}>Due to Collect</Text>
-            <Text style={[styles.statusValue, dueFromCustomer > 0 && styles.statusValueRed]}>{formatINR(dueFromCustomer)}</Text>
-            <View style={[styles.statusPill, dueFromCustomer <= 0 ? styles.statusPillCleared : styles.statusPillPending]}>
-              <Text style={[styles.statusPillText, dueFromCustomer <= 0 ? styles.statusPillTextCleared : styles.statusPillTextPending]}>{receivableStatus}</Text>
-            </View>
-          </View>
-          <View style={[styles.statusBlock, styles.statusBlockBorder]}>
-            <Text style={styles.statusBlockTitle}>Payable</Text>
-            <Text style={styles.statusLabel}>Supplier amount</Text>
-            <Text style={styles.statusValue}>{formatINR(adjCost)}</Text>
-            <Text style={styles.statusLabel}>Paid</Text>
-            <Text style={styles.statusValueRed}>{formatINR(paidToSupplier)}</Text>
-            <Text style={styles.statusLabelEmphasis}>Due to Pay</Text>
-            <Text style={[styles.statusValue, supplierDue > 0 && styles.statusValueRed]}>{formatINR(supplierDue)}</Text>
-            <View style={[styles.statusPill, supplierDue <= 0 ? styles.statusPillCleared : styles.statusPillPending]}>
-              <Text style={[styles.statusPillText, supplierDue <= 0 ? styles.statusPillTextCleared : styles.statusPillTextPending]}>{payableStatus}</Text>
-            </View>
-          </View>
-        </View>
-        {(supplierCommission > 0 || driverCommission > 0) && (
-          <View style={styles.commissionRow}>
-            {supplierCommission > 0 && (
-              <View style={styles.commissionItem}>
-                <Text style={styles.commissionLabel}>Supplier commission</Text>
-                <Text style={styles.commissionValue}>{formatINR(supplierCommission)}</Text>
-              </View>
-            )}
-            {driverCommission > 0 && (
-              <View style={[styles.commissionItem, supplierCommission > 0 && styles.commissionItemBorder]}>
-                <Text style={styles.commissionLabel}>Driver commission</Text>
-                <Text style={styles.commissionValue}>{formatINR(driverCommission)}</Text>
-              </View>
-            )}
-          </View>
-        )}
       </View>
 
       {/* Transaction list */}
@@ -919,300 +920,210 @@ const styles = StyleSheet.create({
   docCardStatus: {
     marginTop: 0,
   },
-  blueprintCard: {
-    backgroundColor: BLUEPRINT_BG,
-    borderRadius: 20,
-    overflow: "hidden",
-    marginBottom: SECTION_GAP,
-  },
-  blueprintHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.05)",
-    paddingVertical: 12,
-    paddingHorizontal: CARD_PADDING,
-  },
-  blueprintHeaderTitle: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: Theme.textOnDark,
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-  },
-  blueprintHeaderClient: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: "#ffffff",
-    flexShrink: 1,
-    marginLeft: 8,
-    textAlign: "right",
-  },
-  blueprintBody: { padding: CARD_PADDING },
-  blueprintTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.05)",
-    paddingBottom: 14,
-    marginBottom: 14,
-  },
-  blueprintLabel: {
-    fontSize: 7,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    marginBottom: 2,
-  },
-  blueprintValue: {
-    fontSize: 22,
-    fontWeight: "300",
-    fontStyle: "italic",
-    color: Theme.textOnDark,
-    letterSpacing: -0.5,
-  },
-  blueprintTopRight: { alignItems: "flex-end" },
-  blueprintLabelEmphasis: {
-    fontSize: 7,
-    fontWeight: "700",
-    color: Theme.darkGreen,
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    fontStyle: "italic",
-    marginBottom: 2,
-  },
-  blueprintMargin: {
-    fontSize: 18,
-    fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.darkGreen,
-  },
-  blueprintGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginHorizontal: -8,
-  },
-  blueprintGridItem: { width: "50%", paddingHorizontal: 8, marginBottom: 12 },
-  blueprintGridItemRight: { alignItems: "flex-end" },
-  blueprintLabelAccent: {
-    fontSize: 7,
-    fontWeight: "700",
-    color: Theme.textOnDark,
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    marginBottom: 2,
-  },
-  blueprintLabelGreen: {
-    fontSize: 7,
-    fontWeight: "700",
-    color: Theme.darkGreen,
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    marginBottom: 2,
-  },
-  blueprintGridValue: {
-    fontSize: 11,
-    fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.textOnDark,
-  },
-  blueprintGridValueGreen: {
-    fontSize: 11,
-    fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.darkGreen,
-  },
-  adjSection: { marginBottom: SECTION_GAP },
-  adjSectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 10,
-    paddingHorizontal: 4,
-  },
-  adjSectionTitle: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-  },
-  adjAddBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  adjTableCard: {
+  financeCard: {
     backgroundColor: Theme.screenBackground,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    overflow: "hidden",
+    padding: CARD_PADDING,
+    marginBottom: SECTION_GAP,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  adjTableHeader: {
+  financeHeader: {
     flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    backgroundColor: Theme.surfaceGray,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 16,
   },
-  adjTh: {
-    fontSize: 8,
+  financeTitle: {
+    fontSize: 14,
     fontWeight: "800",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
+    color: Theme.textPrimaryDark,
   },
-  adjThReason: { flex: 1.5, minWidth: 0 },
-  adjThNode: { flex: 0.8, minWidth: 0 },
-  adjThImpact: { width: 100, textAlign: "right" as const },
-  adjRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
-  },
-  adjCell: { fontSize: 9, fontWeight: "700" },
-  adjCellReason: { flex: 1.5, minWidth: 0 },
-  adjCellNode: { flex: 0.8, minWidth: 0, fontSize: 8, color: Theme.textMuted, fontStyle: "italic" },
-  adjCellImpactWrap: {
-    width: 100,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 8,
-  },
-  adjRemoveBtn: { padding: 4 },
-  adjCellImpact: { fontStyle: "italic" },
-  adjImpactPlus: { color: Theme.darkGreen },
-  adjImpactMinus: { color: Theme.teslaRed },
-  adjEmpty: {
-    paddingVertical: 24,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  adjEmptyText: {
-    fontSize: 7,
+  financeSubtitle: {
+    fontSize: 11,
     fontWeight: "600",
     color: Theme.textMuted,
-    fontStyle: "italic",
+    marginTop: 2,
+  },
+  financeProfitWrap: {
+    alignItems: "flex-end",
+  },
+  financeProfitLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.darkGreen,
     textTransform: "uppercase",
-    letterSpacing: 0.6,
   },
-  statusCard: {
-    backgroundColor: BLUEPRINT_BG,
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: SECTION_GAP,
-  },
-  statusRow: {
-    flexDirection: "row",
-  },
-  statusBlock: {
-    flex: 1,
-    alignItems: "center",
-  },
-  statusBlockBorder: {
-    borderLeftWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
-  statusBlockTitle: {
-    fontSize: 7,
+  financeProfitValue: {
+    fontSize: 16,
     fontWeight: "800",
-    color: Theme.textOnDark,
-    letterSpacing: 0.8,
+    color: Theme.darkGreen,
+    marginTop: 2,
+  },
+  financeSection: {
+    marginBottom: 0,
+  },
+  financeSectionTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    marginBottom: 10,
     textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  financeRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 8,
   },
-  statusLabel: {
-    fontSize: 6,
+  financeLabel: {
+    fontSize: 12,
     fontWeight: "700",
-    color: Theme.textMuted,
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    marginBottom: 2,
+    color: Theme.textSecondary,
   },
-  statusLabelEmphasis: {
-    fontSize: 6,
+  financeValue: {
+    fontSize: 13,
     fontWeight: "800",
-    color: Theme.textOnDark,
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    marginTop: 6,
-    marginBottom: 2,
+    color: Theme.textPrimaryDark,
   },
-  statusValue: {
-    fontSize: 11,
-    fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.textOnDark,
-    marginBottom: 4,
+  financeAdjustmentsWrap: {
+    backgroundColor: Theme.surfaceGray,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 10,
   },
-  statusValueGreen: {
-    color: Theme.darkGreen,
-  },
-  statusValueRed: {
-    color: Theme.teslaRed,
-  },
-  statusPill: {
-    marginTop: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  statusPillCleared: {
-    backgroundColor: "rgba(34,197,94,0.2)",
-    borderWidth: 1,
-    borderColor: Theme.darkGreen,
-  },
-  statusPillPending: {
-    backgroundColor: "rgba(239,68,68,0.15)",
-    borderWidth: 1,
-    borderColor: Theme.teslaRed,
-  },
-  statusPillText: { fontSize: 8, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
-  statusPillTextCleared: { color: Theme.darkGreen },
-  statusPillTextPending: { color: Theme.teslaRed },
-  commissionRow: {
+  financeAdjRow: {
     flexDirection: "row",
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.08)",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 4,
   },
-  commissionItem: {
+  financeAdjReason: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textSecondary,
     flex: 1,
+    marginRight: 8,
+  },
+  financeAdjRight: {
+    flexDirection: "row",
     alignItems: "center",
   },
-  commissionItemBorder: {
-    borderLeftWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+  financeAdjAmount: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
   },
-  commissionLabel: {
-    fontSize: 6,
+  financeAdjRemoveBtn: {
+    marginLeft: 8,
+    padding: 4,
+  },
+  financeTotalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+    marginBottom: 12,
+  },
+  financeTotalLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  financeTotalValue: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+  },
+  financeStatusBox: {
+    flexDirection: "row",
+    backgroundColor: Theme.surfaceGray,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 12,
+  },
+  financeStatusCol: {
+    flex: 1,
+  },
+  financeStatusColRight: {
+    flex: 1,
+    alignItems: "flex-end",
+  },
+  financeStatusDivider: {
+    width: 1,
+    backgroundColor: Theme.borderLight,
+    marginHorizontal: 12,
+  },
+  financeStatusLabel: {
+    fontSize: 10,
     fontWeight: "700",
     color: Theme.textMuted,
-    letterSpacing: 0.6,
+    marginBottom: 4,
     textTransform: "uppercase",
-    marginBottom: 2,
   },
-  commissionValue: {
-    fontSize: 10,
+  financeStatusValueGreen: {
+    fontSize: 13,
     fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.textOnDark,
+    color: Theme.darkGreen,
+  },
+  financeStatusValueDark: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  financeStatusValue: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  financeStatusValueRed: {
+    color: Theme.teslaRed,
+  },
+  financeSectionDivider: {
+    height: 1,
+    backgroundColor: Theme.borderLight,
+    marginVertical: 16,
+  },
+  financeFooter: {
+    marginTop: 12,
+    gap: 12,
+  },
+  financeAddBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 12,
+    paddingVertical: 10,
+  },
+  financeAddBtnText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  financeCommissionsWrap: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    backgroundColor: Theme.surfaceGray,
+    padding: 10,
+    borderRadius: 10,
+  },
+  financeCommissionText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
   },
   handshakesLabel: {
     fontSize: 8,

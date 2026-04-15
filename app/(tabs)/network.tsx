@@ -1421,15 +1421,17 @@ export default function NetworkScreen() {
                       <View style={styles.networkCardActionsCol}>
                         {node.status === "INTEGRATED" &&
                         node.availableOnApp !== false ? (
-                          <View style={styles.activePill}>
-                            <CircleCheck
-                              size={12}
-                              strokeWidth={1.7}
-                              color={Theme.darkGreen}
-                              style={{ marginRight: 5 }}
-                            />
-                            <Text style={styles.activePillText}>Active</Text>
-                          </View>
+                          !onPlatform ? (
+                            <View style={styles.activePill}>
+                              <CircleCheck
+                                size={12}
+                                strokeWidth={1.7}
+                                color={Theme.darkGreen}
+                                style={{ marginRight: 5 }}
+                              />
+                              <Text style={styles.activePillText}>Active</Text>
+                            </View>
+                          ) : null
                         ) : (
                           <TouchableOpacity
                             style={[

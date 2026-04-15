@@ -44,6 +44,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -142,6 +143,8 @@ export function TripAssignmentBlock({
   const [cardVehicleSaving, setCardVehicleSaving] = useState(false);
   const [phoneModalIsReassign, setPhoneModalIsReassign] = useState(false);
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && windowWidth >= 768;
 
   useEffect(() => {
     setPickDriverId(trip.driver_id);
@@ -641,12 +644,12 @@ export function TripAssignmentBlock({
         </View>
 
         {/* Driver and Vehicle rows — side-by-side on web view */}
-        <View style={Platform.OS === 'web' ? styles.twoCol : null}>
+        <View style={isDesktop ? styles.twoCol : null}>
           {/* Driver row — reference: Driver Node, + Assign / Change */}
-          <View style={[styles.assignRow, Platform.OS === 'web' && styles.webAssignRow]}>
+          <View style={[styles.assignRow, isDesktop && styles.webAssignRow]}>
             <View style={styles.assignRowLeft}>
               <View style={[styles.assignIcon, hasDriver ? styles.assignIconDriverActive : styles.assignIconInactive]}>
-                <FontAwesome name="user" size={20} color={hasDriver ? Theme.primary : Theme.textMuted} />
+                <FontAwesome name="user" size={16} color={Theme.textMuted} />
               </View>
               <View style={styles.assignRowText}>
                 <Text style={styles.assignRowLabel}>Driver</Text>
@@ -686,10 +689,10 @@ export function TripAssignmentBlock({
           </View>
 
           {/* Vehicle row — reference: Vehicle Registry, Change */}
-          <View style={[styles.assignRow, styles.assignRowLast, Platform.OS === 'web' && styles.webAssignRow]}>
+          <View style={[styles.assignRow, isDesktop && styles.webAssignRow]}>
             <View style={styles.assignRowLeft}>
-              <View style={[styles.assignIcon, hasVehicle ? styles.assignIconVehicleActive : styles.assignIconInactive]}>
-                <FontAwesome name="truck" size={18} color={hasVehicle ? "#ffffff" : Theme.textMuted} />
+              <View style={[styles.assignIcon, hasVehicle ? styles.assignIconVehicleActive : styles.assignIconVehicleInactive]}>
+                <FontAwesome name="truck" size={14} color={Theme.textMuted} />
               </View>
               <View style={styles.assignRowText}>
                 <Text style={styles.assignRowLabel}>Vehicle</Text>
@@ -699,17 +702,17 @@ export function TripAssignmentBlock({
                         .split(" • ")
                         .map((part, i) => (i === 0 ? part : part.toUpperCase()))
                         .join(" • ")
-                    : "No vehicle assigned"}
+                    : "No assigned node"}
                 </Text>
               </View>
             </View>
             {effectiveCanAssign ? (
               <TouchableOpacity
-                style={[styles.actionBtn, styles.actionBtnSecondaryAlt]}
+                style={[styles.actionBtn, hasVehicle ? styles.actionBtnSecondary : styles.actionBtnPrimary]}
                 onPress={openVehiclePicker}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.actionBtnText, styles.actionBtnTextSecondaryAlt]}>
+                <Text style={[styles.actionBtnText, hasVehicle ? styles.actionBtnTextSecondary : styles.actionBtnTextPrimary]}>
                   {hasVehicle ? "Change" : "+ Assign"}
                 </Text>
               </TouchableOpacity>
@@ -1139,8 +1142,8 @@ const styles = StyleSheet.create({
     borderBottomColor: Theme.borderLight,
   },
   currentHeaderTitle: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 14,
+    fontWeight: "800",
     color: Theme.textPrimaryDark,
   },
   currentHeaderRight: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -1191,37 +1194,41 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   assignIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
   },
   assignIconInactive: {
     backgroundColor: Theme.surfaceGray,
-    borderColor: Theme.borderLight,
+    borderColor: "transparent",
   },
   assignIconDriverActive: {
-    backgroundColor: (Theme as any).primaryMuted ?? Theme.surfaceGray,
-    borderColor: Theme.primary,
+    backgroundColor: Theme.surfaceGray,
+    borderColor: "transparent",
   },
   assignIconVehicleActive: {
-    backgroundColor: Theme.primary,
-    borderColor: Theme.primary,
+    backgroundColor: Theme.surfaceGray,
+    borderColor: "transparent",
+  },
+  assignIconVehicleInactive: {
+    backgroundColor: Theme.surfaceGray,
+    borderColor: "transparent",
   },
   assignRowText: { flex: 1, minWidth: 0 },
   assignRowLabel: {
     fontSize: 9,
-    fontWeight: "400",
+    fontWeight: "700",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.8,
-    marginBottom: 1,
+    marginBottom: 2,
   },
   assignRowValue: {
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
   assignRowValueEmpty: {
@@ -1231,39 +1238,35 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
   actionBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 10,
-    minWidth: 72,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 80,
     alignItems: "center",
     justifyContent: "center",
   },
   actionBtnPrimary: {
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: "#000",
   },
   actionBtnSecondary: {
-    backgroundColor: (Theme as any).primaryMuted ?? Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.primary,
+    backgroundColor: Theme.surfaceGray,
   },
   actionBtnSecondaryAlt: {
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   actionBtnText: {
     fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 0.8,
+    fontWeight: "800",
+    letterSpacing: 0.5,
     textTransform: "uppercase",
   },
-  actionBtnTextPrimary: { color: Theme.textOnDark },
-  actionBtnTextSecondary: { color: Theme.primary },
+  actionBtnTextPrimary: { color: "#fff" },
+  actionBtnTextSecondary: { color: Theme.textPrimaryDark },
   actionBtnTextSecondaryAlt: { color: Theme.textPrimaryDark },
 
   otpInline: {
-    marginTop: 8,
-    paddingTop: 8,
+    marginTop: 12,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: Theme.borderLight,
     gap: 6,
@@ -1275,7 +1278,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   otpInlineLabel: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "800",
     color: Theme.textMuted,
     textTransform: "uppercase",
@@ -1287,7 +1290,7 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     letterSpacing: 1.2,
   },
-  otpInlineMuted: { fontSize: 9, fontWeight: "700", color: Theme.textMuted },
+  otpInlineMuted: { fontSize: 10, fontWeight: "700", color: Theme.textMuted },
   otpInlineBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -1295,7 +1298,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   otpInlineBtnText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "800",
     color: Theme.primary,
     textTransform: "uppercase",
@@ -1332,28 +1335,28 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   badgePrivate: {
-    backgroundColor: Theme.surfaceBorder,
-    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceGray,
+    borderColor: Theme.surfaceGray,
   },
   badgeShared: {
-    backgroundColor: Theme.darkGreen,
-    borderColor: Theme.darkGreen,
+    backgroundColor: Theme.surfaceGray,
+    borderColor: Theme.surfaceGray,
   },
   badgeUnassigned: {
     backgroundColor: Theme.surfaceLight,
     borderColor: Theme.borderInput,
   },
   sourceBadgeText: {
-    fontSize: 7,
-    fontWeight: "600",
-    letterSpacing: 0.6,
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.8,
     textTransform: "uppercase",
   },
   sourceBadgeTextShared: {
-    color: Theme.textOnDark,
+    color: Theme.textSection,
   },
   sourceBadgeTextPrivate: {
-    color: Theme.textPrimaryDark,
+    color: Theme.textSection,
   },
   sourceBadgeTextUnassigned: {
     color: Theme.textPrimaryDark,
@@ -1418,8 +1421,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   assignmentLogText: {
-    fontSize: 11,
-    fontWeight: "400",
+    fontSize: 12,
+    fontWeight: "500",
     color: Theme.textMuted,
     marginTop: 4,
     lineHeight: 16,
@@ -1440,14 +1443,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   assignAggregateMetaLabel: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "800",
-    color: Theme.textMuted,
+    color: Theme.textSection,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
   assignAggregateMetaValue: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
     flex: 1,
@@ -1456,15 +1459,15 @@ const styles = StyleSheet.create({
   },
   col: { flex: 1, minWidth: 0 },
   label: {
-    fontSize: 8,
-    fontWeight: "400",
-    color: Theme.textMuted,
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textSection,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
   value: {
-    fontSize: 12,
-    fontWeight: "500",
+    fontSize: 13,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     marginTop: 4,
   },
@@ -1570,7 +1573,7 @@ const styles = StyleSheet.create({
   assignModalTitle: {
     fontSize: 18,
     fontWeight: "800",
-    color: Theme.primary,
+    color: Theme.textPrimaryDark,
   },
   assignModalSubtitle: {
     fontSize: 11,
@@ -1937,13 +1940,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.textPrimaryDark,
     paddingVertical: 16,
     borderRadius: 12,
-    shadowColor: Theme.primary,
+    shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
     elevation: 4,
   },
   assignConfirmBtnDisabled: { opacity: 0.7 },
