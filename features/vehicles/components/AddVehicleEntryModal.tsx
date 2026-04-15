@@ -119,6 +119,7 @@ export function AddVehicleEntryModal({
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [tripId, setTripId] = useState<string | null>(null);
   const [paymentModeId, setPaymentModeId] = useState<string>(PAYMENT_MODES[0].id);
+  const [paymentReference, setPaymentReference] = useState('');
   const [notes, setNotes] = useState('');
   const [driverId, setDriverId] = useState<string | null>(null);
   const [odometerStr, setOdometerStr] = useState('');
@@ -181,6 +182,7 @@ export function AddVehicleEntryModal({
     if (categoryLabel) parts.push(categoryLabel);
     const paymentName = PAYMENT_MODES.find((p) => p.id === paymentModeId)?.name;
     if (paymentName) parts.push(`Payment: ${paymentName}`);
+    if (paymentReference.trim()) parts.push(`UTR: ${paymentReference.trim()}`);
     if (odometerStr.trim()) parts.push(`Odo: ${odometerStr.trim()}`);
     if (vendorStr.trim()) parts.push(vendorStr.trim());
     if (notes.trim()) parts.push(`Notes: ${notes.trim()}`);
@@ -211,6 +213,7 @@ export function AddVehicleEntryModal({
     setAmountStr('');
     setCategoryId(null);
     setTripId(null);
+    setPaymentReference('');
     setNotes('');
     setDriverId(null);
     setOdometerStr('');
@@ -457,6 +460,24 @@ export function AddVehicleEntryModal({
                 <FontAwesome name="chevron-down" size={10} color={Theme.textMutedDemo} style={styles.fieldChevron} />
               </View>
             </TouchableOpacity>
+
+            {paymentModeId !== 'CASH' && (
+              <View style={styles.fieldRow}>
+                <View style={styles.fieldLabelWrap}>
+                  <Text style={styles.fieldLabel} numberOfLines={1}>REFERENCE NO / UTR</Text>
+                </View>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={paymentReference}
+                  onChangeText={setPaymentReference}
+                  placeholder="Refer the bank to validate"
+                  placeholderTextColor={Theme.textMutedDemo}
+                  autoCorrect={false}
+                  autoCapitalize="characters"
+                  accessibilityLabel="Reference Number or UTR"
+                />
+              </View>
+            )}
 
             {type === 'out' && (
               <View style={[styles.fieldRow, styles.fieldRowVehicle]}>

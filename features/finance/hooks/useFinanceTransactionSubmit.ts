@@ -205,15 +205,26 @@ export function useFinanceTransactionSubmit(
         typeof driverPaymentLabelRaw === "string"
           ? driverPaymentLabelRaw
           : undefined;
+      let baseDescription = (data.type === "in"
+        ? (data.category ?? "ENTRY")
+        : data.type === "out"
+          ? (driverPaymentLabel ?? data.category ?? "ENTRY")
+          : "ENTRY") as string;
+          
+      const descParts = [baseDescription];
+      if (data.paymentMode && data.paymentMode !== 'CASH') {
+        const modeName = data.paymentMode === 'UPI' ? 'UPI' : data.paymentMode === 'BANK' ? 'Bank Transfer' : data.paymentMode === 'CHEQUE' ? 'Cheque' : data.paymentMode;
+        descParts.push(`Mode: ${modeName}`);
+      }
+      if (data.paymentReference) {
+        descParts.push(`UTR: ${data.paymentReference}`);
+      }
+      
       const payload = {
         trip_id: data.tripId ?? null,
         trip_number: data.tripNumber ?? null,
         party_name: data.partyName || "—",
-        description: (data.type === "in"
-          ? (data.category ?? "ENTRY")
-          : data.type === "out"
-            ? (driverPaymentLabel ?? data.category ?? "ENTRY")
-            : "ENTRY") as string,
+        description: descParts.join(' | '),
         amount_in: data.type === "in" ? data.amount : 0,
         amount_out: data.type === "out" ? data.amount : 0,
         transaction_date: transactionDate,
