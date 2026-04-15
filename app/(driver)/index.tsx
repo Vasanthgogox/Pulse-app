@@ -27,7 +27,7 @@ import {
 } from '@/services/routingService';
 import * as tripsService from '@/services/tripsService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput, BottomSheetView } from '@gorhom/bottom-sheet';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import Constants from 'expo-constants';
@@ -437,7 +437,7 @@ export default function DriverRadarScreen() {
   });
 
   const OlaAnimatedMarker = useMemo(
-    () => (Platform.OS === "web" ? null : Reanimated.createAnimatedComponent(Marker)),
+    () => (Platform.OS === "web" ? null : Reanimated.createAnimatedComponent(Marker)) as any,
     [],
   );
   const [stopsExpanded, setStopsExpanded] = useState(false);
@@ -2290,7 +2290,7 @@ export default function DriverRadarScreen() {
           />
         ) : (
           <MapView
-            ref={(instance) => {
+            ref={(instance: any) => {
               targetRef.current = instance;
             }}
             style={isFullScreen ? styles.fullMapView : styles.assignedMapInHalf}
@@ -3241,21 +3241,20 @@ export default function DriverRadarScreen() {
             </View>
 
             <BottomSheet
-              snapPoints={sheetSnapPoints}
-              // Start at half-height so first assignment view is true map/card split.
-              index={1}
+              snapPoints={showNewAssignmentCard ? undefined : sheetSnapPoints}
+              index={showNewAssignmentCard ? 0 : 1}
               enablePanDownToClose={false}
-              enableHandlePanningGesture={true}
-              enableContentPanningGesture={true}
-              enableOverDrag={true}
-              enableDynamicSizing={false}
+              enableHandlePanningGesture={!showNewAssignmentCard}
+              enableContentPanningGesture={!showNewAssignmentCard}
+              enableOverDrag={!showNewAssignmentCard}
+              enableDynamicSizing={showNewAssignmentCard}
               ref={bottomSheetRef}
               keyboardBehavior="interactive"
               keyboardBlurBehavior="restore"
               android_keyboardInputMode="adjustResize"
               onChange={(index) => {
                 // Only dismiss keyboard if we're snapping to a very low point or closing
-                if (index === 0) {
+                if (index === 0 && !showNewAssignmentCard) {
                   Keyboard.dismiss();
                 }
               }}
@@ -3267,63 +3266,116 @@ export default function DriverRadarScreen() {
                 overflow: "hidden",
               }}
               handleIndicatorStyle={{
-                backgroundColor: colors.border,
+                backgroundColor: showNewAssignmentCard ? "transparent" : colors.border,
                 width: 50,
                 height: 4,
                 borderRadius: 999,
               }}
             >
-              <BottomSheetScrollView
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={[
-                  styles.olaSheetContent,
-                  {
-                    paddingBottom: insets.bottom,
-                    paddingHorizontal: Layout.screenPaddingHorizontal,
-                  },
-                ]}
-              >
-                <View style={styles.assignedSheetContent}>
-                  {showNotification && pendingInvite && (
-                    <DriverInviteCard
-                      invite={pendingInvite}
-                      colors={colors}
-                      offerText={buildOfferText(pendingInvite)}
-                      busy={inviteActionId === pendingInvite.id}
-                      fallbackAvatarUri={avatarUri}
-                      onClose={() => setInvitationDismissed(true)}
-                      onIgnore={async () => {
-                        setInviteActionId(pendingInvite.id);
-                        await driversService.rejectDriverInvite(pendingInvite.id);
-                        setInviteActionId(null);
-                        setInvitationDeclined(true);
-                        fetch();
-                      }}
-                      onAccept={async () => {
-                        setInviteActionId(pendingInvite.id);
-                        const { error } = await driversService.acceptDriverInvite(pendingInvite.id);
-                        setInviteActionId(null);
-                        if (!error) {
-                          setInvitationAccepted(true);
+              {showNewAssignmentCard ? (
+                <BottomSheetView
+                  style={[
+                    styles.olaSheetContent,
+                    {
+                      paddingBottom: 0,
+                      paddingHorizontal: Layout.screenPaddingHorizontal,
+                      flexGrow: 0,
+                    },
+                  ]}
+                >
+                  <View style={[styles.assignedSheetContent, { flexGrow: 0 }]}>
+                    {showNotification && pendingInvite && (
+                      <DriverInviteCard
+                        invite={pendingInvite}
+                        colors={colors}
+                        offerText={buildOfferText(pendingInvite)}
+                        busy={inviteActionId === pendingInvite.id}
+                        fallbackAvatarUri={avatarUri}
+                        onClose={() => setInvitationDismissed(true)}
+                        onIgnore={async () => {
+                          setInviteActionId(pendingInvite.id);
+                          await driversService.rejectDriverInvite(pendingInvite.id);
+                          setInviteActionId(null);
+                          setInvitationDeclined(true);
                           fetch();
-                        }
-                      }}
-                    />
-                  )}
-                  {loading && !assignmentFeedback ? (
-                    <ActivityIndicator
-                      style={{ marginTop: 20 }}
-                      size="large"
-                      color={colors.primary}
-                    />
-                  ) : (
-                    <View style={{ paddingTop: 8 }}>
-                      {renderDriverDashboardTripInner(true)}
-                    </View>
-                  )}
-                </View>
-              </BottomSheetScrollView>
+                        }}
+                        onAccept={async () => {
+                          setInviteActionId(pendingInvite.id);
+                          const { error } = await driversService.acceptDriverInvite(pendingInvite.id);
+                          setInviteActionId(null);
+                          if (!error) {
+                            setInvitationAccepted(true);
+                            fetch();
+                          }
+                        }}
+                      />
+                    )}
+                    {loading && !assignmentFeedback ? (
+                      <ActivityIndicator
+                        style={{ marginTop: 20 }}
+                        size="large"
+                        color={colors.primary}
+                      />
+                    ) : (
+                      <View style={{ paddingTop: 0 }}>
+                        {renderDriverDashboardTripInner(true)}
+                      </View>
+                    )}
+                  </View>
+                </BottomSheetView>
+              ) : (
+                <BottomSheetScrollView
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={[
+                    styles.olaSheetContent,
+                    {
+                      paddingBottom: insets.bottom,
+                      paddingHorizontal: Layout.screenPaddingHorizontal,
+                    },
+                  ]}
+                >
+                  <View style={styles.assignedSheetContent}>
+                    {showNotification && pendingInvite && (
+                      <DriverInviteCard
+                        invite={pendingInvite}
+                        colors={colors}
+                        offerText={buildOfferText(pendingInvite)}
+                        busy={inviteActionId === pendingInvite.id}
+                        fallbackAvatarUri={avatarUri}
+                        onClose={() => setInvitationDismissed(true)}
+                        onIgnore={async () => {
+                          setInviteActionId(pendingInvite.id);
+                          await driversService.rejectDriverInvite(pendingInvite.id);
+                          setInviteActionId(null);
+                          setInvitationDeclined(true);
+                          fetch();
+                        }}
+                        onAccept={async () => {
+                          setInviteActionId(pendingInvite.id);
+                          const { error } = await driversService.acceptDriverInvite(pendingInvite.id);
+                          setInviteActionId(null);
+                          if (!error) {
+                            setInvitationAccepted(true);
+                            fetch();
+                          }
+                        }}
+                      />
+                    )}
+                    {loading && !assignmentFeedback ? (
+                      <ActivityIndicator
+                        style={{ marginTop: 20 }}
+                        size="large"
+                        color={colors.primary}
+                      />
+                    ) : (
+                      <View style={{ paddingTop: 8 }}>
+                        {renderDriverDashboardTripInner(true)}
+                      </View>
+                    )}
+                  </View>
+                </BottomSheetScrollView>
+              )}
             </BottomSheet>
           </KeyboardAvoidingView>
         </GestureHandlerRootView>
@@ -4868,6 +4920,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     backgroundColor: "transparent",
     maxHeight: "60%",
+    paddingBottom: 12,
     ...(Platform.OS === "ios"
       ? {
           shadowColor: "#000",

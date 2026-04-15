@@ -1,27 +1,27 @@
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import { isAggregateTrip } from '@/lib/driverUtils';
 import { formatINR } from '@/lib/format';
 import * as tripDocumentsService from '@/services/tripDocumentsService';
 import * as tripsService from '@/services/tripsService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-    import {
-      ActivityIndicator,
-      Image,
-      Linking,
-      Modal,
-      Platform,
-      Pressable,
-      StyleSheet,
-      Text,
-      TouchableOpacity,
-      View,
-    } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { isAggregateTrip } from '@/lib/driverUtils';
+import * as FileSystem from 'expo-file-system';
+import * as ImagePicker from 'expo-image-picker';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Image,
+    Linking,
+    Modal,
+    Platform,
+    Pressable,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 
 type StepId = 'accepted' | 'pickup' | 'transit' | 'reached' | 'completed';
 
