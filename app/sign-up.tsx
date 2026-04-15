@@ -30,7 +30,11 @@ import { isPhoneValid, validatePhone } from '@/lib/phoneValidation';
 import { VALIDATION, maxLength, validateFullName, validatePassword } from '@/lib/validation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
-import { checkExistingUserByPhone, type OperatingModel } from '@/features/auth';
+import {
+  checkExistingUserByPhone,
+  checkOrganizationNameTaken,
+  type OperatingModel,
+} from '@/features/auth';
 
 const OPERATING_MODELS: { value: OperatingModel; label: string }[] = [
   { value: 'ASSET_BASED', label: 'Asset' },
@@ -66,6 +70,11 @@ export default function SignUp() {
     masked_email?: string;
   } | null>(null);
   const phoneCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const companyCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [companyNameTakenCheck, setCompanyNameTakenCheck] = useState<{
+    loading: boolean;
+    taken: boolean;
+  } | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -147,6 +156,52 @@ export default function SignUp() {
     };
   }, [phone, isOnline]);
 
+  useEffect(() => {
+    const raw = companyName.trim();
+    if (!raw) {
+      setCompanyNameTakenCheck(null);
+      if (companyCheckTimeoutRef.current) {
+        clearTimeout(companyCheckTimeoutRef.current);
+        companyCheckTimeoutRef.current = null;
+      }
+      return;
+    }
+    const lenErr = maxLength(
+      VALIDATION.COMPANY_NAME_MAX_LENGTH,
+      `Company name must be at most ${VALIDATION.COMPANY_NAME_MAX_LENGTH} characters.`,
+    )(raw);
+    if (lenErr) {
+      setCompanyNameTakenCheck(null);
+      if (companyCheckTimeoutRef.current) {
+        clearTimeout(companyCheckTimeoutRef.current);
+        companyCheckTimeoutRef.current = null;
+      }
+      return;
+    }
+    if (!isOnline) {
+      setCompanyNameTakenCheck(null);
+      return;
+    }
+    if (companyCheckTimeoutRef.current) clearTimeout(companyCheckTimeoutRef.current);
+    setCompanyNameTakenCheck((prev) =>
+      prev ? { ...prev, loading: true } : { loading: true, taken: false },
+    );
+    companyCheckTimeoutRef.current = setTimeout(async () => {
+      companyCheckTimeoutRef.current = null;
+      const result = await checkOrganizationNameTaken(raw);
+      setCompanyNameTakenCheck({
+        loading: false,
+        taken: !result.error && result.taken,
+      });
+    }, 600);
+    return () => {
+      if (companyCheckTimeoutRef.current) {
+        clearTimeout(companyCheckTimeoutRef.current);
+        companyCheckTimeoutRef.current = null;
+      }
+    };
+  }, [companyName, isOnline]);
+
   const handleSignUp = async () => {
     setErrorMsg(null);
     if (!isOnline) {
@@ -178,6 +233,23 @@ export default function SignUp() {
       if (companyErr) {
         setErrorMsg(companyErr);
         return;
+      }
+      if (companyNameTakenCheck?.taken) {
+        setErrorMsg('Company name already exists.');
+        return;
+      }
+      if (companyNameTakenCheck?.loading) {
+        setLoading(true);
+        const dup = await checkOrganizationNameTaken(companyTrim);
+        setLoading(false);
+        if (dup.error) {
+          setErrorMsg(dup.error.message);
+          return;
+        }
+        if (dup.taken) {
+          setErrorMsg('Company name already exists.');
+          return;
+        }
       }
     }
     if (!trimmedEmail) {
@@ -282,25 +354,6 @@ export default function SignUp() {
             </View>
           ) : null}
 
-          <Text style={styles.label}>Business Model</Text>
-          <View style={styles.modelRow}>
-            {OPERATING_MODELS.map(({ value, label }) => {
-              const isActive = operatingModel === value;
-              return (
-                <TouchableOpacity
-                  key={value}
-                  style={[styles.modelChip, isActive && styles.modelChipActive]}
-                  onPress={() => setOperatingModel(value)}
-                  disabled={loading}
-                >
-                  <Text style={[styles.modelChipText, isActive && styles.modelChipTextActive]}>
-                    {label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
           <View
             style={styles.inputWrap}
             onLayout={(e) => { fieldYRef.current.fullName = e.nativeEvent.layout.y; }}
@@ -337,16 +390,26 @@ export default function SignUp() {
               editable={!loading}
             />
           </View>
+          {companyName.trim().length > 0 ? (
+            companyNameTakenCheck?.loading ? (
+              <Text style={styles.phoneExistsHint}>Checking company name…</Text>
+            ) : companyNameTakenCheck?.taken ? (
+              <Text style={[styles.phoneExistsText, styles.companyTakenHint]}>
+                Company name already exists.
+              </Text>
+            ) : null
+          ) : null}
           <View
             style={styles.inputWrap}
             onLayout={(e) => { fieldYRef.current.phone = e.nativeEvent.layout.y; }}
           >
             <TextInput
               style={[styles.input, styles.inputNoMargin]}
-              placeholder="Phone (Optional for invites)"
+              placeholder="Phone (Optional)"
               placeholderTextColor={Theme.authTextMuted}
               value={phone}
-              onChangeText={setPhone}
+              onChangeText={(text) => setPhone(text.replace(/\D/g, '').slice(0, 10))}
+              maxLength={10}
               onFocus={() => scrollToField('phone')}
               keyboardType="phone-pad"
               autoCorrect={false}
@@ -357,19 +420,31 @@ export default function SignUp() {
           </View>
           {phoneExistsCheck?.loading ? (
             <Text style={styles.phoneExistsHint}>Checking…</Text>
-          ) : phoneExistsCheck?.exists && phoneExistsCheck.email ? (
+          ) : phoneExistsCheck?.exists ? (
             <View style={styles.phoneExistsRow}>
-              <Text style={styles.phoneExistsText}>This number is already registered. </Text>
-              <TouchableOpacity
-                onPress={() =>
-                  router.replace(`/sign-in?email=${encodeURIComponent(phoneExistsCheck.email!)}`)}
-                hitSlop={8}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.phoneExistsLink}>Sign in</Text>
-              </TouchableOpacity>
+              <Text style={styles.phoneExistsText}>This number is already registered.</Text>
             </View>
           ) : null}
+
+          <Text style={styles.label}>Business Model</Text>
+          <View style={styles.modelRow}>
+            {OPERATING_MODELS.map(({ value, label }) => {
+              const isActive = operatingModel === value;
+              return (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.modelChip, isActive && styles.modelChipActive]}
+                  onPress={() => setOperatingModel(value)}
+                  disabled={loading}
+                >
+                  <Text style={[styles.modelChipText, isActive && styles.modelChipTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
           <View
             style={styles.inputWrap}
             onLayout={(e) => { fieldYRef.current.email = e.nativeEvent.layout.y; }}
@@ -572,6 +647,10 @@ const styles = StyleSheet.create({
   },
   inputNoMargin: {
     marginBottom: 0,
+  },
+  companyTakenHint: {
+    marginTop: -8,
+    marginBottom: 12,
   },
   phoneExistsHint: {
     fontSize: 13,

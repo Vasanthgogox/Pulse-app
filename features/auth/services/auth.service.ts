@@ -154,6 +154,11 @@ export async function signUp({
       `Company name must be at most ${VALIDATION.COMPANY_NAME_MAX_LENGTH} characters.`,
     )(c);
     if (companyErr) return { error: new Error(companyErr) };
+    const dup = await checkOrganizationNameTaken(c);
+    if (dup.error) return { error: dup.error };
+    if (dup.taken) {
+      return { error: new Error("Company name already exists.") };
+    }
   }
   try {
     const operatingModel: OperatingModel = operatingModelOption ?? "HYBRID";
@@ -175,6 +180,10 @@ export async function signUp({
       options: { data: metadata },
     });
     if (error) {
+      // Catch the database trigger exception if it fired
+      if (error.message.includes("Company name already exists")) {
+        return { error: new Error("Company name already exists.") };
+      }
       return { error: new Error(error.message || "Sign up failed") };
     }
     if (!data.user) return { error: new Error("No user returned") };
@@ -314,6 +323,66 @@ function maskEmail(email: string): string {
   const domain = t.slice(at);
   if (local.length <= 2) return local[0] + "***" + domain;
   return local.slice(0, 2) + "***" + domain;
+}
+
+export interface CheckOrganizationNameTakenResult {
+  error: Error | null;
+  taken: boolean;
+}
+
+/**
+ * True if an organization already uses this display name (trimmed, case-insensitive).
+ * Used before sign-up; callable by anon via SECURITY DEFINER RPC.
+ */
+export async function checkOrganizationNameTaken(
+  companyName: string,
+): Promise<CheckOrganizationNameTakenResult> {
+  const key = (companyName ?? "").trim();
+  if (!key) return { error: null, taken: false };
+  try {
+    const { data, error } = await supabase().rpc("organization_name_is_taken", {
+      p_name: key,
+    });
+    if (error) {
+      const msg = (error.message ?? "").toLowerCase();
+      if (
+        msg.includes("function") &&
+        (msg.includes("does not exist") ||
+          msg.includes("not found") ||
+          msg.includes("could not find"))
+      ) {
+        if (__DEV__) {
+          console.warn(
+            "[auth] organization_name_is_taken RPC missing; blocking sign-up to enforce uniqueness. Run NOTIFY pgrst, reload_schema; in your DB.",
+          );
+        }
+        // STRICT ENFORCEMENT: If the database function is missing, we must NOT allow sign-up,
+        // because we cannot guarantee the company name is unique.
+        return { 
+          error: new Error("System update required: Cannot verify if company name exists. Please run the SQL migrations."), 
+          taken: false 
+        };
+      }
+      return {
+        error: new Error("Could not verify company name. Please try again."),
+        taken: false,
+      };
+    }
+    return { error: null, taken: data === true };
+  } catch (e) {
+    if (isNetworkError(e)) {
+      return {
+        error: new Error(
+          "Cannot reach server. Check your internet connection and try again.",
+        ),
+        taken: false,
+      };
+    }
+    return {
+      error: e instanceof Error ? e : new Error("Check failed"),
+      taken: false,
+    };
+  }
 }
 
 export interface CheckExistingUserByPhoneResult {
