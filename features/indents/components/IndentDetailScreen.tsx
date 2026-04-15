@@ -123,6 +123,7 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
   const [awarding, setAwarding] = useState(false);
   const isRefreshingRef = useRef(false);
+  const initialLoadDoneRef = useRef(false);
 
   const { data: quotes = [], refetch: refetchQuotes } = useIndentDirectQuotesQuery(indentId);
 
@@ -131,10 +132,11 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
       setLoading(false);
       return;
     }
-    if (!isRefreshingRef.current) setLoading(true);
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
     setError(null);
     const { error: err, indent: row } = await getVisibleIndentById(orgId, indentId);
     setLoading(false);
+    initialLoadDoneRef.current = true;
     isRefreshingRef.current = false;
     setRefreshing(false);
     if (err) {

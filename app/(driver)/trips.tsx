@@ -261,6 +261,9 @@ export default function DriverTripsScreen() {
   const [driver, setDriver] = useState<driversService.DriverRow | null>(null);
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const isRefreshingRef = useRef(false);
+  const initialLoadDoneRef = useRef(false);
   const [selectedTrip, setSelectedTrip] = useState<tripsService.TripRow | null>(
     null,
   );
@@ -276,7 +279,7 @@ export default function DriverTripsScreen() {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
     driversService.getLinkedDriversForCurrentUser(profile.uid).then((res) => {
       const drivers = (res.drivers ?? []).filter((d) => !d.left_at);
       if (drivers.length > 0) {
@@ -286,9 +289,15 @@ export default function DriverTripsScreen() {
           .then((tRes) => {
             setTrips(tRes.trips ?? []);
             setLoading(false);
+            initialLoadDoneRef.current = true;
+            isRefreshingRef.current = false;
+            setRefreshing(false);
           });
       } else {
         setLoading(false);
+        initialLoadDoneRef.current = true;
+        isRefreshingRef.current = false;
+        setRefreshing(false);
       }
     });
   }, [profile?.uid]);

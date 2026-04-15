@@ -46,9 +46,11 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
     const markerLayerRef = useRef<any>(null); // Use any for L.LayerGroup
     const routeLineRef = useRef<any>(null); // Use any for L.Polyline
     const lastPolylineStrRef = useRef<string>("");
+    const isMountedRef = useRef(true);
 
     // Initialize map once on mount
     useEffect(() => {
+      isMountedRef.current = true;
       if (typeof window === "undefined" || !mapContainerRef.current || mapRef.current) {
         return;
       }
@@ -63,7 +65,9 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
       }
 
       // Dynamically import Leaflet only in the browser
+      let cancelled = false;
       import("leaflet").then((LModule) => {
+        if (cancelled || !isMountedRef.current || !mapContainerRef.current) return;
         const L = (LModule as any).default ?? LModule;
 
         // Fix for default marker icon in Webpack (Leaflet's default icons don't play well with Webpack)
@@ -97,6 +101,8 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
       });
 
       return () => {
+        cancelled = true;
+        isMountedRef.current = false;
         if (mapRef.current) {
           mapRef.current.remove();
           mapRef.current = null;
@@ -110,9 +116,12 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
         return;
       }
 
+      let cancelled = false;
       import("leaflet").then((LModule) => {
+        if (cancelled || !isMountedRef.current) return;
         const L = (LModule as any).default ?? LModule;
         const mapInstance = mapRef.current;
+        if (!mapInstance) return;
 
         // Clear existing layers
         markerLayerRef.current?.clearLayers();
@@ -177,6 +186,9 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
         // Recalculate viewport whenever layers change.
         mapInstance.invalidateSize();
       });
+      return () => {
+        cancelled = true;
+      };
     }, [center, zoom, markers, polyline, polylineColor, lowPower]);
 
     React.useImperativeHandle(ref, () => ({

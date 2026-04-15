@@ -74,13 +74,14 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
   const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash">("trips");
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
+  const initialLoadDoneRef = useRef(false);
 
   const load = useCallback(() => {
     if (!vehicleId || !currentOrganization?.id) {
       setLoading(false);
       return;
     }
-    if (!isRefreshingRef.current) setLoading(true);
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
     Promise.all([
@@ -108,6 +109,7 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
       setTransactions(allTx);
     }).finally(() => {
       setLoading(false);
+      initialLoadDoneRef.current = true;
       isRefreshingRef.current = false;
       setRefreshing(false);
     });
@@ -151,12 +153,18 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
   );
 
   const vehicleTransactions = useMemo(() => {
-    if (!vehicleTrips.length) return [];
     const tripIds = new Set(vehicleTrips.map((t) => t.id));
+    const targetVehicleNum = vehicle ? normalizeVehicleNumberForMatch(vehicle.vehicle_number) : null;
     return transactions.filter(
-      (tx) => tx.trip_id != null && tripIds.has(tx.trip_id),
+      (tx) => {
+        if (tx.trip_id != null && tripIds.has(tx.trip_id)) return true;
+        if (targetVehicleNum && tx.vehicle_number) {
+          return normalizeVehicleNumberForMatch(tx.vehicle_number) === targetVehicleNum;
+        }
+        return false;
+      }
     );
-  }, [vehicleTrips, transactions]);
+  }, [vehicleTrips, transactions, vehicle]);
 
   const vehicleTransactionsByTripId = useMemo(() => {
     const map = new Map<string, LedgerRow[]>();

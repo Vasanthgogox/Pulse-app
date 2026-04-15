@@ -113,6 +113,7 @@ export default function ClientDetailScreen({
   const [editPan, setEditPan] = useState("");
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   const [isInApp, setIsInApp] = useState(false);
+  const initialLoadDoneRef = useRef(false);
   
   useEffect(() => {
     if (client?.phone) {
@@ -129,7 +130,7 @@ export default function ClientDetailScreen({
       setLoading(false);
       return;
     }
-    if (!isRefreshingRef.current) setLoading(true);
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
     Promise.all([
@@ -214,6 +215,7 @@ export default function ClientDetailScreen({
       })
       .finally(() => {
         setLoading(false);
+        initialLoadDoneRef.current = true;
         isRefreshingRef.current = false;
         setRefreshing(false);
       });

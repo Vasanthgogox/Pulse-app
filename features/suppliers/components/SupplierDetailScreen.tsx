@@ -111,6 +111,7 @@ export default function SupplierDetailScreen({
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   const [isInApp, setIsInApp] = useState(false);
   const insets = useSafeAreaInsets();
+  const initialLoadDoneRef = useRef(false);
 
   useEffect(() => {
     if (supplier?.phone) {
@@ -127,7 +128,7 @@ export default function SupplierDetailScreen({
       setLoading(false);
       return;
     }
-    if (!isRefreshingRef.current) setLoading(true);
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
     const supplierPromise = getSupplierDetails(supplierId);
@@ -208,6 +209,7 @@ export default function SupplierDetailScreen({
       })
       .finally(() => {
         setLoading(false);
+        initialLoadDoneRef.current = true;
         isRefreshingRef.current = false;
         setRefreshing(false);
       });
