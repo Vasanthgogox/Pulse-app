@@ -1263,26 +1263,41 @@ export default function DriverRadarScreen() {
   const olaMapBottomPaddingPx = Math.round(Dimensions.get('window').height * 0.5);
   const screenHeight = Dimensions.get('window').height;
   const sheetSnapPoints = useMemo(() => {
-    const mid = Math.round(Dimensions.get('window').height * 0.5); // Fixed half-screen
-    const min = Math.max(220, Math.min(mid - 60, Math.round(Dimensions.get('window').height * 0.28))); // Smaller card
+    if (showNewAssignmentCard || acceptedTripId) {
+      // In dynamic sizing mode (v5), we still need to provide valid snap points.
+      // They will be used as fallback or initial points before content height is measured.
+      return ["100%"];
+    }
+    const mid = Math.round(Dimensions.get("window").height * 0.5); // Fixed half-screen
+    const min = Math.max(
+      220,
+      Math.min(
+        mid - 60,
+        Math.round(Dimensions.get("window").height * 0.28),
+      ),
+    ); // Smaller card
     const expanded = Math.max(
       mid + 80,
       Math.min(
-        Math.round(Dimensions.get('window').height * 0.78),
-        Math.round(Dimensions.get('window').height - insets.top - 84),
+        Math.round(Dimensions.get("window").height * 0.78),
+        Math.round(Dimensions.get("window").height - insets.top - 84),
       ),
     );
     return [min, mid, expanded];
-  }, [screenHeight, insets.top]);
+  }, [screenHeight, insets.top, showNewAssignmentCard, acceptedTripId]);
 
-  const snapSheetToIndex = useCallback((idx: 0 | 1 | 2) => {
+  const snapSheetToIndex = useCallback((idx: number) => {
     try {
       const sheetAny = bottomSheetRef.current as any;
-      sheetAny?.snapToIndex?.(idx);
+      // If we only have one snap point (static mode), always snap to index 0
+      const targetIdx = sheetSnapPoints.length === 1 ? 0 : idx;
+      if (targetIdx < sheetSnapPoints.length) {
+        sheetAny?.snapToIndex?.(targetIdx);
+      }
     } catch {
       // ignore
     }
-  }, []);
+  }, [sheetSnapPoints.length]);
 
   const handleTripFlowOperationActiveChange = useCallback((active: boolean) => {
     sheetOperationActiveRef.current = active;
@@ -3241,20 +3256,33 @@ export default function DriverRadarScreen() {
             </View>
 
             <BottomSheet
-              snapPoints={showNewAssignmentCard ? undefined : sheetSnapPoints}
-              index={showNewAssignmentCard ? 0 : 1}
+              snapPoints={sheetSnapPoints}
+              index={
+                sheetSnapPoints.length === 1
+                  ? 0
+                  : showNewAssignmentCard || acceptedTripId
+                  ? 0
+                  : 1
+              }
               enablePanDownToClose={false}
-              enableHandlePanningGesture={!showNewAssignmentCard}
-              enableContentPanningGesture={!showNewAssignmentCard}
-              enableOverDrag={!showNewAssignmentCard}
-              enableDynamicSizing={showNewAssignmentCard}
+              enableHandlePanningGesture={
+                !(showNewAssignmentCard || acceptedTripId)
+              }
+              enableContentPanningGesture={
+                !(showNewAssignmentCard || acceptedTripId)
+              }
+              enableOverDrag={!(showNewAssignmentCard || acceptedTripId)}
+              enableDynamicSizing={showNewAssignmentCard || !!acceptedTripId}
               ref={bottomSheetRef}
               keyboardBehavior="interactive"
               keyboardBlurBehavior="restore"
               android_keyboardInputMode="adjustResize"
               onChange={(index) => {
                 // Only dismiss keyboard if we're snapping to a very low point or closing
-                if (index === 0 && !showNewAssignmentCard) {
+                if (
+                  index <= 0 &&
+                  !(showNewAssignmentCard || acceptedTripId)
+                ) {
                   Keyboard.dismiss();
                 }
               }}
@@ -3266,13 +3294,16 @@ export default function DriverRadarScreen() {
                 overflow: "hidden",
               }}
               handleIndicatorStyle={{
-                backgroundColor: showNewAssignmentCard ? "transparent" : colors.border,
+                backgroundColor:
+                  showNewAssignmentCard || acceptedTripId
+                    ? "transparent"
+                    : colors.border,
                 width: 50,
                 height: 4,
                 borderRadius: 999,
               }}
             >
-              {showNewAssignmentCard ? (
+              {showNewAssignmentCard || acceptedTripId ? (
                 <BottomSheetView
                   style={[
                     styles.olaSheetContent,
@@ -3283,7 +3314,9 @@ export default function DriverRadarScreen() {
                     },
                   ]}
                 >
-                  <View style={[styles.assignedSheetContent, { flexGrow: 0 }]}>
+                  <View
+                    style={[styles.assignedSheetContent, { flexGrow: 0 }]}
+                  >
                     {showNotification && pendingInvite && (
                       <DriverInviteCard
                         invite={pendingInvite}
@@ -3294,14 +3327,19 @@ export default function DriverRadarScreen() {
                         onClose={() => setInvitationDismissed(true)}
                         onIgnore={async () => {
                           setInviteActionId(pendingInvite.id);
-                          await driversService.rejectDriverInvite(pendingInvite.id);
+                          await driversService.rejectDriverInvite(
+                            pendingInvite.id,
+                          );
                           setInviteActionId(null);
                           setInvitationDeclined(true);
                           fetch();
                         }}
                         onAccept={async () => {
                           setInviteActionId(pendingInvite.id);
-                          const { error } = await driversService.acceptDriverInvite(pendingInvite.id);
+                          const { error } =
+                            await driversService.acceptDriverInvite(
+                              pendingInvite.id,
+                            );
                           setInviteActionId(null);
                           if (!error) {
                             setInvitationAccepted(true);
@@ -3346,14 +3384,19 @@ export default function DriverRadarScreen() {
                         onClose={() => setInvitationDismissed(true)}
                         onIgnore={async () => {
                           setInviteActionId(pendingInvite.id);
-                          await driversService.rejectDriverInvite(pendingInvite.id);
+                          await driversService.rejectDriverInvite(
+                            pendingInvite.id,
+                          );
                           setInviteActionId(null);
                           setInvitationDeclined(true);
                           fetch();
                         }}
                         onAccept={async () => {
                           setInviteActionId(pendingInvite.id);
-                          const { error } = await driversService.acceptDriverInvite(pendingInvite.id);
+                          const { error } =
+                            await driversService.acceptDriverInvite(
+                              pendingInvite.id,
+                            );
                           setInviteActionId(null);
                           if (!error) {
                             setInvitationAccepted(true);
