@@ -282,14 +282,46 @@ export default function DriverRequestsScreen() {
                   offerText={buildOfferText(inv)}
                   busy={inviteActionId === inv.id}
                   fallbackAvatarUri={avatarUri}
-                  onIgnore={async () => {
-                    setInviteActionId(inv.id);
-                    const { error } = await driversService.rejectDriverInvite(inv.id);
-                    setInviteActionId(null);
-                    if (error) {
-                      Alert.alert('Decline failed', error.message ?? 'Could not decline. Try again.', [{ text: 'OK' }]);
+                  onIgnore={() => {
+                    const title = "Decline invitation?";
+                    const msg = "You will reject this fleet connection invitation.";
+                    
+                    if (Platform.OS === "web" && typeof window !== "undefined") {
+                      const confirmed = window.confirm(`${title}\n\n${msg}`);
+                      if (confirmed) {
+                        (async () => {
+                          setInviteActionId(inv.id);
+                          const { error } = await driversService.rejectDriverInvite(inv.id);
+                          setInviteActionId(null);
+                          if (error) {
+                            Alert.alert('Decline failed', error.message ?? 'Could not decline. Try again.', [{ text: 'OK' }]);
+                          }
+                          fetch();
+                        })();
+                      }
+                      return;
                     }
-                    fetch();
+
+                    Alert.alert(
+                      title,
+                      msg,
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Decline",
+                          style: "destructive",
+                          onPress: async () => {
+                            setInviteActionId(inv.id);
+                            const { error } = await driversService.rejectDriverInvite(inv.id);
+                            setInviteActionId(null);
+                            if (error) {
+                              Alert.alert('Decline failed', error.message ?? 'Could not decline. Try again.', [{ text: 'OK' }]);
+                            }
+                            fetch();
+                          }
+                        }
+                      ]
+                    );
                   }}
                   onAccept={async () => {
                     setInviteActionId(inv.id);
