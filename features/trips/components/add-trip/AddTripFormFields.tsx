@@ -1296,12 +1296,33 @@ export function AddTripFormFields({
             spellCheck={false}
             autoComplete="off"
           />
+          <View style={[styles.checkRow, { marginTop: 12 }]}>
+            <Switch
+              value={state.assignLater}
+              onValueChange={setters.setAssignLater}
+              trackColor={{ false: Theme.borderInput, true: Theme.primaryText }}
+              thumbColor={Theme.screenBackground}
+            />
+            <Text style={styles.checkLabel}>
+              Assign later (vehicle & driver phone from trip detail)
+            </Text>
+          </View>
+          {state.assignLater && (
+            <Text
+              style={[
+                styles.warningText,
+                { marginBottom: Layout.screenPaddingHorizontal - 4 },
+              ]}
+            >
+              Vehicle & Driver must be assigned before trip start.
+            </Text>
+          )}
           <Text style={[styles.sectionTitle, { marginTop: 12, marginBottom: 6 }]}>
-            DRIVER FOR TRACKING (PHONE) *
+            DRIVER FOR TRACKING (PHONE) {!state.assignLater ? "*" : ""}
           </Text>
           <TextInput
             style={baseInput}
-            placeholder="e.g. +91 98765 43210 (required)"
+            placeholder={state.assignLater ? "e.g. +91 98765 43210 (optional)" : "e.g. +91 98765 43210 (required)"}
             placeholderTextColor={Theme.placeholder}
             value={state.driverPhone}
             onChangeText={setters.setDriverPhone}
@@ -1380,10 +1401,10 @@ export function AddTripFormFields({
               </Text>
             </View>
           ) : null}
-          <Text style={[label, { marginTop: 12 }]}>Vehicle *</Text>
+          <Text style={[label, { marginTop: 12 }]}>Vehicle {!state.assignLater ? "*" : ""}</Text>
           <TextInput
             style={baseInput}
-            placeholder="e.g. TN 67 GH 7654 (required)"
+            placeholder={state.assignLater ? "e.g. TN 67 GH 7654 (optional)" : "e.g. TN 67 GH 7654 (required)"}
             placeholderTextColor={Theme.placeholder}
             value={state.aggregateVehicleText}
             onChangeText={(v) => setters.setAggregateVehicleText(formatIndianVehicleNumberInput(v))}
