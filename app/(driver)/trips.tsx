@@ -141,7 +141,7 @@ interface MissionLogEntry {
   loc: string;
 }
 
-/** Mission log from trip timestamps (Assigned → Pickup → In-transit → Delivered). */
+/** Trip log from trip timestamps (Assigned → Pickup → In-transit → Delivered). */
 function buildMissionLog(trip: tripsService.TripRow): MissionLogEntry[] {
   const entries: MissionLogEntry[] = [];
   if (trip.created_at) {
@@ -1010,7 +1010,7 @@ export default function DriverTripsScreen() {
                       <FontAwesome name="list-alt" size={14} color={colors.text} />
                     </View>
                     <Text style={[styles.logSectionTitleRef, { color: colors.text }]}>
-                      Mission Log
+                      Trip Log
                     </Text>
                   </View>
                   <View

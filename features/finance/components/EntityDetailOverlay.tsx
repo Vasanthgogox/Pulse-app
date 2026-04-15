@@ -1,5 +1,5 @@
 /**
- * Entity detail overlay — TeslaHeader, summary bar, toolbar (search + report + filter), "Entity Ledger protocol" table.
+ * Entity detail overlay — TeslaHeader, summary bar, toolbar (search + report + filter), "Transaction Ledger" table.
  * Report fetches ledger at client/entity level and offers download.
  */
 import { ALL_LEDGER_CATEGORY_VALUES } from "@/components/AddTransactionModal";
@@ -121,7 +121,7 @@ export interface TripEntryContext {
   intent: TripEntryIntent;
 }
 
-/** Build LedgerRow[] from entity protocol rows so report preview shows same data as ENTITY LEDGER PROTOCOL. */
+/** Build LedgerRow[] from entity protocol rows so report preview shows same data as TRANSACTION LEDGER. */
 function protocolRowsToLedger(
   entity: FinancialRowData,
   entityType: EntityType,
@@ -2818,7 +2818,7 @@ export function EntityDetailOverlay({
               labelOut={undefined}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
-              searchPlaceholder="Search mission, destination…"
+              searchPlaceholder="Search trip, destination…"
               onReportPress={handleReportPress}
             />
           </View>
@@ -2842,7 +2842,7 @@ export function EntityDetailOverlay({
                       ? "PAYABLES BY TRIP"
                       : isDriver
                         ? "COMMISSION BY TRIP"
-                        : "ENTITY LEDGER PROTOCOL"}
+                        : "TRANSACTION LEDGER"}
               </Text>
               {(entityType === "CLIENT" || entityType === "SUPPLIER") && (
                 <Text style={styles.sectionSubtitle} numberOfLines={2}>

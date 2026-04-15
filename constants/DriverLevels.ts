@@ -9,7 +9,7 @@ import { Image, type ImageSourcePropType } from 'react-native';
 
 export const LEVELS_CONFIG = [
   { level: 1, name: 'Initiate', goalText: 'Complete Signup', type: 'signup', target: 1, reward: 'Access Hub', tier: 'Bronze' },
-  { level: 2, name: 'Novice', goalText: 'Complete 2 Trips', type: 'trips', target: 2, reward: 'Standard Missions', tier: 'Bronze' },
+  { level: 2, name: 'Novice', goalText: 'Complete 2 Trips', type: 'trips', target: 2, reward: 'Standard Trips', tier: 'Bronze' },
   { level: 3, name: 'Verified', goalText: 'Verify Identity', type: 'verification', target: 1, reward: 'Silver Status', tier: 'Silver' },
   { level: 4, name: 'Trusted', goalText: 'Earn 2 Five-Star Ratings', type: 'ratings', target: 2, reward: 'Priority Support', tier: 'Silver' },
   { level: 5, name: 'Navigator', goalText: 'Complete 10 Trips', type: 'trips', target: 10, reward: 'Grid Boost', tier: 'Silver' },

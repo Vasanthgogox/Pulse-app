@@ -1,6 +1,6 @@
 /**
  * Trip Ledger Detail — matches reference: Treasury header + summary card with search,
- * Entity Ledger Protocol (MISSION ID / SALES / PAID / DUE), Contact, Tax & Compliance,
+ * Transaction Ledger (TRIP ID / SALES / PAID / DUE), Contact, Tax & Compliance,
  * Telemetry History, and FAB. Uses TreasuryDetailLayout for alignment with app.
  */
 import { TreasuryDetailLayout } from "./TreasuryDetailLayout";

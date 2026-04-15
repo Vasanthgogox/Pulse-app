@@ -71,7 +71,7 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
   const [error, setError] = useState<string | null>(null);
   const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [detailSubTab, setDetailSubTab] = useState<"missions" | "cash">("missions");
+  const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash">("trips");
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
 
@@ -307,7 +307,7 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
           <Text style={styles.headerTitle} numberOfLines={1}>
             {vehicle.vehicle_number}
           </Text>
-          <Text style={styles.headerSubtitle}>ASSET FISCAL VIEW</Text>
+          <Text style={styles.headerSubtitle}>VEHICLE FINANCIAL VIEW</Text>
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity
@@ -347,8 +347,8 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
         <View style={styles.scorecard}>
           <View style={styles.scorecardTop}>
             <View style={styles.scorecardLeft}>
-              <Text style={styles.scorecardLabel}>GRID FISCAL DNA</Text>
-              <Text style={styles.scorecardSalesLabel}>ASSET SALES</Text>
+              <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
+              <Text style={styles.scorecardSalesLabel}>VEHICLE SALES</Text>
               <Text style={styles.scorecardAmount}>
                 {formatINR(contractValue)}
               </Text>
@@ -381,18 +381,18 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
           <TouchableOpacity
             style={[
               styles.tabItem,
-              detailSubTab === "missions" && styles.tabItemActive,
+              detailSubTab === "trips" && styles.tabItemActive,
             ]}
-            onPress={() => setDetailSubTab("missions")}
+            onPress={() => setDetailSubTab("trips")}
             activeOpacity={0.8}
           >
             <Text
               style={[
                 styles.tabItemText,
-                detailSubTab === "missions" && styles.tabItemTextActive,
+                detailSubTab === "trips" && styles.tabItemTextActive,
               ]}
             >
-              Missions
+              Trips
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -414,10 +414,10 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
           </TouchableOpacity>
         </View>
 
-        {detailSubTab === "missions" && (
+        {detailSubTab === "trips" && (
           <View style={styles.tableCard}>
             <View style={styles.tableHeader}>
-              <Text style={[styles.th, styles.thMission]}>Mission</Text>
+              <Text style={[styles.th, styles.thMission]}>Trip</Text>
               <Text style={[styles.th, styles.thSales]}>Sales</Text>
               <Text style={[styles.th, styles.thRight]}>Expense</Text>
               <Text style={[styles.th, styles.thRight]}>Profit</Text>
@@ -465,7 +465,7 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
               ))
             ) : (
               <View style={styles.emptyRow}>
-                <Text style={styles.emptyRowText}>No missions</Text>
+                <Text style={styles.emptyRowText}>No trips</Text>
               </View>
             )}
           </View>

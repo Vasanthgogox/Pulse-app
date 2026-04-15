@@ -1485,7 +1485,7 @@ export default function TripDetailScreen({
           <Text style={styles.headerTitle} numberOfLines={1}>
             {getTripDisplayNumber(trip)}
           </Text>
-          <Text style={styles.headerSubtitle}>Mission Control Blueprint</Text>
+          <Text style={styles.headerSubtitle}>Trip Details</Text>
           <Text style={styles.headerTripTypeLabel}>
             {displayAsAsset ? t("assetBasedTrip") : t("aggregateBasedTrip")}
           </Text>

@@ -1,5 +1,5 @@
 /**
- * Trip detail — Mission Control Blueprint layout (aligned with reference):
+ * Trip detail — Trip Details layout (aligned with reference):
  * Grid Tracking Node, Protocol Specification (financial blueprint), Adjustment Registry,
  * Supplier Sync bar, Associated Handshakes.
  */

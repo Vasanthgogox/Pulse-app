@@ -248,7 +248,7 @@
 //                                     {p.integrated && <Link2 size={12} className="text-[#10B981] animate-pulse"/>}
 //                                  </div>
 //                                  <div className="flex items-center gap-2 mt-1">
-//                                     <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{p.trips} Missions</span>
+//                                     <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{p.trips} Trips</span>
 //                                     <div className="w-1 h-1 rounded-full bg-slate-200"></div>
 //                                     <span className={`text-[8px] font-black uppercase ${p.syncStatus === 'VERIFIED' ? 'text-[#10B981]' : 'text-amber-500'}`}>{p.syncStatus}</span>
 //                                  </div>
@@ -410,7 +410,7 @@
 //                    <TacticalCard className="p-6 flex flex-col items-center text-center">
 //                       <Trophy size={28} className="text-[#F59E0B] mb-4"/>
 //                       <p className="text-[20px] font-black text-zinc-900 leading-none">{p.totalTrips}</p>
-//                       <p className="text-[7px] font-black text-zinc-400 uppercase tracking-widest mt-2">Missions</p>
+//                       <p className="text-[7px] font-black text-zinc-400 uppercase tracking-widest mt-2">Trips</p>
 //                    </TacticalCard>
 //                    <TacticalCard className="p-6 flex flex-col items-center text-center">
 //                       <Activity size={28} className="text-[#10B981] mb-4 animate-pulse" />

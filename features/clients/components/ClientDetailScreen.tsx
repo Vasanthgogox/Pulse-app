@@ -409,7 +409,7 @@ export default function ClientDetailScreen({
     return () => clearTimeout(t);
   }, []);
 
-  // ENTITY LEDGER PROTOCOL — Aggressive consolidation & tally, O(n). Must run before any early return (Rules of Hooks).
+  // TRANSACTION LEDGER — Aggressive consolidation & tally, O(n). Must run before any early return (Rules of Hooks).
   const {
     rows: ledgerProtocolRows,
     totalBilledConsolidated,
@@ -671,7 +671,7 @@ export default function ClientDetailScreen({
   const health = sales > 0 ? Math.round((paid / sales) * 100) : 0;
 
   const tabConfig = [
-    { id: "trips" as const, label: "Missions" },
+    { id: "trips" as const, label: "Trips" },
     { id: "cash" as const, label: "Cash Flow" },
     { id: "shared" as const, label: "Shared" },
   ];
@@ -743,7 +743,7 @@ export default function ClientDetailScreen({
         <View style={styles.scorecard}>
           <View style={styles.scorecardTop}>
             <View style={styles.scorecardLeft}>
-              <Text style={styles.scorecardLabel}>GRID FISCAL DNA</Text>
+              <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
               <Text style={styles.scorecardSalesLabel}>TOTAL SALES</Text>
               <Text style={styles.scorecardAmount}>
                 {formatINR(sales)}
@@ -792,11 +792,11 @@ export default function ClientDetailScreen({
           ))}
         </View>
 
-        {/* Tab: Missions — Sales, Received, Due; tap row to open trip detail */}
+        {/* Tab: Trips — Sales, Received, Due; tap row to open trip detail */}
         {detailSubTab === "trips" && (
           <View style={styles.tableCard}>
             <View style={styles.tableHeader}>
-              <Text style={[styles.th, styles.thMission]}>Mission</Text>
+              <Text style={[styles.th, styles.thMission]}>Trip</Text>
               <Text style={[styles.th, styles.thSales]}>Sales</Text>
               <Text style={[styles.th, styles.thRight]}>Received</Text>
               <Text style={[styles.th, styles.thRight]}>Due</Text>
@@ -837,7 +837,7 @@ export default function ClientDetailScreen({
               ))
             ) : (
               <View style={styles.emptyRow}>
-                <Text style={styles.emptyRowText}>No missions</Text>
+                <Text style={styles.emptyRowText}>No trips</Text>
               </View>
             )}
           </View>
