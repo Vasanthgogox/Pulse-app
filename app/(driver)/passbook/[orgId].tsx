@@ -288,7 +288,8 @@ export default function DriverPassbookDetailScreen() {
                 key={entry.id}
                 style={[
                   styles.ppTxCard,
-                  { borderWidth: 1, borderColor: rowToneBorder, borderRadius: 12, paddingHorizontal: 12, marginBottom: 6 },
+                  { paddingHorizontal: 0 },
+                  !isLastEntry && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: listDivider },
                 ]}
               >
                 <View style={styles.ppTxTopRow}>
@@ -416,7 +417,8 @@ export default function DriverPassbookDetailScreen() {
                         key={trip.id}
                         style={[
                           styles.ppTxCard,
-                          { borderWidth: 1, borderColor: rowToneBorder, borderRadius: 12, paddingHorizontal: 12, marginBottom: 6 },
+                          { paddingHorizontal: 0 },
+                          !isLastTrip && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: listDivider },
                         ]}
                       >
                         <View style={styles.ppTxTopRow}>
@@ -532,7 +534,7 @@ const styles = StyleSheet.create({
   ppIconSq: {
     width: 46,
     height: 46,
-    borderRadius: 12,
+    borderRadius: 23,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,

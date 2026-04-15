@@ -462,13 +462,14 @@ export default function DriverWalletScreen() {
             const metaColor = colors.textMuted;
             const isLastEntry = entryIdx === nonTripLedgerEntries.length - 1;
             return (
-              <View
-                key={entry.id}
-                style={[
-                  styles.ppTxCard,
-                  !isLastEntry && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: listDivider },
-                ]}
-              >
+                  <View
+                    key={entry.id}
+                    style={[
+                      styles.ppTxCard,
+                      { paddingHorizontal: 0 },
+                      !isLastEntry && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: listDivider },
+                    ]}
+                  >
                 <View style={styles.ppTxTopRow}>
                   <View style={[styles.ppIconSq, { backgroundColor: EMERALD_600 }]}>
                     <FontAwesome
@@ -662,26 +663,25 @@ export default function DriverWalletScreen() {
                     const rowToneBorder = receivedAmt > 0 ? colors.emeraldBorderSoft : 'rgba(180,83,9,0.25)';
                     const iconSqBg = receivedAmt > 0 ? colors.emeraldMuted : AMBER_50;
                     const iconColor = receivedAmt > 0 ? colors.emerald : Theme.warning;
+                    const isLastTrip = idx === trips.length - 1;
                     return (
                       <View
                         key={trip.id}
                         style={[
                           styles.tripCard,
                           {
-                            backgroundColor: isExpanded ? colors.surface : rowToneBg,
-                            borderColor: rowToneBorder,
-                            borderRadius: 12,
-                            borderWidth: 1,
-                            overflow: 'hidden',
-                            marginBottom: 6,
+                            backgroundColor: 'transparent',
+                            borderColor: 'transparent',
+                            borderWidth: 0,
+                            marginBottom: 0,
                           },
                         ]}
                       >
                         <TouchableOpacity
                           style={[
                             styles.ppTxCard,
-                            { backgroundColor: 'transparent', paddingHorizontal: 12 },
-                            showRowDivider && {
+                            { backgroundColor: 'transparent', paddingHorizontal: 0 },
+                            !isLastTrip && {
                               borderBottomWidth: StyleSheet.hairlineWidth,
                               borderBottomColor: listDivider,
                             },
@@ -1090,28 +1090,22 @@ const styles = StyleSheet.create({
   },
   filterSummaryTile: {
     flex: 1,
-    paddingVertical: 16,
-    paddingHorizontal: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
     borderRadius: 16,
-    borderWidth: 2,
-    borderColor: 'transparent',
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
   },
   filterSummaryTilePending: {
-    backgroundColor: '#B91C1C',
+    backgroundColor: '#991b1b',
   },
   filterSummaryTileReceived: {
-    backgroundColor: EMERALD_600,
+    backgroundColor: '#065f46',
   },
   filterSummaryTileActive: {
-    borderColor: 'rgba(255,255,255,0.6)',
+    transform: [{ scale: 1.02 }],
   },
   filterSummaryWatermarkWrap: {
     position: 'absolute',
@@ -1295,7 +1289,7 @@ const styles = StyleSheet.create({
   ppIconSq: {
     width: 46,
     height: 46,
-    borderRadius: 12,
+    borderRadius: 23,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -1455,7 +1449,7 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     marginHorizontal: 0,
     marginVertical: 0,
-    overflow: 'visible',
+    backgroundColor: 'transparent',
   },
   upiRow: {
     flexDirection: 'row',
