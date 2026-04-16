@@ -1715,12 +1715,17 @@ export default function NetworkScreen() {
                               </View>
                               <View style={styles.networkCardInnerCol}>
                                 <View style={styles.networkCardTitleRow}>
-                                  <Text
-                                    style={styles.networkCardTitleInline}
-                                    numberOfLines={1}
-                                  >
-                                    {displayName}
-                                  </Text>
+                                  <View style={styles.requestTitleMeta}>
+                                    <Text
+                                      style={styles.networkCardTitleInline}
+                                      numberOfLines={1}
+                                    >
+                                      {displayName}
+                                    </Text>
+                                    <Text style={styles.cardTimeAgoInline}>
+                                      {shortRelativeTime(item.created_at)}
+                                    </Text>
+                                  </View>
 
                                   {isReceivedPending && item.row ? (
                                     <View style={styles.networkCardInlineActions}>
@@ -2115,9 +2120,17 @@ export default function NetworkScreen() {
             <View style={[styles.confirmModalCard, styles.requestPreviewModalCard]}>
               <View style={styles.requestPreviewHeader}>
                 <View style={styles.requestPreviewAvatar}>
-                  <Text style={styles.requestPreviewAvatarText}>
-                    {getInitials(previewRequestItem.from_org_name || "S")}
-                  </Text>
+                  {previewRequestItem.nodeInfo ? (
+                    <NetworkAvatar
+                      node={previewRequestItem.nodeInfo as NetworkNode}
+                      onPlatform={true}
+                      frameSize={44}
+                    />
+                  ) : (
+                    <Text style={styles.requestPreviewAvatarText}>
+                      {getInitials(previewRequestItem.from_org_name || "S")}
+                    </Text>
+                  )}
                 </View>
                 <View style={styles.requestPreviewHeaderBody}>
                   <Text style={styles.confirmModalTitle}>
@@ -3032,6 +3045,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     flexShrink: 0,
+  },
+  requestTitleMeta: {
+    flex: 1,
+    minWidth: 0,
   },
   nodeAvatar: {
     width: "100%",
