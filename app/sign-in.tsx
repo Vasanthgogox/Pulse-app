@@ -50,7 +50,7 @@ export default function SignIn() {
   const [keepSignedIn, setKeepSignedInState] = useState(true);
   const [loading, setLoading] = useState(false);
   const [waitingForAuthState, setWaitingForAuthState] = useState(false);
-  const [errorText, setErrorText] = useState<string>('');
+  const [signInError, setSignInError] = useState<string | null>(null);
   const emailPrefilled = Boolean(getEmailFromParams(params));
   const scrollRef = useRef<ScrollView>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -120,44 +120,58 @@ export default function SignIn() {
     'English';
 
   const handleSignIn = async () => {
-    setErrorText('');
+    setSignInError(null);
+    setWaitingForAuthState(false);
+
     if (!isOnline) {
-      const msg = t('connectToSignIn');
-      setErrorText(msg);
-      Alert.alert(t('noInternet'), msg);
+      setSignInError(t('connectToSignIn'));
       return;
     }
+
     const trimmedEmail = email.trim();
     if (!trimmedEmail || !password) {
-      const msg = t('enterEmailPassword');
-      setErrorText(msg);
-      Alert.alert(t('error'), msg);
+      setSignInError(t('enterEmailPassword'));
       return;
     }
+
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      const msg = t('validEmailAddress');
-      setErrorText(msg);
-      Alert.alert(t('invalidEmail'), msg);
+      setSignInError(t('validEmailAddress'));
       return;
     }
+
     try {
       setLoading(true);
       const { error } = await signIn(trimmedEmail, password, keepSignedIn);
-      setLoading(false);
+
       if (error) {
         const isNetwork = error.message.includes('Cannot reach server');
-        const title = isNetwork ? t('connectionError') : t('signInFailed');
-        const msg = isNetwork ? t('cannotReachServer') : (error.message || t('unknownError'));
-        setErrorText(msg);
-        Alert.alert(title, msg);
+        if (isNetwork) {
+          setSignInError(t('cannotReachServer'));
+          Alert.alert(t('connectionError'), t('cannotReachServer'));
+          return;
+        }
+
+        const normalizedMessage = error.message.toLowerCase();
+        const isInvalidCredentials =
+          normalizedMessage.includes('invalid login credentials') ||
+          normalizedMessage.includes('invalid email or password') ||
+          normalizedMessage.includes('invalid credentials');
+
+        setSignInError(
+          isInvalidCredentials
+            ? 'Incorrect email or password.'
+            : error.message || t('signInFailed')
+        );
         return;
       }
+
       setWaitingForAuthState(true);
     } catch (e) {
-      setLoading(false);
       const msg = e instanceof Error ? (e.message || t('unknownError')) : t('unknownError');
-      setErrorText(msg);
+      setSignInError(msg);
       Alert.alert(t('signInFailed'), msg);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -204,13 +218,13 @@ export default function SignIn() {
           </TouchableOpacity>
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, signInError ? styles.inputError : null]}
             placeholder={t('emailPlaceholder')}
             placeholderTextColor={Theme.authTextMuted}
             value={email}
-            onChangeText={(v) => {
-              setEmail(v);
-              if (errorText) setErrorText('');
+            onChangeText={(value) => {
+              setEmail(value);
+              if (signInError) setSignInError(null);
             }}
             autoCapitalize="none"
             autoCorrect={false}
@@ -221,13 +235,13 @@ export default function SignIn() {
           />
           <View style={styles.passwordRow}>
             <TextInput
-              style={styles.inputPassword}
+              style={[styles.inputPassword, signInError ? styles.inputError : null]}
               placeholder={t('passwordPlaceholder')}
               placeholderTextColor={Theme.authTextMuted}
               value={password}
-              onChangeText={(v) => {
-                setPassword(v);
-                if (errorText) setErrorText('');
+              onChangeText={(value) => {
+                setPassword(value);
+                if (signInError) setSignInError(null);
               }}
               secureTextEntry={!showPassword}
               autoCorrect={false}
@@ -248,6 +262,17 @@ export default function SignIn() {
               />
             </TouchableOpacity>
           </View>
+
+          {signInError ? (
+            <View style={styles.errorBanner}>
+              <FontAwesome
+                name="exclamation-circle"
+                size={16}
+                color={Theme.negative}
+              />
+              <Text style={styles.errorBannerText}>{signInError}</Text>
+            </View>
+          ) : null}
 
           <TouchableOpacity
             style={styles.keepSignedInRow}
@@ -283,8 +308,6 @@ export default function SignIn() {
               <Text style={styles.buttonText}>{t('logIn')}</Text>
             )}
           </TouchableOpacity>
-
-          {!!errorText && <Text style={styles.errorText}>{errorText}</Text>}
 
           <TouchableOpacity activeOpacity={0.8} disabled={loading}>
             <Text style={styles.forgotPasswordText}>{t('forgotPassword')}</Text>
@@ -409,6 +432,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Theme.textPrimaryDark,
   },
+  inputError: {
+    borderColor: Theme.negative,
+  },
   eyeButton: {
     position: 'absolute',
     right: 16,
@@ -423,6 +449,25 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingRight: 8,
     gap: 10,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: -4,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: Theme.negativeMuted,
+    borderWidth: 1,
+    borderColor: Theme.negative,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+    color: Theme.negative,
+    fontWeight: '500',
   },
   keepSignedInLabel: {
     fontSize: 15,
@@ -456,13 +501,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: Theme.textPrimaryDark,
-    textAlign: 'center',
-  },
-  errorText: {
-    marginTop: 12,
-    fontSize: 14,
-    fontWeight: '600',
-    color: Theme.authPrimary,
     textAlign: 'center',
   },
   footer: {

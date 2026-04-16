@@ -60,6 +60,7 @@ export default function SignUp() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -79,7 +80,7 @@ export default function SignUp() {
   const scrollRef = useRef<ScrollView>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const fieldYRef = useRef({ fullName: 0, company: 0, phone: 0, email: 0, password: 0 });
+  const fieldYRef = useRef({ fullName: 0, company: 0, phone: 0, email: 0, password: 0, confirmPassword: 0 });
 
   /** Extra scroll offset so focused field stays above keyboard. Use larger offset on iOS when focusing password so the field stays above the "Strong Password" / autofill bar. */
   const SCROLL_OFFSET_DEFAULT = 100;
@@ -218,6 +219,10 @@ export default function SignUp() {
     const passwordErr = validatePassword(password);
     if (passwordErr) {
       setErrorMsg(passwordErr);
+      return;
+    }
+    if (password !== confirmPassword) {
+      setErrorMsg('Passwords do not match.');
       return;
     }
     const fullNameErr = validateFullName(false)(fullName);
@@ -480,6 +485,37 @@ export default function SignUp() {
               value={password}
               onChangeText={setPassword}
               onFocus={() => scrollToField('password')}
+              secureTextEntry={!showPassword}
+              autoCorrect={false}
+              spellCheck={false}
+              autoComplete="new-password"
+              textContentType="newPassword"
+              editable={!loading}
+            />
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowPassword((p) => !p)}
+              disabled={loading}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <FontAwesome
+                name={showPassword ? 'eye-slash' : 'eye'}
+                size={20}
+                color={Theme.authTextMuted}
+              />
+            </TouchableOpacity>
+          </View>
+          <View
+            style={[styles.passwordRow, styles.inputWrap]}
+            onLayout={(e) => { fieldYRef.current.confirmPassword = e.nativeEvent.layout.y; }}
+          >
+            <TextInput
+              style={styles.inputPassword}
+              placeholder="Confirm Password"
+              placeholderTextColor={Theme.authTextMuted}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              onFocus={() => scrollToField('confirmPassword')}
               secureTextEntry={!showPassword}
               autoCorrect={false}
               spellCheck={false}

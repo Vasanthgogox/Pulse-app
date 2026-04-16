@@ -39,7 +39,17 @@ import {
 } from "@/services/connectionRequestsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Building2, CircleCheck, Handshake, Truck, User } from "lucide-react-native";
+import {
+  Building2,
+  CheckCircle2,
+  CircleCheck,
+  Clock3,
+  Handshake,
+  Info,
+  Truck,
+  User,
+  UserPlus,
+} from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -47,6 +57,7 @@ import {
   Image,
   Modal,
   Platform,
+  Pressable,
   RefreshControl,
   ScrollView,
   Share,
@@ -435,8 +446,16 @@ function shortRelativeTime(iso: string): string {
   return `${days}d`;
 }
 
+function requestPreviewRole(kind: RequestKind): string {
+  if (kind === "DRIVER_INVITE") return "Driver invite";
+  if (kind === "CLIENT") return "Add as client";
+  if (kind === "SUPPLIER") return "Add as supplier";
+  return "Add as client + supplier";
+}
+
 export default function NetworkScreen() {
   const { width } = useWindowDimensions();
+  const isWeb = Platform.OS === "web";
   const isLargeScreen = Platform.OS === "web" && width >= 1024;
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -519,6 +538,11 @@ export default function NetworkScreen() {
   const [acceptTermsItem, setAcceptTermsItem] = useState<RequestItem | null>(
     null,
   );
+  const [previewRequestItem, setPreviewRequestItem] = useState<RequestItem | null>(
+    null,
+  );
+  const [previewOpenedAtMs, setPreviewOpenedAtMs] = useState<number>(0);
+  const [hoveredRequestId, setHoveredRequestId] = useState<string | null>(null);
   const [dismissedSentRequestIds, setDismissedSentRequestIds] = useState<
     Record<string, true>
   >({});
@@ -1584,6 +1608,7 @@ export default function NetworkScreen() {
                   item.type === "RECEIVED" && item.status === "pending";
                 const isSentPending =
                   item.type === "SENT" && item.status === "pending";
+                const showInlineSenderPreview = false;
                 const kindLabel =
                   item.kind === "DRIVER_INVITE"
                     ? "DRIVER INVITE"
@@ -1607,7 +1632,18 @@ export default function NetworkScreen() {
                       <View style={styles.networkCard}>
                       <View style={styles.networkCardOrb} pointerEvents="none" />
                       <View style={styles.networkCardMainRow}>
-                        <View style={styles.networkCardBody}>
+                        <Pressable
+                          style={styles.networkCardBody}
+                          disabled={item.type !== "RECEIVED"}
+                          onPress={() => {
+                            if (item.type === "RECEIVED") {
+                              setPreviewRequestItem((prev) =>
+                                prev?.id === item.id ? null : item,
+                              );
+                              setPreviewOpenedAtMs(Date.now());
+                            }
+                          }}
+                        >
                           <View style={styles.networkCardTop}>
                             <View style={styles.networkCardTopLeft}>
                               <View
@@ -1689,12 +1725,17 @@ export default function NetworkScreen() {
                               </View>
                               <View style={styles.networkCardInnerCol}>
                                 <View style={styles.networkCardTitleRow}>
-                                  <Text
-                                    style={styles.networkCardTitleInline}
-                                    numberOfLines={1}
-                                  >
-                                    {displayName}
-                                  </Text>
+                                  <View style={styles.requestTitleMeta}>
+                                    <Text
+                                      style={styles.networkCardTitleInline}
+                                      numberOfLines={1}
+                                    >
+                                      {displayName}
+                                    </Text>
+                                    <Text style={styles.cardTimeAgoInline}>
+                                      {shortRelativeTime(item.created_at)}
+                                    </Text>
+                                  </View>
 
                                   {isReceivedPending && item.row ? (
                                     <View style={styles.networkCardInlineActions}>
@@ -1766,8 +1807,46 @@ export default function NetworkScreen() {
                                 </View>
                               </View>
                             </View>
+
+                            {showInlineSenderPreview ? (
+                              <View style={styles.requestPreviewCard}>
+                                <View style={styles.requestPreviewHeader}>
+                                  <View style={styles.requestPreviewAvatar}>
+                                    <Text style={styles.requestPreviewAvatarText}>
+                                      {getInitials(item.from_org_name || "S")}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.requestPreviewHeaderBody}>
+                                    <Text style={styles.requestPreviewHeading}>
+                                      {item.from_org_name}
+                                    </Text>
+                                    <Text style={styles.requestPreviewBodySubtitle}>
+                                      Sender information
+                                    </Text>
+                                  </View>
+                                </View>
+                                <View style={styles.requestPreviewInfoRow}>
+                                  <Text style={styles.requestPreviewMetaLabel}>Request</Text>
+                                  <Text style={styles.requestPreviewMetaValue}>
+                                    {requestPreviewRole(item.kind)}
+                                  </Text>
+                                </View>
+                                <View style={styles.requestPreviewInfoRow}>
+                                  <Text style={styles.requestPreviewMetaLabel}>Status</Text>
+                                  <Text style={styles.requestPreviewMetaValue}>
+                                    {formatRequestStatus(item.status)}
+                                  </Text>
+                                </View>
+                                <View style={styles.requestPreviewInfoRow}>
+                                  <Text style={styles.requestPreviewMetaLabel}>Received</Text>
+                                  <Text style={styles.requestPreviewMetaValue}>
+                                    {shortRelativeTime(item.created_at)}
+                                  </Text>
+                                </View>
+                              </View>
+                            ) : null}
                           </View>
-                        </View>
+                        </Pressable>
                       </View>
                     </View>
                     </View>
@@ -2025,6 +2104,142 @@ export default function NetworkScreen() {
             </View>
           </View>
         </View>
+      </Modal>
+
+      <Modal
+        transparent
+        animationType="fade"
+        visible={previewRequestItem != null}
+        onRequestClose={() => setPreviewRequestItem(null)}
+      >
+        <Pressable
+          style={[
+            styles.confirmModalBackdrop,
+            {
+              paddingTop: Math.max(insets.top, 12),
+              paddingBottom: Math.max(insets.bottom, 12),
+            },
+          ]}
+          onPress={() => {
+            // Guard: avoid instant close when modal mounts mid-gesture.
+            if (Date.now() - previewOpenedAtMs < 250) return;
+            setPreviewRequestItem(null);
+          }}
+        >
+          {previewRequestItem ? (
+            <View style={[styles.confirmModalCard, styles.requestPreviewModalCard]}>
+              <View style={styles.requestPreviewAccentBar} />
+              <View style={styles.requestPreviewHeader}>
+                <View style={styles.requestPreviewAvatar}>
+                  {previewRequestItem.nodeInfo ? (
+                    <NetworkAvatar
+                      node={previewRequestItem.nodeInfo as NetworkNode}
+                      onPlatform={true}
+                      frameSize={44}
+                    />
+                  ) : (
+                    <Text style={styles.requestPreviewAvatarText}>
+                      {getInitials(previewRequestItem.from_org_name || "S")}
+                    </Text>
+                  )}
+                </View>
+                <View style={styles.requestPreviewHeaderBody}>
+                  <Text style={styles.requestPreviewHeading}>
+                    {previewRequestItem.from_org_name}
+                  </Text>
+                  <View style={styles.requestPreviewSubRow}>
+                    <Info
+                      size={13}
+                      strokeWidth={2}
+                      color={Theme.textSecondary}
+                    />
+                    <Text style={styles.requestPreviewBodySubtitle}>
+                      Minimal sender information available
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              <View style={styles.requestPreviewInfoGrid}>
+                <View style={styles.requestPreviewInfoRow}>
+                  <View style={styles.requestPreviewInfoLeft}>
+                    <UserPlus
+                      size={15}
+                      strokeWidth={2}
+                      color={Theme.textSecondary}
+                    />
+                    <Text style={styles.requestPreviewMetaLabel}>
+                      Request Type
+                    </Text>
+                  </View>
+                  <Text style={styles.requestPreviewMetaValue}>
+                    {requestPreviewRole(previewRequestItem.kind)}
+                  </Text>
+                </View>
+                <View style={styles.requestPreviewInfoRow}>
+                  <View style={styles.requestPreviewInfoLeft}>
+                    <CheckCircle2
+                      size={15}
+                      strokeWidth={2}
+                      color={Theme.textSecondary}
+                    />
+                    <Text style={styles.requestPreviewMetaLabel}>
+                      Current Status
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.requestPreviewStatusBadge,
+                      previewRequestItem.status === "approved"
+                        ? styles.requestPreviewStatusBadgeApproved
+                        : previewRequestItem.status === "rejected"
+                          ? styles.requestPreviewStatusBadgeRejected
+                          : styles.requestPreviewStatusBadgePending,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.requestPreviewStatusText,
+                        previewRequestItem.status === "approved"
+                          ? styles.requestPreviewStatusTextApproved
+                          : previewRequestItem.status === "rejected"
+                            ? styles.requestPreviewStatusTextRejected
+                            : styles.requestPreviewStatusTextPending,
+                      ]}
+                    >
+                      {formatRequestStatus(previewRequestItem.status)}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.requestPreviewInfoRow}>
+                  <View style={styles.requestPreviewInfoLeft}>
+                    <Clock3
+                      size={15}
+                      strokeWidth={2}
+                      color={Theme.textSecondary}
+                    />
+                    <Text style={styles.requestPreviewMetaLabel}>
+                      Time Received
+                    </Text>
+                  </View>
+                  <View style={styles.requestPreviewTimeWrap}>
+                    <Text style={styles.requestPreviewMetaValue}>
+                      {shortRelativeTime(previewRequestItem.created_at)} ago
+                    </Text>
+                    <View style={styles.requestPreviewTimeDot} />
+                  </View>
+                </View>
+              </View>
+              <View style={styles.requestPreviewFooter}>
+                <Text style={styles.requestPreviewFooterText}>
+                  Tap anywhere to close preview
+                </Text>
+                <Text style={styles.requestPreviewFooterHint}>
+                  Use the request card actions to accept or reject.
+                </Text>
+              </View>
+            </View>
+          ) : null}
+        </Pressable>
       </Modal>
 
       <Modal
@@ -2757,6 +2972,169 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
+  requestPreviewCard: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+    gap: 8,
+  },
+  requestPreviewModalCard: {
+    maxWidth: 380,
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
+    alignItems: "stretch",
+    overflow: "hidden",
+  },
+  requestPreviewAccentBar: {
+    width: "100%",
+    height: 6,
+    backgroundColor: Theme.primary,
+  },
+  requestPreviewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+  },
+  requestPreviewHeaderBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  requestPreviewAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Theme.aggregatePillBg,
+    borderWidth: 1.5,
+    borderColor: Theme.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "visible",
+  },
+  requestPreviewAvatarText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.primary,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  requestPreviewHeading: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+    lineHeight: 22,
+  },
+  requestPreviewSubRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 4,
+  },
+  requestPreviewBodySubtitle: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+  },
+  requestPreviewInfoGrid: {
+    marginTop: 18,
+    marginHorizontal: 18,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: Theme.borderLight,
+    gap: 14,
+  },
+  requestPreviewInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  requestPreviewInfoLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 1,
+  },
+  requestPreviewMetaLabel: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  requestPreviewMetaValue: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
+    textAlign: "right",
+    textTransform: "uppercase",
+    flexShrink: 1,
+  },
+  requestPreviewStatusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  requestPreviewStatusBadgePending: {
+    backgroundColor: "#FEF3C7",
+    borderColor: "#FDE68A",
+  },
+  requestPreviewStatusBadgeApproved: {
+    backgroundColor: "#DCFCE7",
+    borderColor: "#BBF7D0",
+  },
+  requestPreviewStatusBadgeRejected: {
+    backgroundColor: "#FFE4E6",
+    borderColor: "#FECDD3",
+  },
+  requestPreviewStatusText: {
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  requestPreviewStatusTextPending: {
+    color: "#B45309",
+  },
+  requestPreviewStatusTextApproved: {
+    color: "#15803D",
+  },
+  requestPreviewStatusTextRejected: {
+    color: "#BE123C",
+  },
+  requestPreviewTimeWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  requestPreviewTimeDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+    backgroundColor: Theme.positive,
+  },
+  requestPreviewFooter: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 18,
+    gap: 4,
+  },
+  requestPreviewFooterText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
+  },
+  requestPreviewFooterHint: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+  },
   /** Matches TripExpandableCard `cardRouteIconWrap` (36×36, radius 10) */
   networkCardIconWrap: {
     width: 36,
@@ -2829,6 +3207,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     flexShrink: 0,
+  },
+  requestTitleMeta: {
+    flex: 1,
+    minWidth: 0,
   },
   nodeAvatar: {
     width: "100%",

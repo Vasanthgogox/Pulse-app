@@ -1,28 +1,42 @@
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
+import { SearchBar } from '@/components/SearchBar';
+import { ThemedConfirmModal } from '@/components/ThemedConfirmModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
+import {
+  buildBulkTripClaimWhatsappMessage,
+  buildSettlementShareMessage,
+  buildTripClaimWhatsappMessage,
+  buildTripFollowUpWhatsappMessage,
+} from '@/lib/driverCommunication';
 import {
   phonePeMetaDate
 } from '@/lib/driverGpayTransactions';
 import { isAggregateTrip, tripEarningsForDriver } from '@/lib/driverUtils';
 import { usePreventScreenCapture } from '@/lib/usePreventScreenCapture';
 import * as driversService from '@/services/driversService';
+import * as salaryRequestsService from '@/services/salaryRequestsService';
 import * as tripsService from '@/services/tripsService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import * as Clipboard from 'expo-clipboard';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -109,10 +123,90 @@ export default function DriverWalletScreen() {
   const [transactionFilter, setTransactionFilter] = useState<'all' | 'pending' | 'received'>('all');
   /** Expand/collapse transaction detail (trip id or null). No redirect. */
   const [expandedTripId, setExpandedTripId] = useState<string | null>(null);
+  const [expandedTripReceiptId, setExpandedTripReceiptId] = useState<string | null>(null);
   const [markPaidLoadingTripId, setMarkPaidLoadingTripId] = useState<string | null>(null);
   const [requestPaymentLoadingTripId, setRequestPaymentLoadingTripId] = useState<string | null>(null);
+  const [claimAllLoading, setClaimAllLoading] = useState(false);
 
-  const [mainTab, setMainTab] = useState<'earnings' | 'transactions'>('earnings');
+  const [mainTab, setMainTab] = useState<'trips' | 'cash' | 'fleet'>('trips');
+  const [journeySearch, setJourneySearch] = useState('');
+  const [journeyFilter, setJourneyFilter] = useState<'all' | 'pending' | 'settled'>('all');
+  const [followUpSentTripId, setFollowUpSentTripId] = useState<string | null>(null);
+  const [copiedTripId, setCopiedTripId] = useState<string | null>(null);
+  const [whatsAppReminderMessage, setWhatsAppReminderMessage] = useState<string | null>(null);
+  const [markPaidConfirmState, setMarkPaidConfirmState] = useState<{ trip: tripsService.TripRow; amount: number } | null>(null);
+
+  const openWhatsAppReminder = useCallback(async (message: string) => {
+    const encoded = encodeURIComponent(message);
+    const waWeb = `https://wa.me/?text=${encoded}`;
+    const waNative = `whatsapp://send?text=${encoded}`;
+    try {
+      if (Platform.OS !== 'web') {
+        const can = await Linking.canOpenURL(waNative);
+        await Linking.openURL(can ? waNative : waWeb);
+      } else {
+        await Linking.openURL(waWeb);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const promptWhatsAppReminder = useCallback(async (message: string) => {
+    setWhatsAppReminderMessage(message);
+  }, []);
+
+  const handleWhatsAppFollowUp = useCallback(
+    async (args: { tripId: string; trip: tripsService.TripRow; fleetName: string; displayId: string; from: string; to: string; amount: number }) => {
+      const { tripId, trip, fleetName, displayId, from, to, amount } = args;
+      setFollowUpSentTripId(tripId);
+      setTimeout(() => setFollowUpSentTripId(null), 2500);
+
+      // "Push notification" to fleet side: create a trip-based salary request.
+      // Fleet apps typically subscribe to driver_salary_requests; backend may notify org members.
+      const driverId = trip.driver_id ?? linkedDrivers[0]?.id ?? null;
+      const orgId = trip.organization_id ?? null;
+      const reqAmount = Math.round(amount);
+      if (!driverId || !orgId) return;
+      if (!Number.isFinite(reqAmount) || reqAmount <= 0) return;
+
+      const { error } = await salaryRequestsService.createSalaryRequest(
+        driverId,
+        orgId,
+        'trip_based',
+        reqAmount,
+        {
+          createdBy: profile?.uid ?? null,
+          tripIds: [trip.id],
+          note: `WhatsApp follow-up: ${displayId}`,
+        },
+      );
+      if (error) {
+        if (Platform.OS === 'web') window.alert(`Could not notify fleet: ${error.message}`);
+        else Alert.alert('Could not notify fleet', error.message);
+        return;
+      }
+
+      const message = buildTripFollowUpWhatsappMessage({
+        fleetName,
+        tripId: displayId,
+        amount,
+        from,
+        to,
+      });
+      await promptWhatsAppReminder(message);
+    },
+    [linkedDrivers, profile?.uid, promptWhatsAppReminder],
+  );
+
+  const handleCopyTripId = useCallback((tripId: string) => {
+    Clipboard.setStringAsync(tripId)
+      .then(() => {
+        setCopiedTripId(tripId);
+        setTimeout(() => setCopiedTripId(null), 2000);
+      })
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(() => {
     if (!profile?.uid) {
@@ -192,6 +286,522 @@ export default function DriverWalletScreen() {
   const receivedLedgerEntries = useMemo(() => {
     return sortedLedgerEntries.filter((entry) => (Number(entry.amount) || 0) > 0);
   }, [sortedLedgerEntries]);
+
+  const latestCreditLedgerByTripId = useMemo(() => {
+    const byTrip: Record<string, driversService.DriverLedgerRow> = {};
+    for (let i = 0; i < receivedLedgerEntries.length; i++) {
+      const e = receivedLedgerEntries[i];
+      const tid = e.trip_id?.trim() || '';
+      if (!tid) continue;
+      const prev = byTrip[tid];
+      if (!prev) {
+        byTrip[tid] = e;
+        continue;
+      }
+      const prevT = new Date(prev.created_at).getTime();
+      const nextT = new Date(e.created_at).getTime();
+      if (nextT > prevT) byTrip[tid] = e;
+    }
+    return byTrip;
+  }, [receivedLedgerEntries]);
+
+  const extractUtr = useCallback((raw?: string | null) => {
+    const s = (raw ?? '').trim();
+    if (!s) return null;
+    // Common formats: "UTR: 61229011223", "UTR 61229011223", "utr=61229011223"
+    const m = s.match(/\bUTR\b\s*[:=]?\s*([0-9A-Za-z-]{8,24})\b/i);
+    return m?.[1] ?? null;
+  }, []);
+
+  const derivePaymentMode = useCallback((raw?: string | null) => {
+    const s = (raw ?? '').toLowerCase();
+    if (!s) return null;
+    if (s.includes('upi')) return 'UPI';
+    if (s.includes('bank') || s.includes('neft') || s.includes('rtgs') || s.includes('imps')) return 'BANK TRANSFER';
+    if (s.includes('cash')) return 'CASH';
+    return null;
+  }, []);
+
+  const buildCashReceiptHtml = useCallback((p: {
+    title: string;
+    amount: number;
+    transactionId: string;
+    utr: string;
+    paymentMode: string;
+    capturedAt: string;
+    reference: string;
+    settledTo: string;
+    route?: string | null;
+  }) => {
+    const {
+      title,
+      amount,
+      transactionId,
+      utr,
+      paymentMode,
+      capturedAt,
+      reference,
+      settledTo,
+      route,
+    } = p;
+    const safe = (s: string) =>
+      String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
+    return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial; margin: 0; color: #0f172a; }
+      .page { padding: 24px; }
+      .card { border: 1px solid #e2e8f0; border-radius: 18px; overflow: hidden; }
+      .hero { padding: 28px 22px 20px; text-align: center; background: #f8fafc; }
+      .check { width: 64px; height: 64px; border-radius: 999px; background: #dcfce7; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 14px; }
+      .check svg { width: 30px; height: 30px; color: #16a34a; }
+      .eyebrow { font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase; color: #16a34a; margin-bottom: 10px; }
+      .amount { font-size: 44px; font-weight: 700; letter-spacing: -0.04em; margin: 0; }
+      .divider { border-top: 1px dashed #e2e8f0; }
+      .rows { padding: 18px 18px 10px; }
+      .row { display: flex; justify-content: space-between; gap: 14px; padding: 10px 0; }
+      .k { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: #64748b; min-width: 120px; }
+      .v { font-size: 14px; font-weight: 600; color: #0f172a; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .footer { padding: 16px 18px 18px; font-size: 11px; color: #94a3b8; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="card">
+        <div class="hero">
+          <div class="check" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="eyebrow">${safe(title)}</div>
+          <p class="amount">₹${Math.round(amount).toLocaleString('en-IN')}</p>
+        </div>
+        <div class="divider"></div>
+        <div class="rows">
+          <div class="row"><div class="k">Transaction ID</div><div class="v">${safe(transactionId)}</div></div>
+          <div class="row"><div class="k">UTR</div><div class="v">${safe(utr)}</div></div>
+          <div class="row"><div class="k">Payment mode</div><div class="v">${safe(paymentMode)}</div></div>
+          <div class="row"><div class="k">Captured at</div><div class="v">${safe(capturedAt)}</div></div>
+          <div class="row"><div class="k">Reference</div><div class="v">${safe(reference)}</div></div>
+          <div class="row"><div class="k">Settled to</div><div class="v">${safe(settledTo)}</div></div>
+          ${route ? `<div class="row"><div class="k">Route</div><div class="v">${safe(route)}</div></div>` : ``}
+        </div>
+        <div class="footer">Generated from Q Driver · ${safe(capturedAt)}</div>
+      </div>
+    </div>
+  </body>
+</html>`;
+  }, []);
+
+  const shareCashReceiptPdf = useCallback(
+    async (p: {
+      title: string;
+      amount: number;
+      transactionId: string;
+      utr: string;
+      paymentMode: string;
+      capturedAt: string;
+      reference: string;
+      settledTo: string;
+      route?: string | null;
+    }) => {
+      const html = buildCashReceiptHtml(p);
+      const file = await Print.printToFileAsync({ html });
+      if (Platform.OS === 'web') {
+        // Best-effort: open the generated file in a new tab.
+        window.open(file.uri, '_blank');
+        return;
+      }
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        Alert.alert('Share unavailable', 'Sharing is not available on this device.');
+        return;
+      }
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: 'Share receipt',
+        UTI: 'com.adobe.pdf',
+      });
+    },
+    [buildCashReceiptHtml],
+  );
+
+  const buildTripClaimHtml = useCallback((p: {
+    fleetName: string;
+    displayId: string;
+    amount: number;
+    from: string;
+    to: string;
+    status: string;
+    capturedAt: string;
+    driverName?: string | null;
+    driverPhone?: string | null;
+    tripDate?: string | null;
+  }) => {
+    const safe = (s: string) =>
+      String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    const driverLine = [p.driverName?.trim() || null, p.driverPhone?.trim() || null].filter(Boolean).join(' · ');
+    return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial; margin: 0; color: #0f172a; background: #ffffff; }
+      .page { padding: 24px; }
+      .card { border: 1px solid #e2e8f0; border-radius: 18px; overflow: hidden; }
+      .hero { padding: 22px; background: #0b1220; color: #ffffff; }
+      .eyebrow { font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase; color: rgba(255,255,255,0.65); margin-bottom: 10px; }
+      .title { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 8px; }
+      .sub { font-size: 12px; color: rgba(255,255,255,0.62); margin: 0; }
+      .amount { font-size: 38px; font-weight: 800; letter-spacing: -0.04em; margin: 14px 0 0; color: #fb923c; }
+      .rows { padding: 18px; }
+      .row { display: flex; justify-content: space-between; gap: 14px; padding: 10px 0; border-bottom: 1px dashed #e2e8f0; }
+      .row:last-child { border-bottom: 0; }
+      .k { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: #64748b; min-width: 120px; }
+      .v { font-size: 14px; font-weight: 600; color: #0f172a; text-align: right; white-space: normal; word-break: break-word; overflow-wrap: anywhere; }
+      .footer { padding: 14px 18px 18px; font-size: 11px; color: #94a3b8; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="card">
+        <div class="hero">
+          <div class="eyebrow">Trip payment claim</div>
+          <p class="title">${safe(p.displayId)} · ${safe(p.fleetName)}</p>
+          <p class="sub">${safe(p.from)} → ${safe(p.to)}</p>
+          ${driverLine ? `<p class="sub">${safe(driverLine)}</p>` : ``}
+          ${p.tripDate ? `<p class="sub">${safe(p.tripDate)}</p>` : ``}
+          <p class="amount">₹${Math.round(p.amount).toLocaleString('en-IN')}</p>
+        </div>
+        <div class="rows">
+          <div class="row"><div class="k">Status</div><div class="v">${safe(p.status)}</div></div>
+          <div class="row"><div class="k">Captured at</div><div class="v">${safe(p.capturedAt)}</div></div>
+          <div class="row"><div class="k">Trip</div><div class="v">${safe(p.displayId)}</div></div>
+          <div class="row"><div class="k">Route</div><div class="v">${safe(`${p.from} → ${p.to}`)}</div></div>
+        </div>
+        <div class="footer">Generated from Q Driver · ${safe(p.capturedAt)}</div>
+      </div>
+    </div>
+  </body>
+</html>`;
+  }, []);
+
+  const shareTripClaimPdf = useCallback(
+    async (p: {
+      fleetName: string;
+      displayId: string;
+      amount: number;
+      from: string;
+      to: string;
+      status: string;
+      capturedAt: string;
+      driverName?: string | null;
+      driverPhone?: string | null;
+      tripDate?: string | null;
+    }) => {
+      const html = buildTripClaimHtml(p);
+      const file = await Print.printToFileAsync({ html });
+      if (Platform.OS === 'web') {
+        window.open(file.uri, '_blank');
+        return;
+      }
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        Alert.alert('Share unavailable', 'Sharing is not available on this device.');
+        return;
+      }
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: 'Share claim PDF',
+        UTI: 'com.adobe.pdf',
+      });
+    },
+    [buildTripClaimHtml],
+  );
+
+  const buildBulkClaimHtml = useCallback((p: {
+    driverName?: string | null;
+    driverPhone?: string | null;
+    generatedAt: string;
+    groups: {
+      fleetName: string;
+      total: number;
+      trips: { displayId: string; amount: number; date: string; route: string; status: string }[];
+    }[];
+  }) => {
+    const safe = (s: string) =>
+      String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    const driverLine = [p.driverName?.trim() || null, p.driverPhone?.trim() || null].filter(Boolean).join(' · ');
+    const groupsHtml = p.groups
+      .map((g) => {
+        const tripsHtml = g.trips
+          .map(
+            (t) => `
+            <div class="trip">
+              <div class="tripTop">
+                <div class="tripId">${safe(t.displayId)}</div>
+                <div class="tripAmt">₹${Math.round(t.amount).toLocaleString('en-IN')}</div>
+              </div>
+              <div class="tripMeta">${safe(t.date)} · ${safe(t.status)}</div>
+              <div class="tripRoute">${safe(t.route)}</div>
+            </div>`,
+          )
+          .join('');
+        return `
+          <div class="group">
+            <div class="groupHead">
+              <div class="groupName">${safe(g.fleetName)}</div>
+              <div class="groupTotal">₹${Math.round(g.total).toLocaleString('en-IN')}</div>
+            </div>
+            ${tripsHtml}
+          </div>`;
+      })
+      .join('');
+
+    return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial; margin: 0; color: #0f172a; background: #ffffff; }
+      .page { padding: 22px; }
+      .hero { border: 1px solid #e2e8f0; border-radius: 18px; padding: 18px; background: #0b1220; color: #fff; }
+      .eyebrow { font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase; color: rgba(255,255,255,0.65); margin-bottom: 10px; }
+      .title { font-size: 18px; font-weight: 700; margin: 0 0 6px; }
+      .sub { font-size: 12px; color: rgba(255,255,255,0.62); margin: 0; }
+      .group { margin-top: 16px; border: 1px solid #e2e8f0; border-radius: 18px; overflow: hidden; }
+      .groupHead { display:flex; justify-content: space-between; gap: 14px; padding: 14px 16px; background: #f8fafc; border-bottom: 1px dashed #e2e8f0; }
+      .groupName { font-size: 13px; font-weight: 700; }
+      .groupTotal { font-size: 14px; font-weight: 800; color: #fb923c; }
+      .trip { padding: 12px 16px; border-bottom: 1px solid #eef2f7; }
+      .trip:last-child { border-bottom: 0; }
+      .tripTop { display:flex; justify-content: space-between; gap: 12px; }
+      .tripId { font-size: 12px; font-weight: 700; }
+      .tripAmt { font-size: 12px; font-weight: 800; }
+      .tripMeta { margin-top: 6px; font-size: 11px; color: #64748b; }
+      .tripRoute { margin-top: 6px; font-size: 12px; color: #0f172a; word-break: break-word; overflow-wrap: anywhere; }
+      .footer { margin-top: 14px; font-size: 11px; color: #94a3b8; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="hero">
+        <div class="eyebrow">Pending trip claims</div>
+        <div class="title">Claim summary</div>
+        ${driverLine ? `<p class="sub">${safe(driverLine)}</p>` : ``}
+        <p class="sub">Generated at ${safe(p.generatedAt)}</p>
+      </div>
+      ${groupsHtml}
+      <div class="footer">Generated from Q Driver · ${safe(p.generatedAt)}</div>
+    </div>
+  </body>
+</html>`;
+  }, []);
+
+  const shareBulkClaimPdf = useCallback(
+    async (p: Parameters<typeof buildBulkClaimHtml>[0]) => {
+      const html = buildBulkClaimHtml(p);
+      const file = await Print.printToFileAsync({ html });
+      if (Platform.OS === 'web') {
+        window.open(file.uri, '_blank');
+        return;
+      }
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        Alert.alert('Share unavailable', 'Sharing is not available on this device.');
+        return;
+      }
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: 'Share claim PDF',
+        UTI: 'com.adobe.pdf',
+      });
+    },
+    [buildBulkClaimHtml],
+  );
+
+  const buildTripSettlementHtml = useCallback((p: {
+    fleetName: string;
+    displayId: string;
+    amount: number;
+    transactionId: string;
+    utr: string;
+    paymentMode: string;
+    capturedAt: string;
+    route: string;
+  }) => {
+    const safe = (s: string) =>
+      String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial; margin: 0; color: #0f172a; }
+      .page { padding: 24px; }
+      .card { border: 1px solid #e2e8f0; border-radius: 18px; overflow: hidden; }
+      .hero { padding: 28px 22px 20px; text-align: center; background: #f8fafc; }
+      .check { width: 64px; height: 64px; border-radius: 999px; background: #dcfce7; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 14px; }
+      .check svg { width: 30px; height: 30px; color: #16a34a; }
+      .eyebrow { font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase; color: #16a34a; margin-bottom: 10px; }
+      .amount { font-size: 44px; font-weight: 700; letter-spacing: -0.04em; margin: 0; }
+      .sub { margin-top: 10px; font-size: 12px; color: #64748b; }
+      .divider { border-top: 1px dashed #e2e8f0; }
+      .rows { padding: 18px 18px 10px; }
+      .row { display: flex; justify-content: space-between; gap: 14px; padding: 10px 0; }
+      .k { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: #64748b; min-width: 120px; }
+      .v { font-size: 14px; font-weight: 600; color: #0f172a; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .footer { padding: 16px 18px 18px; font-size: 11px; color: #94a3b8; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="card">
+        <div class="hero">
+          <div class="check" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="eyebrow">Settlement received</div>
+          <p class="amount">₹${Math.round(p.amount).toLocaleString('en-IN')}</p>
+          <div class="sub">${safe(p.displayId)} · ${safe(p.fleetName)}</div>
+        </div>
+        <div class="divider"></div>
+        <div class="rows">
+          <div class="row"><div class="k">Transaction ID</div><div class="v">${safe(p.transactionId)}</div></div>
+          <div class="row"><div class="k">UTR</div><div class="v">${safe(p.utr)}</div></div>
+          <div class="row"><div class="k">Payment mode</div><div class="v">${safe(p.paymentMode)}</div></div>
+          <div class="row"><div class="k">Captured at</div><div class="v">${safe(p.capturedAt)}</div></div>
+          <div class="row"><div class="k">Route</div><div class="v">${safe(p.route)}</div></div>
+        </div>
+        <div class="footer">Generated from Q Driver · ${safe(p.capturedAt)}</div>
+      </div>
+    </div>
+  </body>
+</html>`;
+  }, []);
+
+  const shareTripSettlementPdf = useCallback(
+    async (p: {
+      fleetName: string;
+      displayId: string;
+      amount: number;
+      transactionId: string;
+      utr: string;
+      paymentMode: string;
+      capturedAt: string;
+      route: string;
+    }) => {
+      const html = buildTripSettlementHtml(p);
+      const file = await Print.printToFileAsync({ html });
+      if (Platform.OS === 'web') {
+        window.open(file.uri, '_blank');
+        return;
+      }
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        Alert.alert('Share unavailable', 'Sharing is not available on this device.');
+        return;
+      }
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: 'Share receipt PDF',
+        UTI: 'com.adobe.pdf',
+      });
+    },
+    [buildTripSettlementHtml],
+  );
+
+  const claimTripInAppAndShare = useCallback(
+    async (p: { trip: tripsService.TripRow; displayId: string; fleetName: string; amount: number; from: string; to: string; status: string }) => {
+      const { trip, displayId, fleetName, amount, from, to, status } = p;
+      const driverId = trip.driver_id ?? linkedDrivers[0]?.id ?? null;
+      const orgId = trip.organization_id ?? null;
+      const reqAmount = Math.round(amount);
+      if (!driverId || !orgId) return;
+      if (!Number.isFinite(reqAmount) || reqAmount <= 0) return;
+
+      setRequestPaymentLoadingTripId(trip.id);
+      const { error } = await salaryRequestsService.createSalaryRequest(driverId, orgId, 'trip_based', reqAmount, {
+        createdBy: profile?.uid ?? null,
+        tripIds: [trip.id],
+        note: `Claim via wallet: ${displayId}`,
+      });
+      setRequestPaymentLoadingTripId(null);
+      if (error) {
+        if (Platform.OS === 'web') window.alert(`Could not create claim: ${error.message}`);
+        else Alert.alert('Could not create claim', error.message);
+        return;
+      }
+
+      const capturedAt = phonePeMetaDate(trip.completed_at ?? trip.updated_at ?? trip.created_at);
+      const driverRow = linkedDrivers.find((d) => String(d.id) === String(driverId)) ?? linkedDrivers[0] ?? null;
+      const tripDate = new Date(trip.completed_at ?? trip.updated_at ?? trip.created_at ?? '').toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+      await shareTripClaimPdf({
+        fleetName,
+        displayId,
+        amount: reqAmount,
+        from,
+        to,
+        status,
+        capturedAt,
+        driverName: driverRow?.name ?? null,
+        driverPhone: driverRow?.phone ?? null,
+        tripDate,
+      });
+
+      // Secondary reminder: WhatsApp (optional, prompted).
+      const msg = buildTripClaimWhatsappMessage({
+        fleetName,
+        tripId: displayId,
+        amount: reqAmount,
+        status,
+        from,
+        to,
+        tripDate,
+        driverName: driverRow?.name ?? null,
+        driverPhone: driverRow?.phone ?? null,
+      });
+      await promptWhatsAppReminder(msg);
+    },
+    [linkedDrivers, profile?.uid, shareTripClaimPdf, promptWhatsAppReminder],
+  );
 
   const { pendingTrips, receivedTrips, filteredTrips, pendingTotal, receivedTotal } = useMemo(() => {
     const visibleTrips = [...completedTrips]
@@ -351,6 +961,256 @@ export default function DriverWalletScreen() {
       });
   }, [linkedDrivers, invites]);
 
+  const fleetCards = useMemo(() => {
+    return salaryRequestOrgOptions.map((fleet) => {
+      const fleetTrips = completedTrips.filter(
+        (trip) =>
+          String(trip.organization_id ?? '') === String(fleet.orgId) &&
+          String(trip.driver_id ?? '') === String(fleet.driverId),
+      );
+      const earned = Math.round(fleetTrips.reduce((sum, trip) => sum + tripEarnings(trip), 0));
+      const received = Math.round(
+        ledgerEntries
+          .filter(
+            (entry) =>
+              String(entry.organization_id ?? '') === String(fleet.orgId) &&
+              String(entry.driver_id ?? '') === String(fleet.driverId),
+          )
+          .reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0),
+      );
+      const pending = Math.max(0, earned - received);
+      const progress = earned > 0 ? Math.min(100, Math.round((received / earned) * 100)) : 0;
+
+      return {
+        ...fleet,
+        tripsCompleted: fleetTrips.length,
+        earned,
+        received,
+        pending,
+        progress,
+      };
+    });
+  }, [salaryRequestOrgOptions, completedTrips, ledgerEntries]);
+
+  const tripJourneyItems = useMemo(() => {
+    return completedTrips.map((trip) => {
+      const receivedAmt = receivedByTripId[trip.id] ?? 0;
+      const isSettled = receivedAmt > 0;
+      const isActionRequired = !isSettled && isAggregateTrip(trip) && tripEarnings(trip) === 0;
+      const status: 'Pending' | 'Action Required' | 'Settled' = isSettled
+        ? 'Settled'
+        : isActionRequired
+          ? 'Action Required'
+          : 'Pending';
+      const subStatus = isSettled
+        ? 'Paid to bank'
+        : isActionRequired
+          ? 'Ready to claim'
+          : 'Pending from fleet';
+      const provider =
+        salaryRequestOrgOptions.find(
+          (o) =>
+            String(o.orgId ?? '') === String(trip.organization_id ?? '') &&
+            String(o.driverId ?? '') === String(trip.driver_id ?? ''),
+        )?.orgName ??
+        salaryRequestOrgOptions.find((o) => String(o.orgId ?? '') === String(trip.organization_id ?? ''))?.orgName ??
+        'Fleet';
+
+      return {
+        trip,
+        id: tripsService.getTripDisplayNumber(trip),
+        rawDate: trip.completed_at ?? trip.updated_at ?? trip.created_at ?? '',
+        date: formatTransactionDateSection(trip.completed_at ?? trip.updated_at ?? trip.created_at ?? ''),
+        amount: Math.round(isSettled ? receivedAmt : tripEarnings(trip)),
+        status,
+        subStatus,
+        provider,
+        from: trip.pickup_area?.trim() || 'Unknown origin',
+        to: trip.drop_location?.trim() || 'Unknown destination',
+        time: new Date(trip.completed_at ?? trip.updated_at ?? trip.created_at ?? '').toLocaleTimeString('en-IN', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        }),
+      };
+    });
+  }, [completedTrips, receivedByTripId, salaryRequestOrgOptions]);
+
+  const filteredTripJourneyItems = useMemo(() => {
+    const search = journeySearch.trim().toLowerCase();
+    return tripJourneyItems.filter((item) => {
+      const matchesSearch =
+        search.length === 0 ||
+        item.id.toLowerCase().includes(search) ||
+        item.from.toLowerCase().includes(search) ||
+        item.to.toLowerCase().includes(search) ||
+        item.provider.toLowerCase().includes(search);
+
+      const matchesFilter =
+        journeyFilter === 'all' ||
+        (journeyFilter === 'pending' && (item.status === 'Pending' || item.status === 'Action Required')) ||
+        (journeyFilter === 'settled' && item.status === 'Settled');
+
+      return matchesSearch && matchesFilter;
+    });
+  }, [tripJourneyItems, journeySearch, journeyFilter]);
+
+  const pendingTripJourneyItems = useMemo(() => {
+    return filteredTripJourneyItems.filter((i) => i.status === 'Pending' || i.status === 'Action Required');
+  }, [filteredTripJourneyItems]);
+
+  const claimAllPendingTrips = useCallback(async () => {
+    if (claimAllLoading) return;
+    if (pendingTripJourneyItems.length === 0) return;
+    setClaimAllLoading(true);
+
+    try {
+      const groups = new Map<
+        string,
+        {
+          orgId: string;
+          driverId: string;
+          fleetName: string;
+          tripIds: string[];
+          total: number;
+          trips: { displayId: string; amount: number; date: string; route: string; status: string }[];
+        }
+      >();
+
+      for (const item of pendingTripJourneyItems) {
+        const orgId = item.trip.organization_id ?? '';
+        const driverId = item.trip.driver_id ?? '';
+        if (!orgId || !driverId) continue;
+        const key = `${orgId}:${driverId}`;
+        const g =
+          groups.get(key) ?? {
+            orgId,
+            driverId,
+            fleetName: item.provider.split("'")[0],
+            tripIds: [],
+            total: 0,
+            trips: [],
+          };
+        g.tripIds.push(item.trip.id);
+        g.total += Math.round(item.amount);
+        const date = new Date(item.trip.completed_at ?? item.trip.updated_at ?? item.trip.created_at ?? '').toLocaleString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        });
+        g.trips.push({
+          displayId: item.id,
+          amount: Math.round(item.amount),
+          date,
+          route: `${item.from} → ${item.to}`,
+          status: item.subStatus || item.status,
+        });
+        groups.set(key, g);
+      }
+
+      for (const g of groups.values()) {
+        if (g.tripIds.length === 0 || g.total <= 0) continue;
+        await salaryRequestsService.createSalaryRequest(g.driverId, g.orgId, 'trip_based', g.total, {
+          createdBy: profile?.uid ?? null,
+          tripIds: g.tripIds,
+          note: `Bulk claim (${g.tripIds.length} trips)`,
+        });
+      }
+
+      const primaryDriver = linkedDrivers[0] ?? null;
+      const generatedAt = new Date().toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+
+      await shareBulkClaimPdf({
+        driverName: primaryDriver?.name ?? null,
+        driverPhone: primaryDriver?.phone ?? null,
+        generatedAt,
+        groups: Array.from(groups.values()).map((g) => ({
+          fleetName: g.fleetName,
+          total: g.total,
+          trips: g.trips,
+        })),
+      });
+
+      const totalAmount = Array.from(groups.values()).reduce((sum, g) => sum + g.total, 0);
+      const msg = buildBulkTripClaimWhatsappMessage({
+        tripCount: pendingTripJourneyItems.length,
+        totalAmount,
+        driverName: primaryDriver?.name ?? null,
+        driverPhone: primaryDriver?.phone ?? null,
+      });
+      await promptWhatsAppReminder(msg);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Could not claim pending trips.';
+      if (Platform.OS === 'web') window.alert(message);
+      else Alert.alert('Claim failed', message);
+    } finally {
+      setClaimAllLoading(false);
+    }
+  }, [claimAllLoading, pendingTripJourneyItems, linkedDrivers, profile?.uid, shareBulkClaimPdf, promptWhatsAppReminder]);
+
+  const filteredTripJourneySections = useMemo(() => {
+    const map = new Map<string, typeof filteredTripJourneyItems>();
+    filteredTripJourneyItems.forEach((item) => {
+      const bucket = map.get(item.date) ?? [];
+      bucket.push(item);
+      map.set(item.date, bucket);
+    });
+    return Array.from(map.entries()).map(([sectionLabel, items]) => ({ sectionLabel, items }));
+  }, [filteredTripJourneyItems]);
+
+  const filteredCashTrips = useMemo(() => {
+    const search = journeySearch.trim().toLowerCase();
+    return receivedTrips.filter((trip) => {
+      const orgName =
+        salaryRequestOrgOptions.find((o) => String(o.orgId ?? '') === String(trip.organization_id ?? ''))?.orgName ?? 'Fleet';
+      const haystack = [
+        tripsService.getTripDisplayNumber(trip),
+        trip.pickup_area ?? '',
+        trip.drop_location ?? '',
+        orgName,
+      ]
+        .join(' ')
+        .toLowerCase();
+      return search.length === 0 || haystack.includes(search);
+    });
+  }, [receivedTrips, journeySearch, salaryRequestOrgOptions]);
+
+  const filteredCashSections = useMemo(() => {
+    const list = [...filteredCashTrips]
+      .sort((a, b) => {
+        const da = new Date(a.completed_at ?? a.updated_at ?? a.created_at).getTime();
+        const db = new Date(b.completed_at ?? b.updated_at ?? b.created_at).getTime();
+        return db - da;
+      })
+      .slice(0, 50);
+
+    const bySection: { sectionLabel: string; trips: typeof list }[] = [];
+    let current = '';
+    let bucket: typeof list = [];
+    for (const trip of list) {
+      const label = formatTransactionDateSection(trip.completed_at ?? trip.updated_at ?? trip.created_at ?? '');
+      if (label !== current) {
+        if (bucket.length) bySection.push({ sectionLabel: current, trips: bucket });
+        current = label;
+        bucket = [trip];
+      } else {
+        bucket.push(trip);
+      }
+    }
+    if (bucket.length) bySection.push({ sectionLabel: current, trips: bucket });
+    return bySection;
+  }, [filteredCashTrips]);
+
   /** Request payment for this trip: route user to Salary Request screen. */
   const openSalaryRequestForTrip = useCallback(
     (trip: tripsService.TripRow) => {
@@ -416,25 +1276,9 @@ export default function DriverWalletScreen() {
   /** Confirm then mark trip as paid. */
   const confirmMarkAsPaid = useCallback(
     (trip: tripsService.TripRow, amount: number) => {
-      const displayId = tripsService.getTripDisplayNumber(trip);
-      const amtStr = `₹${Math.round(amount).toLocaleString('en-IN')}`;
-      
-      if (Platform.OS === 'web') {
-        if (window.confirm(`Record ${amtStr} for ${displayId} as received? This will update your cash balance.`)) {
-          markTripAsPaid(trip, amount);
-        }
-      } else {
-        Alert.alert(
-          'Mark as paid',
-          `Record ${amtStr} for ${displayId} as received? This will update your cash balance.`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Proceed', onPress: () => markTripAsPaid(trip, amount) },
-          ]
-        );
-      }
+      setMarkPaidConfirmState({ trip, amount });
     },
-    [markTripAsPaid]
+    []
   );
 
   if (loading) {
@@ -553,268 +1397,857 @@ export default function DriverWalletScreen() {
         </View>
       </View>
 
-      <View style={[styles.mainTabsWrap, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity 
-          style={styles.mainTab}
-          onPress={() => setMainTab('earnings')}
-          activeOpacity={0.7}
+      <View
+        style={[
+          styles.mainTabsWrap,
+          {
+            backgroundColor: isDark ? colors.surfaceElevated : 'rgba(226,232,240,0.55)',
+            borderColor: isDark ? colors.borderSubtle : 'rgba(255,255,255,0.7)',
+          },
+        ]}
+      >
+        <TouchableOpacity
+          style={[
+            styles.mainTab,
+            mainTab === 'fleet' && [
+              styles.mainTabActive,
+              { backgroundColor: colors.surface, shadowColor: isDark ? '#000' : 'rgba(15,23,42,0.08)' },
+            ],
+          ]}
+          onPress={() => setMainTab('fleet')}
+          activeOpacity={0.8}
         >
-          <Text style={[styles.mainTabText, mainTab === 'earnings' ? { color: colors.text } : { color: colors.textMuted }]}>Earnings</Text>
-          {mainTab === 'earnings' && <View style={[styles.mainTabIndicator, { backgroundColor: colors.text }]} />}
+          <FontAwesome name="users" size={14} color={mainTab === 'fleet' ? colors.emerald : colors.textMuted} />
+          <Text style={[styles.mainTabText, mainTab === 'fleet' ? { color: colors.emerald } : { color: colors.textMuted }]}>Fleet</Text>
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.mainTab}
-          onPress={() => setMainTab('transactions')}
-          activeOpacity={0.7}
+        <TouchableOpacity
+          style={[
+            styles.mainTab,
+            mainTab === 'trips' && [
+              styles.mainTabActive,
+              { backgroundColor: colors.surface, shadowColor: isDark ? '#000' : 'rgba(15,23,42,0.08)' },
+            ],
+          ]}
+          onPress={() => setMainTab('trips')}
+          activeOpacity={0.8}
         >
-          <Text style={[styles.mainTabText, mainTab === 'transactions' ? { color: colors.text } : { color: colors.textMuted }]}>Transactions</Text>
-          {mainTab === 'transactions' && <View style={[styles.mainTabIndicator, { backgroundColor: colors.text }]} />}
+          <FontAwesome name="history" size={14} color={mainTab === 'trips' ? colors.emerald : colors.textMuted} />
+          <Text style={[styles.mainTabText, mainTab === 'trips' ? { color: colors.emerald } : { color: colors.textMuted }]}>Trips</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.mainTab,
+            mainTab === 'cash' && [
+              styles.mainTabActive,
+              { backgroundColor: colors.surface, shadowColor: isDark ? '#000' : 'rgba(15,23,42,0.08)' },
+            ],
+          ]}
+          onPress={() => setMainTab('cash')}
+          activeOpacity={0.8}
+        >
+          <FontAwesome name="credit-card" size={14} color={mainTab === 'cash' ? colors.emerald : colors.textMuted} />
+          <Text style={[styles.mainTabText, mainTab === 'cash' ? { color: colors.emerald } : { color: colors.textMuted }]}>Cash</Text>
         </TouchableOpacity>
       </View>
 
-      {mainTab === 'earnings' ? (
+      {(mainTab === 'trips' || mainTab === 'cash') && (
+        <View style={styles.searchSection}>
+          <SearchBar
+            value={journeySearch}
+            onChangeText={setJourneySearch}
+            placeholder={mainTab === 'trips' ? 'Search trips...' : 'Search settlements...'}
+          />
+
+          {mainTab === 'trips' && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterChipRow}
+            >
+              {[
+                { id: 'all', label: 'All' },
+                { id: 'pending', label: 'Pending' },
+                { id: 'settled', label: 'Settled' },
+              ].map((chip) => {
+                const active = journeyFilter === chip.id;
+                return (
+                  <TouchableOpacity
+                    key={chip.id}
+                    onPress={() => setJourneyFilter(chip.id as 'all' | 'pending' | 'settled')}
+                    style={[
+                      styles.filterChip,
+                      active
+                        ? { backgroundColor: colors.emerald, borderColor: colors.emerald }
+                        : { backgroundColor: colors.surface, borderColor: isDark ? colors.borderSubtle : '#e2e8f0' },
+                    ]}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.filterChipText, { color: active ? colors.textOnPrimary : colors.textMuted }]}>
+                      {chip.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          )}
+
+          {mainTab === 'trips' && journeyFilter === 'pending' && pendingTripJourneyItems.length > 0 && (
+            <TouchableOpacity
+              activeOpacity={0.88}
+              style={[
+                styles.bulkClaimButton,
+                { backgroundColor: colors.emerald, shadowColor: isDark ? '#000' : 'rgba(16,185,129,0.35)' },
+              ]}
+              onPress={() => claimAllPendingTrips().catch(() => {})}
+              disabled={claimAllLoading}
+            >
+              <FontAwesome name={claimAllLoading ? 'spinner' : 'whatsapp'} size={16} color={colors.textOnPrimary} />
+              <Text style={styles.bulkClaimButtonText}>
+                {claimAllLoading ? 'REQUESTING…' : `CLAIM ALL (${pendingTripJourneyItems.length})`}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
+      {mainTab === 'fleet' ? (
         <View style={[styles.ledgerSection, { paddingHorizontal: Layout.screenPaddingHorizontal }]}>
-          <Text style={[styles.transactionHistoryTitle, { color: colors.text }]}>
-            Pending earnings
-          </Text>
-          {pendingTrips.length === 0 ? (
+          <Text style={[styles.transactionHistoryTitle, { color: colors.text }]}>Fleet connections</Text>
+          {fleetCards.length === 0 ? (
             <View style={[styles.ledgerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={[styles.ledgerEmpty, { borderBottomWidth: 0 }]}>
-                <FontAwesome name="exchange" size={32} color={colors.textMuted} />
-                <Text style={[styles.ledgerEmptyText, { color: colors.textMuted }]}>No pending earnings</Text>
+                <FontAwesome name="users" size={32} color={colors.textMuted} />
+                <Text style={[styles.ledgerEmptyText, { color: colors.textMuted }]}>No connected fleets yet</Text>
               </View>
             </View>
           ) : (
-            <View style={styles.upiListWrap}>
-              {pendingTripSections.map(({ sectionLabel, dateKey, trips }) => (
-                <View key={dateKey} style={styles.upiSection}>
-                  <Text style={[styles.upiSectionHeader, { color: colors.textMuted }]}>{sectionLabel}</Text>
-                  <View style={[styles.upiListBlock, { backgroundColor: 'transparent' }]}>
+            <View style={styles.fleetList}>
+              {fleetCards.map((fleet) => (
+                <View
+                  key={`${fleet.driverId}-${fleet.orgId}`}
+                  style={[
+                    styles.fleetCard,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.9)',
+                      shadowColor: isDark ? '#000' : 'rgba(15,23,42,0.10)',
+                    },
+                  ]}
+                >
+                  <View style={styles.fleetCardTopRowNew}>
+                    <View style={styles.fleetCardTopLeft}>
+                      <View
+                        style={[
+                          styles.fleetCardLogoNew,
+                          {
+                            backgroundColor: colors.emerald,
+                            shadowColor: isDark ? '#000' : 'rgba(16,185,129,0.35)',
+                          },
+                        ]}
+                      >
+                        <FontAwesome name="building-o" size={22} color={Theme.textOnPrimary} />
+                      </View>
+                      <View style={styles.fleetCardBody}>
+                        <Text style={[styles.fleetCardTitle, { color: colors.text }]} numberOfLines={1}>
+                          {fleet.orgName}
+                        </Text>
+                        <View style={styles.fleetMetaRow}>
+                          <FontAwesome name="calendar-o" size={12} color={colors.textMuted} />
+                          <Text style={[styles.fleetMetaText, { color: colors.textMuted }]} numberOfLines={1}>
+                            Since {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                    <View style={styles.fleetTopRight}>
+                      <View
+                        style={[
+                          styles.fleetStatusPillNew,
+                          {
+                            backgroundColor: isDark ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.10)',
+                            borderColor: isDark ? 'rgba(16,185,129,0.35)' : 'rgba(16,185,129,0.18)',
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.fleetStatusTextNew, { color: colors.emerald }]}>Accepted</Text>
+                      </View>
+                      <View style={styles.fleetMetaRowRight}>
+                        <FontAwesome name="clock-o" size={12} color={colors.textMuted} />
+                        <Text style={[styles.fleetMetaTextRight, { color: colors.textMuted }]}>1Y 3M ACTIVE</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.fleetStatsGridNew}>
+                    <View
+                      style={[
+                        styles.fleetStatBox,
+                        {
+                          backgroundColor: isDark ? colors.surfaceElevated : 'rgba(248,250,252,0.85)',
+                          borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.8)',
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.fleetStatBoxLabel, { color: colors.textMuted }]}>Lifetime earned</Text>
+                      <Text style={[styles.fleetStatBoxValue, { color: colors.text }]}>₹{fleet.earned.toLocaleString('en-IN')}</Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.fleetStatBox,
+                        styles.fleetStatBoxWarning,
+                        {
+                          backgroundColor: isDark ? 'rgba(249,115,22,0.10)' : 'rgba(255,237,213,0.55)',
+                          borderColor: isDark ? 'rgba(249,115,22,0.25)' : 'rgba(249,115,22,0.22)',
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.fleetStatBoxLabel, { color: isDark ? 'rgba(251,146,60,0.85)' : '#ea580c' }]}>Collect pending</Text>
+                      <Text style={[styles.fleetStatBoxValue, { color: isDark ? 'rgb(251,146,60)' : '#ea580c' }]}>₹{fleet.pending.toLocaleString('en-IN')}</Text>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.fleetPrimaryButtonNew,
+                      {
+                        backgroundColor: '#0f172a',
+                        shadowColor: isDark ? '#000' : 'rgba(15,23,42,0.35)',
+                      },
+                    ]}
+                    activeOpacity={0.85}
+                    onPress={() =>
+                      router.push({
+                        pathname: `/(driver)/passbook/${fleet.orgId}`,
+                        params: { orgName: fleet.orgName, from: 'wallet' },
+                      } as Parameters<typeof router.push>[0])
+                    }
+                  >
+                    <View style={styles.fleetPrimaryButtonLeft}>
+                      <View style={[styles.fleetPrimaryRing, { borderColor: colors.emerald }]}>
+                        <View style={[styles.fleetPrimaryRingDot, { backgroundColor: colors.emerald }]} />
+                      </View>
+                      <Text style={[styles.fleetPrimaryButtonText, { color: Theme.textOnPrimary }]}>Inspect fleet center</Text>
+                    </View>
+                    <FontAwesome name="chevron-right" size={18} color={Theme.textOnPrimary} style={styles.fleetPrimaryButtonArrow} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      ) : mainTab === 'trips' ? (
+        <View style={[styles.ledgerSection, { paddingHorizontal: Layout.screenPaddingHorizontal }]}>
+          <Text style={[styles.transactionHistoryTitle, { color: colors.text }]}>Trips</Text>
+          {filteredTripJourneySections.length === 0 ? (
+            <View style={[styles.ledgerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={[styles.ledgerEmpty, { borderBottomWidth: 0 }]}>
+                <FontAwesome name="search" size={32} color={colors.textMuted} />
+                <Text style={[styles.ledgerEmptyText, { color: colors.textMuted }]}>No trips found</Text>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.tripsPremiumWrap}>
+              {filteredTripJourneySections.map(({ sectionLabel, items }) => (
+                <View key={sectionLabel} style={styles.tripsPremiumSection}>
+                  <View style={styles.tripsSectionHeaderRow}>
+                    <View style={[styles.tripsSectionDot, { backgroundColor: colors.emerald }]} />
+                    <Text style={[styles.tripsPremiumSectionLabel, { color: colors.textMuted }]}>{sectionLabel}</Text>
+                  </View>
+
+                  <View style={styles.tripsTimeline}>
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        styles.tripsTimelineLine,
+                        { backgroundColor: isDark ? colors.borderSubtle : 'rgba(16,185,129,0.35)' },
+                      ]}
+                    />
+
+                    <View style={styles.tripsTimelineList}>
+                      {items.map((item) => {
+                        const tripId = item.trip.id;
+                        const isExpanded = expandedTripId === tripId;
+                        const isActionRequired = item.status === 'Action Required';
+                        const isPending = item.status === 'Pending' || isActionRequired;
+                        const isSettled = item.status === 'Settled';
+                        const providerShort = item.provider.split("'")[0];
+                        const receiptExpanded = expandedTripReceiptId === tripId;
+                        const ledger = latestCreditLedgerByTripId[item.trip.id];
+                        const settlementTxnId = ledger?.id ?? tripId;
+                        const settlementUtr = extractUtr(ledger?.description) ?? '—';
+                        const settlementMode = derivePaymentMode(ledger?.description) ?? '—';
+                        const settlementCapturedAt = phonePeMetaDate(ledger?.created_at ?? item.trip.completed_at ?? item.trip.updated_at ?? item.trip.created_at);
+                        const settlementRoute = `${item.from} → ${item.to}`;
+
+                        return (
+                          <View
+                            key={tripId}
+                            style={[
+                              styles.tripsCard,
+                              {
+                                backgroundColor: colors.surface,
+                                borderColor: isExpanded
+                                  ? colors.emerald
+                                  : isActionRequired
+                                    ? 'rgba(249,115,22,0.65)'
+                                    : isDark
+                                      ? colors.borderSubtle
+                                      : 'rgba(226,232,240,0.9)',
+                                shadowColor: isActionRequired ? 'rgba(249,115,22,0.25)' : 'rgba(16,185,129,0.18)',
+                              },
+                              isExpanded && styles.tripsCardExpanded,
+                            ]}
+                          >
+                            <TouchableOpacity
+                              onPress={() => setExpandedTripId((prev) => (prev === tripId ? null : tripId))}
+                              activeOpacity={0.82}
+                              style={styles.tripsCardTouch}
+                            >
+                              <View style={styles.tripsCardTop}>
+                                <View style={styles.tripsCardTopLeft}>
+                                  <View
+                                    style={[
+                                      styles.tripsIcon,
+                                      {
+                                        backgroundColor: isActionRequired
+                                          ? 'rgba(249,115,22,0.16)'
+                                          : isExpanded
+                                            ? colors.emerald
+                                            : isDark
+                                              ? colors.surfaceElevated
+                                              : 'rgba(248,250,252,0.92)',
+                                      },
+                                    ]}
+                                  >
+                                    <FontAwesome
+                                      name={isActionRequired ? 'exclamation-circle' : 'line-chart'}
+                                      size={18}
+                                      color={isExpanded ? colors.textOnPrimary : isActionRequired ? 'rgb(249,115,22)' : colors.textMuted}
+                                    />
+                                  </View>
+                                  <View style={styles.tripsHeadText}>
+                                    <Text style={[styles.tripsTripId, { color: colors.text }]}>{item.id}</Text>
+                                    <View style={styles.tripsMetaInline}>
+                                      <Text style={[styles.tripsMetaText, { color: colors.textMuted }]}>{item.time}</Text>
+                                      <Text style={[styles.tripsMetaDot, { color: colors.emerald }]}>•</Text>
+                                      <Text style={[styles.tripsMetaText, { color: colors.textMuted }]} numberOfLines={1}>
+                                        {providerShort}
+                                      </Text>
+                                    </View>
+                                  </View>
+                                </View>
+
+                                <View style={styles.tripsCardRight}>
+                                  <Text style={[styles.tripsAmount, { color: colors.text }]}>₹{item.amount.toLocaleString('en-IN')}</Text>
+                                  <View style={styles.tripsStatusRow}>
+                                    <Text
+                                      style={[
+                                        styles.tripsStatusPill,
+                                        isActionRequired
+                                          ? styles.tripsStatusWarning
+                                          : isPending
+                                            ? styles.tripsStatusInfo
+                                            : styles.tripsStatusSuccess,
+                                      ]}
+                                      numberOfLines={1}
+                                    >
+                                      {item.subStatus || item.status}
+                                    </Text>
+                                    <FontAwesome
+                                      name="chevron-down"
+                                      size={16}
+                                      color={colors.textMuted}
+                                      style={isExpanded ? styles.tripsChevronExpanded : undefined}
+                                    />
+                                  </View>
+                                </View>
+                              </View>
+
+                              <View
+                                style={[
+                                  styles.tripsRouteCard,
+                                  {
+                                    backgroundColor: isDark ? colors.surfaceElevated : 'rgba(248,250,252,0.85)',
+                                    borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.65)',
+                                  },
+                                ]}
+                              >
+                                <View style={styles.tripsRouteSide}>
+                                  <Text style={[styles.tripsRouteLabel, { color: colors.textMuted }]}>Origin</Text>
+                                  <Text style={[styles.tripsRouteValue, { color: colors.text }]} numberOfLines={1}>
+                                    {item.from}
+                                  </Text>
+                                </View>
+                                <View style={styles.tripsRouteMiddle}>
+                                  <View style={[styles.tripsRouteDot, { backgroundColor: colors.emerald }]} />
+                                  <View style={[styles.tripsRouteLine, { backgroundColor: colors.border }]} />
+                                  <View style={[styles.tripsRouteDot, { backgroundColor: colors.textMuted }]} />
+                                </View>
+                                <View style={[styles.tripsRouteSide, styles.tripsRouteSideRight]}>
+                                  <Text style={[styles.tripsRouteLabel, { color: colors.textMuted }]}>Destination</Text>
+                                  <Text style={[styles.tripsRouteValue, { color: colors.text }]} numberOfLines={1}>
+                                    {item.to}
+                                  </Text>
+                                </View>
+                              </View>
+                            </TouchableOpacity>
+
+                            {isExpanded && (
+                              <View style={styles.tripsExpanded}>
+                                {isActionRequired && (
+                                  <View
+                                    style={[
+                                      styles.tripsAttention,
+                                      {
+                                        backgroundColor: 'rgba(249,115,22,0.10)',
+                                        borderColor: 'rgba(249,115,22,0.22)',
+                                      },
+                                    ]}
+                                  >
+                                    <View style={styles.tripsAttentionLeft}>
+                                      <FontAwesome name="exclamation-circle" size={16} color={'rgb(249,115,22)'} />
+                                      <View style={styles.tripsAttentionText}>
+                                        <Text style={styles.tripsAttentionLabel}>Attention needed</Text>
+                                        <Text style={[styles.tripsAttentionValue, { color: colors.text }]} numberOfLines={1}>
+                                          {item.subStatus}
+                                        </Text>
+                                      </View>
+                                    </View>
+                                    <FontAwesome name="info-circle" size={16} color={'rgba(249,115,22,0.65)'} />
+                                  </View>
+                                )}
+
+                                {isPending && (
+                                  <TouchableOpacity
+                                    activeOpacity={0.88}
+                                    onPress={() =>
+                                      handleWhatsAppFollowUp({
+                                        tripId,
+                                        trip: item.trip,
+                                        fleetName: item.provider.split("'")[0],
+                                        displayId: item.id,
+                                        from: item.from,
+                                        to: item.to,
+                                        amount: item.amount,
+                                      })
+                                    }
+                                    style={[
+                                      styles.tripsWhatsAppButton,
+                                      followUpSentTripId === tripId && styles.tripsWhatsAppButtonSent,
+                                    ]}
+                                  >
+                                    <FontAwesome
+                                      name={followUpSentTripId === tripId ? 'check' : 'whatsapp'}
+                                      size={16}
+                                      color={followUpSentTripId === tripId ? 'rgb(4,120,87)' : '#16a34a'}
+                                    />
+                                    <Text
+                                      style={[
+                                        styles.tripsWhatsAppButtonText,
+                                        followUpSentTripId === tripId ? styles.tripsWhatsAppButtonTextSent : undefined,
+                                      ]}
+                                    >
+                                      {followUpSentTripId === tripId ? 'SENT' : 'SHARE ON WHATSAPP'}
+                                    </Text>
+                                  </TouchableOpacity>
+                                )}
+
+                                {isSettled ? (
+                                  <>
+                                    <TouchableOpacity
+                                      activeOpacity={0.88}
+                                      style={[
+                                        styles.tripsReceiptButton,
+                                        {
+                                          backgroundColor: isDark ? colors.surfaceElevated : 'rgba(248,250,252,0.7)',
+                                          borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.8)',
+                                        },
+                                      ]}
+                                      onPress={() => setExpandedTripReceiptId((prev) => (prev === tripId ? null : tripId))}
+                                    >
+                                      <View style={styles.tripsReceiptButtonLeft}>
+                                        <FontAwesome name="file-text-o" size={14} color={colors.textMuted} />
+                                        <Text style={[styles.tripsReceiptButtonText, { color: colors.textMuted }]}>View receipt</Text>
+                                      </View>
+                                      <FontAwesome name={receiptExpanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
+                                    </TouchableOpacity>
+
+                                    {receiptExpanded && (
+                                      <View style={styles.tripsReceiptCardWrap}>
+                                        <View
+                                          style={[
+                                            styles.tripsReceiptCard,
+                                            { backgroundColor: colors.surface, borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.9)' },
+                                          ]}
+                                        >
+                                          <View style={styles.tripsReceiptHero}>
+                                            <View style={[styles.tripsReceiptIcon, { backgroundColor: 'rgba(16,185,129,0.12)' }]}>
+                                              <FontAwesome name="check" size={20} color={colors.emerald} />
+                                            </View>
+                                            <Text style={[styles.tripsReceiptEyebrow, { color: colors.emerald }]}>SETTLEMENT RECEIVED</Text>
+                                            <Text style={[styles.tripsReceiptAmount, { color: colors.text }]}>₹{Math.round(item.amount).toLocaleString('en-IN')}</Text>
+                                          </View>
+
+                                          <View style={[styles.tripsReceiptMeta, { borderTopColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.9)' }]}>
+                                            {[
+                                              { k: 'Transaction ID', v: String(settlementTxnId) },
+                                              { k: 'UTR', v: String(settlementUtr) },
+                                              { k: 'Payment mode', v: String(settlementMode) },
+                                              { k: 'Captured at', v: String(settlementCapturedAt) },
+                                              { k: 'Reference', v: item.id },
+                                              { k: 'Settled to', v: providerShort },
+                                            ].map((r) => (
+                                              <View key={r.k} style={styles.tripsReceiptMetaRow}>
+                                                <Text style={[styles.tripsReceiptMetaLabel, { color: colors.textMuted }]}>{r.k}</Text>
+                                                <Text style={[styles.tripsReceiptMetaValue, { color: colors.text }]} numberOfLines={1} ellipsizeMode="middle">
+                                                  {r.v}
+                                                </Text>
+                                              </View>
+                                            ))}
+                                            <View style={styles.tripsReceiptMetaRow}>
+                                              <Text style={[styles.tripsReceiptMetaLabel, { color: colors.textMuted }]}>Route</Text>
+                                              <Text style={[styles.tripsReceiptMetaValue, { color: colors.text }]} numberOfLines={1}>
+                                                {settlementRoute}
+                                              </Text>
+                                            </View>
+                                          </View>
+
+                                          <View style={styles.tripsReceiptActions}>
+                                            <TouchableOpacity
+                                              activeOpacity={0.85}
+                                              style={[
+                                                styles.tripsReceiptActionSecondary,
+                                                {
+                                                  backgroundColor: isDark ? colors.surfaceElevated : '#f8fafc',
+                                                  borderColor: isDark ? colors.borderSubtle : '#e2e8f0',
+                                                },
+                                              ]}
+                                              onPress={() => {
+                                                const msg = buildSettlementShareMessage({
+                                                  fleetName: providerShort,
+                                                  tripId: item.id,
+                                                  amount: Math.round(item.amount),
+                                                  transactionId: String(settlementTxnId),
+                                                  utr: String(settlementUtr),
+                                                });
+                                                Share.share({ message: msg }).catch(() => {});
+                                              }}
+                                            >
+                                              <FontAwesome name="share-square-o" size={13} color={colors.textMuted} />
+                                              <Text style={[styles.tripsReceiptActionSecondaryText, { color: colors.textMuted }]}>Share</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                              activeOpacity={0.85}
+                                              style={[styles.tripsReceiptActionPrimary, { backgroundColor: colors.emerald }]}
+                                              onPress={() =>
+                                                shareTripSettlementPdf({
+                                                  fleetName: providerShort,
+                                                  displayId: item.id,
+                                                  amount: Math.round(item.amount),
+                                                  transactionId: String(settlementTxnId),
+                                                  utr: String(settlementUtr),
+                                                  paymentMode: String(settlementMode),
+                                                  capturedAt: String(settlementCapturedAt),
+                                                  route: settlementRoute,
+                                                }).catch(() => {})
+                                              }
+                                            >
+                                              <FontAwesome name="file-pdf-o" size={13} color={colors.textOnPrimary} />
+                                              <Text style={styles.tripsReceiptActionPrimaryText}>PDF receipt</Text>
+                                            </TouchableOpacity>
+                                          </View>
+                                        </View>
+                                      </View>
+                                    )}
+                                  </>
+                                ) : (
+                                  <View style={styles.tripsExpandedGrid}>
+                                    <TouchableOpacity
+                                      activeOpacity={0.88}
+                                      onPress={() =>
+                                        claimTripInAppAndShare({
+                                          trip: item.trip,
+                                          displayId: item.id,
+                                          fleetName: providerShort,
+                                          amount: item.amount,
+                                          from: item.from,
+                                          to: item.to,
+                                          status: item.subStatus || item.status,
+                                        }).catch(() => {})
+                                      }
+                                      style={[styles.tripsClaimButton, { backgroundColor: '#0f172a' }]}
+                                    >
+                                      <FontAwesome name="bolt" size={14} color={Theme.textOnPrimary} />
+                                      <Text style={styles.tripsClaimButtonText}>
+                                        {requestPaymentLoadingTripId === item.trip.id ? 'REQUESTING…' : 'CLAIM'}
+                                      </Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                      activeOpacity={0.88}
+                                      onPress={() => confirmMarkAsPaid(item.trip, item.amount)}
+                                      style={[
+                                        styles.tripsMarkPaidButton,
+                                        {
+                                          backgroundColor: isDark ? colors.surfaceElevated : '#ffffff',
+                                          borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.9)',
+                                        },
+                                      ]}
+                                      disabled={markPaidLoadingTripId === item.trip.id}
+                                    >
+                                      <FontAwesome
+                                        name={markPaidLoadingTripId === item.trip.id ? 'spinner' : 'check'}
+                                        size={14}
+                                        color={colors.emerald}
+                                      />
+                                      <Text style={[styles.tripsMarkPaidButtonText, { color: colors.textMuted }]}>
+                                        {markPaidLoadingTripId === item.trip.id ? 'SAVING…' : 'MARK AS PAID'}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                )}
+                              </View>
+                            )}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      ) : (
+        <View style={[styles.ledgerSection, { paddingHorizontal: 12 }]}>
+          <Text style={[styles.transactionHistoryTitle, { color: colors.text }]}>Cash settlements</Text>
+          {filteredCashSections.length === 0 ? (
+            <View style={[styles.ledgerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={[styles.ledgerEmpty, { borderBottomWidth: 0 }]}>
+                <FontAwesome name="search" size={32} color={colors.textMuted} />
+                <Text style={[styles.ledgerEmptyText, { color: colors.textMuted }]}>No settlements found</Text>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.cashPremiumWrap}>
+              {filteredCashSections.map(({ sectionLabel, trips }) => (
+                <View key={sectionLabel} style={styles.cashPremiumSection}>
+                  <Text style={[styles.cashPremiumSectionLabel, { color: colors.textMuted }]}>{sectionLabel}</Text>
+                  <View
+                    style={[
+                      styles.cashPremiumGroup,
+                      {
+                        backgroundColor: isDark ? colors.surface : 'rgba(255,255,255,0.62)',
+                        borderColor: isDark ? colors.borderSubtle : 'rgba(255,255,255,0.85)',
+                      },
+                    ]}
+                  >
                     {trips.map((trip, idx) => {
-                      const earned = tripEarnings(trip);
-                      const received = receivedByTripId[trip.id] ?? 0;
-                      const isPending = received === 0;
-                      const isAdHocTrip = isAggregateTrip(trip);
-                      const isExpanded = expandedTripId === trip.id;
                       const routeSummary = [trip.pickup_area?.trim(), trip.drop_location?.trim()]
                         .filter(Boolean)
                         .join(' → ');
                       const tripRef = tripsService.getTripDisplayNumber(trip);
-                      const tripDriverId = trip.driver_id ?? linkedDrivers[0]?.id ?? null;
-                      const tripFleetName =
-                        salaryRequestOrgOptions.find(
-                          (o) => o.driverId === tripDriverId && o.orgId === trip.organization_id,
-                        )?.orgName ??
-                        salaryRequestOrgOptions.find((o) => o.orgId === trip.organization_id)?.orgName ??
-                        'Fleet';
                       const receivedAmt = receivedByTripId[trip.id] ?? 0;
-                      const amountLabel = earned > 0 ? `₹${earned.toLocaleString('en-IN')}` : '₹0';
-                      const amountColor =
-                        amountLabel === '—'
-                          ? colors.textMuted
-                          : isPending
-                            ? isDark
-                              ? colors.text
-                              : Theme.gpayListTitle
-                            : isDark
-                              ? colors.emerald
-                              : Theme.gpayAmountReceived;
                       const listDivider = isDark ? colors.borderSubtle : Theme.borderMedium;
-                      const subColor = colors.textMuted;
-                      const metaColor = colors.textMuted;
-                      const secondaryLine = routeSummary || 'Route not specified';
-                      const isOtpAdHocPending = isAdHocTrip && earned === 0;
-                      const primaryLine = tripRef;
-                      const metaRight =
-                        receivedAmt > 0
-                          ? 'Settled in cash balance'
-                          : isOtpAdHocPending
-                            ? 'Pending'
-                            : 'Pending from fleet';
-                      const showRowDivider = isExpanded || idx < trips.length - 1;
-                      const iconName =
-                        isOtpAdHocPending ? 'exchange' : receivedAmt > 0 ? 'arrow-down' : 'clock-o';
-                      const statusLabel = receivedAmt > 0 ? 'EARNED' : 'PENDING';
-                      const statusPillBg = receivedAmt > 0 ? colors.emeraldMuted : AMBER_50;
-                      const statusPillTextColor = receivedAmt > 0 ? colors.emerald : Theme.warning;
-                      const statusPillBorderColor = receivedAmt > 0 ? colors.emeraldBorderSoft : 'rgba(180,83,9,0.25)';
-                      const rowToneBg = isExpanded ? colors.surface : colors.surface;
-                      const rowToneBorder = receivedAmt > 0 ? colors.emeraldBorderSoft : 'rgba(180,83,9,0.25)';
-                      const iconSqBg = receivedAmt > 0 ? colors.emeraldMuted : AMBER_50;
-                      const iconColor = receivedAmt > 0 ? colors.emerald : Theme.warning;
                       const isLastTrip = idx === trips.length - 1;
+                      const txnExpanded = expandedTripId === `cash-${trip.id}`;
+                      const fleetName =
+                        salaryRequestOrgOptions.find((o) => String(o.orgId ?? '') === String(trip.organization_id ?? ''))?.orgName ?? 'Fleet';
+                      const ledger = latestCreditLedgerByTripId[trip.id];
+                      const paymentMode = derivePaymentMode(ledger?.description) ?? '—';
+                      const utr = extractUtr(ledger?.description) ?? '—';
+                      const capturedAt = phonePeMetaDate(ledger?.created_at ?? trip.completed_at ?? trip.updated_at ?? trip.created_at);
+                      const txnId = ledger?.id ?? tripRef;
                       return (
                         <View
                           key={trip.id}
                           style={[
-                            styles.tripCard,
-                            {
-                              backgroundColor: 'transparent',
-                              borderColor: 'transparent',
-                              borderWidth: 0,
-                              marginBottom: 0,
-                            },
+                            styles.cashPremiumRow,
+                            !isLastTrip && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: listDivider },
                           ]}
                         >
                           <TouchableOpacity
-                            style={[
-                              styles.ppTxCard,
-                              { backgroundColor: 'transparent', paddingHorizontal: 0 },
-                              !isLastTrip && {
-                                borderBottomWidth: StyleSheet.hairlineWidth,
-                                borderBottomColor: listDivider,
-                              },
-                            ]}
-                            activeOpacity={0.7}
-                            onPress={() => setExpandedTripId((prev) => (prev === trip.id ? null : trip.id))}
-                            accessibilityLabel={`Trip ${tripRef} earnings ${earned}`}
-                            accessibilityHint={isExpanded ? 'Collapse details' : 'Expand details'}
-                            accessibilityRole="button"
-                            accessibilityState={{ expanded: isExpanded }}
+                            style={styles.cashPremiumRowTouch}
+                            activeOpacity={0.8}
+                            onPress={() => setExpandedTripId((prev) => (prev === `cash-${trip.id}` ? null : `cash-${trip.id}`))}
                           >
-                            <View style={styles.ppTxTopRow}>
-                              <View style={[styles.ppIconSq, { backgroundColor: iconSqBg }]}>
-                                <FontAwesome name={iconName} size={18} color={iconColor} />
-                              </View>
-                              <View style={styles.ppMiddle}>
-                                <View style={styles.ppPrimaryRow}>
-                                  <Text style={[styles.ppPrimary, { color: colors.text }]} numberOfLines={1}>
-                                    {primaryLine}
-                                  </Text>
-                                  <View style={[styles.txStatusPill, { backgroundColor: statusPillBg, borderColor: statusPillBorderColor }]}>
-                                    <Text style={[styles.txStatusPillText, { color: statusPillTextColor }]}>
-                                      {statusLabel}
-                                    </Text>
-                                  </View>
-                                </View>
-                                <Text style={[styles.ppSecondary, { color: subColor }]} numberOfLines={2}>
-                                  {secondaryLine}
-                                </Text>
-                              </View>
-                              <Text
+                            <View style={styles.cashPremiumLeft}>
+                              <View
                                 style={[
-                                  styles.ppAmount,
-                                  isAndroid && styles.ppAmountAndroid,
-                                  { color: amountColor },
+                                  styles.cashPremiumAvatar,
+                                  { backgroundColor: isDark ? colors.surfaceElevated : 'rgba(248,250,252,0.92)' },
                                 ]}
                               >
-                                {amountLabel}
-                              </Text>
-                            </View>
-                            <View style={styles.ppMetaRow}>
-                              <Text style={[styles.ppMetaLeft, { color: metaColor }]}>
-                                {phonePeMetaDate(trip.completed_at ?? trip.updated_at ?? trip.created_at)}
-                              </Text>
-                              <View style={styles.ppMetaRight}>
-                                <Text style={[styles.ppMetaRightText, { color: metaColor }]} numberOfLines={1}>
-                                  {metaRight}
+                                <Text style={[styles.cashPremiumAvatarText, { color: colors.textMuted }]}>
+                                  {fleetName.charAt(0).toUpperCase()}
                                 </Text>
-                                <FontAwesome name="university" size={13} color={colors.emerald} style={styles.ppMetaBankIcon} />
+                                <View style={[styles.cashPremiumAvatarBadge, { backgroundColor: colors.surface }]}>
+                                  <FontAwesome name="arrow-down" size={10} color={colors.emerald} />
+                                </View>
                               </View>
+                              <View style={styles.cashPremiumBody}>
+                                <Text style={[styles.cashPremiumSource, { color: colors.text }]} numberOfLines={1}>
+                                  {fleetName}
+                                </Text>
+                                <Text style={[styles.cashPremiumMethod, { color: colors.textMuted }]} numberOfLines={1}>
+                                  {tripRef} • {phonePeMetaDate(trip.completed_at ?? trip.updated_at ?? trip.created_at)}
+                                </Text>
+                              </View>
+                            </View>
+
+                            <View style={styles.cashPremiumRightWrap}>
+                              <View style={styles.cashPremiumRight}>
+                                <Text style={[styles.cashPremiumAmount, { color: colors.emerald }]}>
+                                  +₹{receivedAmt.toLocaleString('en-IN')}
+                                </Text>
+                                <View style={styles.cashPremiumStatusRow}>
+                                  <FontAwesome name="check-circle" size={10} color={colors.emerald} />
+                                  <Text style={[styles.cashPremiumStatus, { color: colors.textMuted }]}>SUCCESS</Text>
+                                </View>
+                              </View>
+                              <FontAwesome
+                                name="chevron-down"
+                                size={16}
+                                color={colors.textMuted}
+                                style={txnExpanded ? styles.cashPremiumChevronExpanded : undefined}
+                              />
                             </View>
                           </TouchableOpacity>
-                          {isExpanded && (
-                            <View style={[styles.dropdownWrap, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
-  
-                              {/* Receipt details */}
-                              <View style={styles.dropdownGrid}>
-                                <View style={styles.dropdownGridCol}>
-                                  <Text style={[styles.dropdownGridLabel, { color: colors.textMuted }]}>PROVIDER</Text>
-                                  <View style={styles.dropdownGridValueRow}>
-                                    <FontAwesome name="building-o" size={12} color={colors.textMuted} />
-                                    <Text style={[styles.dropdownGridValue, { color: colors.text }]} numberOfLines={1}>
-                                      {tripFleetName}
-                                    </Text>
+
+                          {txnExpanded && (
+                            <View style={styles.cashPremiumReceiptWrap}>
+                              <View
+                                style={[
+                                  styles.cashPremiumReceiptCard,
+                                  {
+                                    backgroundColor: colors.surface,
+                                    borderColor: isDark ? colors.borderSubtle : '#e2e8f0',
+                                  },
+                                ]}
+                              >
+                                <View style={styles.cashPremiumReceiptHero}>
+                                  <View style={[styles.cashPremiumReceiptIcon, { backgroundColor: colors.emeraldMuted }]}>
+                                    <FontAwesome name="check" size={22} color={colors.emerald} />
                                   </View>
+                                  <Text style={[styles.cashPremiumReceiptEyebrow, { color: colors.emerald }]}>SETTLEMENT RECEIVED</Text>
+                                  <Text style={[styles.cashPremiumReceiptAmount, { color: colors.text }]}>₹{receivedAmt.toLocaleString('en-IN')}</Text>
                                 </View>
-                                <View style={styles.dropdownGridCol}>
-                                  <Text style={[styles.dropdownGridLabel, { color: colors.textMuted }]}>SERVICE TYPE</Text>
-                                  <View style={styles.dropdownGridValueRow}>
-                                    <Text style={[styles.dropdownGridValue, { color: colors.text }]} numberOfLines={1}>
-                                      {isOtpAdHocPending ? 'Ad Hoc Trip' : 'Fleet Settlement'}
-                                    </Text>
-                                  </View>
-                                </View>
-                                <View style={styles.dropdownGridCol}>
-                                  <Text style={[styles.dropdownGridLabel, { color: colors.textMuted }]}>TIMESTAMP</Text>
-                                  <View style={styles.dropdownGridValueRow}>
-                                    <FontAwesome name="calendar" size={12} color={colors.textMuted} />
-                                    <Text style={[styles.dropdownGridValue, { color: colors.text }]} numberOfLines={1}>
-                                      {new Date(trip.completed_at ?? trip.updated_at ?? trip.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} • {new Date(trip.completed_at ?? trip.updated_at ?? trip.created_at).toLocaleTimeString('en-IN', {
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                        hour12: true,
-                                      })}
-                                    </Text>
-                                  </View>
-                                </View>
-                                <View style={styles.dropdownGridCol}>
-                                  <Text style={[styles.dropdownGridLabel, { color: colors.textMuted }]}>REFERENCE</Text>
-                                  <Pressable
-                                    onPress={() => Clipboard.setStringAsync(tripRef).catch(() => {})}
-                                    style={styles.dropdownGridValueRow}
-                                    hitSlop={10}
-                                    accessibilityRole="button"
-                                    accessibilityLabel="Copy reference ID"
+
+                                <View style={[styles.cashPremiumReceiptMeta, { borderTopColor: isDark ? colors.borderSubtle : '#e2e8f0' }]}>
+                                  <View style={styles.cashPremiumReceiptMetaRow}>
+                                    <Text style={[styles.cashPremiumReceiptMetaLabel, { color: colors.textMuted }]}>Transaction ID</Text>
+                                  <Text
+                                    style={[styles.cashPremiumReceiptMetaValue, { color: colors.text }]}
+                                    numberOfLines={1}
+                                    ellipsizeMode="middle"
                                   >
-                                    <FontAwesome name="copy" size={12} color={colors.emerald} />
-                                    <Text style={[styles.dropdownGridValue, { color: colors.emerald }]}>Copy Details</Text>
-                                  </Pressable>
+                                    {txnId}
+                                  </Text>
+                                  </View>
+                                  <View style={styles.cashPremiumReceiptMetaRow}>
+                                  <Text style={[styles.cashPremiumReceiptMetaLabel, { color: colors.textMuted }]}>UTR</Text>
+                                  <Text
+                                    style={[styles.cashPremiumReceiptMetaValue, { color: colors.text }]}
+                                    numberOfLines={1}
+                                    ellipsizeMode="middle"
+                                  >
+                                    {utr}
+                                  </Text>
+                                  </View>
+                                  <View style={styles.cashPremiumReceiptMetaRow}>
+                                  <Text style={[styles.cashPremiumReceiptMetaLabel, { color: colors.textMuted }]}>Payment mode</Text>
+                                  <Text style={[styles.cashPremiumReceiptMetaValue, { color: colors.text }]} numberOfLines={1}>
+                                    {paymentMode}
+                                  </Text>
                                 </View>
-                              </View>
-  
-                              <View style={[styles.totalPill, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#f8fafc' }]}>
-                                <Text style={[styles.totalLabel, { color: colors.textMuted }]}>NET SETTLEMENT AMOUNT</Text>
-                                <Text style={[styles.totalValue, { color: colors.text }]}>
-                                  ₹{Math.round(earned).toLocaleString('en-IN')}
-                                </Text>
-                              </View>
-  
-                              {/* Actions */}
-                              {isPending && !isOtpAdHocPending && earned > 0 ? (
-                                <View style={styles.dropdownActions}>
+                                <View style={styles.cashPremiumReceiptMetaRow}>
+                                  <Text style={[styles.cashPremiumReceiptMetaLabel, { color: colors.textMuted }]}>Captured at</Text>
+                                  <Text style={[styles.cashPremiumReceiptMetaValue, { color: colors.text }]} numberOfLines={1}>
+                                    {capturedAt}
+                                  </Text>
+                                </View>
+                                <View style={styles.cashPremiumReceiptMetaRow}>
+                                  <Text style={[styles.cashPremiumReceiptMetaLabel, { color: colors.textMuted }]}>Reference</Text>
+                                  <Text
+                                    style={[styles.cashPremiumReceiptMetaValue, { color: colors.text }]}
+                                    numberOfLines={1}
+                                    ellipsizeMode="middle"
+                                  >
+                                    {tripRef}
+                                  </Text>
+                                </View>
+                                <View style={styles.cashPremiumReceiptMetaRow}>
+                                  <Text style={[styles.cashPremiumReceiptMetaLabel, { color: colors.textMuted }]}>Settled to</Text>
+                                    <View style={styles.cashPremiumReceiptBankRow}>
+                                      <FontAwesome name="university" size={12} color={colors.textMuted} />
+                                    <Text
+                                      style={[styles.cashPremiumReceiptMetaValue, { color: colors.text }]}
+                                      numberOfLines={1}
+                                      ellipsizeMode="tail"
+                                    >
+                                      {fleetName}
+                                    </Text>
+                                    </View>
+                                  </View>
+                                  {routeSummary ? (
+                                    <View style={styles.cashPremiumReceiptMetaRow}>
+                                      <Text style={[styles.cashPremiumReceiptMetaLabel, { color: colors.textMuted }]}>Route</Text>
+                                      <Text style={[styles.cashPremiumReceiptMetaValue, { color: colors.text }]} numberOfLines={1}>
+                                        {routeSummary}
+                                      </Text>
+                                    </View>
+                                  ) : null}
+                                </View>
+
+                                <View style={styles.cashPremiumReceiptActions}>
                                   <TouchableOpacity
-                                    style={[styles.dropdownActionBtn, { backgroundColor: isDark ? colors.surfaceElevated : '#0f172a' }]}
-                                    onPress={() => openSalaryRequestForTrip(trip)}
-                                    disabled={!!requestPaymentLoadingTripId}
+                                    style={[
+                                      styles.cashPremiumReceiptButtonSecondary,
+                                      {
+                                        backgroundColor: isDark ? colors.surfaceElevated : '#f8fafc',
+                                        borderColor: isDark ? colors.borderSubtle : '#e2e8f0',
+                                      },
+                                    ]}
                                     activeOpacity={0.85}
-                                    accessibilityLabel="Request payment"
+                                    onPress={() => {
+                                      const msg = buildSettlementShareMessage({
+                                        fleetName,
+                                        tripId: tripRef,
+                                        amount: receivedAmt,
+                                        transactionId: String(txnId),
+                                        utr: String(utr),
+                                      });
+                                      Share.share({ message: msg }).catch(() => {});
+                                    }}
                                   >
-                                    {requestPaymentLoadingTripId === trip.id ? (
-                                      <ActivityIndicator size="small" color={Theme.textOnPrimary} />
-                                    ) : (
-                                      <FontAwesome name="send" size={14} color={Theme.textOnPrimary} />
-                                    )}
-                                    <Text style={[styles.dropdownActionBtnText, { color: Theme.textOnPrimary }]}>
-                                      {requestPaymentLoadingTripId === trip.id ? 'Sending…' : 'Request Payment'}
-                                    </Text>
+                                    <FontAwesome name="share-square-o" size={13} color={colors.textMuted} />
+                                    <Text style={[styles.cashPremiumReceiptButtonSecondaryText, { color: colors.textMuted }]}>Share</Text>
                                   </TouchableOpacity>
-                                  
                                   <TouchableOpacity
-                                    style={[styles.dropdownActionBtn, { borderColor: colors.border, backgroundColor: colors.surface, borderWidth: 1 }]}
-                                    onPress={() => confirmMarkAsPaid(trip, earned)}
-                                    disabled={!!markPaidLoadingTripId}
+                                    style={[styles.cashPremiumReceiptButtonPrimary, { backgroundColor: colors.emerald }]}
                                     activeOpacity={0.85}
-                                    accessibilityLabel="Mark as paid"
+                                    onPress={() =>
+                                      shareCashReceiptPdf({
+                                        title: 'SETTLEMENT RECEIVED',
+                                        amount: receivedAmt,
+                                        transactionId: String(txnId ?? '—'),
+                                        utr: String(utr ?? '—'),
+                                        paymentMode: String(paymentMode ?? '—'),
+                                        capturedAt: String(capturedAt ?? '—'),
+                                        reference: String(tripRef ?? '—'),
+                                        settledTo: String(fleetName ?? '—'),
+                                        route: routeSummary || null,
+                                      }).catch((e) => {
+                                        const message = e instanceof Error ? e.message : 'Could not generate receipt.';
+                                        if (Platform.OS === 'web') window.alert(message);
+                                        else Alert.alert('Receipt failed', message);
+                                      })
+                                    }
                                   >
-                                    {markPaidLoadingTripId === trip.id ? (
-                                      <ActivityIndicator size="small" color={colors.emerald} />
-                                    ) : (
-                                      <FontAwesome name="check-circle" size={14} color={colors.emerald} />
-                                    )}
-                                    <Text style={[styles.dropdownActionBtnText, { color: colors.text }]}>
-                                      {markPaidLoadingTripId === trip.id ? 'Marking…' : 'Mark Paid'}
-                                    </Text>
+                                    <FontAwesome name="file-pdf-o" size={13} color={colors.textOnPrimary} />
+                                    <Text style={styles.cashPremiumReceiptButtonPrimaryText}>PDF receipt</Text>
                                   </TouchableOpacity>
                                 </View>
-                              ) : null}
-  
-                              <View style={styles.dropdownTrustRow}>
-                                <View style={[styles.dropdownTrustDot, { backgroundColor: colors.border }]} />
-                                <Text style={[styles.dropdownTrustText, { color: colors.textMuted }]}>
-                                  Secure encryption by Fleet Connect Global
-                                </Text>
-                                <View style={[styles.dropdownTrustDot, { backgroundColor: colors.border }]} />
                               </View>
                             </View>
                           )}
@@ -827,93 +2260,118 @@ export default function DriverWalletScreen() {
             </View>
           )}
         </View>
-      ) : (
-        <View style={[styles.ledgerSection, { paddingHorizontal: Layout.screenPaddingHorizontal }]}>
-          <Text style={[styles.transactionHistoryTitle, { color: colors.text }]}>Received payments</Text>
-          {receivedTrips.length === 0 ? (
-            <View style={[styles.ledgerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <View style={[styles.ledgerEmpty, { borderBottomWidth: 0 }]}>
-                <FontAwesome name="exchange" size={32} color={colors.textMuted} />
-                <Text style={[styles.ledgerEmptyText, { color: colors.textMuted }]}>No received transactions yet</Text>
-              </View>
-            </View>
-          ) : (
-            <View style={styles.upiListWrap}>
-              {receivedTripSections.map(({ sectionLabel, dateKey, trips }) => (
-                <View key={dateKey} style={styles.upiSection}>
-                  <Text style={[styles.upiSectionHeader, { color: colors.textMuted }]}>{sectionLabel}</Text>
-                  <View style={[styles.upiListBlock, { backgroundColor: 'transparent' }]}>
-                    {trips.map((trip, idx) => {
-                      const routeSummary = [trip.pickup_area?.trim(), trip.drop_location?.trim()]
-                        .filter(Boolean)
-                        .join(' → ');
-                      const tripRef = tripsService.getTripDisplayNumber(trip);
-                      const receivedAmt = receivedByTripId[trip.id] ?? 0;
-                      const amountLabel = `+ ₹${receivedAmt.toLocaleString('en-IN')}`;
-                      const amountColor = isDark ? colors.emerald : Theme.gpayAmountReceived;
-                      const listDivider = isDark ? colors.borderSubtle : Theme.borderMedium;
-                      const subColor = colors.textMuted;
-                      const metaColor = colors.textMuted;
-                      const isLastTrip = idx === trips.length - 1;
-                      return (
-                        <View
-                          key={trip.id}
-                          style={[
-                            styles.ppTxCard,
-                            { paddingHorizontal: 0 },
-                            !isLastTrip && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: listDivider },
-                          ]}
-                        >
-                          <View style={styles.ppTxTopRow}>
-                            <View style={[styles.ppIconSq, { backgroundColor: colors.emeraldMuted }]}>
-                              <FontAwesome name="arrow-down" size={18} color={colors.emerald} />
-                            </View>
-                            <View style={styles.ppMiddle}>
-                              <View style={styles.ppPrimaryRow}>
-                                <Text style={[styles.ppPrimary, { color: colors.text }]} numberOfLines={1}>
-                                  {tripRef}
-                                </Text>
-                                <View style={[styles.txStatusPill, { backgroundColor: colors.emeraldMuted, borderColor: colors.emeraldBorderSoft }]}>
-                                  <Text style={[styles.txStatusPillText, { color: colors.emerald }]}>RECEIVED</Text>
-                                </View>
-                              </View>
-                              <Text style={[styles.ppSecondary, { color: subColor }]} numberOfLines={2}>
-                                {routeSummary || 'Route not specified'}
-                              </Text>
-                            </View>
-                            <Text
-                              style={[
-                                styles.ppAmount,
-                                { color: amountColor },
-                                isAndroid && styles.ppAmountAndroid,
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {amountLabel}
-                            </Text>
-                          </View>
-                          <View style={styles.ppMetaRow}>
-                            <Text style={[styles.ppMetaLeft, { color: metaColor }]}>
-                              {phonePeMetaDate(trip.completed_at ?? trip.updated_at ?? trip.created_at)}
-                            </Text>
-                            <View style={styles.ppMetaRight}>
-                              <Text style={[styles.ppMetaRightText, { color: metaColor }]} numberOfLines={1}>
-                                Added to cash balance
-                              </Text>
-                              <FontAwesome name="university" size={13} color={colors.emerald} style={styles.ppMetaBankIcon} />
-                            </View>
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
       )}
     </ScrollView>
+    <Modal
+      visible={!!whatsAppReminderMessage}
+      animationType="fade"
+      transparent
+      statusBarTranslucent
+      onRequestClose={() => setWhatsAppReminderMessage(null)}
+    >
+      <Pressable
+        style={[
+          styles.walletDialogOverlay,
+          {
+            paddingTop: insets.top,
+            paddingBottom: insets.bottom,
+            backgroundColor: isDark ? 'rgba(2,6,23,0.68)' : 'rgba(15,23,42,0.28)',
+          },
+        ]}
+        onPress={() => setWhatsAppReminderMessage(null)}
+      >
+        <Pressable
+          style={[
+            styles.walletDialogCard,
+            {
+              backgroundColor: isDark ? colors.surfaceElevated : '#ffffff',
+              borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.95)',
+              shadowColor: isDark ? '#000000' : 'rgba(15,23,42,0.18)',
+            },
+          ]}
+          onPress={(e) => e.stopPropagation()}
+        >
+          <View style={[styles.walletDialogAccent, { backgroundColor: colors.emerald }]} />
+          <View
+            style={[
+              styles.walletDialogIconWrap,
+              { backgroundColor: isDark ? 'rgba(16,185,129,0.14)' : 'rgba(16,185,129,0.10)' },
+            ]}
+          >
+            <FontAwesome name="whatsapp" size={26} color={colors.emerald} />
+          </View>
+          <Text style={[styles.walletDialogTitle, { color: colors.text }]}>Reminder sent</Text>
+          <Text style={[styles.walletDialogMessage, { color: colors.textMuted }]}>
+            The fleet owner has been notified in app. Send a WhatsApp reminder too?
+          </Text>
+          <View
+            style={[
+              styles.walletDialogInfoChip,
+              {
+                backgroundColor: isDark ? colors.surface : 'rgba(241,245,249,0.82)',
+                borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.9)',
+              },
+            ]}
+          >
+            <FontAwesome name="bell-o" size={12} color={colors.emerald} />
+            <Text style={[styles.walletDialogInfoChipText, { color: colors.textMuted }]}>In-app reminder created</Text>
+          </View>
+          <View style={styles.walletDialogButtons}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={[
+                styles.walletDialogButton,
+                styles.walletDialogButtonSecondary,
+                {
+                  backgroundColor: isDark ? colors.surface : 'rgba(241,245,249,0.92)',
+                  borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.95)',
+                },
+              ]}
+              onPress={() => setWhatsAppReminderMessage(null)}
+            >
+              <Text style={[styles.walletDialogButtonSecondaryText, { color: colors.text }]}>Not now</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={[
+                styles.walletDialogButton,
+                styles.walletDialogButtonPrimary,
+                { backgroundColor: colors.emerald, shadowColor: isDark ? '#000' : 'rgba(16,185,129,0.32)' },
+              ]}
+              onPress={() => {
+                const message = whatsAppReminderMessage;
+                setWhatsAppReminderMessage(null);
+                if (message) void openWhatsAppReminder(message);
+              }}
+            >
+              <FontAwesome name="whatsapp" size={16} color={colors.textOnPrimary} />
+              <Text style={[styles.walletDialogButtonPrimaryText, { color: colors.textOnPrimary }]}>Send on WhatsApp</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+    <ThemedConfirmModal
+      visible={!!markPaidConfirmState}
+      title="Mark as paid"
+      message={
+        markPaidConfirmState
+          ? `Record ₹${Math.round(markPaidConfirmState.amount).toLocaleString('en-IN')} for ${tripsService.getTripDisplayNumber(markPaidConfirmState.trip)} as received? This will update your cash balance.`
+          : ''
+      }
+      cancelText="Cancel"
+      confirmText={markPaidLoadingTripId && markPaidConfirmState ? 'Saving...' : 'Proceed'}
+      confirmVariant="primary"
+      onCancel={() => {
+        if (!markPaidLoadingTripId) setMarkPaidConfirmState(null);
+      }}
+      onConfirm={() => {
+        const next = markPaidConfirmState;
+        if (!next) return;
+        setMarkPaidConfirmState(null);
+        void markTripAsPaid(next.trip, next.amount);
+      }}
+    />
     </>
   );
 }
@@ -933,6 +2391,104 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 14,
     color: Theme.textMuted,
+  },
+  walletDialogOverlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  walletDialogCard: {
+    width: '100%',
+    maxWidth: 368,
+    borderRadius: 28,
+    borderWidth: 1,
+    paddingHorizontal: 22,
+    paddingTop: 18,
+    paddingBottom: 20,
+    alignItems: 'center',
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 1,
+    shadowRadius: 36,
+    elevation: 18,
+  },
+  walletDialogAccent: {
+    width: 88,
+    height: 4,
+    borderRadius: 999,
+    marginBottom: 18,
+  },
+  walletDialogIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  walletDialogTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    textAlign: 'center',
+  },
+  walletDialogMessage: {
+    marginTop: 10,
+    fontSize: 14,
+    lineHeight: 21,
+    fontWeight: '500',
+    textAlign: 'center',
+    maxWidth: 280,
+  },
+  walletDialogInfoChip: {
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+  },
+  walletDialogInfoChipText: {
+    fontSize: 12,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+  },
+  walletDialogButtons: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 18,
+  },
+  walletDialogButton: {
+    flex: 1,
+    minHeight: 50,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  walletDialogButtonPrimary: {
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 1,
+    shadowRadius: 18,
+    elevation: 6,
+  },
+  walletDialogButtonSecondary: {
+    borderWidth: 1,
+  },
+  walletDialogButtonPrimaryText: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  walletDialogButtonSecondaryText: {
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 0.1,
   },
   header: {
     flexDirection: 'row',
@@ -963,8 +2519,8 @@ const styles = StyleSheet.create({
   },
   passbookHeaderBtnText: {
     fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.3,
+    fontWeight: '500',
+    letterSpacing: 0.2,
   },
   avatarBtn: { padding: 2 },
   avatarCircle: {
@@ -989,7 +2545,7 @@ const styles = StyleSheet.create({
     ...Typography.headerTitle,
     textTransform: 'none',
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '500',
     letterSpacing: -0.2,
   },
   creditsSection: {
@@ -999,15 +2555,15 @@ const styles = StyleSheet.create({
   },
   creditsTitle: {
     fontSize: 32,
-    fontWeight: '900',
-    letterSpacing: -0.5,
+    fontWeight: '800',
+    letterSpacing: -0.3,
     fontStyle: 'italic',
     textTransform: 'uppercase',
   },
   creditsSubtitle: {
     fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
     marginTop: 6,
     textTransform: 'uppercase',
   },
@@ -1035,7 +2591,7 @@ const styles = StyleSheet.create({
   },
   walletCardWatermark: {
     fontSize: 120,
-    fontWeight: '700',
+    fontWeight: '400',
   },
   walletCardContent: {
     width: '100%',
@@ -1043,16 +2599,16 @@ const styles = StyleSheet.create({
   },
   walletCardLabel: {
     fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 2,
+    fontWeight: '700',
+    letterSpacing: 1.6,
     marginBottom: 4,
     fontStyle: 'italic',
     textTransform: 'uppercase',
   },
   walletCardSublabel: {
     fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontWeight: '500',
+    letterSpacing: 0.4,
     marginBottom: 12,
     textTransform: 'uppercase',
   },
@@ -1066,7 +2622,7 @@ const styles = StyleSheet.create({
   },
   walletCardBalanceRupee: {
     fontSize: 48,
-    fontWeight: '800',
+    fontWeight: '700',
     fontStyle: 'italic',
     lineHeight: 56,
     marginRight: -4,
@@ -1076,7 +2632,7 @@ const styles = StyleSheet.create({
   walletCardBalanceNumber: {
     flexShrink: 1,
     fontSize: 48,
-    fontWeight: '800',
+    fontWeight: '700',
     fontStyle: 'italic',
     lineHeight: 56,
     includeFontPadding: false,
@@ -1104,8 +2660,8 @@ const styles = StyleSheet.create({
   },
   walletCardWithdrawText: {
     fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 4,
+    fontWeight: '700',
+    letterSpacing: 2.6,
     fontStyle: 'italic',
     textTransform: 'uppercase',
   },
@@ -1113,36 +2669,1436 @@ const styles = StyleSheet.create({
     marginTop: 18,
     marginHorizontal: Layout.screenPaddingHorizontal,
     flexDirection: 'row',
-    borderBottomWidth: 1,
+    borderWidth: 1,
+    borderRadius: 28,
+    padding: 8,
+    gap: 6,
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.14,
+    shadowRadius: 30,
+    elevation: 10,
   },
   mainTab: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 4,
-    paddingBottom: 12,
+    flexDirection: 'row',
+    gap: 8,
+    minHeight: 56,
+    borderRadius: 22,
+  },
+  mainTabActive: {
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.9,
+    shadowRadius: 22,
+    elevation: 6,
   },
   mainTabText: {
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: -0.2,
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
   },
-  mainTabIndicator: {
-    position: 'absolute',
-    left: 24,
-    right: 24,
-    bottom: 0,
-    height: 3,
+  searchSection: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 14,
+    gap: 12,
+  },
+  filterChipRow: {
+    gap: 10,
+    paddingRight: 24,
+  },
+  filterChip: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
     borderRadius: 999,
+    borderWidth: 1,
+  },
+  filterChipText: {
+    fontSize: 8,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+  },
+  bulkClaimButton: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 16,
+    borderRadius: 18,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.22,
+    shadowRadius: 26,
+    elevation: 10,
+  },
+  bulkClaimButtonText: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1.8,
+    color: Theme.textOnPrimary,
   },
   ledgerSection: {
     paddingTop: 16,
   },
   transactionHistoryTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.2,
+    fontSize: 10,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 2.2,
+    marginBottom: 10,
+  },
+  fleetList: {
+    gap: 18,
+    paddingBottom: 24,
+  },
+  fleetCard: {
+    borderWidth: 1,
+    borderRadius: 24,
+    padding: 16,
+  },
+  fleetCardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 18,
+  },
+  fleetCardTopRowNew: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 14,
+    gap: 14,
+  },
+  fleetCardTopLeft: {
+    flexDirection: 'row',
+    gap: 14,
+    flex: 1,
+    minWidth: 0,
+  },
+  fleetCardLogo: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fleetCardLogoNew: {
+    width: 50,
+    height: 50,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  fleetCardBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  fleetCardTitle: {
+    fontSize: 15,
+    fontWeight: '500',
+    letterSpacing: -0.2,
+    marginBottom: 6,
+  },
+  fleetMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  fleetMetaText: {
+    fontSize: 8,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 1.8,
+    flex: 1,
+    minWidth: 0,
+  },
+  fleetTopRight: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  fleetStatusPillNew: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  fleetStatusTextNew: {
+    fontSize: 8,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 2.2,
+  },
+  fleetMetaRowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  fleetMetaTextRight: {
+    fontSize: 8,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 2.2,
+  },
+  fleetCardRateRow: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  fleetStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  fleetStatusText: {
+    fontSize: 10,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  fleetStatsCard: {
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 16,
+  },
+  fleetStatsGridNew: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 14,
+  },
+  fleetStatBox: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 22,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    shadowColor: 'rgba(15,23,42,0.06)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    elevation: 4,
+  },
+  fleetStatBoxWarning: {
+    shadowColor: 'rgba(249,115,22,0.10)',
+  },
+  fleetStatBoxLabel: {
+    fontSize: 8,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 2.2,
+    marginBottom: 8,
+  },
+  fleetStatBoxValue: {
+    fontSize: 15,
+    fontWeight: '500',
+    letterSpacing: -0.6,
+  },
+  fleetStatRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  fleetStatLabel: {
+    fontSize: 12,
+    fontWeight: '400',
+  },
+  fleetStatValue: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  fleetPrimaryButton: {
+    marginTop: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.24,
+    shadowRadius: 20,
+    elevation: 6,
+  },
+  fleetPrimaryButtonNew: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.22,
+    shadowRadius: 30,
+    elevation: 10,
+  },
+  fleetPrimaryButtonLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  fleetPrimaryRing: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fleetPrimaryRingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  fleetPrimaryButtonText: {
+    fontSize: 10,
+    fontWeight: '500',
+    letterSpacing: 1.8,
+    textTransform: 'uppercase',
+  },
+  fleetPrimaryButtonArrow: {
+    opacity: 0.45,
+  },
+  referenceSectionWrap: {
+    gap: 28,
+    paddingBottom: 28,
+  },
+  tripsPremiumWrap: {
+    gap: 28,
+    paddingBottom: 28,
+  },
+  tripsPremiumSection: {
+    gap: 12,
+  },
+  tripsSectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingLeft: 2,
+  },
+  tripsSectionDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 3,
+    borderColor: Theme.driverBackground,
+    shadowColor: 'rgba(16,185,129,0.45)',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  tripsPremiumSectionLabel: {
+    fontSize: 8,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    paddingHorizontal: 2,
+  },
+  tripsTimeline: {
+    position: 'relative',
+    paddingLeft: 0,
+  },
+  tripsTimelineLine: {
+    display: 'none',
+  },
+  tripsTimelineList: {
+    gap: 18,
+  },
+  tripsCard: {
+    borderWidth: 1,
+    borderRadius: 30,
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 6,
+  },
+  tripsCardExpanded: {
+    shadowOpacity: 0.18,
+    shadowRadius: 30,
+    elevation: 10,
+  },
+  tripsCardTouch: {
+    padding: 20,
+  },
+  tripsCardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+    gap: 12,
+  },
+  tripsCardTopLeft: {
+    flexDirection: 'row',
+    gap: 14,
+    flex: 1,
+    minWidth: 0,
+  },
+  tripsIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tripsHeadText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  tripsTripId: {
+    fontSize: 14,
+    fontWeight: '500',
+    letterSpacing: -0.2,
+    marginBottom: 4,
+  },
+  tripsMetaInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  tripsMetaText: {
+    fontSize: 9,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  tripsMetaDot: {
+    fontSize: 10,
+    fontWeight: '400',
+  },
+  tripsCardRight: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  tripsAmount: {
+    fontSize: 18,
+    fontWeight: '500',
+    letterSpacing: -0.7,
+  },
+  tripsStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  tripsStatusPill: {
+    fontSize: 8,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  tripsStatusWarning: {
+    backgroundColor: '#ffedd5',
+    color: '#ea580c',
+    borderWidth: 1,
+    borderColor: '#fdba74',
+  },
+  tripsStatusInfo: {
+    backgroundColor: '#eff6ff',
+    color: '#2563eb',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  tripsStatusSuccess: {
+    backgroundColor: '#ecfdf5',
+    color: '#059669',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
+  tripsChevronExpanded: {
+    transform: [{ rotate: '180deg' }],
+  },
+  tripsRouteCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  tripsRouteSide: {
+    flex: 1,
+    minWidth: 0,
+  },
+  tripsRouteSideRight: {
+    alignItems: 'flex-end',
+  },
+  tripsRouteLabel: {
+    fontSize: 8,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 1.3,
+    marginBottom: 4,
+  },
+  tripsRouteValue: {
+    fontSize: 11,
+    fontWeight: '400',
+  },
+  tripsRouteMiddle: {
+    alignItems: 'center',
+    width: 44,
+  },
+  tripsRouteDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  tripsRouteLine: {
+    width: 1,
+    height: 22,
+    marginVertical: 2,
+  },
+  tripsExpanded: {
+    paddingHorizontal: 18,
+    paddingBottom: 18,
+    paddingTop: 2,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(226,232,240,0.7)',
+    gap: 12,
+  },
+  tripsAttention: {
+    marginTop: 14,
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  tripsAttentionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+  },
+  tripsAttentionText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  tripsAttentionLabel: {
+    fontSize: 8,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 1.7,
+    color: '#9a3412',
+    marginBottom: 2,
+  },
+  tripsAttentionValue: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  tripsWhatsAppButton: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 16,
+    borderRadius: 18,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(226,232,240,0.9)',
+    shadowColor: 'rgba(15,23,42,0.10)',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.14,
+    shadowRadius: 22,
+    elevation: 6,
+  },
+  tripsWhatsAppButtonSent: {
+    backgroundColor: 'rgba(16,185,129,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(16,185,129,0.25)',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  tripsWhatsAppButtonText: {
+    fontSize: 11,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 1.6,
+    color: '#0f172a',
+  },
+  tripsWhatsAppButtonTextSent: {
+    color: 'rgb(4,120,87)',
+  },
+  tripsExpandedGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  tripsMiniCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+    justifyContent: 'space-between',
+    minHeight: 68,
+  },
+  tripsShareCard: {
+    justifyContent: 'center',
+    gap: 10,
+  },
+  tripsMiniLabel: {
+    fontSize: 8,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 1.7,
+    marginBottom: 8,
+  },
+  tripsCopyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  tripsCopyText: {
+    fontSize: 11,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+  },
+  tripsClaimButton: {
+    flex: 1,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    flexDirection: 'row',
+    minHeight: 68,
+    shadowColor: 'rgba(15,23,42,0.35)',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.28,
+    shadowRadius: 24,
+    elevation: 10,
+  },
+  tripsMarkPaidButton: {
+    flex: 1,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    flexDirection: 'row',
+    minHeight: 68,
+    borderWidth: 1,
+    shadowColor: 'rgba(15,23,42,0.10)',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.14,
+    shadowRadius: 22,
+    elevation: 6,
+  },
+  tripsMarkPaidButtonText: {
+    fontSize: 11,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 1.7,
+  },
+  tripsClaimButtonText: {
+    fontSize: 11,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 1.7,
+    color: Theme.textOnPrimary,
+  },
+  tripsReceiptButton: {
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  tripsReceiptButtonLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  tripsReceiptButtonText: {
+    fontSize: 10,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+  },
+  tripsReceiptCardWrap: {
+    paddingTop: 12,
+  },
+  tripsReceiptCard: {
+    borderWidth: 1,
+    borderRadius: 28,
+    overflow: 'hidden',
+    shadowColor: 'rgba(16,185,129,0.18)',
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.12,
+    shadowRadius: 32,
+    elevation: 10,
+  },
+  tripsReceiptHero: {
+    alignItems: 'center',
+    paddingTop: 20,
+    paddingBottom: 16,
+    paddingHorizontal: 18,
+  },
+  tripsReceiptIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  tripsReceiptEyebrow: {
+    fontSize: 8,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    marginBottom: 6,
+  },
+  tripsReceiptAmount: {
+    fontSize: 28,
+    fontWeight: '500',
+    letterSpacing: -1,
+  },
+  tripsReceiptMeta: {
+    borderTopWidth: 1,
+    borderStyle: 'dashed',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  tripsReceiptMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  tripsReceiptMetaLabel: {
+    fontSize: 8,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 1.7,
+    minWidth: 128,
+  },
+  tripsReceiptMetaValue: {
+    fontSize: 11,
+    fontWeight: '400',
+    textAlign: 'right',
+    flexShrink: 1,
+  },
+  tripsReceiptActions: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 18,
+  },
+  tripsReceiptActionSecondary: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 18,
+    paddingVertical: 14,
+    minHeight: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  tripsReceiptActionSecondaryText: {
+    fontSize: 11,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 1.4,
+  },
+  tripsReceiptActionPrimary: {
+    flex: 1,
+    borderRadius: 18,
+    paddingVertical: 14,
+    minHeight: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  tripsReceiptActionPrimaryText: {
+    fontSize: 11,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 1.4,
+    color: Theme.textOnPrimary,
+  },
+  referenceSection: {
+    gap: 14,
+  },
+  cashPremiumWrap: {
+    gap: 28,
+    paddingBottom: 28,
+  },
+  cashPremiumSection: {
+    gap: 14,
+  },
+  cashPremiumSectionLabel: {
+    fontSize: 8,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    paddingHorizontal: 2,
+  },
+  cashPremiumGroup: {
+    borderWidth: 1,
+    borderRadius: 32,
+    overflow: 'hidden',
+    shadowColor: 'rgba(15,23,42,0.12)',
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.14,
+    shadowRadius: 34,
+    elevation: 8,
+  },
+  cashPremiumRow: {
+    paddingHorizontal: 6,
+  },
+  cashPremiumRowTouch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    justifyContent: 'space-between',
+  },
+  cashPremiumLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    flex: 1,
+    minWidth: 0,
+  },
+  cashPremiumAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(226,232,240,0.7)',
+  },
+  cashPremiumAvatarText: {
+    fontSize: 16,
+    fontWeight: '500',
+    letterSpacing: -0.2,
+  },
+  cashPremiumAvatarBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(226,232,240,0.7)',
+  },
+  cashPremiumBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  cashPremiumSource: {
+    fontSize: 13,
+    fontWeight: '500',
+    letterSpacing: -0.2,
+  },
+  cashPremiumMethod: {
+    fontSize: 9,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 0.9,
+  },
+  cashPremiumRight: {
+    alignItems: 'flex-end',
+    gap: 6,
+    marginLeft: 4,
+  },
+  cashPremiumRightWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginLeft: 12,
+  },
+  cashPremiumAmount: {
+    fontSize: 16,
+    fontWeight: '500',
+    letterSpacing: -0.4,
+  },
+  cashPremiumStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  cashPremiumStatus: {
+    fontSize: 8,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 1.7,
+  },
+  cashPremiumChevronExpanded: {
+    transform: [{ rotate: '180deg' }],
+  },
+  cashPremiumReceiptWrap: {
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 16,
+    alignItems: 'center',
+  },
+  cashPremiumReceiptCard: {
+    borderWidth: 1,
+    borderRadius: 28,
+    overflow: 'hidden',
+    shadowColor: 'rgba(16,185,129,0.18)',
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.16,
+    shadowRadius: 34,
+    elevation: 10,
+    width: '100%',
+    maxWidth: 720,
+  },
+  cashPremiumReceiptHero: {
+    alignItems: 'center',
+    paddingTop: 22,
+    paddingBottom: 18,
+    paddingHorizontal: 18,
+  },
+  cashPremiumReceiptIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  cashPremiumReceiptEyebrow: {
+    fontSize: 8,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    marginBottom: 6,
+  },
+  cashPremiumReceiptAmount: {
+    fontSize: 28,
+    fontWeight: '500',
+    letterSpacing: -1,
+  },
+  cashPremiumReceiptMeta: {
+    borderTopWidth: 1,
+    borderStyle: 'dashed',
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    gap: 10,
+  },
+  cashPremiumReceiptMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  cashPremiumReceiptMetaLabel: {
+    fontSize: 8,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 1.7,
+    minWidth: 128,
+  },
+  cashPremiumReceiptMetaValue: {
+    fontSize: 11,
+    fontWeight: '400',
+    textAlign: 'right',
+    flexShrink: 1,
+  },
+  cashPremiumReceiptBankRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
+  },
+  cashPremiumReceiptActions: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 18,
+  },
+  cashPremiumReceiptButtonSecondary: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 18,
+    paddingVertical: 14,
+    minHeight: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  cashPremiumReceiptButtonSecondaryText: {
+    fontSize: 11,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 1.4,
+  },
+  cashPremiumReceiptButtonPrimary: {
+    flex: 1,
+    borderRadius: 18,
+    paddingVertical: 14,
+    minHeight: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  cashPremiumReceiptButtonPrimaryText: {
+    fontSize: 11,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 1.4,
+    color: Theme.textOnPrimary,
+  },
+  referenceDateLabel: {
+    fontSize: 8,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    paddingHorizontal: 2,
+  },
+  referenceTripList: {
+    gap: 16,
+  },
+  referenceTripCard: {
+    borderWidth: 1,
+    borderRadius: 28,
+    overflow: 'hidden',
+  },
+  referenceTripCardExpanded: {
+    shadowColor: '#34d399',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.14,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  referenceTripTouch: {
+    padding: 18,
+  },
+  referenceTripTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+    gap: 12,
+  },
+  referenceTripTopLeft: {
+    flexDirection: 'row',
+    gap: 14,
+    flex: 1,
+    minWidth: 0,
+  },
+  referenceTripIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  referenceTripHeadText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  referenceTripId: {
+    fontSize: 15,
+    fontWeight: '500',
+    letterSpacing: -0.2,
+    marginBottom: 4,
+  },
+  referenceTripMetaInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  referenceTripMetaText: {
+    fontSize: 9,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  referenceTripMetaDot: {
+    fontSize: 10,
+    fontWeight: '400',
+  },
+  referenceTripRight: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  referenceTripAmount: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.6,
+  },
+  referenceTripStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  referenceTripStatusPill: {
+    fontSize: 8,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  referenceTripStatusWarning: {
+    backgroundColor: '#ffedd5',
+    color: '#ea580c',
+    borderWidth: 1,
+    borderColor: '#fdba74',
+  },
+  referenceTripStatusInfo: {
+    backgroundColor: '#eff6ff',
+    color: '#2563eb',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  referenceTripStatusSuccess: {
+    backgroundColor: '#ecfdf5',
+    color: '#059669',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
+  referenceChevronExpanded: {
+    transform: [{ rotate: '180deg' }],
+  },
+  referenceRouteCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  referenceRouteSide: {
+    flex: 1,
+    minWidth: 0,
+  },
+  referenceRouteSideRight: {
+    alignItems: 'flex-end',
+  },
+  referenceRouteLabel: {
+    fontSize: 8,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.3,
+    marginBottom: 4,
+  },
+  referenceRouteValue: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  referenceRouteMiddle: {
+    alignItems: 'center',
+    paddingHorizontal: 18,
+  },
+  referenceRouteDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  referenceRouteLine: {
+    width: 1,
+    height: 18,
+    marginVertical: 2,
+  },
+  referenceExpanded: {
+    paddingHorizontal: 18,
+    paddingBottom: 18,
+    paddingTop: 2,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(226,232,240,0.7)',
+  },
+  referenceExpandedStatus: {
+    marginTop: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  referenceExpandedStatusLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  referenceExpandedStatusIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  referenceExpandedStatusLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.4,
+    marginBottom: 2,
+  },
+  referenceExpandedStatusValue: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  referenceExpandedGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  referenceExpandedInfoCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+  },
+  referenceExpandedInfoHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+    opacity: 0.55,
+  },
+  referenceExpandedInfoLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.4,
+  },
+  referenceExpandedCopy: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  referenceExpandedCopyText: {
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+  },
+  referenceExpandedInfoValue: {
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  referenceExpandedButton: {
+    marginTop: 14,
+    borderRadius: 18,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  referenceExpandedButtonText: {
+    color: Theme.textOnPrimary,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  referenceTransactionGroup: {
+    borderWidth: 1,
+    borderRadius: 28,
+    overflow: 'hidden',
+  },
+  referenceCashRow: {
+    paddingHorizontal: 0,
+  },
+  referenceCashRowTouch: {
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 14,
+  },
+  referenceCashAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  referenceCashAvatarText: {
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  referenceCashAvatarBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  referenceCashBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  referenceCashSource: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  referenceCashMethod: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  referenceCashRight: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  referenceCashAmount: {
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  referenceCashStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  referenceCashStatus: {
+    fontSize: 9,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+  },
+  referenceCashReceiptWrap: {
+    paddingHorizontal: 18,
+    paddingBottom: 18,
+    paddingTop: 2,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(226,232,240,0.7)',
+  },
+  referenceCashReceiptCard: {
+    borderWidth: 1,
+    borderRadius: 22,
+    padding: 18,
+  },
+  referenceCashReceiptHero: {
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  referenceCashReceiptIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  referenceCashReceiptEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.6,
+    marginBottom: 4,
+  },
+  referenceCashReceiptAmount: {
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: -0.8,
+  },
+  referenceCashReceiptMeta: {
+    paddingTop: 14,
+    borderTopWidth: 1,
+    gap: 12,
+  },
+  referenceCashReceiptMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  referenceCashReceiptMetaLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+  },
+  referenceCashReceiptMetaValue: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  referenceCashReceiptBankRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  referenceCashReceiptActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 18,
+  },
+  referenceCashReceiptButtonSecondary: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  referenceCashReceiptButtonSecondaryText: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+  },
+  referenceCashReceiptButtonPrimary: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  referenceCashReceiptButtonPrimaryText: {
+    color: Theme.textOnPrimary,
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
   },
   filterTabRow: {
     flexDirection: 'row',
@@ -1164,8 +4120,8 @@ const styles = StyleSheet.create({
   },
   filterTabPillText: {
     fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.3,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
   filterSummaryRow: {
     flexDirection: 'row',
@@ -1225,19 +4181,19 @@ const styles = StyleSheet.create({
   },
   filterSummaryLabel: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '600',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   filterSummaryAmountPending: {
     fontSize: 17,
-    fontWeight: '800',
+    fontWeight: '700',
     letterSpacing: 0.2,
     color: Theme.negative,
   },
   filterSummaryAmountReceived: {
     fontSize: 17,
-    fontWeight: '800',
+    fontWeight: '700',
     letterSpacing: 0.2,
     color: Theme.driverEmerald,
   },
@@ -1258,8 +4214,8 @@ const styles = StyleSheet.create({
   },
   filterTabText: {
     fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.3,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
   filterTabUnderline: {
     position: 'absolute',
@@ -1271,7 +4227,7 @@ const styles = StyleSheet.create({
   },
   filterSummary: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '500',
     letterSpacing: 0.2,
     marginBottom: 12,
   },
@@ -1338,8 +4294,8 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   upiListWrap: {
-    gap: 22,
-    paddingBottom: 28,
+    gap: 14,
+    paddingBottom: 24,
   },
   upiSection: {
     gap: 6,
@@ -1358,13 +4314,13 @@ const styles = StyleSheet.create({
   },
   /** PhonePe-style trip / ledger row */
   ppTxCard: {
-    paddingVertical: 14,
+    paddingVertical: 13,
     paddingHorizontal: 0,
   },
   ppPrimaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     minWidth: 0,
   },
   ppTxTopRow: {
@@ -1372,12 +4328,12 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   ppIconSq: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 10,
   },
   ppMiddle: {
     flex: 1,
@@ -1385,14 +4341,14 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   ppPrimary: {
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: -0.2,
+    fontSize: 14,
+    fontWeight: '500',
+    letterSpacing: 0,
     flexShrink: 1,
   },
   txStatusPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     borderRadius: 999,
     borderWidth: 1,
     alignItems: 'center',
@@ -1401,20 +4357,20 @@ const styles = StyleSheet.create({
   },
   txStatusPillText: {
     fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontWeight: '500',
+    letterSpacing: 0.25,
   },
   ppSecondary: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '400',
     marginTop: 4,
-    lineHeight: 18,
-    letterSpacing: 0,
+    lineHeight: 16,
+    letterSpacing: 0.1,
   },
   ppAmount: {
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: '600',
-    letterSpacing: -0.2,
+    letterSpacing: 0,
     flexShrink: 0,
     maxWidth: '40%',
     textAlign: 'right',
@@ -1426,12 +4382,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 10,
+    marginTop: 6,
     paddingLeft: 58,
     paddingRight: 2,
   },
   ppMetaLeft: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '400',
     flex: 1,
     minWidth: 0,
@@ -1446,7 +4402,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   ppMetaRightText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '400',
     textAlign: 'right',
     flexShrink: 1,
@@ -1455,80 +4411,100 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   dropdownWrap: {
-    marginTop: 0,
-    borderRadius: 0,
-    paddingHorizontal: 12,
-    paddingTop: 0,
-    paddingBottom: 14,
-    overflow: 'hidden',
-    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    paddingTop: 16,
   },
-  dropdownRouteBlock: { paddingLeft: 10, paddingRight: 4, paddingBottom: 8 },
-  routeLine: { position: 'absolute', left: 16, top: 10, bottom: 12, width: 2, borderRadius: 1 },
-  routeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 14, paddingLeft: 0, paddingVertical: 10 },
-  routeDot: { width: 14, height: 14, borderRadius: 7, borderWidth: 5, marginTop: 2 },
-  routeTextWrap: { flex: 1, minWidth: 0 },
-  routeLabel: { fontSize: 12, fontWeight: '600', letterSpacing: 0.6 },
-  routeValue: { fontSize: 16, fontWeight: '600', marginTop: 4, letterSpacing: -0.1 },
-  dropdownRouteOneLine: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    paddingHorizontal: 2,
-    paddingVertical: 10,
-  },
-  dropdownRouteOneLineText: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 15,
-    fontWeight: '600',
-    lineHeight: 20,
-    letterSpacing: -0.1,
-  },
-  dropdownDivider: { height: StyleSheet.hairlineWidth, marginTop: 14, marginBottom: 16 },
   dropdownGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
+    gap: 12,
   },
-  dropdownGridCol: {
-    width: '48%',
-    flexDirection: 'column',
-    gap: 6,
-    marginBottom: 16,
+  dropdownCard: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
   },
-  dropdownGridLabel: {
-    fontSize: 10,
+  dropdownCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+    opacity: 0.5,
+  },
+  dropdownCardLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+  },
+  dropdownCardValue: {
+    fontSize: 12,
     fontWeight: '700',
-    letterSpacing: 0.5,
   },
-  dropdownGridValueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  dropdownGridValue: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  dropdownDetails: { gap: 14, paddingHorizontal: 2 },
-  detailRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  detailLabel: { fontSize: 14, fontWeight: '500' },
-  detailRight: { flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: '62%', justifyContent: 'flex-end' },
-  detailRightPress: { flexDirection: 'row', alignItems: 'center', gap: 10, maxWidth: '62%', justifyContent: 'flex-end' },
-  detailValue: { fontSize: 15, fontWeight: '600' },
-  totalPill: {
+  fareBreakdownWrap: {
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
     marginTop: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 12,
+  },
+  fareBreakdownHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  fareBreakdownTitle: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+  },
+  copyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 4,
   },
-  totalLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
-  totalValue: { fontSize: 18, fontWeight: '800', letterSpacing: -0.1 },
+  copyBtnText: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  fareRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  fareLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  fareValue: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  fareTotalRow: {
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  fareTotalLabelWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  fareTotalLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  fareTotalValue: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
   dropdownActions: { flexDirection: 'row', marginTop: 18, gap: 12 },
   dropdownActionBtn: {
     flex: 1,
@@ -1539,7 +4515,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  dropdownActionBtnText: { fontSize: 14, fontWeight: '700', letterSpacing: -0.1 },
+  dropdownActionBtnText: { fontSize: 14, fontWeight: '400', letterSpacing: 0 },
   dropdownPrimaryBtn: {
     width: '100%',
     paddingVertical: 14,
@@ -1549,7 +4525,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 10,
   },
-  dropdownPrimaryBtnText: { fontSize: 16, fontWeight: '700', letterSpacing: -0.1 },
+  dropdownPrimaryBtnText: { fontSize: 16, fontWeight: '500', letterSpacing: 0 },
   dropdownSecondaryRow: { flexDirection: 'row', gap: 12 },
   dropdownSecondaryBtn: {
     flex: 1,
@@ -1561,10 +4537,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 10,
   },
-  dropdownSecondaryBtnText: { fontSize: 15, fontWeight: '700', letterSpacing: -0.1 },
+  dropdownSecondaryBtnText: { fontSize: 15, fontWeight: '400', letterSpacing: 0 },
   dropdownTrustRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 16 },
   dropdownTrustDot: { width: 4, height: 4, borderRadius: 2 },
-  dropdownTrustText: { fontSize: 10, fontWeight: '600' },
+  dropdownTrustText: { fontSize: 10, fontWeight: '500' },
   tripCard: {
     borderWidth: 0,
     borderRadius: 0,
@@ -1775,8 +4751,8 @@ const styles = StyleSheet.create({
   },
   earningsListTripId: {
     fontSize: 15,
-    fontWeight: '500',
-    letterSpacing: -0.2,
+    fontWeight: '400',
+    letterSpacing: -0.1,
   },
   earningsListRideBadge: {
     paddingHorizontal: 6,
@@ -1785,8 +4761,8 @@ const styles = StyleSheet.create({
   },
   earningsListRideBadgeText: {
     fontSize: 10,
-    fontWeight: '500',
-    letterSpacing: 0.5,
+    fontWeight: '400',
+    letterSpacing: 0.4,
     textTransform: 'uppercase',
   },
   earningsListSubtext: {
@@ -1807,7 +4783,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 11,
     fontWeight: '400',
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
   },
   earningsListRight: {
     alignItems: 'flex-end',
@@ -1816,8 +4792,8 @@ const styles = StyleSheet.create({
   },
   earningsListAmount: {
     fontSize: 15,
-    fontWeight: '500',
-    letterSpacing: -0.2,
+    fontWeight: '400',
+    letterSpacing: -0.1,
   },
   statusBadge: {
     flexDirection: 'row',
@@ -1830,7 +4806,7 @@ const styles = StyleSheet.create({
   },
   statusBadgeText: {
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '600',
     letterSpacing: 0.2,
   },
   earningsCardStatusTagText: {
@@ -1875,7 +4851,7 @@ const styles = StyleSheet.create({
   receivedLabel: {
     flex: 1,
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '500',
   },
   ledgerAmountSmall: {
     fontSize: 14,
@@ -1883,6 +4859,6 @@ const styles = StyleSheet.create({
   },
   notReceivedLabel: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '500',
   },
 });

@@ -4,7 +4,7 @@ import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { tripEarningsForDriver } from '@/lib/driverUtils';
 import { useAuth } from '@/contexts/AuthContext';
-import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import * as driversService from '@/services/driversService';
 import * as tripsService from '@/services/tripsService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -51,7 +51,9 @@ export interface ConnectionPassbook {
 export default function DriverRequestsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { theme } = useDriverTheme();
   const colors = useDriverThemeColors();
+  const isDark = theme === 'dark';
   const { profile } = useAuth();
   const { avatarUri } = useDriverAvatarUri();
 
@@ -761,7 +763,14 @@ export default function DriverRequestsScreen() {
                 return (
                   <View
                     key={inv.id}
-                    style={[styles.card, styles.cardReadOnly, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    style={[
+                      styles.card,
+                      styles.cardReadOnly,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: isDark ? colors.border : 'rgba(226,232,240,0.9)',
+                      },
+                    ]}
                   >
                     <View style={styles.premiumHeaderRow}>
                       <View style={styles.premiumHeaderLeft}>
@@ -776,6 +785,7 @@ export default function DriverRequestsScreen() {
                             {buildOfferText(inv)}
                           </Text>
                         </View>
+
                       </View>
                       <TouchableOpacity
                         style={[styles.premiumInfoBtn, { backgroundColor: colors.surfaceElevated }]}
@@ -797,6 +807,7 @@ export default function DriverRequestsScreen() {
                           <View style={styles.quickStatCol}>
                             <Text style={[styles.quickStatLabel, { color: colors.textMuted }]}>Rate</Text>
                             <Text style={[styles.quickStatValue, { color: colors.text }]}>₹{inv.payable_amount?.toLocaleString('en-IN') ?? 0}</Text>
+
                           </View>
                           <View style={[styles.quickDivider, { backgroundColor: colors.border }]} />
                           <View style={styles.quickStatCol}>
@@ -864,6 +875,7 @@ export default function DriverRequestsScreen() {
                             shadowOpacity: 0.2,
                             shadowRadius: 0,
                           },
+
                         ]}
                         onPress={() => router.push({
                           pathname: `/(driver)/passbook/${passbook?.orgId ?? inv.from_organization_id}` as const,
@@ -943,3 +955,4 @@ export default function DriverRequestsScreen() {
     </View>
   );
 }
+
