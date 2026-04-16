@@ -376,7 +376,7 @@ export default function DriverWalletScreen() {
           </TouchableOpacity>
           <View style={styles.headerTextWrap}>
             <Text style={[styles.brand, { color: colors.textMuted }]}>Q PILOT</Text>
-            <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>Activity</Text>
+            <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>Transactions</Text>
           </View>
         </View>
         <TouchableOpacity
