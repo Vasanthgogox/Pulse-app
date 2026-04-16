@@ -250,7 +250,7 @@ export default function DriverWalletScreen() {
     return bySection;
   }, [filteredTrips]);
 
-  // Wallet balance = only received (sum of all driver_ledger entries). Trip earnings are not in wallet until received.
+  // Cash balance = only received (sum of all driver_ledger entries). Trip earnings are not in balance until received.
   const totalReceived = Math.round(ledgerEntries.reduce((sum, e) => sum + (Number(e.amount) ?? 0), 0));
 
   /** Salary request: only show connected fleets (accepted invite). Use org name from invite when available, else "Fleet". */
@@ -295,13 +295,24 @@ export default function DriverWalletScreen() {
         return;
       }
       setMarkPaidLoadingTripId(trip.id);
-      const { error } = await driversService.createDriverLedgerEntry(
+      let { error, row } = await driversService.createDriverLedgerEntry(
         trip.organization_id,
         driverId,
         Math.round(amount),
         'settlement',
         { tripId: trip.id, createdBy: profile?.uid ?? null, description: `Trip ${tripsService.getTripDisplayNumber(trip)}` }
       );
+      if (error?.message?.includes("driver_ledger_created_by_fkey")) {
+        const retry = await driversService.createDriverLedgerEntry(
+          trip.organization_id,
+          driverId,
+          Math.round(amount),
+          'settlement',
+          { tripId: trip.id, createdBy: null, description: `Trip ${tripsService.getTripDisplayNumber(trip)}` }
+        );
+        error = retry.error;
+        if (retry.row) row = retry.row;
+      }
       setMarkPaidLoadingTripId(null);
       if (error) {
         const isDriverLedgerRls =
@@ -309,11 +320,19 @@ export default function DriverWalletScreen() {
         const message = isDriverLedgerRls
           ? "You don't have permission to record this payment. Ensure the database has the driver settlement policy applied (migration: 20250324120000_driver_ledger_driver_settlement_insert)."
           : error.message;
-        Alert.alert('Could not mark as paid', message);
+        if (Platform.OS === 'web') {
+          window.alert(`Could not mark as paid: ${message}`);
+        } else {
+          Alert.alert('Could not mark as paid', message);
+        }
         return;
       }
-      setExpandedTripId(null);
-      load();
+      
+      if (row) {
+        setLedgerEntries(prev => [row!, ...prev]);
+      } else {
+        load();
+      }
     },
     [linkedDrivers, profile?.uid, load]
   );
@@ -323,14 +342,21 @@ export default function DriverWalletScreen() {
     (trip: tripsService.TripRow, amount: number) => {
       const displayId = tripsService.getTripDisplayNumber(trip);
       const amtStr = `₹${Math.round(amount).toLocaleString('en-IN')}`;
-      Alert.alert(
-        'Mark as paid',
-        `Record ${amtStr} for ${displayId} as received? This will update your wallet.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Proceed', onPress: () => markTripAsPaid(trip, amount) },
-        ]
-      );
+      
+      if (Platform.OS === 'web') {
+        if (window.confirm(`Record ${amtStr} for ${displayId} as received? This will update your cash balance.`)) {
+          markTripAsPaid(trip, amount);
+        }
+      } else {
+        Alert.alert(
+          'Mark as paid',
+          `Record ${amtStr} for ${displayId} as received? This will update your cash balance.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Proceed', onPress: () => markTripAsPaid(trip, amount) },
+          ]
+        );
+      }
     },
     [markTripAsPaid]
   );
@@ -364,7 +390,7 @@ export default function DriverWalletScreen() {
           </TouchableOpacity>
           <View style={styles.headerTextWrap}>
             <Text style={[styles.brand, { color: colors.textMuted }]}>Q PILOT</Text>
-            <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>Cash</Text>
+            <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>Transactions</Text>
           </View>
         </View>
         <TouchableOpacity
@@ -390,7 +416,7 @@ export default function DriverWalletScreen() {
       </View>
 
       <View style={styles.creditsSection}>
-        <Text style={[styles.creditsTitle, { color: EMERALD_500 }]}>Salary.</Text>
+        <Text style={[styles.creditsTitle, { color: EMERALD_500 }]}>Transactions.</Text>
         <Text style={[styles.creditsSubtitle, { color: GRAY_700 }]}>Financial audit & settlements.</Text>
       </View>
 
@@ -421,7 +447,7 @@ export default function DriverWalletScreen() {
             </Text>
           </View>
           <View style={styles.walletCardContent}>
-            <Text style={[styles.walletCardLabel, { color: EMERALD_200_90 }]}>salary balance</Text>
+            <Text style={[styles.walletCardLabel, { color: EMERALD_200_90 }]}>CASH BALANCE</Text>
             <Text style={[styles.walletCardSublabel, { color: EMERALD_200_90, opacity: 0.8 }]}></Text>
             <View style={styles.walletCardBalanceRow}>
               <Text style={[styles.walletCardBalanceRupee, { color: '#ffffff' }]}>₹</Text>
@@ -653,7 +679,7 @@ export default function DriverWalletScreen() {
                     const listDivider = isDark ? colors.borderSubtle : Theme.borderMedium;
                     const subColor = colors.textMuted;
                     const metaColor = colors.textMuted;
-                    const secondaryLine = routeSummary || tripRef;
+                    const secondaryLine = routeSummary ? `${tripRef} • ${routeSummary}` : tripRef;
                     const isOtpAdHocPending = isAdHocTrip && earned === 0;
                     const primaryLine = isOtpAdHocPending
                       ? 'Ad hoc trip'
@@ -812,7 +838,7 @@ export default function DriverWalletScreen() {
                             </View>
 
                             {/* Actions */}
-                            {isPending && !isOtpAdHocPending ? (
+                            {isPending && !isOtpAdHocPending && earned > 0 ? (
                               <View style={styles.dropdownActions}>
                                 <TouchableOpacity
                                   style={[styles.dropdownPrimaryBtn, { backgroundColor: isDark ? colors.surfaceElevated : '#0f172a' }]}
@@ -999,7 +1025,7 @@ const styles = StyleSheet.create({
   walletCardLabel: {
     fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 5,
+    letterSpacing: 2,
     marginBottom: 4,
     fontStyle: 'italic',
     textTransform: 'uppercase',
