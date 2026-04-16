@@ -963,8 +963,8 @@ const styles = StyleSheet.create({
   },
   passbookHeaderBtnText: {
     fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.3,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
   avatarBtn: { padding: 2 },
   avatarCircle: {
@@ -989,7 +989,7 @@ const styles = StyleSheet.create({
     ...Typography.headerTitle,
     textTransform: 'none',
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '600',
     letterSpacing: -0.2,
   },
   creditsSection: {
@@ -999,15 +999,15 @@ const styles = StyleSheet.create({
   },
   creditsTitle: {
     fontSize: 32,
-    fontWeight: '900',
-    letterSpacing: -0.5,
+    fontWeight: '700',
+    letterSpacing: -0.3,
     fontStyle: 'italic',
     textTransform: 'uppercase',
   },
   creditsSubtitle: {
     fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontWeight: '600',
+    letterSpacing: 0.4,
     marginTop: 6,
     textTransform: 'uppercase',
   },
@@ -1043,16 +1043,16 @@ const styles = StyleSheet.create({
   },
   walletCardLabel: {
     fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 2,
+    fontWeight: '600',
+    letterSpacing: 1.6,
     marginBottom: 4,
     fontStyle: 'italic',
     textTransform: 'uppercase',
   },
   walletCardSublabel: {
     fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontWeight: '500',
+    letterSpacing: 0.4,
     marginBottom: 12,
     textTransform: 'uppercase',
   },
@@ -1066,7 +1066,7 @@ const styles = StyleSheet.create({
   },
   walletCardBalanceRupee: {
     fontSize: 48,
-    fontWeight: '800',
+    fontWeight: '700',
     fontStyle: 'italic',
     lineHeight: 56,
     marginRight: -4,
@@ -1076,7 +1076,7 @@ const styles = StyleSheet.create({
   walletCardBalanceNumber: {
     flexShrink: 1,
     fontSize: 48,
-    fontWeight: '800',
+    fontWeight: '700',
     fontStyle: 'italic',
     lineHeight: 56,
     includeFontPadding: false,
@@ -1104,8 +1104,8 @@ const styles = StyleSheet.create({
   },
   walletCardWithdrawText: {
     fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 4,
+    fontWeight: '700',
+    letterSpacing: 2.6,
     fontStyle: 'italic',
     textTransform: 'uppercase',
   },
@@ -1123,9 +1123,9 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   mainTabText: {
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: -0.2,
+    fontSize: 13,
+    fontWeight: '500',
+    letterSpacing: 0.1,
   },
   mainTabIndicator: {
     position: 'absolute',
@@ -1139,10 +1139,10 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   transactionHistoryTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-    marginBottom: 14,
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: 0.05,
+    marginBottom: 10,
   },
   filterTabRow: {
     flexDirection: 'row',
@@ -1164,8 +1164,8 @@ const styles = StyleSheet.create({
   },
   filterTabPillText: {
     fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.3,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
   filterSummaryRow: {
     flexDirection: 'row',
@@ -1225,19 +1225,19 @@ const styles = StyleSheet.create({
   },
   filterSummaryLabel: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '600',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   filterSummaryAmountPending: {
     fontSize: 17,
-    fontWeight: '800',
+    fontWeight: '700',
     letterSpacing: 0.2,
     color: Theme.negative,
   },
   filterSummaryAmountReceived: {
     fontSize: 17,
-    fontWeight: '800',
+    fontWeight: '700',
     letterSpacing: 0.2,
     color: Theme.driverEmerald,
   },
@@ -1258,8 +1258,8 @@ const styles = StyleSheet.create({
   },
   filterTabText: {
     fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.3,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
   filterTabUnderline: {
     position: 'absolute',
@@ -1271,7 +1271,7 @@ const styles = StyleSheet.create({
   },
   filterSummary: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '500',
     letterSpacing: 0.2,
     marginBottom: 12,
   },
@@ -1338,8 +1338,8 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   upiListWrap: {
-    gap: 22,
-    paddingBottom: 28,
+    gap: 14,
+    paddingBottom: 24,
   },
   upiSection: {
     gap: 6,
@@ -1358,13 +1358,13 @@ const styles = StyleSheet.create({
   },
   /** PhonePe-style trip / ledger row */
   ppTxCard: {
-    paddingVertical: 14,
+    paddingVertical: 13,
     paddingHorizontal: 0,
   },
   ppPrimaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     minWidth: 0,
   },
   ppTxTopRow: {
@@ -1372,12 +1372,12 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   ppIconSq: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 10,
   },
   ppMiddle: {
     flex: 1,
@@ -1385,14 +1385,14 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   ppPrimary: {
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: -0.2,
+    fontSize: 14,
+    fontWeight: '500',
+    letterSpacing: 0,
     flexShrink: 1,
   },
   txStatusPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     borderRadius: 999,
     borderWidth: 1,
     alignItems: 'center',
@@ -1401,20 +1401,20 @@ const styles = StyleSheet.create({
   },
   txStatusPillText: {
     fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontWeight: '500',
+    letterSpacing: 0.25,
   },
   ppSecondary: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '400',
     marginTop: 4,
-    lineHeight: 18,
-    letterSpacing: 0,
+    lineHeight: 16,
+    letterSpacing: 0.1,
   },
   ppAmount: {
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: '600',
-    letterSpacing: -0.2,
+    letterSpacing: 0,
     flexShrink: 0,
     maxWidth: '40%',
     textAlign: 'right',
@@ -1426,12 +1426,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 10,
+    marginTop: 6,
     paddingLeft: 58,
     paddingRight: 2,
   },
   ppMetaLeft: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '400',
     flex: 1,
     minWidth: 0,
@@ -1446,7 +1446,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   ppMetaRightText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '400',
     textAlign: 'right',
     flexShrink: 1,
@@ -1468,8 +1468,8 @@ const styles = StyleSheet.create({
   routeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 14, paddingLeft: 0, paddingVertical: 10 },
   routeDot: { width: 14, height: 14, borderRadius: 7, borderWidth: 5, marginTop: 2 },
   routeTextWrap: { flex: 1, minWidth: 0 },
-  routeLabel: { fontSize: 12, fontWeight: '600', letterSpacing: 0.6 },
-  routeValue: { fontSize: 16, fontWeight: '600', marginTop: 4, letterSpacing: -0.1 },
+  routeLabel: { fontSize: 12, fontWeight: '500', letterSpacing: 0.5 },
+  routeValue: { fontSize: 16, fontWeight: '500', marginTop: 4, letterSpacing: 0 },
   dropdownRouteOneLine: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1481,7 +1481,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '500',
     lineHeight: 20,
     letterSpacing: -0.1,
   },
@@ -1500,7 +1500,7 @@ const styles = StyleSheet.create({
   },
   dropdownGridLabel: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '600',
     letterSpacing: 0.5,
   },
   dropdownGridValueRow: {
@@ -1510,14 +1510,14 @@ const styles = StyleSheet.create({
   },
   dropdownGridValue: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   dropdownDetails: { gap: 14, paddingHorizontal: 2 },
   detailRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   detailLabel: { fontSize: 14, fontWeight: '500' },
   detailRight: { flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: '62%', justifyContent: 'flex-end' },
   detailRightPress: { flexDirection: 'row', alignItems: 'center', gap: 10, maxWidth: '62%', justifyContent: 'flex-end' },
-  detailValue: { fontSize: 15, fontWeight: '600' },
+  detailValue: { fontSize: 15, fontWeight: '500' },
   totalPill: {
     marginTop: 16,
     paddingVertical: 12,
@@ -1527,8 +1527,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  totalLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
-  totalValue: { fontSize: 18, fontWeight: '800', letterSpacing: -0.1 },
+  totalLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 0.4 },
+  totalValue: { fontSize: 18, fontWeight: '700', letterSpacing: 0 },
   dropdownActions: { flexDirection: 'row', marginTop: 18, gap: 12 },
   dropdownActionBtn: {
     flex: 1,
@@ -1539,7 +1539,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  dropdownActionBtnText: { fontSize: 14, fontWeight: '700', letterSpacing: -0.1 },
+  dropdownActionBtnText: { fontSize: 14, fontWeight: '600', letterSpacing: 0 },
   dropdownPrimaryBtn: {
     width: '100%',
     paddingVertical: 14,
@@ -1549,7 +1549,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 10,
   },
-  dropdownPrimaryBtnText: { fontSize: 16, fontWeight: '700', letterSpacing: -0.1 },
+  dropdownPrimaryBtnText: { fontSize: 16, fontWeight: '600', letterSpacing: 0 },
   dropdownSecondaryRow: { flexDirection: 'row', gap: 12 },
   dropdownSecondaryBtn: {
     flex: 1,
@@ -1561,10 +1561,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 10,
   },
-  dropdownSecondaryBtnText: { fontSize: 15, fontWeight: '700', letterSpacing: -0.1 },
+  dropdownSecondaryBtnText: { fontSize: 15, fontWeight: '600', letterSpacing: 0 },
   dropdownTrustRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 16 },
   dropdownTrustDot: { width: 4, height: 4, borderRadius: 2 },
-  dropdownTrustText: { fontSize: 10, fontWeight: '600' },
+  dropdownTrustText: { fontSize: 10, fontWeight: '500' },
   tripCard: {
     borderWidth: 0,
     borderRadius: 0,
@@ -1775,8 +1775,8 @@ const styles = StyleSheet.create({
   },
   earningsListTripId: {
     fontSize: 15,
-    fontWeight: '500',
-    letterSpacing: -0.2,
+    fontWeight: '400',
+    letterSpacing: -0.1,
   },
   earningsListRideBadge: {
     paddingHorizontal: 6,
@@ -1785,8 +1785,8 @@ const styles = StyleSheet.create({
   },
   earningsListRideBadgeText: {
     fontSize: 10,
-    fontWeight: '500',
-    letterSpacing: 0.5,
+    fontWeight: '400',
+    letterSpacing: 0.4,
     textTransform: 'uppercase',
   },
   earningsListSubtext: {
@@ -1807,7 +1807,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 11,
     fontWeight: '400',
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
   },
   earningsListRight: {
     alignItems: 'flex-end',
@@ -1816,8 +1816,8 @@ const styles = StyleSheet.create({
   },
   earningsListAmount: {
     fontSize: 15,
-    fontWeight: '500',
-    letterSpacing: -0.2,
+    fontWeight: '400',
+    letterSpacing: -0.1,
   },
   statusBadge: {
     flexDirection: 'row',
@@ -1830,7 +1830,7 @@ const styles = StyleSheet.create({
   },
   statusBadgeText: {
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '600',
     letterSpacing: 0.2,
   },
   earningsCardStatusTagText: {
@@ -1875,7 +1875,7 @@ const styles = StyleSheet.create({
   receivedLabel: {
     flex: 1,
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '500',
   },
   ledgerAmountSmall: {
     fontSize: 14,
@@ -1883,6 +1883,6 @@ const styles = StyleSheet.create({
   },
   notReceivedLabel: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '500',
   },
 });
