@@ -8,7 +8,7 @@ import type { LedgerRow } from "@/features/finance";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import { VALIDATION, dateISO } from "@/lib/validation";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
+import { isCrossOrgIntegrationTrip } from "@/features/trips/visibility/tripVisibility";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
@@ -487,11 +487,7 @@ export function AddTransactionModal({
   const partyOptions = useMemo(() => {
     if (type === "in" && selectedTrip) {
       const lid = (selectedTrip as any).organization_id;
-      const isIntegrated =
-        viewerOrgId != null &&
-        lid != null &&
-        lid !== viewerOrgId &&
-        isLoadBasedTrip(selectedTrip);
+      const isIntegrated = isCrossOrgIntegrationTrip(selectedTrip, viewerOrgId);
 
       if (isIntegrated) {
         const localCid =
@@ -538,11 +534,7 @@ export function AddTransactionModal({
     }
     if (type === "out" && selectedTrip) {
       const lid = (selectedTrip as any).organization_id;
-      const isIntegrated =
-        viewerOrgId != null &&
-        lid != null &&
-        lid !== viewerOrgId &&
-        isLoadBasedTrip(selectedTrip);
+      const isIntegrated = isCrossOrgIntegrationTrip(selectedTrip, viewerOrgId);
 
       if (isIntegrated) {
         const localSid =
@@ -636,6 +628,11 @@ export function AddTransactionModal({
     initialEntry?.party_name,
     defaultPartyId,
     defaultPartyName,
+    viewerOrgId,
+    linkedClientIdByOrgId,
+    linkedSupplierIdByOrgId,
+    lockedPartyId,
+    lockedPartyName,
   ]);
 
   const effectivePartyName = isPartyLocked
@@ -1034,12 +1031,7 @@ export function AddTransactionModal({
     let derivedContactType: AddTransactionData["contactType"] = null;
     let derivedPartyName: string | null = null;
     if (tripLocked && selectedTrip) {
-      const lid = (selectedTrip as any).organization_id;
-      const isIntegrated =
-        viewerOrgId != null &&
-        lid != null &&
-        lid !== viewerOrgId &&
-        isLoadBasedTrip(selectedTrip);
+      const isIntegrated = isCrossOrgIntegrationTrip(selectedTrip, viewerOrgId);
 
       if (type === "in") {
         let localCid: string | null = null;
@@ -1079,6 +1071,17 @@ export function AddTransactionModal({
             safeSuppliers.find((s) => s.id === localSid)?.name ??
             lockedPartyName ??
             defaultPartyName ??
+            null;
+        } else if (
+          isPartyLocked &&
+          lockedPartyId &&
+          safeSuppliers.some((s) => s.id === lockedPartyId)
+        ) {
+          derivedContactId = lockedPartyId;
+          derivedContactType = "supplier";
+          derivedPartyName =
+            safeSuppliers.find((s) => s.id === lockedPartyId)?.name ??
+            lockedPartyName ??
             null;
         } else {
           derivedContactId =

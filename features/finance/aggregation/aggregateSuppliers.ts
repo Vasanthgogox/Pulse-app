@@ -80,11 +80,13 @@ export function aggregateSuppliers(
   }
 
   // O(tripsWhereOrgIsClient): attribute "trips where we are client" to integrated supplier by linked_organization_id.
+  // Count aggregate (supplier_id) rows as well as indent-linked loads so payables stay aligned when indent_id is absent.
   const asClient = tripsWhereOrgIsClient ?? [];
   for (let i = 0; i < asClient.length; i++) {
     const t = asClient[i];
-    if (!isLoadBasedTrip(t)) continue;
+    if (!isLoadBasedTrip(t) && !normId(t.supplier_id)) continue;
     const ownerOrgId = t.organization_id;
+    if (!ownerOrgId) continue;
     const sid = supplierIdByLinkedOrgId.get(ownerOrgId) ?? null;
     if (!sid) continue;
     const amount = Number(t.client_price ?? 0) || Number(t.supplier_rate ?? 0);
@@ -141,9 +143,13 @@ export function aggregateSuppliers(
     if (!amtOut) continue;
 
     if (tx.contact_type === 'supplier' && tx.contact_id) {
-      const sid = tx.contact_id;
-      paidFromLedger[sid] = (paidFromLedger[sid] ?? 0) + amtOut;
-      continue;
+      const raw = normId(tx.contact_id);
+      const mapped = normalizedIdToRawId[raw] ?? raw;
+      if (supplierIds.has(mapped)) {
+        paidFromLedger[mapped] = (paidFromLedger[mapped] ?? 0) + amtOut;
+        continue;
+      }
+      // contact_id may be the partner org's supplier uuid; fall through to tripPartyMap
     }
 
     if (tripPartyMap && tx.trip_id && tripPartyMap[tx.trip_id]) {

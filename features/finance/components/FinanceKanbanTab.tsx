@@ -25,8 +25,6 @@ import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
 
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
-import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
-
 export interface FinanceKanbanTabProps {
   transactions: LedgerRow[];
   onRowSelect?: (data: any) => void;
@@ -46,6 +44,7 @@ export interface FinanceKanbanTabProps {
       supplier_id?: string | null;
       organization_id?: string | null;
       client_id?: string | null;
+      supplier_display_name?: string | null;
     }
   >;
   clientRows?: ClientRow[];
@@ -64,6 +63,20 @@ const COLUMN_TYPES = ['customers', 'suppliers', 'garage', 'drivers'] as const;
 type ColumnType = typeof COLUMN_TYPES[number];
 
 const MONTHS_SHORT = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
+
+/** Ledger rows sometimes store generic party_name ("Supplier") when contact_id was foreign; treat as missing. */
+function isPlaceholderLedgerPartyName(name: string | null | undefined): boolean {
+  const n = (name ?? "").trim().toLowerCase();
+  if (!n || n === "—" || n === "-") return true;
+  return (
+    n === "supplier" ||
+    n === "client" ||
+    n === "driver" ||
+    n === "unknown client" ||
+    n === "misc / unlinked" ||
+    n.startsWith("misc /")
+  );
+}
 
 const AVATAR_COLORS = [
   Theme.primary,
@@ -275,7 +288,20 @@ export function FinanceKanbanTab({
       return clientById.get(row.contact_id)?.name || row.party_name || "—";
     }
     if (contactType === 'supplier' && row.contact_id) {
-      return supplierById.get(row.contact_id)?.name || row.party_name || "—";
+      const direct = supplierById.get(row.contact_id)?.name;
+      if (direct) return direct;
+      if (tripId && tripPartyMap[tripId]?.supplier_id) {
+        const viaTrip = supplierById.get(tripPartyMap[tripId]!.supplier_id!)?.name;
+        if (viaTrip) return viaTrip;
+      }
+      const detailNm =
+        tripId && tripDetailsMap[tripId]?.supplier_display_name
+          ? tripDetailsMap[tripId]!.supplier_display_name!.trim()
+          : "";
+      if (detailNm) return detailNm;
+      const pn = row.party_name;
+      if (pn && !isPlaceholderLedgerPartyName(pn)) return pn;
+      return "—";
     }
     if (contactType === 'driver') {
       return row.driver_name || row.party_name || "—";
@@ -288,11 +314,21 @@ export function FinanceKanbanTab({
         return clientById.get(pm.client_id)?.name || row.party_name || "—";
       }
       if (row.amount_out && pm.supplier_id) {
-        return supplierById.get(pm.supplier_id)?.name || row.party_name || "—";
+        const nm = supplierById.get(pm.supplier_id)?.name;
+        if (nm) return nm;
       }
     }
 
-    return row.party_name || "—";
+    if (tripId && tripDetailsMap[tripId]) {
+      const d = tripDetailsMap[tripId];
+      if ((row.amount_out ?? 0) > 0 && d.supplier_display_name?.trim()) {
+        return d.supplier_display_name.trim();
+      }
+    }
+
+    const fallbackPn = row.party_name;
+    if (fallbackPn && !isPlaceholderLedgerPartyName(fallbackPn)) return fallbackPn;
+    return "—";
   };
 
   const getRowCategory = (row: LedgerRow): ColumnType | 'other' => {

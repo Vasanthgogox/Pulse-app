@@ -4,6 +4,7 @@ export { default as TripDetailScreen } from './components/trip-detail/TripDetail
 export type { AddTripFormData, AddTripModalProps } from './components/add-trip';
 export {
   isLoadBasedTrip,
+  isCrossOrgIntegrationTrip,
   canOrgSeeTripAsIntegratedClient,
   canOrgSeeTripAsIntegratedSupplier,
   isTripVisibleToOrgViaIntegration,
