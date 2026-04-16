@@ -1,18 +1,19 @@
-import React, { useEffect } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
-import * as Haptics from 'expo-haptics';
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { useDriverThemeColors, useDriverTheme } from '@/contexts/DriverThemeContext';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
+import Typography from '@/constants/Typography';
+import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
+import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import * as Haptics from 'expo-haptics';
+import React, { useEffect } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSequence,
-  withSpring,
+    useAnimatedStyle,
+    useSharedValue,
+    withSequence,
+    withSpring,
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const springBounce = { damping: 14, stiffness: 400 };
 const springSettle = { damping: 18, stiffness: 320 };
@@ -43,7 +44,7 @@ function AnimatedTabIcon({ selected, children }: { selected: boolean; children: 
 export const TAB_CONFIG = [
   { name: 'index', label: 'Dashboard', icon: 'crosshairs' as const },
   { name: 'trips', label: 'History', icon: 'history' as const },
-  { name: 'wallet', label: 'Transactions', icon: 'wallet' as const },
+  { name: 'wallet', label: 'Earnings', icon: 'wallet' as const },
 ];
 
 export function DriverTabBar({ state, navigation }: BottomTabBarProps) {
@@ -195,9 +196,8 @@ const styles = StyleSheet.create({
     minHeight: Layout.minTouchTargetSize,
   },
   dockLabel: {
+    ...Typography.subTabLabel,
     fontSize: 7,
-    fontWeight: '800',
-    textTransform: 'uppercase',
     letterSpacing: 1,
   },
   dockLabelActive: {

@@ -98,6 +98,7 @@ export interface FinanceTabBodyProps {
   refreshing?: boolean;
   onRefresh?: () => void;
   bottomInset?: number;
+  profileImages: Record<string, string>;
 }
 
 export function FinanceTabBody({
@@ -139,6 +140,7 @@ export function FinanceTabBody({
   refreshing = false,
   onRefresh,
   bottomInset = 120,
+  profileImages,
 }: FinanceTabBodyProps) {
   const { width: windowWidth } = useWindowDimensions();
   // Kanban only for Web desktop (large screens); mobile/native/tablet uses standard list
@@ -163,6 +165,7 @@ export function FinanceTabBody({
                   onTripSelect(row.trip_id);
                 }
               }}
+              profileImages={profileImages}
             />
           )}
         </View>

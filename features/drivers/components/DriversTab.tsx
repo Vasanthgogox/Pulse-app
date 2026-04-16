@@ -8,7 +8,7 @@ import { RefreshControl, ScrollView, View, Text, StyleSheet, TouchableOpacity } 
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LiquidFillPill } from '@/components/LiquidFillPill';
-import { IntegrationModeTag } from '@/components/IntegrationModeTag';
+import { EntityAvatar } from '@/components/EntityAvatar';
 import { useTabBarAwareScrollProps } from '@/contexts/DemoTabBarScrollContext';
 import Theme from '@/constants/Theme';
 import { getRatingsForDrivers, averageScore } from '@/features/ratings';
@@ -260,8 +260,8 @@ export function DriversTab({
             const tripCount = data.trips ?? 0;
             const isDisconnected =
               data.left_at != null && String(data.left_at).trim() !== '';
-            const integrationMode =
-              !isDisconnected && data.is_integrated ? 'integrated' : 'manual';
+            const isIntegrated = !isDisconnected && !!data.is_integrated;
+            const driver = driverById.get(data.id);
             return (
               <TouchableOpacity
                 key={data.id}
@@ -273,11 +273,15 @@ export function DriversTab({
                 }
                 activeOpacity={0.7}
               >
+                <EntityAvatar
+                  name={data.name ?? ''}
+                  avatarUrl={driver?.avatar_url}
+                  avatarSeed={driver?.avatar_seed}
+                  entityType="driver"
+                  isIntegrated={isIntegrated}
+                />
                 <View style={[styles.tableCell, styles.ctEntity]}>
                   <View style={styles.tableEntityHeader}>
-                    <IntegrationModeTag
-                      mode={integrationMode}
-                    />
                     <Text style={styles.tableEntityName} numberOfLines={1} ellipsizeMode="tail">
                       {data.name ?? '—'}
                     </Text>
@@ -417,6 +421,7 @@ const styles = StyleSheet.create({
   tableRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderBottomWidth: 1,

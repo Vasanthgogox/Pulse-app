@@ -102,7 +102,7 @@ export default function IndentsScreen() {
           subtitle={i.client_name ?? '—'}
           amount={formatINR(i.client_price)}
           amountLabel={getIndentStatusLabel(i.status)}
-          onPress={() => router.push(`/indent/${i.id}` as import('expo-router').Href)}
+          onPress={() => router.push({ pathname: "/network", params: { tab: "load", indentId: i.id } } as import('expo-router').Href)}
         />
       )}
       ListEmptyComponent={emptyComponent}

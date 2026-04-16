@@ -6,6 +6,7 @@ import { SemanticAddIcon } from "@/components/SemanticAddIcon";
 import { SubTabs } from "@/components/SubTabs";
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
+import { StyleSheet } from "react-native";
 import Theme from "@/constants/Theme";
 import { formatMobileNumber } from "@/lib/format";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -46,6 +47,7 @@ import {
   useTripsQuery,
   useVehiclesQuery,
 } from "@/lib/queries";
+import { FlashList } from "@shopify/flash-list";
 import { searchExistingDriversByPhone } from "@/features/drivers/services/drivers.service";
 import { queryKeys } from "@/lib/queryKeys";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -66,7 +68,6 @@ import {
   RefreshControl,
   ScrollView,
   Share,
-  StyleSheet,
   Switch,
   Text,
   TextInput,
@@ -107,6 +108,7 @@ interface LoadCenterViewProps {
   contentTopPadding?: number;
   onCreateIndentPress: () => void;
   onIndentPress: (indent: IndentRow) => void;
+  highlightedIndentId?: string | null;
 }
 
 const TESLA_BLACK = "#171A20";
@@ -115,12 +117,28 @@ export function LoadCenterView({
   contentTopPadding = 0,
   onCreateIndentPress,
   onIndentPress,
+  highlightedIndentId,
 }: LoadCenterViewProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const router = useRouter();
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
+
+  const scrollRef = useRef<FlashList<IndentRow>>(null);
+
+  useEffect(() => {
+    if (highlightedIndentId) {
+      // Using a timeout to ensure the list has rendered before attempting to scroll.
+      setTimeout(() => {
+        scrollRef.current?.scrollToItem({
+          animated: true,
+          item: { id: highlightedIndentId } as IndentRow, // Cast to IndentRow with just ID
+          viewPosition: 0.5, // Center the item if possible
+        });
+      }, 500);
+    }
+  }, [highlightedIndentId]);
 
   const [loadSubTab, setLoadSubTab] = useState<LoadSubTab>("GIVE_LOAD");
   const [statusFilterTab, setStatusFilterTab] =
@@ -163,7 +181,7 @@ export function LoadCenterView({
   const [aggregatePhoneName, setAggregatePhoneName] = useState<string | null>(null);
   const [aggregatePhoneNotFound, setAggregatePhoneNotFound] = useState(false);
   const [aggregatePhoneInTrip, setAggregatePhoneInTrip] = useState(false);
-  const aggregatePhoneLookupTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const aggregatePhoneLookupTimeoutRef = useRef<number | null>(null);
   const [subcontractSupplierId, setSubcontractSupplierId] = useState<string | null>(null);
   const [subcontractRate, setSubcontractRate] = useState<string>("");
   const [subcontractPickerOpen, setSubcontractPickerOpen] = useState(false);
@@ -1954,13 +1972,24 @@ export function LoadCenterView({
                     {filteredClaimedLoads.length}
                   </Text>
                 </View>
-                <View style={useGridLayout ? styles.gridList : undefined}>
-                  {filteredClaimedLoads.map((load) => (
-                    <View key={`claimed-${load.id}`} style={useGridLayout ? styles.gridCardWrap : undefined}>
+                <FlashList
+                  data={filteredClaimedLoads}
+                  renderItem={({ item: load }) => (
+                    <View
+                      key={`claimed-${load.id}`}
+                      style={[
+                        useGridLayout ? styles.gridCardWrap : undefined,
+                        useGridLayout ? styles.gridList : undefined,
+                        highlightedIndentId === load.id && styles.highlightedIndentCard,
+                      ]}
+                    >
                       {renderClaimedLoadCard(load, false)}
                     </View>
-                  ))}
-                </View>
+                  )}
+                  estimatedItemSize={200} // Estimate item size for FlashList performance
+                  keyExtractor={(item) => item.id}
+                  ref={scrollRef}
+                />
               </View>
             ))}
         </ScrollView>
@@ -2876,7 +2905,7 @@ export function LoadCenterView({
                                   <Text style={styles.assignEntitySubtitle}>
                                     {v.vehicle_type
                                       ? `${v.vehicle_type}${
-                                          v.body_type ? ` · ${v.body_type}` : ""
+                                          v.vehicle_body_type ? ` · ${v.vehicle_body_type}` : ""
                                         }`
                                       : "Fleet vehicle"}
                                   </Text>
@@ -5046,5 +5075,13 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     fontStyle: "italic",
     marginBottom: 24,
+  },
+  highlightedIndentCard: {
+    backgroundColor: Theme.negativeMuted,
+    borderColor: Theme.teslaRed,
+    shadowColor: Theme.teslaRed,
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 5,
   },
 });

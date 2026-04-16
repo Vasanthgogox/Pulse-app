@@ -1861,6 +1861,7 @@ export function LedgerTransactionListView({
                               .join(" · ") || dateStr;
                           const avatarBg = avatarColor(partyName);
                           const initialText = initials(partyName);
+                          const customAvatar = renderPartyAvatar?.(row);
 
                           const routeWhyLine =
                             [routeStr, typeLabel].filter(Boolean).join(" • ") ||
@@ -1940,22 +1941,35 @@ export function LedgerTransactionListView({
 
                           const leftContent = useTimelineLayout ? (
                             <>
-                              <View
-                                style={[
-                                  styles.timelineCardAvatar,
-                                  { backgroundColor: avatarBg },
-                                  isIn
-                                    ? styles.avatarWrapIn
-                                    : styles.avatarWrapOut,
-                                ]}
-                              >
-                                <Text
-                                  style={styles.avatarText}
-                                  numberOfLines={1}
+                              {customAvatar ? (
+                                <View
+                                  style={[
+                                    styles.timelineCardAvatarImageWrap,
+                                    isIn
+                                      ? styles.avatarWrapIn
+                                      : styles.avatarWrapOut,
+                                  ]}
                                 >
-                                  {initialText}
-                                </Text>
-                              </View>
+                                  {customAvatar}
+                                </View>
+                              ) : (
+                                <View
+                                  style={[
+                                    styles.timelineCardAvatar,
+                                    { backgroundColor: avatarBg },
+                                    isIn
+                                      ? styles.avatarWrapIn
+                                      : styles.avatarWrapOut,
+                                  ]}
+                                >
+                                  <Text
+                                    style={styles.avatarText}
+                                    numberOfLines={1}
+                                  >
+                                    {initialText}
+                                  </Text>
+                                </View>
+                              )}
                               <View style={styles.timelineCardBody}>
                                 <Text
                                   style={styles.timelineCardParty}
@@ -3685,6 +3699,15 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+  },
+  timelineCardAvatarImageWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 18,
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1.5,

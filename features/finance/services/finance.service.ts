@@ -10,10 +10,50 @@
 import { supabase } from '@/lib/supabase';
 import { LEDGER_PAGE_SIZE, type PageOpts } from '@/lib/pagination';
 import { VALIDATION, dateISO } from '@/lib/validation';
+import { getAvatarUriForSeed } from '@/constants/DriverLevels';
+import { resolveAvatarPublicUrl } from '@/lib/avatarUpload';
+
+export async function getProfileImage(
+  contactId: string | null | undefined,
+  contactType: "client" | "supplier" | "driver" | null | undefined,
+): Promise<string | null> {
+  if (!contactId || !contactType) return null;
+
+  // Only drivers have a user_id → profiles link; clients/suppliers have no direct profile connection.
+  if (contactType !== 'driver') return null;
+
+  // Step 1: get user_id from the driver record
+  const { data: driverData, error: driverError } = await supabase()
+    .from('drivers')
+    .select('user_id')
+    .eq('id', contactId)
+    .maybeSingle();
+
+  if (driverError || !driverData?.user_id) return null;
+
+  // Step 2: get avatar_url + avatar_seed from profiles
+  const { data: profileData, error: profileError } = await supabase()
+    .from('profiles')
+    .select('avatar_url, avatar_seed')
+    .eq('id', driverData.user_id)
+    .maybeSingle();
+
+  if (profileError || !profileData) return null;
+
+  // Public bucket — resolve synchronously, no signed URL round-trip needed
+  const publicUrl = resolveAvatarPublicUrl(profileData.avatar_url);
+  if (publicUrl) return publicUrl;
+
+  // Fall back to preset avatar from seed
+  const seed = (profileData.avatar_seed ?? '').trim();
+  if (!seed) return null;
+  return getAvatarUriForSeed(seed);
+}
 
 export interface LedgerRow {
   id: string;
   organization_id: string;
+  profileImageUrl?: string | null;
   trip_id: string | null;
   /** Resolved from joined trips.trip_number or trip list */
   trip_number?: string | null;
@@ -99,6 +139,7 @@ export async function getTransactionsByOrganization(
         vehicle_number: row.vehicle_number ?? null,
         driver_name: row.driver_name ?? null,
         trips: row.trips ? { trip_number: row.trips.trip_number, display_trip_id: row.trips.trip_number } : null,
+        profileImageUrl: null,
       };
     });
     return { error: null, transactions, hasMore: rows.length > limit };

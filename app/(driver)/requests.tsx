@@ -1,14 +1,7 @@
-/**
- * Driver Requests page — connection invites + passbook per fleet (driver_invites, trips, driver_ledger).
- * PENDING: accept/decline. CONNECTED: accepted/declined with optional Passbook summary and link to detail.
- */
-// Wallet-style hero text (match wallet.tsx creditsSection)
-const EMERALD_500 = '#10b981';
-const GRAY_700 = '#374151';
-
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import { DriverInviteCard } from '@/components/driver/DriverInviteCard';
 import Layout from '@/constants/Layout';
+import Theme from '@/constants/Theme';
 import { tripEarningsForDriver } from '@/lib/driverUtils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
@@ -23,6 +16,7 @@ import {
   Alert,
   AppState,
   Image,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -33,6 +27,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { isCompleted, buildOfferText } from '@/lib/driverUtils';
+
+/**
+ * Driver Requests page — connection invites + passbook per fleet (driver_invites, trips, driver_ledger).
+ * PENDING: accept/decline. CONNECTED: accepted/declined with optional Passbook summary and link to detail.
+ */
+// Wallet-style hero text (match wallet.tsx creditsSection)
+const EMERALD_500 = '#10b981';
+const GRAY_700 = '#374151';
 
 /** Per-org passbook stats (trips, earned, received from DB). */
 export interface ConnectionPassbook {
@@ -794,12 +796,12 @@ export default function DriverRequestsScreen() {
                         <View style={styles.quickStatsRow}>
                           <View style={styles.quickStatCol}>
                             <Text style={[styles.quickStatLabel, { color: colors.textMuted }]}>Rate</Text>
-                            <Text style={[styles.quickStatValue, { color: colors.text }]}>₹{inv.base_rate_per_month?.toLocaleString('en-IN') ?? 0}</Text>
+                            <Text style={[styles.quickStatValue, { color: colors.text }]}>₹{inv.payable_amount?.toLocaleString('en-IN') ?? 0}</Text>
                           </View>
                           <View style={[styles.quickDivider, { backgroundColor: colors.border }]} />
                           <View style={styles.quickStatCol}>
                             <Text style={[styles.quickStatLabel, { color: colors.textMuted }]}>Commission</Text>
-                            <Text style={[styles.quickStatValue, { color: colors.text }]}>{inv.per_trip_commission_percent ?? 0}%</Text>
+                            <Text style={[styles.quickStatValue, { color: colors.text }]}>{inv.commission_percent ?? 0}%</Text>
                           </View>
                           <View style={[styles.quickDivider, { backgroundColor: colors.border }]} />
                           <View style={styles.quickStatCol}>
@@ -891,12 +893,12 @@ export default function DriverRequestsScreen() {
                             <FontAwesome
                               name="sign-out"
                               size={16}
-                              color={leaveFleetPressedOrgId === inv.from_organization_id ? colors.negative : colors.textMuted}
+                              color={leaveFleetPressedOrgId === inv.from_organization_id ? Theme.negative : colors.textMuted}
                             />
                             <Text
                               style={[
                                 styles.leaveFleetLinkText,
-                                { color: leaveFleetPressedOrgId === inv.from_organization_id ? colors.negative : colors.textMuted },
+                                { color: leaveFleetPressedOrgId === inv.from_organization_id ? Theme.negative : colors.textMuted },
                               ]}
                             >
                               Exit fleet
