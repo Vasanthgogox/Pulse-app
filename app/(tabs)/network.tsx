@@ -1,12 +1,18 @@
 /**
- * Network tab: two sub-tabs — Manage Network (reference UI) and Load (Load Board).
+ * Network tab: two sub-tabs — My Network (reference UI) and Load (Load Board).
  */
+import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { getLinkedOrgProfile } from "@/features/clients/services/clients.service";
+import { cancelDriverInvite, getDriverProfileDisplay } from "@/features/drivers/services/drivers.service";
 import { type IndentRow } from "@/features/indents";
 import { LoadCenterView } from "@/features/network/components/LoadCenterView";
+import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
   useClientsQuery,
   useConnectionRequestsReceivedQuery,
@@ -19,12 +25,11 @@ import {
 import { useRefreshWithFeedback } from "@/lib/useRefreshWithFeedback";
 import {
   approveConnectionRequest,
+  cancelConnectionRequest,
   createConnectionRequest,
   getConnectionInviteeByPhone,
   rejectConnectionRequest,
-  cancelConnectionRequest,
 } from "@/services/connectionRequestsService";
-import { cancelDriverInvite } from "@/features/drivers/services/drivers.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { Building2, CircleCheck, Truck, User } from "lucide-react-native";
@@ -46,17 +51,9 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
-import { getAvatarUriForSeed } from "@/constants/DriverLevels";
-import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
-import { getSignedAvatarUrl } from "@/lib/avatarUpload";
-import { getLinkedOrgProfile } from "@/features/clients/services/clients.service";
-import { getDriverProfileDisplay } from "@/features/drivers/services/drivers.service";
-import type { ClientRow } from "@/features/clients/services/clients.service";
-import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
-import type { DriverRow } from "@/features/drivers/services/drivers.service";
 
-type NetworkSegment = "ALL" | "SENT" | "RECEIVED";
+type InvitationSegment = "SENT" | "RECEIVED";
+type ManageView = "CONNECTIONS" | "INVITATIONS";
 type NodeKindFilter = "ALL" | "CLIENT" | "SUPPLIER" | "DRIVER";
 type SubTab = "manage" | "load";
 
@@ -427,26 +424,10 @@ export default function NetworkScreen() {
     Platform.OS === "web" ? 0 : insets.top + Layout.headerPaddingBelowInset;
   const scrollBottomPad =
     24 + Layout.demoTabBarScrollBottomInset + insets.bottom + 24;
-  const [socialTap, setSocialTap] = useState<
-    Record<string, { heart: boolean; save: boolean }>
-  >({});
-
-  const toggleHeart = useCallback((id: string) => {
-    setSocialTap((s) => {
-      const cur = s[id] ?? { heart: false, save: false };
-      return { ...s, [id]: { ...cur, heart: !cur.heart } };
-    });
-  }, []);
-
-  const toggleSave = useCallback((id: string) => {
-    setSocialTap((s) => {
-      const cur = s[id] ?? { heart: false, save: false };
-      return { ...s, [id]: { ...cur, save: !cur.save } };
-    });
-  }, []);
-
   const [subTab, setSubTab] = useState<SubTab>("manage");
-  const [segment, setSegment] = useState<NetworkSegment>("ALL");
+  const [manageView, setManageView] = useState<ManageView>("CONNECTIONS");
+  const [invitationSegment, setInvitationSegment] =
+    useState<InvitationSegment>("RECEIVED");
   const [nodeKind, setNodeKind] = useState<NodeKindFilter>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [showSuccess, setShowSuccess] = useState(false);
@@ -753,6 +734,7 @@ export default function NetworkScreen() {
   const filteredNodes = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return nodes.filter((n) => {
+      if (manageView === "CONNECTIONS" && !n.isIntegrated) return false;
       const matchesSearch =
         !q ||
         n.name.toLowerCase().includes(q) ||
@@ -763,31 +745,32 @@ export default function NetworkScreen() {
       if (nodeKind !== "ALL" && n.type !== nodeKind) return false;
       return true;
     });
-  }, [nodes, nodeKind, searchQuery]);
+  }, [manageView, nodeKind, nodes, searchQuery]);
 
   const filteredRequests = useMemo(() => {
     return requestItems.filter((item) => {
       if (dismissedSentRequestIds[item.id]) return false;
-      if (segment === "SENT" && item.type !== "SENT") return false;
-      if (segment === "RECEIVED" && item.type !== "RECEIVED") return false;
+      if (invitationSegment === "SENT" && item.type !== "SENT") return false;
+      if (invitationSegment === "RECEIVED" && item.type !== "RECEIVED")
+        return false;
       if (!searchQuery.trim()) return true;
       const q = searchQuery.trim().toLowerCase();
       const displayName =
         item.type === "RECEIVED" ? item.from_org_name : item.to_org_name;
       return (displayName ?? "").toLowerCase().includes(q);
     });
-  }, [dismissedSentRequestIds, requestItems, searchQuery, segment]);
+  }, [dismissedSentRequestIds, invitationSegment, requestItems, searchQuery]);
 
   const pendingRequestCount = requestItems.filter(
     (item) => item.type === "RECEIVED" && item.status === "pending",
   ).length;
 
   const handleAddPress = useCallback(() => {
-    if (segment !== "ALL") return;
+    if (manageView !== "CONNECTIONS") return;
     if (nodeKind === "CLIENT") router.push("/(modals)/add-client");
     else if (nodeKind === "SUPPLIER") router.push("/(modals)/add-supplier");
     else if (nodeKind === "DRIVER") router.push("/(modals)/add-driver");
-  }, [router, segment, nodeKind]);
+  }, [manageView, nodeKind, router]);
 
   if (subTab === "load") {
     return (
@@ -806,7 +789,7 @@ export default function NetworkScreen() {
               onPress={() => setSubTab("manage")}
               activeOpacity={0.8}
             >
-              <Text style={styles.mainTabText}>Manage Network</Text>
+              <Text style={styles.mainTabText}>My Network</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.mainTab, styles.mainTabActive]}
@@ -861,7 +844,7 @@ export default function NetworkScreen() {
       )}
 
       <View style={[styles.blackBlock, { paddingTop: 4 }]}>
-        {/* Manage Network | Load — black tabs (body), Load-style */}
+        {/* My Network | Load — black tabs (body), Load-style */}
         <View style={styles.mainTabRow}>
           <TouchableOpacity
             style={[styles.mainTab, styles.mainTabActive]}
@@ -869,7 +852,7 @@ export default function NetworkScreen() {
             activeOpacity={0.8}
           >
             <Text style={[styles.mainTabText, styles.mainTabTextActive]}>
-              Manage Network
+              My Network
             </Text>
             <View style={styles.mainTabUnderline} />
           </TouchableOpacity>
@@ -882,53 +865,65 @@ export default function NetworkScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Segment tabs: All, Sent, Received + add contact — Load-style ScrollView */}
-        <View style={styles.filterHeaderRow}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.filterScroll}
-            contentContainerStyle={styles.filterScrollContent}
+        {/* LinkedIn-style section switcher: Connections | Invitations */}
+        <View style={styles.manageSwitchRow}>
+          <TouchableOpacity
+            style={styles.manageSwitchTab}
+            onPress={() => setManageView("CONNECTIONS")}
+            activeOpacity={0.85}
           >
-            {(["ALL", "SENT", "RECEIVED"] as const).map((tab) => (
-              <TouchableOpacity
-                key={tab}
-                onPress={() => setSegment(tab)}
-                style={styles.filterTab}
-                activeOpacity={0.8}
+            <View style={styles.filterTabLabelRow}>
+              <Text
+                style={[
+                  styles.filterTabText,
+                  manageView === "CONNECTIONS" && styles.filterTabTextActive,
+                ]}
               >
-                <View style={styles.filterTabLabelRow}>
+                Connections
+              </Text>
+            </View>
+            {manageView === "CONNECTIONS" ? (
+              <View style={styles.filterTabUnderline} />
+            ) : null}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.manageSwitchTab}
+            onPress={() => setManageView("INVITATIONS")}
+            activeOpacity={0.85}
+          >
+            <View style={styles.filterTabLabelRow}>
+              <Text
+                style={[
+                  styles.filterTabText,
+                  manageView === "INVITATIONS" && styles.filterTabTextActive,
+                ]}
+              >
+                Invitations
+              </Text>
+              {pendingRequestCount > 0 ? (
+                <View
+                  style={[
+                    styles.filterTabBadge,
+                    manageView === "INVITATIONS" && styles.filterTabBadgeActive,
+                  ]}
+                >
                   <Text
                     style={[
-                      styles.filterTabText,
-                      segment === tab && styles.filterTabTextActive,
+                      styles.filterTabBadgeText,
+                      manageView === "INVITATIONS" &&
+                        styles.filterTabBadgeTextActive,
                     ]}
                   >
-                    {tab}
+                    {pendingRequestCount}
                   </Text>
-                  {tab === "RECEIVED" && pendingRequestCount > 0 && (
-                    <View
-                      style={[
-                        styles.filterTabBadge,
-                        segment === tab && styles.filterTabBadgeActive,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.filterTabBadgeText,
-                          segment === tab && styles.filterTabBadgeTextActive,
-                        ]}
-                      >
-                        {pendingRequestCount}
-                      </Text>
-                    </View>
-                  )}
                 </View>
-                {segment === tab && <View style={styles.filterTabUnderline} />}
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-          {segment === "ALL" &&
+              ) : null}
+            </View>
+            {manageView === "INVITATIONS" ? (
+              <View style={styles.filterTabUnderline} />
+            ) : null}
+          </TouchableOpacity>
+          {manageView === "CONNECTIONS" &&
           (nodeKind === "CLIENT" ||
             nodeKind === "SUPPLIER" ||
             nodeKind === "DRIVER") ? (
@@ -946,8 +941,47 @@ export default function NetworkScreen() {
           ) : null}
         </View>
 
+        {manageView === "INVITATIONS" ? (
+          <View style={styles.filterHeaderRow}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.filterScroll}
+              contentContainerStyle={styles.filterScrollContent}
+            >
+              {(["SENT", "RECEIVED"] as const).map((tab) => (
+                <TouchableOpacity
+                  key={tab}
+                  onPress={() => setInvitationSegment(tab)}
+                  style={styles.filterTab}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.filterTabLabelRow}>
+                    <Text
+                      style={[
+                        styles.filterTabText,
+                        invitationSegment === tab && styles.filterTabTextActive,
+                      ]}
+                    >
+                      {tab}
+                    </Text>
+                  </View>
+                  {invitationSegment === tab ? (
+                    <View style={styles.filterTabUnderline} />
+                  ) : null}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
+
         {/* Search + Type filter — inside black block */}
-        <View style={styles.searchRowDark}>
+        <View
+          style={[
+            styles.searchRowDark,
+            manageView === "INVITATIONS" && styles.searchRowDarkSingle,
+          ]}
+        >
           <View style={styles.searchWrapDark}>
             <FontAwesome
               name="search"
@@ -957,37 +991,45 @@ export default function NetworkScreen() {
             />
             <TextInput
               style={styles.searchInputDark}
-              placeholder="Find by name..."
+              placeholder={
+                manageView === "CONNECTIONS"
+                  ? "Search connections..."
+                  : "Search invitations..."
+              }
               placeholderTextColor={Theme.textOnDarkMuted}
               value={searchQuery}
               onChangeText={setSearchQuery}
               autoCapitalize="none"
             />
           </View>
-          <View style={styles.typeFilterWrapDark}>
-            {(["ALL", "CLIENT", "SUPPLIER", "DRIVER"] as const).map((kind) => (
-              <TouchableOpacity
-                key={kind}
-                style={[
-                  styles.typeFilterChipDark,
-                  nodeKind === kind && styles.typeFilterChipDarkActive,
-                ]}
-                onPress={() => setNodeKind(kind)}
-                activeOpacity={0.8}
-              >
-                <Text
-                  style={[
-                    styles.typeFilterChipTextDark,
-                    nodeKind === kind && styles.typeFilterChipTextDarkActive,
-                  ]}
-                >
-                  {kind === "ALL"
-                    ? "All"
-                    : kind.charAt(0) + kind.slice(1).toLowerCase()}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {manageView === "CONNECTIONS" ? (
+            <View style={styles.typeFilterWrapDark}>
+              {(["ALL", "CLIENT", "SUPPLIER", "DRIVER"] as const).map(
+                (kind) => (
+                  <TouchableOpacity
+                    key={kind}
+                    style={[
+                      styles.typeFilterChipDark,
+                      nodeKind === kind && styles.typeFilterChipDarkActive,
+                    ]}
+                    onPress={() => setNodeKind(kind)}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.typeFilterChipTextDark,
+                        nodeKind === kind && styles.typeFilterChipTextDarkActive,
+                      ]}
+                    >
+                      {kind === "ALL"
+                        ? "All"
+                        : kind.charAt(0) + kind.slice(1).toLowerCase()}
+                    </Text>
+                  </TouchableOpacity>
+                ),
+              )}
+            </View>
+          ) : null}
         </View>
       </View>
 
@@ -1020,7 +1062,9 @@ export default function NetworkScreen() {
             />
           }
         >
-          {segment === "ALL" && !isLargeScreen && filteredNodes.length > 0 ? (
+          {manageView === "CONNECTIONS" &&
+          !isLargeScreen &&
+          filteredNodes.length > 0 ? (
             <View style={styles.storiesSection}>
               <Text style={styles.storiesSectionLabel}>On your grid</Text>
               <ScrollView
@@ -1058,7 +1102,7 @@ export default function NetworkScreen() {
               </ScrollView>
             </View>
           ) : null}
-          {segment !== "ALL" ? (
+          {manageView === "INVITATIONS" ? (
             loadingRequests ? (
               <Text style={styles.loadingText}>{t("loadingRequests")}</Text>
             ) : filteredRequests.length === 0 ? (
@@ -1311,15 +1355,6 @@ export default function NetworkScreen() {
                         pointerEvents="none"
                       />
                       <View style={styles.networkCardMainRow}>
-                      {!isLargeScreen ? (
-                        <View style={styles.networkCardHeroAvatar}>
-                          <NetworkAvatar
-                            node={node}
-                            onPlatform={onPlatform}
-                            frameSize={56}
-                          />
-                        </View>
-                      ) : null}
                       <TouchableOpacity
                         style={styles.networkCardBody}
                         activeOpacity={0.7}
@@ -1373,31 +1408,29 @@ export default function NetworkScreen() {
                         </Text>
                         <View style={styles.networkCardInner}>
                           <View style={styles.networkCardInnerRow}>
-                            {isLargeScreen ? (
-                              <View
-                                style={[
-                                  styles.networkCardIconWrap,
-                                  onPlatform
-                                    ? styles.networkCardIconWrapOn
-                                    : styles.networkCardIconWrapOff,
-                                ]}
-                              >
-                                <View style={styles.networkAvatarInCard}>
-                                  <NetworkAvatar
-                                    node={node}
-                                    onPlatform={onPlatform}
-                                  />
-                                </View>
-                                <View
-                                  style={[
-                                    styles.connectionDot,
-                                    onPlatform
-                                      ? styles.connectionDotActive
-                                      : styles.connectionDotMuted,
-                                  ]}
+                            <View
+                              style={[
+                                styles.networkCardIconWrap,
+                                onPlatform
+                                  ? styles.networkCardIconWrapOn
+                                  : styles.networkCardIconWrapOff,
+                              ]}
+                            >
+                              <View style={styles.networkAvatarInCard}>
+                                <NetworkAvatar
+                                  node={node}
+                                  onPlatform={onPlatform}
                                 />
                               </View>
-                            ) : null}
+                              <View
+                                style={[
+                                  styles.connectionDot,
+                                  onPlatform
+                                    ? styles.connectionDotActive
+                                    : styles.connectionDotMuted,
+                                ]}
+                              />
+                            </View>
                             <View
                               style={[
                                 styles.networkCardInnerCol,
@@ -1465,59 +1498,6 @@ export default function NetworkScreen() {
                         )}
                       </View>
                     </View>
-                    {!isLargeScreen ? (
-                      <View style={styles.cardSocialBar}>
-                        <TouchableOpacity
-                          style={styles.cardSocialBtn}
-                          onPress={() => toggleHeart(node.id)}
-                          activeOpacity={0.75}
-                          accessibilityLabel="Highlight connection"
-                        >
-                          <FontAwesome
-                            name="heart"
-                            size={15}
-                            color={
-                              socialTap[node.id]?.heart
-                                ? Theme.teslaRed
-                                : Theme.textMuted
-                            }
-                          />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.cardSocialBtn}
-                          onPress={() => toggleSave(node.id)}
-                          activeOpacity={0.75}
-                          accessibilityLabel="Save to shortlist"
-                        >
-                          <FontAwesome
-                            name="bookmark"
-                            size={15}
-                            color={
-                              socialTap[node.id]?.save
-                                ? Theme.primary
-                                : Theme.textMuted
-                            }
-                          />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.cardSocialBtn}
-                          onPress={() =>
-                            Share.share({
-                              message: `Working with ${node.name} on Q — sync ledger & trips.`,
-                              title: node.name,
-                            })
-                          }
-                          activeOpacity={0.75}
-                          accessibilityLabel="Share"
-                        >
-                          <FontAwesome
-                            name="share-alt"
-                            size={15}
-                            color={Theme.textMuted}
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    ) : null}
                   </View>
                   </View>
                 </View>
@@ -1753,6 +1733,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingTop: 4,
   },
+  manageSwitchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingTop: 4,
+  },
+  manageSwitchTab: {
+    position: "relative" as const,
+    paddingVertical: 8,
+  },
   filterTab: {
     position: "relative" as const,
     paddingVertical: 8,
@@ -1837,6 +1827,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     paddingTop: 6,
+  },
+  searchRowDarkSingle: {
+    gap: 0,
   },
   searchWrapDark: {
     flex: 1,
@@ -2048,11 +2041,6 @@ const styles = StyleSheet.create({
     elevation: 4,
     borderColor: Theme.borderMedium,
   },
-  networkCardHeroAvatar: {
-    marginRight: 10,
-    alignSelf: "flex-start",
-    paddingTop: 2,
-  },
   networkCardInnerColSolo: {
     marginLeft: 0,
   },
@@ -2093,23 +2081,6 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
     marginTop: -6,
     marginBottom: 10,
-  },
-  cardSocialBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-start",
-    gap: 4,
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: Theme.surfaceBorder,
-  },
-  cardSocialBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    minWidth: 44,
-    alignItems: "center",
-    justifyContent: "center",
   },
   networkCardOrb: {
     position: "absolute",
