@@ -54,6 +54,8 @@ type SortBy =
 type PaymentFilter = "all" | "pending" | "partial" | "paid";
 type DateFilter = "all" | "today" | "tomorrow" | "this_week" | "this_month";
 
+const TRIPS_PAGE_BG = "#f4f5f7";
+
 export default function TripsScreen() {
   const { width } = useWindowDimensions();
   const isLargeScreen = Platform.OS === "web" && width >= 1024;
@@ -890,7 +892,7 @@ export default function TripsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Theme.darkBackground },
+  container: { flex: 1, backgroundColor: TRIPS_PAGE_BG },
   centered: {
     flex: 1,
     justifyContent: "center",
@@ -899,7 +901,7 @@ const styles = StyleSheet.create({
   },
   message: { fontSize: 16, color: Theme.textSecondary },
   headerBlock: {
-    backgroundColor: "#000000",
+    backgroundColor: Theme.darkBackground,
     width: "100%",
     paddingTop: 12,
   },
@@ -1224,12 +1226,12 @@ const styles = StyleSheet.create({
     width: "33.333%",
     paddingHorizontal: 8,
   },
-  scroll: { flex: 1, backgroundColor: Theme.darkBackground },
+  scroll: { flex: 1, backgroundColor: TRIPS_PAGE_BG },
   scrollContent: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 12,
     flexGrow: 1,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: TRIPS_PAGE_BG,
   },
   empty: {
     padding: 24,
