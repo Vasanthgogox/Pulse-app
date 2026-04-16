@@ -2349,7 +2349,7 @@ export default function NetworkScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
-                  styles.confirmModalCancelBtn,
+                  styles.confirmModalConfirmBtn,
                   actingRequestId === acceptTermsItem?.id
                     ? styles.modalActionDisabled
                     : null,
@@ -2359,9 +2359,9 @@ export default function NetworkScreen() {
                 activeOpacity={0.8}
               >
                 {actingRequestId === acceptTermsItem?.id ? (
-                  <ActivityIndicator size="small" color={ROSE_500} />
+                  <ActivityIndicator size="small" color={Theme.screenBackground} />
                 ) : (
-                  <Text style={styles.confirmModalCancelText}>Confirm</Text>
+                  <Text style={styles.confirmModalConfirmText}>Confirm</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -3619,6 +3619,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     color: ROSE_500,
+    textTransform: "uppercase",
+  },
+  confirmModalConfirmBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: EMERALD,
+    backgroundColor: EMERALD,
+  },
+  confirmModalConfirmText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.screenBackground,
     textTransform: "uppercase",
   },
   modalActionDisabled: {
