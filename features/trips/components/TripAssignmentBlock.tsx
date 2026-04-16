@@ -30,6 +30,7 @@ import {
 import {
   formatIndianVehicleNumber,
   formatIndianVehicleNumberInput,
+  formatMobileNumber,
 } from "@/lib/format";
 import { validatePhone } from "@/lib/phoneValidation";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -1104,7 +1105,7 @@ export function TripAssignmentBlock({
               placeholderTextColor={Theme.textMuted}
               value={phoneInput}
               onChangeText={(v) => {
-                setPhoneInput(v);
+                setPhoneInput(formatMobileNumber(v));
                 setPhoneError(null);
               }}
               keyboardType="phone-pad"

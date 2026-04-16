@@ -42,4 +42,5 @@ export {
   useAcceptedDirectQuotesForFinanceQuery,
   useDriverOffersQuery,
   useSalaryRequestsQuery,
+  useTripSubcontractsQuery,
 } from './useFinanceEntityQueries';

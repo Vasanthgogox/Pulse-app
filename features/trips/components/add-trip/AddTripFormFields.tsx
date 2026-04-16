@@ -4,7 +4,7 @@
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { formatIndianVehicleNumber, formatIndianVehicleNumberInput } from "@/lib/format";
+import { formatIndianVehicleNumber, formatIndianVehicleNumberInput, formatMobileNumber } from "@/lib/format";
 import { validatePhone } from "@/lib/phoneValidation";
 import { type ClientRow } from "@/features/clients/services/clients.service";
 import {
@@ -1325,7 +1325,7 @@ export function AddTripFormFields({
             placeholder={state.assignLater ? "e.g. +91 98765 43210 (optional)" : "e.g. +91 98765 43210 (required)"}
             placeholderTextColor={Theme.placeholder}
             value={state.driverPhone}
-            onChangeText={setters.setDriverPhone}
+            onChangeText={(v) => setters.setDriverPhone(formatMobileNumber(v))}
             keyboardType="phone-pad"
             autoCorrect={false}
             spellCheck={false}

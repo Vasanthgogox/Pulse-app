@@ -27,6 +27,7 @@ import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
 import { validateEmail } from '@/lib/emailValidation';
 import { isPhoneValid, validatePhone } from '@/lib/phoneValidation';
+import { formatMobileNumber } from '@/lib/format';
 import { VALIDATION, maxLength, validateFullName, validatePassword } from '@/lib/validation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
@@ -412,7 +413,7 @@ export default function SignUp() {
               placeholder="10-digit Phone"
               placeholderTextColor={Theme.authTextMuted}
               value={phone}
-              onChangeText={(text) => setPhone(text.replace(/\D/g, '').slice(0, 10))}
+              onChangeText={(text) => setPhone(formatMobileNumber(text))}
               maxLength={10}
               onFocus={() => scrollToField('phone')}
               keyboardType="phone-pad"

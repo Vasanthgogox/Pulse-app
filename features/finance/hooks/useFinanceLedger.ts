@@ -3,7 +3,11 @@
  */
 import type { TripRow } from "@/features/trips";
 import { getTripDisplayNumber } from "@/features/trips";
-import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
+import {
+  buildUniqueLinkedOrgIdMap,
+  isCrossOrgIntegrationTrip,
+  isLoadBasedTrip,
+} from "@/features/trips/visibility/tripVisibility";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
 import { useTransactionsQuery } from "@/lib/queries";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -90,6 +94,8 @@ export interface UseFinanceLedgerResult {
       supplier_rate?: number | null;
       /** Driver commission for driver statement (To pay). */
       driver_commission?: number | null;
+      /** Resolved partner name for Cash/ledger when party_name on row is a placeholder. */
+      supplier_display_name?: string | null;
     }
   >;
   clearFilters: () => void;
@@ -256,13 +262,13 @@ export function useFinanceLedger({
       let cid = t.client_id ?? null;
       let sid = t.supplier_id ?? null;
 
-      // Integration check: for load-based trips where we are the carrier/supplier (originated by another org),
-      // attribute to the shipper org's local client/supplier entry if one exists.
-      if (t.organization_id && t.organization_id !== organizationId && isLoadBasedTrip(t)) {
-        const linkedCid = linkedClientIdByOrgId.get(t.organization_id);
+      // Integration: cross-org load (indent) or aggregate partner trip — map to local client/supplier rows.
+      if (isCrossOrgIntegrationTrip(t, organizationId)) {
+        const ownerOrgId = t.organization_id!;
+        const linkedCid = linkedClientIdByOrgId.get(ownerOrgId);
         if (linkedCid) cid = linkedCid;
 
-        const linkedSid = linkedSupplierIdByOrgId.get(t.organization_id);
+        const linkedSid = linkedSupplierIdByOrgId.get(ownerOrgId);
         if (linkedSid) sid = linkedSid;
       }
 
@@ -273,7 +279,7 @@ export function useFinanceLedger({
       };
     }
     return map;
-  }, [tripRows, clients, suppliers]);
+  }, [tripRows, clients, suppliers, organizationId]);
 
   const filteredLedgerBySource = useMemo(() => {
     if (sourceSupplyFilter === "all") return filteredLedger;
@@ -427,10 +433,13 @@ export function useFinanceLedger({
         supplier_rate?: number | null;
         driver_commission?: number | null;
         supplier_id?: string | null;
+        supplier_display_name?: string | null;
       }
     > = {};
     const linkedClientIdByOrgId = buildUniqueLinkedOrgIdMap(clients ?? []);
+    const linkedSupplierIdByOrgId = buildUniqueLinkedOrgIdMap(suppliers ?? []);
     const clientById = new Map((clients ?? []).map(c => [c.id, c]));
+    const supplierById = new Map((suppliers ?? []).map((s) => [s.id, s]));
 
     const tripLedgerOutMap = new Map<string, number>();
     for (const row of ledgerTransactions ?? []) {
@@ -460,6 +469,21 @@ export function useFinanceLedger({
         resolvedSupplierRate = tripLedgerOutMap.get(t.id) ?? 0;
       }
 
+      const tripSupplierName = ((t as { supplier_name?: string | null }).supplier_name ?? "")
+        .trim() || null;
+      let supplierDisplayName: string | null = tripSupplierName;
+      if (isCrossOrgIntegrationTrip(t, organizationId) && t.organization_id) {
+        const localSid = linkedSupplierIdByOrgId.get(t.organization_id) ?? null;
+        if (localSid) {
+          const srow = supplierById.get(localSid);
+          const nm =
+            (srow?.name ?? "").trim() ||
+            (srow?.company_name ?? "").trim() ||
+            (srow?.contact_person ?? "").trim();
+          if (nm) supplierDisplayName = nm;
+        }
+      }
+
       map[t.id] = {
         trip_number: getTripDisplayNumber(t),
         drop_location: t.drop_location || undefined,
@@ -473,10 +497,11 @@ export function useFinanceLedger({
         supplier_rate: resolvedSupplierRate,
         driver_commission: t.driver_commission ?? null,
         supplier_id: t.supplier_id ?? null,
+        supplier_display_name: supplierDisplayName,
       };
     }
     return map;
-  }, [tripRows, vehicleById, clients, organizationId, ledgerTransactions]);
+  }, [tripRows, vehicleById, clients, suppliers, organizationId, ledgerTransactions]);
 
   const setLedgerTransactionsNoop = useCallback(
     (_action: React.SetStateAction<LedgerRow[] | null>) => {
