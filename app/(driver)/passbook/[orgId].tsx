@@ -389,10 +389,7 @@ export default function DriverPassbookDetailScreen() {
                     const subColor = colors.textMuted;
                     const metaColor = colors.textMuted;
                     const secondaryLine = routeSummary || 'Route not specified';
-                    const primaryLine =
-                      isAggregate && earned === 0
-                        ? `Ad hoc trip ${tripRef}`
-                        : `Trip ${tripRef}`;
+                    const primaryLine = tripRef;
                     const metaRight =
                       receivedAmt > 0
                         ? 'Added to cash balance'
@@ -550,7 +547,7 @@ const styles = StyleSheet.create({
   },
   ppPrimary: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     letterSpacing: -0.2,
     flexShrink: 1,
   },

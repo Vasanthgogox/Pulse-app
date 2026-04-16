@@ -681,9 +681,7 @@ export default function DriverWalletScreen() {
                     const metaColor = colors.textMuted;
                     const secondaryLine = routeSummary || 'Route not specified';
                     const isOtpAdHocPending = isAdHocTrip && earned === 0;
-                    const primaryLine = isOtpAdHocPending
-                      ? `Ad hoc trip ${tripRef}`
-                      : `Trip ${tripRef}`;
+                    const primaryLine = tripRef;
                     const metaRight =
                       receivedAmt > 0
                         ? 'Added to cash balance'
@@ -775,61 +773,55 @@ export default function DriverWalletScreen() {
                         {isExpanded && (
                           <View style={[styles.dropdownWrap, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
 
-                            {/* Route (single line, same as existing list style) */}
-                            <View style={styles.dropdownRouteOneLine}>
-                              <FontAwesome name="map-marker" size={18} color={colors.textMuted} />
-                              <Text
-                                style={[styles.dropdownRouteOneLineText, { color: colors.text }]}
-                                numberOfLines={2}
-                              >
-                                {(trip.pickup_area?.trim() || trip.drop_location?.trim())
-                                  ? [trip.pickup_area?.trim(), trip.drop_location?.trim()]
-                                      .filter(Boolean)
-                                      .join(' → ')
-                                  : '—'}
-                              </Text>
-                            </View>
-
-                            <View style={[styles.dropdownDivider, { backgroundColor: colors.border }]} />
-
                             {/* Receipt details */}
-                            <View style={styles.dropdownDetails}>
-                              <View style={styles.detailRow}>
-                                <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Reference ID</Text>
-                                <Pressable
-                                  onPress={() => Clipboard.setStringAsync(tripRef).catch(() => {})}
-                                  style={styles.detailRightPress}
-                                  hitSlop={10}
-                                  accessibilityRole="button"
-                                  accessibilityLabel="Copy reference ID"
-                                >
-                                  <Text style={[styles.detailValue, { color: colors.text }]}>{tripRef}</Text>
-                                  <FontAwesome name="copy" size={14} color={colors.textMuted} />
-                                </Pressable>
-                              </View>
-                              <View style={styles.detailRow}>
-                                <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Service Provider</Text>
-                                <View style={styles.detailRight}>
-                                  <FontAwesome name="building-o" size={14} color={colors.textMuted} />
-                                  <Text style={[styles.detailValue, { color: colors.text }]} numberOfLines={1}>
+                            <View style={styles.dropdownGrid}>
+                              <View style={styles.dropdownGridCol}>
+                                <Text style={[styles.dropdownGridLabel, { color: colors.textMuted }]}>PROVIDER</Text>
+                                <View style={styles.dropdownGridValueRow}>
+                                  <FontAwesome name="building-o" size={12} color={colors.textMuted} />
+                                  <Text style={[styles.dropdownGridValue, { color: colors.text }]} numberOfLines={1}>
                                     {tripFleetName}
                                   </Text>
                                 </View>
                               </View>
-                              <View style={styles.detailRow}>
-                                <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Transaction Date</Text>
-                                <Text style={[styles.detailValue, { color: colors.text }]}>
-                                  {new Date(trip.completed_at ?? trip.updated_at ?? trip.created_at).toLocaleTimeString('en-IN', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    hour12: true,
-                                  })}
-                                </Text>
+                              <View style={styles.dropdownGridCol}>
+                                <Text style={[styles.dropdownGridLabel, { color: colors.textMuted }]}>SERVICE TYPE</Text>
+                                <View style={styles.dropdownGridValueRow}>
+                                  <Text style={[styles.dropdownGridValue, { color: colors.text }]} numberOfLines={1}>
+                                    {isOtpAdHocPending ? 'Ad Hoc Trip' : 'Fleet Settlement'}
+                                  </Text>
+                                </View>
+                              </View>
+                              <View style={styles.dropdownGridCol}>
+                                <Text style={[styles.dropdownGridLabel, { color: colors.textMuted }]}>TIMESTAMP</Text>
+                                <View style={styles.dropdownGridValueRow}>
+                                  <FontAwesome name="calendar" size={12} color={colors.textMuted} />
+                                  <Text style={[styles.dropdownGridValue, { color: colors.text }]} numberOfLines={1}>
+                                    {new Date(trip.completed_at ?? trip.updated_at ?? trip.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} • {new Date(trip.completed_at ?? trip.updated_at ?? trip.created_at).toLocaleTimeString('en-IN', {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                      hour12: true,
+                                    })}
+                                  </Text>
+                                </View>
+                              </View>
+                              <View style={styles.dropdownGridCol}>
+                                <Text style={[styles.dropdownGridLabel, { color: colors.textMuted }]}>REFERENCE</Text>
+                                <Pressable
+                                  onPress={() => Clipboard.setStringAsync(tripRef).catch(() => {})}
+                                  style={styles.dropdownGridValueRow}
+                                  hitSlop={10}
+                                  accessibilityRole="button"
+                                  accessibilityLabel="Copy reference ID"
+                                >
+                                  <FontAwesome name="copy" size={12} color={colors.emerald} />
+                                  <Text style={[styles.dropdownGridValue, { color: colors.emerald }]}>Copy Details</Text>
+                                </Pressable>
                               </View>
                             </View>
 
-                            <View style={[styles.totalPill, { backgroundColor: colors.whiteMuted }]}>
-                              <Text style={[styles.totalLabel, { color: colors.textMuted }]}>TOTAL AMOUNT</Text>
+                            <View style={[styles.totalPill, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#f8fafc' }]}>
+                              <Text style={[styles.totalLabel, { color: colors.textMuted }]}>NET SETTLEMENT AMOUNT</Text>
                               <Text style={[styles.totalValue, { color: colors.text }]}>
                                 ₹{Math.round(earned).toLocaleString('en-IN')}
                               </Text>
@@ -839,7 +831,7 @@ export default function DriverWalletScreen() {
                             {isPending && !isOtpAdHocPending && earned > 0 ? (
                               <View style={styles.dropdownActions}>
                                 <TouchableOpacity
-                                  style={[styles.dropdownPrimaryBtn, { backgroundColor: isDark ? colors.surfaceElevated : '#0f172a' }]}
+                                  style={[styles.dropdownActionBtn, { backgroundColor: isDark ? colors.surfaceElevated : '#0f172a' }]}
                                   onPress={() => openSalaryRequestForTrip(trip)}
                                   disabled={!!requestPaymentLoadingTripId}
                                   activeOpacity={0.85}
@@ -848,38 +840,38 @@ export default function DriverWalletScreen() {
                                   {requestPaymentLoadingTripId === trip.id ? (
                                     <ActivityIndicator size="small" color={Theme.textOnPrimary} />
                                   ) : (
-                                    <FontAwesome name="send" size={16} color={Theme.textOnPrimary} />
+                                    <FontAwesome name="send" size={14} color={Theme.textOnPrimary} />
                                   )}
-                                  <Text style={[styles.dropdownPrimaryBtnText, { color: Theme.textOnPrimary }]}>
+                                  <Text style={[styles.dropdownActionBtnText, { color: Theme.textOnPrimary }]}>
                                     {requestPaymentLoadingTripId === trip.id ? 'Sending…' : 'Request Payment'}
                                   </Text>
                                 </TouchableOpacity>
-                                <View style={styles.dropdownSecondaryRow}>
-                                  <TouchableOpacity
-                                    style={[styles.dropdownSecondaryBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
-                                    onPress={() => confirmMarkAsPaid(trip, earned)}
-                                    disabled={!!markPaidLoadingTripId}
-                                    activeOpacity={0.85}
-                                    accessibilityLabel="Mark as paid"
-                                  >
-                                    {markPaidLoadingTripId === trip.id ? (
-                                      <ActivityIndicator size="small" color={colors.emerald} />
-                                    ) : (
-                                      <FontAwesome name="check-circle" size={16} color={colors.emerald} />
-                                    )}
-                                    <Text style={[styles.dropdownSecondaryBtnText, { color: colors.text }]}>
-                                      {markPaidLoadingTripId === trip.id ? 'Marking…' : 'Mark Paid'}
-                                    </Text>
-                                  </TouchableOpacity>
-                                </View>
+                                
+                                <TouchableOpacity
+                                  style={[styles.dropdownActionBtn, { borderColor: colors.border, backgroundColor: colors.surface, borderWidth: 1 }]}
+                                  onPress={() => confirmMarkAsPaid(trip, earned)}
+                                  disabled={!!markPaidLoadingTripId}
+                                  activeOpacity={0.85}
+                                  accessibilityLabel="Mark as paid"
+                                >
+                                  {markPaidLoadingTripId === trip.id ? (
+                                    <ActivityIndicator size="small" color={colors.emerald} />
+                                  ) : (
+                                    <FontAwesome name="check-circle" size={14} color={colors.emerald} />
+                                  )}
+                                  <Text style={[styles.dropdownActionBtnText, { color: colors.text }]}>
+                                    {markPaidLoadingTripId === trip.id ? 'Marking…' : 'Mark Paid'}
+                                  </Text>
+                                </TouchableOpacity>
                               </View>
                             ) : null}
 
                             <View style={styles.dropdownTrustRow}>
-                              <FontAwesome name="info-circle" size={14} color={colors.textMuted} />
+                              <View style={[styles.dropdownTrustDot, { backgroundColor: colors.border }]} />
                               <Text style={[styles.dropdownTrustText, { color: colors.textMuted }]}>
-                                Secure trip settlement via Fleet Connect
+                                Secure encryption by Fleet Connect Global
                               </Text>
+                              <View style={[styles.dropdownTrustDot, { backgroundColor: colors.border }]} />
                             </View>
                           </View>
                         )}
@@ -1339,7 +1331,7 @@ const styles = StyleSheet.create({
   },
   ppPrimary: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     letterSpacing: -0.2,
     flexShrink: 1,
   },
@@ -1439,6 +1431,32 @@ const styles = StyleSheet.create({
     letterSpacing: -0.1,
   },
   dropdownDivider: { height: StyleSheet.hairlineWidth, marginTop: 14, marginBottom: 16 },
+  dropdownGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+  },
+  dropdownGridCol: {
+    width: '48%',
+    flexDirection: 'column',
+    gap: 6,
+    marginBottom: 16,
+  },
+  dropdownGridLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  dropdownGridValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dropdownGridValue: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
   dropdownDetails: { gap: 14, paddingHorizontal: 2 },
   detailRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   detailLabel: { fontSize: 14, fontWeight: '500' },
@@ -1454,9 +1472,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  totalLabel: { fontSize: 13, fontWeight: '600', letterSpacing: 0.5 },
-  totalValue: { fontSize: 18, fontWeight: '700', letterSpacing: -0.1 },
-  dropdownActions: { marginTop: 18, gap: 14 },
+  totalLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  totalValue: { fontSize: 18, fontWeight: '800', letterSpacing: -0.1 },
+  dropdownActions: { flexDirection: 'row', marginTop: 18, gap: 12 },
+  dropdownActionBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  dropdownActionBtnText: { fontSize: 14, fontWeight: '700', letterSpacing: -0.1 },
   dropdownPrimaryBtn: {
     width: '100%',
     paddingVertical: 14,
@@ -1479,8 +1507,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   dropdownSecondaryBtnText: { fontSize: 15, fontWeight: '700', letterSpacing: -0.1 },
-  dropdownTrustRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 16 },
-  dropdownTrustText: { fontSize: 12, fontWeight: '600', letterSpacing: 0.2 },
+  dropdownTrustRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 16 },
+  dropdownTrustDot: { width: 4, height: 4, borderRadius: 2 },
+  dropdownTrustText: { fontSize: 10, fontWeight: '600' },
   tripCard: {
     borderWidth: 0,
     borderRadius: 0,
