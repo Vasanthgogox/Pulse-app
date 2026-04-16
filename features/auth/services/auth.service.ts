@@ -35,6 +35,8 @@ export interface AuthProfile {
   asset: boolean;
   full_name?: string;
   avatar_url?: string;
+  /** Custom avatar seed for presets (e.g. pilot-1). Stored in DB so it persists across devices. */
+  avatar_seed?: string;
   phone?: string;
   company_name?: string;
   /** Profile quote/status (WhatsApp-style), shown under name on profile. */
@@ -81,9 +83,29 @@ function mapSupabaseUserToAuth(user: SupabaseUser): {
       company_name: meta.company_name,
       phone: meta.phone,
       avatar_url: meta.avatar_url,
+      avatar_seed: meta.avatar_seed,
       status_text: meta.status_text,
       memberships: {},
     },
+  };
+}
+
+/** Map public.profiles row to AuthProfile. */
+function mapDbProfileToAuth(profile: any): AuthProfile {
+  return {
+    uid: profile.id,
+    email: profile.email || "",
+    displayName: profile.full_name || profile.email?.split("@")[0] || "User",
+    full_name: profile.full_name,
+    role: (profile.role === "driver" ? "driver" : "user") as UserRole,
+    aggregated: profile.aggregated !== false,
+    asset: profile.asset !== false,
+    company_name: profile.company_name,
+    phone: profile.phone,
+    avatar_url: profile.avatar_url,
+    avatar_seed: profile.avatar_seed,
+    status_text: profile.bio, // Profiles table uses 'bio' for status_text
+    memberships: {},
   };
 }
 
@@ -97,6 +119,8 @@ export interface SignUpOptions {
   fullName?: string;
   /** Phone (e.g. for drivers). Stored in user_metadata; backends can use it to link invited drivers. */
   phone?: string;
+  /** Optional trading / legal name; stored in profiles.company_name and used for default organization name. */
+  companyName?: string;
   role?: UserRole;
   /** Business model for the new org: asset, aggregate, or both. Default HYBRID. */
   operatingModel?: OperatingModel;
@@ -107,6 +131,7 @@ export async function signUp({
   password,
   fullName,
   phone,
+  companyName,
   role = "user",
   operatingModel: operatingModelOption,
 }: SignUpOptions): Promise<SignInResult> {
@@ -122,6 +147,19 @@ export async function signUp({
     const phoneErr = validatePhone(phone);
     if (phoneErr) return { error: new Error(phoneErr) };
   }
+  if (companyName != null && String(companyName).trim()) {
+    const c = companyName.trim();
+    const companyErr = maxLength(
+      VALIDATION.COMPANY_NAME_MAX_LENGTH,
+      `Company name must be at most ${VALIDATION.COMPANY_NAME_MAX_LENGTH} characters.`,
+    )(c);
+    if (companyErr) return { error: new Error(companyErr) };
+    const dup = await checkOrganizationNameTaken(c);
+    if (dup.error) return { error: dup.error };
+    if (dup.taken) {
+      return { error: new Error("Company name already exists.") };
+    }
+  }
   try {
     const operatingModel: OperatingModel = operatingModelOption ?? "HYBRID";
     const metadata: Record<string, unknown> = {
@@ -129,6 +167,8 @@ export async function signUp({
       operating_model: operatingModel,
     };
     if (fullName?.trim()) metadata.full_name = fullName.trim();
+    if (companyName != null && companyName.trim())
+      metadata.company_name = companyName.trim();
     // Normalize phone (trim + collapse spaces) so it matches get_invitee_by_phone / get_driver_invitee_by_phone lookup.
     if (phone != null && phone !== "") {
       const normalized = phone.trim().replace(/\s+/g, "");
@@ -140,6 +180,10 @@ export async function signUp({
       options: { data: metadata },
     });
     if (error) {
+      // Catch the database trigger exception if it fired
+      if (error.message.includes("Company name already exists")) {
+        return { error: new Error("Company name already exists.") };
+      }
       return { error: new Error(error.message || "Sign up failed") };
     }
     if (!data.user) return { error: new Error("No user returned") };
@@ -197,7 +241,20 @@ export async function signInWithPassword(
 }
 
 export async function signOut(): Promise<void> {
-  await supabase().auth.signOut();
+  try {
+    const { error } = await supabase().auth.signOut();
+    if (error) {
+      console.warn("Sign out server error:", error);
+      await supabase().auth.signOut({ scope: "local" });
+    }
+  } catch (e) {
+    console.error("Sign out exception:", e);
+    try {
+      await supabase().auth.signOut({ scope: "local" });
+    } catch (localErr) {
+      // ignore
+    }
+  }
 }
 
 /** Detect auth errors that mean the session is invalid (e.g. refresh token not found, user deleted). */
@@ -266,6 +323,66 @@ function maskEmail(email: string): string {
   const domain = t.slice(at);
   if (local.length <= 2) return local[0] + "***" + domain;
   return local.slice(0, 2) + "***" + domain;
+}
+
+export interface CheckOrganizationNameTakenResult {
+  error: Error | null;
+  taken: boolean;
+}
+
+/**
+ * True if an organization already uses this display name (trimmed, case-insensitive).
+ * Used before sign-up; callable by anon via SECURITY DEFINER RPC.
+ */
+export async function checkOrganizationNameTaken(
+  companyName: string,
+): Promise<CheckOrganizationNameTakenResult> {
+  const key = (companyName ?? "").trim();
+  if (!key) return { error: null, taken: false };
+  try {
+    const { data, error } = await supabase().rpc("organization_name_is_taken", {
+      p_name: key,
+    });
+    if (error) {
+      const msg = (error.message ?? "").toLowerCase();
+      if (
+        msg.includes("function") &&
+        (msg.includes("does not exist") ||
+          msg.includes("not found") ||
+          msg.includes("could not find"))
+      ) {
+        if (__DEV__) {
+          console.warn(
+            "[auth] organization_name_is_taken RPC missing; blocking sign-up to enforce uniqueness. Run NOTIFY pgrst, reload_schema; in your DB.",
+          );
+        }
+        // STRICT ENFORCEMENT: If the database function is missing, we must NOT allow sign-up,
+        // because we cannot guarantee the company name is unique.
+        return { 
+          error: new Error("System update required: Cannot verify if company name exists. Please run the SQL migrations."), 
+          taken: false 
+        };
+      }
+      return {
+        error: new Error("Could not verify company name. Please try again."),
+        taken: false,
+      };
+    }
+    return { error: null, taken: data === true };
+  } catch (e) {
+    if (isNetworkError(e)) {
+      return {
+        error: new Error(
+          "Cannot reach server. Check your internet connection and try again.",
+        ),
+        taken: false,
+      };
+    }
+    return {
+      error: e instanceof Error ? e : new Error("Check failed"),
+      taken: false,
+    };
+  }
 }
 
 export interface CheckExistingUserByPhoneResult {
@@ -364,6 +481,68 @@ export async function getSession(): Promise<{
   }
 }
 
+/**
+ * Refresh user and profile from server (network call).
+ * Uses getUser() for latest metadata and queries public.profiles for DB-side updates.
+ */
+export async function refreshSession(): Promise<{
+  user: AuthUser;
+  profile: AuthProfile;
+} | null> {
+  try {
+    const { data: { user }, error } = await supabase().auth.getUser();
+    if (error || !user) return null;
+
+    // Base profile from auth metadata (immediate source after avatar/profile updates).
+    const base = mapSupabaseUserToAuth(user);
+
+    // Fetch from public.profiles and merge with metadata so stale DB values don't hide fresh updates.
+    const { data: profile } = await supabase()
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .single();
+
+    if (profile) {
+      const dbProfile = mapDbProfileToAuth(profile);
+      const merged: AuthProfile = {
+        ...base.profile,
+        ...dbProfile,
+        avatar_url: dbProfile.avatar_url ?? base.profile.avatar_url,
+        avatar_seed: dbProfile.avatar_seed ?? base.profile.avatar_seed,
+        status_text: dbProfile.status_text ?? base.profile.status_text,
+        company_name: dbProfile.company_name ?? base.profile.company_name,
+        phone: dbProfile.phone ?? base.profile.phone,
+        full_name: dbProfile.full_name ?? base.profile.full_name,
+        displayName: dbProfile.displayName || base.profile.displayName,
+      };
+      return {
+        user: { uid: user.id, email: user.email ?? "", displayName: merged.displayName || "User" },
+        profile: merged,
+      };
+    }
+
+    return base;
+  } catch {
+    return null;
+  }
+}
+
+/** Fetch a specific user's profile from the public.profiles table. */
+export async function getProfile(uid: string): Promise<AuthProfile | null> {
+  try {
+    const { data, error } = await supabase()
+      .from("profiles")
+      .select("*")
+      .eq("id", uid)
+      .single();
+    if (error || !data) return null;
+    return mapDbProfileToAuth(data);
+  } catch {
+    return null;
+  }
+}
+
 export function onAuthStateChange(
   callback: (auth: { user: AuthUser; profile: AuthProfile } | null) => void,
 ): () => void {
@@ -379,19 +558,22 @@ export function onAuthStateChange(
   return () => subscription.unsubscribe();
 }
 
-/** Updates to apply to the current user's profile (stored in auth user_metadata). */
+/** Updates to apply to the current user's profile (stored in auth user_metadata and public.profiles). */
 export interface UpdateProfileOptions {
   full_name?: string;
   phone?: string;
   company_name?: string;
   /** Profile photo URL; pass null to clear. */
   avatar_url?: string | null;
+  /** Custom avatar seed for presets (e.g. pilot-1). */
+  avatar_seed?: string | null;
   /** Profile quote/status (WhatsApp-style). */
   status_text?: string | null;
 }
 
 /**
- * Update the current user's profile. Stored only in auth.users.raw_user_meta_data (Supabase Auth).
+ * Update the current user's profile. Stored in both auth.users.raw_user_meta_data (Supabase Auth)
+ * and the public.profiles table for relational integrity and searchability.
  * Connection invite-by-phone (get_invitee_by_phone) reads from auth.users. Triggers onAuthStateChange so AuthContext reflects the new profile.
  */
 export async function updateProfile(
@@ -426,6 +608,7 @@ export async function updateProfile(
     } = await supabase().auth.getUser();
     if (!user) return { error: new Error("Not signed in") };
 
+    // 1. Update auth.users metadata (for fast local access and sync across devices)
     const data: Record<string, unknown> = {};
     if (updates.full_name !== undefined)
       data.full_name = updates.full_name.trim();
@@ -437,11 +620,35 @@ export async function updateProfile(
       data.company_name = updates.company_name.trim();
     if (updates.avatar_url !== undefined)
       data.avatar_url = updates.avatar_url || null;
+    if (updates.avatar_seed !== undefined)
+      data.avatar_seed = updates.avatar_seed || null;
     if (updates.status_text !== undefined)
       data.status_text = updates.status_text?.trim() ?? "";
 
-    const { error } = await supabase().auth.updateUser({ data });
-    if (error) return { error: new Error(error.message || "Update failed") };
+    const { error: authError } = await supabase().auth.updateUser({ data });
+    if (authError) return { error: new Error(authError.message || "Auth update failed") };
+
+    // 2. Sync to public.profiles table (for relational use, searching, and public profile view)
+    const profileUpdates: Record<string, any> = {};
+    if (updates.full_name !== undefined) profileUpdates.full_name = updates.full_name.trim();
+    if (updates.phone !== undefined) profileUpdates.phone = updates.phone.trim() ? normalizePhoneForProfile(updates.phone) : "";
+    if (updates.company_name !== undefined) profileUpdates.company_name = updates.company_name.trim();
+    if (updates.avatar_url !== undefined) profileUpdates.avatar_url = updates.avatar_url;
+    if (updates.avatar_seed !== undefined) profileUpdates.avatar_seed = updates.avatar_seed;
+    // Note: Profiles table uses 'bio' for status/quote (from migrations)
+    if (updates.status_text !== undefined) profileUpdates.bio = updates.status_text?.trim() ?? "";
+    
+    // We update public.profiles but don't block the UI if it fails (metadata is the primary driver for the current user)
+    const { error: dbError } = await supabase()
+      .from("profiles")
+      .update(profileUpdates)
+      .eq("id", user.id);
+
+    if (dbError) {
+      console.warn("[authService] Failed to sync profile to public table:", dbError.message);
+      // We still return success if metadata update worked, as it drives the app UI
+    }
+
     return { error: null };
   } catch (e) {
     if (isNetworkError(e)) {

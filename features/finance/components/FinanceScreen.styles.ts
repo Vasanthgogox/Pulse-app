@@ -5,7 +5,12 @@ import { CUSTOMERS_SUPPLIERS, LEDGER } from '@/features/finance/constants/tableC
 import { MIN_FISCAL_TAB_WIDTH } from '../types';
 
 export const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Theme.screenBackground },
+  container: {
+    flex: 1,
+    width: '100%',
+    minWidth: 0,
+    backgroundColor: Theme.screenBackground,
+  },
   centered: {
     flex: 1,
     justifyContent: "center",
@@ -17,11 +22,11 @@ export const styles = StyleSheet.create({
   darkBlock: {
     backgroundColor: "#000000",
     width: "100%",
+    minWidth: 0,
+    alignSelf: "stretch",
     paddingBottom: 4,
     shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
+    boxShadow: "0px 2px 8px 0px rgba(0, 0, 0, 0.2)",
     elevation: 4,
   },
   darkBlockContent: {
@@ -32,12 +37,10 @@ export const styles = StyleSheet.create({
   },
   fiscalTabRow: {
     flexDirection: "row",
-    paddingHorizontal: 14,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
     marginTop: 2,
     marginBottom: 6,
     paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.separatorDark,
   },
   fiscalTab: {
     flex: 1,
@@ -106,7 +109,9 @@ export const styles = StyleSheet.create({
     color: "#fff",
   },
 
-  tableScroll: { flex: 1 },
+  /** minHeight: 0 lets flex children shrink so inner ScrollView can scroll (web + native). */
+  tableScroll: { flex: 1, width: '100%', minWidth: 0, minHeight: 0 },
+  tableScrollInner: { flex: 1, minHeight: 0, minWidth: 0 },
   tableContent: {
     paddingHorizontal: 0,
     paddingTop: 0,
@@ -116,6 +121,9 @@ export const styles = StyleSheet.create({
   ledgerCardWrap: {
     flex: 1,
     minHeight: 0,
+    width: '100%',
+    minWidth: 0,
+    alignSelf: 'stretch',
     marginHorizontal: 0,
     marginBottom: 8,
   },
@@ -134,9 +142,7 @@ export const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     marginTop: -1,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.02,
-    shadowRadius: 2,
+    boxShadow: "0px 1px 2px 0px rgba(0, 0, 0, 0.02)",
     elevation: 1,
   },
   driverSalaryRequestsBlock: {
@@ -386,9 +392,7 @@ export const styles = StyleSheet.create({
     maxHeight: 360,
     overflow: "hidden",
     shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
+    boxShadow: "0px 2px 8px 0px rgba(0, 0, 0, 0.2)",
     elevation: 8,
   },
   entityListPanelHeader: {
@@ -429,9 +433,7 @@ export const styles = StyleSheet.create({
     borderLeftWidth: 4,
     backgroundColor: Theme.screenBackground,
     shadowColor: Theme.teslaRed,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
+    boxShadow: "0px 0px 8px 0px rgba(200, 0, 0, 0.12)",
     elevation: 2,
   },
   entityCategoryIconWrap: {
@@ -487,9 +489,7 @@ export const styles = StyleSheet.create({
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
     shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.02,
-    shadowRadius: 2,
+    boxShadow: "0px 1px 2px 0px rgba(0, 0, 0, 0.02)",
     elevation: 1,
   },
   tableHeader: {

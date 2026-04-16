@@ -7,7 +7,10 @@ import type { AddTransactionData } from "@/components/AddTransactionModal";
 import type { PartyOption, TripOption } from "@/components/AddTransactionModal";
 import { AddTransactionModal } from "@/components/AddTransactionModal";
 import { AddClientModal } from "@/features/clients/components/AddClientModal";
-import type { AddClientFormData } from "@/features/clients/components/AddClientModal";
+import type {
+  AddClientFormData,
+  ConnectionInviteeMatch,
+} from "@/features/clients/components/AddClientModal";
 import { EditClientModal } from "@/features/clients/components/EditClientModal";
 import type { ClientRow, UpdateClientData } from "@/features/clients/services/clients.service";
 import { AddDriverModal } from "@/features/drivers/components/AddDriverModal";
@@ -59,6 +62,12 @@ export interface FinanceModalsProps {
   defaultContactId: string | undefined;
   defaultContactType: "client" | "supplier" | "driver" | undefined;
   defaultDriverPaymentType: import("@/components/AddTransactionModal").DriverPaymentType | null | undefined;
+  /** Map linked_organization_id -> local_client_id (for integrated trips). */
+  linkedClientIdByOrgId?: Record<string, string> | Map<string, string>;
+  /** Map linked_organization_id -> local_supplier_id. */
+  linkedSupplierIdByOrgId?: Record<string, string> | Map<string, string>;
+  /** Current organization ID to detect if trip is "ours". */
+  viewerOrgId?: string | null;
   financeSubTab: FinanceSubTab;
 
   // Add Client
@@ -68,7 +77,7 @@ export interface FinanceModalsProps {
   organizationId: string | null;
   noOrganizationMessage: string | null;
   onRefreshOrganization: () => void;
-  searchInviteeByPhone: (phone: string) => Promise<{ organization_id: string; full_name: string; phone: string } | null>;
+  searchInviteeByPhone: (phone: string) => Promise<ConnectionInviteeMatch | null>;
   onSendClientInvitation: (toOrgId: string) => Promise<void>;
 
   // Edit Client
@@ -169,6 +178,9 @@ export function FinanceModals(props: FinanceModalsProps) {
     defaultContactId,
     defaultContactType,
     defaultDriverPaymentType,
+    linkedClientIdByOrgId,
+    linkedSupplierIdByOrgId,
+    viewerOrgId,
     financeSubTab,
     showAddClientModal,
     onCloseAddClientModal,
@@ -239,6 +251,9 @@ export function FinanceModals(props: FinanceModalsProps) {
         clients={clients}
         suppliers={supplierPartyOptions}
         supplierLinkedOrgIds={supplierLinkedOrgIds}
+        linkedClientIdByOrgId={linkedClientIdByOrgId}
+        linkedSupplierIdByOrgId={linkedSupplierIdByOrgId}
+        viewerOrgId={viewerOrgId}
         drivers={driverPartyOptions}
         vehicles={vehicleOptions}
         trips={modalTripOptions}

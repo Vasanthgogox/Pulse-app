@@ -80,4 +80,14 @@ export const queryKeys = {
     status ? (['q', 'salary-requests', orgId, status] as const) : (['q', 'salary-requests', orgId] as const),
 
   driverOffers: (orgId: string) => ['q', 'driver-offers', orgId] as const,
+
+  logPods: {
+    trips: (orgId: string) => ['q', 'log-pods', 'trips', orgId] as const,
+    courierPartners: () => ['q', 'log-pods', 'courier-partners'] as const,
+  },
+
+  invoicing: {
+    trips: (orgId: string) => ['q', 'invoicing', 'trips', orgId] as const,
+    summary: (orgId: string) => ['q', 'invoicing', 'summary', orgId] as const,
+  },
 } as const;

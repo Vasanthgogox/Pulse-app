@@ -6,9 +6,11 @@ import { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { TeslaHeader } from '@/components/TeslaHeader';
 import { useSafeBack } from '@/lib/useSafeBack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type NetworkFilter = 'ALL' | 'REQUESTS' | 'CLIENT' | 'SUPPLIER' | 'DRIVER';
 
@@ -25,6 +27,7 @@ type NetworkNode = {
 export default function NetworkScreen() {
   const router = useRouter();
   const safeBack = useSafeBack();
+  const insets = useSafeAreaInsets();
   const [networkFilter, setNetworkFilter] = useState<NetworkFilter>('ALL');
   const [nodes, setNodes] = useState<NetworkNode[]>([]);
 
@@ -83,7 +86,10 @@ export default function NetworkScreen() {
 
       <ScrollView
         style={styles.list}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: Math.max(insets.bottom, 16) + 16 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {filtered.length === 0 ? (
@@ -157,10 +163,17 @@ export default function NetworkScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Theme.screenBackground },
+  container: {
+    flex: 1,
+    width: '100%',
+    minWidth: 0,
+    alignSelf: 'stretch',
+    backgroundColor: Theme.screenBackground,
+  },
   darkBlock: {
     backgroundColor: Theme.darkBackground,
     width: '100%',
+    minWidth: 0,
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.06)',
@@ -173,7 +186,7 @@ const styles = StyleSheet.create({
   pillWrap: {
     flexDirection: 'row',
     backgroundColor: Theme.surfaceGray,
-    marginHorizontal: 16,
+    marginHorizontal: Layout.screenPaddingHorizontal,
     marginTop: 8,
     padding: 4,
     borderRadius: 2,
@@ -199,8 +212,13 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   pillTabTextActive: { color: Theme.textOnDark },
-  list: { flex: 1 },
-  listContent: { padding: 16, paddingBottom: 32 },
+  list: { flex: 1, width: '100%', minWidth: 0 },
+  listContent: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: Layout.screenPaddingHorizontal,
+    flexGrow: 1,
+    width: '100%',
+  },
   empty: {
     textAlign: 'center',
     fontSize: 14,

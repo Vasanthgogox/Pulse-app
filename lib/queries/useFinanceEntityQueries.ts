@@ -7,6 +7,7 @@ import { getDriverOffersByOrganization } from '@/features/drivers/services/drive
 import { getSalaryRequestsByOrganization } from '@/services/salaryRequestsService';
 import { getIndentsByOrganization } from '@/features/indents/services/indents.service';
 import { getAcceptedDirectQuotesByOrg } from '@/features/indents/services/direct-quotes.service';
+import { getTripSubcontracts } from '@/features/finance/services/tripSubcontracts.service';
 import { queryKeys } from '@/lib/queryKeys';
 
 export function useTripsWhereOrgIsClientQuery(orgId: string | null) {
@@ -90,5 +91,18 @@ export function useSalaryRequestsQuery(orgId: string | null, status?: 'pending' 
       return res.requests ?? [];
     },
     enabled: !!orgId,
+  });
+}
+
+export function useTripSubcontractsQuery(orgId: string | null, tripIds: string[]) {
+  const normalizedTripIds = [...tripIds].sort();
+  return useQuery({
+    queryKey: ['q', 'trips', 'subcontracts', orgId ?? '', normalizedTripIds],
+    queryFn: async () => {
+      const res = await getTripSubcontracts({ viewerOrgId: orgId!, tripIds: normalizedTripIds });
+      if (res.error) throw res.error;
+      return res.rows ?? [];
+    },
+    enabled: !!orgId && normalizedTripIds.length > 0,
   });
 }

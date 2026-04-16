@@ -5,6 +5,7 @@
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { getDoubleEntryDisplayLabel } from "@/features/finance/accounting/accountingModel";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { formatLedgerAmount } from "@/lib/format";
@@ -276,7 +277,7 @@ function TimelineExpandedDetail({
       <View style={styles.timelineExpandedMissionBlock}>
         <View style={styles.timelineExpandedMissionHeader}>
           <Text style={styles.timelineExpandedMissionHeaderText}>
-            Associated Mission
+            Associated Trip
           </Text>
         </View>
         <View style={styles.timelineExpandedMissionInner}>
@@ -505,6 +506,7 @@ export function LedgerTransactionListView({
   onExportPress,
   renderPartyAvatar,
 }: LedgerTransactionListViewProps) {
+  const tabBarScrollProps = useTabBarAwareScrollProps();
   const { t } = useLanguage();
   const [tripPickerRowId, setTripPickerRowId] = useState<string | null>(null);
   const [fiscalViewModeInternal, setFiscalViewModeInternal] = useState<
@@ -588,6 +590,17 @@ export function LedgerTransactionListView({
   const effectiveFiscalSubTab = showFiscalSubTabs
     ? fiscalSubTab
     : "transaction";
+
+  /** Render "Secured" inside scroll so it does not sit fixed over the list on mobile */
+  const showSecuredFooterInScroll =
+    showGridFooter &&
+    !(
+      showHistoryHeader &&
+      useTimelineLayout &&
+      (effectiveFiscalSubTab === "analytics" ||
+        effectiveFiscalSubTab === "table")
+    );
+
   /** Timeline: which date sections are expanded. When undefined, all sections are expanded (opened) by default. */
   const [expandedSectionsByKey, setExpandedSectionsByKey] = useState<
     Record<string, boolean>
@@ -792,6 +805,7 @@ export function LedgerTransactionListView({
             style={styles.tableViewScroll}
             contentContainerStyle={styles.tableViewScrollContent}
             showsVerticalScrollIndicator={false}
+            {...tabBarScrollProps}
           >
             {groups.map(({ key, rows: sectionRows }) => {
               const sectionLabel =
@@ -1211,6 +1225,12 @@ export function LedgerTransactionListView({
                 </View>
               );
             })}
+            {showSecuredFooterInScroll && (
+              <View style={styles.gridFooter}>
+                <FontAwesome name="shield" size={28} color={Theme.textMuted} />
+                <Text style={styles.gridFooterText}>Secured</Text>
+              </View>
+            )}
             <View style={styles.scrollBottomSpacer} />
           </ScrollView>
         ) : (
@@ -1218,7 +1238,12 @@ export function LedgerTransactionListView({
             const ScrollWrapper = embedInParentScroll ? View : ScrollView;
             const scrollWrapperProps = embedInParentScroll
               ? {}
-              : { showsVerticalScrollIndicator: false };
+              : {
+                  showsVerticalScrollIndicator: false,
+                  style: styles.ledgerMainScroll,
+                  contentContainerStyle: styles.ledgerMainScrollContent,
+                  ...tabBarScrollProps,
+                };
             return (
               <ScrollWrapper {...scrollWrapperProps}>
                 {groups.map(({ key, rows: sectionRows }) => {
@@ -1836,6 +1861,7 @@ export function LedgerTransactionListView({
                               .join(" · ") || dateStr;
                           const avatarBg = avatarColor(partyName);
                           const initialText = initials(partyName);
+                          const customAvatar = renderPartyAvatar?.(row);
 
                           const routeWhyLine =
                             [routeStr, typeLabel].filter(Boolean).join(" • ") ||
@@ -1915,22 +1941,35 @@ export function LedgerTransactionListView({
 
                           const leftContent = useTimelineLayout ? (
                             <>
-                              <View
-                                style={[
-                                  styles.timelineCardAvatar,
-                                  { backgroundColor: avatarBg },
-                                  isIn
-                                    ? styles.avatarWrapIn
-                                    : styles.avatarWrapOut,
-                                ]}
-                              >
-                                <Text
-                                  style={styles.avatarText}
-                                  numberOfLines={1}
+                              {customAvatar ? (
+                                <View
+                                  style={[
+                                    styles.timelineCardAvatarImageWrap,
+                                    isIn
+                                      ? styles.avatarWrapIn
+                                      : styles.avatarWrapOut,
+                                  ]}
                                 >
-                                  {initialText}
-                                </Text>
-                              </View>
+                                  {customAvatar}
+                                </View>
+                              ) : (
+                                <View
+                                  style={[
+                                    styles.timelineCardAvatar,
+                                    { backgroundColor: avatarBg },
+                                    isIn
+                                      ? styles.avatarWrapIn
+                                      : styles.avatarWrapOut,
+                                  ]}
+                                >
+                                  <Text
+                                    style={styles.avatarText}
+                                    numberOfLines={1}
+                                  >
+                                    {initialText}
+                                  </Text>
+                                </View>
+                              )}
                               <View style={styles.timelineCardBody}>
                                 <Text
                                   style={styles.timelineCardParty}
@@ -2128,22 +2167,17 @@ export function LedgerTransactionListView({
                     </View>
                   );
                 })}
+                {showSecuredFooterInScroll && (
+                  <View style={styles.gridFooter}>
+                    <FontAwesome name="shield" size={28} color={Theme.textMuted} />
+                    <Text style={styles.gridFooterText}>Secured</Text>
+                  </View>
+                )}
+                <View style={styles.scrollBottomSpacer} />
               </ScrollWrapper>
             );
           })()
         )}
-        {showGridFooter &&
-          !(
-            showHistoryHeader &&
-            useTimelineLayout &&
-            (effectiveFiscalSubTab === "analytics" ||
-              effectiveFiscalSubTab === "table")
-          ) && (
-            <View style={styles.gridFooter}>
-              <FontAwesome name="shield" size={40} color={Theme.textMuted} />
-              <Text style={styles.gridFooterText}>Secured</Text>
-            </View>
-          )}
       </View>
       {tripPickerRowId &&
         (() => {
@@ -2210,8 +2244,24 @@ export function LedgerTransactionListView({
 }
 
 const styles = StyleSheet.create({
+  /** Fill parent so ScrollView gets a bounded height (required for Cash tab scroll on web). */
   wrap: {
+    flex: 1,
+    minHeight: 0,
+    minWidth: 0,
     marginBottom: 12,
+    width: '100%',
+    alignSelf: 'stretch',
+  },
+  /** Web: ScrollView content must stretch to viewport width (avoids centered narrow column). */
+  ledgerMainScroll: {
+    width: '100%',
+    flex: 1,
+    minHeight: 0,
+  },
+  /** Do not use flexGrow here — it breaks vertical scrolling on web (content fills viewport). */
+  ledgerMainScrollContent: {
+    width: '100%',
   },
   emptyState: {
     alignItems: "center",
@@ -2391,8 +2441,11 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.primary,
     borderRadius: 1,
   },
-  tableViewScroll: { flex: 1 },
-  tableViewScrollContent: { paddingBottom: Layout.sectionSpacing + 8 },
+  tableViewScroll: { flex: 1, width: '100%', minHeight: 0 },
+  tableViewScrollContent: {
+    width: '100%',
+    paddingBottom: Layout.sectionSpacing + 8,
+  },
   scrollBottomSpacer: { height: Layout.sectionSpacing },
   tableViewSection: { marginBottom: 16 },
   tableViewDateBar: {
@@ -3527,6 +3580,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   list: {
+    flex: 1,
+    minHeight: 0,
+    minWidth: 0,
     gap: 0,
   },
   section: {
@@ -3643,6 +3699,15 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+  },
+  timelineCardAvatarImageWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 18,
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1.5,
@@ -3955,19 +4020,20 @@ const styles = StyleSheet.create({
     maxWidth: 56,
   },
   gridFooter: {
-    flexDirection: "column",
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 48,
-    gap: 16,
-    opacity: 0.4,
+    paddingVertical: 24,
+    paddingTop: 32,
+    gap: 10,
+    opacity: 0.45,
   },
   gridFooterText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "500",
     color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: 0.35,
   },
   gridFooterSubtext: {
     fontSize: 9,

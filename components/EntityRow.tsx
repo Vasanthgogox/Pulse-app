@@ -5,6 +5,8 @@ import Theme from '@/constants/Theme';
 export interface EntityRowProps {
   title: string;
   subtitle?: string;
+  subtitleLeft?: string;
+  subtitleRight?: string;
   amount?: string;
   amountLabel?: string;
   amountColor?: 'green' | 'red' | 'default';
@@ -39,6 +41,8 @@ function getAvatarStyle(index?: number) {
 export function EntityRow({
   title,
   subtitle,
+  subtitleLeft,
+  subtitleRight,
   amount,
   amountLabel,
   amountColor = 'default',
@@ -92,6 +96,16 @@ export function EntityRow({
           )}
           <Text style={styles.title} numberOfLines={1}>{title}</Text>
         </View>
+        {(subtitleLeft != null || subtitleRight != null) && (
+          <View style={styles.subtitleSplitRow}>
+            <Text style={[styles.subtitle, styles.subtitleLeft]} numberOfLines={1}>
+              {subtitleLeft ?? ''}
+            </Text>
+            <Text style={[styles.subtitle, styles.subtitleRight]} numberOfLines={1}>
+              {subtitleRight ?? ''}
+            </Text>
+          </View>
+        )}
         {subtitle != null && subtitle !== '' && (
           <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>
         )}
@@ -192,6 +206,23 @@ const styles = StyleSheet.create({
     color: Theme.textMutedDemo,
     marginTop: 2,
     textTransform: 'uppercase',
+  },
+  subtitleSplitRow: {
+    marginTop: 2,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  subtitleLeft: {
+    marginTop: 0,
+    flex: 1,
+    textAlign: 'left',
+  },
+  subtitleRight: {
+    marginTop: 0,
+    flex: 1,
+    textAlign: 'right',
   },
   rightBlock: {
     flexDirection: 'row',

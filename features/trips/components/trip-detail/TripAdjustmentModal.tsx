@@ -7,6 +7,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useState } from "react";
 import {
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -77,8 +78,8 @@ export function TripAdjustmentModal({
             <FontAwesome name="chevron-left" size={18} color={Theme.textMuted} />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>Alteration</Text>
-            <Text style={styles.headerSubtitle}>Grid Blueprint Sync</Text>
+            <Text style={styles.headerTitle}>Add Adjustment</Text>
+            <Text style={styles.headerSubtitle}>modify trip amounts</Text>
           </View>
           <View style={styles.headerBtn} />
         </View>
@@ -90,7 +91,7 @@ export function TripAdjustmentModal({
           showsVerticalScrollIndicator={false}
         >
           {/* Type: Revenue (Sale) | Cost (Supplier) */}
-          <Text style={styles.sectionLabel}>Type Registry</Text>
+          <Text style={styles.sectionLabel}>Adjustment Type</Text>
           <View style={styles.typeRow}>
             <TouchableOpacity
               style={[styles.typeBtn, type === "revenue" && styles.typeBtnActive]}
@@ -138,7 +139,7 @@ export function TripAdjustmentModal({
           </View>
 
           {/* Amount */}
-          <Text style={styles.sectionLabel}>Synchronize Alteration Node</Text>
+          <Text style={styles.sectionLabel}>Amount</Text>
           <View style={styles.amountWrap}>
             <Text style={styles.currencyPrefix}>₹</Text>
             <TextInput
@@ -153,7 +154,7 @@ export function TripAdjustmentModal({
           </View>
 
           {/* Reason */}
-          <Text style={styles.sectionLabel}>Reason Manifest</Text>
+          <Text style={styles.sectionLabel}>Reason</Text>
           <View style={styles.chipWrap}>
             {reasonOptions.map((r) => (
               <TouchableOpacity
@@ -185,8 +186,8 @@ export function TripAdjustmentModal({
             disabled={!canCommit}
             activeOpacity={0.9}
           >
-            <FontAwesome name="bolt" size={16} color={Theme.primary} style={styles.commitIcon} />
-            <Text style={styles.commitBtnText}>Commit Blueprint Alteration</Text>
+            <FontAwesome name="check" size={16} color={Theme.primary} style={styles.commitIcon} />
+            <Text style={styles.commitBtnText}>Save Adjustment</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -315,6 +316,11 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     minWidth: 120,
     padding: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   chip: {
@@ -346,6 +352,11 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surface,
     fontSize: 14,
     color: Theme.textPrimaryDark,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   footer: {
     paddingHorizontal: 24,

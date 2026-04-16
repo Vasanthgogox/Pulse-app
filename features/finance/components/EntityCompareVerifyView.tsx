@@ -1,6 +1,6 @@
 /**
  * Compare & Verify — trip-level shared ledger audit for a single partner (client/supplier).
- * Shows Mission | Sales (My Book / Partner) | Paid (My Book / Partner) with expandable
+ * Shows Trip | Sales (My Book / Partner) | Paid (My Book / Partner) with expandable
  * reconciliation statement and Raise Dispute. Matches reference UX; uses Theme and app terms.
  */
 import Layout from "@/constants/Layout";
@@ -33,6 +33,7 @@ import {
     ActivityIndicator,
     Alert,
     Modal,
+    Platform,
     ScrollView,
     Share,
     StyleSheet,
@@ -68,6 +69,12 @@ export interface EntityCompareVerifyViewProps {
   viewAsPartner?: boolean;
   /** When true, header/tabs/summary are provided by overlay; hide "SHARED LEDGER AUDIT" and summary card here. */
   embeddedInOverlay?: boolean;
+  /** Callback to trigger connection invitation logic. */
+  onRequestInvite?: () => void;
+  /** Optional callback to trigger a connection request for a partner already in the app. */
+  onRequestConnection?: () => void;
+  /** Optional callback to trigger an invitation to join the app for a partner not yet in the app. */
+  onInviteToApp?: () => void;
 }
 
 type ReconStatus = "VERIFIED" | "PENDING" | "MISMATCH" | "UNRECOGNIZED";
@@ -293,6 +300,9 @@ export function EntityCompareVerifyView({
   onRefresh,
   viewAsPartner = false,
   embeddedInOverlay = false,
+  onRequestInvite,
+  onRequestConnection,
+  onInviteToApp,
 }: EntityCompareVerifyViewProps) {
   const myBookLabel = viewAsPartner ? entity.name : "My Book";
   const partnerLabel = viewAsPartner ? "Your Company" : entity.name;
@@ -315,6 +325,8 @@ export function EntityCompareVerifyView({
   const [disputesRaised, setDisputesRaised] = useState<DisputeRow[]>([]);
   const [disputesReceived, setDisputesReceived] = useState<DisputeRow[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
+  const [pendingAcceptDispute, setPendingAcceptDispute] =
+    useState<DisputeRow | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Non-integrated partner: resolve phone → invitee in app or not → Request vs Invite
@@ -574,7 +586,7 @@ export function EntityCompareVerifyView({
       entity.name ?? "—",
       entityType,
     );
-    // Sort descending by trip ID so newest missions appear first (e.g. TRP019 → TRP005).
+    // Sort descending by trip ID so newest trips appear first (e.g. TRP019 → TRP005).
     return [...rows].sort((a, b) =>
       (b.tripId ?? "").localeCompare(a.tripId ?? "", undefined, { numeric: true }),
     );
@@ -675,9 +687,89 @@ export function EntityCompareVerifyView({
     [organizationId, entity.id, entity.name, onRefresh, refetchDisputes],
   );
 
+  const executeAcceptReceivedDispute = useCallback(
+    async (dispute: DisputeRow) => {
+      if (!organizationId) return;
+      setPendingAcceptDispute(null);
+      setActionLoading(true);
+      try {
+        const { error, rpcUnavailable } = await resolveDispute(
+          dispute.id,
+          "ACCEPT",
+          organizationId,
+        );
+        if (!error) {
+          refetchDisputes();
+          onRefresh?.();
+          Alert.alert(
+            "Ledger updated",
+            "Your book has been updated to match the partner. The trip is now matched.",
+          );
+          setActionLoading(false);
+          return;
+        }
+        if (rpcUnavailable) {
+          const sales = dispute.raised_sales ?? 0;
+          let paid = dispute.raised_paid ?? 0;
+          if (paid === 0) {
+            const row = reconciledRows.find(
+              (r) =>
+                String(r.tripId).toLowerCase() ===
+                String(dispute.transaction_id).toLowerCase(),
+            );
+            if (row?.extPaid != null && row.extPaid > 0) paid = row.extPaid;
+          }
+          if (sales !== 0 || paid !== 0) {
+            const { error: updateError } = await acceptPartnerView(
+              organizationId,
+              dispute.transaction_id,
+              sales,
+              paid,
+              entity.id,
+            );
+            if (updateError) {
+              Alert.alert("Ledger update failed", updateError.message);
+              setActionLoading(false);
+              return;
+            }
+          }
+          const { error: tableError } = await resolveDisputeTableOnly(
+            dispute.id,
+            organizationId,
+          );
+          if (tableError) {
+            Alert.alert("Accept failed", tableError.message);
+            setActionLoading(false);
+            return;
+          }
+          refetchDisputes();
+          onRefresh?.();
+          Alert.alert(
+            "Ledger updated",
+            "Your book has been updated to match the partner. The trip is now matched.",
+          );
+        } else {
+          Alert.alert("Accept failed", error.message);
+        }
+      } catch (e) {
+        Alert.alert(
+          "Error",
+          e instanceof Error ? e.message : "Something went wrong.",
+        );
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [organizationId, entity.id, onRefresh, refetchDisputes, reconciledRows],
+  );
+
   const handleAcceptReceivedDispute = useCallback(
     (dispute: DisputeRow) => {
-      if (!organizationId) return;
+      if (!organizationId || actionLoading) return;
+      if (Platform.OS === "web") {
+        setPendingAcceptDispute(dispute);
+        return;
+      }
       Alert.alert(
         "Accept partner's view?",
         "Your ledger for this trip will be updated to match the partner's numbers. This cannot be undone.",
@@ -686,86 +778,13 @@ export function EntityCompareVerifyView({
           {
             text: "Accept & update",
             onPress: () => {
-              setTimeout(async () => {
-                setActionLoading(true);
-                try {
-                  const { error, rpcUnavailable } = await resolveDispute(
-                    dispute.id,
-                    "ACCEPT",
-                    organizationId,
-                  );
-                  if (!error) {
-                    refetchDisputes();
-                    onRefresh?.();
-                    Alert.alert(
-                      "Ledger updated",
-                      "Your book has been updated to match the partner. The trip is now matched.",
-                    );
-                    setActionLoading(false);
-                    return;
-                  }
-                  if (rpcUnavailable) {
-                    const sales = dispute.raised_sales ?? 0;
-                    let paid = dispute.raised_paid ?? 0;
-                    if (paid === 0) {
-                      const row = reconciledRows.find(
-                        (r) =>
-                          String(r.tripId).toLowerCase() ===
-                          String(dispute.transaction_id).toLowerCase(),
-                      );
-                      if (row?.extPaid != null && row.extPaid > 0)
-                        paid = row.extPaid;
-                    }
-                    if (sales !== 0 || paid !== 0) {
-                      const { error: updateError } = await acceptPartnerView(
-                        organizationId,
-                        dispute.transaction_id,
-                        sales,
-                        paid,
-                        entity.id,
-                      );
-                      if (updateError) {
-                        Alert.alert(
-                          "Ledger update failed",
-                          updateError.message,
-                        );
-                        setActionLoading(false);
-                        return;
-                      }
-                    }
-                    const { error: tableError } = await resolveDisputeTableOnly(
-                      dispute.id,
-                      organizationId,
-                    );
-                    if (tableError) {
-                      Alert.alert("Accept failed", tableError.message);
-                      setActionLoading(false);
-                      return;
-                    }
-                    refetchDisputes();
-                    onRefresh?.();
-                    Alert.alert(
-                      "Ledger updated",
-                      "Your book has been updated to match the partner. The trip is now matched.",
-                    );
-                  } else {
-                    Alert.alert("Accept failed", error.message);
-                  }
-                } catch (e) {
-                  Alert.alert(
-                    "Error",
-                    e instanceof Error ? e.message : "Something went wrong.",
-                  );
-                } finally {
-                  setActionLoading(false);
-                }
-              }, 100);
+              void executeAcceptReceivedDispute(dispute);
             },
           },
         ],
       );
     },
-    [organizationId, entity.id, onRefresh, refetchDisputes, reconciledRows],
+    [organizationId, actionLoading, executeAcceptReceivedDispute],
   );
 
   const handleDeclineReceivedDispute = useCallback(
@@ -906,6 +925,169 @@ export function EntityCompareVerifyView({
     Share.share({ message, title: "Invite to Q" }).catch(() => {});
   }, [entity.name]);
 
+  const renderExpandedReconCard = (
+    row: ReconciledRow,
+    salesVar: number,
+    paidVar: number,
+    intPaidDisplay: number,
+    netInt: number,
+    isPending: boolean,
+    hasDisputeSent: boolean,
+    hasDisputeReceived: boolean,
+    receivedDispute: any
+  ) => (
+    <View style={styles.expandedWrap}>
+      <View style={styles.reconHeader}>
+        <Text style={styles.reconTitle}>Reconciliation Statement</Text>
+        <Text style={styles.reconRef}>REF: {row.missionId}</Text>
+      </View>
+      <View style={styles.reconCardsContainer}>
+        <View style={styles.valueCard}>
+          <Text style={styles.valueCardTitle}>{entityType === "CLIENT" ? "Sale Value" : "Cost Value"}</Text>
+          <View style={styles.valueCardRowHeader}>
+            <Text style={[styles.valueCardColHeader, styles.valueCardColLeft]}>My Book</Text>
+            <Text style={[styles.valueCardColHeader, styles.valueCardColCenter]}>Partner</Text>
+            <Text style={[styles.valueCardColHeader, styles.valueCardColRight]}>Var</Text>
+          </View>
+          <View style={styles.valueCardRowValues}>
+            <View style={[styles.valueCardColValueContainer, styles.valueCardColLeft]}>
+              <Text style={styles.valueCardValue}>{row.internal ? formatINR(row.intSales) : "—"}</Text>
+              <Text style={styles.valueCardDate}>{row.internal?.date ?? "—"}</Text>
+            </View>
+            <View style={[styles.valueCardColValueContainer, styles.valueCardColCenter]}>
+              <Text style={styles.valueCardValue}>{isPending ? "—" : row.external ? formatINR(row.extSales) : "—"}</Text>
+              <Text style={styles.valueCardDate}>{isPending ? "—" : row.internal?.date ?? "—"}</Text>
+            </View>
+            <View style={[styles.valueCardColValueContainer, styles.valueCardColRight]}>
+              <Text style={[styles.valueCardVar, !isPending && salesVar !== 0 && styles.varianceRed]}>
+                {isPending ? "Wait" : salesVar === 0 ? "—" : `${salesVar > 0 ? "+" : ""}${formatINR(salesVar)}`}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.valueCard}>
+          <Text style={styles.valueCardTitle}>Transaction Value</Text>
+          <View style={styles.valueCardRowHeader}>
+            <Text style={[styles.valueCardColHeader, styles.valueCardColLeft]}>My Book</Text>
+            <Text style={[styles.valueCardColHeader, styles.valueCardColCenter]}>Partner</Text>
+            <Text style={[styles.valueCardColHeader, styles.valueCardColRight]}>Var</Text>
+          </View>
+          <View style={styles.valueCardRowValues}>
+            <View style={[styles.valueCardColValueContainer, styles.valueCardColLeft]}>
+              <Text style={[styles.valueCardValue, styles.textPaid]}>{row.internal ? formatINR(intPaidDisplay) : "—"}</Text>
+              <Text style={styles.valueCardDate}>{row.internal?.date ?? "—"}</Text>
+            </View>
+            <View style={[styles.valueCardColValueContainer, styles.valueCardColCenter]}>
+              <Text style={[styles.valueCardValue, !isPending && paidVar !== 0 && styles.varianceRed]}>
+                {isPending ? "—" : row.external ? formatINR(row.extPaid) : "—"}
+              </Text>
+              <Text style={styles.valueCardDate}>{isPending ? "—" : row.internal?.date ?? "—"}</Text>
+            </View>
+            <View style={[styles.valueCardColValueContainer, styles.valueCardColRight]}>
+              <Text style={[styles.valueCardVar, !isPending && paidVar !== 0 && styles.varianceRed]}>
+                {isPending ? "Wait" : paidVar === 0 ? "—" : `${paidVar > 0 ? "+" : ""}${formatINR(paidVar)}`}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.netDueCard}>
+          <Text style={styles.netDueTitle}>Net Trip Due</Text>
+          <Text
+            style={[
+              styles.netDueValue,
+              netInt < 0 ? styles.netDueValueNegative : styles.netDueValueNonNegative,
+            ]}
+          >
+            {isPending ? "Wait" : row.internal ? formatINR(netInt) : "—"}
+          </Text>
+        </View>
+      </View>
+      {hasDisputeReceived && receivedDispute && (
+        <View style={styles.receivedBar}>
+          <Text style={styles.receivedLabel}>Dispute received from partner</Text>
+          <View style={styles.receivedActions}>
+            <TouchableOpacity
+              style={[styles.acceptBtn, actionLoading && styles.btnDisabled]}
+              onPress={() => handleAcceptReceivedDispute(receivedDispute)}
+              disabled={actionLoading}
+              activeOpacity={0.8}
+              hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel="Accept and auto-update ledger"
+            >
+              <FontAwesome name="check" size={12} color={Theme.textOnDark} />
+              <Text style={styles.acceptBtnText}>Accept & Auto-Update Ledger</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.declineBtn, actionLoading && styles.btnDisabled]}
+              onPress={() => handleDeclineReceivedDispute(receivedDispute)}
+              disabled={actionLoading}
+              activeOpacity={0.8}
+              hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel="Decline dispute"
+            >
+              <Text style={styles.declineBtnText}>Decline</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+      {(row.status === "MISMATCH" || row.status === "PENDING" || row.status === "UNRECOGNIZED") && !hasDisputeSent && row.external && (
+        <View style={styles.varianceBar}>
+          <Text style={styles.varianceBarLabel} numberOfLines={1}>
+            {row.issue ?? "Data Variance Detected"}
+          </Text>
+          <View style={styles.varianceBarActions}>
+            <TouchableOpacity
+              style={[styles.updateMyBookBtn, actionLoading && styles.btnDisabled]}
+              onPress={() => handleUpdateMyBook(row)}
+              disabled={actionLoading}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Update my book"
+            >
+              <FontAwesome name="edit" size={12} color="#16A34A" />
+              <Text style={styles.updateMyBookBtnText}>Update My Book</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.raiseDisputeBtn, actionLoading && styles.btnDisabled]}
+              onPress={() => setSelectedDispute(row)}
+              disabled={actionLoading}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Raise dispute"
+            >
+              <FontAwesome name="exclamation-triangle" size={10} color="#111827" />
+              <Text style={styles.raiseDisputeBtnText}>Raise Dispute</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+      {(row.status === "MISMATCH" || row.status === "PENDING" || row.status === "UNRECOGNIZED") && !hasDisputeSent && !row.external && (
+        <View style={styles.varianceBar}>
+          <Text style={styles.varianceBarLabel} numberOfLines={1}>
+            {row.issue ?? "Data Variance Detected"}
+          </Text>
+          <View style={styles.varianceBarActions}>
+            <TouchableOpacity
+              style={[styles.raiseDisputeBtn, actionLoading && styles.btnDisabled]}
+              onPress={() => setSelectedDispute(row)}
+              disabled={actionLoading}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Raise dispute"
+            >
+              <FontAwesome name="exclamation-triangle" size={10} color="#111827" />
+              <Text style={styles.raiseDisputeBtnText}>Raise Dispute</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+
   if (!integrated) {
     return (
       <View style={styles.notIntegratedWrap}>
@@ -974,11 +1156,11 @@ export function EntityCompareVerifyView({
             ) : (
               <TouchableOpacity
                 style={styles.notIntegratedBtn}
-                onPress={handleRequestConnection}
-                disabled={requestInviteLoading}
+                onPress={onRequestConnection ?? onRequestInvite ?? handleRequestConnection}
+                disabled={requestInviteLoading && !onRequestInvite && !onRequestConnection}
                 activeOpacity={0.8}
               >
-                {requestInviteLoading ? (
+                {requestInviteLoading && !onRequestInvite && !onRequestConnection ? (
                   <ActivityIndicator size="small" color={Theme.textOnDark} />
                 ) : (
                   <Text style={styles.notIntegratedBtnText}>
@@ -998,7 +1180,11 @@ export function EntityCompareVerifyView({
             </Text>
             <TouchableOpacity
               style={styles.notIntegratedBtn}
-              onPress={handleInviteToApp}
+              onPress={() => {
+                if (onInviteToApp) onInviteToApp();
+                else if (onRequestInvite) onRequestInvite();
+                else handleInviteToApp();
+              }}
               activeOpacity={0.8}
             >
               <Text style={styles.notIntegratedBtnText}>Invite to app</Text>
@@ -1106,7 +1292,7 @@ export function EntityCompareVerifyView({
                         color={Theme.textMuted}
                       />
                       <Text style={styles.emptyTableText}>
-                        No missions to compare yet.
+                        No trips to compare yet.
                       </Text>
                     </View>
                   ) : (
@@ -1258,153 +1444,71 @@ export function EntityCompareVerifyView({
                           {isExpanded && (
                             <View style={styles.expandedWrap}>
                               <View style={styles.reconHeader}>
-                                <Text style={styles.reconTitle}>
-                                  Reconciliation Statement
-                                </Text>
-                                <Text style={styles.reconRef}>
-                                  REF: {row.missionId}
-                                </Text>
+                                <Text style={styles.reconTitle}>Reconciliation Statement</Text>
+                                <Text style={styles.reconRef}>REF: {row.missionId}</Text>
                               </View>
-                              <View style={styles.reconCard}>
-                                <View style={styles.reconRowHeader}>
-                                  <Text style={styles.reconColLabel}>
-                                    Description
-                                  </Text>
-                                  <Text
-                                    style={[
-                                      styles.reconColRight,
-                                      styles.reconColMy,
-                                    ]}
-                                    numberOfLines={1}
-                                    ellipsizeMode="tail"
-                                  >
-                                    {myBookLabel}
-                                  </Text>
-                                  <Text
-                                    style={[
-                                      styles.reconColRight,
-                                      styles.reconColPartner,
-                                    ]}
-                                    numberOfLines={1}
-                                    ellipsizeMode="tail"
-                                  >
-                                    {partnerLabel}
-                                  </Text>
-                                  <Text style={styles.reconColRight}>
-                                    Variance
-                                  </Text>
+                              <View style={styles.reconCardsContainer}>
+                                <View style={styles.valueCard}>
+                                  <Text style={styles.valueCardTitle}>{entityType === "CLIENT" ? "Sale Value" : "Cost Value"}</Text>
+                                  <View style={styles.valueCardRowHeader}>
+                                    <Text style={[styles.valueCardColHeader, styles.valueCardColLeft]}>My Book</Text>
+                                    <Text style={[styles.valueCardColHeader, styles.valueCardColCenter]}>Partner</Text>
+                                    <Text style={[styles.valueCardColHeader, styles.valueCardColRight]}>Var</Text>
+                                  </View>
+                                  <View style={styles.valueCardRowValues}>
+                                    <View style={[styles.valueCardColValueContainer, styles.valueCardColLeft]}>
+                                      <Text style={styles.valueCardValue}>{row.internal ? formatINR(row.intSales) : "—"}</Text>
+                                      <Text style={styles.valueCardDate}>{row.internal?.date ?? "—"}</Text>
+                                    </View>
+                                    <View style={[styles.valueCardColValueContainer, styles.valueCardColCenter]}>
+                                      <Text style={styles.valueCardValue}>{isPending ? "—" : row.external ? formatINR(row.extSales) : "—"}</Text>
+                                      <Text style={styles.valueCardDate}>{isPending ? "—" : row.internal?.date ?? "—"}</Text>
+                                    </View>
+                                    <View style={[styles.valueCardColValueContainer, styles.valueCardColRight]}>
+                                      <Text style={[styles.valueCardVar, !isPending && salesVar !== 0 && styles.varianceRed]}>
+                                        {isPending ? "Wait" : salesVar === 0 ? "—" : `${salesVar > 0 ? "+" : ""}${formatINR(salesVar)}`}
+                                      </Text>
+                                    </View>
+                                  </View>
                                 </View>
-                                <View style={styles.reconSectionLabel}>
-                                  <Text style={styles.reconSectionText}>
-                                    Charges (Sales)
-                                  </Text>
+
+                                <View style={styles.valueCard}>
+                                  <Text style={styles.valueCardTitle}>Transaction Value</Text>
+                                  <View style={styles.valueCardRowHeader}>
+                                    <Text style={[styles.valueCardColHeader, styles.valueCardColLeft]}>My Book</Text>
+                                    <Text style={[styles.valueCardColHeader, styles.valueCardColCenter]}>Partner</Text>
+                                    <Text style={[styles.valueCardColHeader, styles.valueCardColRight]}>Var</Text>
+                                  </View>
+                                  <View style={styles.valueCardRowValues}>
+                                    <View style={[styles.valueCardColValueContainer, styles.valueCardColLeft]}>
+                                      <Text style={[styles.valueCardValue, styles.textPaid]}>{row.internal ? formatINR(intPaidDisplay) : "—"}</Text>
+                                      <Text style={styles.valueCardDate}>{row.internal?.date ?? "—"}</Text>
+                                    </View>
+                                    <View style={[styles.valueCardColValueContainer, styles.valueCardColCenter]}>
+                                      <Text style={[styles.valueCardValue, !isPending && paidVar !== 0 && styles.varianceRed]}>
+                                        {isPending ? "—" : row.external ? formatINR(row.extPaid) : "—"}
+                                      </Text>
+                                      <Text style={styles.valueCardDate}>{isPending ? "—" : row.internal?.date ?? "—"}</Text>
+                                    </View>
+                                    <View style={[styles.valueCardColValueContainer, styles.valueCardColRight]}>
+                                      <Text style={[styles.valueCardVar, !isPending && paidVar !== 0 && styles.varianceRed]}>
+                                        {isPending ? "Wait" : paidVar === 0 ? "—" : `${paidVar > 0 ? "+" : ""}${formatINR(paidVar)}`}
+                                      </Text>
+                                    </View>
+                                  </View>
                                 </View>
-                                <View style={styles.reconDataRow}>
-                                  <Text style={styles.reconColLabel}>
-                                    Total Sales
-                                  </Text>
-                                  <Text style={styles.reconColRight}>
-                                    {row.internal
-                                      ? formatINR(row.intSales)
-                                      : "—"}
-                                  </Text>
-                                  <Text style={styles.reconColRight}>
-                                    {isPending
-                                      ? "—"
-                                      : row.external
-                                        ? formatINR(row.extSales)
-                                        : "—"}
-                                  </Text>
+
+                                <View style={styles.netDueCard}>
+                                  <Text style={styles.netDueTitle}>Net Trip Due</Text>
                                   <Text
                                     style={[
-                                      styles.reconColRight,
-                                      salesVar !== 0 &&
-                                        !isPending &&
-                                        styles.varianceRed,
+                                      styles.netDueValue,
+                                      netInt < 0
+                                        ? styles.netDueValueNegative
+                                        : styles.netDueValueNonNegative,
                                     ]}
                                   >
-                                    {isPending
-                                      ? "Partner data pending"
-                                      : salesVar === 0
-                                        ? "—"
-                                        : (salesVar > 0 ? "+" : "") +
-                                          formatINR(salesVar)}
-                                  </Text>
-                                </View>
-                                <View style={styles.reconSectionLabelPaid}>
-                                  <Text style={styles.reconSectionTextPaid}>
-                                    Credits (Paid)
-                                  </Text>
-                                </View>
-                                <View style={styles.reconDataRow}>
-                                  <Text style={styles.reconColLabel}>
-                                    Total Paid
-                                  </Text>
-                                  <Text
-                                    style={[
-                                      styles.reconColRight,
-                                      styles.textPaid,
-                                    ]}
-                                  >
-                                    {row.internal
-                                      ? formatINR(intPaidDisplay)
-                                      : "—"}
-                                  </Text>
-                                  <Text
-                                    style={[
-                                      styles.reconColRight,
-                                      styles.textPaid,
-                                    ]}
-                                  >
-                                    {isPending
-                                      ? "—"
-                                      : row.external
-                                        ? formatINR(row.extPaid)
-                                        : "—"}
-                                  </Text>
-                                  <Text
-                                    style={[
-                                      styles.reconColRight,
-                                      paidVar !== 0 &&
-                                        !isPending &&
-                                        styles.varianceAmber,
-                                    ]}
-                                  >
-                                    {isPending
-                                      ? "Partner data pending"
-                                      : paidVar === 0
-                                        ? "—"
-                                        : (paidVar > 0 ? "+" : "") +
-                                          formatINR(paidVar)}
-                                  </Text>
-                                </View>
-                                <View style={styles.reconNetRow}>
-                                  <Text style={styles.reconNetLabel}>
-                                    Net Trip Due
-                                  </Text>
-                                  <Text style={styles.reconColRight}>
-                                    {row.internal ? formatINR(netInt) : "—"}
-                                  </Text>
-                                  <Text style={styles.reconColRight}>
-                                    {isPending
-                                      ? "—"
-                                      : row.external
-                                        ? formatINR(netExt)
-                                        : "—"}
-                                  </Text>
-                                  <Text
-                                    style={[
-                                      styles.reconColRight,
-                                      netVar !== 0 && !isPending
-                                        ? styles.varianceRed
-                                        : styles.varianceMatch,
-                                    ]}
-                                  >
-                                    {isPending
-                                      ? "Partner data pending"
-                                      : netVar === 0
-                                        ? "MATCH"
-                                        : formatINR(netVar)}
+                                    {isPending ? "Wait" : row.internal ? formatINR(netInt) : "—"}
                                   </Text>
                                 </View>
                               </View>
@@ -1478,11 +1582,8 @@ export function EntityCompareVerifyView({
                                 !hasDisputeSent &&
                                 row.external && (
                                   <View style={styles.varianceBar}>
-                                    <Text
-                                      style={styles.varianceBarLabel}
-                                      numberOfLines={1}
-                                    >
-                                      {row.issue}
+                                    <Text style={styles.varianceBarLabel} numberOfLines={1}>
+                                      {row.issue ?? "Data Variance Detected"}
                                     </Text>
                                     <View style={styles.varianceBarActions}>
                                       <TouchableOpacity
@@ -1498,8 +1599,8 @@ export function EntityCompareVerifyView({
                                       >
                                         <FontAwesome
                                           name="edit"
-                                          size={10}
-                                          color={Theme.textOnDark}
+                                          size={12}
+                                          color="#16A34A"
                                         />
                                         <Text
                                           style={styles.updateMyBookBtnText}
@@ -1520,8 +1621,8 @@ export function EntityCompareVerifyView({
                                       >
                                         <FontAwesome
                                           name="exclamation-triangle"
-                                          size={10}
-                                          color={Theme.textOnDark}
+                                          size={12}
+                                          color="#111827"
                                         />
                                         <Text
                                           style={styles.raiseDisputeBtnText}
@@ -1552,7 +1653,7 @@ export function EntityCompareVerifyView({
                         color={Theme.textMuted}
                       />
                       <Text style={styles.emptyTableText}>
-                        No missions to compare yet.
+                        No trips to compare yet.
                       </Text>
                     </View>
                   ) : (
@@ -1570,6 +1671,9 @@ export function EntityCompareVerifyView({
                       const isPaidMismatchDisplay =
                         row.status === "MISMATCH" &&
                         intPaidDisplay !== row.extPaid;
+                      const salesVar = row.extSales - row.intSales;
+                      const paidVar = row.extPaid - intPaidDisplay;
+                      const netInt = row.intSales - intPaidDisplay;
                       const rowKey = String(row.tripId).trim().toLowerCase();
                       const hasDisputeSent = disputeSentByTripId.has(rowKey);
                       const hasDisputeReceived =
@@ -1689,186 +1793,16 @@ export function EntityCompareVerifyView({
                               />
                             </View>
                           </TouchableOpacity>
-                          {isExpanded && (
-                            <View style={styles.expandedWrap}>
-                              <View style={styles.reconHeader}>
-                                <Text style={styles.reconTitle}>
-                                  Reconciliation Statement
-                                </Text>
-                                <Text style={styles.reconRef}>
-                                  REF: {row.missionId}
-                                </Text>
-                              </View>
-                              <View style={styles.reconCard}>
-                                <View style={styles.reconRowHeader}>
-                                  <Text style={styles.reconColLabel}>
-                                    Description
-                                  </Text>
-                                  <Text
-                                    style={[
-                                      styles.reconColRight,
-                                      styles.reconColMy,
-                                    ]}
-                                    numberOfLines={1}
-                                    ellipsizeMode="tail"
-                                  >
-                                    {myBookLabel}
-                                  </Text>
-                                  <Text
-                                    style={[
-                                      styles.reconColRight,
-                                      styles.reconColPartner,
-                                    ]}
-                                    numberOfLines={1}
-                                    ellipsizeMode="tail"
-                                  >
-                                    {partnerLabel}
-                                  </Text>
-                                </View>
-                                {row.internal && (
-                                  <View style={styles.reconRow}>
-                                    <Text style={styles.reconColLabel}>
-                                      Sales
-                                    </Text>
-                                    <Text
-                                      style={[
-                                        styles.reconColRight,
-                                        styles.reconColMy,
-                                      ]}
-                                    >
-                                      {formatINR(row.intSales)}
-                                    </Text>
-                                    <Text
-                                      style={[
-                                        styles.reconColRight,
-                                        styles.reconColPartner,
-                                      ]}
-                                    >
-                                      —
-                                    </Text>
-                                  </View>
-                                )}
-                                {row.external && (
-                                  <View style={styles.reconRow}>
-                                    <Text style={styles.reconColLabel}>
-                                      Sales (partner)
-                                    </Text>
-                                    <Text
-                                      style={[
-                                        styles.reconColRight,
-                                        styles.reconColMy,
-                                      ]}
-                                    >
-                                      —
-                                    </Text>
-                                    <Text
-                                      style={[
-                                        styles.reconColRight,
-                                        styles.reconColPartner,
-                                      ]}
-                                    >
-                                      {formatINR(row.extSales)}
-                                    </Text>
-                                  </View>
-                                )}
-                                {row.internal && (
-                                  <View style={styles.reconRow}>
-                                    <Text style={styles.reconColLabel}>
-                                      Paid (this relationship)
-                                    </Text>
-                                    <Text
-                                      style={[
-                                        styles.reconColRight,
-                                        styles.reconColMy,
-                                      ]}
-                                    >
-                                      {formatINR(intPaidDisplay)}
-                                    </Text>
-                                    <Text
-                                      style={[
-                                        styles.reconColRight,
-                                        styles.reconColPartner,
-                                      ]}
-                                    >
-                                      —
-                                    </Text>
-                                  </View>
-                                )}
-                                {row.external && (
-                                  <View style={styles.reconRow}>
-                                    <Text style={styles.reconColLabel}>
-                                      Paid (partner)
-                                    </Text>
-                                    <Text
-                                      style={[
-                                        styles.reconColRight,
-                                        styles.reconColMy,
-                                      ]}
-                                    >
-                                      —
-                                    </Text>
-                                    <Text
-                                      style={[
-                                        styles.reconColRight,
-                                        styles.reconColPartner,
-                                      ]}
-                                    >
-                                      {formatINR(row.extPaid)}
-                                    </Text>
-                                  </View>
-                                )}
-                                {(hasDisputeSent || hasDisputeReceived) && (
-                                  <View style={styles.reconRow}>
-                                    <Text style={styles.reconColLabel}>
-                                      Dispute
-                                    </Text>
-                                    <Text
-                                      style={[
-                                        styles.reconColRight,
-                                        styles.reconColMy,
-                                      ]}
-                                      numberOfLines={2}
-                                    >
-                                      {hasDisputeSent
-                                        ? "You sent a dispute"
-                                        : "—"}
-                                    </Text>
-                                    <Text
-                                      style={[
-                                        styles.reconColRight,
-                                        styles.reconColPartner,
-                                      ]}
-                                      numberOfLines={2}
-                                    >
-                                      {hasDisputeReceived && receivedDispute
-                                        ? ((receivedDispute as { remarks?: string }).remarks ??
-                                          "Dispute received")
-                                        : "—"}
-                                    </Text>
-                                  </View>
-                                )}
-                                {!hasDisputeSent &&
-                                  (row.status === "MISMATCH" ||
-                                    row.status === "UNRECOGNIZED") && (
-                                    <TouchableOpacity
-                                      style={styles.raiseDisputeBtn}
-                                      onPress={() => setSelectedDispute(row)}
-                                      activeOpacity={0.8}
-                                      accessibilityRole="button"
-                                      accessibilityLabel="Raise dispute"
-                                    >
-                                      <FontAwesome
-                                        name="exclamation-triangle"
-                                        size={10}
-                                        color={Theme.textOnDark}
-                                      />
-                                      <Text style={styles.raiseDisputeBtnText}>
-                                        Raise Dispute
-                                      </Text>
-                                    </TouchableOpacity>
-                                  )}
-                              </View>
-                            </View>
+                          {isExpanded && renderExpandedReconCard(
+                            row,
+                            salesVar,
+                            paidVar,
+                            intPaidDisplay,
+                            netInt,
+                            isPending,
+                            hasDisputeSent,
+                            hasDisputeReceived,
+                            receivedDispute
                           )}
                         </View>
                       );
@@ -1880,6 +1814,49 @@ export function EntityCompareVerifyView({
           </View>
         </>
       )}
+
+      <Modal
+        visible={Platform.OS === "web" && !!pendingAcceptDispute}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPendingAcceptDispute(null)}
+      >
+        <View style={styles.confirmModalOverlay}>
+          <View style={styles.confirmModalCard}>
+            <Text style={styles.confirmModalTitle}>Accept partner&apos;s view?</Text>
+            <Text style={styles.confirmModalText}>
+              Your ledger for this trip will be updated to match the partner&apos;s
+              numbers. This cannot be undone.
+            </Text>
+            <View style={styles.confirmModalActions}>
+              <TouchableOpacity
+                style={styles.confirmModalCancelBtn}
+                onPress={() => setPendingAcceptDispute(null)}
+                disabled={actionLoading}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.confirmModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.confirmModalConfirmBtn,
+                  actionLoading && styles.btnDisabled,
+                ]}
+                onPress={() =>
+                  pendingAcceptDispute &&
+                  void executeAcceptReceivedDispute(pendingAcceptDispute)
+                }
+                disabled={actionLoading || !pendingAcceptDispute}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.confirmModalConfirmText}>
+                  Accept &amp; update
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Dispute modal */}
       <Modal
@@ -2186,7 +2163,7 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     letterSpacing: 0.3,
   },
-  /** Mission column: same row height and layout as amount columns */
+  /** Trip column: same row height and layout as amount columns */
   thMissionWrap: {
     flex: 0.25,
     minWidth: 0,
@@ -2206,6 +2183,129 @@ const styles = StyleSheet.create({
     paddingRight: 8,
     paddingVertical: 10,
     justifyContent: "center",
+  },
+  expandedWrapV2: {
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    marginTop: 8,
+    overflow: "hidden",
+  },
+  reconHeaderV2: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#161616",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  reconTitleV2: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: 1,
+  },
+  reconRefV2: { 
+    fontSize: 10, 
+    color: "#FFFFFF", 
+    fontFamily: "monospace" 
+  },
+  reconCardsContainerV2: {
+    padding: 16,
+    gap: 12,
+  },
+  valueCardV2: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 16,
+  },
+  valueCardTitleV2: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textMutedDemo,
+    letterSpacing: 1,
+    marginBottom: 16,
+    textTransform: "uppercase",
+  },
+  valueCardRowHeaderV2: {
+    flexDirection: "row",
+    marginBottom: 12,
+  },
+  valueCardColHeaderV2: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+  },
+  valueCardColLeftV2: {
+    flex: 1,
+    textAlign: "left",
+    alignItems: "flex-start",
+  },
+  valueCardColCenterV2: {
+    flex: 1,
+    textAlign: "center",
+    alignItems: "center",
+  },
+  valueCardColRightV2: {
+    flex: 0.8,
+    textAlign: "right",
+    alignItems: "flex-end",
+  },
+  valueCardRowValuesV2: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  valueCardColValueContainerV2: {
+    justifyContent: "center",
+  },
+  valueCardValueV2: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
+  },
+  valueCardDateV2: {
+    fontSize: 10,
+    color: Theme.textMuted,
+    marginTop: 4,
+  },
+  valueCardVarV2: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
+  },
+  netDueCardV2: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  netDueTitleV2: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMutedDemo,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  netDueValueV2: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+  },
+  netDueValueNegativeV2: {
+    color: Theme.teslaRed,
+  },
+  netDueValueNonNegativeV2: {
+    color: Theme.textPrimaryDark,
   },
   thCol: {
     flex: 0.1875,
@@ -2416,115 +2516,194 @@ const styles = StyleSheet.create({
   cellMismatch: { color: Theme.teslaRed },
   cellPending: { color: Theme.driverGold, fontStyle: "italic" },
   expandedWrap: {
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    backgroundColor: Theme.surfaceLight,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.surfaceLight,
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    marginTop: 8,
+    overflow: "hidden",
   },
   reconHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    backgroundColor: "#161616",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   reconTitle: {
-    fontSize: 8,
-    fontWeight: "600",
-    color: Theme.textMutedDemo,
-    letterSpacing: 1.5,
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: 1,
   },
-  reconRef: { fontSize: 8, color: Theme.textMuted, fontFamily: "monospace" },
-  reconCard: {
-    backgroundColor: Theme.screenBackground,
+  reconRef: { 
+    fontSize: 10, 
+    color: "#FFFFFF", 
+    fontFamily: "monospace" 
+  },
+  reconCardsContainer: {
+    padding: 16,
+    gap: 12,
+  },
+  valueCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    borderRadius: 2,
-    overflow: "hidden",
+    padding: 16,
   },
-  reconRow: {
+  valueCardTitle: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textMutedDemo,
+    letterSpacing: 1,
+    marginBottom: 16,
+    textTransform: "uppercase",
+  },
+  valueCardRowHeader: {
+    flexDirection: "row",
+    marginBottom: 12,
+  },
+  valueCardColHeader: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+  },
+  valueCardColLeft: {
+    flex: 1,
+    textAlign: "left",
+    alignItems: "flex-start",
+  },
+  valueCardColCenter: {
+    flex: 1,
+    textAlign: "center",
+    alignItems: "center",
+  },
+  valueCardColRight: {
+    flex: 0.8,
+    textAlign: "right",
+    alignItems: "flex-end",
+  },
+  valueCardRowValues: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.surfaceLight,
+  },
+  valueCardColValueContainer: {
+    justifyContent: "center",
+  },
+  valueCardValue: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
+  },
+  valueCardDate: {
+    fontSize: 10,
+    color: Theme.textMuted,
+    marginTop: 4,
+  },
+  valueCardVar: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
+  },
+  netDueCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  netDueTitle: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMutedDemo,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  netDueValue: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+  },
+  netDueValueNegative: {
+    color: Theme.teslaRed,
+  },
+  netDueValueNonNegative: {
+    color: Theme.textPrimaryDark,
+  },
+  reconCard: {
+    backgroundColor: "#FFFFFF",
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+    overflow: "hidden",
   },
   reconRowHeader: {
     flexDirection: "row",
-    backgroundColor: Theme.surfaceLight,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
+    backgroundColor: "#FFFFFF",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
   reconColLabel: {
     flex: 1,
-    fontSize: 7,
+    fontSize: 11,
+    fontWeight: "400",
+    color: Theme.textPrimaryDark,
+  },
+  reconColHeader: {
+    flex: 1,
+    fontSize: 11,
     fontWeight: "600",
-    color: Theme.textMuted,
+    color: Theme.textPrimaryDark,
   },
   reconColRight: {
-    width: 72,
-    fontSize: 8,
-    fontWeight: "500",
+    width: 65,
+    fontSize: 11,
+    fontWeight: "400",
     textAlign: "right" as const,
     color: Theme.textPrimaryDark,
   },
-  reconColMy: { color: Theme.textPrimaryDark },
-  reconColPartner: { color: Theme.primary },
-  reconSectionLabel: {
-    backgroundColor: Theme.surfaceGray,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-  },
-  reconSectionText: {
-    fontSize: 7,
+  reconColRightHeader: {
+    width: 65,
+    fontSize: 11,
     fontWeight: "600",
-    color: Theme.textMuted,
-    letterSpacing: 1,
+    textAlign: "right" as const,
+    color: Theme.textPrimaryDark,
   },
-  reconSectionLabelPaid: {
-    backgroundColor: Theme.positiveMuted,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
+  reconColMy: {},
+  reconColPartner: {},
+  reconDataGroup: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
   },
-  reconSectionTextPaid: {
-    fontSize: 7,
-    fontWeight: "600",
-    color: Theme.darkGreen,
-    letterSpacing: 1,
+  reconGroupTitle: {
+    fontSize: 11,
+    fontWeight: "400",
+    color: Theme.textPrimaryDark,
+    marginBottom: 6,
   },
   reconDataRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.surfaceLight,
+  },
+  reconDivider: {
+    height: 1,
+    backgroundColor: Theme.borderLight,
+    marginHorizontal: 16,
   },
   varianceRed: { color: Theme.teslaRed },
-  varianceAmber: { color: Theme.driverGold },
+  varianceAmber: { color: Theme.driverGold, fontStyle: "italic" },
   varianceMatch: { color: Theme.darkGreen },
   textPaid: { color: Theme.darkGreen },
-  reconNetRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    backgroundColor: Theme.surfaceGray,
-  },
-  reconNetLabel: {
-    flex: 1,
-    fontSize: 8,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
-    letterSpacing: 1,
-  },
+  btnDisabled: { opacity: 0.7 },
   disputeBar: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2538,19 +2717,19 @@ const styles = StyleSheet.create({
   },
   varianceBar: {
     marginTop: 10,
-    padding: 10,
-    backgroundColor: Theme.negativeMuted,
-    borderRadius: 6,
+    marginHorizontal: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.negativeMuted,
+    borderColor: Theme.borderLight,
   },
   varianceBarLabel: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: Theme.teslaRed,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-    marginBottom: 8,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#C62828",
+    marginBottom: 12,
   },
   varianceBarActions: {
     flexDirection: "row",
@@ -2571,17 +2750,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: Theme.primary,
-    minHeight: 36,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
+    backgroundColor: "#FFFFFF",
+    borderColor: "#111827",
+    borderWidth: 1,
+    minHeight: 48,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
   },
   raiseDisputeBtnText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textOnDark,
-    letterSpacing: 0.2,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#111827",
   },
   receivedBar: {
     marginTop: 12,
@@ -2642,19 +2822,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: Theme.darkGreen,
-    minHeight: 36,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
+    backgroundColor: "#FFFFFF",
+    borderColor: "#16A34A",
+    borderWidth: 1,
+    minHeight: 48,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
   },
   updateMyBookBtnText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textOnDark,
-    letterSpacing: 0.2,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#16A34A",
   },
-  btnDisabled: { opacity: 0.7 },
   modalWrap: {
     flex: 1,
     backgroundColor: Theme.screenBackground,
@@ -2731,6 +2911,11 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     minHeight: 64,
     textAlignVertical: "top",
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   modalActions: {
     flexDirection: "row",
@@ -2762,6 +2947,67 @@ const styles = StyleSheet.create({
   modalBtnPrimaryText: {
     fontSize: 12,
     fontWeight: "700",
+    color: Theme.textOnPrimary,
+  },
+  confirmModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(11, 16, 32, 0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  confirmModalCard: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: Theme.surfaceLight,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    borderRadius: 10,
+    padding: 16,
+    gap: 10,
+  },
+  confirmModalTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  confirmModalText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: Theme.textMuted,
+  },
+  confirmModalActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 6,
+  },
+  confirmModalCancelBtn: {
+    flex: 1,
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  confirmModalCancelText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  confirmModalConfirmBtn: {
+    flex: 1,
+    minHeight: 44,
+    backgroundColor: Theme.primary,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  confirmModalConfirmText: {
+    fontSize: 12,
+    fontWeight: "800",
     color: Theme.textOnPrimary,
   },
   emptyTable: {

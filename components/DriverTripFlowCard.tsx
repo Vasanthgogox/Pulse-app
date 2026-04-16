@@ -1,26 +1,27 @@
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import { isAggregateTrip } from '@/lib/driverUtils';
 import { formatINR } from '@/lib/format';
 import * as tripDocumentsService from '@/services/tripDocumentsService';
 import * as tripsService from '@/services/tripsService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { File } from 'expo-file-system';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Image,
-  Linking,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Image,
+    Linking,
+    Modal,
+    Platform,
+    Pressable,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { isAggregateTrip } from '@/lib/driverUtils';
 
 type StepId = 'accepted' | 'pickup' | 'transit' | 'reached' | 'completed';
 
@@ -137,9 +138,10 @@ export function DriverTripFlowCard({
 
   const tripIsAggregate = useMemo(() => isAggregateTrip(localTrip), [localTrip]);
   const earnings = useMemo(() => {
-    if (tripIsAggregate) return '—';
     const n = Math.max(0, Number(commissionAmount ?? 0) || 0);
-    return formatINR(n);
+    if (n > 0) return formatINR(n);
+    if (tripIsAggregate) return 'SALARY';
+    return formatINR(0);
   }, [tripIsAggregate, commissionAmount]);
 
   const progressPct = useMemo(() => progressForStep(step), [step]);
@@ -270,8 +272,15 @@ export function DriverTripFlowCard({
     const fileName = result.assets[0].fileName ?? `pod-${Date.now()}.jpg`;
     const mimeType = result.assets[0].mimeType ?? 'image/jpeg';
     try {
-      const file = new File(uri);
-      const arrayBuffer = await file.arrayBuffer();
+      let arrayBuffer: ArrayBuffer;
+      if (Platform.OS === 'web') {
+        const response = await fetch(uri);
+        arrayBuffer = await response.arrayBuffer();
+      } else {
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        arrayBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0)).buffer;
+      }
+      
       if (!arrayBuffer || arrayBuffer.byteLength === 0) {
         setStepError('Could not read image file');
         setPodUploading(false);
@@ -688,8 +697,8 @@ const styles = StyleSheet.create({
     overflow: 'visible',
     backgroundColor: 'transparent',
     borderWidth: 0,
-    paddingHorizontal: 24,
-    paddingBottom: 18,
+    paddingHorizontal: 0,
+    paddingBottom: 0,
     paddingTop: 12,
   },
   shadow: {

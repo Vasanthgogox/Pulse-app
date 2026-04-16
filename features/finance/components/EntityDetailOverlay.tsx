@@ -1,5 +1,5 @@
 /**
- * Entity detail overlay — TeslaHeader, summary bar, toolbar (search + report + filter), "Entity Ledger protocol" table.
+ * Entity detail overlay — TeslaHeader, summary bar, toolbar (search + report + filter), "Transaction Ledger" table.
  * Report fetches ledger at client/entity level and offers download.
  */
 import { ALL_LEDGER_CATEGORY_VALUES } from "@/components/AddTransactionModal";
@@ -10,64 +10,65 @@ import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { ClientRiskBadge } from "@/features/ai";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
-import { getRatingsForDriver, type RatingRow } from "@/features/ratings";
+import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
+import { getRatingsForDriver, type RatingRow } from "@/features/ratings/services/ratings.service";
 import { getTripDisplayNumber, type TripRow } from "@/features/trips";
 import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import {
-  getExpenseGroupedForTrip,
-  getExpenseLinesForTripPnL,
+    getExpenseGroupedForTrip,
+    getExpenseLinesForTripPnL,
 } from "@/features/vehicles/pnl";
-import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import {
-  formatINR,
-  formatIndianVehicleNumber,
-  formatLedgerAmount,
-  formatLedgerDate,
-  formatLedgerDateTime,
-  formatRelative,
+    formatINR,
+    formatIndianVehicleNumber,
+    formatLedgerAmount,
+    formatLedgerDate,
+    formatLedgerDateTime,
+    formatRelative,
 } from "@/lib/format";
 import type { SalaryRequestWithDriverRow } from "@/services/salaryRequestsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert,
-  FlatList,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  useWindowDimensions,
+    Alert,
+    FlatList,
+    Modal,
+    Pressable,
+    ScrollView,
+    Share,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+    useWindowDimensions,
 } from "react-native";
 import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
+    Easing,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
 import type { DriverOfferForAggregation } from "../aggregation";
 import {
-  buildMonthlyDriverStatement,
-  computeDriverCommissionForTrip,
-  type DriverLedgerEntryForStatement,
-  type TripForStatement,
+    buildMonthlyDriverStatement,
+    computeDriverCommissionForTrip,
+    type DriverLedgerEntryForStatement,
+    type TripForStatement,
 } from "../aggregation";
 import type { LedgerRow } from "../services/finance.service";
 import { MIN_FISCAL_TAB_WIDTH } from "../types";
 import { EntityCompareVerifyView } from "./EntityCompareVerifyView";
 import {
-  FinancialRow,
-  type FinancialRowData,
-  type FinancialRowType,
+    FinancialRow,
+    type FinancialRowData,
+    type FinancialRowType,
 } from "./FinancialRow";
 import { LedgerReportModal } from "./LedgerReportModal";
 import { LedgerTransactionListView } from "./LedgerTransactionListView";
@@ -120,7 +121,7 @@ export interface TripEntryContext {
   intent: TripEntryIntent;
 }
 
-/** Build LedgerRow[] from entity protocol rows so report preview shows same data as ENTITY LEDGER PROTOCOL. */
+/** Build LedgerRow[] from entity protocol rows so report preview shows same data as TRANSACTION LEDGER. */
 function protocolRowsToLedger(
   entity: FinancialRowData,
   entityType: EntityType,
@@ -585,6 +586,15 @@ export function EntityDetailOverlay({
   const [driverRatings, setDriverRatings] = useState<RatingRow[]>([]);
   const [showVehiclePicker, setShowVehiclePicker] = useState(false);
   const [showDriverPicker, setShowDriverPicker] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [successTitle, setSuccessTitle] = useState("NODE_SYNCED");
+
+  const triggerSuccess = useCallback((title = "NODE_SYNCED") => {
+    setSuccessTitle(title);
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 1500);
+  }, []);
+
   const isDriver = entityType === "DRIVER";
   const assignedVehicle =
     isDriver && driverProfile?.assigned_vehicle_id && vehicles.length > 0
@@ -1663,6 +1673,19 @@ export function EntityDetailOverlay({
             organizationId={organizationId ?? null}
             integrated={entity.is_integrated ?? false}
             onRefresh={onRefresh}
+            onRequestConnection={() => {
+              triggerSuccess("CONNECTION_REQUESTED");
+            }}
+            onInviteToApp={() => {
+              const message = `Join me on Q to sync our ledger and compare books with ${
+                entity.name ?? "—"
+              }. Download the Q app to get started.`;
+              Share.share({ message, title: "Invite to Q" })
+                .then(() => {
+                  triggerSuccess("INVITE_SENT");
+                })
+                .catch(() => {});
+            }}
             viewAsPartner={false}
             embeddedInOverlay
           />
@@ -2795,7 +2818,7 @@ export function EntityDetailOverlay({
               labelOut={undefined}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
-              searchPlaceholder="Search mission, destination…"
+              searchPlaceholder="Search trip, destination…"
               onReportPress={handleReportPress}
             />
           </View>
@@ -2819,7 +2842,7 @@ export function EntityDetailOverlay({
                       ? "PAYABLES BY TRIP"
                       : isDriver
                         ? "COMMISSION BY TRIP"
-                        : "ENTITY LEDGER PROTOCOL"}
+                        : "TRANSACTION LEDGER"}
               </Text>
               {(entityType === "CLIENT" || entityType === "SUPPLIER") && (
                 <Text style={styles.sectionSubtitle} numberOfLines={2}>
@@ -3627,6 +3650,17 @@ export function EntityDetailOverlay({
             </View>
           </TouchableOpacity>
         </Modal>
+      )}
+
+      {showSuccess && (
+        <View style={styles.successOverlay}>
+          <View style={styles.successCard}>
+            <View style={styles.successIconWrap}>
+              <FontAwesome name="check" size={24} color={Theme.textOnPrimary} />
+            </View>
+            <Text style={styles.successTitle}>{successTitle}</Text>
+          </View>
+        </View>
       )}
     </View>
   );
@@ -4985,5 +5019,43 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textMuted,
     marginTop: 2,
+  },
+  successOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,255,255,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10000,
+    paddingHorizontal: 40,
+  },
+  successCard: {
+    backgroundColor: Theme.darkBackground,
+    paddingVertical: 24,
+    paddingHorizontal: 32,
+    borderRadius: 24,
+    alignItems: "center",
+    minWidth: 160,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+  successIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Theme.darkGreen,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  successTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: Theme.textOnPrimary,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
   },
 });

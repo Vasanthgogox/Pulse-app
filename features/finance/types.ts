@@ -26,8 +26,8 @@ export const SUMMARY_LABELS: Record<FinanceSubTab, { in: string; out: string }> 
   cash: { in: "Total Cash In", out: "Total Cash Out" },
   customers: { in: "Total Billing", out: "Total Balance" },
   suppliers: { in: "Total Payables", out: "Unsettled Due" },
-  garage: { in: "Asset Revenue", out: "Net Profit" },
-  drivers: { in: "Payroll Vol", out: "Salary Due" },
+  garage: { in: "Vehicle Revenue", out: "Net Profit" },
+  drivers: { in: "Total Payroll", out: "Salary Due" },
 };
 
 export const ADD_NODE_LABELS: Record<Exclude<FinanceSubTab, "cash">, string> = {

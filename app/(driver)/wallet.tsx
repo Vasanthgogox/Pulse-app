@@ -1,21 +1,27 @@
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
+import Typography from '@/constants/Typography';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
+import {
+  phonePeMetaDate
+} from '@/lib/driverGpayTransactions';
 import { isAggregateTrip, tripEarningsForDriver } from '@/lib/driverUtils';
 import { usePreventScreenCapture } from '@/lib/usePreventScreenCapture';
 import * as driversService from '@/services/driversService';
-import * as salaryRequestsService from '@/services/salaryRequestsService';
 import * as tripsService from '@/services/tripsService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Image,
+  Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,6 +29,8 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const isAndroid = Platform.OS === 'android';
 
 function isCompleted(status: string) {
   const s = (status || '').toLowerCase();
@@ -32,11 +40,6 @@ function isCompleted(status: string) {
 /** Trip earnings for driver: 0 for aggregate (offline payment), else driver_commission / 10% supplier_rate / 10% client_price. */
 function tripEarnings(t: tripsService.TripRow): number {
   return tripEarningsForDriver(t);
-}
-
-function formatLedgerDate(dateStr: string) {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
 }
 
 /** UPI-style date section label: Today, Yesterday, or "5 Mar" */
@@ -89,12 +92,8 @@ export default function DriverWalletScreen() {
   const isDark = theme === 'dark';
   const router = useRouter();
 
-  const openTripDetails = useCallback(
-    (tripId: string) => {
-      router.push({ pathname: '/(driver)/control', params: { tripId } });
-    },
-    [router],
-  );
+  // Note: We intentionally do not deep-link to the Trip tab from Wallet.
+  // The Wallet screen should remain self-contained and not steal focus/navigation.
   const { profile } = useAuth();
   const { avatarSeed } = useDriverAvatar();
   const { avatarUri } = useDriverAvatarUri();
@@ -104,18 +103,23 @@ export default function DriverWalletScreen() {
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
   const [ledgerEntries, setLedgerEntries] = useState<driversService.DriverLedgerRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const isRefreshingRef = useRef(false);
+  const initialLoadDoneRef = useRef(false);
   const [transactionFilter, setTransactionFilter] = useState<'all' | 'pending' | 'received'>('all');
   /** Expand/collapse transaction detail (trip id or null). No redirect. */
   const [expandedTripId, setExpandedTripId] = useState<string | null>(null);
   const [markPaidLoadingTripId, setMarkPaidLoadingTripId] = useState<string | null>(null);
   const [requestPaymentLoadingTripId, setRequestPaymentLoadingTripId] = useState<string | null>(null);
 
+  const [mainTab, setMainTab] = useState<'earnings' | 'transactions'>('earnings');
+
   const load = useCallback(() => {
     if (!profile?.uid) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
     Promise.all([
       driversService.getLinkedDriversForCurrentUser(profile.uid),
       driversService.getDriverInvitesReceived(),
@@ -133,11 +137,22 @@ export default function DriverWalletScreen() {
           setTrips(tRes.trips ?? []);
           setLedgerEntries(ledgerRes.entries ?? []);
           setLoading(false);
+          initialLoadDoneRef.current = true;
+          isRefreshingRef.current = false;
+          setRefreshing(false);
         });
       } else {
         setLoading(false);
+        initialLoadDoneRef.current = true;
+        isRefreshingRef.current = false;
+        setRefreshing(false);
       }
-    }).catch(() => setLoading(false));
+    }).catch(() => {
+      setLoading(false);
+      initialLoadDoneRef.current = true;
+      isRefreshingRef.current = false;
+      setRefreshing(false);
+    });
   }, [profile?.uid]);
 
   useEffect(() => {
@@ -170,18 +185,32 @@ export default function DriverWalletScreen() {
     return { receivedByTripId: byTrip, nonTripLedgerEntries: nonTrip };
   }, [ledgerEntries]);
 
-  /** Pending = not yet credited; received = already in ledger. */
+  const sortedLedgerEntries = useMemo(() => {
+    return [...ledgerEntries].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [ledgerEntries]);
+
+  const receivedLedgerEntries = useMemo(() => {
+    return sortedLedgerEntries.filter((entry) => (Number(entry.amount) || 0) > 0);
+  }, [sortedLedgerEntries]);
+
   const { pendingTrips, receivedTrips, filteredTrips, pendingTotal, receivedTotal } = useMemo(() => {
-    const pending = completedTrips.filter((t) => (receivedByTripId[t.id] ?? 0) === 0);
-    const received = completedTrips.filter((t) => (receivedByTripId[t.id] ?? 0) > 0);
+    const visibleTrips = [...completedTrips]
+      .sort((a, b) => {
+        const da = new Date(a.completed_at ?? a.updated_at ?? a.created_at).getTime();
+        const db = new Date(b.completed_at ?? b.updated_at ?? b.created_at).getTime();
+        return db - da;
+      });
+
+    const pending = visibleTrips.filter((t) => (receivedByTripId[t.id] ?? 0) === 0);
+    const received = visibleTrips.filter((t) => (receivedByTripId[t.id] ?? 0) > 0);
     const pendingSum = pending.reduce((s, t) => s + tripEarnings(t), 0);
-    const receivedSum = received.reduce((s, t) => s + (receivedByTripId[t.id] ?? 0), 0);
+    const receivedSum = received.reduce((s, t) => s + tripEarnings(t), 0);
     const list =
       transactionFilter === 'pending'
         ? pending
         : transactionFilter === 'received'
           ? received
-          : completedTrips;
+          : visibleTrips;
     return {
       pendingTrips: pending,
       receivedTrips: received,
@@ -227,7 +256,77 @@ export default function DriverWalletScreen() {
     return bySection;
   }, [filteredTrips]);
 
-  // Wallet balance = only received (sum of all driver_ledger entries). Trip earnings are not in wallet until received.
+  const pendingTripSections = useMemo(() => {
+    const list = pendingTrips.slice(0, 50);
+    const bySection: { sectionLabel: string; dateKey: string; trips: typeof list }[] = [];
+    let currentKey = '';
+    let currentGroup: typeof list = [];
+    for (let i = 0; i < list.length; i++) {
+      const t = list[i];
+      const raw = t.completed_at ?? t.updated_at ?? t.created_at ?? '';
+      const dateKey = raw ? new Date(raw).toISOString().slice(0, 10) : '';
+      if (dateKey !== currentKey) {
+        if (currentGroup.length > 0) {
+          const first = currentGroup[0];
+          bySection.push({
+            sectionLabel: formatTransactionDateSection(first.completed_at ?? first.updated_at ?? first.created_at ?? ''),
+            dateKey: currentKey,
+            trips: currentGroup,
+          });
+        }
+        currentKey = dateKey;
+        currentGroup = [t];
+      } else {
+        currentGroup.push(t);
+      }
+    }
+    if (currentGroup.length > 0) {
+      const first = currentGroup[0];
+      bySection.push({
+        sectionLabel: formatTransactionDateSection(first.completed_at ?? first.updated_at ?? first.created_at ?? ''),
+        dateKey: currentKey,
+        trips: currentGroup,
+      });
+    }
+    return bySection;
+  }, [pendingTrips]);
+
+  const receivedTripSections = useMemo(() => {
+    const list = receivedTrips.slice(0, 50);
+    const bySection: { sectionLabel: string; dateKey: string; trips: typeof list }[] = [];
+    let currentKey = '';
+    let currentGroup: typeof list = [];
+    for (let i = 0; i < list.length; i++) {
+      const t = list[i];
+      const raw = t.completed_at ?? t.updated_at ?? t.created_at ?? '';
+      const dateKey = raw ? new Date(raw).toISOString().slice(0, 10) : '';
+      if (dateKey !== currentKey) {
+        if (currentGroup.length > 0) {
+          const first = currentGroup[0];
+          bySection.push({
+            sectionLabel: formatTransactionDateSection(first.completed_at ?? first.updated_at ?? first.created_at ?? ''),
+            dateKey: currentKey,
+            trips: currentGroup,
+          });
+        }
+        currentKey = dateKey;
+        currentGroup = [t];
+      } else {
+        currentGroup.push(t);
+      }
+    }
+    if (currentGroup.length > 0) {
+      const first = currentGroup[0];
+      bySection.push({
+        sectionLabel: formatTransactionDateSection(first.completed_at ?? first.updated_at ?? first.created_at ?? ''),
+        dateKey: currentKey,
+        trips: currentGroup,
+      });
+    }
+    return bySection;
+  }, [receivedTrips]);
+
+  // Cash balance = only received (sum of all driver_ledger entries). Trip earnings are not in balance until received.
   const totalReceived = Math.round(ledgerEntries.reduce((sum, e) => sum + (Number(e.amount) ?? 0), 0));
 
   /** Salary request: only show connected fleets (accepted invite). Use org name from invite when available, else "Fleet". */
@@ -252,45 +351,16 @@ export default function DriverWalletScreen() {
       });
   }, [linkedDrivers, invites]);
 
-  /** Request payment for the selected trip only: create a single trip_based salary request in DB. */
-  const requestPaymentForTrip = useCallback(
-    async (trip: tripsService.TripRow) => {
-      const driverId = trip.driver_id ?? linkedDrivers[0]?.id;
-      if (!driverId || !trip.organization_id) {
-        Alert.alert('Error', 'Missing driver or organization.');
-        return;
-      }
-      const orgOption = salaryRequestOrgOptions.find(
-        (o) => o.driverId === trip.driver_id && o.orgId === trip.organization_id
-      );
-      if (!orgOption) {
-        Alert.alert('Fleet not found', 'This trip’s fleet is not in your connections. You can request payment from the main Salary request button.');
-        return;
-      }
-      const amount = Math.round(tripEarnings(trip));
-      if (amount <= 0) {
-        Alert.alert('Invalid amount', 'No earnings for this trip.');
-        return;
-      }
-      setRequestPaymentLoadingTripId(trip.id);
-      const { error } = await salaryRequestsService.createSalaryRequest(
-        driverId,
-        trip.organization_id,
-        'trip_based',
-        amount,
-        { tripIds: [trip.id], createdBy: profile?.uid ?? null }
-      );
-      setRequestPaymentLoadingTripId(null);
-      if (error) {
-        Alert.alert('Request failed', error.message);
-        return;
-      }
-      Alert.alert('Request sent', `Settlement request for ₹${amount.toLocaleString('en-IN')} (${tripsService.getTripDisplayNumber(trip)}) has been sent to your fleet.`);
+  /** Request payment for this trip: route user to Salary Request screen. */
+  const openSalaryRequestForTrip = useCallback(
+    (trip: tripsService.TripRow) => {
+      // Keep Wallet self-contained: route to existing Salary Request flow.
+      // (Salary Request screen already supports trip-based requests.)
+      router.push('/(driver)/salary-request');
       setExpandedTripId(null);
     },
-    [linkedDrivers, salaryRequestOrgOptions, profile?.uid]
+    [router]
   );
-  const openSalaryRequestForTrip = requestPaymentForTrip;
 
   /** Mark trip as paid (settlement ledger entry). */
   const markTripAsPaid = useCallback(
@@ -301,13 +371,24 @@ export default function DriverWalletScreen() {
         return;
       }
       setMarkPaidLoadingTripId(trip.id);
-      const { error } = await driversService.createDriverLedgerEntry(
+      let { error, row } = await driversService.createDriverLedgerEntry(
         trip.organization_id,
         driverId,
         Math.round(amount),
         'settlement',
         { tripId: trip.id, createdBy: profile?.uid ?? null, description: `Trip ${tripsService.getTripDisplayNumber(trip)}` }
       );
+      if (error?.message?.includes("driver_ledger_created_by_fkey")) {
+        const retry = await driversService.createDriverLedgerEntry(
+          trip.organization_id,
+          driverId,
+          Math.round(amount),
+          'settlement',
+          { tripId: trip.id, createdBy: null, description: `Trip ${tripsService.getTripDisplayNumber(trip)}` }
+        );
+        error = retry.error;
+        if (retry.row) row = retry.row;
+      }
       setMarkPaidLoadingTripId(null);
       if (error) {
         const isDriverLedgerRls =
@@ -315,11 +396,19 @@ export default function DriverWalletScreen() {
         const message = isDriverLedgerRls
           ? "You don't have permission to record this payment. Ensure the database has the driver settlement policy applied (migration: 20250324120000_driver_ledger_driver_settlement_insert)."
           : error.message;
-        Alert.alert('Could not mark as paid', message);
+        if (Platform.OS === 'web') {
+          window.alert(`Could not mark as paid: ${message}`);
+        } else {
+          Alert.alert('Could not mark as paid', message);
+        }
         return;
       }
-      setExpandedTripId(null);
-      load();
+      
+      if (row) {
+        setLedgerEntries(prev => [row!, ...prev]);
+      } else {
+        load();
+      }
     },
     [linkedDrivers, profile?.uid, load]
   );
@@ -329,14 +418,21 @@ export default function DriverWalletScreen() {
     (trip: tripsService.TripRow, amount: number) => {
       const displayId = tripsService.getTripDisplayNumber(trip);
       const amtStr = `₹${Math.round(amount).toLocaleString('en-IN')}`;
-      Alert.alert(
-        'Mark as paid',
-        `Record ${amtStr} for ${displayId} as received? This will update your wallet.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Proceed', onPress: () => markTripAsPaid(trip, amount) },
-        ]
-      );
+      
+      if (Platform.OS === 'web') {
+        if (window.confirm(`Record ${amtStr} for ${displayId} as received? This will update your cash balance.`)) {
+          markTripAsPaid(trip, amount);
+        }
+      } else {
+        Alert.alert(
+          'Mark as paid',
+          `Record ${amtStr} for ${displayId} as received? This will update your cash balance.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Proceed', onPress: () => markTripAsPaid(trip, amount) },
+          ]
+        );
+      }
     },
     [markTripAsPaid]
   );
@@ -370,11 +466,21 @@ export default function DriverWalletScreen() {
           </TouchableOpacity>
           <View style={styles.headerTextWrap}>
             <Text style={[styles.brand, { color: colors.textMuted }]}>Q PILOT</Text>
-            <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>Wallet</Text>
+            <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>Cash</Text>
           </View>
         </View>
         <TouchableOpacity
-          onPress={() => router.push('/(driver)/requests')}
+          onPress={() => {
+            if (salaryRequestOrgOptions.length > 0) {
+              const fleet = salaryRequestOrgOptions[0];
+              router.push({
+                pathname: `/(driver)/passbook/${fleet.orgId}`,
+                params: { orgName: fleet.orgName, from: 'wallet' },
+              } as Parameters<typeof router.push>[0]);
+            } else {
+              router.push('/(driver)/requests');
+            }
+          }}
           style={[styles.passbookHeaderBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
           activeOpacity={0.8}
           accessibilityLabel="Passbook"
@@ -386,7 +492,7 @@ export default function DriverWalletScreen() {
       </View>
 
       <View style={styles.creditsSection}>
-        <Text style={[styles.creditsTitle, { color: EMERALD_500 }]}>Salary.</Text>
+        <Text style={[styles.creditsTitle, { color: EMERALD_500 }]}>SALARY.</Text>
         <Text style={[styles.creditsSubtitle, { color: GRAY_700 }]}>Financial audit & settlements.</Text>
       </View>
 
@@ -417,11 +523,22 @@ export default function DriverWalletScreen() {
             </Text>
           </View>
           <View style={styles.walletCardContent}>
-            <Text style={[styles.walletCardLabel, { color: EMERALD_200_90 }]}>salary balance</Text>
+            <Text style={[styles.walletCardLabel, { color: EMERALD_200_90 }]}>CASH BALANCE</Text>
             <Text style={[styles.walletCardSublabel, { color: EMERALD_200_90, opacity: 0.8 }]}></Text>
             <View style={styles.walletCardBalanceRow}>
               <Text style={[styles.walletCardBalanceRupee, { color: '#ffffff' }]}>₹</Text>
-              <Text style={[styles.walletCardBalanceNumber, { color: '#ffffff' }]}>{totalReceived.toLocaleString()}</Text>
+              <Text
+                style={[
+                  styles.walletCardBalanceNumber,
+                  isAndroid && styles.walletCardBalanceNumberAndroid,
+                  { color: '#ffffff' },
+                ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+              >
+                {totalReceived.toLocaleString('en-IN')}
+              </Text>
             </View>
             <TouchableOpacity
               style={[styles.walletCardWithdrawBtn, { backgroundColor: EMERALD_500, borderColor: 'rgba(52,211,153,0.3)' }]}
@@ -436,289 +553,366 @@ export default function DriverWalletScreen() {
         </View>
       </View>
 
-      {nonTripLedgerEntries.length > 0 ? (
-        <View style={styles.ledgerSection}>
-          <Text style={[styles.ledgerTitle, { color: colors.text }]}>Other payments</Text>
-          <View style={[styles.ledgerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            {nonTripLedgerEntries.map((entry) => (
-              <View key={entry.id} style={[styles.ledgerRow, { borderBottomColor: colors.border }]}>
-                <View style={[styles.ledgerIconWrap, { backgroundColor: colors.emerald, borderWidth: 1, borderColor: colors.emerald }]}>
-                  <FontAwesome name="arrow-down" size={18} color={Theme.textOnPrimary} />
-                </View>
-                <View style={styles.ledgerDesc}>
-                  <Text style={[styles.ledgerDescText, { color: colors.text }]}>
-                    {entry.description?.trim() || ledgerTypeLabel(entry.type)}
-                  </Text>
-                  <Text style={[styles.ledgerDate, { color: colors.textMuted }]}>
-                    {formatLedgerDate(entry.created_at)}
-                  </Text>
-                </View>
-                <Text style={[styles.ledgerAmount, { color: colors.emerald }]}>
-                  +₹{Number(entry.amount).toLocaleString()}
-                </Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      ) : null}
+      <View style={[styles.mainTabsWrap, { borderBottomColor: colors.border }]}>
+        <TouchableOpacity 
+          style={styles.mainTab}
+          onPress={() => setMainTab('earnings')}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.mainTabText, mainTab === 'earnings' ? { color: colors.text } : { color: colors.textMuted }]}>Earnings</Text>
+          {mainTab === 'earnings' && <View style={[styles.mainTabIndicator, { backgroundColor: colors.text }]} />}
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.mainTab}
+          onPress={() => setMainTab('transactions')}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.mainTabText, mainTab === 'transactions' ? { color: colors.text } : { color: colors.textMuted }]}>Transactions</Text>
+          {mainTab === 'transactions' && <View style={[styles.mainTabIndicator, { backgroundColor: colors.text }]} />}
+        </TouchableOpacity>
+      </View>
 
-      <View style={styles.ledgerSection}>
-        <Text style={[styles.transactionHistoryTitle, { color: colors.text }]}>
-          Transaction history
-        </Text>
-        {(pendingTotal > 0 || receivedTotal > 0) && (
-          <View style={styles.filterSummaryRow}>
-            <TouchableOpacity
-              style={[
-                styles.filterSummaryTile,
-                styles.filterSummaryTilePending,
-                transactionFilter === 'pending' && styles.filterSummaryTileActive,
-              ]}
-              onPress={() => setTransactionFilter(transactionFilter === 'pending' ? 'all' : 'pending')}
-              activeOpacity={0.9}
-              accessibilityLabel="Filter by pending"
-              accessibilityState={{ selected: transactionFilter === 'pending' }}
-            >
-              <View style={styles.filterSummaryWatermarkWrap} pointerEvents="none">
-                <FontAwesome
-                  name="clock-o"
-                  size={56}
-                  color={Theme.textOnPrimary}
-                  style={styles.filterSummaryWatermarkIcon}
-                />
+      {mainTab === 'earnings' ? (
+        <View style={[styles.ledgerSection, { paddingHorizontal: Layout.screenPaddingHorizontal }]}>
+          <Text style={[styles.transactionHistoryTitle, { color: colors.text }]}>
+            Pending earnings
+          </Text>
+          {pendingTrips.length === 0 ? (
+            <View style={[styles.ledgerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={[styles.ledgerEmpty, { borderBottomWidth: 0 }]}>
+                <FontAwesome name="exchange" size={32} color={colors.textMuted} />
+                <Text style={[styles.ledgerEmptyText, { color: colors.textMuted }]}>No pending earnings</Text>
               </View>
-              <View style={styles.filterSummaryContent}>
-                <Text style={styles.filterSummaryLabelOnDark}>PENDING</Text>
-                <Text style={styles.filterSummaryAmountOnDark}>
-                  ₹{pendingTotal.toLocaleString('en-IN')}
-                </Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.filterSummaryTile,
-                styles.filterSummaryTileReceived,
-                transactionFilter === 'received' && styles.filterSummaryTileActive,
-              ]}
-              onPress={() => setTransactionFilter(transactionFilter === 'received' ? 'all' : 'received')}
-              activeOpacity={0.9}
-              accessibilityLabel="Filter by received"
-              accessibilityState={{ selected: transactionFilter === 'received' }}
-            >
-              <View style={styles.filterSummaryWatermarkWrap} pointerEvents="none">
-                <FontAwesome
-                  name="check-circle"
-                  size={56}
-                  color={Theme.textOnPrimary}
-                  style={styles.filterSummaryWatermarkIcon}
-                />
-              </View>
-              <View style={styles.filterSummaryContent}>
-                <Text style={styles.filterSummaryLabelOnDark}>RECEIVED</Text>
-                <Text style={styles.filterSummaryAmountOnDark}>
-                  ₹{receivedTotal.toLocaleString('en-IN')}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-        )}
-        {completedTrips.length === 0 ? (
-          <View style={[styles.ledgerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={[styles.ledgerEmpty, { borderBottomWidth: 0 }]}>
-              <FontAwesome name="exchange" size={32} color={colors.textMuted} />
-              <Text style={[styles.ledgerEmptyText, { color: colors.textMuted }]}>No trips completed yet</Text>
             </View>
-          </View>
-        ) : filteredTrips.length === 0 ? (
-          <View style={[styles.ledgerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={[styles.ledgerEmpty, { borderBottomWidth: 0 }]}>
-              <FontAwesome
-                name={transactionFilter === 'pending' ? 'clock-o' : 'check-circle'}
-                size={32}
-                color={colors.textMuted}
-              />
-              <Text style={[styles.ledgerEmptyText, { color: colors.textMuted }]}>
-                {transactionFilter === 'pending'
-                  ? 'No pending earnings'
-                  : 'No received yet'}
-              </Text>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.upiListWrap}>
-            {transactionSections.map(({ sectionLabel, dateKey, trips }) => (
-              <View key={dateKey} style={styles.upiSection}>
-                <Text style={[styles.upiSectionHeader, { color: colors.textMuted }]}>{sectionLabel}</Text>
-                <View style={[styles.upiListBlock, { backgroundColor: colors.surface }]}>
-                  {trips.map((trip, idx) => {
-                    const earned = tripEarnings(trip);
-                    const received = receivedByTripId[trip.id] ?? 0;
-                    const date = formatLedgerDate(trip.completed_at ?? trip.updated_at ?? trip.created_at);
-                    const isPending = received === 0;
-                    const isAdHocTrip = isAggregateTrip(trip);
-                    const isLast = idx === trips.length - 1;
-                    const isExpanded = expandedTripId === trip.id;
-                    const transactionDateTime =
-                      trip.completed_at ?? trip.updated_at ?? trip.created_at
-                        ? new Date(trip.completed_at ?? trip.updated_at ?? trip.created_at).toLocaleString('en-IN', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: true,
-                          })
-                        : '—';
-                    return (
-                      <View
-                        key={trip.id}
-                        style={[styles.tripCard, { backgroundColor: colors.surface }]}
-                      >
-                        <TouchableOpacity
+          ) : (
+            <View style={styles.upiListWrap}>
+              {pendingTripSections.map(({ sectionLabel, dateKey, trips }) => (
+                <View key={dateKey} style={styles.upiSection}>
+                  <Text style={[styles.upiSectionHeader, { color: colors.textMuted }]}>{sectionLabel}</Text>
+                  <View style={[styles.upiListBlock, { backgroundColor: 'transparent' }]}>
+                    {trips.map((trip, idx) => {
+                      const earned = tripEarnings(trip);
+                      const received = receivedByTripId[trip.id] ?? 0;
+                      const isPending = received === 0;
+                      const isAdHocTrip = isAggregateTrip(trip);
+                      const isExpanded = expandedTripId === trip.id;
+                      const routeSummary = [trip.pickup_area?.trim(), trip.drop_location?.trim()]
+                        .filter(Boolean)
+                        .join(' → ');
+                      const tripRef = tripsService.getTripDisplayNumber(trip);
+                      const tripDriverId = trip.driver_id ?? linkedDrivers[0]?.id ?? null;
+                      const tripFleetName =
+                        salaryRequestOrgOptions.find(
+                          (o) => o.driverId === tripDriverId && o.orgId === trip.organization_id,
+                        )?.orgName ??
+                        salaryRequestOrgOptions.find((o) => o.orgId === trip.organization_id)?.orgName ??
+                        'Fleet';
+                      const receivedAmt = receivedByTripId[trip.id] ?? 0;
+                      const amountLabel = earned > 0 ? `₹${earned.toLocaleString('en-IN')}` : '₹0';
+                      const amountColor =
+                        amountLabel === '—'
+                          ? colors.textMuted
+                          : isPending
+                            ? isDark
+                              ? colors.text
+                              : Theme.gpayListTitle
+                            : isDark
+                              ? colors.emerald
+                              : Theme.gpayAmountReceived;
+                      const listDivider = isDark ? colors.borderSubtle : Theme.borderMedium;
+                      const subColor = colors.textMuted;
+                      const metaColor = colors.textMuted;
+                      const secondaryLine = routeSummary || 'Route not specified';
+                      const isOtpAdHocPending = isAdHocTrip && earned === 0;
+                      const primaryLine = tripRef;
+                      const metaRight =
+                        receivedAmt > 0
+                          ? 'Settled in cash balance'
+                          : isOtpAdHocPending
+                            ? 'Pending'
+                            : 'Pending from fleet';
+                      const showRowDivider = isExpanded || idx < trips.length - 1;
+                      const iconName =
+                        isOtpAdHocPending ? 'exchange' : receivedAmt > 0 ? 'arrow-down' : 'clock-o';
+                      const statusLabel = receivedAmt > 0 ? 'EARNED' : 'PENDING';
+                      const statusPillBg = receivedAmt > 0 ? colors.emeraldMuted : AMBER_50;
+                      const statusPillTextColor = receivedAmt > 0 ? colors.emerald : Theme.warning;
+                      const statusPillBorderColor = receivedAmt > 0 ? colors.emeraldBorderSoft : 'rgba(180,83,9,0.25)';
+                      const rowToneBg = isExpanded ? colors.surface : colors.surface;
+                      const rowToneBorder = receivedAmt > 0 ? colors.emeraldBorderSoft : 'rgba(180,83,9,0.25)';
+                      const iconSqBg = receivedAmt > 0 ? colors.emeraldMuted : AMBER_50;
+                      const iconColor = receivedAmt > 0 ? colors.emerald : Theme.warning;
+                      const isLastTrip = idx === trips.length - 1;
+                      return (
+                        <View
+                          key={trip.id}
                           style={[
-                            styles.upiRow,
-                            { borderBottomColor: colors.border },
-                            isLast && !isExpanded && styles.upiRowLast,
+                            styles.tripCard,
+                            {
+                              backgroundColor: 'transparent',
+                              borderColor: 'transparent',
+                              borderWidth: 0,
+                              marginBottom: 0,
+                            },
                           ]}
-                          activeOpacity={0.7}
-                          onPress={() => setExpandedTripId((prev) => (prev === trip.id ? null : trip.id))}
-                          accessibilityLabel={`Trip ${tripsService.getTripDisplayNumber(trip)} earnings ${earned}`}
-                          accessibilityHint={isExpanded ? 'Collapse details' : 'Expand details'}
-                          accessibilityRole="button"
-                          accessibilityState={{ expanded: isExpanded }}
                         >
-                          <View style={styles.upiRowIcon}>
-                            <FontAwesome
-                              name={isPending ? 'clock-o' : 'check'}
-                              size={20}
-                              color={isPending ? Theme.negative : Theme.driverEmerald}
-                              style={styles.upiRowIconStyle}
-                            />
-                          </View>
-                          <View style={styles.upiRowBody}>
-                            <Text style={[styles.upiRowTitle, { color: colors.text }]} numberOfLines={1}>
-                              Trip Earnings
-                            </Text>
-                            <Text style={[styles.upiRowSub, { color: colors.textMuted }]} numberOfLines={1}>
-                              {date}
-                              {isAdHocTrip ? ' · Ad hoc trip' : ''}
-                              {(trip.pickup_area?.trim() || trip.drop_location?.trim())
-                                ? ` · ${[trip.pickup_area?.trim(), trip.drop_location?.trim()].filter(Boolean).join(' → ')}`
-                                : ''}
-                            </Text>
-                          </View>
-                          <View style={styles.upiRowRight}>
-                            <Text
-                              style={[
-                                styles.upiRowAmount,
-                                { color: isPending ? Theme.primaryText : Theme.darkGreen },
-                              ]}
-                            >
-                              +₹{earned.toLocaleString('en-IN')}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.upiRowStatus,
-                                { color: isPending ? Theme.negative : Theme.driverEmerald },
-                              ]}
-                            >
-                              {isPending ? 'Pending' : 'Settled'}
-                            </Text>
-                          </View>
-                          {/* Chevron removed per latest UX request */}
-                        </TouchableOpacity>
-                        {isExpanded && (
-                          <View style={[styles.upiExpandedPanel, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-                            <View style={[styles.upiExpandedCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                              <View style={[styles.upiExpandedDetailRowTwoCol, { borderBottomColor: colors.border }]}>
-                                <View style={styles.upiExpandedDetailCell}>
-                                  <Text style={[styles.upiExpandedLabel, { color: colors.textMuted }]}>Trip ID</Text>
-                                  <Text style={[styles.upiExpandedValue, { color: colors.text }]} numberOfLines={1}>{tripsService.getTripDisplayNumber(trip)}</Text>
-                                </View>
-                                <View style={[styles.upiExpandedDetailCell, styles.upiExpandedDetailCellRight]}>
-                                  <Text style={[styles.upiExpandedLabel, { color: colors.textMuted }]}>Date & time</Text>
-                                  <Text style={[styles.upiExpandedValue, { color: colors.text }]} numberOfLines={2}>{transactionDateTime}</Text>
-                                </View>
+                          <TouchableOpacity
+                            style={[
+                              styles.ppTxCard,
+                              { backgroundColor: 'transparent', paddingHorizontal: 0 },
+                              !isLastTrip && {
+                                borderBottomWidth: StyleSheet.hairlineWidth,
+                                borderBottomColor: listDivider,
+                              },
+                            ]}
+                            activeOpacity={0.7}
+                            onPress={() => setExpandedTripId((prev) => (prev === trip.id ? null : trip.id))}
+                            accessibilityLabel={`Trip ${tripRef} earnings ${earned}`}
+                            accessibilityHint={isExpanded ? 'Collapse details' : 'Expand details'}
+                            accessibilityRole="button"
+                            accessibilityState={{ expanded: isExpanded }}
+                          >
+                            <View style={styles.ppTxTopRow}>
+                              <View style={[styles.ppIconSq, { backgroundColor: iconSqBg }]}>
+                                <FontAwesome name={iconName} size={18} color={iconColor} />
                               </View>
-                              <View style={[styles.upiExpandedDetailRowTwoCol, styles.upiExpandedDetailRowLast, { borderBottomColor: colors.border }]}>
-                                <View style={styles.upiExpandedDetailCell}>
-                                  <Text style={[styles.upiExpandedLabel, { color: colors.textMuted }]}>Route</Text>
-                                  <Text style={[styles.upiExpandedValue, { color: colors.text }]} numberOfLines={2}>
-                                    {(trip.pickup_area?.trim() || trip.drop_location?.trim())
-                                      ? [trip.pickup_area?.trim(), trip.drop_location?.trim()].filter(Boolean).join(' → ')
-                                      : '—'}
+                              <View style={styles.ppMiddle}>
+                                <View style={styles.ppPrimaryRow}>
+                                  <Text style={[styles.ppPrimary, { color: colors.text }]} numberOfLines={1}>
+                                    {primaryLine}
                                   </Text>
+                                  <View style={[styles.txStatusPill, { backgroundColor: statusPillBg, borderColor: statusPillBorderColor }]}>
+                                    <Text style={[styles.txStatusPillText, { color: statusPillTextColor }]}>
+                                      {statusLabel}
+                                    </Text>
+                                  </View>
                                 </View>
-                                <View style={[styles.upiExpandedDetailCell, styles.upiExpandedDetailCellRight]}>
-                                  <Text style={[styles.upiExpandedLabel, { color: colors.textMuted }]}>Amount</Text>
-                                  <Text style={[styles.upiExpandedValue, styles.upiExpandedAmountValue, { color: isPending ? Theme.negative : Theme.darkGreen }]}>
-                                    +₹{earned.toLocaleString('en-IN')}
-                                  </Text>
-                                </View>
+                                <Text style={[styles.ppSecondary, { color: subColor }]} numberOfLines={2}>
+                                  {secondaryLine}
+                                </Text>
+                              </View>
+                              <Text
+                                style={[
+                                  styles.ppAmount,
+                                  isAndroid && styles.ppAmountAndroid,
+                                  { color: amountColor },
+                                ]}
+                              >
+                                {amountLabel}
+                              </Text>
+                            </View>
+                            <View style={styles.ppMetaRow}>
+                              <Text style={[styles.ppMetaLeft, { color: metaColor }]}>
+                                {phonePeMetaDate(trip.completed_at ?? trip.updated_at ?? trip.created_at)}
+                              </Text>
+                              <View style={styles.ppMetaRight}>
+                                <Text style={[styles.ppMetaRightText, { color: metaColor }]} numberOfLines={1}>
+                                  {metaRight}
+                                </Text>
+                                <FontAwesome name="university" size={13} color={colors.emerald} style={styles.ppMetaBankIcon} />
                               </View>
                             </View>
-                            {isPending && isAdHocTrip && (
-                              <View style={[styles.upiExpandedAdHocCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                                <View style={[styles.upiExpandedAdHocIconWrap, { backgroundColor: colors.emeraldMuted }]}>
-                                  <FontAwesome name="info-circle" size={20} color={colors.emerald} />
+                          </TouchableOpacity>
+                          {isExpanded && (
+                            <View style={[styles.dropdownWrap, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
+  
+                              {/* Receipt details */}
+                              <View style={styles.dropdownGrid}>
+                                <View style={styles.dropdownGridCol}>
+                                  <Text style={[styles.dropdownGridLabel, { color: colors.textMuted }]}>PROVIDER</Text>
+                                  <View style={styles.dropdownGridValueRow}>
+                                    <FontAwesome name="building-o" size={12} color={colors.textMuted} />
+                                    <Text style={[styles.dropdownGridValue, { color: colors.text }]} numberOfLines={1}>
+                                      {tripFleetName}
+                                    </Text>
+                                  </View>
                                 </View>
-                                <View style={styles.upiExpandedAdHocTextWrap}>
-                                  <Text style={[styles.upiExpandedAdHocTitle, { color: colors.text }]}>
-                                    Ad hoc trip
-                                  </Text>
-                                  <Text style={[styles.upiExpandedAdHocBody, { color: colors.textMuted }]}>
-                                    You'll get paid by this fleet directly. The 'Request payment' button is only for fleets you're connected to.
-                                  </Text>
+                                <View style={styles.dropdownGridCol}>
+                                  <Text style={[styles.dropdownGridLabel, { color: colors.textMuted }]}>SERVICE TYPE</Text>
+                                  <View style={styles.dropdownGridValueRow}>
+                                    <Text style={[styles.dropdownGridValue, { color: colors.text }]} numberOfLines={1}>
+                                      {isOtpAdHocPending ? 'Ad Hoc Trip' : 'Fleet Settlement'}
+                                    </Text>
+                                  </View>
+                                </View>
+                                <View style={styles.dropdownGridCol}>
+                                  <Text style={[styles.dropdownGridLabel, { color: colors.textMuted }]}>TIMESTAMP</Text>
+                                  <View style={styles.dropdownGridValueRow}>
+                                    <FontAwesome name="calendar" size={12} color={colors.textMuted} />
+                                    <Text style={[styles.dropdownGridValue, { color: colors.text }]} numberOfLines={1}>
+                                      {new Date(trip.completed_at ?? trip.updated_at ?? trip.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} • {new Date(trip.completed_at ?? trip.updated_at ?? trip.created_at).toLocaleTimeString('en-IN', {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        hour12: true,
+                                      })}
+                                    </Text>
+                                  </View>
+                                </View>
+                                <View style={styles.dropdownGridCol}>
+                                  <Text style={[styles.dropdownGridLabel, { color: colors.textMuted }]}>REFERENCE</Text>
+                                  <Pressable
+                                    onPress={() => Clipboard.setStringAsync(tripRef).catch(() => {})}
+                                    style={styles.dropdownGridValueRow}
+                                    hitSlop={10}
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Copy reference ID"
+                                  >
+                                    <FontAwesome name="copy" size={12} color={colors.emerald} />
+                                    <Text style={[styles.dropdownGridValue, { color: colors.emerald }]}>Copy Details</Text>
+                                  </Pressable>
                                 </View>
                               </View>
-                            )}
-                            {isPending && !isAdHocTrip && (
-                              <View style={[styles.upiExpandedActions, { borderTopColor: colors.border }]}>
-                                <TouchableOpacity
-                                  style={[styles.upiExpandedBtn, styles.upiExpandedBtnPrimary, { backgroundColor: colors.emerald }]}
-                                  onPress={() => openSalaryRequestForTrip(trip)}
-                                  disabled={!!requestPaymentLoadingTripId}
-                                  activeOpacity={0.8}
-                                  accessibilityLabel="Request payment"
-                                >
-                                  {requestPaymentLoadingTripId === trip.id ? (
-                                    <ActivityIndicator size="small" color={Theme.textOnPrimary} />
-                                  ) : (
-                                    <FontAwesome name="send" size={14} color={Theme.textOnPrimary} />
-                                  )}
-                                  <Text style={[styles.upiExpandedBtnText, { color: Theme.textOnPrimary }]}>
-                                    {requestPaymentLoadingTripId === trip.id ? 'Sending…' : 'Request payment'}
-                                  </Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                  style={[styles.upiExpandedBtn, styles.upiExpandedBtnSecondary, { borderColor: colors.border }]}
-                                  onPress={() => confirmMarkAsPaid(trip, earned)}
-                                  disabled={!!markPaidLoadingTripId}
-                                  activeOpacity={0.8}
-                                  accessibilityLabel="Mark as paid"
-                                >
-                                  {markPaidLoadingTripId === trip.id ? (
-                                    <ActivityIndicator size="small" color={colors.text} />
-                                  ) : (
-                                    <FontAwesome name="check-circle" size={14} color={colors.text} />
-                                  )}
-                                  <Text style={[styles.upiExpandedBtnText, { color: colors.text }]}>
-                                    {markPaidLoadingTripId === trip.id ? 'Marking…' : 'Mark as paid'}
-                                  </Text>
-                                </TouchableOpacity>
+  
+                              <View style={[styles.totalPill, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#f8fafc' }]}>
+                                <Text style={[styles.totalLabel, { color: colors.textMuted }]}>NET SETTLEMENT AMOUNT</Text>
+                                <Text style={[styles.totalValue, { color: colors.text }]}>
+                                  ₹{Math.round(earned).toLocaleString('en-IN')}
+                                </Text>
                               </View>
-                            )}
-                          </View>
-                        )}
-                      </View>
-                    );
-                  })}
+  
+                              {/* Actions */}
+                              {isPending && !isOtpAdHocPending && earned > 0 ? (
+                                <View style={styles.dropdownActions}>
+                                  <TouchableOpacity
+                                    style={[styles.dropdownActionBtn, { backgroundColor: isDark ? colors.surfaceElevated : '#0f172a' }]}
+                                    onPress={() => openSalaryRequestForTrip(trip)}
+                                    disabled={!!requestPaymentLoadingTripId}
+                                    activeOpacity={0.85}
+                                    accessibilityLabel="Request payment"
+                                  >
+                                    {requestPaymentLoadingTripId === trip.id ? (
+                                      <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                                    ) : (
+                                      <FontAwesome name="send" size={14} color={Theme.textOnPrimary} />
+                                    )}
+                                    <Text style={[styles.dropdownActionBtnText, { color: Theme.textOnPrimary }]}>
+                                      {requestPaymentLoadingTripId === trip.id ? 'Sending…' : 'Request Payment'}
+                                    </Text>
+                                  </TouchableOpacity>
+                                  
+                                  <TouchableOpacity
+                                    style={[styles.dropdownActionBtn, { borderColor: colors.border, backgroundColor: colors.surface, borderWidth: 1 }]}
+                                    onPress={() => confirmMarkAsPaid(trip, earned)}
+                                    disabled={!!markPaidLoadingTripId}
+                                    activeOpacity={0.85}
+                                    accessibilityLabel="Mark as paid"
+                                  >
+                                    {markPaidLoadingTripId === trip.id ? (
+                                      <ActivityIndicator size="small" color={colors.emerald} />
+                                    ) : (
+                                      <FontAwesome name="check-circle" size={14} color={colors.emerald} />
+                                    )}
+                                    <Text style={[styles.dropdownActionBtnText, { color: colors.text }]}>
+                                      {markPaidLoadingTripId === trip.id ? 'Marking…' : 'Mark Paid'}
+                                    </Text>
+                                  </TouchableOpacity>
+                                </View>
+                              ) : null}
+  
+                              <View style={styles.dropdownTrustRow}>
+                                <View style={[styles.dropdownTrustDot, { backgroundColor: colors.border }]} />
+                                <Text style={[styles.dropdownTrustText, { color: colors.textMuted }]}>
+                                  Secure encryption by Fleet Connect Global
+                                </Text>
+                                <View style={[styles.dropdownTrustDot, { backgroundColor: colors.border }]} />
+                              </View>
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
                 </View>
+              ))}
+            </View>
+          )}
+        </View>
+      ) : (
+        <View style={[styles.ledgerSection, { paddingHorizontal: Layout.screenPaddingHorizontal }]}>
+          <Text style={[styles.transactionHistoryTitle, { color: colors.text }]}>Received payments</Text>
+          {receivedTrips.length === 0 ? (
+            <View style={[styles.ledgerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={[styles.ledgerEmpty, { borderBottomWidth: 0 }]}>
+                <FontAwesome name="exchange" size={32} color={colors.textMuted} />
+                <Text style={[styles.ledgerEmptyText, { color: colors.textMuted }]}>No received transactions yet</Text>
               </View>
-            ))}
-          </View>
-        )}
-      </View>
+            </View>
+          ) : (
+            <View style={styles.upiListWrap}>
+              {receivedTripSections.map(({ sectionLabel, dateKey, trips }) => (
+                <View key={dateKey} style={styles.upiSection}>
+                  <Text style={[styles.upiSectionHeader, { color: colors.textMuted }]}>{sectionLabel}</Text>
+                  <View style={[styles.upiListBlock, { backgroundColor: 'transparent' }]}>
+                    {trips.map((trip, idx) => {
+                      const routeSummary = [trip.pickup_area?.trim(), trip.drop_location?.trim()]
+                        .filter(Boolean)
+                        .join(' → ');
+                      const tripRef = tripsService.getTripDisplayNumber(trip);
+                      const receivedAmt = receivedByTripId[trip.id] ?? 0;
+                      const amountLabel = `+ ₹${receivedAmt.toLocaleString('en-IN')}`;
+                      const amountColor = isDark ? colors.emerald : Theme.gpayAmountReceived;
+                      const listDivider = isDark ? colors.borderSubtle : Theme.borderMedium;
+                      const subColor = colors.textMuted;
+                      const metaColor = colors.textMuted;
+                      const isLastTrip = idx === trips.length - 1;
+                      return (
+                        <View
+                          key={trip.id}
+                          style={[
+                            styles.ppTxCard,
+                            { paddingHorizontal: 0 },
+                            !isLastTrip && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: listDivider },
+                          ]}
+                        >
+                          <View style={styles.ppTxTopRow}>
+                            <View style={[styles.ppIconSq, { backgroundColor: colors.emeraldMuted }]}>
+                              <FontAwesome name="arrow-down" size={18} color={colors.emerald} />
+                            </View>
+                            <View style={styles.ppMiddle}>
+                              <View style={styles.ppPrimaryRow}>
+                                <Text style={[styles.ppPrimary, { color: colors.text }]} numberOfLines={1}>
+                                  {tripRef}
+                                </Text>
+                                <View style={[styles.txStatusPill, { backgroundColor: colors.emeraldMuted, borderColor: colors.emeraldBorderSoft }]}>
+                                  <Text style={[styles.txStatusPillText, { color: colors.emerald }]}>RECEIVED</Text>
+                                </View>
+                              </View>
+                              <Text style={[styles.ppSecondary, { color: subColor }]} numberOfLines={2}>
+                                {routeSummary || 'Route not specified'}
+                              </Text>
+                            </View>
+                            <Text
+                              style={[
+                                styles.ppAmount,
+                                { color: amountColor },
+                                isAndroid && styles.ppAmountAndroid,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {amountLabel}
+                            </Text>
+                          </View>
+                          <View style={styles.ppMetaRow}>
+                            <Text style={[styles.ppMetaLeft, { color: metaColor }]}>
+                              {phonePeMetaDate(trip.completed_at ?? trip.updated_at ?? trip.created_at)}
+                            </Text>
+                            <View style={styles.ppMetaRight}>
+                              <Text style={[styles.ppMetaRightText, { color: metaColor }]} numberOfLines={1}>
+                                Added to cash balance
+                              </Text>
+                              <FontAwesome name="university" size={13} color={colors.emerald} style={styles.ppMetaBankIcon} />
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
     </ScrollView>
     </>
   );
@@ -788,12 +982,12 @@ const styles = StyleSheet.create({
     borderRadius: Layout.driverHeaderAvatarSize / 2,
   },
   brand: {
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1.6,
+    ...Typography.headerSubtitle,
     marginBottom: 1,
   },
   welcomeTitle: {
+    ...Typography.headerTitle,
+    textTransform: 'none',
     fontSize: 15,
     fontWeight: '700',
     letterSpacing: -0.2,
@@ -850,7 +1044,7 @@ const styles = StyleSheet.create({
   walletCardLabel: {
     fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 5,
+    letterSpacing: 2,
     marginBottom: 4,
     fontStyle: 'italic',
     textTransform: 'uppercase',
@@ -868,7 +1062,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'center',
     marginBottom: 20,
-    paddingHorizontal: 50,
+    paddingHorizontal: 18,
   },
   walletCardBalanceRupee: {
     fontSize: 48,
@@ -880,12 +1074,21 @@ const styles = StyleSheet.create({
     textAlignVertical: 'center',
   },
   walletCardBalanceNumber: {
+    flexShrink: 1,
     fontSize: 48,
     fontWeight: '800',
     fontStyle: 'italic',
     lineHeight: 56,
     includeFontPadding: false,
     textAlignVertical: 'center',
+  },
+  walletCardBalanceNumberAndroid: {
+    fontSize: 42,
+    lineHeight: 50,
+    includeFontPadding: true,
+    paddingLeft: 2,
+    paddingRight: 8,
+    fontStyle: 'normal',
   },
   walletCardWithdrawBtn: {
     width: '100%',
@@ -906,15 +1109,40 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textTransform: 'uppercase',
   },
+  mainTabsWrap: {
+    marginTop: 18,
+    marginHorizontal: Layout.screenPaddingHorizontal,
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+  },
+  mainTab: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 4,
+    paddingBottom: 12,
+  },
+  mainTabText: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  mainTabIndicator: {
+    position: 'absolute',
+    left: 24,
+    right: 24,
+    bottom: 0,
+    height: 3,
+    borderRadius: 999,
+  },
   ledgerSection: {
-    paddingHorizontal: 20,
     paddingTop: 16,
   },
   transactionHistoryTitle: {
-    fontSize: 15,
-    fontWeight: '500',
-    letterSpacing: 0.4,
-    marginBottom: 10,
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+    marginBottom: 14,
   },
   filterTabRow: {
     flexDirection: 'row',
@@ -947,28 +1175,22 @@ const styles = StyleSheet.create({
   },
   filterSummaryTile: {
     flex: 1,
-    paddingVertical: 16,
-    paddingHorizontal: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
     borderRadius: 16,
-    borderWidth: 2,
-    borderColor: 'transparent',
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
   },
   filterSummaryTilePending: {
-    backgroundColor: '#B91C1C',
+    backgroundColor: '#991b1b',
   },
   filterSummaryTileReceived: {
-    backgroundColor: EMERALD_600,
+    backgroundColor: '#065f46',
   },
   filterSummaryTileActive: {
-    borderColor: 'rgba(255,255,255,0.6)',
+    transform: [{ scale: 1.02 }],
   },
   filterSummaryWatermarkWrap: {
     position: 'absolute',
@@ -1116,35 +1338,244 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   upiListWrap: {
-    gap: 20,
-    paddingBottom: 24,
+    gap: 22,
+    paddingBottom: 28,
   },
   upiSection: {
-    gap: 8,
+    gap: 6,
   },
   upiSectionHeader: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
-    letterSpacing: 0.2,
-    paddingHorizontal: 4,
+    letterSpacing: 0.15,
+    paddingHorizontal: 0,
   },
   upiListBlock: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    paddingVertical: 4,
+    borderRadius: 0,
+    borderWidth: 0,
+    overflow: 'visible',
+    paddingVertical: 0,
   },
-  tripCard: {
+  /** PhonePe-style trip / ledger row */
+  ppTxCard: {
+    paddingVertical: 14,
+    paddingHorizontal: 0,
+  },
+  ppPrimaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minWidth: 0,
+  },
+  ppTxTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  ppIconSq: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  ppMiddle: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 8,
+  },
+  ppPrimary: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+    flexShrink: 1,
+  },
+  txStatusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 14,
-    marginHorizontal: 4,
-    marginVertical: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  txStatusPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  ppSecondary: {
+    fontSize: 13,
+    fontWeight: '400',
+    marginTop: 4,
+    lineHeight: 18,
+    letterSpacing: 0,
+  },
+  ppAmount: {
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+    flexShrink: 0,
+    maxWidth: '40%',
+    textAlign: 'right',
+  },
+  ppAmountAndroid: {
+    includeFontPadding: true,
+  },
+  ppMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    paddingLeft: 58,
+    paddingRight: 2,
+  },
+  ppMetaLeft: {
+    fontSize: 12,
+    fontWeight: '400',
+    flex: 1,
+    minWidth: 0,
+    marginRight: 8,
+  },
+  ppMetaRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+    maxWidth: '52%',
+    justifyContent: 'flex-end',
+  },
+  ppMetaRightText: {
+    fontSize: 12,
+    fontWeight: '400',
+    textAlign: 'right',
+    flexShrink: 1,
+  },
+  ppMetaBankIcon: {
+    marginTop: 1,
+  },
+  dropdownWrap: {
+    marginTop: 0,
+    borderRadius: 0,
+    paddingHorizontal: 12,
+    paddingTop: 0,
+    paddingBottom: 14,
     overflow: 'hidden',
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  dropdownRouteBlock: { paddingLeft: 10, paddingRight: 4, paddingBottom: 8 },
+  routeLine: { position: 'absolute', left: 16, top: 10, bottom: 12, width: 2, borderRadius: 1 },
+  routeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 14, paddingLeft: 0, paddingVertical: 10 },
+  routeDot: { width: 14, height: 14, borderRadius: 7, borderWidth: 5, marginTop: 2 },
+  routeTextWrap: { flex: 1, minWidth: 0 },
+  routeLabel: { fontSize: 12, fontWeight: '600', letterSpacing: 0.6 },
+  routeValue: { fontSize: 16, fontWeight: '600', marginTop: 4, letterSpacing: -0.1 },
+  dropdownRouteOneLine: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingHorizontal: 2,
+    paddingVertical: 10,
+  },
+  dropdownRouteOneLineText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 20,
+    letterSpacing: -0.1,
+  },
+  dropdownDivider: { height: StyleSheet.hairlineWidth, marginTop: 14, marginBottom: 16 },
+  dropdownGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+  },
+  dropdownGridCol: {
+    width: '48%',
+    flexDirection: 'column',
+    gap: 6,
+    marginBottom: 16,
+  },
+  dropdownGridLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  dropdownGridValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dropdownGridValue: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  dropdownDetails: { gap: 14, paddingHorizontal: 2 },
+  detailRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  detailLabel: { fontSize: 14, fontWeight: '500' },
+  detailRight: { flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: '62%', justifyContent: 'flex-end' },
+  detailRightPress: { flexDirection: 'row', alignItems: 'center', gap: 10, maxWidth: '62%', justifyContent: 'flex-end' },
+  detailValue: { fontSize: 15, fontWeight: '600' },
+  totalPill: {
+    marginTop: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  totalLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  totalValue: { fontSize: 18, fontWeight: '800', letterSpacing: -0.1 },
+  dropdownActions: { flexDirection: 'row', marginTop: 18, gap: 12 },
+  dropdownActionBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  dropdownActionBtnText: { fontSize: 14, fontWeight: '700', letterSpacing: -0.1 },
+  dropdownPrimaryBtn: {
+    width: '100%',
+    paddingVertical: 14,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  dropdownPrimaryBtnText: { fontSize: 16, fontWeight: '700', letterSpacing: -0.1 },
+  dropdownSecondaryRow: { flexDirection: 'row', gap: 12 },
+  dropdownSecondaryBtn: {
+    flex: 1,
+    borderWidth: 1,
+    paddingVertical: 13,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  dropdownSecondaryBtnText: { fontSize: 15, fontWeight: '700', letterSpacing: -0.1 },
+  dropdownTrustRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 16 },
+  dropdownTrustDot: { width: 4, height: 4, borderRadius: 2 },
+  dropdownTrustText: { fontSize: 10, fontWeight: '600' },
+  tripCard: {
+    borderWidth: 0,
+    borderRadius: 0,
+    marginHorizontal: 0,
+    marginVertical: 0,
+    backgroundColor: 'transparent',
   },
   upiRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 12,
@@ -1153,9 +1584,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   upiRowIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1168,15 +1599,15 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   upiRowTitle: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '500',
-    letterSpacing: -0.2,
+    letterSpacing: 0,
   },
   upiRowSub: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '400',
     marginTop: 2,
-    letterSpacing: 0.1,
+    letterSpacing: 0,
   },
   upiRowRight: {
     alignItems: 'flex-end',
@@ -1186,11 +1617,11 @@ const styles = StyleSheet.create({
   upiRowAmount: {
     fontSize: 14,
     fontWeight: '500',
-    letterSpacing: -0.2,
+    letterSpacing: 0,
   },
   upiRowStatus: {
-    fontSize: 10,
-    fontWeight: '400',
+    fontSize: 11,
+    fontWeight: '500',
     letterSpacing: 0.2,
   },
   upiRowChevron: {
@@ -1231,20 +1662,21 @@ const styles = StyleSheet.create({
     paddingLeft: 8,
   },
   upiExpandedLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 0.5,
+    fontSize: 11,
+    fontWeight: '500',
+    letterSpacing: 0.7,
     textTransform: 'uppercase',
     marginBottom: 3,
   },
   upiExpandedValue: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '400',
+    lineHeight: 19,
   },
   upiExpandedAmountValue: {
-    fontSize: 18,
-    fontWeight: '600',
-    letterSpacing: -0.2,
+    fontSize: 15,
+    fontWeight: '500',
+    letterSpacing: 0,
   },
   upiExpandedActions: {
     flexDirection: 'row',

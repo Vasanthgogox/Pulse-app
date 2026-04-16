@@ -1,5 +1,5 @@
 /**
- * Treasury Fiscal Matrix — Ledger tab. Table view (default) or Transaction view (GPay-style).
+ * Treasury Financial Summary — Ledger tab. Table view (default) or Transaction view (GPay-style).
  * When transactions prop is provided, uses it (single read from parent); otherwise uses TanStack Query cache.
  */
 import { ALL_LEDGER_CATEGORY_VALUES } from "@/components/AddTransactionModal";
@@ -7,14 +7,32 @@ import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import { useTransactionsQuery } from "@/lib/queries";
-import { useEffect, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
 import * as financeService from "../services/finance.service";
+import { getProfileImage } from "../services/finance.service";
+import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
 import { FinancialRow, type FinancialRowData } from "./FinancialRow";
 import { LedgerTransactionListView } from "./LedgerTransactionListView";
+import type { ClientRow } from "@/features/clients/services/clients.service";
+import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
+
 
 export type LedgerViewMode = "table" | "transaction";
+
+function isPlaceholderLedgerPartyName(name: string | null | undefined): boolean {
+  const n = (name ?? "").trim().toLowerCase();
+  if (!n || n === "—" || n === "-") return true;
+  return (
+    n === "supplier" ||
+    n === "client" ||
+    n === "driver" ||
+    n === "unknown client" ||
+    n === "misc / unlinked" ||
+    n.startsWith("misc /")
+  );
+}
 
 export interface LedgerTabProps {
   organizationId: string | null;
@@ -51,6 +69,7 @@ export interface LedgerTabProps {
       supplier_rate?: number | null;
       driver_commission?: number | null;
       supplier_id?: string | null;
+      supplier_display_name?: string | null;
     }
   >;
   /** When provided, changing trip in SOURCE dropdown updates the entry and refreshes. */
@@ -60,6 +79,16 @@ export interface LedgerTabProps {
   onViewModeChange?: (mode: LedgerViewMode) => void;
   /** When false, hide TRANSACTION | TABLE | ANALYTICS sub-tabs (e.g. main Finance Cash tab). */
   showFiscalSubTabs?: boolean;
+  clientRows?: ClientRow[];
+  supplierRows?: SupplierRow[];
+  tripPartyMap?: Record<
+    string,
+    {
+      client_id?: string | null;
+      supplier_id?: string | null;
+      driver_id?: string | null;
+    }
+  >;
 }
 
 export function LedgerTab({
@@ -75,12 +104,69 @@ export function LedgerTab({
   onMissionChange,
   viewMode: viewModeProp,
   showFiscalSubTabs = true,
+  clientRows = [],
+  supplierRows = [],
+  tripPartyMap = {},
 }: LedgerTabProps) {
   const { t } = useLanguage();
   const isViewOnly = onAddTransactionPress === undefined;
   const isControlled = transactionsProp !== undefined;
   const [expandedLedgerRowId, setExpandedLedgerRowId] = useState<string | null>(null);
+  const [profileImages, setProfileImages] = useState<Record<string, string>>({});
   const viewMode = viewModeProp ?? "table";
+
+  const clientById = new Map(clientRows.map(c => [c.id, c]));
+  const supplierById = new Map(supplierRows.map(s => [s.id, s]));
+
+  const getResolvedPartyName = (row: financeService.LedgerRow): string => {
+    const contactType = row.contact_type;
+    const tripId = row.trip_id;
+    
+    if (contactType === 'client' && row.contact_id) {
+      return clientById.get(row.contact_id)?.name || row.party_name || "—";
+    }
+    if (contactType === 'supplier' && row.contact_id) {
+      const direct = supplierById.get(row.contact_id)?.name;
+      if (direct) return direct;
+      if (tripId && tripPartyMap[tripId]?.supplier_id) {
+        const viaTrip = supplierById.get(tripPartyMap[tripId]!.supplier_id!)?.name;
+        if (viaTrip) return viaTrip;
+      }
+      const detailNm =
+        tripId && tripDetailsMap[tripId]?.supplier_display_name
+          ? tripDetailsMap[tripId]!.supplier_display_name!.trim()
+          : "";
+      if (detailNm) return detailNm;
+      const pn = row.party_name;
+      if (pn && !isPlaceholderLedgerPartyName(pn)) return pn;
+      return "—";
+    }
+    if (contactType === 'driver') {
+      return row.driver_name || row.party_name || "—";
+    }
+
+    if (tripId && tripPartyMap[tripId]) {
+      const pm = tripPartyMap[tripId];
+      if (row.amount_in && pm.client_id) {
+        return clientById.get(pm.client_id)?.name || row.party_name || "—";
+      }
+      if (row.amount_out && pm.supplier_id) {
+        const nm = supplierById.get(pm.supplier_id)?.name;
+        if (nm) return nm;
+      }
+    }
+
+    if (tripId && tripDetailsMap[tripId]) {
+      const d = tripDetailsMap[tripId];
+      if ((row.amount_out ?? 0) > 0 && d.supplier_display_name?.trim()) {
+        return d.supplier_display_name.trim();
+      }
+    }
+
+    const fallbackPn = row.party_name;
+    if (fallbackPn && !isPlaceholderLedgerPartyName(fallbackPn)) return fallbackPn;
+    return "—";
+  };
 
   const {
     data: cachedTransactions = [],
@@ -95,6 +181,36 @@ export function LedgerTab({
 
   const rows = isControlled ? (transactionsProp ?? []) : cachedTransactions;
   const loading = isControlled ? false : queryLoading;
+
+  /** Transaction list (mobile / timeline) reads party_name directly; mirror web-resolved supplier/client labels. */
+  const transactionListRows = useMemo(
+    () =>
+      rows.map((r) => ({
+        ...r,
+        party_name: getResolvedPartyName(r),
+      })),
+    [rows, clientRows, supplierRows, tripPartyMap, tripDetailsMap],
+  );
+
+  useEffect(() => {
+    // Only drivers need async fetching (clients/suppliers resolve from already-fetched rows synchronously).
+    const fetchDriverProfileImages = async () => {
+      const newProfileImages: Record<string, string> = {};
+      for (const row of rows) {
+        const contactId = row.contact_id;
+        if (contactId && row.contact_type === 'driver' && !profileImages[contactId]) {
+          const imageUrl = await getProfileImage(contactId, 'driver');
+          if (imageUrl) {
+            newProfileImages[contactId] = imageUrl;
+          }
+        }
+      }
+      if (Object.keys(newProfileImages).length > 0) {
+        setProfileImages((prev) => ({ ...prev, ...newProfileImages }));
+      }
+    };
+    fetchDriverProfileImages();
+  }, [rows]);
 
   // Truck-related expense: contact_id/contact_type NULL; entity = vehicle_number (from row or trip) or party_name; LINK = route + vehicle badge only when trip.vehicle_id set. See docs/LEDGER_TRUCK_EXPENSE_AND_TRIP_DISPLAY.md for NULL handling (trip_id null, trip not in map, vehicle_id null).
 
@@ -234,13 +350,7 @@ export function LedgerTab({
       (row.trip_id != null && !isDriverPayment
         ? (getVehicleNumberForTripId?.(row.trip_id) ?? null)
         : null);
-    const entityName = isDriverPayment
-      ? row.driver_name || row.party_name || "—"
-      : isClientOrSupplier
-        ? row.party_name || "—"
-        : vehicleNum
-          ? formatIndianVehicleNumber(vehicleNum)
-          : (row.party_name ?? "—");
+    const entityName = getResolvedPartyName(row);
     const tripDetail =
       row.trip_id != null && tripDetailsMap[row.trip_id]
         ? tripDetailsMap[row.trip_id]
@@ -275,13 +385,7 @@ export function LedgerTab({
                 (r.trip_id && !isDr
                   ? (getVehicleNumberForTripId?.(r.trip_id) ?? null)
                   : null);
-              const party = isDr
-                ? r.driver_name || r.party_name || "—"
-                : isCS
-                  ? r.party_name || "—"
-                  : vn
-                    ? vn
-                    : (r.party_name ?? "—");
+              const party = getResolvedPartyName(r);
               return {
                 id: r.id,
                 date: formatEntryDate(r.transaction_date),
@@ -292,12 +396,22 @@ export function LedgerTab({
               };
             })
         : undefined;
+
+    let derivedPartyType = row.contact_type;
+    if (!derivedPartyType && row.trip_id && tripPartyMap[row.trip_id]) {
+      const pm = tripPartyMap[row.trip_id];
+      if (row.amount_in && pm.client_id) derivedPartyType = 'client';
+      if (row.amount_out && pm.supplier_id) derivedPartyType = 'supplier';
+    }
+
+    const profileImageUrl = row.contact_id ? profileImages[row.contact_id] : null;
+
     const ledgerPartyType =
-      row.contact_type === "client"
+      derivedPartyType === "client"
         ? "client"
-        : row.contact_type === "supplier"
+        : derivedPartyType === "supplier"
           ? "supplier"
-          : row.contact_type === "driver"
+          : isDriverPayment
             ? "driver"
             : "vehicle";
     const desc = row.description ?? "";
@@ -323,19 +437,20 @@ export function LedgerTab({
       transactionTypeLabel: getDoubleEntryDisplayLabel(row) ?? undefined,
       tripPaymentSummary: tripPaymentSummary ?? undefined,
       sameTripTransactions: sameTripTransactions ?? undefined,
+      profileImageUrl: profileImageUrl,
     };
   }
 
   const expandedRow =
     viewMode === "transaction" && expandedLedgerRowId != null
-      ? rows.find((r) => r.id === expandedLedgerRowId) ?? null
+      ? transactionListRows.find((r) => r.id === expandedLedgerRowId) ?? null
       : null;
   const expandedRowData =
     expandedRow != null ? buildFinancialRowDataForRow(expandedRow) : null;
 
   const transactionContent = (
     <LedgerTransactionListView
-      transactions={rows}
+      transactions={transactionListRows}
       onRowPress={(id) => {
         setExpandedLedgerRowId((prev) => (prev === id ? null : id));
       }}
@@ -351,7 +466,27 @@ export function LedgerTab({
       tripDetailsMap={tripDetailsMap}
       tripOptions={tripOptions}
       onMissionChange={onMissionChange}
-      fullWidth={false}
+      fullWidth
+      renderPartyAvatar={(row) => {
+        if (!row.contact_id) return null;
+        let url: string | null = null;
+        if (row.contact_type === 'client') {
+          // avatar_url from get_clients_with_profiles RPC — synchronous public URL
+          url = resolveAvatarPublicUrl(clientById.get(row.contact_id)?.avatar_url);
+        } else if (row.contact_type === 'supplier') {
+          url = resolveAvatarPublicUrl(supplierById.get(row.contact_id)?.avatar_url);
+        } else {
+          // Drivers: resolved via async profileImages state
+          url = profileImages[row.contact_id] ?? null;
+        }
+        if (!url) return null;
+        return (
+          <Image
+            source={{ uri: url }}
+            style={{ width: 40, height: 40 }}
+          />
+        );
+      }}
     />
   );
 
@@ -378,13 +513,7 @@ export function LedgerTab({
             ? (getVehicleNumberForTripId?.(row.trip_id) ?? null)
             : null);
         // Party column: show person name for client/supplier/driver; show vehicle only for vehicle expense (no contact).
-        const entityName = isDriverPayment
-          ? row.driver_name || row.party_name || "—"
-          : isClientOrSupplier
-            ? row.party_name || "—"
-            : vehicleNum
-              ? formatIndianVehicleNumber(vehicleNum)
-              : (row.party_name ?? "—");
+        const entityName = getResolvedPartyName(row);
         const tripDisplay = (row.trip_number ?? "").trim() || null;
         const entryDateStr = formatEntryDate(row.transaction_date);
         const restSublineDriver =
@@ -407,7 +536,7 @@ export function LedgerTab({
             : restSublineTrip
               ? `${entryDateStr} · ${restSublineTrip}`
               : entryDateStr;
-        const partyKey = (row.party_name ?? "").trim().toLowerCase();
+        const partyKey = (getResolvedPartyName(row) ?? "").trim().toLowerCase();
         const recommendedTripIds =
           partyKey === ""
             ? []
@@ -416,8 +545,8 @@ export function LedgerTab({
                   rows
                     .filter(
                       (r) =>
-                        (r.party_name ?? "").trim().toLowerCase() ===
-                          partyKey &&
+                        (getResolvedPartyName(r) ?? "").trim().toLowerCase() ===
+                        partyKey &&
                         r.trip_id != null &&
                         tripOptionIds.has(r.trip_id),
                     )
@@ -496,12 +625,12 @@ export function LedgerTab({
                       ? (getVehicleNumberForTripId?.(r.trip_id) ?? null)
                       : null);
                   const party = isDr
-                    ? r.driver_name || r.party_name || "—"
+                    ? r.driver_name || getResolvedPartyName(r) || "—"
                     : isCS
-                      ? r.party_name || "—"
+                      ? getResolvedPartyName(r) || "—"
                       : vn
                         ? vn
-                        : (r.party_name ?? "—");
+                        : getResolvedPartyName(r) || "—";
                   return {
                     id: r.id,
                     date: formatEntryDate(r.transaction_date),
@@ -513,12 +642,18 @@ export function LedgerTab({
                 });
               })()
             : undefined;
+        let derivedPartyType = row.contact_type;
+        if (!derivedPartyType && row.trip_id && tripPartyMap[row.trip_id]) {
+          const pm = tripPartyMap[row.trip_id];
+          if (row.amount_in && pm.client_id) derivedPartyType = "client";
+          if (row.amount_out && pm.supplier_id) derivedPartyType = "supplier";
+        }
         const ledgerPartyType =
-          row.contact_type === "client"
+          derivedPartyType === "client"
             ? "client"
-            : row.contact_type === "supplier"
+            : derivedPartyType === "supplier"
               ? "supplier"
-              : row.contact_type === "driver"
+              : isDriverPayment
                 ? "driver"
                 : "vehicle";
         const data: FinancialRowData = {
@@ -553,7 +688,7 @@ export function LedgerTab({
                 ? () =>
                     onEntitySelect(
                       (data.name || "").trim() ||
-                        row.party_name ||
+                        getResolvedPartyName(row) ||
                         (vehicleNum ?? ""),
                     )
                 : undefined

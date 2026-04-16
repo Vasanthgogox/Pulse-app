@@ -27,14 +27,18 @@ import {
   getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
 import { formatINR, formatLedgerDate } from "@/lib/format";
+import { getSignedAvatarUrl } from "@/lib/avatarUpload";
+import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Image,
   Modal,
   RefreshControl,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -64,11 +68,13 @@ function isPlaceholderPhone(value: string | null | undefined): boolean {
 export interface ClientDetailScreenProps {
   clientId: string;
   onBack: () => void;
+  autoOpenProfile?: boolean;
 }
 
 export default function ClientDetailScreen({
   clientId,
   onBack,
+  autoOpenProfile,
 }: ClientDetailScreenProps) {
   const router = useRouter();
   const { t } = useLanguage();
@@ -96,6 +102,7 @@ export default function ClientDetailScreen({
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash" | "shared">("trips");
   const [showSuccess, setShowSuccess] = useState(false);
+  const [successTitle, setSuccessTitle] = useState("NODE_SYNCED");
   const [isLinked, setIsLinked] = useState(false);
   const insets = useSafeAreaInsets();
   const [profileEditMode, setProfileEditMode] = useState(false);
@@ -106,13 +113,30 @@ export default function ClientDetailScreen({
   const [editAddress, setEditAddress] = useState("");
   const [editGstin, setEditGstin] = useState("");
   const [editPan, setEditPan] = useState("");
+  const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
+  const [isInApp, setIsInApp] = useState(false);
+  const initialLoadDoneRef = useRef(false);
+  
+  useEffect(() => {
+    if (autoOpenProfile) setShowProfileModal(true);
+  }, [autoOpenProfile]);
+
+  useEffect(() => {
+    if (client?.phone) {
+      import("@/services/connectionRequestsService").then(({ getConnectionInviteeByPhone }) => {
+        getConnectionInviteeByPhone(client.phone).then(({ invitee }) => {
+          if (invitee) setIsInApp(true);
+        });
+      });
+    }
+  }, [client?.phone]);
 
   const load = useCallback(() => {
     if (!clientId || !currentOrganization?.id) {
       setLoading(false);
       return;
     }
-    if (!isRefreshingRef.current) setLoading(true);
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
     Promise.all([
@@ -197,6 +221,7 @@ export default function ClientDetailScreen({
       })
       .finally(() => {
         setLoading(false);
+        initialLoadDoneRef.current = true;
         isRefreshingRef.current = false;
         setRefreshing(false);
       });
@@ -220,6 +245,39 @@ export default function ClientDetailScreen({
       setEditPan(client.pan_number ?? "");
     }
   }, [client]);
+
+  useEffect(() => {
+    let mounted = true;
+    const resolveAvatar = async () => {
+      if (!client?.linked_organization_id) {
+        if (mounted) setProfileAvatarUri(null);
+        return;
+      }
+      const { profile } = await getLinkedOrgProfile(client.linked_organization_id);
+      if (!profile) {
+        if (mounted) setProfileAvatarUri(null);
+        return;
+      }
+      if (profile.avatarUrl?.startsWith("http")) {
+        if (mounted) setProfileAvatarUri(profile.avatarUrl);
+        return;
+      }
+      if (profile.avatarUrl?.trim()) {
+        const signed = await getSignedAvatarUrl(profile.avatarUrl.trim());
+        if (mounted) setProfileAvatarUri(signed);
+        return;
+      }
+      if (profile.avatarSeed?.trim()) {
+        if (mounted) setProfileAvatarUri(getUser2DAvatarUriForSeed(profile.avatarSeed.trim()));
+        return;
+      }
+      if (mounted) setProfileAvatarUri(null);
+    };
+    void resolveAvatar();
+    return () => {
+      mounted = false;
+    };
+  }, [client?.linked_organization_id]);
 
   const ledgerEntries: LedgerEntry[] = useMemo(() => {
     const rows: LedgerEntry[] = transactions.map((tx) => {
@@ -352,13 +410,14 @@ export default function ClientDetailScreen({
     };
   };
 
-  const triggerSuccess = useCallback(() => {
+  const triggerSuccess = useCallback((title = "NODE_SYNCED") => {
+    setSuccessTitle(title);
     setShowSuccess(true);
     const t = setTimeout(() => setShowSuccess(false), 1500);
     return () => clearTimeout(t);
   }, []);
 
-  // ENTITY LEDGER PROTOCOL — Aggressive consolidation & tally, O(n). Must run before any early return (Rules of Hooks).
+  // TRANSACTION LEDGER — Aggressive consolidation & tally, O(n). Must run before any early return (Rules of Hooks).
   const {
     rows: ledgerProtocolRows,
     totalBilledConsolidated,
@@ -620,7 +679,7 @@ export default function ClientDetailScreen({
   const health = sales > 0 ? Math.round((paid / sales) * 100) : 0;
 
   const tabConfig = [
-    { id: "trips" as const, label: "Missions" },
+    { id: "trips" as const, label: "Trips" },
     { id: "cash" as const, label: "Cash Flow" },
     { id: "shared" as const, label: "Shared" },
   ];
@@ -649,7 +708,11 @@ export default function ClientDetailScreen({
             activeOpacity={0.8}
             accessibilityLabel="Client profile"
           >
-            <FontAwesome name="user" size={16} color={Theme.textOnPrimary} />
+            {profileAvatarUri ? (
+              <Image source={{ uri: profileAvatarUri }} style={styles.headerAvatarImage} />
+            ) : (
+              <FontAwesome name="user" size={16} color={Theme.textPrimaryDark} />
+            )}
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.downloadBtn}
@@ -688,7 +751,7 @@ export default function ClientDetailScreen({
         <View style={styles.scorecard}>
           <View style={styles.scorecardTop}>
             <View style={styles.scorecardLeft}>
-              <Text style={styles.scorecardLabel}>GRID FISCAL DNA</Text>
+              <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
               <Text style={styles.scorecardSalesLabel}>TOTAL SALES</Text>
               <Text style={styles.scorecardAmount}>
                 {formatINR(sales)}
@@ -737,11 +800,11 @@ export default function ClientDetailScreen({
           ))}
         </View>
 
-        {/* Tab: Missions — Sales, Received, Due; tap row to open trip detail */}
+        {/* Tab: Trips — Sales, Received, Due; tap row to open trip detail */}
         {detailSubTab === "trips" && (
           <View style={styles.tableCard}>
             <View style={styles.tableHeader}>
-              <Text style={[styles.th, styles.thMission]}>Mission</Text>
+              <Text style={[styles.th, styles.thMission]}>Trip</Text>
               <Text style={[styles.th, styles.thSales]}>Sales</Text>
               <Text style={[styles.th, styles.thRight]}>Received</Text>
               <Text style={[styles.th, styles.thRight]}>Due</Text>
@@ -782,7 +845,7 @@ export default function ClientDetailScreen({
               ))
             ) : (
               <View style={styles.emptyRow}>
-                <Text style={styles.emptyRowText}>No missions</Text>
+                <Text style={styles.emptyRowText}>No trips</Text>
               </View>
             )}
           </View>
@@ -826,9 +889,17 @@ export default function ClientDetailScreen({
               integrated={Boolean(client.is_integrated || client.linked_organization_id)}
               embeddedInOverlay={true}
               onRefresh={load}
-              onRequestInvite={() => {
+              onRequestConnection={() => {
                 setIsLinked(true);
-                triggerSuccess();
+                triggerSuccess("CONNECTION_REQUESTED");
+              }}
+              onInviteToApp={() => {
+                const message = `Join me on Q to sync our ledger and compare books with ${clientName}. Download the Q app to get started.`;
+                Share.share({ message, title: "Invite to Q" })
+                  .then(() => {
+                    triggerSuccess("INVITE_SENT");
+                  })
+                  .catch(() => {});
               }}
             />
           </View>
@@ -840,9 +911,9 @@ export default function ClientDetailScreen({
         <View style={styles.successOverlay}>
           <View style={styles.successCard}>
             <View style={styles.successIconWrap}>
-              <FontAwesome name="check" size={32} color={Theme.textOnPrimary} />
+              <FontAwesome name="check" size={24} color={Theme.textOnPrimary} />
             </View>
-            <Text style={styles.successTitle}>NODE_SYNCED</Text>
+            <Text style={styles.successTitle}>{successTitle}</Text>
           </View>
         </View>
       )}
@@ -904,7 +975,11 @@ export default function ClientDetailScreen({
             <View style={styles.profileCard}>
               <View style={styles.profileCardTop}>
                 <View style={styles.profileAvatarWrap}>
-                  <FontAwesome name="building" size={30} color={Theme.primary} />
+                  {profileAvatarUri ? (
+                    <Image source={{ uri: profileAvatarUri }} style={styles.profileAvatarImage} />
+                  ) : (
+                    <FontAwesome name="building" size={30} color={Theme.primary} />
+                  )}
                 </View>
                 <View style={styles.profileCardTopText}>
                   <Text style={styles.profileEntityName} numberOfLines={2}>
@@ -919,9 +994,15 @@ export default function ClientDetailScreen({
                     <View style={styles.profileBadge}>
                       <Text style={styles.profileBadgeText}>Verified</Text>
                     </View>
-                    <View style={[styles.profileBadge, styles.profileBadgeCore]}>
-                      <Text style={styles.profileBadgeCoreText}>Core Node</Text>
-                    </View>
+                    {client?.is_integrated || client?.linked_organization_id || isInApp ? (
+                      <View style={[styles.profileBadge, { backgroundColor: Theme.positive + '20', borderColor: Theme.positive }]}>
+                        <Text style={[styles.profileBadgeCoreText, { color: Theme.positive }]}>Integrated</Text>
+                      </View>
+                    ) : (
+                      <View style={[styles.profileBadge, styles.profileBadgeCore]}>
+                        <Text style={styles.profileBadgeCoreText}>Core Node</Text>
+                      </View>
+                    )}
                   </View>
                 </View>
               </View>
@@ -998,6 +1079,22 @@ export default function ClientDetailScreen({
               <FontAwesome name="refresh" size={14} color={Theme.textOnPrimary} />
               <Text style={styles.profileEditBtnText}>Edit Node Profile</Text>
             </TouchableOpacity>
+            {!client?.linked_organization_id && !isInApp && (
+              <TouchableOpacity
+                style={[
+                  styles.profileEditBtn,
+                  { backgroundColor: Theme.surface, borderWidth: 1, borderColor: Theme.borderLight, marginTop: 12 }
+                ]}
+                onPress={() => {
+                  const message = `Join me on Q to sync our ledger and compare books with ${clientName}. Download the Q app to get started.`;
+                  Share.share({ message, title: "Invite to Q" });
+                }}
+                activeOpacity={0.8}
+              >
+                <FontAwesome name="link" size={14} color={Theme.textPrimaryDark} />
+                <Text style={[styles.profileEditBtnText, { color: Theme.textPrimaryDark }]}>{t("linkToAppAccount")}</Text>
+              </TouchableOpacity>
+            )}
           </ScrollView>
         </View>
       </Modal>
@@ -1061,9 +1158,14 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
+  },
+  headerAvatarImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 12,
   },
   downloadBtn: {
     width: 40,
@@ -1133,6 +1235,11 @@ const styles = StyleSheet.create({
     borderColor: Theme.primary,
     alignItems: "center",
     justifyContent: "center",
+  },
+  profileAvatarImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 37,
   },
   profileCardTopText: { flex: 0, minWidth: 0, alignItems: "center" },
   profileEntityName: {
@@ -1739,26 +1846,32 @@ const styles = StyleSheet.create({
   },
   successCard: {
     backgroundColor: Theme.darkBackground,
-    paddingVertical: 48,
-    paddingHorizontal: 48,
-    borderRadius: 40,
+    paddingVertical: 24,
+    paddingHorizontal: 32,
+    borderRadius: 24,
     alignItems: "center",
-    minWidth: 200,
+    minWidth: 160,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 12,
   },
   successIconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: Theme.darkGreen,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   successTitle: {
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 14,
+    fontWeight: "900",
     fontStyle: "italic",
     color: Theme.textOnPrimary,
-    letterSpacing: -0.5,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
   },
 });

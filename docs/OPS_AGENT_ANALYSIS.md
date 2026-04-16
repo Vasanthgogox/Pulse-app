@@ -194,8 +194,8 @@ Each returns `{ success, message?, error?, entity? }`. `entity` is a `CreatedEnt
 
 ## 6. Alternate Screen: `app/(tabs)/ops-agent.tsx`
 
-- **Purpose:** Alternate/demo Ops Autopilot screen (e.g. “Ops Autopilot”, “Neural Mission Control”).
-- **Behavior:** Same visual style (TeslaHeader, chat bubbles, “ENTER COMMAND…”, Send), but **no** call to **processOpsMessage**. On send, after a short delay it pushes a **mock** system message: “Autopilot response: Mission sync complete.” and shows a “SYNC COMPLETE” toast.
+- **Purpose:** Alternate/demo Ops Autopilot screen (e.g. “Ops Autopilot”, “Neural Trip Control”).
+- **Behavior:** Same visual style (TeslaHeader, chat bubbles, “ENTER COMMAND…”, Send), but **no** call to **processOpsMessage**. On send, after a short delay it pushes a **mock** system message: “Autopilot response: Trip sync complete.” and shows a “SYNC COMPLETE” toast.
 - **Navigation:** Available when navigating to `ops-agent` (e.g. from docs or deep link); tab bar does not show it (href: null). The **default** Ops Agent experience is **index** (Home).
 
 ---

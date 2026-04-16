@@ -30,13 +30,15 @@ export interface UserProfile {
   asset?: boolean;
   full_name?: string;
   avatar_url?: string;
+  /** Custom avatar seed for presets (e.g. pilot-1). */
+  avatar_seed?: string;
   phone?: string;
   company_name?: string;
   /** Profile quote/status (WhatsApp-style). */
   status_text?: string;
 }
 
-function authProfileToUserProfile(p: AuthProfile): UserProfile {
+function authProfileToUserProfile(p: authService.AuthProfile): UserProfile {
   return {
     uid: p.uid,
     email: p.email,
@@ -46,9 +48,29 @@ function authProfileToUserProfile(p: AuthProfile): UserProfile {
     asset: p.asset ?? true,
     full_name: p.full_name,
     avatar_url: p.avatar_url,
+    avatar_seed: p.avatar_seed,
     phone: p.phone,
     company_name: p.company_name,
     status_text: p.status_text,
+  };
+}
+
+function mergeAuthProfiles(
+  base: authService.AuthProfile,
+  db: authService.AuthProfile | null,
+): authService.AuthProfile {
+  if (!db) return base;
+  return {
+    ...base,
+    ...db,
+    // Prefer DB when present, but keep fresh auth metadata values when DB field is empty/stale.
+    avatar_url: db.avatar_url ?? base.avatar_url,
+    avatar_seed: db.avatar_seed ?? base.avatar_seed,
+    status_text: db.status_text ?? base.status_text,
+    company_name: db.company_name ?? base.company_name,
+    phone: db.phone ?? base.phone,
+    full_name: db.full_name ?? base.full_name,
+    displayName: db.displayName || base.displayName,
   };
 }
 
@@ -68,6 +90,7 @@ interface AuthContextType {
     role?: authService.UserRole,
     operatingModel?: authService.OperatingModel,
     phone?: string,
+    companyName?: string,
   ) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
@@ -131,6 +154,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUser(session.user);
             setProfile(authProfileToUserProfile(session.profile));
             setSessionExpired(false);
+            
+            // Proactively refresh from server to ensure profile is not stale
+            authService.refreshSession().then((refreshed) => {
+              if (mounted && refreshed) {
+                setUser(refreshed.user);
+                setProfile(authProfileToUserProfile(refreshed.profile));
+              }
+            }).catch(() => {});
           }
         } else {
           setUser(null);
@@ -139,11 +170,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         setLoading(false);
         try {
-          unsubscribe = authService.onAuthStateChange((auth) => {
+          unsubscribe = authService.onAuthStateChange(async (auth) => {
             if (!mounted) return;
             if (auth) {
+              // Fetch latest profile from DB for accuracy (handles updates from other devices/sessions)
+              const dbProfile = await authService.getProfile(auth.user.uid);
+              if (!mounted) return;
+
               setUser(auth.user);
-              setProfile(authProfileToUserProfile(auth.profile));
+              setProfile(
+                authProfileToUserProfile(
+                  mergeAuthProfiles(auth.profile, dbProfile),
+                ),
+              );
               setSessionExpired(false);
             } else {
               if (!signOutRequestedRef.current) setSessionExpired(true);
@@ -165,11 +204,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setLoading(false);
         }
         try {
-          unsubscribe = authService.onAuthStateChange((auth) => {
+          unsubscribe = authService.onAuthStateChange(async (auth) => {
             if (!mounted) return;
             if (auth) {
+              const dbProfile = await authService.getProfile(auth.user.uid);
+              if (!mounted) return;
               setUser(auth.user);
-              setProfile(authProfileToUserProfile(auth.profile));
+              setProfile(
+                authProfileToUserProfile(
+                  mergeAuthProfiles(auth.profile, dbProfile),
+                ),
+              );
               setSessionExpired(false);
             } else {
               if (!signOutRequestedRef.current) setSessionExpired(true);
@@ -212,6 +257,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!result.error) {
       setSessionExpired(false);
       await setKeepSignedIn(keepSignedIn);
+      // Wait for the session state to be fully populated before returning,
+      // ensuring the redirect doesn't hit an empty state and bounce back.
+      await refreshSession();
     }
     return result;
   };
@@ -223,19 +271,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     role?: authService.UserRole,
     operatingModel?: authService.OperatingModel,
     phone?: string,
+    companyName?: string,
   ) => {
-    return authService.signUp({
+    const result = await authService.signUp({
       email,
       password,
       fullName,
       phone,
+      companyName,
       role,
       operatingModel,
     });
+    if (!result.error) {
+      await refreshSession();
+    }
+    return result;
   };
 
   const refreshSession = async () => {
-    const session = await authService.getSession();
+    const session = await authService.refreshSession();
     if (session) {
       setUser(session.user);
       setProfile(authProfileToUserProfile(session.profile));
@@ -245,7 +299,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     signOutRequestedRef.current = true;
-    await authService.signOut();
+    try {
+      await authService.signOut();
+    } catch (error) {
+      console.error("Error during signOut in AuthContext:", error);
+    }
     setSessionExpired(false);
     setUser(null);
     setProfile(null);

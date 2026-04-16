@@ -23,18 +23,47 @@ export interface SupplierRow {
   supplier_type?: 'integrated' | 'offline' | 'marketplace';
   /** When set, this supplier is another platform org (for shared ledger / compare & verify). */
   linked_organization_id?: string | null;
+  /** Joined profile data for integrated suppliers (owner of linked org). */
+  avatar_url?: string | null;
+  avatar_seed?: string | null;
+  owner_full_name?: string | null;
 }
 
 export async function getSuppliersByOrganization(
   orgId: string,
   opts?: PageOpts
 ): Promise<{ error: Error | null; suppliers: SupplierRow[]; hasMore?: boolean }> {
+  try {
+    // Try optimized RPC first
+    const { data, error: rpcError } = await supabase().rpc('get_suppliers_with_profiles', {
+      p_org_id: orgId,
+    });
+
+    if (!rpcError && data) {
+      const raw = (data ?? []) as SupplierRow[];
+      if (opts != null) {
+        const limit = opts.limit ?? DEFAULT_PAGE_SIZE;
+        const offset = opts.offset ?? 0;
+        const hasMore = raw.length > offset + limit;
+        return { error: null, suppliers: raw.slice(offset, offset + limit), hasMore };
+      }
+      return { error: null, suppliers: raw };
+    }
+    if (rpcError && __DEV__) {
+      console.warn('[getSuppliersByOrganization] RPC failed, falling back to select:', rpcError.message);
+    }
+  } catch (e) {
+    if (__DEV__) console.warn('[getSuppliersByOrganization] RPC exception:', e);
+  }
+
+  // Fallback to standard select if RPC fails or is missing
   const base = () =>
     supabase()
       .from('suppliers')
       .select('*')
       .eq('organization_id', orgId)
       .order('created_at', { ascending: false });
+
   if (opts != null) {
     const limit = opts.limit ?? DEFAULT_PAGE_SIZE;
     const offset = opts.offset ?? 0;
@@ -80,14 +109,14 @@ export async function getSupplierDetails(
 }
 
 /**
- * Fetch display profile (name, contact, phone, email) for a linked organization (supplier side).
+ * Fetch display profile (name, contact, phone, email, avatar) for a linked organization (supplier side).
  * Uses RPC get_connection_partner_display (SECURITY DEFINER) so we can read the other org's profile.
  */
 export async function getLinkedOrgProfileForSupplier(
   linkedOrganizationId: string
 ): Promise<{
   error: Error | null;
-  profile: { organizationName: string; contactPerson: string; phone: string; email: string } | null;
+  profile: { organizationName: string; contactPerson: string; phone: string; email: string; avatarUrl?: string; avatarSeed?: string } | null;
 }> {
   const { data, error } = await supabase().rpc('get_connection_partner_display', {
     p_linked_organization_id: linkedOrganizationId,
@@ -98,7 +127,7 @@ export async function getLinkedOrgProfileForSupplier(
   if (data == null || typeof data !== 'object') {
     return { error: null, profile: null };
   }
-  const raw = data as { organizationName?: string; contactPerson?: string; phone?: string; email?: string };
+  const raw = data as { organizationName?: string; contactPerson?: string; phone?: string; email?: string; avatarUrl?: string; avatarSeed?: string };
   return {
     error: null,
     profile: {
@@ -106,6 +135,8 @@ export async function getLinkedOrgProfileForSupplier(
       contactPerson: (raw.contactPerson ?? '').trim(),
       phone: (raw.phone ?? '').trim(),
       email: (raw.email ?? '').trim(),
+      avatarUrl: (raw.avatarUrl ?? '').trim(),
+      avatarSeed: (raw.avatarSeed ?? '').trim(),
     },
   };
 }

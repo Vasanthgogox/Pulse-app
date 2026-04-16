@@ -40,7 +40,7 @@ function getEmailFromParams(params: { email?: string | string[] }): string {
 export default function SignIn() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ email?: string | string[] }>();
-  const { signIn } = useAuth();
+  const { signIn, user, profile, loading: authLoading } = useAuth();
   const { t, locale, localeOptions } = useLanguage();
   const isOnline = useIsOnline();
   const router = useRouter();
@@ -49,6 +49,8 @@ export default function SignIn() {
   const [showPassword, setShowPassword] = useState(false);
   const [keepSignedIn, setKeepSignedInState] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [waitingForAuthState, setWaitingForAuthState] = useState(false);
+  const [errorText, setErrorText] = useState<string>('');
   const emailPrefilled = Boolean(getEmailFromParams(params));
   const scrollRef = useRef<ScrollView>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -67,9 +69,27 @@ export default function SignIn() {
   }, []);
 
   useEffect(() => {
+    // Automatically redirect to home if the user is already or becomes logged in.
+    if (user) {
+      router.replace('/');
+    }
+  }, [user, router]);
+
+  useEffect(() => {
     const next = getEmailFromParams(params);
     if (next) setEmail(next);
   }, [params.email]);
+
+  useEffect(() => {
+    // Wait for AuthContext to finish hydration/auth events before navigating.
+    if (authLoading) return;
+    if (!user || !profile) return;
+    if (profile.role === 'driver') {
+      router.replace('/(driver)');
+      return;
+    }
+    router.replace('/(tabs)/finance');
+  }, [authLoading, user, profile, router]);
 
   useEffect(() => {
     const show = () => {
@@ -100,31 +120,45 @@ export default function SignIn() {
     'English';
 
   const handleSignIn = async () => {
+    setErrorText('');
     if (!isOnline) {
-      Alert.alert(t('noInternet'), t('connectToSignIn'));
+      const msg = t('connectToSignIn');
+      setErrorText(msg);
+      Alert.alert(t('noInternet'), msg);
       return;
     }
     const trimmedEmail = email.trim();
     if (!trimmedEmail || !password) {
-      Alert.alert(t('error'), t('enterEmailPassword'));
+      const msg = t('enterEmailPassword');
+      setErrorText(msg);
+      Alert.alert(t('error'), msg);
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      Alert.alert(t('invalidEmail'), t('validEmailAddress'));
+      const msg = t('validEmailAddress');
+      setErrorText(msg);
+      Alert.alert(t('invalidEmail'), msg);
       return;
     }
-    setLoading(true);
-    const { error } = await signIn(trimmedEmail, password, keepSignedIn);
-    setLoading(false);
-    if (error) {
-      const isNetwork = error.message.includes('Cannot reach server');
-      Alert.alert(
-        isNetwork ? t('connectionError') : t('signInFailed'),
-        isNetwork ? t('cannotReachServer') : error.message
-      );
-      return;
+    try {
+      setLoading(true);
+      const { error } = await signIn(trimmedEmail, password, keepSignedIn);
+      setLoading(false);
+      if (error) {
+        const isNetwork = error.message.includes('Cannot reach server');
+        const title = isNetwork ? t('connectionError') : t('signInFailed');
+        const msg = isNetwork ? t('cannotReachServer') : (error.message || t('unknownError'));
+        setErrorText(msg);
+        Alert.alert(title, msg);
+        return;
+      }
+      setWaitingForAuthState(true);
+    } catch (e) {
+      setLoading(false);
+      const msg = e instanceof Error ? (e.message || t('unknownError')) : t('unknownError');
+      setErrorText(msg);
+      Alert.alert(t('signInFailed'), msg);
     }
-    router.replace('/');
   };
 
   const scrollContentStyle = [
@@ -174,7 +208,10 @@ export default function SignIn() {
             placeholder={t('emailPlaceholder')}
             placeholderTextColor={Theme.authTextMuted}
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(v) => {
+              setEmail(v);
+              if (errorText) setErrorText('');
+            }}
             autoCapitalize="none"
             autoCorrect={false}
             spellCheck={false}
@@ -188,7 +225,10 @@ export default function SignIn() {
               placeholder={t('passwordPlaceholder')}
               placeholderTextColor={Theme.authTextMuted}
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(v) => {
+                setPassword(v);
+                if (errorText) setErrorText('');
+              }}
               secureTextEntry={!showPassword}
               autoCorrect={false}
               spellCheck={false}
@@ -233,16 +273,18 @@ export default function SignIn() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.button, (loading || !isOnline) && styles.buttonDisabled]}
+            style={[styles.button, (loading || waitingForAuthState || !isOnline) && styles.buttonDisabled]}
             onPress={handleSignIn}
-            disabled={loading || !isOnline}
+            disabled={loading || waitingForAuthState || !isOnline}
           >
-            {loading ? (
+            {loading || waitingForAuthState ? (
               <ActivityIndicator color="#ffffff" />
             ) : (
               <Text style={styles.buttonText}>{t('logIn')}</Text>
             )}
           </TouchableOpacity>
+
+          {!!errorText && <Text style={styles.errorText}>{errorText}</Text>}
 
           <TouchableOpacity activeOpacity={0.8} disabled={loading}>
             <Text style={styles.forgotPasswordText}>{t('forgotPassword')}</Text>
@@ -273,7 +315,7 @@ export default function SignIn() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.screenBackground,
     padding: Layout.screenPaddingHorizontal + 8,
   },
   scrollContent: {
@@ -313,13 +355,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 34,
     fontWeight: '800',
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
     marginBottom: 8,
     letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 16,
-    color: Theme.authTextMuted,
+    color: Theme.textMuted,
     letterSpacing: 0.5,
   },
   languageRow: {
@@ -329,28 +371,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     marginBottom: 24,
     borderBottomWidth: 1,
-    borderBottomColor: Theme.authBorder,
+    borderBottomColor: Theme.border,
   },
   languageLabel: {
     fontSize: 14,
-    color: Theme.authTextMuted,
+    color: Theme.textMuted,
     marginLeft: 8,
   },
   languageValue: {
     flex: 1,
     fontSize: 15,
     fontWeight: '600',
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
     marginLeft: 4,
   },
   input: {
-    backgroundColor: Theme.authInputBg,
+    backgroundColor: Theme.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.authBorder,
+    borderColor: Theme.border,
     padding: 16,
     fontSize: 16,
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
     marginBottom: 16,
   },
   passwordRow: {
@@ -358,14 +400,14 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   inputPassword: {
-    backgroundColor: Theme.authInputBg,
+    backgroundColor: Theme.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.authBorder,
+    borderColor: Theme.border,
     padding: 16,
     paddingRight: 48,
     fontSize: 16,
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
   },
   eyeButton: {
     position: 'absolute',
@@ -384,7 +426,7 @@ const styles = StyleSheet.create({
   },
   keepSignedInLabel: {
     fontSize: 15,
-    color: Theme.authTextMuted,
+    color: Theme.textMuted,
     fontWeight: '500',
     flex: 1,
   },
@@ -413,7 +455,14 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 14,
     fontWeight: '500',
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
+    textAlign: 'center',
+  },
+  errorText: {
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: '600',
+    color: Theme.authPrimary,
     textAlign: 'center',
   },
   footer: {
@@ -426,12 +475,12 @@ const styles = StyleSheet.create({
   },
   footerMuted: {
     fontSize: 14,
-    color: Theme.authTextMuted,
+    color: Theme.textMuted,
     fontWeight: '500',
   },
   footerLink: {
     fontSize: 14,
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
     fontWeight: '700',
   },
 });

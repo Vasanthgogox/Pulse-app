@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -307,13 +308,17 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   input: {
-    borderWidth: 2,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
     minHeight: 48,
     paddingRight: 44,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   inputPressable: {
     justifyContent: "center",
@@ -382,6 +387,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     fontSize: 16,
     color: Theme.textPrimary,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   dropdownScroll: {
     maxHeight: 300,

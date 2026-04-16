@@ -15,6 +15,59 @@ export interface RouteResult {
   duration: number; // in seconds
 }
 
+const ROUTE_FETCH_KEY_SEPARATOR = "|";
+const ROUTE_FETCH_KEY_COORD_SEPARATOR = ",";
+
+function formatKeyCoord(value: number): string {
+  return Number.isFinite(value) ? value.toFixed(6) : "0.000000";
+}
+
+/**
+ * Stable key for memoized route fetches.
+ */
+export function buildRouteFetchKey(
+  tripId: string,
+  from: LatLon,
+  to: LatLon,
+): string {
+  const normalizedTripId = (tripId ?? "").trim();
+  return [
+    normalizedTripId,
+    `${formatKeyCoord(from.latitude)}${ROUTE_FETCH_KEY_COORD_SEPARATOR}${formatKeyCoord(from.longitude)}`,
+    `${formatKeyCoord(to.latitude)}${ROUTE_FETCH_KEY_COORD_SEPARATOR}${formatKeyCoord(to.longitude)}`,
+  ].join(ROUTE_FETCH_KEY_SEPARATOR);
+}
+
+/**
+ * Parse a route fetch key back into coords.
+ */
+export function parseRouteFetchKey(
+  key: string,
+): { tripId: string; from: LatLon; to: LatLon } | null {
+  const raw = (key ?? "").trim();
+  if (!raw) return null;
+
+  const [tripId, fromRaw, toRaw] = raw.split(ROUTE_FETCH_KEY_SEPARATOR);
+  if (!tripId || !fromRaw || !toRaw) return null;
+
+  const [fromLatRaw, fromLonRaw] = fromRaw.split(ROUTE_FETCH_KEY_COORD_SEPARATOR);
+  const [toLatRaw, toLonRaw] = toRaw.split(ROUTE_FETCH_KEY_COORD_SEPARATOR);
+  const fromLat = Number(fromLatRaw);
+  const fromLon = Number(fromLonRaw);
+  const toLat = Number(toLatRaw);
+  const toLon = Number(toLonRaw);
+
+  if (![fromLat, fromLon, toLat, toLon].every((n) => Number.isFinite(n))) {
+    return null;
+  }
+
+  return {
+    tripId,
+    from: { latitude: fromLat, longitude: fromLon },
+    to: { latitude: toLat, longitude: toLon },
+  };
+}
+
 const MAPBOX_DIRECTIONS_BASE = 'https://api.mapbox.com/directions/v5/mapbox/driving';
 const OSRM_DIRECTIONS_BASE = 'https://router.project-osrm.org/route/v1/driving';
 const OSRM_NETWORK_ERROR_COOLDOWN_MS = 60_000;

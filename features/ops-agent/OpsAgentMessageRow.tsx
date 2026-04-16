@@ -17,6 +17,7 @@ import type { Message, OpsRef } from "./types";
 import { OpsAgentReportCard } from "./components/OpsAgentReportCard";
 import { FONT } from "./constants";
 import type { ChatReportData, OpsSessionState, LastMessageImage } from "@/services/opsAgentService";
+import { formatMobileNumber } from "@/lib/format";
 import type { OpsAgentStyles } from "./opsAgentStyles";
 import {
   ClientDropdown,
@@ -325,7 +326,7 @@ export function OpsAgentMessageRow({
                           onChangeText={(t) =>
                             onUpdatePendingConfirmData(index, {
                               ...msg.pendingConfirm!.data,
-                              phone: t,
+                              phone: formatMobileNumber(t),
                             })
                           }
                           placeholder="e.g. 943214566"
@@ -365,7 +366,7 @@ export function OpsAgentMessageRow({
                           onChangeText={(t) =>
                             onUpdatePendingConfirmData(index, {
                               ...msg.pendingConfirm!.data,
-                              phone: t,
+                              phone: formatMobileNumber(t),
                             })
                           }
                           placeholder="e.g. 943214566"
@@ -532,7 +533,7 @@ export function OpsAgentMessageRow({
                           onChangeText={(t) =>
                             onUpdatePendingConfirmData(index, {
                               ...msg.pendingConfirm!.data,
-                              phone: t,
+                              phone: formatMobileNumber(t),
                             })
                           }
                           placeholder="e.g. 943214566"
@@ -1232,7 +1233,7 @@ export function OpsAgentMessageRow({
                             onChangeText={(t) =>
                               onUpdatePreviewData(index, {
                                 ...msg.createdPreview!.data,
-                                phone: t,
+                                phone: formatMobileNumber(t),
                               })
                             }
                             placeholder="e.g. 943214566"
@@ -1274,7 +1275,7 @@ export function OpsAgentMessageRow({
                             onChangeText={(t) =>
                               onUpdatePreviewData(index, {
                                 ...msg.createdPreview!.data,
-                                phone: t,
+                                phone: formatMobileNumber(t),
                               })
                             }
                             placeholder="e.g. 943214566"
@@ -1445,7 +1446,7 @@ export function OpsAgentMessageRow({
                             onChangeText={(t) =>
                               onUpdatePreviewData(index, {
                                 ...msg.createdPreview!.data,
-                                phone: t,
+                                phone: formatMobileNumber(t),
                               })
                             }
                             placeholder="e.g. 943214566"

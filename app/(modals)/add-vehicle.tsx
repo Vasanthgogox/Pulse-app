@@ -1,21 +1,29 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { AddVehicleModal, type AddVehicleCompletePayload, createVehicle } from '@/features/vehicles';
 import { queryKeys } from '@/lib/queryKeys';
 import { useQueryClient } from '@tanstack/react-query';
-import { useSafeBack } from '@/lib/useSafeBack';
 
-/** Dismiss modal and navigate to Finance (Garrage) so we don't fall back to Ops Agent tab. */
-function closeModal(safeBack: () => void, router: ReturnType<typeof useRouter>) {
-  safeBack();
-  setTimeout(() => router.navigate('/(tabs)/finance'), 100);
+const DEFAULT_FALLBACK_ROUTE = '/(tabs)/resources';
+
+/** Dismiss modal: go back to the page that opened it. */
+function closeModal(router: ReturnType<typeof useRouter>, returnTo?: string) {
+  if (router.canGoBack()) {
+    router.back();
+  } else if (returnTo) {
+    router.replace(returnTo as Parameters<typeof router.replace>[0]);
+  } else {
+    router.replace(DEFAULT_FALLBACK_ROUTE);
+  }
 }
 
 export default function AddVehicleScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ returnTo?: string | string[] }>();
   const queryClient = useQueryClient();
-  const safeBack = useSafeBack();
   const { currentOrganization } = useOrganization();
+  const returnToParam = Array.isArray(params.returnTo) ? params.returnTo[0] : params.returnTo;
+  const returnTo = returnToParam?.startsWith('/') ? returnToParam : undefined;
 
   const handleComplete = async (payload: AddVehicleCompletePayload) => {
     if (!currentOrganization?.id) return;
@@ -34,12 +42,11 @@ export default function AddVehicleScreen() {
     });
     if (error) throw error;
     await queryClient.refetchQueries({ queryKey: queryKeys.vehicles.all(orgId) });
-    closeModal(safeBack, router);
   };
 
   return (
     <AddVehicleModal
-      onClose={() => closeModal(safeBack, router)}
+      onClose={() => closeModal(router, returnTo)}
       onComplete={handleComplete}
       ownAssetOnly
     />

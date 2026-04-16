@@ -59,7 +59,7 @@ export function LoadBoardModal({
       {!embedInTab && (
         <TeslaHeader
           title="Load Board"
-          subtitle="Mission Exchange"
+          subtitle="Trip Exchange"
           showBack
           onBack={onClose}
         />

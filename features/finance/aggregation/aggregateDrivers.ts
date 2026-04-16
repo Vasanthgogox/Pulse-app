@@ -18,7 +18,7 @@ function parseDistanceKm(distance: string | number | null | undefined): number |
 }
 
 /**
- * Compute trip-based commission for one trip. Used in ENTITY LEDGER PROTOCOL table (COMMISSION column).
+ * Compute trip-based commission for one trip. Used in TRANSACTION LEDGER table (COMMISSION column).
  * 1) Driver offer: client_price * (commission_percent/100) or distance_km * commission_per_km.
  * 2) Else trip.driver_commission.
  * 3) Else 10% of supplier_rate.

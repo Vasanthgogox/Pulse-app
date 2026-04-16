@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { StyleSheet, View, Text, Platform, ActivityIndicator } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import { LeafletMap } from '@/components/driver/LeafletMap';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from '@/lib/reactNativeMapsCompat';
 import { FontAwesome } from '@expo/vector-icons';
 import { getOptimalRoute, LatLon, RouteResult } from '@/services/routingService';
 import Theme from '@/constants/Theme';
@@ -39,10 +40,12 @@ export const OptimalRouteMap: React.FC<OptimalRouteMapProps> = ({
         
         // Auto-fit the route after a short delay to ensure map is ready
         setTimeout(() => {
-          mapRef.current?.fitToCoordinates(result.coordinates, {
-            edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
-            animated: true,
-          });
+          if (Platform.OS !== 'web') {
+            mapRef.current?.fitToCoordinates(result.coordinates, {
+              edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
+              animated: true,
+            });
+          }
         }, 500);
       }
       setLoading(false);
@@ -51,6 +54,64 @@ export const OptimalRouteMap: React.FC<OptimalRouteMapProps> = ({
     fetchRoute();
   }, [from.latitude, from.longitude, to.latitude, to.longitude]);
 
+  const mapCenter = {
+    latitude: (from.latitude + to.latitude) / 2,
+    longitude: (from.longitude + to.longitude) / 2,
+  };
+
+  if (Platform.OS === 'web') {
+    const leafletMarkers = [
+      {
+        id: 'start',
+        coordinate: from,
+        label: 'Pickup',
+        color: Theme.positive,
+      },
+      {
+        id: 'end',
+        coordinate: to,
+        label: 'Drop-off',
+        color: Theme.teslaRed,
+      },
+    ];
+
+    return (
+      <View style={styles.container}>
+        <LeafletMap
+          center={mapCenter}
+          zoom={12}
+          markers={leafletMarkers}
+          polyline={route?.coordinates || []}
+          polylineColor={Theme.primary}
+          style={styles.map}
+        />
+        {loading && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color={Theme.primary} />
+            <Text style={styles.loadingText}>Calculating optimal route...</Text>
+          </View>
+        )}
+        {route && !loading && (
+          <View style={[styles.statsCard, { backgroundColor: isDark ? Theme.darkSurface : Theme.surface }]}>
+            <View style={styles.statItem}>
+              <Text style={[styles.statLabel, { color: isDark ? Theme.textOnDarkMuted : Theme.textMuted }]}>Distance</Text>
+              <Text style={[styles.statValue, { color: isDark ? Theme.textOnDark : Theme.textPrimary }]}>
+                {(route.distance / 1000).toFixed(1)} km
+              </Text>
+            </View>
+            <View style={styles.statSeparator} />
+            <View style={styles.statItem}>
+              <Text style={[styles.statLabel, { color: isDark ? Theme.textOnDarkMuted : Theme.textMuted }]}>Duration</Text>
+              <Text style={[styles.statValue, { color: isDark ? Theme.textOnDark : Theme.textPrimary }]}>
+                {Math.round(route.duration / 60)} mins
+              </Text>
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <MapView
@@ -58,8 +119,7 @@ export const OptimalRouteMap: React.FC<OptimalRouteMapProps> = ({
         provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
         style={styles.map}
         initialRegion={{
-          latitude: (from.latitude + to.latitude) / 2,
-          longitude: (from.longitude + to.longitude) / 2,
+          ...mapCenter,
           latitudeDelta: Math.abs(from.latitude - to.latitude) * 2,
           longitudeDelta: Math.abs(from.longitude - to.longitude) * 2,
         }}

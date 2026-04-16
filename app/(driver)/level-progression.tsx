@@ -1,5 +1,5 @@
 /**
- * Driver level progression — matches user profile / Neural Identity design:
+ * Driver level progression — matches user profile / User Profile design:
  * Dark Elite Evolution card, 2x2 stats grid, Next Mile Objectives with VERIFIED and progress bars.
  */
 import { useCallback, useEffect, useState } from 'react';
@@ -9,6 +9,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
+import Typography from '@/constants/Typography';
 import { LEVELS_CONFIG } from '@/constants/DriverLevels';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -129,7 +130,7 @@ export default function LevelProgressionScreen() {
         <Text style={styles.eliteStatus}>Status: Active · Milestone Tracker</Text>
       </View>
 
-      {/* Stats grid — Safety, Reliability, Missions Logged, XP Level (same as user profile) */}
+      {/* Stats grid — Safety, Reliability, Trips Logged, XP Level (same as user profile) */}
       <View style={styles.statsGrid}>
         <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.statCardDeco} pointerEvents="none">
@@ -155,7 +156,7 @@ export default function LevelProgressionScreen() {
           <View style={styles.statCardDeco} pointerEvents="none">
             <FontAwesome name="trophy" size={56} color="rgba(217,119,6,0.14)" />
           </View>
-          <Text style={[styles.statLabel, { color: colors.textMuted }]}>Missions Logged</Text>
+          <Text style={[styles.statLabel, { color: colors.textMuted }]}>Trips Logged</Text>
           <View style={styles.statRow}>
             <Text style={[styles.statValue, { color: colors.text }]}>{tripsCount}</Text>
             <FontAwesome name="trophy" size={14} color="#d97706" />
@@ -266,7 +267,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: { flex: 1, fontSize: 16, fontWeight: '800', textAlign: 'center' },
+  headerTitle: { flex: 1, ...Typography.headerTitle, textAlign: 'center' },
   headerSpacer: { width: 44 },
 
   // Elite Evolution (dark card — same as user profile)

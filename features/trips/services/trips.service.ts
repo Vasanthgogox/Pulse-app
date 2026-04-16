@@ -56,6 +56,14 @@ export interface TripRow {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  /** Trip creator (auth.uid) when available. May be null for legacy rows. */
+  created_by?: string | null;
+  /** Optimistic revision for status/progress updates (monotonic). */
+  status_revision?: number | null;
+  /** Last actor who advanced status (auth.uid). */
+  status_updated_by?: string | null;
+  /** Last actor role who advanced status. */
+  status_updated_role?: "driver" | "creator" | "system" | null;
 }
 
 export async function getTripsByOrganization(
@@ -322,7 +330,9 @@ export async function createTripWithOtp(
   const { error, trip } = await createTrip(orgId, data);
   if (error || !trip) return { error: error ?? new Error('No trip returned'), trip: null, otp: null };
   const isAggregate = !!data.supplier_id;
-  if (!isAggregate) return { error: null, trip, otp: null };
+  const hasAssignment = !!data.driver_id || !!data.vehicle_id || !!data.vehicle_display_number;
+  if (!isAggregate || !hasAssignment) return { error: null, trip, otp: null };
+
   const { generateTripOtp } = await import('@/features/trips/services/tripOtp.service');
   const { error: otpError, code, expires_at } = await generateTripOtp(trip.id);
   if (otpError || !code || !expires_at) {
@@ -337,6 +347,11 @@ export interface UpdateTripAssignmentData {
   vehicle_id?: string | null;
   /** Ad-hoc vehicle number when vehicle_id is null (e.g. aggregate trip). */
   vehicle_display_number?: string | null;
+}
+
+export interface UpdateTripSupplierData {
+  supplier_id?: string | null;
+  supplier_rate?: number;
 }
 
 /** Optional audit context for Private Book vs Shared Network (who last assigned). */
@@ -402,6 +417,32 @@ export async function updateTripAssignment(
   }
 
   return { error: null, trip: updatedTrip };
+}
+
+/**
+ * Update trip supplier link and/or supplier rate.
+ * Used when load-based aggregate flow re-assigns the supplying partner at deploy time.
+ */
+export async function updateTripSupplier(
+  tripId: string,
+  data: UpdateTripSupplierData,
+): Promise<{ error: Error | null; trip: TripRow | null }> {
+  const updates: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+  if (data.supplier_id !== undefined) updates.supplier_id = data.supplier_id;
+  if (data.supplier_rate !== undefined) {
+    const n = Number(data.supplier_rate ?? 0);
+    updates.supplier_rate = Number.isFinite(n) ? n : 0;
+  }
+  const { data: row, error } = await supabase()
+    .from("trips")
+    .update(updates)
+    .eq("id", tripId)
+    .select()
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), trip: null };
+  return { error: null, trip: (row ?? null) as TripRow | null };
 }
 
 /**
@@ -540,6 +581,85 @@ export async function updateTripStatus(
     };
   }
   return { error: null, trip: row as TripRow };
+}
+
+export interface TripDriverOnlineState {
+  isOnline: boolean;
+  lastSeen: string | null;
+}
+
+/**
+ * Returns driver online/offline state for a trip using latest driver location timestamp.
+ * Backend is authoritative (SECURITY DEFINER) and uses org membership to authorize reads.
+ */
+export async function getTripDriverOnlineState(
+  tripId: string,
+  offlineAfterSeconds = 90,
+): Promise<{ error: Error | null; state: TripDriverOnlineState | null }> {
+  const { data, error } = await supabase().rpc("get_trip_driver_online_state", {
+    p_trip_id: tripId,
+    p_offline_after_seconds: offlineAfterSeconds,
+  });
+  if (error) return { error: new Error(error.message), state: null };
+
+  // PostgREST returns set-returning functions as arrays
+  const row = Array.isArray(data) ? (data[0] ?? null) : (data ?? null);
+  if (!row) return { error: null, state: { isOnline: false, lastSeen: null } };
+
+  const obj = row as { is_online?: boolean; last_seen?: string | null };
+  return {
+    error: null,
+    state: {
+      isOnline: obj.is_online === true,
+      lastSeen: obj.last_seen ?? null,
+    },
+  };
+}
+
+export type ManualAdvanceTripAction =
+  | "confirm_arrival"
+  | "start_transit"
+  | "reach_drop"
+  | "complete";
+
+/**
+ * Creator-only manual trip progression while driver is offline.
+ * Uses optimistic revisioning + idempotency on the backend.
+ */
+export async function manualAdvanceTrip(
+  tripId: string,
+  params: {
+    action: ManualAdvanceTripAction;
+    expectedRevision: number;
+    idempotencyKey: string;
+  },
+): Promise<{ error: Error | null; trip: TripRow | null }> {
+  const { data, error } = await supabase().rpc("manual_advance_trip", {
+    p_trip_id: tripId,
+    p_action: params.action,
+    p_expected_revision: params.expectedRevision,
+    p_idempotency_key: params.idempotencyKey,
+  });
+  if (error) return { error: new Error(error.message), trip: null };
+  return { error: null, trip: (data ?? null) as TripRow | null };
+}
+
+/**
+ * Claim trip creator for legacy trips where `created_by` is null.
+ * Backend enforces: caller must be org member; only first claimant wins.
+ */
+export async function claimTripCreator(
+  tripId: string,
+): Promise<{ error: Error | null; createdBy: string | null }> {
+  const { data, error } = await supabase().rpc("claim_trip_creator", {
+    p_trip_id: tripId,
+  });
+  if (error) return { error: new Error(error.message), createdBy: null };
+  const obj = data as { ok?: boolean; error?: string; created_by?: string } | null;
+  if (!obj || obj.ok !== true) {
+    return { error: new Error(obj?.error ?? "Could not claim creator"), createdBy: null };
+  }
+  return { error: null, createdBy: obj.created_by ?? null };
 }
 
 /** Update client payment received (amount_paid). */

@@ -4,11 +4,12 @@
  * Preset avatars are 10 bundled driver icons in assets/drivers/.
  */
 
-import { Image } from 'react-native';
+import { Asset } from 'expo-asset';
+import { Image, type ImageSourcePropType } from 'react-native';
 
 export const LEVELS_CONFIG = [
   { level: 1, name: 'Initiate', goalText: 'Complete Signup', type: 'signup', target: 1, reward: 'Access Hub', tier: 'Bronze' },
-  { level: 2, name: 'Novice', goalText: 'Complete 2 Trips', type: 'trips', target: 2, reward: 'Standard Missions', tier: 'Bronze' },
+  { level: 2, name: 'Novice', goalText: 'Complete 2 Trips', type: 'trips', target: 2, reward: 'Standard Trips', tier: 'Bronze' },
   { level: 3, name: 'Verified', goalText: 'Verify Identity', type: 'verification', target: 1, reward: 'Silver Status', tier: 'Silver' },
   { level: 4, name: 'Trusted', goalText: 'Earn 2 Five-Star Ratings', type: 'ratings', target: 2, reward: 'Priority Support', tier: 'Silver' },
   { level: 5, name: 'Navigator', goalText: 'Complete 10 Trips', type: 'trips', target: 10, reward: 'Grid Boost', tier: 'Silver' },
@@ -18,7 +19,7 @@ export const LEVELS_CONFIG = [
 ] as const;
 
 /** Preset avatar: bundled image (require) and seed for persistence. */
-export type PresetAvatar = { name: string; seed: string; image: number };
+export type PresetAvatar = { name: string; seed: string; image: ImageSourcePropType };
 
 const driver1 = require('../assets/drivers/driver-1.png');
 const driver2 = require('../assets/drivers/driver-2.png');
@@ -50,8 +51,20 @@ export const ALL_PRESET_AVATARS: PresetAvatar[] = DRIVER_PRESET_AVATARS;
 
 /** URI for a preset (from bundled asset). */
 export function getPresetAvatarUri(av: PresetAvatar): string {
-  const resolved = Image.resolveAssetSource(av.image);
-  return resolved?.uri ?? '';
+  const source = av.image as any;
+
+  if (!source) return '';
+  if (typeof source === 'string') return source;
+  if (typeof source?.uri === 'string' && source.uri.length > 0) return source.uri;
+
+  const resolver = (Image as any)?.resolveAssetSource;
+  if (typeof resolver === 'function') {
+    const resolved = resolver(source);
+    if (typeof resolved?.uri === 'string' && resolved.uri.length > 0) return resolved.uri;
+  }
+
+  const asset = Asset.fromModule(source);
+  return asset?.uri ?? asset?.localUri ?? '';
 }
 
 /** Resolve stored avatarSeed to display URI. */

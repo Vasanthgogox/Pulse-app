@@ -18,23 +18,29 @@ import {
     getTripDisplayNumber,
     getTripsByOrganization,
     getTripsWhereOrgIsClient,
+    getTripsWhereOrgIsSupplier,
     type TripRow,
 } from "@/features/trips";
+import { getTripSubcontracts } from "@/features/finance/services/tripSubcontracts.service";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import {
     canAccessFinance,
     getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
 import { formatINR, formatLedgerDate } from "@/lib/format";
+import { getSignedAvatarUrl } from "@/lib/avatarUpload";
+import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import Layout from "@/constants/Layout";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Image,
   Modal,
   RefreshControl,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -70,11 +76,13 @@ function normalizePhoneDisplay(value: string | null | undefined): string {
 export interface SupplierDetailScreenProps {
   supplierId: string;
   onBack: () => void;
+  autoOpenProfile?: boolean;
 }
 
 export default function SupplierDetailScreen({
   supplierId,
   onBack,
+  autoOpenProfile,
 }: SupplierDetailScreenProps) {
   const router = useRouter();
   const { t } = useLanguage();
@@ -102,15 +110,78 @@ export default function SupplierDetailScreen({
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash" | "shared">("trips");
   const [showSuccess, setShowSuccess] = useState(false);
+  const [successTitle, setSuccessTitle] = useState("NODE_SYNCED");
   const [isLinked, setIsLinked] = useState(false);
+  const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
+  const [isInApp, setIsInApp] = useState(false);
+  const [sendingInvitation, setSendingInvitation] = useState(false);
   const insets = useSafeAreaInsets();
+  const initialLoadDoneRef = useRef(false);
+
+  useEffect(() => {
+    if (autoOpenProfile) setShowProfileModal(true);
+  }, [autoOpenProfile]);
+
+  useEffect(() => {
+    if (supplier?.phone) {
+      import("@/services/connectionRequestsService").then(({ getConnectionInviteeByPhone }) => {
+        getConnectionInviteeByPhone(supplier.phone).then(({ invitee }) => {
+          if (invitee) setIsInApp(true);
+        });
+      });
+    }
+  }, [supplier?.phone]);
+
+  const handleSendInvitation = useCallback(async () => {
+    if (!currentOrganization?.id || !supplier?.phone) return;
+    setSendingInvitation(true);
+    try {
+      const { createConnectionRequest, getConnectionInviteeByPhone } = await import(
+        "@/services/connectionRequestsService"
+      );
+      const { invitee, error: lookupError } = await getConnectionInviteeByPhone(
+        supplier.phone,
+      );
+      if (lookupError) {
+        Alert.alert("Unable to send invitation", lookupError.message);
+        return;
+      }
+      if (!invitee?.organization_id) {
+        Alert.alert(
+          "Unable to send invitation",
+          "This supplier is not available in the application yet.",
+        );
+        return;
+      }
+      const { error, alreadyInvited } = await createConnectionRequest(
+        currentOrganization.id,
+        invitee.organization_id,
+        {
+          requestShipperClient: false,
+          requestCarrierSupplier: true,
+        },
+      );
+      if (error) {
+        Alert.alert("Unable to send invitation", error.message);
+        return;
+      }
+      setIsLinked(true);
+      setSuccessTitle(
+        alreadyInvited ? "INVITATION_ALREADY_SENT" : "CONNECTION_REQUESTED",
+      );
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 1500);
+    } finally {
+      setSendingInvitation(false);
+    }
+  }, [currentOrganization?.id, supplier?.phone]);
 
   const load = useCallback(() => {
     if (!supplierId || !currentOrganization?.id) {
       setLoading(false);
       return;
     }
-    if (!isRefreshingRef.current) setLoading(true);
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
     const supplierPromise = getSupplierDetails(supplierId);
@@ -125,8 +196,17 @@ export default function SupplierDetailScreen({
         r.error ? [] : (r.trips ?? []),
       );
     });
-    Promise.all([supplierPromise, tripsPromise, txPromise, asClientPromise, suppliersPromise])
-      .then(([res, tripsRes, txRes, asClientTrips, suppliersRes]) => {
+    const subcontractsPromise = getTripsWhereOrgIsSupplier(orgId).then((res) => {
+      if (res.error) return { sharedTrips: [], subcontracts: [] };
+      const sharedTrips = res.trips ?? [];
+      const tripIds = sharedTrips.map((t) => t.id);
+      if (tripIds.length === 0) return { sharedTrips, subcontracts: [] };
+      return getTripSubcontracts({ viewerOrgId: orgId, tripIds }).then((subRes) => {
+        return { sharedTrips, subcontracts: subRes.error ? [] : subRes.rows };
+      });
+    });
+    Promise.all([supplierPromise, tripsPromise, txPromise, asClientPromise, suppliersPromise, subcontractsPromise])
+      .then(([res, tripsRes, txRes, asClientTrips, suppliersRes, subRes]) => {
         if (res.error) {
           setError(res.error.message);
           setSupplier(null);
@@ -154,6 +234,26 @@ export default function SupplierDetailScreen({
         );
         const seen = new Set(fromOwned.map((t) => t.id));
         const merged: TripRow[] = [...fromOwned];
+        
+        // Add shared trips where we are the supplier and we subcontracted to THIS supplier
+        const { sharedTrips, subcontracts } = subRes;
+        const tripIdToSubcontract = new Map(subcontracts.map(s => [s.trip_id, s]));
+        for (const t of sharedTrips) {
+          const sub = tripIdToSubcontract.get(t.id);
+          if (sub && sub.supplier_id === supplierId) {
+            if (!seen.has(t.id)) {
+              seen.add(t.id);
+              // Overwrite supplier_rate so the UI displays the subcontract rate
+              merged.push({ ...t, supplier_rate: sub.rate });
+            }
+          } else if (t.supplier_id === supplierId || (!t.supplier_id && supplierDisplayName && (t.supplier_name ?? "").trim().toLowerCase() === supplierDisplayName)) {
+            if (!seen.has(t.id)) {
+                seen.add(t.id);
+                merged.push(t);
+            }
+          }
+        }
+        
         if (linkedOrgId && Array.isArray(asClientTrips)) {
           for (const t of asClientTrips) {
             if (
@@ -191,6 +291,7 @@ export default function SupplierDetailScreen({
       })
       .finally(() => {
         setLoading(false);
+        initialLoadDoneRef.current = true;
         isRefreshingRef.current = false;
         setRefreshing(false);
       });
@@ -202,6 +303,39 @@ export default function SupplierDetailScreen({
       load();
     }, [load]),
   );
+
+  useEffect(() => {
+    let mounted = true;
+    const resolveAvatar = async () => {
+      if (!supplier?.linked_organization_id) {
+        if (mounted) setProfileAvatarUri(null);
+        return;
+      }
+      const { profile } = await getLinkedOrgProfileForSupplier(supplier.linked_organization_id);
+      if (!profile) {
+        if (mounted) setProfileAvatarUri(null);
+        return;
+      }
+      if (profile.avatarUrl?.startsWith("http")) {
+        if (mounted) setProfileAvatarUri(profile.avatarUrl);
+        return;
+      }
+      if (profile.avatarUrl?.trim()) {
+        const signed = await getSignedAvatarUrl(profile.avatarUrl.trim());
+        if (mounted) setProfileAvatarUri(signed);
+        return;
+      }
+      if (profile.avatarSeed?.trim()) {
+        if (mounted) setProfileAvatarUri(getUser2DAvatarUriForSeed(profile.avatarSeed.trim()));
+        return;
+      }
+      if (mounted) setProfileAvatarUri(null);
+    };
+    void resolveAvatar();
+    return () => {
+      mounted = false;
+    };
+  }, [supplier?.linked_organization_id]);
 
   const ledgerEntries: LedgerEntry[] = useMemo(() => {
     const rows: LedgerEntry[] = transactions.map((tx) => {
@@ -437,10 +571,10 @@ export default function SupplierDetailScreen({
     Alert.alert(t("exportLedger"), t("exportComingSoon"));
   };
 
-  const triggerSuccess = useCallback(() => {
+  const triggerSuccess = useCallback((title = "NODE_SYNCED") => {
+    setSuccessTitle(title);
     setShowSuccess(true);
-    const tid = setTimeout(() => setShowSuccess(false), 1500);
-    return () => clearTimeout(tid);
+    setTimeout(() => setShowSuccess(false), 1500);
   }, []);
 
   const handleEditSave = async (patch: UpdateSupplierData) => {
@@ -579,7 +713,7 @@ export default function SupplierDetailScreen({
   const lockedPartyName = supplierName.trim() || t("supplier");
 
   const tabConfig = [
-    { id: "trips" as const, label: "Missions" },
+    { id: "trips" as const, label: "Trips" },
     { id: "cash" as const, label: "Cash Flow" },
     { id: "shared" as const, label: "Shared" },
   ];
@@ -603,7 +737,11 @@ export default function SupplierDetailScreen({
             activeOpacity={0.8}
             accessibilityLabel="Supplier profile"
           >
-            <FontAwesome name="user" size={16} color={Theme.textOnPrimary} />
+            {profileAvatarUri ? (
+              <Image source={{ uri: profileAvatarUri }} style={styles.headerAvatarImage} />
+            ) : (
+              <FontAwesome name="user" size={16} color={Theme.textPrimaryDark} />
+            )}
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.downloadBtn}
@@ -641,7 +779,7 @@ export default function SupplierDetailScreen({
         <View style={styles.scorecard}>
           <View style={styles.scorecardTop}>
             <View style={styles.scorecardLeft}>
-              <Text style={styles.scorecardLabel}>GRID FISCAL DNA</Text>
+              <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
               <Text style={styles.scorecardSalesLabel}>CONTRACT VALUE</Text>
               <Text style={styles.scorecardAmount}>{formatINR(contractValue)}</Text>
             </View>
@@ -690,7 +828,7 @@ export default function SupplierDetailScreen({
         {detailSubTab === "trips" && (
           <View style={styles.tableCard}>
             <View style={styles.tableHeader}>
-              <Text style={[styles.th, styles.thMission]}>Mission</Text>
+              <Text style={[styles.th, styles.thMission]}>Trip</Text>
               <Text style={[styles.th, styles.thSales]}>Contract</Text>
               <Text style={[styles.th, styles.thRight]}>Paid</Text>
               <Text style={[styles.th, styles.thRight]}>Due</Text>
@@ -720,7 +858,7 @@ export default function SupplierDetailScreen({
               ))
             ) : (
               <View style={styles.emptyRow}>
-                <Text style={styles.emptyRowText}>No missions</Text>
+                <Text style={styles.emptyRowText}>No trips</Text>
               </View>
             )}
           </View>
@@ -758,9 +896,18 @@ export default function SupplierDetailScreen({
               integrated={Boolean(supplier.supplier_type === "integrated" || supplier.linked_organization_id)}
               embeddedInOverlay={true}
               onRefresh={load}
-              onRequestInvite={() => {
+              onRequestConnection={() => {
                 setIsLinked(true);
-                triggerSuccess();
+                triggerSuccess("CONNECTION_REQUESTED");
+              }}
+              onInviteToApp={() => {
+                const message = `Join me on Q to sync our ledger and compare books with ${supplierName}. Download the Q app to get started.`;
+                Share.share({ message, title: "Invite to Q" })
+                  .then(() => {
+                    // After sharing, show a friendlier message
+                    triggerSuccess("INVITE_SENT");
+                  })
+                  .catch(() => {});
               }}
             />
           </View>
@@ -797,9 +944,9 @@ export default function SupplierDetailScreen({
         <View style={styles.successOverlay}>
           <View style={styles.successCard}>
             <View style={styles.successIconWrap}>
-              <FontAwesome name="check" size={32} color={Theme.textOnPrimary} />
+              <FontAwesome name="check" size={24} color={Theme.textOnPrimary} />
             </View>
-            <Text style={styles.successTitle}>NODE_SYNCED</Text>
+            <Text style={styles.successTitle}>{successTitle}</Text>
           </View>
         </View>
       )}
@@ -835,7 +982,11 @@ export default function SupplierDetailScreen({
             <View style={styles.profileCard}>
               <View style={styles.profileCardTop}>
                 <View style={styles.profileAvatarWrap}>
-                  <FontAwesome name="truck" size={30} color={Theme.primary} />
+                  {profileAvatarUri ? (
+                    <Image source={{ uri: profileAvatarUri }} style={styles.profileAvatarImage} />
+                  ) : (
+                    <FontAwesome name="truck" size={30} color={Theme.primary} />
+                  )}
                 </View>
                 <View style={styles.profileCardTopText}>
                   <Text style={styles.profileEntityName} numberOfLines={2}>
@@ -847,9 +998,15 @@ export default function SupplierDetailScreen({
                         <Text style={styles.profileBadgeText}>Verified</Text>
                       </View>
                     ) : null}
-                    <View style={[styles.profileBadge, styles.profileBadgeCore]}>
-                      <Text style={styles.profileBadgeCoreText}>Core Node</Text>
-                    </View>
+                    {supplier?.supplier_type === 'integrated' || supplier?.linked_organization_id || isInApp ? (
+                      <View style={[styles.profileBadge, { backgroundColor: Theme.positive + '20', borderColor: Theme.positive }]}>
+                        <Text style={[styles.profileBadgeCoreText, { color: Theme.positive }]}>Integrated</Text>
+                      </View>
+                    ) : (
+                      <View style={[styles.profileBadge, styles.profileBadgeCore]}>
+                        <Text style={styles.profileBadgeCoreText}>Core Node</Text>
+                      </View>
+                    )}
                   </View>
                 </View>
               </View>
@@ -926,6 +1083,49 @@ export default function SupplierDetailScreen({
               <FontAwesome name="refresh" size={14} color={Theme.primary} />
               <Text style={styles.profileEditBtnText}>Edit Node Profile</Text>
             </TouchableOpacity>
+            {!supplier?.linked_organization_id && isInApp && !isLinked && (
+              <TouchableOpacity
+                style={[
+                  styles.profileSecondaryBtn,
+                  { marginTop: 12 },
+                ]}
+                onPress={() => void handleSendInvitation()}
+                activeOpacity={0.8}
+                disabled={sendingInvitation}
+              >
+                <FontAwesome name="paper-plane" size={14} color={Theme.primary} />
+                <Text style={styles.profileSecondaryBtnText}>
+                  {sendingInvitation ? "Sending..." : "Send invitation"}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {!supplier?.linked_organization_id && isInApp && isLinked && (
+              <View
+                style={[
+                  styles.profileSecondaryBtn,
+                  { marginTop: 12, opacity: 0.7 },
+                ]}
+              >
+                <FontAwesome name="check" size={14} color={Theme.primary} />
+                <Text style={styles.profileSecondaryBtnText}>Invitation sent</Text>
+              </View>
+            )}
+            {!supplier?.linked_organization_id && !isInApp && (
+              <TouchableOpacity
+                style={[
+                  styles.profileSecondaryBtn,
+                  { marginTop: 12 }
+                ]}
+                onPress={() => {
+                  const message = `Join me on Q to sync our ledger and compare books with ${supplierName}. Download the Q app to get started.`;
+                  Share.share({ message, title: "Invite to Q" });
+                }}
+                activeOpacity={0.8}
+              >
+                <FontAwesome name="link" size={14} color={Theme.primary} />
+                <Text style={styles.profileSecondaryBtnText}>{t("linkToAppAccount")}</Text>
+              </TouchableOpacity>
+            )}
           </ScrollView>
         </View>
       </Modal>
@@ -1001,9 +1201,14 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
+  },
+  headerAvatarImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 12,
   },
   downloadBtn: {
     width: 40,
@@ -1073,6 +1278,11 @@ const styles = StyleSheet.create({
     borderColor: Theme.primary,
     alignItems: "center",
     justifyContent: "center",
+  },
+  profileAvatarImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 37,
   },
   profileCardTopText: { flex: 0, minWidth: 0, alignItems: "center" },
   profileEntityName: {
@@ -1247,6 +1457,24 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
     color: Theme.textOnPrimary,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  profileSecondaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    paddingVertical: 14,
+    backgroundColor: Theme.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  profileSecondaryBtnText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.primary,
     letterSpacing: 1,
     textTransform: "uppercase",
   },
@@ -1617,26 +1845,32 @@ const styles = StyleSheet.create({
   },
   successCard: {
     backgroundColor: Theme.darkBackground,
-    paddingVertical: 48,
-    paddingHorizontal: 48,
-    borderRadius: 40,
+    paddingVertical: 24,
+    paddingHorizontal: 32,
+    borderRadius: 24,
     alignItems: "center",
-    minWidth: 200,
+    minWidth: 160,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 12,
   },
   successIconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: Theme.darkGreen,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   successTitle: {
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 14,
+    fontWeight: "900",
     fontStyle: "italic",
     color: Theme.textOnPrimary,
-    letterSpacing: -0.5,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
   },
 });

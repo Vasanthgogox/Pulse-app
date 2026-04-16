@@ -1,10 +1,11 @@
 /**
- * Treasury Fiscal Matrix — Suppliers tab. O(n): due = trips only, paid = ledger only, unsettled = max(0, due - paid).
+ * Treasury Financial Summary — Suppliers tab. O(n): due = trips only, paid = ledger only, unsettled = max(0, due - paid).
  * Layout aligned with Customers tab: wrap, header, summary row, table card.
  */
-import { IntegrationModeTag } from "@/components/IntegrationModeTag";
+import { EntityAvatar } from "@/components/EntityAvatar";
 import { LiquidFillPill } from "@/components/LiquidFillPill";
 import Theme from "@/constants/Theme";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import type { EntityListFilter } from "@/features/finance/components/TreasurySummaryCard";
 import { aggregateSuppliers, type FinancialRowData, type TripPartyMap } from "@/features/finance/aggregation";
 import type { DirectQuoteForAggregation, IndentForAggregation } from "@/features/finance/aggregation/types";
@@ -92,6 +93,7 @@ export function SuppliersTab({
   onRefresh,
   bottomInset = 100,
 }: SuppliersTabProps) {
+  const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [suppliersState, setSuppliersState] = useState<SupplierRow[]>([]);
@@ -127,6 +129,11 @@ export function SuppliersTab({
     }
     fetch();
   }, [isControlled, fetch]);
+
+  const supplierAvatarById = useMemo(
+    () => new Map(suppliers.map((s) => [s.id, { avatar_url: s.avatar_url, avatar_seed: s.avatar_seed }])),
+    [suppliers],
+  );
 
   const { rows, totals } = useMemo(() => {
     return aggregateSuppliers(
@@ -201,6 +208,7 @@ export function SuppliersTab({
           { paddingBottom: bottomInset + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
+        {...tabBarScrollProps}
         stickyHeaderIndices={[stickyHeaderIndex]}
         refreshControl={
           onRefresh ? (
@@ -263,6 +271,7 @@ export function SuppliersTab({
             const due = data.due ?? 0;
             const paid = data.paid ?? 0;
             const tripCount = data.trips ?? 0;
+            const avatarData = supplierAvatarById.get(data.id);
             return (
               <TouchableOpacity
                 key={data.id}
@@ -274,11 +283,15 @@ export function SuppliersTab({
                 }
                 activeOpacity={0.7}
               >
+                <EntityAvatar
+                  name={data.name ?? ""}
+                  avatarUrl={avatarData?.avatar_url}
+                  avatarSeed={avatarData?.avatar_seed}
+                  entityType="supplier"
+                  isIntegrated={!!data.is_integrated}
+                />
                 <View style={[styles.tableCell, styles.ctEntity]}>
                   <View style={styles.tableEntityHeader}>
-                    <IntegrationModeTag
-                      mode={data.is_integrated ? "integrated" : "manual"}
-                    />
                     <Text style={styles.tableEntityName} numberOfLines={1} ellipsizeMode="tail">
                       {data.name ?? "—"}
                     </Text>
@@ -419,6 +432,7 @@ const styles = StyleSheet.create({
   tableRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 10,
     minHeight: 62,
     paddingVertical: 10,
     paddingHorizontal: 14,

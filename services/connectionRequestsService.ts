@@ -20,11 +20,29 @@
  * - Re-invite after existing connection: duplicate insert prevented as above; existing client/supplier rows are updated by trigger when linked_organization_id already exists.
  */
 import { supabase } from '@/lib/supabase';
+import {
+  normalizePhoneForInviteeLookup,
+  uniqueNormalizedPhonesForLookup,
+} from '@/lib/phoneLookup';
 
 export interface ConnectionInviteeByPhone {
   organization_id: string;
   full_name: string;
   phone: string;
+  /** Matched user's organization name (organizations.name). */
+  organization_name: string;
+  /** Matched user's profile company (profiles.company_name), if set. */
+  profile_company_name: string | null;
+}
+
+/** Prefill: prefer profile company_name, else organization display name. */
+export function inviteeSuggestedCompanyName(invitee: {
+  profile_company_name?: string | null;
+  organization_name?: string;
+}): string {
+  const fromProfile = (invitee.profile_company_name ?? "").trim();
+  if (fromProfile.length > 0) return fromProfile;
+  return (invitee.organization_name ?? "").trim();
 }
 
 export interface ConnectionRequestRow {
@@ -46,19 +64,19 @@ export interface ConnectionRequestRow {
  * Phone is stored on the person (auth.users.raw_user_meta_data->>'phone' or ->'phone_numbers' array), not on organizations.
  * RPC get_invitee_by_phone finds the profile by phone, then returns that user's org id and display name. O(1).
  */
-/** Normalize phone for lookup: digits only, last 10 for Indian mobile (matches get_invitee_by_phone in DB). */
-function normalizePhoneForLookup(phone: string): string {
-  const digits = (phone || '').replace(/\D/g, '');
-  if (digits.length >= 12 && digits.startsWith('91')) return digits.slice(-10);
-  if (digits.length >= 10) return digits.slice(-10);
-  return digits;
+export interface ConnectionInviteeByPhoneRow {
+  phone: string;
+  organization_id: string;
+  full_name: string | null;
+  organization_name?: string | null;
+  profile_company_name?: string | null;
 }
 
 export async function getConnectionInviteeByPhone(phone: string): Promise<{
   error: Error | null;
   invitee: ConnectionInviteeByPhone | null;
 }> {
-  const normalized = normalizePhoneForLookup(phone);
+  const normalized = normalizePhoneForInviteeLookup(phone);
   if (!normalized) return { error: null, invitee: null };
   const { data, error } = await supabase().rpc('get_invitee_by_phone', {
     p_phone: normalized,
@@ -73,8 +91,78 @@ export async function getConnectionInviteeByPhone(phone: string): Promise<{
       organization_id: row.organization_id,
       full_name: row.full_name ?? '',
       phone: row.phone ?? normalized,
+      organization_name: row.organization_name ?? '',
+      profile_company_name: row.profile_company_name ?? null,
     },
   };
+}
+
+/**
+ * Batch lookup: resolve invitee orgs for multiple phone numbers in one RPC call.
+ * Returns a map keyed by normalized phone (digits-only, last-10 for India).
+ *
+ * Backend dependency: requires RPC `get_invitees_by_phones(p_phones text[])`.
+ * If the RPC is not deployed yet, this function returns an empty map (no hard failure),
+ * so the UI can gracefully show "Offline" until backend rollout completes.
+ */
+export async function getConnectionInviteesByPhones(phones: string[]): Promise<{
+  error: Error | null;
+  inviteesByPhone: Map<string, ConnectionInviteeByPhone>;
+}> {
+  const normalizedPhones = uniqueNormalizedPhonesForLookup(phones);
+  const inviteesByPhone = new Map<string, ConnectionInviteeByPhone>();
+  if (normalizedPhones.length === 0) return { error: null, inviteesByPhone };
+
+  const { data, error } = await supabase().rpc('get_invitees_by_phones', {
+    p_phones: normalizedPhones,
+  });
+
+  if (error) {
+    const msg = error.message ?? '';
+    // Best-effort fallback: if the batch RPC isn't available yet, or fails due to
+    // permissions/RLS differences, fall back to the single-phone RPC so UI can still
+    // detect "ON APP" accounts and show the right CTA.
+    const settled = await Promise.allSettled(
+      normalizedPhones.map(async (p) => {
+        const { invitee } = await getConnectionInviteeByPhone(p);
+        return invitee;
+      }),
+    );
+    for (let i = 0; i < settled.length; i++) {
+      const res = settled[i];
+      if (res.status !== "fulfilled") continue;
+      const invitee = res.value;
+      if (!invitee?.organization_id) continue;
+      const phoneKey = normalizePhoneForInviteeLookup(
+        invitee.phone ?? normalizedPhones[i] ?? "",
+      );
+      if (!phoneKey) continue;
+      if (inviteesByPhone.has(phoneKey)) continue;
+      inviteesByPhone.set(phoneKey, invitee);
+    }
+    // Even if the batch call failed, return best-effort results so UI can update labels.
+    // If fallback couldn't resolve any, still surface the original error to callers that care.
+    return inviteesByPhone.size > 0
+      ? { error: null, inviteesByPhone }
+      : { error: new Error(msg), inviteesByPhone };
+  }
+
+  const rows = (data ?? []) as ConnectionInviteeByPhoneRow[];
+  for (const r of rows) {
+    const phoneKey = normalizePhoneForInviteeLookup(r?.phone ?? '');
+    if (!phoneKey) continue;
+    if (!r?.organization_id) continue;
+    // If backend returns multiple rows for same phone, keep the first (deterministic).
+    if (inviteesByPhone.has(phoneKey)) continue;
+    inviteesByPhone.set(phoneKey, {
+      organization_id: r.organization_id,
+      full_name: r.full_name ?? '',
+      phone: r.phone ?? phoneKey,
+      organization_name: r.organization_name ?? '',
+      profile_company_name: r.profile_company_name ?? null,
+    });
+  }
+  return { error: null, inviteesByPhone };
 }
 
 /**
@@ -140,6 +228,40 @@ export async function createConnectionRequest(
     error: null,
     requestId: data?.id ?? null,
     alreadyInvited: false,
+  };
+}
+
+export type ConnectionRequestStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "cancelled"
+  | "expired"
+  | string;
+
+/**
+ * Get the latest connection request status for a specific (from_org -> to_org).
+ * Used to update UI immediately after sending an invitation (driver-style).
+ */
+export async function getLatestConnectionRequestStatus(
+  fromOrgId: string,
+  toOrgId: string,
+): Promise<{ error: Error | null; status: ConnectionRequestStatus | null; requestId: string | null }> {
+  const { data, error } = await supabase()
+    .from("connection_requests")
+    .select("id, status, created_at")
+    .eq("from_organization_id", fromOrgId)
+    .eq("to_organization_id", toOrgId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), status: null, requestId: null };
+  if (!data) return { error: null, status: null, requestId: null };
+  const row = data as { id?: string | null; status?: string | null };
+  return {
+    error: null,
+    status: (row.status ?? null) as ConnectionRequestStatus | null,
+    requestId: row.id ?? null,
   };
 }
 
@@ -225,4 +347,23 @@ export async function rejectConnectionRequest(requestId: string): Promise<{
   if (error) return { error: new Error(error.message), updated: false };
   const updated = Array.isArray(updateData) && updateData.length > 0;
   return { error: null, updated };
+}
+
+/**
+ * Cancel a connection request that you have sent (caller must be member of from_organization_id).
+ * Deletes the request so it can be re-sent later if needed. Only works when status is pending.
+ */
+export async function cancelConnectionRequest(requestId: string): Promise<{
+  error: Error | null;
+  deleted: boolean;
+}> {
+  const { data: deleteData, error } = await supabase()
+    .from('connection_requests')
+    .delete()
+    .eq('id', requestId)
+    .eq('status', 'pending')
+    .select('id');
+  if (error) return { error: new Error(error.message), deleted: false };
+  const deleted = Array.isArray(deleteData) && deleteData.length > 0;
+  return { error: null, deleted };
 }

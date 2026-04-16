@@ -5,16 +5,20 @@
  * When visible is true, shows as Ledger-style bottom-sheet popup; when undefined, full-screen wizard (e.g. route).
  */
 import { WizardStepLayout } from '@/components/WizardStepLayout';
+import { getAvatarUriForSeed } from '@/constants/DriverLevels';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { getSignedAvatarUrl } from '@/lib/avatarUpload';
 import { pickContactForNameAndPhone } from '@/lib/contactPicker';
 import { validatePhone } from '@/lib/phoneValidation';
+import { formatMobileNumber } from '@/lib/format';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Dimensions,
+  Image,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -27,7 +31,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ExistingDriverMatch } from '../services/drivers.service';
-import { searchExistingDriversByPhone } from '../services/drivers.service';
+import { getDriverProfileAvatar, searchExistingDriversByPhone } from '../services/drivers.service';
 
 export type DriverSource = 'organization' | 'partner';
 
@@ -88,6 +92,16 @@ interface AddDriverModalProps {
 
 const PHONE_DEBOUNCE_MS = 400;
 const MIN_PHONE_LENGTH_FOR_SEARCH = 8;
+const DL_SANITIZE_REGEX = /[\s-]/g;
+const DL_FORMAT_REGEX = /^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}$/;
+
+const validateDrivingLicenseNumber = (licenseNumber: string): string | null => {
+  const trimmed = licenseNumber.trim();
+  if (!trimmed) return null;
+  const normalized = trimmed.toUpperCase().replace(DL_SANITIZE_REGEX, '');
+  if (DL_FORMAT_REGEX.test(normalized)) return null;
+  return 'Enter a valid DL number (e.g. MH12 20180001234).';
+};
 
 export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, salariedOnly = false }: AddDriverModalProps) {
   const { t } = useLanguage();
@@ -103,7 +117,11 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
   const [phoneSearchError, setPhoneSearchError] = useState<string | null>(null);
   const [phoneValidationError, setPhoneValidationError] = useState<string | null>(null);
   const [emergencyPhoneValidationError, setEmergencyPhoneValidationError] = useState<string | null>(null);
+  const [licenseValidationError, setLicenseValidationError] = useState<string | null>(null);
   const [selectedMatchUserId, setSelectedMatchUserId] = useState<string | null>(null);
+  const [existingMatchAvatarByUserId, setExistingMatchAvatarByUserId] = useState<Record<string, string>>({});
+  const [avatarLoadFailedByUserId, setAvatarLoadFailedByUserId] = useState<Record<string, boolean>>({});
+  const [fleetWarningMatch, setFleetWarningMatch] = useState<ExistingDriverMatch | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const searchIdRef = useRef(0);
 
@@ -143,10 +161,66 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
       setPhoneSearchError(null);
       setPhoneValidationError(null);
       setEmergencyPhoneValidationError(null);
+      setLicenseValidationError(null);
       setSelectedMatchUserId(null);
+      setExistingMatchAvatarByUserId({});
+      setAvatarLoadFailedByUserId({});
+      setFleetWarningMatch(null);
       setImportLoading(false);
     }
   }, [visible]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadExistingDriverAvatars = async () => {
+      if (existingMatches.length === 0) {
+        setExistingMatchAvatarByUserId({});
+        setAvatarLoadFailedByUserId({});
+        return;
+      }
+      const pairs = await Promise.all(
+        existingMatches.map(async (match) => {
+          const directAvatarUrl = (match.avatar_url ?? '').trim();
+          if (directAvatarUrl) {
+            if (directAvatarUrl.startsWith('http://') || directAvatarUrl.startsWith('https://')) {
+              return [match.user_id, directAvatarUrl] as const;
+            }
+            const directSignedUrl = await getSignedAvatarUrl(directAvatarUrl);
+            if (directSignedUrl) return [match.user_id, directSignedUrl] as const;
+          }
+
+          const directSeed = (match.avatar_seed ?? '').trim();
+          if (directSeed) return [match.user_id, getAvatarUriForSeed(directSeed)] as const;
+
+          const { avatar } = await getDriverProfileAvatar(match.user_id);
+          const avatarUrl = (avatar?.avatar_url ?? '').trim();
+          if (avatarUrl) {
+            if (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://')) {
+              return [match.user_id, avatarUrl] as const;
+            }
+            const signedUrl = await getSignedAvatarUrl(avatarUrl);
+            if (signedUrl) return [match.user_id, signedUrl] as const;
+          }
+          const avatarSeed = (avatar?.avatar_seed ?? '').trim();
+          if (avatarSeed) return [match.user_id, getAvatarUriForSeed(avatarSeed)] as const;
+          const userPathFallback = await getSignedAvatarUrl(match.user_id);
+          if (userPathFallback) return [match.user_id, userPathFallback] as const;
+          return [match.user_id, ''] as const;
+        }),
+      );
+      if (cancelled) return;
+      const next: Record<string, string> = {};
+      pairs.forEach(([userId, uri]) => {
+        if (uri) next[userId] = uri;
+      });
+      setExistingMatchAvatarByUserId(next);
+      setAvatarLoadFailedByUserId({});
+    };
+    loadExistingDriverAvatars();
+    return () => {
+      cancelled = true;
+    };
+  }, [existingMatches]);
 
   const step = STEPS[stepIndex];
 
@@ -194,9 +268,16 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
     }, PHONE_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [formData.phone]);
+  useEffect(() => {
+    setLicenseValidationError(validateDrivingLicenseNumber(formData.licenseNumber));
+  }, [formData.licenseNumber]);
   const isReview = step.id === 'review';
   const canProceedDriver = salariedOnly
-    ? !!formData.name.trim() && !!formData.phone.trim() && !!formData.licenseNumber.trim() && !phoneValidationError
+    ? !!formData.name.trim() &&
+      !!formData.phone.trim() &&
+      !!formData.licenseNumber.trim() &&
+      !phoneValidationError &&
+      !licenseValidationError
     : !!formData.phone.trim() && !phoneValidationError;
   const canProceed = step.id === 'driver' ? canProceedDriver : true;
 
@@ -207,6 +288,13 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
   const reviewUseInvite = Boolean(onComplete) && existingMatches.length > 0;
 
   const handleNext = () => {
+    if (step.id === 'driver') {
+      const inFleetMatch = existingMatches.find((m) => m.is_in_fleet === true) ?? null;
+      if (inFleetMatch) {
+        setFleetWarningMatch(inFleetMatch);
+        return;
+      }
+    }
     if (isReview) {
       setError(null);
       setSubmitting(true);
@@ -305,7 +393,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
               placeholder="+91 98765 43210"
               placeholderTextColor={Theme.placeholder}
               value={formData.phone}
-              onChangeText={(v) => setFormData((p) => ({ ...p, phone: v }))}
+              onChangeText={(v) => setFormData((p) => ({ ...p, phone: formatMobileNumber(v) }))}
               keyboardType="phone-pad"
               autoCorrect={false}
               spellCheck={false}
@@ -368,93 +456,96 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
                   autoComplete="off"
                   autoCapitalize="characters"
                 />
-              </>
-            ) : (
-              <>
-                {phoneSearchLoading && (
-                  <View style={styles.existingRow}>
-                    <ActivityIndicator size="small" color={Theme.primary} />
-                    <Text style={styles.existingHint}>Searching for existing drivers…</Text>
-                  </View>
-                )}
-                {!phoneSearchLoading && phoneSearchError && (
-                  <Text style={[styles.existingError, { color: Theme.negative }]}>{phoneSearchError}</Text>
-                )}
-                {!phoneSearchLoading && existingMatches.length > 0 && (
-                  <View style={styles.existingList}>
-                    <Text style={styles.existingLabel}>Existing driver on platform — tap to use</Text>
-                    {existingMatches.map((match) => (
-                      <TouchableOpacity
-                        key={match.user_id}
-                        style={[
-                          styles.existingItem,
-                          selectedMatchUserId === match.user_id && styles.existingItemSelected,
-                        ]}
-                        onPress={() => {
-                          setFormData((p) => ({
-                            ...p,
-                            phone: match.phone,
-                            name: match.full_name || p.name,
-                            email: match.email?.trim() ?? p.email,
-                            emergencyName: match.emergency_contact_name?.trim() ?? p.emergencyName,
-                            emergencyContact: match.emergency_contact_phone?.trim() ?? p.emergencyContact,
-                          }));
-                          setSelectedMatchUserId(match.user_id);
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.existingItemName} numberOfLines={1}>
-                          {match.full_name || match.phone || 'Driver'}
-                        </Text>
-                        {match.phone ? (
-                          <Text style={styles.existingItemPhone} numberOfLines={1}>
-                            {match.phone}
-                          </Text>
-                        ) : null}
-                        <Text style={styles.existingFleetStatus}>Already in a fleet</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+                {licenseValidationError && (
+                  <Text style={[styles.errorText, { color: Theme.negative }]}>
+                    {licenseValidationError}
+                  </Text>
                 )}
               </>
+            ) : null}
+            {phoneSearchLoading && (
+              <View style={styles.existingRow}>
+                <ActivityIndicator size="small" color={Theme.primary} />
+                <Text style={styles.existingHint}>Searching for existing drivers…</Text>
+              </View>
             )}
             {!phoneSearchLoading && phoneSearchError && (
               <Text style={[styles.existingError, { color: Theme.negative }]}>{phoneSearchError}</Text>
             )}
             {!phoneSearchLoading && existingMatches.length > 0 && (
               <View style={styles.existingList}>
-                <Text style={styles.existingLabel}>Existing driver on platform — tap to use</Text>
-                {existingMatches.map((match) => (
-                  <TouchableOpacity
-                    key={match.user_id}
-                    style={[
-                      styles.existingItem,
-                      selectedMatchUserId === match.user_id && styles.existingItemSelected,
-                    ]}
-                    onPress={() => {
-                      setFormData((p) => ({
-                        ...p,
-                        phone: match.phone,
-                        name: match.full_name || p.name,
-                        email: match.email?.trim() ?? p.email,
-                        emergencyName: match.emergency_contact_name?.trim() ?? p.emergencyName,
-                        emergencyContact: match.emergency_contact_phone?.trim() ?? p.emergencyContact,
-                      }));
-                      setSelectedMatchUserId(match.user_id);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.existingItemName} numberOfLines={1}>
-                      {match.full_name || match.phone || 'Driver'}
-                    </Text>
-                    {match.phone ? (
-                      <Text style={styles.existingItemPhone} numberOfLines={1}>
-                        {match.phone}
+                <Text style={styles.existingLabel}>{t('existingDriverOnPlatform')}</Text>
+                {existingMatches.map((match) => {
+                  const inFleet = match.is_in_fleet === true;
+                  const avatarUri = existingMatchAvatarByUserId[match.user_id] ?? '';
+                  const avatarFailed = avatarLoadFailedByUserId[match.user_id] === true;
+                  const initial = (match.full_name || match.phone || 'D').trim().charAt(0).toUpperCase();
+                  return (
+                    <TouchableOpacity
+                      key={match.user_id}
+                      style={[
+                        styles.existingItem,
+                        selectedMatchUserId === match.user_id && styles.existingItemSelected,
+                      ]}
+                      onPress={() => {
+                        if (inFleet) {
+                          setFleetWarningMatch(match);
+                          return;
+                        }
+                        setFormData((p) => ({
+                          ...p,
+                          phone: match.phone,
+                          name: match.full_name || p.name,
+                          email: match.email?.trim() ?? p.email,
+                          emergencyName: match.emergency_contact_name?.trim() ?? p.emergencyName,
+                          emergencyContact: match.emergency_contact_phone?.trim() ?? p.emergencyContact,
+                          licenseNumber: match.license_number?.trim() ?? p.licenseNumber,
+                        }));
+                        setSelectedMatchUserId(match.user_id);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.existingHeadRow}>
+                        <View style={styles.existingAvatar}>
+                          {avatarUri && !avatarFailed ? (
+                            <Image
+                              source={{ uri: avatarUri }}
+                              style={styles.existingAvatarImage}
+                              onError={() =>
+                                setAvatarLoadFailedByUserId((prev) => ({
+                                  ...prev,
+                                  [match.user_id]: true,
+                                }))
+                              }
+                            />
+                          ) : (
+                            <Text style={styles.existingAvatarInitial}>{initial}</Text>
+                          )}
+                        </View>
+                        <View style={styles.existingHeadInfo}>
+                          <Text style={styles.existingItemName} numberOfLines={1}>
+                            {match.full_name || match.phone || 'Driver'}
+                          </Text>
+                          {match.phone ? (
+                            <Text style={styles.existingItemPhone} numberOfLines={1}>
+                              {match.phone}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </View>
+                      <Text
+                        style={inFleet ? styles.existingFleetStatusInFleet : styles.existingFleetStatusNeutral}
+                      >
+                        {inFleet ? t('existingDriverInFleet') : t('existingDriverNotInFleet')}
                       </Text>
-                    ) : null}
-                    <Text style={styles.existingFleetStatus}>Already in a fleet</Text>
-                  </TouchableOpacity>
-                ))}
+                      {inFleet ? (
+                        <Text style={styles.existingFleetStatusDetail}>
+                          {t('existingDriverInFleetDetail')}
+                        </Text>
+                      ) : null}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             )}
           </View>
@@ -493,8 +584,9 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
                 placeholderTextColor={Theme.placeholder}
                 value={formData.emergencyContact}
                 onChangeText={(v) => {
-                  setFormData((p) => ({ ...p, emergencyContact: v }));
-                  validateEmergencyPhone(v);
+                  const formatted = formatMobileNumber(v);
+                  setFormData((p) => ({ ...p, emergencyContact: formatted }));
+                  validateEmergencyPhone(formatted);
                 }}
                 keyboardType="phone-pad"
                 autoCorrect={false}
@@ -523,6 +615,11 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
               spellCheck={false}
               autoComplete="off"
             />
+            {licenseValidationError && (
+              <Text style={[styles.errorText, { color: Theme.negative }]}>
+                {licenseValidationError}
+              </Text>
+            )}
           </View>
         );
       case 'salary':
@@ -580,35 +677,86 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
         return (
           <ScrollView style={styles.reviewScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <View style={styles.reviewCard}>
-              <Text style={styles.reviewName}>{formData.name || 'New Driver'}</Text>
-              <Text style={styles.reviewSub}>
-                {formData.driverSource === 'organization' ? t('organizationDriver') : t('partnerDriver')}
-              </Text>
-              <Text style={styles.reviewSub}>Pending Invitation</Text>
-              <Text style={[styles.reviewSub, { marginTop: 8 }]}>{formData.phone}</Text>
-              {formData.email ? <Text style={styles.reviewSub}>{formData.email}</Text> : null}
-              {formData.licenseNumber ? (
-                <Text style={styles.reviewSub}>License: {formData.licenseNumber}</Text>
-              ) : null}
-              {(formData.payableAmount != null && formData.payableAmount > 0) ||
-              (formData.commissionPercent != null && formData.commissionPercent > 0) ||
-              (formData.commissionPerKm != null && formData.commissionPerKm > 0) ? (
-                <View style={styles.emergencyReview}>
-                  <Text style={styles.reviewLabel}>Offer</Text>
-                  <Text style={styles.reviewValue}>
-                    {formData.payableAmount != null && formData.payableAmount > 0 && `Salary: ₹${formData.payableAmount.toLocaleString('en-IN')} `}
-                    {formData.commissionPercent != null && formData.commissionPercent > 0 && `Commission: ${formData.commissionPercent}% `}
-                    {formData.commissionPerKm != null && formData.commissionPerKm > 0 && `Per km: ₹${formData.commissionPerKm}/km`}
-                  </Text>
+              <View style={styles.reviewHeader}>
+                <View style={styles.reviewAvatar}>
+                  <FontAwesome name="user" size={24} color={Theme.textMutedDemo} />
                 </View>
-              ) : null}
+                <View style={styles.reviewHeaderContent}>
+                  <Text style={styles.reviewName}>{formData.name || 'New Driver'}</Text>
+                  <Text style={styles.reviewSub}>
+                    {formData.driverSource === 'organization' ? t('organizationDriver') : t('partnerDriver')}
+                  </Text>
+                  {reviewUseInvite && (
+                    <View style={styles.pendingBadge}>
+                      <Text style={styles.pendingBadgeText}>Pending Invitation</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              <View style={styles.reviewDivider} />
+
+              <View style={styles.reviewSection}>
+                <View style={styles.reviewRow}>
+                  <FontAwesome name="phone" size={14} color={Theme.textMutedDemo} style={styles.reviewIcon} />
+                  <Text style={styles.reviewValue}>{formData.phone}</Text>
+                </View>
+                {formData.email ? (
+                  <View style={styles.reviewRow}>
+                    <FontAwesome name="envelope" size={14} color={Theme.textMutedDemo} style={styles.reviewIcon} />
+                    <Text style={styles.reviewValue}>{formData.email}</Text>
+                  </View>
+                ) : null}
+                {formData.licenseNumber ? (
+                  <View style={styles.reviewRow}>
+                    <FontAwesome name="id-card" size={14} color={Theme.textMutedDemo} style={styles.reviewIcon} />
+                    <Text style={styles.reviewValue}>DL: {formData.licenseNumber}</Text>
+                  </View>
+                ) : null}
+              </View>
+
+              {((formData.payableAmount != null && formData.payableAmount > 0) ||
+                (formData.commissionPercent != null && formData.commissionPercent > 0) ||
+                (formData.commissionPerKm != null && formData.commissionPerKm > 0)) && (
+                <>
+                  <View style={styles.reviewDivider} />
+                  <View style={styles.reviewSection}>
+                    <Text style={styles.reviewLabel}>Offer</Text>
+                    {formData.payableAmount != null && formData.payableAmount > 0 && (
+                      <View style={styles.reviewOfferRow}>
+                        <Text style={styles.reviewOfferLabel}>Salary</Text>
+                        <Text style={styles.reviewOfferValue}>₹{formData.payableAmount.toLocaleString('en-IN')}</Text>
+                      </View>
+                    )}
+                    {formData.commissionPercent != null && formData.commissionPercent > 0 && (
+                      <View style={styles.reviewOfferRow}>
+                        <Text style={styles.reviewOfferLabel}>Commission</Text>
+                        <Text style={styles.reviewOfferValue}>{formData.commissionPercent}%</Text>
+                      </View>
+                    )}
+                    {formData.commissionPerKm != null && formData.commissionPerKm > 0 && (
+                      <View style={styles.reviewOfferRow}>
+                        <Text style={styles.reviewOfferLabel}>Per km</Text>
+                        <Text style={styles.reviewOfferValue}>₹{formData.commissionPerKm}/km</Text>
+                      </View>
+                    )}
+                  </View>
+                </>
+              )}
+
               {(formData.emergencyName || formData.emergencyContact) && (
-                <View style={styles.emergencyReview}>
-                  <Text style={styles.reviewLabel}>{t('emergencyContactLabel')}</Text>
-                  <Text style={styles.reviewValue}>
-                    {formData.emergencyName} - {formData.emergencyContact}
-                  </Text>
-                </View>
+                <>
+                  <View style={styles.reviewDivider} />
+                  <View style={styles.reviewSection}>
+                    <Text style={styles.reviewLabel}>{t('emergencyContactLabel')}</Text>
+                    <View style={styles.reviewRow}>
+                      <FontAwesome name="heart" size={14} color={Theme.negative} style={styles.reviewIcon} />
+                      <Text style={styles.reviewValue}>
+                        {formData.emergencyName} - {formData.emergencyContact}
+                      </Text>
+                    </View>
+                  </View>
+                </>
               )}
             </View>
             {onAddDriver && (
@@ -650,6 +798,42 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
   };
 
   if (visible === false) return null;
+
+  const fleetWarningModal = (
+    <Modal
+      transparent
+      animationType="fade"
+      visible={fleetWarningMatch != null}
+      onRequestClose={() => setFleetWarningMatch(null)}
+    >
+      <View style={styles.fleetWarningBackdrop}>
+        <View style={styles.fleetWarningCard}>
+          <View style={styles.fleetWarningIconWrap}>
+            <FontAwesome name="exclamation-triangle" size={18} color={Theme.negative} />
+          </View>
+          <Text style={styles.fleetWarningEyebrow}>Action needed</Text>
+          <Text style={styles.fleetWarningTitle}>{t('existingDriverInFleet')}</Text>
+          <Text style={styles.fleetWarningBody}>
+            {t('existingDriverInFleetDetail')}
+          </Text>
+          {fleetWarningMatch?.full_name ? (
+            <View style={styles.fleetWarningDriverChip}>
+              <Text style={styles.fleetWarningDriverName}>
+                Driver: {fleetWarningMatch.full_name}
+              </Text>
+            </View>
+          ) : null}
+          <TouchableOpacity
+            style={styles.fleetWarningActionBtn}
+            onPress={() => setFleetWarningMatch(null)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.fleetWarningActionText}>OK</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
 
   if (visible === true) {
     const windowHeight = Dimensions.get('window').height;
@@ -722,6 +906,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
               </View>
             </View>
           </View>
+          {fleetWarningModal}
         </KeyboardAvoidingView>
       </Modal>
     );
@@ -749,6 +934,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
       footerRightTestID={isReview ? 'invite-submit-btn' : undefined}
     >
       {renderStep()}
+      {fleetWarningModal}
     </WizardStepLayout>
   );
 }
@@ -866,6 +1052,35 @@ const styles = StyleSheet.create({
     borderColor: Theme.primary,
     backgroundColor: Theme.surfaceLight,
   },
+  existingHeadRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  existingAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceGray,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  existingAvatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  existingAvatarInitial: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+  },
+  existingHeadInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
   existingItemName: {
     fontSize: 14,
     fontWeight: '600',
@@ -876,13 +1091,111 @@ const styles = StyleSheet.create({
     color: Theme.textMutedDemo,
     marginTop: 2,
   },
-  existingFleetStatus: {
+  /** Driver is linked to at least one org with left_at IS NULL — warn dispatcher. */
+  existingFleetStatusInFleet: {
     fontSize: 11,
     marginTop: 6,
     color: Theme.negative,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.3,
+  },
+  /** Driver account exists but no active drivers row — invite flow is appropriate. */
+  existingFleetStatusNeutral: {
+    fontSize: 11,
+    marginTop: 6,
+    color: Theme.textMutedDemo,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  existingFleetStatusDetail: {
+    fontSize: 11,
+    marginTop: 4,
+    color: Theme.textSecondary,
+    lineHeight: 16,
+  },
+  fleetWarningBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  fleetWarningCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    alignItems: 'center',
+  },
+  fleetWarningIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(244,63,94,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  fleetWarningTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    textAlign: 'center',
+  },
+  fleetWarningEyebrow: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Theme.negative,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  fleetWarningBody: {
+    marginTop: 8,
+    fontSize: 12,
+    lineHeight: 18,
+    color: Theme.textSecondary,
+    textAlign: 'center',
+  },
+  fleetWarningDriverChip: {
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: Theme.surfaceLight,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  fleetWarningDriverName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+    textAlign: 'center',
+  },
+  fleetWarningActionBtn: {
+    marginTop: 16,
+    width: '100%',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: 'rgba(244,63,94,0.14)',
+    borderWidth: 1,
+    borderColor: Theme.negative,
+    alignItems: 'center',
+  },
+  fleetWarningActionText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: Theme.negative,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
   input: {
     borderWidth: 1,
@@ -896,17 +1209,81 @@ const styles = StyleSheet.create({
   emergencyBox: { gap: 12 },
   reviewScroll: { flex: 1 },
   reviewCard: {
-    padding: 16,
     borderRadius: 16,
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     marginBottom: 12,
+    overflow: 'hidden',
   },
-  reviewName: { fontSize: 14, fontWeight: '700', color: Theme.textPrimaryDark, textTransform: 'uppercase' },
-  reviewSub: { fontSize: 12, color: Theme.textMutedDemo },
-  reviewLabel: { fontSize: 10, color: Theme.textMutedDemo, marginTop: 8, textTransform: 'uppercase' },
-  reviewValue: { fontSize: 14, color: Theme.textPrimary },
+  reviewHeader: {
+    flexDirection: 'row',
+    padding: 16,
+    alignItems: 'center',
+    gap: 16,
+    backgroundColor: Theme.surfaceLight,
+  },
+  reviewAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Theme.surfaceBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reviewHeaderContent: {
+    flex: 1,
+  },
+  reviewName: { fontSize: 16, fontWeight: '700', color: Theme.textPrimaryDark, textTransform: 'uppercase' },
+  reviewSub: { fontSize: 12, color: Theme.textMutedDemo, marginTop: 2 },
+  pendingBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: Theme.warningMuted,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginTop: 6,
+  },
+  pendingBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Theme.warning,
+    textTransform: 'uppercase',
+  },
+  reviewDivider: {
+    height: 1,
+    backgroundColor: Theme.borderLight,
+  },
+  reviewSection: {
+    padding: 16,
+    gap: 12,
+  },
+  reviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  reviewIcon: {
+    width: 16,
+    textAlign: 'center',
+  },
+  reviewLabel: { fontSize: 10, color: Theme.textMutedDemo, textTransform: 'uppercase', fontWeight: '700', letterSpacing: 0.5, marginBottom: -4 },
+  reviewValue: { fontSize: 14, color: Theme.textPrimary, fontWeight: '500' },
+  reviewOfferRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  reviewOfferLabel: {
+    fontSize: 13,
+    color: Theme.textSecondary,
+  },
+  reviewOfferValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Theme.textPrimaryDark,
+  },
   emergencyReview: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: Theme.borderLight },
   addDriverBtn: {
     alignSelf: 'stretch',

@@ -3,9 +3,11 @@
  * Tabs: VEHICLE | TRIPS | REVENUE | PROFIT. Vehicle/revenue/profit show vehicle list; Trips shows trip-level list.
  */
 import { LiquidFillPill } from "@/components/LiquidFillPill";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import Theme from "@/constants/Theme";
-import { DriverStatusDot } from "@/features/finance/components/FinancialRow";
+import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import type { EntityListFilter, FinancialRowData, LedgerRow } from "@/features/finance";
+import { DriverStatusDot } from "@/features/finance/components/FinancialRow";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { getTripDisplayNumber } from "@/features/trips/services/trips.service";
 import { formatIndianVehicleNumber } from "@/lib/format";
@@ -18,13 +20,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
     buildTripPnLListForPeriod,
     buildVehiclePnLList,
+    resolveVehicleIdForTrip,
     type GarragePeriodValue,
     type TripPnLRow,
     type VehiclePnLRow,
-    resolveVehicleIdForTrip,
 } from "../pnl";
 import type { VehicleRow } from "../services/vehicles.service";
-import type { DriverRow } from "@/features/drivers/services/drivers.service";
 
 export type GarrageViewTab = "vehicle" | "trips" | "revenue" | "profit";
 
@@ -86,6 +87,7 @@ export function GarrageTab({
   onRefresh,
   bottomInset = 100,
 }: GarrageTabProps) {
+  const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const defaultPeriod: GarragePeriodValue = (() => {
@@ -231,6 +233,7 @@ export function GarrageTab({
           { paddingBottom: bottomInset + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
+        {...tabBarScrollProps}
         stickyHeaderIndices={[stickyHeaderIndex]}
         refreshControl={
           onRefresh ? (
@@ -245,7 +248,7 @@ export function GarrageTab({
         {topContent}
         <View style={styles.receivablesSummaryRow}>
           <View style={styles.receivablesSummaryCard}>
-            <Text style={styles.receivablesSummaryLabel}>Asset Revenue</Text>
+            <Text style={styles.receivablesSummaryLabel}>Vehicle Revenue</Text>
             <Text style={styles.receivablesSummaryRevenue}>
               ₹{totalRevenue.toLocaleString("en-IN")}
             </Text>
@@ -261,7 +264,7 @@ export function GarrageTab({
         <View style={styles.listHeader}>
           <View style={styles.headerEntityCol}>
             <Text style={[styles.listHeaderCell, styles.ctHeaderLeft]} numberOfLines={1}>
-              {viewTab === "trips" ? "Mission" : "Vehicle Entity"}
+              {viewTab === "trips" ? "Trip" : "Vehicle Entity"}
             </Text>
           </View>
           <View style={styles.headerTripsCol}>

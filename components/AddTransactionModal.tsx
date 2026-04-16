@@ -8,6 +8,7 @@ import type { LedgerRow } from "@/features/finance";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import { VALIDATION, dateISO } from "@/lib/validation";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { isCrossOrgIntegrationTrip } from "@/features/trips/visibility/tripVisibility";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
@@ -131,6 +132,16 @@ export const VEHICLE_CATEGORIES = [
 ] as const;
 export type VehicleCategory = (typeof VEHICLE_CATEGORIES)[number];
 
+export const PAYMENT_MODES = [
+  { id: 'CASH', name: 'Cash' },
+  { id: 'UPI', name: 'UPI' },
+  { id: 'BANK', name: 'Bank Transfer' },
+  { id: 'CHEQUE', name: 'Cheque' },
+  { id: 'FUEL_CARD', name: 'Fuel Card' },
+  { id: 'FASTAG', name: 'FASTag' },
+  { id: 'CREDIT', name: 'Credit' },
+] as const;
+
 /** Vehicle expense "parties" — vehicle cannot be party; user selects expense type. id = name = stored in description. */
 export const VEHICLE_EXPENSE_PARTIES: PartyOption[] = [
   ...VEHICLE_CATEGORIES,
@@ -168,6 +179,10 @@ export interface AddTransactionData {
   indentId?: string | null;
   /** Entry date (YYYY-MM-DD). When not set, parent uses today or editing entry's date. */
   transactionDate?: string | null;
+  /** Payment mode (e.g. CASH, UPI, BANK) */
+  paymentMode?: string | null;
+  /** Reference number / UTR for online transactions */
+  paymentReference?: string | null;
 }
 
 export interface PartyOption {
@@ -255,6 +270,12 @@ interface AddTransactionModalProps {
   entryContextLabel?: string;
   /** Map supplier party id -> linked_organization_id so trips created by that org (org-as-client) are shown for the supplier. */
   supplierLinkedOrgIds?: Record<string, string>;
+  /** Map linked_organization_id -> local_client_id (for integrated trips). */
+  linkedClientIdByOrgId?: Record<string, string> | Map<string, string>;
+  /** Map linked_organization_id -> local_supplier_id. */
+  linkedSupplierIdByOrgId?: Record<string, string> | Map<string, string>;
+  /** Current organization ID to detect if trip is "ours". */
+  viewerOrgId?: string | null;
   /** When true (e.g. Garrage/vehicle context), hide party dropdown for Cash OUT and use vehicle expense categories as first field. */
   hidePartyForCashOut?: boolean;
   /** Cash IN: suggested receivable in amount placeholder when the field is empty (e.g. customer / trip pending). */
@@ -291,6 +312,9 @@ export function AddTransactionModal({
   requireTripForSupplierOut = true,
   entryContextLabel,
   supplierLinkedOrgIds,
+  linkedClientIdByOrgId,
+  linkedSupplierIdByOrgId,
+  viewerOrgId,
   hidePartyForCashOut = false,
   dueAmountIn = null,
   dueAmountOut = null,
@@ -315,11 +339,14 @@ export function AddTransactionModal({
   const [partyId, setPartyId] = useState<string | null>(null);
   const [tripId, setTripId] = useState<string | null>(null);
   const [category, setCategory] = useState<string | null>(null);
+  const [paymentModeId, setPaymentModeId] = useState<string>(PAYMENT_MODES[0].id);
+  const [paymentReference, setPaymentReference] = useState<string>("");
   const [driverPaymentType, setDriverPaymentType] =
     useState<DriverPaymentType | null>(null);
   const [showPartyPicker, setShowPartyPicker] = useState(false);
   const [showTripPicker, setShowTripPicker] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [showPaymentPicker, setShowPaymentPicker] = useState(false);
   const [showDriverPaymentTypePicker, setShowDriverPaymentTypePicker] =
     useState(false);
   /** When party is "Driver salary", which driver this salary is for. */
@@ -459,6 +486,32 @@ export function AddTransactionModal({
 
   const partyOptions = useMemo(() => {
     if (type === "in" && selectedTrip) {
+      const lid = (selectedTrip as any).organization_id;
+      const isIntegrated = isCrossOrgIntegrationTrip(selectedTrip, viewerOrgId);
+
+      if (isIntegrated) {
+        const localCid =
+          linkedClientIdByOrgId instanceof Map
+            ? linkedClientIdByOrgId.get(lid)
+            : linkedClientIdByOrgId?.[lid];
+        if (localCid) {
+          const client = safeClients.find((c) => c.id === localCid);
+          if (client) return [client];
+          // If we have a local ID but not in full list, try defaultPartyName/lockedPartyName
+          if (
+            (defaultPartyId === localCid || lockedPartyId === localCid) &&
+            (defaultPartyName || lockedPartyName)
+          ) {
+            return [
+              {
+                id: localCid,
+                name: (lockedPartyName || defaultPartyName) as string,
+              },
+            ];
+          }
+        }
+      }
+
       const cid =
         selectedTrip.client_id && selectedTrip.client_id.trim()
           ? selectedTrip.client_id
@@ -480,6 +533,31 @@ export function AddTransactionModal({
       }
     }
     if (type === "out" && selectedTrip) {
+      const lid = (selectedTrip as any).organization_id;
+      const isIntegrated = isCrossOrgIntegrationTrip(selectedTrip, viewerOrgId);
+
+      if (isIntegrated) {
+        const localSid =
+          linkedSupplierIdByOrgId instanceof Map
+            ? linkedSupplierIdByOrgId.get(lid)
+            : linkedSupplierIdByOrgId?.[lid];
+        if (localSid) {
+          const supplier = safeSuppliers.find((s) => s.id === localSid);
+          if (supplier) return [supplier];
+          if (
+            (defaultPartyId === localSid || lockedPartyId === localSid) &&
+            (defaultPartyName || lockedPartyName)
+          ) {
+            return [
+              {
+                id: localSid,
+                name: (lockedPartyName || defaultPartyName) as string,
+              },
+            ];
+          }
+        }
+      }
+
       const outOptions: PartyOption[] = [];
       if (selectedTrip.supplier_id) {
         const sup = safeSuppliers.find(
@@ -550,6 +628,11 @@ export function AddTransactionModal({
     initialEntry?.party_name,
     defaultPartyId,
     defaultPartyName,
+    viewerOrgId,
+    linkedClientIdByOrgId,
+    linkedSupplierIdByOrgId,
+    lockedPartyId,
+    lockedPartyName,
   ]);
 
   const effectivePartyName = isPartyLocked
@@ -647,7 +730,8 @@ export function AddTransactionModal({
       !isDriverPayment &&
       !isVehicleExpenseOut &&
       category != null &&
-      (EXPENSE_CATEGORIES as readonly string[]).includes(category));
+      ((EXPENSE_CATEGORIES as readonly string[]).includes(category) ||
+        category === "SUPPLIER COST"));
 
   /** Entry date: when non-empty must be valid YYYY-MM-DD; empty falls back to today in submit. */
   const entryDateError =
@@ -896,7 +980,7 @@ export function AddTransactionModal({
     )
       setCategory(null);
   }, [visible, hidePartyForCashOut, type, category]);
-  // Default category by party: Receivables (Cash IN) → Trip Payment; Supplier (Cash OUT) → Trip Payment; legacy Cash OUT → SUPPLIER COST or DRIVER SALARY.
+  // Default category by party: Receivables (Cash IN) -> Trip Payment; Supplier (Cash OUT) -> Trip Payment; legacy Cash OUT -> SUPPLIER PAYMENT or DRIVER SALARY.
   useEffect(() => {
     if (!visible) return;
     if (type === "in") {
@@ -915,8 +999,8 @@ export function AddTransactionModal({
       return;
     }
     if (type === "out") {
-      if (category !== "SUPPLIER COST" && category !== "DRIVER SALARY")
-        setCategory("SUPPLIER COST");
+      if (category !== "SUPPLIER PAYMENT" && category !== "DRIVER SALARY")
+        setCategory("SUPPLIER PAYMENT");
     }
   }, [
     visible,
@@ -947,26 +1031,77 @@ export function AddTransactionModal({
     let derivedContactType: AddTransactionData["contactType"] = null;
     let derivedPartyName: string | null = null;
     if (tripLocked && selectedTrip) {
+      const lid = (selectedTrip as { organization_id?: string | null })
+        .organization_id;
+      const isIntegrated = isCrossOrgIntegrationTrip(selectedTrip, viewerOrgId);
+
       if (type === "in") {
-        derivedContactId = selectedTrip.client_id ?? null;
-        derivedContactType = derivedContactId ? "client" : null;
-        derivedPartyName = selectedTrip.client_name ?? null;
+        let localCid: string | null = null;
+        if (isIntegrated && lid != null) {
+          localCid =
+            (linkedClientIdByOrgId instanceof Map
+              ? linkedClientIdByOrgId.get(lid)
+              : linkedClientIdByOrgId?.[lid]) ?? null;
+        }
+
+        if (localCid) {
+          derivedContactId = localCid;
+          derivedContactType = "client";
+          derivedPartyName =
+            safeClients.find((c) => c.id === localCid)?.name ??
+            lockedPartyName ??
+            defaultPartyName ??
+            null;
+        } else {
+          derivedContactId = selectedTrip.client_id ?? null;
+          derivedContactType = derivedContactId ? "client" : null;
+          derivedPartyName = selectedTrip.client_name ?? null;
+        }
       } else {
-        derivedContactId =
-          selectedTrip.supplier_id ?? selectedTrip.driver_id ?? null;
-        derivedContactType = selectedTrip.supplier_id
-          ? "supplier"
-          : selectedTrip.driver_id
-            ? "driver"
-            : null;
-        derivedPartyName = selectedTrip.supplier_id
-          ? (safeSuppliers.find((s) => s.id === selectedTrip!.supplier_id!)?.name ??
-            (selectedTrip as { supplier_name?: string }).supplier_name ??
-            null)
-          : selectedTrip.driver_id
-            ? (safeDrivers.find((d) => d.id === selectedTrip!.driver_id!)?.name ??
+        let localSid: string | null = null;
+        if (isIntegrated && lid != null) {
+          localSid =
+            (linkedSupplierIdByOrgId instanceof Map
+              ? linkedSupplierIdByOrgId.get(lid)
+              : linkedSupplierIdByOrgId?.[lid]) ?? null;
+        }
+
+        if (localSid) {
+          derivedContactId = localSid;
+          derivedContactType = "supplier";
+          derivedPartyName =
+            safeSuppliers.find((s) => s.id === localSid)?.name ??
+            lockedPartyName ??
+            defaultPartyName ??
+            null;
+        } else if (
+          isPartyLocked &&
+          lockedPartyId &&
+          safeSuppliers.some((s) => s.id === lockedPartyId)
+        ) {
+          derivedContactId = lockedPartyId;
+          derivedContactType = "supplier";
+          derivedPartyName =
+            safeSuppliers.find((s) => s.id === lockedPartyId)?.name ??
+            lockedPartyName ??
+            null;
+        } else {
+          derivedContactId =
+            selectedTrip.supplier_id ?? selectedTrip.driver_id ?? null;
+          derivedContactType = selectedTrip.supplier_id
+            ? "supplier"
+            : selectedTrip.driver_id
+              ? "driver"
+              : null;
+          derivedPartyName = selectedTrip.supplier_id
+            ? (safeSuppliers.find((s) => s.id === selectedTrip!.supplier_id!)?.name ??
+              (selectedTrip as { supplier_name?: string }).supplier_name ??
               null)
-            : null;
+            : selectedTrip.driver_id
+              ? (safeDrivers.find((d) => d.id === selectedTrip!.driver_id!)?.name ??
+                null)
+              : null;
+        }
       }
     }
     const isUnlinkedMisc =
@@ -1017,6 +1152,9 @@ export function AddTransactionModal({
           : isUnlinkedMisc
             ? "Misc / Unlinked"
             : (effectivePartyName ?? null);
+    const normalizedCategory =
+      category === "SUPPLIER COST" ? "SUPPLIER PAYMENT" : category;
+
     const data: AddTransactionData = {
       type,
       amount,
@@ -1032,12 +1170,12 @@ export function AddTransactionModal({
       category:
         type === "in"
           ? (isClientPayment || tripLocked)
-            ? (category ?? undefined)
+            ? (normalizedCategory ?? undefined)
             : undefined
           : type === "out" && !isDriverPayment
             ? isVehicleExpenseOut
               ? (effectivePartyId ?? undefined)
-              : (category ?? undefined)
+              : (normalizedCategory ?? undefined)
             : undefined,
       driverPaymentType: finalDriverPaymentType,
       contactId: finalContactId ?? undefined,
@@ -1053,6 +1191,8 @@ export function AddTransactionModal({
       transactionDate: /^\d{4}-\d{2}-\d{2}$/.test(entryDate)
         ? entryDate
         : undefined,
+      paymentMode: paymentModeId,
+      paymentReference: paymentReference.trim() || null,
     };
     if (isEditMode && initialEntry?.id) {
       onSubmit(data, { entryId: initialEntry.id });
@@ -1089,6 +1229,7 @@ export function AddTransactionModal({
     setShowDriverPaymentTypePicker(false);
     setShowDriverForSalaryPicker(false);
     setShowVehiclePicker(false);
+    setShowPaymentPicker(false);
   };
 
   const pickerModalVisible =
@@ -1098,7 +1239,8 @@ export function AddTransactionModal({
       showCategoryPicker ||
       showDriverPaymentTypePicker ||
       showDriverForSalaryPicker ||
-      showVehiclePicker);
+      showVehiclePicker ||
+      showPaymentPicker);
 
   if (!visible && !fullPage) return null;
   if (fullPage && !visible) return null;
@@ -1152,6 +1294,10 @@ export function AddTransactionModal({
           ref={scrollRef}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          onScrollBeginDrag={() => {
+            Keyboard.dismiss();
+            closeAllPickers();
+          }}
           scrollEnabled={
             fullPage ||
             (!showPartyPicker &&
@@ -1461,6 +1607,51 @@ export function AddTransactionModal({
               </TouchableOpacity>
             )}
 
+            <TouchableOpacity
+              style={styles.fieldBlockFull}
+              onPress={() => {
+                setShowPartyPicker(false);
+                setShowTripPicker(false);
+                setShowCategoryPicker(false);
+                setShowDriverPaymentTypePicker(false);
+                setShowDriverForSalaryPicker(false);
+                setShowPaymentPicker((v) => !v);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.tagLabel, styles.fieldLabel]}>PAYMENT MODE</Text>
+              <Text style={styles.fieldValue} numberOfLines={1}>
+                {PAYMENT_MODES.find((p) => p.id === paymentModeId)?.name ?? "Cash"}
+              </Text>
+              <FontAwesome
+                name="chevron-down"
+                size={10}
+                color={Theme.textMutedDemo}
+                style={styles.fieldChevron}
+              />
+            </TouchableOpacity>
+
+            {paymentModeId !== 'CASH' && (
+              <View style={[styles.fieldBlockFull, { marginTop: 0, borderTopWidth: 0 }]}>
+                <Text style={[styles.tagLabel, styles.fieldLabel]}>REFERENCE NO / UTR</Text>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={paymentReference}
+                  onChangeText={setPaymentReference}
+                  placeholder="Refer the bank to validate"
+                  placeholderTextColor={Theme.textMutedDemo}
+                  autoCorrect={false}
+                  autoCapitalize="characters"
+                  accessibilityLabel="Reference Number or UTR"
+                  onFocus={() => {
+                    if (fullPage && scrollRef.current) {
+                      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+                    }
+                  }}
+                />
+              </View>
+            )}
+
             {showDriverForSalaryPicker && !fullPage && (
               <View style={styles.pickerList}>
                 <ScrollView
@@ -1580,6 +1771,33 @@ export function AddTransactionModal({
                       }}
                     >
                       <Text style={styles.pickerItemText}>{cat}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {showPaymentPicker && !fullPage && (
+              <View style={styles.pickerList}>
+                <ScrollView
+                  style={styles.pickerScroll}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={true}
+                  nestedScrollEnabled={true}
+                >
+                  {PAYMENT_MODES.map((opt) => (
+                    <TouchableOpacity
+                      key={opt.id}
+                      style={[
+                        styles.pickerItem,
+                        paymentModeId === opt.id && styles.pickerItemActive,
+                      ]}
+                      onPress={() => {
+                        setPaymentModeId(opt.id);
+                        setShowPaymentPicker(false);
+                      }}
+                    >
+                      <Text style={styles.pickerItemText}>{opt.name}</Text>
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
@@ -1880,6 +2098,17 @@ export function AddTransactionModal({
         </ScrollView>
       );
     }
+    if (showPaymentPicker) {
+      return (
+        <ScrollView style={pickerModalScrollStyle} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
+          {PAYMENT_MODES.map((opt) => (
+            <TouchableOpacity key={opt.id} style={[styles.pickerItem, paymentModeId === opt.id && styles.pickerItemActive]} onPress={() => { setPaymentModeId(opt.id); setShowPaymentPicker(false); }}>
+              <Text style={styles.pickerItemText}>{opt.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      );
+    }
     if (showVehiclePicker && safeVehicles.length > 0) {
       return (
         <ScrollView style={pickerModalScrollStyle} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
@@ -1903,9 +2132,9 @@ export function AddTransactionModal({
         {formContent}
         {pickerModalVisible ? (
           <Modal transparent visible animationType="fade" onRequestClose={closeAllPickers}>
-            <TouchableOpacity style={StyleSheet.absoluteFill} onPress={closeAllPickers} activeOpacity={1} />
-            <View style={[styles.pickerModalContainer, { paddingBottom: insets.bottom + 16 }]}>
-              <View style={[styles.pickerModalPanel, { height: Math.min(windowHeight * 0.5, 380) }]}>
+            <View style={[styles.pickerModalContainer, { paddingBottom: insets.bottom + 16 }]} pointerEvents="box-none">
+              <TouchableOpacity style={StyleSheet.absoluteFill} onPress={closeAllPickers} activeOpacity={1} />
+              <View style={[styles.pickerModalPanel, { height: Math.min(windowHeight * 0.5, 380) }]} pointerEvents="auto">
                 {renderPickerModalContent()}
               </View>
             </View>
@@ -1926,7 +2155,21 @@ export function AddTransactionModal({
       <View style={styles.backdrop}>
         <TouchableOpacity
           style={StyleSheet.absoluteFill}
-          onPress={handleClose}
+          onPress={() => {
+            const hasOpenPicker =
+              showPartyPicker ||
+              showTripPicker ||
+              showCategoryPicker ||
+              showDriverPaymentTypePicker ||
+              showDriverForSalaryPicker ||
+              showVehiclePicker ||
+              showPaymentPicker;
+            if (hasOpenPicker) {
+              closeAllPickers();
+            } else {
+              handleClose();
+            }
+          }}
           activeOpacity={1}
         />
         {formContent}
@@ -2085,7 +2328,13 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.textPrimaryDark,
     paddingVertical: 0,
+    borderWidth: 0,
     letterSpacing: -0.5,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
 
   tagsRow: {
@@ -2158,6 +2407,25 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textPrimaryDark,
     paddingVertical: 6,
+    borderWidth: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
+  },
+  fieldInput: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    paddingVertical: 0,
+    borderWidth: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   fieldInputError: { borderWidth: 1, borderColor: Theme.negative, borderRadius: 8 },
   fieldErrorText: {

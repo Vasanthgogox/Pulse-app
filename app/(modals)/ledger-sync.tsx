@@ -62,6 +62,9 @@ type TripDueMeta = {
   client_price: number;
   supplier_rate: number;
   organization_id: string | null;
+  indent_id: string | null;
+  /** True if we are the supplier of a trip owned by another organization. */
+  isCrossOrgSupplier: boolean;
 };
 
 export default function LedgerSyncScreen() {
@@ -205,8 +208,10 @@ export default function LedgerSyncScreen() {
         const seen = new Set<string>();
         const merged: TripRow[] = [];
         for (const t of owned) {
-          merged.push(t);
-          seen.add(t.id);
+          if (!seen.has(t.id)) {
+            merged.push(t);
+            seen.add(t.id);
+          }
         }
         for (const t of asClient) {
           if (!seen.has(t.id)) {
@@ -220,12 +225,15 @@ export default function LedgerSyncScreen() {
             seen.add(t.id);
           }
         }
+        const asSupplierIds = new Set(asSupplier.map((t) => t.id));
         const tripDueMeta: Record<string, TripDueMeta> = {};
         merged.forEach((t: TripRow) => {
           tripDueMeta[t.id] = {
             client_price: Number(t.client_price ?? 0),
             supplier_rate: Number(t.supplier_rate ?? 0),
             organization_id: t.organization_id ?? null,
+            indent_id: t.indent_id ?? null,
+            isCrossOrgSupplier: asSupplierIds.has(t.id) && t.organization_id !== orgId,
           };
         });
         const options = merged.map((t: TripRow) => ({
@@ -290,6 +298,15 @@ export default function LedgerSyncScreen() {
       }
     });
   }, [orgId, params.entityType, params.entityId]);
+
+  const uniqueLinkedClientIdByOrgId = useMemo(
+    () => buildUniqueLinkedOrgIdMap(clients),
+    [clients],
+  );
+  const uniqueLinkedSupplierIdByOrgId = useMemo(
+    () => buildUniqueLinkedOrgIdMap(suppliers),
+    [suppliers],
+  );
 
   /** When opened from entity detail (vehicle/driver/client/supplier), show that entity's trips. For SUPPLIER, include owned trips and trips where org is client (integrated supplier-created). */
   const filteredTrips = useMemo(() => {
@@ -426,15 +443,6 @@ export default function LedgerSyncScreen() {
     return m;
   }, [suppliers, clients]);
 
-  const uniqueLinkedClientIdByOrgId = useMemo(
-    () => buildUniqueLinkedOrgIdMap(clients),
-    [clients],
-  );
-  const uniqueLinkedSupplierIdByOrgId = useMemo(
-    () => buildUniqueLinkedOrgIdMap(suppliers),
-    [suppliers],
-  );
-
   /** Trip-level due for amount placeholder when trip is locked (aligns with mission row SALES/RECEIVED/DUE). */
   const tripComputedDues = useMemo(() => {
     const tid = params.tripId;
@@ -444,15 +452,25 @@ export default function LedgerSyncScreen() {
     const meta = tripDueMetaById[tid];
     if (!meta) return { in: null, out: null };
     const entries = getTripLedgerEntries(transactions, tid);
-    const sales = Number(meta.client_price ?? 0);
+
+    // sales: what we are owed (Cash IN placeholder)
+    const sales = meta.isCrossOrgSupplier
+      ? Number(meta.supplier_rate ?? 0)
+      : Number(meta.client_price ?? 0);
+
     const received = entries.reduce((s, tx) => s + Number(tx.amount_in ?? 0), 0);
     const pendingIn = Math.max(0, sales - received);
 
+    // cost: what we owe others (Cash OUT placeholder)
     const isTripWhereWeAreClient =
       meta.organization_id != null && orgId != null && meta.organization_id !== orgId;
-    const supplierCost = isTripWhereWeAreClient
-      ? Number(meta.client_price ?? 0) || Number(meta.supplier_rate ?? 0)
-      : Number(meta.supplier_rate ?? 0);
+
+    const supplierCost = meta.isCrossOrgSupplier
+      ? 0 // As integrated supplier, this record is our revenue, not our cost.
+      : isTripWhereWeAreClient
+        ? Number(meta.client_price ?? 0) || Number(meta.supplier_rate ?? 0)
+        : Number(meta.supplier_rate ?? 0);
+
     const supplierPaid = entries.reduce((s, tx) => s + Number(tx.amount_out ?? 0), 0);
     const pendingOut = Math.max(0, supplierCost - supplierPaid);
 
@@ -490,7 +508,13 @@ export default function LedgerSyncScreen() {
 
       if (data.type === "in") {
         if (!resolvedContactId || resolvedContactType !== "client") {
-          const fromTripClientId = linkedTrip?.client_id ?? null;
+          // For integrated trips we don't own, the client_id on the record belongs to the other org.
+          // We need to resolve our own local client ID that is linked to the trip owner.
+          const fromTripClientId =
+            linkedTrip && linkedTrip.organization_id !== orgId
+              ? uniqueLinkedClientIdByOrgId.get(linkedTrip.organization_id)
+              : linkedTrip?.client_id ?? null;
+
           const fromEntityClientId =
             params.entityType === "CLIENT" ? (params.entityId ?? null) : null;
           const fromContextClientId =
@@ -504,27 +528,72 @@ export default function LedgerSyncScreen() {
         }
 
         if (!resolvedPartyName || resolvedPartyName === "—") {
-          const fromTripName = linkedTrip?.client_name ?? null;
           const fromClientIdName = resolvedContactId
-            ? (clients.find((c) => c.id === resolvedContactId)?.name ??
+            ? clients.find((c) => c.id === resolvedContactId)?.name ??
               clients.find((c) => c.id === resolvedContactId)?.contact_person ??
-              null)
+              null
             : null;
+          // For integrated trips, we want our local client name (the shipper), not the end customer name from the trip.
+          const fromTripName =
+            linkedTrip && linkedTrip.organization_id !== orgId
+              ? fromClientIdName
+              : linkedTrip?.client_name ?? null;
+
           resolvedPartyName = fromTripName || fromClientIdName || params.partyName || "—";
         }
       }
 
-      // description: client/supplier/vehicle category or driver payment label; Cash IN uses data.category (client category).
+      // Similarly for Cash OUT: if it's an integrated trip we don't own, resolve the correct supplier.
+      if (data.type === "out" && (!resolvedContactId || resolvedContactType === "driver")) {
+        // If it's a driver payment, we keep it as is. But if it's a generic OUT or we're looking for a supplier:
+        if (!resolvedContactId || resolvedContactType !== "driver") {
+          const fromTripSupplierId =
+            linkedTrip && linkedTrip.organization_id !== orgId
+              ? uniqueLinkedSupplierIdByOrgId.get(linkedTrip.organization_id)
+              : linkedTrip?.supplier_id ?? null;
+          const fromEntitySupplierId =
+            params.entityType === "SUPPLIER" ? (params.entityId ?? null) : null;
+          const fromContextSupplierId =
+            params.partyContext === "suppliers" ? (params.partyId ?? null) : null;
+          const candidateSupplierId =
+            fromTripSupplierId || fromEntitySupplierId || fromContextSupplierId;
+
+          if (candidateSupplierId && !resolvedContactId) {
+            resolvedContactId = candidateSupplierId;
+            resolvedContactType = "supplier";
+          }
+        }
+
+        if (!resolvedPartyName || resolvedPartyName === "—") {
+          const fromSupplierName = resolvedContactId && resolvedContactType === "supplier"
+            ? suppliers.find((s) => s.id === resolvedContactId)?.name ?? null
+            : null;
+          if (fromSupplierName) {
+            resolvedPartyName = fromSupplierName;
+          }
+        }
+      }
+
+      let baseDescription = (data.type === "in"
+        ? (data.category ?? "ENTRY")
+        : data.type === "out"
+          ? (driverPaymentLabel ?? data.category ?? "ENTRY")
+          : "ENTRY") as string;
+          
+      const descParts = [baseDescription];
+      if (data.paymentMode && data.paymentMode !== 'CASH') {
+        const modeName = data.paymentMode === 'UPI' ? 'UPI' : data.paymentMode === 'BANK' ? 'Bank Transfer' : data.paymentMode === 'CHEQUE' ? 'Cheque' : data.paymentMode;
+        descParts.push(`Mode: ${modeName}`);
+      }
+      if (data.paymentReference) {
+        descParts.push(`UTR: ${data.paymentReference}`);
+      }
+
       const payload = {
         trip_id: data.tripId ?? null,
         trip_number: data.tripNumber ?? null,
         party_name: resolvedPartyName,
-        description:
-          (data.type === "in"
-            ? (data.category ?? "ENTRY")
-            : data.type === "out"
-              ? (driverPaymentLabel ?? data.category ?? "ENTRY")
-              : "ENTRY") as string,
+        description: descParts.join(' | '),
         amount_in: data.type === "in" ? data.amount : 0,
         amount_out: data.type === "out" ? data.amount : 0,
         transaction_date: transactionDate,
@@ -706,6 +775,9 @@ export default function LedgerSyncScreen() {
         vehicles={vehicles}
         trips={filteredTrips}
         supplierLinkedOrgIds={supplierLinkedOrgIds}
+        linkedClientIdByOrgId={uniqueLinkedClientIdByOrgId}
+        linkedSupplierIdByOrgId={uniqueLinkedSupplierIdByOrgId}
+        viewerOrgId={orgId}
         partyContext={partyContext}
         defaultPartyId={params.partyId ?? undefined}
         defaultPartyName={params.partyName ?? undefined}

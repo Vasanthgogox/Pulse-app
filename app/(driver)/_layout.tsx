@@ -3,14 +3,15 @@
  * Tabs: Dashboard, Trip, History, Wallet.
  * Not to be confused with app/driver/ which is for dispatchers (e.g. /driver/[id] = driver detail).
  */
+import { DriverTabBar } from '@/components/driver/DriverTabBar';
 import { DriverAvatarProvider } from '@/contexts/DriverAvatarContext';
 import { DriverThemeProvider } from '@/contexts/DriverThemeContext';
-import { DriverTabBar } from '@/components/driver/DriverTabBar';
 import { Tabs } from 'expo-router';
 
 function DriverTabsNavigator() {
   return (
     <Tabs
+      backBehavior="history"
       tabBar={(props) => <DriverTabBar {...props} />}
       screenOptions={{
         headerShown: false,
@@ -26,10 +27,11 @@ function DriverTabsNavigator() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Dashboard' }} />
-      <Tabs.Screen name="control" options={{ title: 'Trip' }} />
+      {/* Keep route for internal dashboard flow, but hide from tab bar */}
+      <Tabs.Screen name="control" options={{ title: 'Trip', href: null }} />
       <Tabs.Screen name="trips" options={{ title: 'History' }} />
       <Tabs.Screen name="requests" options={{ title: 'Requests', href: null }} />
-      <Tabs.Screen name="wallet" options={{ title: 'Wallet' }} />
+      <Tabs.Screen name="wallet" options={{ title: 'Transactions' }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile', href: null }} />
       <Tabs.Screen name="level-progression" options={{ title: 'Level progression', href: null }} />
       <Tabs.Screen name="documents" options={{ title: 'Documents', href: null }} />

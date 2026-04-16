@@ -1,11 +1,12 @@
 /**
- * Treasury Fiscal Matrix — Customers tab. O(n) aggregation: received = ledger only, billed = trips only.
+ * Treasury Financial Summary — Customers tab. O(n) aggregation: received = ledger only, billed = trips only.
  * Supports matrix (table) view and ledger (transaction cards) view with toggle.
  */
 import { FAB } from "@/components/FAB";
-import { IntegrationModeTag } from "@/components/IntegrationModeTag";
+import { EntityAvatar } from "@/components/EntityAvatar";
 import { LiquidFillPill } from "@/components/LiquidFillPill";
 import Theme from "@/constants/Theme";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import {
     aggregateCustomers,
     type TripPartyMap,
@@ -25,6 +26,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
+    Platform,
     RefreshControl,
     ScrollView,
     StyleSheet,
@@ -287,7 +289,7 @@ function CustomerDetailView({
           <View style={detailStyles.scorecard}>
             <View style={detailStyles.scorecardTop}>
               <View>
-                <Text style={detailStyles.scorecardLabel}>Grid Fiscal DNA</Text>
+                <Text style={detailStyles.scorecardLabel}>Financial Overview</Text>
                 <Text style={detailStyles.scorecardAmount}>
                   ₹{sales.toLocaleString("en-IN")}
                 </Text>
@@ -313,7 +315,7 @@ function CustomerDetailView({
           </View>
         )}
 
-        {/* Tab content: Trip-level receivables (Missions) */}
+        {/* Tab content: Trip-level receivables (Trips) */}
         {detailTab === "receivables" && (
           <View style={detailStyles.section}>
             <View style={detailStyles.tableCard}>
@@ -380,7 +382,7 @@ function CustomerDetailView({
                 })
               ) : (
                 <View style={detailStyles.missionEmpty}>
-                  <Text style={detailStyles.missionEmptyText}>No missions</Text>
+                  <Text style={detailStyles.missionEmptyText}>No trips</Text>
                 </View>
               )}
             </View>
@@ -432,7 +434,7 @@ function CustomerDetailView({
               </View>
               <TextInput
                 style={detailStyles.byTripSearchInput}
-                placeholder="Search mission, destination..."
+                placeholder="Search trip, destination..."
                 placeholderTextColor={Theme.driverPlaceholder}
                 value={byTripSearch}
                 onChangeText={setByTripSearch}
@@ -919,6 +921,11 @@ const detailStyles = StyleSheet.create({
     color: Theme.textOnDark,
     paddingVertical: 0,
     paddingLeft: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   byTripSummaryRow: {
     flexDirection: "row",
@@ -1810,6 +1817,7 @@ export function CustomersTab({
   onRefresh,
   bottomInset = 100,
 }: CustomersTabProps) {
+  const tabBarScrollProps = useTabBarAwareScrollProps();
   const insets = useSafeAreaInsets();
   const [selectedCustomer, setSelectedCustomer] =
     useState<FinancialRowData | null>(null);
@@ -1839,6 +1847,11 @@ export function CustomersTab({
 
   const uniqueLinkedClientIdByOrgId = useMemo(
     () => buildUniqueLinkedOrgIdMap(clients),
+    [clients],
+  );
+
+  const clientAvatarById = useMemo(
+    () => new Map(clients.map((c) => [c.id, { avatar_url: c.avatar_url, avatar_seed: c.avatar_seed }])),
     [clients],
   );
 
@@ -1929,6 +1942,7 @@ export function CustomersTab({
           { paddingBottom: bottomInset + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
+        {...tabBarScrollProps}
         stickyHeaderIndices={[stickyHeaderIndex]}
         refreshControl={
           onRefresh ? (
@@ -1998,6 +2012,7 @@ export function CustomersTab({
             const receivedDisplay =
               received >= 1000 ? `${(received / 1000).toFixed(1)}k` : received.toLocaleString("en-IN");
             const tripCount = data.trips ?? 0;
+            const avatarData = clientAvatarById.get(data.id);
             return (
               <TouchableOpacity
                 key={data.id}
@@ -2005,11 +2020,15 @@ export function CustomersTab({
                 onPress={() => handleRowSelect(data)}
                 activeOpacity={0.7}
               >
+                <EntityAvatar
+                  name={data.name ?? ""}
+                  avatarUrl={avatarData?.avatar_url}
+                  avatarSeed={avatarData?.avatar_seed}
+                  entityType="client"
+                  isIntegrated={!!data.is_integrated}
+                />
                 <View style={[styles.customerTableCell, styles.ctEntity]}>
                   <View style={styles.customerTableEntityHeader}>
-                    <IntegrationModeTag
-                      mode={data.is_integrated ? "integrated" : "manual"}
-                    />
                     <Text
                       style={styles.customerTableEntityName}
                       numberOfLines={1}
@@ -2207,6 +2226,7 @@ const styles = StyleSheet.create({
   customerTableRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 10,
     minHeight: 62,
     paddingVertical: 10,
     paddingHorizontal: 14,

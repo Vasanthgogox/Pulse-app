@@ -9,6 +9,8 @@ import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { pickContactForNameAndPhone } from "@/lib/contactPicker";
 import { validatePhone } from "@/lib/phoneValidation";
+import { formatMobileNumber } from "@/lib/format";
+import { inviteeSuggestedCompanyName } from "@/services/connectionRequestsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -38,6 +40,8 @@ export interface SupplierInviteeMatch {
   organization_id: string;
   full_name: string;
   phone: string;
+  organization_name?: string;
+  profile_company_name?: string | null;
 }
 
 interface AddSupplierModalProps {
@@ -119,6 +123,7 @@ export function AddSupplierModal({
   const phoneError = phone.trim() ? validatePhone(phone.trim()) : null;
   const canSubmit =
     !blockedByNoOrg &&
+    companyName.trim().length > 0 &&
     name.trim().length > 0 &&
     phone.trim().length > 0 &&
     !phoneError &&
@@ -158,6 +163,10 @@ export function AddSupplierModal({
         setSearchedNoResult(!result);
         if (result) {
           setName((prev) => (prev.trim() ? prev : result.full_name));
+          const suggested = inviteeSuggestedCompanyName(result);
+          if (suggested) {
+            setCompanyName((prev) => (prev.trim() ? prev : suggested));
+          }
         }
       });
     }, PHONE_DEBOUNCE_MS);
@@ -251,18 +260,22 @@ export function AddSupplierModal({
       ) : null}
       <Pressable
         style={styles.ledgerAmountBlock}
-        onPress={() => companyInputRef.current?.focus()}
+        onPress={() => phoneInputRef.current?.focus()}
       >
-        <Text style={styles.ledgerAmountLabel}>COMPANY NAME</Text>
+        <Text style={styles.ledgerAmountLabel}>PHONE</Text>
         <View style={styles.ledgerAmountRow}>
           <TextInput
-            ref={companyInputRef}
+            ref={phoneInputRef}
             style={styles.ledgerAmountInput}
-            placeholder={t("company")}
+            placeholder="+91 …"
             placeholderTextColor={Theme.textMutedDemo}
-            value={companyName}
-            onChangeText={setCompanyName}
-            autoCapitalize="words"
+            value={phone}
+            onChangeText={(t) => {
+              setPhone(formatMobileNumber(t));
+              setInviteeMatch(null);
+              setSearchedNoResult(false);
+            }}
+            keyboardType="phone-pad"
             autoCorrect={false}
             spellCheck={false}
             autoComplete="off"
@@ -290,21 +303,17 @@ export function AddSupplierModal({
         </Pressable>
         <Pressable
           style={[styles.ledgerFieldBlock, styles.ledgerFieldBlockCol]}
-          onPress={() => phoneInputRef.current?.focus()}
+          onPress={() => companyInputRef.current?.focus()}
         >
-          <Text style={styles.ledgerFieldLabelCol}>PHONE</Text>
+        <Text style={styles.ledgerFieldLabelCol}>COMPANY NAME *</Text>
           <TextInput
-            ref={phoneInputRef}
+            ref={companyInputRef}
             style={styles.ledgerFieldInput}
-            placeholder="+91 …"
+            placeholder={t("company")}
             placeholderTextColor={Theme.textMutedDemo}
-            value={phone}
-            onChangeText={(t) => {
-              setPhone(t);
-              setInviteeMatch(null);
-              setSearchedNoResult(false);
-            }}
-            keyboardType="phone-pad"
+            value={companyName}
+            onChangeText={setCompanyName}
+            autoCapitalize="words"
             autoCorrect={false}
             spellCheck={false}
             autoComplete="off"
@@ -503,18 +512,24 @@ export function AddSupplierModal({
             ) : null}
 
             <Pressable
-              onPress={() => companyInputRef.current?.focus()}
+              onPress={() => phoneInputRef.current?.focus()}
               style={styles.screenInputCard}
             >
-              <Text style={styles.screenInputLabel}>{t("companyName")}</Text>
+              <Text style={styles.screenInputLabel}>
+                Phone number <Text style={styles.screenRequiredMark}>*</Text>
+              </Text>
               <TextInput
-                ref={companyInputRef}
+                ref={phoneInputRef}
                 style={styles.screenInput}
-                placeholder={t("company")}
+                placeholder="+91 98765 43210"
                 placeholderTextColor={Theme.textMutedDemo}
-                value={companyName}
-                onChangeText={setCompanyName}
-                autoCapitalize="words"
+                value={phone}
+                onChangeText={(t) => {
+                  setPhone(formatMobileNumber(t));
+                  setInviteeMatch(null);
+                  setSearchedNoResult(false);
+                }}
+                keyboardType="phone-pad"
                 autoCorrect={false}
                 spellCheck={false}
                 autoComplete="off"
@@ -549,24 +564,21 @@ export function AddSupplierModal({
               </Pressable>
 
               <Pressable
-                onPress={() => phoneInputRef.current?.focus()}
+                onPress={() => companyInputRef.current?.focus()}
                 style={styles.screenFieldCard}
               >
                 <Text style={styles.screenInputLabel}>
-                  Phone number <Text style={styles.screenRequiredMark}>*</Text>
+                  {t("companyName")}{" "}
+                  <Text style={styles.screenRequiredMark}>*</Text>
                 </Text>
                 <TextInput
-                  ref={phoneInputRef}
+                  ref={companyInputRef}
                   style={styles.screenInput}
-                  placeholder="+91 98765 43210"
+                  placeholder={t("company")}
                   placeholderTextColor={Theme.textMutedDemo}
-                  value={phone}
-                  onChangeText={(t) => {
-                    setPhone(t);
-                    setInviteeMatch(null);
-                    setSearchedNoResult(false);
-                  }}
-                  keyboardType="phone-pad"
+                  value={companyName}
+                  onChangeText={setCompanyName}
+                  autoCapitalize="words"
                   autoCorrect={false}
                   spellCheck={false}
                   autoComplete="off"
@@ -759,6 +771,11 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
     paddingVertical: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   fieldRowWrap: {
     marginBottom: 20,
@@ -789,6 +806,11 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     paddingHorizontal: 0,
     minWidth: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   ledgerSubmitBtn: {
     paddingVertical: 16,
@@ -1125,6 +1147,11 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     paddingVertical: 0,
     minHeight: 28,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   screenActionCard: {
     flexDirection: "row",

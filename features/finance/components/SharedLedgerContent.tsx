@@ -1,6 +1,6 @@
 /**
  * Compare & Verify — trip-level shared ledger audit for a single partner (client/supplier).
- * Shows Mission | Sales (My Book / Partner) | Paid (My Book / Partner) with expandable
+ * Shows Trip | Sales (My Book / Partner) | Paid (My Book / Partner) with expandable
  * reconciliation statement and Raise Dispute. Matches reference UX; uses Theme and app terms.
  */
 import Layout from "@/constants/Layout";
@@ -32,6 +32,7 @@ import {
     ActivityIndicator,
     Alert,
     Modal,
+    Platform,
     ScrollView,
     Share,
     StyleSheet,
@@ -68,6 +69,10 @@ export interface EntityCompareVerifyViewProps {
   embeddedInOverlay?: boolean;
   /** Callback to trigger connection invitation logic. */
   onRequestInvite?: () => void;
+  /** Optional callback to trigger a connection request for a partner already in the app. */
+  onRequestConnection?: () => void;
+  /** Optional callback to trigger an invitation to join the app for a partner not yet in the app. */
+  onInviteToApp?: () => void;
 }
 
 type ReconStatus = "VERIFIED" | "PENDING" | "MISMATCH" | "UNRECOGNIZED";
@@ -315,6 +320,8 @@ export function SharedLedgerContent({
   viewAsPartner = false,
   embeddedInOverlay = false,
   onRequestInvite,
+  onRequestConnection,
+  onInviteToApp,
 }: EntityCompareVerifyViewProps) {
   const resolutionOptions = entityType === "CLIENT" ? [
     "Partner needs to update Sales amount",
@@ -344,6 +351,8 @@ export function SharedLedgerContent({
   const [disputesRaised, setDisputesRaised] = useState<DisputeRow[]>([]);
   const [disputesReceived, setDisputesReceived] = useState<DisputeRow[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
+  const [pendingAcceptDispute, setPendingAcceptDispute] =
+    useState<DisputeRow | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Manual partner (not integrated): resolve phone → invitee in app or not → Request vs Invite
@@ -413,6 +422,7 @@ export function SharedLedgerContent({
       }
       if (inv) {
         setInvitee(inv);
+        // If the offline contact is already in our contact list and matches an app user, treat them as integrated
         setInviteeStatus("in_app");
         // Check if we already sent a pending connection request to this org
         const { requests } = await getConnectionRequestsSent(organizationId);
@@ -679,9 +689,89 @@ export function SharedLedgerContent({
     [organizationId, entity.id, entity.name, onRefresh, refetchDisputes],
   );
 
+  const executeAcceptReceivedDispute = useCallback(
+    async (dispute: DisputeRow) => {
+      if (!organizationId) return;
+      setPendingAcceptDispute(null);
+      setActionLoading(true);
+      try {
+        const { error, rpcUnavailable } = await resolveDispute(
+          dispute.id,
+          "ACCEPT",
+          organizationId,
+        );
+        if (!error) {
+          refetchDisputes();
+          onRefresh?.();
+          Alert.alert(
+            "Ledger updated",
+            "Your book has been updated to match the partner. The trip is now matched.",
+          );
+          setActionLoading(false);
+          return;
+        }
+        if (rpcUnavailable) {
+          const sales = dispute.raised_sales ?? 0;
+          let paid = dispute.raised_paid ?? 0;
+          if (paid === 0) {
+            const row = reconciledRows.find(
+              (r) =>
+                String(r.tripId).toLowerCase() ===
+                String(dispute.transaction_id).toLowerCase(),
+            );
+            if (row?.extPaid != null && row.extPaid > 0) paid = row.extPaid;
+          }
+          if (sales !== 0 || paid !== 0) {
+            const { error: updateError } = await acceptPartnerView(
+              organizationId,
+              dispute.transaction_id,
+              sales,
+              paid,
+              entity.id,
+            );
+            if (updateError) {
+              Alert.alert("Ledger update failed", updateError.message);
+              setActionLoading(false);
+              return;
+            }
+          }
+          const { error: tableError } = await resolveDisputeTableOnly(
+            dispute.id,
+            organizationId,
+          );
+          if (tableError) {
+            Alert.alert("Accept failed", tableError.message);
+            setActionLoading(false);
+            return;
+          }
+          refetchDisputes();
+          onRefresh?.();
+          Alert.alert(
+            "Ledger updated",
+            "Your book has been updated to match the partner. The trip is now matched.",
+          );
+        } else {
+          Alert.alert("Accept failed", error.message);
+        }
+      } catch (e) {
+        Alert.alert(
+          "Error",
+          e instanceof Error ? e.message : "Something went wrong.",
+        );
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [organizationId, entity.id, onRefresh, refetchDisputes, reconciledRows],
+  );
+
   const handleAcceptReceivedDispute = useCallback(
     (dispute: DisputeRow) => {
-      if (!organizationId) return;
+      if (!organizationId || actionLoading) return;
+      if (Platform.OS === "web") {
+        setPendingAcceptDispute(dispute);
+        return;
+      }
       Alert.alert(
         "Accept partner's view?",
         "Your ledger for this trip will be updated to match the partner's numbers. This cannot be undone.",
@@ -690,80 +780,13 @@ export function SharedLedgerContent({
           {
             text: "Accept & update",
             onPress: () => {
-              setTimeout(async () => {
-                setActionLoading(true);
-                try {
-                  const { error, rpcUnavailable } = await resolveDispute(
-                    dispute.id,
-                    "ACCEPT",
-                    organizationId,
-                  );
-                  if (!error) {
-                    refetchDisputes();
-                    onRefresh?.();
-                    Alert.alert(
-                      "Ledger updated",
-                      "Your book has been updated to match the partner. The trip is now matched.",
-                    );
-                    setActionLoading(false);
-                    return;
-                  }
-                  if (rpcUnavailable) {
-                    const sales = dispute.raised_sales ?? 0;
-                    let paid = dispute.raised_paid ?? 0;
-                    if (paid === 0) {
-                      const row = reconciledRows.find(
-                        (r) => String(r.tripId).toLowerCase() === String(dispute.transaction_id).toLowerCase(),
-                      );
-                      if (row?.extPaid != null && row.extPaid > 0) paid = row.extPaid;
-                    }
-                    if (sales !== 0 || paid !== 0) {
-                      const { error: updateError } = await acceptPartnerView(
-                        organizationId,
-                        dispute.transaction_id,
-                        sales,
-                        paid,
-                        entity.id,
-                      );
-                      if (updateError) {
-                        Alert.alert("Ledger update failed", updateError.message);
-                        setActionLoading(false);
-                        return;
-                      }
-                    }
-                    const { error: tableError } = await resolveDisputeTableOnly(
-                      dispute.id,
-                      organizationId,
-                    );
-                    if (tableError) {
-                      Alert.alert("Accept failed", tableError.message);
-                      setActionLoading(false);
-                      return;
-                    }
-                    refetchDisputes();
-                    onRefresh?.();
-                    Alert.alert(
-                      "Ledger updated",
-                      "Your book has been updated to match the partner. The trip is now matched.",
-                    );
-                  } else {
-                    Alert.alert("Accept failed", error.message);
-                  }
-                } catch (e) {
-                  Alert.alert(
-                    "Error",
-                    e instanceof Error ? e.message : "Something went wrong.",
-                  );
-                } finally {
-                  setActionLoading(false);
-                }
-              }, 100);
+              void executeAcceptReceivedDispute(dispute);
             },
           },
         ],
       );
     },
-    [organizationId, entity.id, onRefresh, refetchDisputes, reconciledRows],
+    [organizationId, actionLoading, executeAcceptReceivedDispute],
   );
 
   const handleDeclineReceivedDispute = useCallback(
@@ -985,11 +1008,11 @@ export function SharedLedgerContent({
             ) : (
               <TouchableOpacity
                 style={styles.notIntegratedBtn}
-                onPress={onRequestInvite ?? handleRequestConnection}
-                disabled={requestInviteLoading && !onRequestInvite}
+                onPress={onRequestConnection ?? onRequestInvite ?? handleRequestConnection}
+                disabled={requestInviteLoading && !onRequestInvite && !onRequestConnection}
                 activeOpacity={0.8}
               >
-                {requestInviteLoading && !onRequestInvite ? (
+                {requestInviteLoading && !onRequestInvite && !onRequestConnection ? (
                   <ActivityIndicator size="small" color={Theme.textOnDark} />
                 ) : (
                   <Text style={styles.notIntegratedBtnText}>
@@ -1009,7 +1032,11 @@ export function SharedLedgerContent({
             </Text>
             <TouchableOpacity
               style={styles.notIntegratedBtn}
-              onPress={onRequestInvite ?? handleInviteToApp}
+              onPress={() => {
+                if (onInviteToApp) onInviteToApp();
+                else if (onRequestInvite) onRequestInvite();
+                else handleInviteToApp();
+              }}
               activeOpacity={0.8}
             >
               <Text style={styles.notIntegratedBtnText}>Invite to app</Text>
@@ -1088,7 +1115,7 @@ export function SharedLedgerContent({
                       color={Theme.textMuted}
                     />
                     <Text style={styles.emptyTableText}>
-                      No missions to compare yet.
+                      No trips to compare yet.
                     </Text>
                   </View>
                 ) : (
@@ -1227,146 +1254,104 @@ export function SharedLedgerContent({
                                 REF: {row.missionId}
                               </Text>
                             </View>
-                            <View style={styles.reconCard}>
-                              <View style={styles.reconRowHeader}>
-                                <Text style={styles.reconColLabel}>
-                                  Description
+                            <View style={styles.reconCardsContainer}>
+                              <View style={styles.valueCard}>
+                                <Text style={styles.valueCardTitle}>
+                                  {entityType === "CLIENT" ? "Sale Value" : "Cost Value"}
                                 </Text>
-                                <Text
-                                  style={[
-                                    styles.reconColRight,
-                                    styles.reconColMy,
-                                  ]}
-                                  numberOfLines={1}
-                                >
-                                  {myBookLabel}
-                                </Text>
-                                <Text
-                                  style={[
-                                    styles.reconColRight,
-                                    styles.reconColPartner,
-                                  ]}
-                                  numberOfLines={1}
-                                >
-                                  {partnerLabel}
-                                </Text>
-                                <Text style={styles.reconColRight}>
-                                  Variance
-                                </Text>
-                              </View>
-                              <View style={styles.reconSectionLabel}>
-                                <Text style={styles.reconSectionText}>
-                                  {entityType === "CLIENT" ? "Charges (Sales)" : "Charges (Cost)"}
-                                </Text>
-                              </View>
-                              <View style={styles.reconDataRow}>
-                                <Text style={styles.reconColLabel}>
-                                  {entityType === "CLIENT" ? "Total Sales" : "Total Cost"}
-                                </Text>
-                                <Text style={styles.reconColRight}>
-                                  {row.internal ? formatINR(row.intSales) : "—"}
-                                </Text>
-                                <Text style={styles.reconColRight}>
-                                  {isPending
-                                    ? "—"
-                                    : row.external
-                                      ? formatINR(row.extSales)
-                                      : "—"}
-                                </Text>
-                                <Text
-                                  style={[
-                                    styles.reconColRight,
-                                    salesVar !== 0 &&
-                                      !isPending &&
-                                      styles.varianceRed,
-                                    isPending && styles.varianceWait,
-                                  ]}
-                                >
-                                  {isPending
-                                    ? "Wait"
-                                    : salesVar === 0
-                                      ? "—"
-                                      : (salesVar > 0 ? "+" : "") +
-                                        formatINR(salesVar)}
-                                </Text>
-                              </View>
-                              <View style={styles.reconSectionLabelPaid}>
-                                <Text style={styles.reconSectionTextPaid}>
-                                  Credits (Paid)
-                                </Text>
-                              </View>
-                              <View style={styles.reconPaidCompactRow}>
-                                <Text style={styles.reconPaidCompactLabel}>
-                                  Total Paid
-                                </Text>
-                                <View style={styles.reconPaidCompactValues}>
-                                  <Text
-                                    style={[
-                                      styles.reconPaidCompactAmt,
-                                      styles.textPaid,
-                                    ]}
-                                    numberOfLines={1}
-                                  >
-                                    {row.internal
-                                      ? formatINR(intPaidDisplay)
-                                      : "—"}
+                                <View style={styles.valueCardRowHeader}>
+                                  <Text style={[styles.valueCardColHeader, styles.valueCardColLeft]}>
+                                    {myBookLabel}
                                   </Text>
-                                  <Text
-                                    style={[
-                                      styles.reconPaidCompactAmt,
-                                      styles.textPaid,
-                                    ]}
-                                    numberOfLines={1}
-                                  >
-                                    {isPending
-                                      ? "—"
-                                      : row.external
-                                        ? formatINR(row.extPaid)
-                                        : "—"}
+                                  <Text style={[styles.valueCardColHeader, styles.valueCardColCenter]}>
+                                    {partnerLabel}
                                   </Text>
-                                  <Text
-                                    style={[
-                                      styles.reconPaidCompactAmt,
-                                      paidVar !== 0 &&
-                                        !isPending &&
-                                        styles.varianceAmber,
-                                      isPending && styles.varianceWait,
-                                    ]}
-                                    numberOfLines={1}
-                                  >
-                                    {isPending
-                                      ? "Wait"
-                                      : paidVar === 0
-                                        ? "—"
-                                        : (paidVar > 0 ? "+" : "") +
-                                          formatINR(paidVar)}
+                                  <Text style={[styles.valueCardColHeader, styles.valueCardColRight]}>
+                                    Var
                                   </Text>
                                 </View>
+                                <View style={styles.valueCardRowValues}>
+                                  <View style={[styles.valueCardColValueContainer, styles.valueCardColLeft]}>
+                                    <Text style={styles.valueCardValue}>
+                                      {row.internal ? formatINR(row.intSales) : "—"}
+                                    </Text>
+                                    <Text style={styles.valueCardDate}>{row.internal?.date ?? "—"}</Text>
+                                  </View>
+                                  <View style={[styles.valueCardColValueContainer, styles.valueCardColCenter]}>
+                                    <Text style={styles.valueCardValue}>
+                                      {isPending
+                                        ? "—"
+                                        : row.external
+                                          ? formatINR(row.extSales)
+                                          : "—"}
+                                    </Text>
+                                    <Text style={styles.valueCardDate}>{isPending ? "—" : row.internal?.date ?? "—"}</Text>
+                                  </View>
+                                  <View style={[styles.valueCardColValueContainer, styles.valueCardColRight]}>
+                                    <Text style={[styles.valueCardVar, !isPending && salesVar !== 0 && styles.varianceRed]}>
+                                      {isPending
+                                        ? "Wait"
+                                        : salesVar === 0
+                                          ? "—"
+                                          : `${salesVar > 0 ? "+" : ""}${formatINR(salesVar)}`}
+                                    </Text>
+                                  </View>
+                                </View>
                               </View>
-                              <View style={styles.reconNetBar}>
-                                <Text style={styles.reconNetBarLabel}>
-                                  Net Trip Due
-                                </Text>
+
+                              <View style={styles.valueCard}>
+                                <Text style={styles.valueCardTitle}>Transaction Value</Text>
+                                <View style={styles.valueCardRowHeader}>
+                                  <Text style={[styles.valueCardColHeader, styles.valueCardColLeft]}>
+                                    {myBookLabel}
+                                  </Text>
+                                  <Text style={[styles.valueCardColHeader, styles.valueCardColCenter]}>
+                                    {partnerLabel}
+                                  </Text>
+                                  <Text style={[styles.valueCardColHeader, styles.valueCardColRight]}>
+                                    Var
+                                  </Text>
+                                </View>
+                                <View style={styles.valueCardRowValues}>
+                                  <View style={[styles.valueCardColValueContainer, styles.valueCardColLeft]}>
+                                    <Text style={[styles.valueCardValue, styles.textPaid]}>
+                                      {row.internal ? formatINR(intPaidDisplay) : "—"}
+                                    </Text>
+                                    <Text style={styles.valueCardDate}>{row.internal?.date ?? "—"}</Text>
+                                  </View>
+                                  <View style={[styles.valueCardColValueContainer, styles.valueCardColCenter]}>
+                                    <Text style={[styles.valueCardValue, !isPending && paidVar !== 0 && styles.varianceRed]}>
+                                      {isPending
+                                        ? "—"
+                                        : row.external
+                                          ? formatINR(row.extPaid)
+                                          : "—"}
+                                    </Text>
+                                    <Text style={styles.valueCardDate}>{isPending ? "—" : row.internal?.date ?? "—"}</Text>
+                                  </View>
+                                  <View style={[styles.valueCardColValueContainer, styles.valueCardColRight]}>
+                                    <Text style={[styles.valueCardVar, !isPending && paidVar !== 0 && styles.varianceRed]}>
+                                      {isPending
+                                        ? "Wait"
+                                        : paidVar === 0
+                                          ? "—"
+                                          : `${paidVar > 0 ? "+" : ""}${formatINR(paidVar)}`}
+                                    </Text>
+                                  </View>
+                                </View>
+                              </View>
+
+                              <View style={styles.netDueCard}>
+                                <Text style={styles.netDueTitle}>Net Trip Due</Text>
                                 <Text
                                   style={[
-                                    styles.reconNetBarAmount,
-                                    isPending && styles.varianceWait,
-                                    !isPending &&
-                                      row.internal &&
-                                      netInt < 0 &&
-                                      styles.reconNetBarAmountNegative,
-                                    !isPending &&
-                                      row.internal &&
-                                      netInt >= 0 &&
-                                      styles.reconNetBarAmountNonNegative,
+                                    styles.netDueValue,
+                                    netInt < 0
+                                      ? styles.netDueValueNegative
+                                      : styles.netDueValueNonNegative,
                                   ]}
-                                  numberOfLines={1}
                                 >
-                                  {isPending
-                                    ? "Wait"
-                                    : row.internal
-                                      ? formatINR(netInt)
-                                      : "—"}
+                                  {isPending ? "Wait" : row.internal ? formatINR(netInt) : "—"}
                                 </Text>
                               </View>
                             </View>
@@ -1490,7 +1475,7 @@ export function SharedLedgerContent({
                                           <FontAwesome
                                             name="edit"
                                             size={12}
-                                            color={Theme.textOnDark}
+                                            color="#16A34A"
                                           />
                                           <Text style={styles.varianceBtnUpdateText}>
                                             Update My Book
@@ -1515,7 +1500,7 @@ export function SharedLedgerContent({
                                           <FontAwesome
                                             name="exclamation-triangle"
                                             size={12}
-                                            color={Theme.textOnDark}
+                                            color="#111827"
                                           />
                                           <Text style={styles.varianceBtnDisputeText}>
                                             Raise Dispute
@@ -1537,6 +1522,49 @@ export function SharedLedgerContent({
           </View>
         </>
       )}
+
+      <Modal
+        visible={Platform.OS === "web" && !!pendingAcceptDispute}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPendingAcceptDispute(null)}
+      >
+        <View style={styles.confirmModalOverlay}>
+          <View style={styles.confirmModalCard}>
+            <Text style={styles.confirmModalTitle}>Accept partner&apos;s view?</Text>
+            <Text style={styles.confirmModalText}>
+              Your ledger for this trip will be updated to match the partner&apos;s
+              numbers. This cannot be undone.
+            </Text>
+            <View style={styles.confirmModalActions}>
+              <TouchableOpacity
+                style={styles.confirmModalCancelBtn}
+                onPress={() => setPendingAcceptDispute(null)}
+                disabled={actionLoading}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.confirmModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.confirmModalConfirmBtn,
+                  actionLoading && styles.btnDisabled,
+                ]}
+                onPress={() =>
+                  pendingAcceptDispute &&
+                  void executeAcceptReceivedDispute(pendingAcceptDispute)
+                }
+                disabled={actionLoading || !pendingAcceptDispute}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.confirmModalConfirmText}>
+                  Accept &amp; update
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Dispute modal */}
       <Modal
@@ -1994,168 +2022,146 @@ const styles = StyleSheet.create({
   cellMismatch: { color: Theme.teslaRed },
   cellPending: { color: Theme.driverGold, fontStyle: "italic" },
   expandedWrap: {
-    paddingVertical: 16,
-    paddingHorizontal: 0,
-    backgroundColor: Theme.screenBackground,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    marginTop: 8,
+    overflow: "hidden",
   },
   reconHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    backgroundColor: "#161616",
     paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   reconTitle: {
     fontSize: 10,
     fontWeight: "800",
-    color: Theme.textMutedDemo,
-    letterSpacing: 1.5,
+    color: "#FFFFFF",
+    letterSpacing: 1,
   },
-  reconRef: { fontSize: 10, color: Theme.textMuted, fontFamily: "monospace" },
-  reconCard: {
-    backgroundColor: Theme.screenBackground,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
+  reconRef: { 
+    fontSize: 10, 
+    color: "#FFFFFF", 
+    fontFamily: "monospace" 
+  },
+  reconCardsContainer: {
+    padding: 16,
+    gap: 12,
+  },
+  valueCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
     borderColor: Theme.borderLight,
-    overflow: "hidden",
+    padding: 16,
   },
-  reconRowHeader: {
-    flexDirection: "row",
-    backgroundColor: Theme.screenBackground,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-  },
-  reconColLabel: {
-    flex: 1,
-    fontSize: 9,
+  valueCardTitle: {
+    fontSize: 10,
     fontWeight: "800",
     color: Theme.textMutedDemo,
+    letterSpacing: 1,
+    marginBottom: 16,
+    textTransform: "uppercase",
   },
-  reconColRight: {
-    width: 72,
-    fontSize: 11,
+  valueCardRowHeader: {
+    flexDirection: "row",
+    marginBottom: 12,
+  },
+  valueCardColHeader: {
+    fontSize: 10,
     fontWeight: "700",
-    textAlign: "right" as const,
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+  },
+  valueCardColLeft: {
+    flex: 1,
+    textAlign: "left",
+    alignItems: "flex-start",
+  },
+  valueCardColCenter: {
+    flex: 1,
+    textAlign: "center",
+    alignItems: "center",
+  },
+  valueCardColRight: {
+    flex: 0.8,
+    textAlign: "right",
+    alignItems: "flex-end",
+  },
+  valueCardRowValues: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  valueCardColValueContainer: {
+    justifyContent: "center",
+  },
+  valueCardValue: {
+    fontSize: 15,
+    fontWeight: "500",
     color: Theme.textPrimaryDark,
   },
-  reconColMy: { color: Theme.textPrimaryDark },
-  reconColPartner: { color: Theme.primary },
-  reconSectionLabel: {
-    backgroundColor: Theme.screenBackground,
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
+  valueCardDate: {
+    fontSize: 10,
+    color: Theme.textMuted,
+    marginTop: 4,
   },
-  reconSectionText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textMutedDemo,
-    letterSpacing: 1,
+  valueCardVar: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
   },
-  reconSectionLabelPaid: {
-    backgroundColor: Theme.positiveMuted,
-    paddingVertical: 5,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-  },
-  reconSectionTextPaid: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.darkGreen,
-    letterSpacing: 1,
-  },
-  reconDataRow: {
+  netDueCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 16,
     flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.surfaceLight,
-  },
-  reconPaidCompactRow: {
-    flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.surfaceLight,
-    gap: 10,
-  },
-  reconPaidCompactLabel: {
-    flexShrink: 0,
-    fontSize: 11,
-    fontWeight: "600",
-    color: Theme.textMutedDemo,
-  },
-  reconPaidCompactValues: {
-    flex: 1,
-    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 8,
-    minWidth: 0,
   },
-  reconPaidCompactAmt: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 11,
+  netDueTitle: {
+    fontSize: 10,
     fontWeight: "700",
-    textAlign: "right" as const,
+    color: Theme.textMutedDemo,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  netDueValue: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+  },
+  netDueValueNegative: {
+    color: Theme.teslaRed,
+  },
+  netDueValueNonNegative: {
+    color: Theme.textPrimaryDark,
   },
   varianceRed: { color: Theme.teslaRed },
-  varianceAmber: { color: Theme.driverGold, fontStyle: "italic" },
+  varianceAmber: { color: Theme.warning, fontStyle: "italic" },
   varianceMatch: { color: Theme.darkGreen },
   textPaid: { color: Theme.darkGreen },
-  reconNetBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: Theme.ledgerNetBarBg,
-  },
-  reconNetBarLabel: {
-    flexShrink: 0,
-    fontSize: 12,
-    fontWeight: "800",
-    color: Theme.textOnDark,
-    letterSpacing: 0.2,
-  },
-  reconNetBarAmount: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: "800",
-    textAlign: "right" as const,
-    color: Theme.textOnDark,
-    marginLeft: 12,
-  },
-  reconNetBarAmountNegative: {
-    color: Theme.ledgerNetDueAccent,
-  },
-  reconNetBarAmountNonNegative: {
-    color: Theme.textOnDark,
-  },
   varianceWait: {
     color: Theme.textMuted,
     fontStyle: "italic",
   },
   varianceActionCard: {
-    marginTop: 10,
+    marginTop: 4,
     marginHorizontal: 16,
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 12,
-    backgroundColor: Theme.surfaceLight,
-    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: "#E5E7EB",
   },
   varianceActionWaitingBlock: {
     width: "100%" as const,
@@ -2166,10 +2172,10 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
   },
   varianceActionTitle: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: Theme.warning,
-    marginBottom: 10,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#C62828",
+    marginBottom: 12,
   },
   varianceActionTitleWaiting: {
     marginBottom: 4,
@@ -2202,33 +2208,37 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    backgroundColor: Theme.darkGreen,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    minHeight: 44,
+    backgroundColor: "#FFFFFF",
+    borderColor: "#16A34A",
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    minHeight: 48,
   },
   varianceBtnUpdateText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: Theme.textOnDark,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#16A34A",
+    marginLeft: 6,
   },
   varianceBtnDispute: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    backgroundColor: Theme.ledgerNetBarBg,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    minHeight: 44,
+    backgroundColor: "#FFFFFF",
+    borderColor: "#111827",
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    minHeight: 48,
   },
   varianceBtnDisputeText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: Theme.textOnDark,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#111827",
+    marginLeft: 6,
   },
   receivedBar: {
     marginTop: 16,
@@ -2353,6 +2363,11 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     minHeight: 64,
     textAlignVertical: "top",
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   modalActions: {
     flexDirection: "row",
@@ -2384,6 +2399,67 @@ const styles = StyleSheet.create({
   modalBtnPrimaryText: {
     fontSize: 12,
     fontWeight: "700",
+    color: Theme.textOnPrimary,
+  },
+  confirmModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(11, 16, 32, 0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  confirmModalCard: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: Theme.surfaceLight,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    borderRadius: 16,
+    padding: 16,
+    gap: 10,
+  },
+  confirmModalTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  confirmModalText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: Theme.textMuted,
+  },
+  confirmModalActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 6,
+  },
+  confirmModalCancelBtn: {
+    flex: 1,
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  confirmModalCancelText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  confirmModalConfirmBtn: {
+    flex: 1,
+    minHeight: 44,
+    backgroundColor: Theme.primary,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  confirmModalConfirmText: {
+    fontSize: 12,
+    fontWeight: "800",
     color: Theme.textOnPrimary,
   },
   emptyTable: {

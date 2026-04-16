@@ -5,7 +5,19 @@
  */
 import { DEFAULT_PAGE_SIZE, type PageOpts } from "@/lib/pagination";
 import { supabase } from "@/lib/supabase";
-import type { DriverFormData } from "../components/AddDriverModal";
+
+export interface CreateDriverServiceData {
+  driverSource?: string;
+  name: string;
+  phone: string | null;
+  email?: string | null;
+  emergencyContact?: string;
+  emergencyName?: string;
+  licenseNumber?: string;
+  payableAmount?: number | null;
+  commissionPercent?: number | null;
+  commissionPerKm?: number | null;
+}
 
 export interface DriverRow {
   id: string;
@@ -28,6 +40,9 @@ export interface DriverRow {
   commission_percent?: number | null;
   /** Per-kilometer rate for the driver (nullable). */
   commission_per_km?: number | null;
+  /** Optional linked profile avatar fields when joined via RPC/view. */
+  avatar_url?: string | null;
+  avatar_seed?: string | null;
 }
 
 /**
@@ -50,6 +65,22 @@ export async function getDriversByOrganization(
   orgId: string,
   opts?: PageOpts,
 ): Promise<{ error: Error | null; drivers: DriverRow[]; hasMore?: boolean }> {
+  // Try profile-joined RPC first (returns avatar_url + avatar_seed from profiles via user_id join).
+  if (opts == null) {
+    try {
+      const { data, error: rpcError } = await supabase().rpc(
+        "get_drivers_with_profiles",
+        { p_org_id: orgId },
+      );
+      if (!rpcError && data) {
+        const raw = excludeTrackingOnly((data ?? []) as DriverRow[]);
+        return { error: null, drivers: raw.map((d) => normalizeDriverRow(d)) };
+      }
+    } catch {
+      // Fall through to direct select
+    }
+  }
+
   const base = () =>
     supabase()
       .from("drivers")
@@ -103,7 +134,7 @@ function normalizePhone(phone: string | null | undefined): string {
  */
 export async function createDriver(
   orgId: string,
-  data: DriverFormData,
+  data: CreateDriverServiceData,
 ): Promise<{ error: Error | null; driver: DriverRow | null }> {
   const phoneNorm = normalizePhone(data.phone);
   if (phoneNorm) {
@@ -144,8 +175,9 @@ export async function createDriver(
 
 export interface UpdateDriverData {
   name?: string;
-  phone?: string;
-  email?: string;
+  phone?: string | null;
+  email?: string | null;
+  status?: string;
   assigned_vehicle_id?: string | null;
   /** Set to null to reconnect a driver who had left (clear left_at). */
   left_at?: null;
@@ -225,6 +257,8 @@ export interface DriverInviteRow {
   responded_at: string | null;
   responded_by: string | null;
   from_org_name: string | null;
+  from_org_logo_url?: string | null;
+  from_org_avatar_url?: string | null;
   payable_amount: number | null;
   commission_percent: number | null;
   commission_per_km: number | null;
@@ -240,8 +274,17 @@ export interface ExistingDriverMatch {
   emergency_contact_phone: string | null;
   /** Driving license number (from profiles.license_number when RPC returns it). */
   license_number: string | null;
+  /** Optional avatar path/url from profile metadata (when RPC provides it). */
+  avatar_url?: string | null;
+  /** Optional avatar preset seed (when RPC provides it). */
+  avatar_seed?: string | null;
   /** True when driver is currently connected to at least one fleet (left_at is null). */
   is_in_fleet?: boolean;
+}
+
+export interface DriverProfileAvatar {
+  avatar_url: string | null;
+  avatar_seed: string | null;
 }
 
 /**
@@ -266,6 +309,10 @@ export async function searchExistingDriversByPhone(phone: string): Promise<{
     emergency_contact_name?: string | null;
     emergency_contact_phone?: string | null;
     license_number?: string | null;
+    avatar_url?: string | null;
+    avatarUrl?: string | null;
+    avatar_seed?: string | null;
+    avatarSeed?: string | null;
     is_in_fleet?: boolean | null;
   }[];
   const matches: ExistingDriverMatch[] = [];
@@ -280,10 +327,36 @@ export async function searchExistingDriversByPhone(phone: string): Promise<{
         emergency_contact_name: r.emergency_contact_name ?? null,
         emergency_contact_phone: r.emergency_contact_phone ?? null,
         license_number: r.license_number ?? null,
+        avatar_url: r.avatar_url ?? r.avatarUrl ?? null,
+        avatar_seed: r.avatar_seed ?? r.avatarSeed ?? null,
         is_in_fleet: r.is_in_fleet === true,
       });
   }
   return { error: null, matches };
+}
+
+/** Fetch avatar metadata for a matched driver profile. */
+export async function getDriverProfileAvatar(
+  userId: string,
+): Promise<{ error: Error | null; avatar: DriverProfileAvatar | null }> {
+  const id = (userId || "").trim();
+  if (!id) return { error: null, avatar: null };
+  const { data, error } = await supabase()
+    .from("profiles")
+    .select("avatar_url, avatar_seed")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), avatar: null };
+  const row = data as { avatar_url?: string | null; avatar_seed?: string | null } | null;
+  return {
+    error: null,
+    avatar: row
+      ? {
+          avatar_url: row.avatar_url ?? null,
+          avatar_seed: row.avatar_seed ?? null,
+        }
+      : null,
+  };
 }
 
 /**
@@ -382,6 +455,51 @@ async function createDriverInvite(
 }
 
 /**
+ * Re-open a previously rejected/declined invite by updating it back to pending.
+ * This enables explicit "Invite again" flows without creating duplicate rows.
+ */
+async function reopenDriverInvite(
+  fromOrganizationId: string,
+  toUserId: string,
+  fromOrgName?: string | null,
+  inviteeName?: string | null,
+  offer?: DriverInviteOffer | null,
+): Promise<{ error: Error | null; reopened: boolean }> {
+  const { data, error } = await supabase().rpc("reopen_driver_invite", {
+    p_org_id: fromOrganizationId,
+    p_to_user_id: toUserId,
+    p_from_org_name: fromOrgName ?? null,
+    p_invitee_name: (inviteeName ?? "").trim() || null,
+    p_payable_amount:
+      offer?.payableAmount != null && offer.payableAmount > 0
+        ? offer.payableAmount
+        : null,
+    p_commission_percent:
+      offer?.commissionPercent != null && offer.commissionPercent >= 0
+        ? offer.commissionPercent
+        : null,
+    p_commission_per_km:
+      offer?.commissionPerKm != null && offer.commissionPerKm >= 0
+        ? offer.commissionPerKm
+        : null,
+  });
+  if (error) {
+    const msg = error.message ?? "";
+    if (/function.*reopen_driver_invite.*does not exist/i.test(msg)) {
+      return {
+        error: new Error(
+          "Server update required for re-invite. Please ask admin to run latest database migrations."
+        ),
+        reopened: false,
+      };
+    }
+    return { error: new Error(msg), reopened: false };
+  }
+  const obj = data as { ok?: boolean } | null;
+  return { error: null, reopened: obj?.ok === true };
+}
+
+/**
  * Send driver invitation:
  * - If a driver account exists with this phone (get_driver_invitee_by_phone): create driver_invites
  *   so they see the invite in the app and can Accept (creates driver row in your org).
@@ -389,8 +507,11 @@ async function createDriverInvite(
  */
 export async function inviteDriver(
   orgId: string,
-  data: DriverFormData,
+  data: CreateDriverServiceData,
   orgName?: string | null,
+  options?: {
+    allowReinviteRejected?: boolean;
+  },
 ): Promise<{
   error: Error | null;
   driver: DriverRow | null;
@@ -452,6 +573,55 @@ export async function inviteDriver(
     }
 
     if (existingStatus) {
+      const normalizedStatus = existingStatus.toLowerCase();
+      if (
+        options?.allowReinviteRejected === true &&
+        (normalizedStatus === "rejected" || normalizedStatus === "declined")
+      ) {
+        const offer: DriverInviteOffer | null =
+          data.payableAmount != null ||
+          data.commissionPercent != null ||
+          data.commissionPerKm != null
+            ? {
+                payableAmount: data.payableAmount ?? null,
+                commissionPercent: data.commissionPercent ?? null,
+                commissionPerKm: data.commissionPerKm ?? null,
+              }
+            : null;
+        const { error: reopenError, reopened } = await reopenDriverInvite(
+          orgId,
+          toUserId,
+          orgName,
+          invitee.full_name ?? null,
+          offer,
+        );
+        if (reopenError) {
+          return { error: reopenError, driver: null, inviteSent: false };
+        }
+        if (reopened) {
+          const verify = await getDriverInviteSentStatus(orgId, toUserId);
+          if (verify.error) {
+            return { error: verify.error, driver: null, inviteSent: false };
+          }
+          if ((verify.status ?? "").toLowerCase() !== "pending") {
+            return {
+              error: new Error(
+                "Re-invite could not be activated. Please try again."
+              ),
+              driver: null,
+              inviteSent: false,
+            };
+          }
+          return { error: null, driver: null, inviteSent: true };
+        }
+        return {
+          error: new Error(
+            "Re-invite could not be activated. Please try again."
+          ),
+          driver: null,
+          inviteSent: false,
+        };
+      }
       return {
         error: null,
         driver: null,
@@ -809,6 +979,8 @@ export interface DriverInviteSentRow {
   driver_name: string | null;
   status: string;
   created_at: string;
+  /** Invitee auth user; used to hide accepted invites when they already appear on the driver roster. */
+  to_user_id?: string | null;
 }
 
 /** Match state when a manual driver's phone later signs up in app. */
@@ -824,6 +996,43 @@ export interface DriverOffer {
   payableAmount: number | null;
   commissionPercent: number | null;
   commissionPerKm: number | null;
+}
+
+/**
+ * Fetch display profile (name/avatar) for a driver's linked user profile.
+ * Uses RPC get_driver_profile_display (SECURITY DEFINER) to read profile safely.
+ */
+export async function getDriverProfileDisplay(driverId: string): Promise<{
+  error: Error | null;
+  profile: { fullName: string; avatarUrl?: string; avatarSeed?: string } | null;
+}> {
+  const normalizedDriverId = (driverId ?? "").trim();
+  if (!normalizedDriverId) return { error: null, profile: null };
+
+  const { data, error } = await supabase().rpc("get_driver_profile_display", {
+    p_driver_id: normalizedDriverId,
+  });
+  if (error) {
+    return { error: new Error(error.message), profile: null };
+  }
+  if (data == null || typeof data !== "object") {
+    return { error: null, profile: null };
+  }
+
+  const raw = data as {
+    fullName?: string;
+    avatarUrl?: string;
+    avatarSeed?: string;
+  };
+
+  return {
+    error: null,
+    profile: {
+      fullName: (raw.fullName ?? "").trim(),
+      avatarUrl: (raw.avatarUrl ?? "").trim(),
+      avatarSeed: (raw.avatarSeed ?? "").trim(),
+    },
+  };
 }
 
 /**
@@ -937,7 +1146,7 @@ export async function getDriverInvitesSent(orgId: string): Promise<{
     // Fallback: show invites even when the RPC isn't available (e.g. not deployed yet / RLS differences).
     const { data: fallback, error: fallbackErr } = await supabase()
       .from("driver_invites")
-      .select("id, from_org_name, invitee_name, status, created_at")
+      .select("id, from_org_name, invitee_name, status, created_at, to_user_id")
       .eq("from_organization_id", orgId)
       .order("created_at", { ascending: false });
     if (fallbackErr) return { error: new Error(fallbackErr.message), invites: [] };
@@ -949,7 +1158,12 @@ export async function getDriverInvitesSent(orgId: string): Promise<{
         invitee_name: string | null;
         status: string;
         created_at: string;
-      }>).map((r) => ({ ...r, driver_name: r.invitee_name ?? null })),
+        to_user_id?: string | null;
+      }>).map((r) => ({
+        ...r,
+        driver_name: r.invitee_name ?? null,
+        to_user_id: r.to_user_id ?? null,
+      })),
     };
   }
   return { error: null, invites: (data ?? []) as DriverInviteSentRow[] };
@@ -1020,7 +1234,7 @@ export async function sendDriverSignupMatchInvite(
   }
   return {
     error: null,
-    ok: obj?.ok !== false,
+    ok: obj?.ok ?? true,
     already_exists: Boolean(obj?.already_exists),
     status: obj?.status ?? null,
   };
@@ -1106,6 +1320,25 @@ export async function rejectDriverInvite(
   });
   if (error) return { error: new Error(error.message) };
   return { error: null };
+}
+
+/**
+ * Cancel a driver invite that you have sent.
+ * Deletes the pending invite row.
+ */
+export async function cancelDriverInvite(inviteId: string): Promise<{
+  error: Error | null;
+  deleted: boolean;
+}> {
+  const { data: deleteData, error } = await supabase()
+    .from("driver_invites")
+    .delete()
+    .eq("id", inviteId)
+    .eq("status", "pending")
+    .select("id");
+  if (error) return { error: new Error(error.message), deleted: false };
+  const deleted = Array.isArray(deleteData) && deleteData.length > 0;
+  return { error: null, deleted };
 }
 
 /**

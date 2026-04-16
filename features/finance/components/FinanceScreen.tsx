@@ -1,16 +1,18 @@
 import type { DriverPaymentType, PartyOption, TripOption } from "@/components/AddTransactionModal";
-import { TeslaHeader } from "@/components/TeslaHeader";
+import { FinanceFAB } from "@/components/FinanceFAB";
+import { Layout } from "@/constants/Layout";
+import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { AIInsightsPanel } from "@/features/ai";
-import { aggregateCustomers, aggregateDrivers, aggregateSuppliers, type DriverOfferForAggregation } from "@/features/finance/aggregation";
 import type { ClientRow, UpdateClientData } from "@/features/clients/services/clients.service";
 import { updateClient } from "@/features/clients/services/clients.service";
 import {
   getDriverLedgerByDriver,
   type DriverLedgerRow
 } from "@/features/drivers/services/drivers.service";
+import { aggregateCustomers, aggregateDrivers, aggregateSuppliers, type DriverOfferForAggregation } from "@/features/finance/aggregation";
 import type { SupplierRow, UpdateSupplierData } from "@/features/suppliers/services/suppliers.service";
 import { updateSupplier } from "@/features/suppliers/services/suppliers.service";
 import { getTripDisplayNumber, type TripRow } from "@/features/trips";
@@ -22,8 +24,6 @@ import {
   canAccessFinance,
   getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
-import { Layout } from "@/constants/Layout";
-import Theme from "@/constants/Theme";
 import { formatIndianVehicleNumber, formatLedgerDate } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import {
@@ -33,19 +33,19 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Platform,
   Text,
   View,
-  useWindowDimensions,
-  ActivityIndicator
+  useWindowDimensions
 } from "react-native";
-import { FinanceFAB } from "@/components/FinanceFAB";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFinanceAddEntityHandlers } from "../hooks/useFinanceAddEntityHandlers";
 import { useFinanceEntities } from "../hooks/useFinanceEntities";
 import { useFinanceLedger } from "../hooks/useFinanceLedger";
 import { useFinanceTransactionSubmit } from "../hooks/useFinanceTransactionSubmit";
 import type { LedgerRow } from "../services/finance.service";
-import { updateLedgerEntry } from "../services/finance.service";
+import { getProfileImage, updateLedgerEntry } from "../services/finance.service";
 import type { FinanceSubTab } from "../types";
 import type { TripEntryContext } from "./EntityDetailOverlay";
 import { EntityListCategoryModal } from "./EntityListCategoryModal";
@@ -100,6 +100,8 @@ function createReportRow({
 
 export function FinanceScreen() {
   const insets = useSafeAreaInsets();
+  const screenTopPad =
+    Platform.OS === "web" ? 0 : insets.top + Layout.headerPaddingBelowInset;
   const { width: screenWidth } = useWindowDimensions();
   const router = useRouter();
   const { t } = useLanguage();
@@ -122,11 +124,18 @@ export function FinanceScreen() {
     canAccess,
     refreshKey: entitiesRefreshKey,
   });
+  const allTripsForLedger = useMemo(
+    () => [...entities.tripRows, ...entities.tripsWhereOrgIsSupplier],
+    [entities.tripRows, entities.tripsWhereOrgIsSupplier],
+  );
+
   const ledger = useFinanceLedger({
     organizationId: currentOrganization?.id ?? null,
     canAccess,
-    tripRows: entities.tripRows,
+    tripRows: allTripsForLedger,
     vehicleRows: entities.vehicleRows,
+    clients: entities.clientRows,
+    suppliers: entities.supplierRows,
   });
   const {
     clients,
@@ -172,8 +181,11 @@ export function FinanceScreen() {
     getVehicleNumberForTripId,
     tripPartyMap,
     tripDetailsMap,
+    clearFilters: ledgerClearFilters,
+    isAnyFilterActive: ledgerAnyFilterActive,
   } = ledger;
 
+  const [entityFilter, setEntityFilter] = useState<EntityListFilter>("all");
   const [financeSubTab, setFinanceSubTab] = useState<FinanceSubTab>("cash");
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showAddClientModal, setShowAddClientModal] = useState(false);
@@ -183,7 +195,60 @@ export function FinanceScreen() {
   const [editingEntry, setEditingEntry] = useState<LedgerRow | null>(null);
   const [tabTotals, setTabTotals] = useState({ totalIn: 0, totalOut: 0 });
   const [refreshing, setRefreshing] = useState(false);
-  const [entityFilter, setEntityFilter] = useState<EntityListFilter>("all");
+  const [profileImages, setProfileImages] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchProfileImages = async () => {
+      const pending = new Map<string, { id: string; type: "client" | "supplier" | "driver" }>();
+      for (const row of filteredLedgerForDisplay) {
+        const id = (row.contact_id ?? "").trim();
+        const type = row.contact_type;
+        if (!id || !type) continue;
+        if (profileImages[id]) continue;
+        const dedupeKey = `${type}:${id}`;
+        if (!pending.has(dedupeKey)) {
+          pending.set(dedupeKey, { id, type });
+        }
+      }
+
+      if (pending.size === 0) return;
+      const entries = Array.from(pending.values());
+      const resolved = await Promise.all(
+        entries.map(async ({ id, type }) => {
+          const uri = await getProfileImage(id, type);
+          return uri ? ([id, uri] as const) : null;
+        }),
+      );
+
+      if (cancelled) return;
+      const next: Record<string, string> = {};
+      for (const row of resolved) {
+        if (!row) continue;
+        next[row[0]] = row[1];
+      }
+      if (Object.keys(next).length > 0) {
+        setProfileImages((prev) => ({ ...prev, ...next }));
+      }
+    };
+
+    void fetchProfileImages();
+    return () => {
+      cancelled = true;
+    };
+  }, [filteredLedgerForDisplay, profileImages]);
+
+  const isAnyFilterActive = useMemo(
+    () => ledgerAnyFilterActive || entityFilter !== "all",
+    [ledgerAnyFilterActive, entityFilter],
+  );
+
+  const handleClearFilters = useCallback(() => {
+    ledgerClearFilters();
+    setEntityFilter("all");
+  }, [ledgerClearFilters]);
+
   const [showEntityListModal, setShowEntityListModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showSharedLedgerModal, setShowSharedLedgerModal] = useState(false);
@@ -473,7 +538,7 @@ export function FinanceScreen() {
     if (financeSubTab === "suppliers") {
       const { rows } = aggregateSuppliers(
         supplierRows,
-        tripRows,
+        allTripsForLedger,
         ledgerRows,
         tripsWhereOrgIsClient,
         tripPartyMap,
@@ -1025,17 +1090,8 @@ export function FinanceScreen() {
 
   if (isOrgLoading) {
     return (
-      <View style={styles.container}>
-        <View style={[styles.darkBlock, { paddingTop: 0 }]}>
-          <TeslaHeader
-            title={t("treasury")}
-            subtitle={t("fiscalMatrix")}
-            onLoadClick={() => router.push("/load-board")}
-            onNetworkClick={() => router.push("/(tabs)/network")}
-            onProfileClick={() => router.push("/(tabs)/profile")}
-          />
-        </View>
-        <View style={[styles.centered, { flex: 1, paddingTop: insets.top + 24 }]}>
+      <View style={[styles.container, { paddingTop: screenTopPad }]}>
+        <View style={[styles.centered, { flex: 1, paddingTop: 24 }]}>
           <ActivityIndicator size="large" color={Theme.primary} />
         </View>
       </View>
@@ -1044,18 +1100,9 @@ export function FinanceScreen() {
 
   if (!orgId) {
     return (
-      <View style={styles.container}>
-        <View style={[styles.darkBlock, { paddingTop: 0 }]}>
-          <TeslaHeader
-            title={t("treasury")}
-            subtitle={t("fiscalMatrix")}
-            onLoadClick={() => router.push("/load-board")}
-            onNetworkClick={() => router.push("/(tabs)/network")}
-            onProfileClick={() => router.push("/(tabs)/profile")}
-          />
-        </View>
+      <View style={[styles.container, { paddingTop: screenTopPad }]}>
         <View
-          style={[styles.centered, { flex: 1, paddingTop: insets.top + 24 }]}
+          style={[styles.centered, { flex: 1, paddingTop: 24 }]}
         >
           <Text style={styles.message}>{t("noOrganization")}</Text>
           <Text
@@ -1072,7 +1119,7 @@ export function FinanceScreen() {
   }
 
   return (
-    <View style={styles.container} testID="finance-tab-screen">
+    <View style={[styles.container, { paddingTop: screenTopPad }]} testID="finance-tab-screen">
       <FinanceSummarySection
         title={t("treasury")}
         subtitle={t("fiscalMatrix")}
@@ -1102,12 +1149,18 @@ export function FinanceScreen() {
                 )
             : undefined
         }
+        ledgerCategory={financeSubTab === "cash" ? selectedLedgerCategory : undefined}
+        onLedgerCategoryChange={
+          financeSubTab === "cash" ? setSelectedLedgerCategory : undefined
+        }
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         searchPlaceholder={
           financeSubTab === "cash"
             ? t("searchPartyDescription")
-            : t("searchEntities")
+            : financeSubTab === "customers" || financeSubTab === "suppliers"
+              ? "Find by name..."
+              : t("searchEntities")
         }
         onReportPress={() => setShowReportModal(true)}
         entityFilter={
@@ -1151,9 +1204,11 @@ export function FinanceScreen() {
           financeSubTab === "cash" ? "transaction" : undefined
         }
         onLedgerViewModeChange={undefined}
+        onClearFilters={handleClearFilters}
+        isAnyFilterActive={isAnyFilterActive}
       />
       <View style={styles.tableScroll}>
-        <View style={{ flex: 1 }}>
+        <View style={styles.tableScrollInner}>
           <View style={styles.ledgerCardWrap}>
             <FinanceTabBody
               financeSubTab={financeSubTab}
@@ -1169,7 +1224,7 @@ export function FinanceScreen() {
               tripDetailsMap={tripDetailsMap}
               onLedgerMissionChange={handleLedgerMissionChange}
               clientRows={clientRows}
-              tripRows={tripRows}
+              tripRows={allTripsForLedger}
               supplierRows={supplierRows}
               tripsWhereOrgIsClient={tripsWhereOrgIsClient}
               tripsWhereOrgIsSupplier={tripsWhereOrgIsSupplier}
@@ -1199,7 +1254,13 @@ export function FinanceScreen() {
               }
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              bottomInset={24 + insets.bottom + 120}
+              bottomInset={
+                24 +
+                insets.bottom +
+                Layout.demoTabBarScrollBottomInset +
+                40
+              }
+              profileImages={profileImages}
             />
           </View>
         </View>
@@ -1214,7 +1275,11 @@ export function FinanceScreen() {
               : financeSubTab === "suppliers"
                 ? () => router.push("/(modals)/add-supplier" as const)
                 : financeSubTab === "garage"
-                  ? () => router.push("/(modals)/add-vehicle" as const)
+                  ? () =>
+                      router.push({
+                        pathname: "/(modals)/add-vehicle",
+                        params: { returnTo: "/(tabs)/finance" },
+                      })
                   : financeSubTab === "drivers"
                     ? () => router.push("/(modals)/add-driver" as const)
                     : undefined;
@@ -1223,7 +1288,12 @@ export function FinanceScreen() {
           <View
             style={[
               styles.fabAbsoluteWrap,
-              { bottom: Layout.fabBottomOffset + insets.bottom },
+              {
+                bottom:
+                  Layout.demoTabBarScrollBottomInset +
+                  insets.bottom +
+                  Layout.tabBarBottomPaddingMin,
+              },
             ]}
           >
             <FinanceFAB
@@ -1496,6 +1566,9 @@ export function FinanceScreen() {
         }))}
         suppliersList={suppliersList}
         tripCountByParty={tripCountByParty}
+        linkedClientIdByOrgId={uniqueLinkedClientIdByOrgId}
+        linkedSupplierIdByOrgId={uniqueLinkedSupplierIdByOrgId}
+        viewerOrgId={orgId}
       />
 
       <EntityListCategoryModal

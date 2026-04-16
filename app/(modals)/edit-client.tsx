@@ -14,8 +14,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 
 function closeModal(router: ReturnType<typeof useRouter>) {
-  if (router.canGoBack()) router.back();
-  else router.replace("/(tabs)/finance");
+  router.replace("/(tabs)/network");
 }
 
 export default function EditClientScreen() {

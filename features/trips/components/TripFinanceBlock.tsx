@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -923,6 +924,11 @@ const styles = StyleSheet.create({
     borderColor: Theme.separatorDark,
     paddingVertical: 6,
     paddingHorizontal: 8,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   adjReasonInput: {
     flex: 1,
@@ -934,6 +940,11 @@ const styles = StyleSheet.create({
     borderBottomColor: Theme.separatorDark,
     paddingVertical: 6,
     textTransform: "uppercase",
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   adjRemoveBtn: { padding: 6 },
   adjButtons: { flexDirection: "row", gap: 12, marginTop: 8, marginBottom: 16 },

@@ -4,7 +4,7 @@
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { formatIndianVehicleNumber, formatIndianVehicleNumberInput } from "@/lib/format";
+import { formatIndianVehicleNumber, formatIndianVehicleNumberInput, formatMobileNumber } from "@/lib/format";
 import { validatePhone } from "@/lib/phoneValidation";
 import { type ClientRow } from "@/features/clients/services/clients.service";
 import {
@@ -29,6 +29,7 @@ import {
     Dimensions,
     FlatList,
     Modal,
+    Platform,
     ScrollView,
     StyleSheet,
     Switch,
@@ -205,13 +206,17 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   input: {
-    borderWidth: 1,
     borderRadius: 10,
     paddingHorizontal: Layout.screenPaddingHorizontal - 2,
     paddingVertical: 12,
     fontSize: 14,
     minHeight: Layout.minTouchTargetSize,
     marginBottom: Layout.screenPaddingHorizontal - 2,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   notesInput: {
     minHeight: 88,
@@ -1291,15 +1296,36 @@ export function AddTripFormFields({
             spellCheck={false}
             autoComplete="off"
           />
+          <View style={[styles.checkRow, { marginTop: 12 }]}>
+            <Switch
+              value={state.assignLater}
+              onValueChange={setters.setAssignLater}
+              trackColor={{ false: Theme.borderInput, true: Theme.primaryText }}
+              thumbColor={Theme.screenBackground}
+            />
+            <Text style={styles.checkLabel}>
+              Assign later (vehicle & driver phone from trip detail)
+            </Text>
+          </View>
+          {state.assignLater && (
+            <Text
+              style={[
+                styles.warningText,
+                { marginBottom: Layout.screenPaddingHorizontal - 4 },
+              ]}
+            >
+              Vehicle & Driver must be assigned before trip start.
+            </Text>
+          )}
           <Text style={[styles.sectionTitle, { marginTop: 12, marginBottom: 6 }]}>
-            DRIVER FOR TRACKING (PHONE) *
+            DRIVER FOR TRACKING (PHONE) {!state.assignLater ? "*" : ""}
           </Text>
           <TextInput
             style={baseInput}
-            placeholder="e.g. +91 98765 43210 (required)"
+            placeholder={state.assignLater ? "e.g. +91 98765 43210 (optional)" : "e.g. +91 98765 43210 (required)"}
             placeholderTextColor={Theme.placeholder}
             value={state.driverPhone}
-            onChangeText={setters.setDriverPhone}
+            onChangeText={(v) => setters.setDriverPhone(formatMobileNumber(v))}
             keyboardType="phone-pad"
             autoCorrect={false}
             spellCheck={false}
@@ -1375,10 +1401,10 @@ export function AddTripFormFields({
               </Text>
             </View>
           ) : null}
-          <Text style={[label, { marginTop: 12 }]}>Vehicle *</Text>
+          <Text style={[label, { marginTop: 12 }]}>Vehicle {!state.assignLater ? "*" : ""}</Text>
           <TextInput
             style={baseInput}
-            placeholder="e.g. TN 67 GH 7654 (required)"
+            placeholder={state.assignLater ? "e.g. TN 67 GH 7654 (optional)" : "e.g. TN 67 GH 7654 (required)"}
             placeholderTextColor={Theme.placeholder}
             value={state.aggregateVehicleText}
             onChangeText={(v) => setters.setAggregateVehicleText(formatIndianVehicleNumberInput(v))}

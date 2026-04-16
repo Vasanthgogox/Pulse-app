@@ -15,7 +15,8 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Theme from "@/constants/Theme";
 import type { DriverLocationRow } from "@/services/driverLocationService";
 import { getOptimalRoute, type RouteResult } from "@/services/routingService";
-import MapView, { Callout, Marker, Polyline } from "react-native-maps";
+import { LeafletMap } from "@/components/driver/LeafletMap";
+import MapView, { Callout, Marker, Polyline } from "@/lib/reactNativeMapsCompat";
 
 type MapCoordinate = {
   latitude: number;
@@ -211,8 +212,8 @@ const styles = StyleSheet.create({
   trackingMapNodeIcon: {
     width: 40,
     height: 40,
-    borderRadius: 12,
-    backgroundColor: Theme.textPrimaryDark,
+    borderRadius: 20,
+    backgroundColor: Theme.primary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -445,7 +446,6 @@ export function TrackingMapBlock({
         : null);
     const pastOnePoint = selectHistoryWaypoint(historyCoordinates, 0.33);
     const pastTwoPoint = selectHistoryWaypoint(historyCoordinates, 0.66);
-    const currentPoint = latestCoordinate ?? historyCoordinates[historyCoordinates.length - 1] ?? null;
 
     pushMarker(
       originPoint
@@ -491,24 +491,8 @@ export function TrackingMapBlock({
           }
         : null
     );
-    pushMarker(
-      currentPoint
-        ? {
-            id: "current",
-            coordinate: currentPoint,
-            kind: "current",
-            title: current,
-            subtitle:
-              locationAddress?.trim() ||
-              vehicleLabel?.trim() ||
-              (latestLocation ? formatLocationUpdatedAt(latestLocation.recorded_at) : "Live driver location"),
-          }
-        : null
-    );
-
     return nextMarkers;
   }, [
-    current,
     destination,
     historyCoordinates,
     latestCoordinate,
@@ -525,13 +509,11 @@ export function TrackingMapBlock({
   useEffect(() => {
     if (!mapRef.current) return;
     if (displayedRouteCoordinates.length > 1) {
-      const timer = setTimeout(() => {
-        mapRef.current?.fitToCoordinates(displayedRouteCoordinates, {
-          edgePadding: { top: 72, right: 48, bottom: 48, left: 48 },
-          animated: true,
-        });
-      }, 120);
-      return () => clearTimeout(timer);
+      mapRef.current?.fitToCoordinates(displayedRouteCoordinates, {
+        edgePadding: { top: 72, right: 48, bottom: 48, left: 48 },
+        animated: false,
+      });
+      return;
     }
     const focusPoint =
       displayedRouteCoordinates[0] ??
@@ -539,17 +521,14 @@ export function TrackingMapBlock({
       normalizedOriginCoordinate ??
       normalizedDestinationCoordinate;
     if (!focusPoint) return;
-    const timer = setTimeout(() => {
-      mapRef.current?.animateToRegion(
-        {
-          ...focusPoint,
-          latitudeDelta: 0.02,
-          longitudeDelta: 0.02,
-        },
-        300
-      );
-    }, 120);
-    return () => clearTimeout(timer);
+    mapRef.current?.animateToRegion(
+      {
+        ...focusPoint,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      },
+      0
+    );
   }, [
     displayedRouteCoordinates,
     latestCoordinate,
@@ -566,6 +545,54 @@ export function TrackingMapBlock({
         : routeCoordinates.length > 0
           ? "Showing recorded route"
           : "Waiting for driver location";
+
+  if (Platform.OS === "web") {
+    const leafletMarkers = markers.map((m) => ({
+      id: m.id,
+      coordinate: m.coordinate,
+      label: m.title,
+      color:
+        m.kind === "origin"
+          ? Theme.negative
+          : m.kind === "destination"
+            ? Theme.positive
+            : m.kind === "current"
+              ? Theme.primary
+              : Theme.primaryLight,
+    }));
+
+    const mapCenter =
+      latestCoordinate ??
+      normalizedOriginCoordinate ??
+      normalizedDestinationCoordinate ??
+      DEFAULT_MAP_REGION;
+
+    return (
+      <View style={[styles.trackingPageMapArea, { height: mapHeight }]}>
+        <LeafletMap
+          center={mapCenter}
+          zoom={13}
+          markers={leafletMarkers}
+          polyline={displayedRouteCoordinates}
+          polylineColor={Theme.primary}
+          style={styles.map}
+        />
+        <View style={styles.trackingRouteHalo} pointerEvents="none">
+          <Text style={styles.trackingRouteHaloLabel}>{statusLabel}</Text>
+          <Text style={styles.trackingRouteHaloText} numberOfLines={2}>
+            {locationAddress?.trim() ||
+              vehicleLabel?.trim() ||
+              "Trip route and live driver movement appear here."}
+          </Text>
+        </View>
+        {driverLocationLoading ? (
+          <View style={styles.mapLoadingOverlay} pointerEvents="none">
+            <ActivityIndicator size="small" color={Theme.primary} />
+          </View>
+        ) : null}
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.trackingPageMapArea, { height: mapHeight }]}>

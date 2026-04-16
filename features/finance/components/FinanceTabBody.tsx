@@ -19,10 +19,11 @@ import { GarrageTab } from "@/features/vehicles/components/GarrageTab";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
 import type { ConnectionRequestRow } from "@/services/connectionRequestsService";
 import type { ReactNode } from "react";
-import { Text, View } from "react-native";
+import { Platform, Text, View, useWindowDimensions } from "react-native";
 import type { LedgerRow } from "../services/finance.service";
 import type { FinanceSubTab } from "../types";
 import { styles } from "./FinanceScreen.styles";
+import { FinanceKanbanTab } from "./FinanceKanbanTab";
 import type { FinancialRowData } from "./FinancialRow";
 import { LedgerTab } from "./LedgerTab";
 import type { EntityListFilter } from "./TreasurySummaryCard";
@@ -97,6 +98,7 @@ export interface FinanceTabBodyProps {
   refreshing?: boolean;
   onRefresh?: () => void;
   bottomInset?: number;
+  profileImages: Record<string, string>;
 }
 
 export function FinanceTabBody({
@@ -138,29 +140,61 @@ export function FinanceTabBody({
   refreshing = false,
   onRefresh,
   bottomInset = 120,
+  profileImages,
 }: FinanceTabBodyProps) {
+  const { width: windowWidth } = useWindowDimensions();
+  // Kanban only for Web desktop (large screens); mobile/native/tablet uses standard list
+  const isWebLargeScreen = Platform.OS === 'web' && windowWidth >= 1024;
+
   if (financeSubTab === "cash") {
+    if (isWebLargeScreen) {
+      return (
+        <View style={styles.tableBodyWrap}>
+          {ledgerLoading && ledgerTransactions === null ? (
+            <Text style={styles.ledgerLoading}>Loading…</Text>
+          ) : (
+            <FinanceKanbanTab
+              transactions={filteredLedgerForDisplay}
+              getVehicleNumberForTripId={getVehicleNumberForTripId}
+              tripDetailsMap={tripDetailsMap}
+              clientRows={clientRows}
+              supplierRows={supplierRows}
+              tripPartyMap={tripPartyMap}
+              onRowSelect={(row) => {
+                if (row.trip_id) {
+                  onTripSelect(row.trip_id);
+                }
+              }}
+              profileImages={profileImages}
+            />
+          )}
+        </View>
+      );
+    }
     return (
       <View style={styles.tableBodyWrap}>
         {ledgerLoading && ledgerTransactions === null ? (
           <Text style={styles.ledgerLoading}>Loading…</Text>
         ) : (
-          <LedgerTab
-            organizationId={orgId}
-            refreshKey={ledgerRefreshKey}
-            transactions={
-              ledgerTransactions !== null ? filteredLedgerForDisplay : undefined
-            }
-            viewMode="transaction"
-            showFiscalSubTabs={false}
-            onRowSelect={onLedgerRowSelect}
-            onEntitySelect={() => {}}
-            getVehicleNumberForTripId={getVehicleNumberForTripId}
-            tripOptions={trips}
-            tripDetailsMap={tripDetailsMap}
-            onMissionChange={onLedgerMissionChange}
-            onAddTransactionPress={onAddTransactionPress}
-          />
+        <LedgerTab
+          organizationId={orgId}
+          refreshKey={ledgerRefreshKey}
+          transactions={
+            ledgerTransactions !== null ? filteredLedgerForDisplay : undefined
+          }
+          viewMode="transaction"
+          showFiscalSubTabs={false}
+          onRowSelect={onLedgerRowSelect}
+          onEntitySelect={() => {}}
+          getVehicleNumberForTripId={getVehicleNumberForTripId}
+          tripOptions={trips}
+          tripDetailsMap={tripDetailsMap}
+          onMissionChange={onLedgerMissionChange}
+          onAddTransactionPress={onAddTransactionPress}
+          clientRows={clientRows}
+          supplierRows={supplierRows}
+          tripPartyMap={tripPartyMap}
+        />
         )}
       </View>
     );

@@ -1,5 +1,6 @@
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import Typography from "@/constants/Typography";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDriverAvatar } from "@/contexts/DriverAvatarContext";
 import {
@@ -15,7 +16,7 @@ import * as tripsService from "@/services/tripsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     AppState,
     FlatList,
@@ -24,6 +25,7 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from "react-native";
@@ -140,7 +142,7 @@ interface MissionLogEntry {
   loc: string;
 }
 
-/** Mission log from trip timestamps (Assigned → Pickup → In-transit → Delivered). */
+/** Trip log from trip timestamps (Assigned → Pickup → In-transit → Delivered). */
 function buildMissionLog(trip: tripsService.TripRow): MissionLogEntry[] {
   const entries: MissionLogEntry[] = [];
   if (trip.created_at) {
@@ -179,9 +181,10 @@ function buildMissionLog(trip: tripsService.TripRow): MissionLogEntry[] {
   return entries;
 }
 
-function getGrossRevenue(trip: tripsService.TripRow): number {
-  if (isAggregateTrip(trip)) return 0;
-  return Number(trip.supplier_rate ?? trip.client_price ?? 0);
+function getGrossRevenue(trip: tripsService.TripRow): number | string {
+  const amount = Number(trip.supplier_rate ?? trip.client_price ?? 0);
+  if (amount <= 0 && isAggregateTrip(trip)) return "SALARY";
+  return amount;
 }
 
 /** Arrow with translate-x animation on press (reference: group-hover:translate-x-2) */
@@ -259,6 +262,9 @@ export default function DriverTripsScreen() {
   const [driver, setDriver] = useState<driversService.DriverRow | null>(null);
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const isRefreshingRef = useRef(false);
+  const initialLoadDoneRef = useRef(false);
   const [selectedTrip, setSelectedTrip] = useState<tripsService.TripRow | null>(
     null,
   );
@@ -266,13 +272,15 @@ export default function DriverTripsScreen() {
   const [detailTab, setDetailTab] = useState<"journey" | "settlement">(
     "journey",
   );
+  const [searchQuery, setSearchQuery] = useState("");
+  const [tripView, setTripView] = useState<"active" | "history">("active");
 
   const fetch = useCallback(() => {
     if (!profile?.uid) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
     driversService.getLinkedDriversForCurrentUser(profile.uid).then((res) => {
       const drivers = (res.drivers ?? []).filter((d) => !d.left_at);
       if (drivers.length > 0) {
@@ -282,9 +290,15 @@ export default function DriverTripsScreen() {
           .then((tRes) => {
             setTrips(tRes.trips ?? []);
             setLoading(false);
+            initialLoadDoneRef.current = true;
+            isRefreshingRef.current = false;
+            setRefreshing(false);
           });
       } else {
         setLoading(false);
+        initialLoadDoneRef.current = true;
+        isRefreshingRef.current = false;
+        setRefreshing(false);
       }
     });
   }, [profile?.uid]);
@@ -307,9 +321,8 @@ export default function DriverTripsScreen() {
   }, [profile?.uid, fetch]);
 
   const getEarning = (trip: tripsService.TripRow) => {
-    if (isAggregateTrip(trip)) return "—";
     const amount = tripEarningsForDriver(trip);
-    if (amount <= 0) return "SALARY";
+    if (amount <= 0) return isAggregateTrip(trip) ? "SALARY" : "—";
     return `₹${Math.round(amount).toLocaleString()}`;
   };
 
@@ -328,6 +341,43 @@ export default function DriverTripsScreen() {
   const selectedTripDropParts = useMemo(
     () => splitLocationPrimarySecondary(selectedTrip?.drop_location),
     [selectedTrip?.drop_location],
+  );
+  const filteredTrips = useMemo(() => {
+    let list = [...trips];
+
+    list = list.filter((trip) =>
+      tripView === "history" ? isCompleted(trip.status) : !isCompleted(trip.status),
+    );
+
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter((trip) => {
+        const ref = tripsService.getTripDisplayNumber(trip).toLowerCase();
+        const pickup = (trip.pickup_area ?? "").toLowerCase();
+        const drop = (trip.drop_location ?? "").toLowerCase();
+        const status = (trip.status ?? "").toLowerCase();
+        return (
+          ref.includes(q) ||
+          pickup.includes(q) ||
+          drop.includes(q) ||
+          status.includes(q)
+        );
+      });
+    }
+
+    list.sort((a, b) => {
+      const dateA = new Date(a.pickup_date ?? a.created_at ?? "").getTime();
+      const dateB = new Date(b.pickup_date ?? b.created_at ?? "").getTime();
+      const safeA = Number.isFinite(dateA) ? dateA : 0;
+      const safeB = Number.isFinite(dateB) ? dateB : 0;
+      return safeB - safeA;
+    });
+
+    return list;
+  }, [trips, tripView, searchQuery]);
+  const historyTripsCount = useMemo(
+    () => trips.filter((trip) => isCompleted(trip.status)).length,
+    [trips],
   );
 
   const renderItem = ({ item }: { item: tripsService.TripRow }) => {
@@ -518,8 +568,106 @@ export default function DriverTripsScreen() {
           Trip history & route archive.
         </Text>
       </View>
+      <View
+        style={[
+          styles.toolbarWrap,
+          { backgroundColor: colors.background },
+        ]}
+      >
+        <View style={styles.toolbarTopRow}>
+          <View
+            style={[
+              styles.searchWrap,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <FontAwesome name="search" size={14} color={colors.textMuted} />
+            <TextInput
+              style={[styles.searchInput, { color: colors.text }]}
+              placeholder="Search"
+              placeholderTextColor={colors.textMuted}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCorrect={false}
+              spellCheck={false}
+              autoComplete="off"
+              returnKeyType="search"
+            />
+          </View>
+          <View
+            style={[
+              styles.segmentWrap,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <TouchableOpacity
+              style={[
+                styles.segmentBtn,
+                tripView === "active" && [
+                  styles.segmentBtnActive,
+                  { backgroundColor: colors.background, borderColor: colors.border },
+                ],
+              ]}
+              onPress={() => setTripView("active")}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.segmentLabel,
+                  {
+                    color: tripView === "active" ? colors.text : colors.textMuted,
+                  },
+                ]}
+              >
+                ACTIVE
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.segmentBtn,
+                tripView === "history" && [
+                  styles.segmentBtnActive,
+                  { backgroundColor: colors.background, borderColor: colors.border },
+                ],
+              ]}
+              onPress={() => setTripView("history")}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.segmentLabel,
+                  {
+                    color: tripView === "history" ? colors.emerald : colors.textMuted,
+                  },
+                ]}
+              >
+                HISTORY
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        <View style={styles.toolbarFooter}>
+          <Text style={[styles.resultMeta, { color: colors.textMuted }]}>
+            Showing {filteredTrips.length} of {trips.length}
+          </Text>
+          {searchQuery.trim().length > 0 ? (
+            <TouchableOpacity
+              style={[
+                styles.clearBtn,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+              onPress={() => setSearchQuery("")}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.clearBtnText, { color: colors.text }]}>Clear</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.clearBtnPlaceholder} />
+          )}
+        </View>
+      </View>
       <FlatList
-        data={trips}
+        data={filteredTrips}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         contentContainerStyle={[
@@ -527,17 +675,65 @@ export default function DriverTripsScreen() {
           { backgroundColor: colors.background, paddingBottom: insets.bottom + 80 },
         ]}
         ListEmptyComponent={
-          trips.length === 0 ? (
-            <View style={styles.empty}>
-              <FontAwesome
-                name="history"
-                size={40}
-                color={colors.tabInactive}
-              />
-              <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-                No trips completed yet
-              </Text>
-            </View>
+          filteredTrips.length === 0 ? (
+            tripView === "active" && searchQuery.trim().length === 0 ? (
+              <View style={styles.emptyActiveWrap}>
+                <View
+                  style={[
+                    styles.emptyActiveIconCircle,
+                    {
+                      backgroundColor: colors.whiteMuted,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <FontAwesome name="send-o" size={26} color={colors.emerald} />
+                </View>
+                <Text style={[styles.emptyActiveTitle, { color: colors.text }]}>
+                  No active trips right now
+                </Text>
+                <Text
+                  style={[styles.emptyActiveSubtitle, { color: colors.textMuted }]}
+                >
+                  Fresh assignments appear here instantly once dispatched.
+                </Text>
+                {historyTripsCount > 0 ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.emptyActiveButton,
+                      { backgroundColor: colors.surface, borderColor: colors.border },
+                    ]}
+                    onPress={() => setTripView("history")}
+                    activeOpacity={0.85}
+                  >
+                    <FontAwesome
+                      name="history"
+                      size={12}
+                      color={colors.text}
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text
+                      style={[styles.emptyActiveButtonText, { color: colors.text }]}
+                    >
+                      View history
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : (
+              <View style={styles.empty}>
+                <FontAwesome
+                  name="history"
+                  size={40}
+                  color={colors.tabInactive}
+                />
+                <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+                  {trips.length === 0
+                    ? "No trips completed yet"
+                    : "No trips found"}
+                </Text>
+              </View>
+            )
           ) : null
         }
       />
@@ -813,85 +1009,104 @@ export default function DriverTripsScreen() {
               </View>
 
               {detailTab === "journey" && archiveMissionLog.length > 0 && (
-                <View
-                  style={[
-                    styles.logCardActivityRef,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
+                <>
+                  <View style={styles.logSectionHeaderRef}>
+                    <View
+                      style={[
+                        styles.logSectionIconWrap,
+                        { backgroundColor: colors.whiteMuted },
+                      ]}
+                    >
+                      <FontAwesome name="list-alt" size={14} color={colors.text} />
+                    </View>
+                    <Text style={[styles.logSectionTitleRef, { color: colors.text }]}>
+                      Trip Log
+                    </Text>
+                  </View>
                   <View
                     style={[
-                      styles.logCardActivityLineRef,
-                      { backgroundColor: colors.border },
+                      styles.logCardActivityRef,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
                     ]}
-                  />
-                  {archiveMissionLog.map((log, i) => {
-                    const completed = true;
-                    const isLast = i === archiveMissionLog.length - 1;
-                    return (
-                      <View
-                        key={i}
-                        style={[
-                          styles.logItemActivityRef,
-                          isLast && styles.logItemActivityLastRef,
-                        ]}
-                      >
+                  >
+                    {archiveMissionLog.map((log, i) => {
+                      const completed = true;
+                      const isLast = i === archiveMissionLog.length - 1;
+                      return (
                         <View
+                          key={i}
                           style={[
-                            styles.logCircleWrapRef,
-                            completed
-                              ? { backgroundColor: colors.emerald }
-                              : { backgroundColor: colors.border },
+                            styles.logItemActivityRef,
+                            isLast && styles.logItemActivityLastRef,
                           ]}
                         >
-                          {completed && (
-                            <FontAwesome
-                              name="check"
-                              size={10}
-                              color={Theme.textOnPrimary}
-                            />
-                          )}
-                        </View>
-                        <View style={styles.logContentActivityRef}>
-                          <View style={styles.logHeadRef}>
-                            <Text
+                          <View style={styles.logMarkerColRef}>
+                            <View
                               style={[
-                                styles.logStatusRef,
-                                {
-                                  color: completed
-                                    ? colors.text
-                                    : colors.textMuted,
-                                },
+                                styles.logCircleWrapRef,
+                                completed
+                                  ? { backgroundColor: colors.emerald }
+                                  : { backgroundColor: colors.border },
                               ]}
                             >
-                              {log.status}
-                            </Text>
+                              {completed && (
+                                <FontAwesome
+                                  name="check"
+                                  size={9}
+                                  color={Theme.textOnPrimary}
+                                />
+                              )}
+                            </View>
+                            {!isLast && (
+                              <View
+                                style={[
+                                  styles.logConnectorRef,
+                                  { backgroundColor: colors.border },
+                                ]}
+                              />
+                            )}
+                          </View>
+                          <View style={styles.logContentActivityRef}>
+                            <View style={styles.logHeadRef}>
+                              <Text
+                                style={[
+                                  styles.logStatusRef,
+                                  {
+                                    color: completed
+                                      ? colors.text
+                                      : colors.textMuted,
+                                  },
+                                ]}
+                              >
+                                {log.status}
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.logTimeRef,
+                                  { color: colors.textMuted },
+                                ]}
+                              >
+                                {log.time}
+                              </Text>
+                            </View>
                             <Text
                               style={[
-                                styles.logTimeRef,
-                                { color: colors.textMuted },
+                                styles.logLocTextRef,
+                                { color: colors.text },
                               ]}
+                              numberOfLines={2}
                             >
-                              {log.time}
+                              {log.loc}
                             </Text>
                           </View>
-                          <Text
-                            style={[
-                              styles.logLocTextRef,
-                              { color: colors.textMuted },
-                            ]}
-                            numberOfLines={2}
-                          >
-                            {log.loc}
-                          </Text>
                         </View>
-                      </View>
-                    );
-                  })}
-                </View>
+                      );
+                    })}
+                  </View>
+                </>
               )}
 
               {detailTab === "settlement" && (
@@ -911,19 +1126,39 @@ export default function DriverTripsScreen() {
                       { borderBottomColor: colors.border },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.yieldRowLabelSettlementRef,
-                        { color: colors.textMuted },
-                      ]}
-                    >
-                      Fare Earnings
-                    </Text>
-                    <Text
-                      style={[styles.yieldRowValueRef, { color: colors.text }]}
-                    >
-                      ₹{getGrossRevenue(selectedTrip).toLocaleString()}
-                    </Text>
+                    <View style={styles.yieldRowTextBlockRef}>
+                      <Text
+                        style={[
+                          styles.yieldRowLabelSettlementRef,
+                          { color: colors.text },
+                        ]}
+                      >
+                        Fare Earnings
+                      </Text>
+                      <Text
+                        style={[
+                          styles.yieldRowSubtextRef,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        Base trip rate calculation
+                      </Text>
+                    </View>
+                    <View style={styles.yieldRowValueBlockRef}>
+                      <Text
+                        style={[styles.yieldRowValueRef, { color: colors.text }]}
+                      >
+                        {getGrossRevenue(selectedTrip) === "SALARY" ? "SALARY" : `₹${getGrossRevenue(selectedTrip).toLocaleString()}`}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.yieldRowValueMetaRef,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        CALCULATED
+                      </Text>
+                    </View>
                   </View>
                   <View
                     style={[
@@ -932,25 +1167,42 @@ export default function DriverTripsScreen() {
                       { borderBottomColor: colors.border },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.yieldRowLabelSettlementRef,
-                        { color: colors.textMuted },
-                      ]}
-                    >
-                      Partner Bonus
-                    </Text>
-                    <Text
-                      style={[
-                        styles.yieldRowValueEmeraldRef,
-                        { color: colors.emerald },
-                      ]}
-                    >
-                      + ₹
-                      {Math.round(
-                        getEarningAmount(selectedTrip),
-                      ).toLocaleString()}
-                    </Text>
+                    <View style={styles.yieldRowTextBlockRef}>
+                      <Text
+                        style={[
+                          styles.yieldRowLabelSettlementRef,
+                          { color: colors.text },
+                        ]}
+                      >
+                        Partner Bonus
+                      </Text>
+                      <Text
+                        style={[
+                          styles.yieldRowSubtextRef,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        Precision pilot multiplier
+                      </Text>
+                    </View>
+                    <View style={styles.yieldRowValueBlockRef}>
+                      <Text
+                        style={[
+                          styles.yieldRowValueEmeraldRef,
+                          { color: colors.emerald },
+                        ]}
+                      >
+                        {getEarning(selectedTrip) === "SALARY" ? "—" : `+ ₹${Math.round(getEarningAmount(selectedTrip)).toLocaleString()}`}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.yieldRowValueMetaRef,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        AWARDED
+                      </Text>
+                    </View>
                   </View>
                   <View
                     style={[
@@ -959,22 +1211,42 @@ export default function DriverTripsScreen() {
                       { borderBottomColor: colors.border },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.yieldRowLabelSettlementRef,
-                        { color: colors.textMuted },
-                      ]}
-                    >
-                      Tax Deductions
-                    </Text>
-                    <Text
-                      style={[
-                        styles.yieldRowValueDeductionRef,
-                        { color: Theme.negative },
-                      ]}
-                    >
-                      - ₹0
-                    </Text>
+                    <View style={styles.yieldRowTextBlockRef}>
+                      <Text
+                        style={[
+                          styles.yieldRowLabelSettlementRef,
+                          { color: colors.text },
+                        ]}
+                      >
+                        Tax Deductions
+                      </Text>
+                      <Text
+                        style={[
+                          styles.yieldRowSubtextRef,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        TDS and platform overhead
+                      </Text>
+                    </View>
+                    <View style={styles.yieldRowValueBlockRef}>
+                      <Text
+                        style={[
+                          styles.yieldRowValueDeductionRef,
+                          { color: Theme.negative },
+                        ]}
+                      >
+                        - ₹0
+                      </Text>
+                      <Text
+                        style={[
+                          styles.yieldRowValueMetaRef,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        DEDUCTED
+                      </Text>
+                    </View>
                   </View>
 
                   <View style={styles.yieldPayoutHeroDarkRef}>
@@ -982,9 +1254,9 @@ export default function DriverTripsScreen() {
                       Net payout
                     </Text>
                     <View style={styles.yieldPayoutHeroAmountRowRef}>
-                      <Text style={styles.yieldPayoutHeroRupeeRef}>₹</Text>
+                      {getEarning(selectedTrip) === "SALARY" ? null : <Text style={styles.yieldPayoutHeroRupeeRef}>₹</Text>}
                       <Text style={styles.yieldPayoutHeroAmountDarkRef}>
-                        {Math.round(
+                        {getEarning(selectedTrip) === "SALARY" ? "SALARY" : Math.round(
                           getEarningAmount(selectedTrip),
                         ).toLocaleString()}
                       </Text>
@@ -1110,12 +1382,12 @@ const styles = StyleSheet.create({
     borderRadius: Layout.driverHeaderAvatarSize / 2,
   },
   brand: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 1.6,
+    ...Typography.headerSubtitle,
     marginBottom: 1,
   },
   welcomeTitle: {
+    ...Typography.headerTitle,
+    textTransform: "none",
     fontSize: 15,
     fontWeight: "700",
     letterSpacing: -0.2,
@@ -1138,6 +1410,87 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginTop: 8,
     textTransform: "uppercase",
+  },
+  toolbarWrap: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  toolbarTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  searchWrap: {
+    flex: 1,
+    minHeight: 50,
+    borderWidth: 1,
+    borderRadius: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 14,
+    fontWeight: "500",
+    paddingVertical: 10,
+  },
+  segmentWrap: {
+    height: 50,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    minWidth: 170,
+  },
+  segmentBtn: {
+    flex: 1,
+    height: "100%",
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  segmentBtnActive: {
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  segmentLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  toolbarFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 2,
+  },
+  resultMeta: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  clearBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  clearBtnText: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  clearBtnPlaceholder: {
+    width: 50,
   },
   listContent: {
     paddingHorizontal: 24,
@@ -1275,6 +1628,50 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 48,
     gap: 12,
+  },
+  emptyActiveWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 68,
+    paddingHorizontal: 30,
+  },
+  emptyActiveIconCircle: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 18,
+  },
+  emptyActiveTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    letterSpacing: -0.2,
+    textAlign: "center",
+  },
+  emptyActiveSubtitle: {
+    marginTop: 8,
+    fontSize: 13,
+    fontWeight: "500",
+    lineHeight: 20,
+    textAlign: "center",
+    maxWidth: 320,
+  },
+  emptyActiveButton: {
+    marginTop: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  emptyActiveButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   emptyText: {
     fontSize: 14,
@@ -1506,73 +1903,126 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   logCardActivityRef: {
-    paddingVertical: 20,
-    paddingHorizontal: 20,
-    borderRadius: 24,
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+    borderRadius: 20,
     borderWidth: 1,
     position: "relative",
     overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
   logCardActivityLineRef: {
     position: "absolute",
-    left: 13,
-    top: 40,
-    bottom: 40,
+    left: 12,
+    top: 32,
+    bottom: 32,
     width: 1,
   },
   logItemActivityRef: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 24,
+    marginBottom: 26,
   },
   logItemActivityLastRef: {
     marginBottom: 0,
   },
   logCircleWrapRef: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    marginRight: 14,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    marginRight: 0,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: "#ffffff",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.05,
     shadowRadius: 2,
-    elevation: 2,
+    elevation: 1,
+  },
+  logMarkerColRef: {
+    width: 20,
+    marginRight: 12,
+    alignItems: "center",
+    position: "relative",
+  },
+  logConnectorRef: {
+    position: "absolute",
+    top: 20,
+    bottom: -26,
+    width: 1,
+    alignSelf: "center",
   },
   logContentActivityRef: {
     flex: 1,
     minWidth: 0,
   },
+  logStatusChipRef: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  logStatusChipTextRef: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  logTimeMetaRef: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+    textTransform: "uppercase",
+  },
   yieldCardSettlementRef: {
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 4,
-    borderRadius: 32,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 2,
+    borderRadius: 20,
     borderWidth: 1,
     marginBottom: 0,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
   yieldRowLabelSettlementRef: {
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 17,
+    fontWeight: "700",
     color: DETAIL_REF.yieldRowLabel,
   },
+  yieldRowTextBlockRef: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 10,
+  },
+  yieldRowSubtextRef: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  yieldRowValueBlockRef: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    minWidth: 94,
+  },
+  yieldRowValueMetaRef: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
   yieldRowValueDeductionRef: {
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 20,
+    fontWeight: "800",
   },
   yieldPayoutHeroDarkRef: {
     marginTop: 24,
@@ -1592,12 +2042,12 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   yieldPayoutHeroLabelDarkRef: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "800",
     color: "#94a3b8",
-    letterSpacing: 0.5,
-    textTransform: "none",
-    marginBottom: 16,
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+    marginBottom: 12,
   },
   yieldPayoutHeroRupeeRef: {
     fontSize: 24,
@@ -1606,10 +2056,10 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   yieldPayoutHeroAmountDarkRef: {
-    fontSize: 44,
+    fontSize: 40,
     fontWeight: "800",
     color: "#ffffff",
-    letterSpacing: -1,
+    letterSpacing: -0.8,
   },
   yieldPayoutHeroBadgeDarkRef: {
     flexDirection: "row",
@@ -1881,13 +2331,13 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   yieldRowValueRef: {
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 20,
+    fontWeight: "800",
     color: DETAIL_REF.headerTitle,
   },
   yieldRowValueEmeraldRef: {
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 20,
+    fontWeight: "800",
     color: DETAIL_REF.emerald,
   },
   yieldRowLabelNetRef: {

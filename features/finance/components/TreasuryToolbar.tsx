@@ -3,7 +3,7 @@
  * Renders between summary banner and table header on Treasury (Finance) screen.
  */
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
 
@@ -182,6 +182,11 @@ const styles = StyleSheet.create({
     color: Theme.textOnDark,
     paddingVertical: 2,
     minWidth: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      } as any,
+    }),
   },
   reportBtn: {
     flexDirection: 'row',

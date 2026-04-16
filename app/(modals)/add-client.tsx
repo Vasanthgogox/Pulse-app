@@ -18,10 +18,9 @@ import {
 const NO_ORG_MESSAGE =
   "No organization loaded. Sign out and sign in again to refresh, or ensure you are added as a member of an organization in the dashboard.";
 
-/** Close modal: go back when possible; otherwise fall back to Finance. */
+/** Close modal: go back to network. */
 function closeModal(router: ReturnType<typeof useRouter>) {
-  if (router.canGoBack()) router.back();
-  else router.replace("/(tabs)/finance");
+  router.replace("/(tabs)/network");
 }
 
 export default function AddClientScreen() {
@@ -58,6 +57,8 @@ export default function AddClientScreen() {
       organization_id: invitee.organization_id,
       full_name: invitee.full_name,
       phone: invitee.phone,
+      organization_name: invitee.organization_name,
+      profile_company_name: invitee.profile_company_name,
     };
   };
 

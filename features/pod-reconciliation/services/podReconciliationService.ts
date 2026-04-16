@@ -1,0 +1,292 @@
+/**
+ * POD Reconciliation service — maps to cashflow PodReconciliation.tsx.
+ * Same DB as Q-unified-base; RLS applies.
+ *
+ * Trip scope: selected org only — merge owner trips + supplier-linked + client-linked RPCs
+ * so list counts match metrics (plain `from('trips')` + RLS can include other orgs).
+ */
+import { supabase } from '@/lib/supabase';
+import { expandLR } from '@/lib/utils/lr';
+
+type TripRow = Record<string, unknown>;
+
+export interface PodReconciliationSummaryComputed {
+  pod_pending_count: number;
+  pod_pending_sum: number;
+  received_count: number;
+  received_sum: number;
+  approved_count: number;
+  approved_sum: number;
+  invoiced_count: number;
+  invoiced_sum: number;
+}
+
+export type PodTab = 'pod_pending' | 'received' | 'approved' | 'invoiced';
+
+export interface PodReconciliationTripView {
+  id: string; // trip_id (sequence)
+  internal_id: string; // uuid
+  client_name: string;
+  vendor_name: string;
+  trip_date: string;
+  pp_location: string;
+  drop_point: string;
+  total_client_value?: number;
+  trip_status: string;
+  pod_status: string;
+  pod_received_date: string | null;
+  invoice_status_1: string;
+  invoice_no: string | null;
+  invoice_status_display: string;
+  lr_numbers: string[];
+  trip_pods: string[];
+  amount: number;
+  date: string;
+}
+
+function str(v: unknown): string {
+  return v == null ? '' : String(v);
+}
+
+function num(v: unknown): number {
+  if (v == null) return 0;
+  const n = typeof v === 'number' ? v : parseFloat(String(v));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function tripAmount(t: TripRow): number {
+  return num(t.total_client_value ?? t.client_price);
+}
+
+/** Trips for the selected org: owner + supplier-linked + client-linked (same scope as finance/invoicing merge). */
+export async function mergeTripsForPodOrg(orgId: string): Promise<{
+  error: Error | null;
+  trips: TripRow[];
+}> {
+  try {
+    const [ownerRes, supRes, clientRes] = await Promise.all([
+      supabase()
+        .from('trips')
+        .select('*')
+        .eq('organization_id', orgId)
+        .order('created_at', { ascending: false })
+        .limit(5000),
+      supabase().rpc('get_trips_where_org_is_supplier', { p_org_id: orgId }),
+      supabase().rpc('get_trips_where_org_is_client', { p_org_id: orgId }),
+    ]);
+
+    if (ownerRes.error) {
+      return { error: new Error(ownerRes.error.message), trips: [] };
+    }
+    if (supRes.error) {
+      return { error: new Error(supRes.error.message), trips: [] };
+    }
+    if (clientRes.error) {
+      return { error: new Error(clientRes.error.message), trips: [] };
+    }
+
+    const map = new Map<string, TripRow>();
+    const push = (rows: unknown) => {
+      for (const row of (rows as TripRow[]) || []) {
+        if (row && row.id) map.set(str(row.id), row);
+      }
+    };
+    push(ownerRes.data);
+    push(supRes.data);
+    push(clientRes.data);
+
+    return { error: null, trips: Array.from(map.values()) };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e : new Error(String(e)),
+      trips: [],
+    };
+  }
+}
+
+/** Same rules as the tab list filter in fetchReconciliationTrips. */
+export function tripMatchesPodTab(trip: TripRow, activeTab: PodTab): boolean {
+  const inv1 = str(trip.invoice_status_1).toLowerCase();
+  const inv2 = str(trip.invoice_status_2).toLowerCase();
+  const podS = str(trip.pod_status).toLowerCase();
+  const hasInvoiceNo = Boolean(trip.invoice_no && str(trip.invoice_no).trim() !== '');
+  const isNoInvoice = !hasInvoiceNo && !inv1.includes('raised');
+  const isApproved = inv1.includes('pending') || inv1.includes('data shared');
+
+  if (activeTab === 'invoiced') {
+    return hasInvoiceNo || inv1.includes('raised');
+  }
+  if (activeTab === 'approved') {
+    return isNoInvoice && podS === 'received' && isApproved;
+  }
+  if (activeTab === 'received') {
+    return isNoInvoice && podS === 'received' && !isApproved;
+  }
+  if (activeTab === 'pod_pending') {
+    if (inv2.includes('unbilled')) return true;
+    return (
+      isNoInvoice &&
+      (podS.includes('pending') ||
+        podS.includes('i-bond') ||
+        podS === '' ||
+        podS === 'partial')
+    );
+  }
+  return true;
+}
+
+export function computePodReconciliationSummaryFromTrips(
+  rows: TripRow[],
+): PodReconciliationSummaryComputed {
+  const sumFor = (tab: PodTab) =>
+    rows
+      .filter((t) => tripMatchesPodTab(t, tab))
+      .reduce((s, t) => s + tripAmount(t), 0);
+
+  return {
+    pod_pending_count: rows.filter((t) => tripMatchesPodTab(t, 'pod_pending'))
+      .length,
+    pod_pending_sum: sumFor('pod_pending'),
+    received_count: rows.filter((t) => tripMatchesPodTab(t, 'received')).length,
+    received_sum: sumFor('received'),
+    approved_count: rows.filter((t) => tripMatchesPodTab(t, 'approved'))
+      .length,
+    approved_sum: sumFor('approved'),
+    invoiced_count: rows.filter((t) => tripMatchesPodTab(t, 'invoiced'))
+      .length,
+    invoiced_sum: sumFor('invoiced'),
+  };
+}
+
+export async function fetchReconciliationTrips(
+  orgId: string,
+  activeTab: PodTab,
+  searchTerm: string = '',
+  regionFilter: string = 'All'
+): Promise<{ error: Error | null; trips: PodReconciliationTripView[] }> {
+  try {
+    const { error: mergeErr, trips: merged } = await mergeTripsForPodOrg(orgId);
+    if (mergeErr) {
+      console.error('[podReconciliation] merge error:', mergeErr);
+      return { error: mergeErr, trips: [] };
+    }
+
+    let pool = merged;
+
+    if (searchTerm) {
+      const q = searchTerm.trim().toLowerCase();
+      pool = pool.filter((trip) => {
+        const tid = str(
+          trip.display_trip_id ??
+            trip.trip_number ??
+            trip.trip_id ??
+            trip.id,
+        ).toLowerCase();
+        const client = str(trip.client_name).toLowerCase();
+        const lr = str(trip.lr_no).toLowerCase();
+        return tid.includes(q) || client.includes(q) || lr.includes(q);
+      });
+    }
+
+    if (regionFilter && regionFilter !== 'All') {
+      const pref = regionFilter.toLowerCase();
+      pool = pool.filter((trip) => {
+        const loc = str(trip.pickup_area ?? trip.pp_location).toLowerCase();
+        return loc.startsWith(pref);
+      });
+    }
+
+    pool.sort((a, b) => {
+      const ca = str(a.created_at);
+      const cb = str(b.created_at);
+      return cb.localeCompare(ca);
+    });
+
+    const filtered = pool
+      .filter((trip) => tripMatchesPodTab(trip, activeTab))
+      .slice(0, 1000);
+
+    const internalIds = filtered.map(t => str(t.id)).filter(Boolean);
+    const supplierIds = Array.from(new Set(filtered.map(t => str(t.supplier_id)).filter(Boolean)));
+
+    let lrByTripId = new Map<string, Record<string, unknown>[]>();
+    let supplierNameById = new Map<string, string>();
+
+    if (supplierIds.length > 0) {
+      const { data: supData } = await supabase()
+        .from('suppliers')
+        .select('id, name, company_name')
+        .in('id', supplierIds);
+      
+      (supData || []).forEach(s => {
+        supplierNameById.set(s.id, str(s.name || s.company_name));
+      });
+    }
+
+    if (internalIds.length > 0) {
+      const { data: lrData } = await supabase()
+        .from('trip_lrs')
+        .select('*')
+        .in('trip_id', internalIds);
+      
+      (lrData || []).forEach(lr => {
+        const tid = str(lr.trip_id);
+        const list = lrByTripId.get(tid) ?? [];
+        list.push(lr);
+        lrByTripId.set(tid, list);
+      });
+    }
+
+    const mapped = filtered.map(trip => {
+      let invoice_status_display = 'Invoice Pending';
+      const inv1 = str(trip.invoice_status_1).toLowerCase();
+      const podS = str(trip.pod_status).toLowerCase();
+      const isRaised = inv1.includes('raised') || trip.invoice_no;
+      const isApproved = (inv1.includes('pending') || inv1.includes('data shared')) && podS === 'received';
+      const isReceived = podS === 'received' && !isApproved && !isRaised;
+      
+      if (isRaised) invoice_status_display = 'Invoiced';
+      else if (isApproved) invoice_status_display = 'Ready for Invoice';
+      else if (isReceived) invoice_status_display = 'Received';
+
+      const lrs = lrByTripId.get(str(trip.id)) || [];
+      const allLrNumbers = lrs.length > 0 
+        ? Array.from(new Set(lrs.flatMap(lr => expandLR(str(lr.lr_number)))))
+        : (trip.lr_no ? expandLR(str(trip.lr_no)) : []);
+      
+      const receivedLRs = Array.from(new Set(
+        lrs
+          .filter(lr => lr.pod_received === true || str(lr.pod_status).toLowerCase() === 'received')
+          .flatMap(lr => expandLR(str(lr.lr_number)))
+      ));
+
+      let finalReceivedLRs = receivedLRs;
+      if (lrs.length === 0 && podS === 'received' && allLrNumbers.length > 0) {
+        finalReceivedLRs = allLrNumbers;
+      }
+
+      const tripDisplayId = str(trip.display_trip_id || trip.trip_number || trip.trip_id || trip.id);
+      const tripDate = str(trip.pickup_date || trip.trip_date || trip.created_at);
+
+      return {
+        ...trip,
+        id: tripDisplayId,
+        internal_id: str(trip.id),
+        client_name: str(trip.client_name),
+        vendor_name: str(supplierNameById.get(str(trip.supplier_id)) || trip.vendor_name || trip.supplier_name),
+        pp_location: str(trip.pickup_area || trip.pp_location),
+        drop_point: str(trip.drop_location || trip.drop_point),
+        amount: num(trip.client_price || trip.total_client_value),
+        date: tripDate,
+        trip_date: tripDate,
+        invoice_status_display,
+        lr_numbers: allLrNumbers,
+        trip_pods: finalReceivedLRs
+      } as PodReconciliationTripView;
+    });
+
+    return { error: null, trips: mapped };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), trips: [] };
+  }
+}

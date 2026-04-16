@@ -16,6 +16,7 @@ import {
 } from '@/lib/validation';
 
 export type CirculationTarget = 'marketplace' | 'integrated_supplier' | 'offline' | 'both';
+export type IndentAction = 'draft' | 'share';
 
 /** Input for creating an indent (UI → service). client_id only sent when valid UUID. */
 export interface CreateIndentInput {
@@ -31,7 +32,7 @@ export interface CreateIndentInput {
   vehicle_type: string;
   /** Required: load type (e.g. FMCG). */
   load_type: string;
-  /** Required: weight in kg. */
+  /** Required: weight in kg (UI converts from tons). */
   weight: number;
   pickup_date?: string | null;
   circulation_target?: CirculationTarget | null;
@@ -66,6 +67,8 @@ export interface IndentRow {
   load_type: string | null;
   pickup_date: string | null;
   circulation_target: string | null;
+  shared_at?: string | null;
+  last_saved_at?: string | null;
   weight?: number | null;
   created_at: string;
   /** Name of the organization that created the indent (who posted the load). For Find Work: show this to supplier. */
@@ -120,6 +123,7 @@ export async function getMarketIndentsForOrganization(
     .select('*, organizations(name)')
     .neq('organization_id', orgId)
     .in('circulation_target', ['integrated_supplier', 'both'])
+    .neq('status', 'draft')
     .order('created_at', { ascending: false });
 
   if (error) return { error: new Error(error.message), indents: [] };
@@ -192,31 +196,36 @@ export function getIndentDisplayNumber(row: IndentRow): string {
  */
 export async function createIndent(
   orgId: string,
-  data: CreateIndentInput
+  data: CreateIndentInput,
+  options?: { action?: IndentAction }
 ): Promise<{ error: Error | null; indent: IndentRow | null }> {
-  const clientNameErr = runValidators((data.client_name ?? '').trim(), [
-    required(),
-    maxLength(VALIDATION.CLIENT_SUPPLIER_NAME_MAX_LENGTH),
-  ]);
-  if (clientNameErr) return { error: new Error(`Client name: ${clientNameErr}`), indent: null };
-  const pickupErr = runValidators((data.pickup_area ?? '').trim(), [required(), maxLength(255)]);
-  if (pickupErr) return { error: new Error(`Pickup area: ${pickupErr}`), indent: null };
-  const dropErr = runValidators((data.drop_location ?? '').trim(), [required(), maxLength(255)]);
-  if (dropErr) return { error: new Error(`Drop location: ${dropErr}`), indent: null };
-  const priceErr = positiveAmount()(data.client_price);
-  if (priceErr) return { error: new Error(`Client price: ${priceErr}`), indent: null };
-  const targetErr = nonNegativeAmount()(data.supplier_target);
-  if (targetErr) return { error: new Error(`Supplier target: ${targetErr}`), indent: null };
-  const vehicleErr = runValidators((data.vehicle_type ?? '').trim(), [required('Vehicle is required'), maxLength(100)]);
-  if (vehicleErr) return { error: new Error(`Vehicle: ${vehicleErr}`), indent: null };
-  const loadTypeErr = runValidators((data.load_type ?? '').trim(), [required('Load type is required'), maxLength(100)]);
-  if (loadTypeErr) return { error: new Error(`Load type: ${loadTypeErr}`), indent: null };
-  if (data.weight == null || typeof data.weight !== 'number' || data.weight <= 0 || data.weight > 999999) {
-    return { error: new Error('Weight is required and must be between 0.01 and 999,999 kg.'), indent: null };
-  }
-  if (data.pickup_date?.trim()) {
-    const dateErr = dateISO()(data.pickup_date);
-    if (dateErr) return { error: new Error(`Pickup date: ${dateErr}`), indent: null };
+  const action = options?.action ?? 'share';
+  const shouldValidateShare = action === 'share';
+  if (shouldValidateShare) {
+    const clientNameErr = runValidators((data.client_name ?? '').trim(), [
+      required(),
+      maxLength(VALIDATION.CLIENT_SUPPLIER_NAME_MAX_LENGTH),
+    ]);
+    if (clientNameErr) return { error: new Error(`Client name: ${clientNameErr}`), indent: null };
+    const pickupErr = runValidators((data.pickup_area ?? '').trim(), [required(), maxLength(255)]);
+    if (pickupErr) return { error: new Error(`Pickup area: ${pickupErr}`), indent: null };
+    const dropErr = runValidators((data.drop_location ?? '').trim(), [required(), maxLength(255)]);
+    if (dropErr) return { error: new Error(`Drop location: ${dropErr}`), indent: null };
+    const priceErr = positiveAmount()(data.client_price);
+    if (priceErr) return { error: new Error(`Client price: ${priceErr}`), indent: null };
+    const targetErr = nonNegativeAmount()(data.supplier_target);
+    if (targetErr) return { error: new Error(`Supplier target: ${targetErr}`), indent: null };
+    const vehicleErr = runValidators((data.vehicle_type ?? '').trim(), [required('Vehicle is required'), maxLength(100)]);
+    if (vehicleErr) return { error: new Error(`Vehicle: ${vehicleErr}`), indent: null };
+    const loadTypeErr = runValidators((data.load_type ?? '').trim(), [required('Load type is required'), maxLength(100)]);
+    if (loadTypeErr) return { error: new Error(`Load type: ${loadTypeErr}`), indent: null };
+    if (data.weight == null || typeof data.weight !== 'number' || data.weight <= 0 || data.weight > 999999) {
+      return { error: new Error('Weight is required and must be between 0.01 and 1,000 tons.'), indent: null };
+    }
+    if (data.pickup_date?.trim()) {
+      const dateErr = dateISO()(data.pickup_date);
+      if (dateErr) return { error: new Error(`Pickup date: ${dateErr}`), indent: null };
+    }
   }
   let client_name = (data.client_name ?? '').trim();
   if (data.client_id && !client_name) {
@@ -232,16 +241,19 @@ export async function createIndent(
   // check open/closed/cancelled) and consolidated (default 'pending', check pending/quoted/awarded/...).
   const payload: Record<string, unknown> = {
     indent_number,
-    pickup_area: data.pickup_area,
-    drop_location: data.drop_location,
-    client_name,
-    client_price: data.client_price,
-    supplier_target: data.supplier_target,
-    vehicle_type: data.vehicle_type,
-    load_type: data.load_type,
+    pickup_area: data.pickup_area?.trim() ?? '',
+    drop_location: data.drop_location?.trim() ?? '',
+    client_name: client_name?.trim() ?? '',
+    client_price: Number.isFinite(data.client_price) ? data.client_price : 0,
+    supplier_target: Number.isFinite(data.supplier_target) ? data.supplier_target : 0,
+    vehicle_type: data.vehicle_type?.trim() ?? '',
+    load_type: data.load_type?.trim() ?? '',
     pickup_date: data.pickup_date ?? null,
     circulation_target: data.circulation_target ?? 'integrated_supplier',
-    weight: data.weight,
+    weight: Number.isFinite(data.weight) ? data.weight : 0,
+    status: action === 'draft' ? 'draft' : 'broadcast',
+    shared_at: action === 'share' ? new Date().toISOString() : null,
+    last_saved_at: action === 'draft' ? new Date().toISOString() : null,
   };
 
   const { data: row, error } = await supabase()
@@ -312,6 +324,74 @@ export async function updateIndent(
 
   if (error) return { error: new Error(error.message), indent: null };
   return { error: null, indent: (data ?? null) as IndentRow | null };
+}
+
+type DraftEditableFields = Partial<
+  Pick<
+    IndentRow,
+    | 'pickup_area'
+    | 'drop_location'
+    | 'client_name'
+    | 'client_price'
+    | 'supplier_target'
+    | 'vehicle_type'
+    | 'load_type'
+    | 'pickup_date'
+    | 'circulation_target'
+  >
+>;
+
+function toIndentUpdateError(message: string): Error {
+  const lower = message.toLowerCase();
+  if (lower.includes('cannot be edited')) return new Error('This indent has been shared and cannot be edited');
+  if (lower.includes('cannot be reverted to draft')) return new Error('This indent has been shared and cannot be edited');
+  return new Error(message);
+}
+
+export async function updateIndentDraft(
+  indentId: string,
+  updates: DraftEditableFields
+): Promise<{ error: Error | null; indent: IndentRow | null }> {
+  const payload: Record<string, unknown> = {};
+  if (updates.pickup_area !== undefined) payload.pickup_area = updates.pickup_area;
+  if (updates.drop_location !== undefined) payload.drop_location = updates.drop_location;
+  if (updates.client_name !== undefined) payload.client_name = updates.client_name;
+  if (updates.client_price !== undefined) payload.client_price = updates.client_price;
+  if (updates.supplier_target !== undefined) payload.supplier_target = updates.supplier_target;
+  if (updates.vehicle_type !== undefined) payload.vehicle_type = updates.vehicle_type;
+  if (updates.load_type !== undefined) payload.load_type = updates.load_type;
+  if (updates.pickup_date !== undefined) payload.pickup_date = updates.pickup_date;
+  if (updates.circulation_target !== undefined) payload.circulation_target = updates.circulation_target;
+  payload.last_saved_at = new Date().toISOString();
+
+  const { data, error } = await supabase()
+    .from('indents')
+    .update(payload)
+    .eq('id', indentId)
+    .eq('status', 'draft')
+    .select()
+    .maybeSingle();
+
+  if (error) return { error: toIndentUpdateError(error.message), indent: null };
+  if (!data) return { error: new Error('This indent has been shared and cannot be edited'), indent: null };
+  return { error: null, indent: data as IndentRow };
+}
+
+export async function shareDraftIndent(
+  indentId: string
+): Promise<{ error: Error | null; indent: IndentRow | null }> {
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabase()
+    .from('indents')
+    .update({ status: 'broadcast', shared_at: nowIso })
+    .eq('id', indentId)
+    .eq('status', 'draft')
+    .select()
+    .maybeSingle();
+
+  if (error) return { error: toIndentUpdateError(error.message), indent: null };
+  if (!data) return { error: new Error('This indent has already been shared'), indent: null };
+  return { error: null, indent: data as IndentRow };
 }
 
 /**

@@ -24,12 +24,40 @@ export interface ClientRow {
   linked_organization_id?: string | null;
   /** Optional contact/commission percent; shown in Finance customers table subline (e.g. "MANUAL · 10%"). */
   contact_percent?: number | null;
+  /** Joined profile data for integrated clients (owner of linked org). */
+  avatar_url?: string | null;
+  avatar_seed?: string | null;
+  owner_full_name?: string | null;
 }
 
 export async function getClientsByOrganization(
   orgId: string,
   opts?: PageOpts
 ): Promise<{ error: Error | null; clients: ClientRow[]; hasMore?: boolean }> {
+  try {
+    // Try optimized RPC first (SECURITY DEFINER, joins profiles for avatars)
+    const { data, error: rpcError } = await supabase().rpc('get_clients_with_profiles', {
+      p_org_id: orgId,
+    });
+
+    if (!rpcError && data) {
+      const raw = (data ?? []) as ClientRow[];
+      if (opts != null) {
+        const limit = opts.limit ?? DEFAULT_PAGE_SIZE;
+        const offset = opts.offset ?? 0;
+        const hasMore = raw.length > offset + limit;
+        return { error: null, clients: raw.slice(offset, offset + limit), hasMore };
+      }
+      return { error: null, clients: raw };
+    }
+    if (rpcError && __DEV__) {
+      console.warn('[getClientsByOrganization] RPC failed, falling back to select:', rpcError.message);
+    }
+  } catch (e) {
+    if (__DEV__) console.warn('[getClientsByOrganization] RPC exception:', e);
+  }
+
+  // Fallback to standard select if RPC fails or is missing
   const base = () =>
     supabase()
       .from('clients')
@@ -37,6 +65,7 @@ export async function getClientsByOrganization(
       .eq('organization_id', orgId)
       .eq('status', 'active')
       .order('name', { ascending: true });
+
   if (opts != null) {
     const limit = opts.limit ?? DEFAULT_PAGE_SIZE;
     const offset = opts.offset ?? 0;
@@ -82,13 +111,13 @@ export async function getClientDetails(
 }
 
 /**
- * Fetch display profile (name, contact, phone) for a linked organization.
+ * Fetch display profile (name, contact, phone, avatar) for a linked organization.
  * Used when syncing integrated client details from the other org's profile.
  * Uses RPC get_connection_partner_display (SECURITY DEFINER) so we can read the other org's profile.
  */
 export async function getLinkedOrgProfile(linkedOrganizationId: string): Promise<{
   error: Error | null;
-  profile: { organizationName: string; contactPerson: string; phone: string } | null;
+  profile: { organizationName: string; contactPerson: string; phone: string; avatarUrl?: string; avatarSeed?: string } | null;
 }> {
   const { data, error } = await supabase().rpc('get_connection_partner_display', {
     p_linked_organization_id: linkedOrganizationId,
@@ -99,13 +128,15 @@ export async function getLinkedOrgProfile(linkedOrganizationId: string): Promise
   if (data == null || typeof data !== 'object') {
     return { error: null, profile: null };
   }
-  const raw = data as { organizationName?: string; contactPerson?: string; phone?: string };
+  const raw = data as { organizationName?: string; contactPerson?: string; phone?: string; avatarUrl?: string; avatarSeed?: string };
   return {
     error: null,
     profile: {
       organizationName: (raw.organizationName ?? '').trim() || 'Connected',
       contactPerson: (raw.contactPerson ?? '').trim(),
       phone: (raw.phone ?? '').trim(),
+      avatarUrl: (raw.avatarUrl ?? '').trim(),
+      avatarSeed: (raw.avatarSeed ?? '').trim(),
     },
   };
 }

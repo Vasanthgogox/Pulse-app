@@ -1,5 +1,11 @@
 import { FloatingOpsAgentButton } from '@/components/FloatingOpsAgentButton';
+import { DemoTabBar, type DemoTabId } from '@/components/demo';
 import Theme from '@/constants/Theme';
+import {
+  DemoTabBarAutoHideShell,
+  DemoTabBarScrollProvider,
+  useDemoTabBarScroll,
+} from '@/contexts/DemoTabBarScrollContext';
 import * as authService from '@/features/auth';
 import { isSessionExpiredError } from '@/features/auth';
 import { makeQueryClient } from '@/lib/queryClient';
@@ -8,11 +14,15 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
-import { Stack, useRouter, type ErrorBoundaryProps } from 'expo-router';
+import { Stack, usePathname, useRouter, type ErrorBoundaryProps } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useMemo, useRef } from 'react';
+<<<<<<< HEAD
 import { LogBox, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import 'react-native-gesture-handler';
+=======
+import { LogBox, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+>>>>>>> deepak/main
 import 'react-native-reanimated';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -123,6 +133,13 @@ const errorStyles = StyleSheet.create({
   },
 });
 
+const styles = StyleSheet.create({
+  rootTabBarWrap: {
+    width: '100%',
+    paddingHorizontal: 0,
+  },
+});
+
 export const unstable_settings = {
   initialRouteName: 'index',
 };
@@ -216,22 +233,80 @@ function RootLayoutNav() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <View style={{ flex: 1 }}>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="sign-in" />
-          <Stack.Screen name="sign-up" />
-          <Stack.Screen name="(driver)" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="add-trip" />
-          <Stack.Screen name="network" />
-          <Stack.Screen name="load-board" options={{ presentation: 'fullScreenModal' }} />
-          <Stack.Screen name="create-indent" options={{ presentation: 'fullScreenModal' }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="(modals)" options={{ presentation: 'modal' }} />
-        </Stack>
-        <FloatingOpsAgentButton />
-      </View>
+      <DemoTabBarScrollProvider>
+        <View style={{ flex: 1 }}>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="sign-in" />
+            <Stack.Screen name="sign-up" />
+            <Stack.Screen name="(driver)" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="add-trip" />
+            <Stack.Screen name="network" />
+            <Stack.Screen name="load-board" options={{ presentation: 'fullScreenModal' }} />
+            <Stack.Screen name="create-indent" options={{ presentation: 'fullScreenModal' }} />
+            <Stack.Screen name="log-incoming-pods" options={{ presentation: 'card', animation: 'slide_from_right' }} />
+            <Stack.Screen name="invoicing-execute" options={{ presentation: 'card', animation: 'slide_from_right' }} />
+            <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="(modals)" options={{ presentation: 'modal' }} />
+          </Stack>
+          <RootOverlayTabBar />
+          <FloatingOpsAgentButton />
+        </View>
+      </DemoTabBarScrollProvider>
     </ThemeProvider>
+  );
+}
+
+function RootOverlayTabBar() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { resetBarVisible } = useDemoTabBarScroll();
+
+  const showOnRootScreens =
+    pathname === '/pod-reconciliation' ||
+    pathname === '/invoicing-execute' ||
+    pathname === '/log-incoming-pods';
+
+  useEffect(() => {
+    if (showOnRootScreens) resetBarVisible();
+  }, [pathname, resetBarVisible, showOnRootScreens]);
+
+  if (!showOnRootScreens) return null;
+
+  const activeTab: DemoTabId = 'finance';
+  const isWeb = Platform.OS === 'web';
+
+  return (
+    <DemoTabBarAutoHideShell
+      style={[
+        styles.rootTabBarWrap,
+        isWeb && {
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 100,
+          width: '100%',
+        },
+      ]}
+    >
+      <DemoTabBar
+        activeTab={activeTab}
+        onTabChange={(tab) =>
+          router.push(
+            tab === 'finance'
+              ? '/(tabs)/finance'
+              : tab === 'trips'
+                ? '/(tabs)/trips'
+                : '/(tabs)/network'
+          )
+        }
+        onLoadBoardPress={() => router.push('/load-board')}
+        onProfilePress={() => router.push('/(tabs)/profile')}
+        onLogoPress={() => router.navigate('/')}
+        showLoadFab={false}
+      />
+    </DemoTabBarAutoHideShell>
   );
 }

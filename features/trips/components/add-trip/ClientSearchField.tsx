@@ -7,10 +7,11 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import {
     ActivityIndicator,
     Modal,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -53,10 +54,13 @@ export function ClientSearchField({
   labelStyle,
 }: ClientSearchFieldProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [draft, setDraft] = useState(clientName);
   const wrapperRef = useRef<View>(null);
+  const modalInputRef = useRef<TextInput>(null);
 
   const hasSelectedClient = !!selectedId;
-  const query = hasSelectedClient ? "" : clientName.trim().toLowerCase();
+  const query = hasSelectedClient ? "" : draft.trim().toLowerCase();
+  
   const filtered = useMemo(
     () =>
       query
@@ -71,11 +75,14 @@ export function ClientSearchField({
   }, [onDropdownOpenChange]);
 
   const openDropdown = useCallback(() => {
+    setDraft(hasSelectedClient ? "" : clientName);
     setDropdownOpen(true);
     onDropdownOpenChange?.(true);
-  }, [onDropdownOpenChange]);
+    setTimeout(() => modalInputRef.current?.focus(), 50);
+  }, [onDropdownOpenChange, hasSelectedClient, clientName]);
 
   const handleSelectClient = (c: ClientRow) => {
+    onClientNameChange(c.name);
     onSelectClient(c);
     closeDropdown();
   };
@@ -84,6 +91,11 @@ export function ClientSearchField({
     closeDropdown();
     onRequestCreateClient?.();
   };
+
+  const handleClear = useCallback(() => {
+    setDraft("");
+    onClearSelection();
+  }, [onClearSelection]);
 
   const dropdownListContent = (
     <>
@@ -122,8 +134,8 @@ export function ClientSearchField({
         >
           <FontAwesome name="plus" size={14} color={Theme.primary} />
           <Text style={[styles.createRowText, { color: Theme.primary }]}>
-            {clientName.trim()
-              ? `Create "${clientName.trim()}"`
+            {draft.trim()
+              ? `Create "${draft.trim()}"`
               : "Create new client"}
           </Text>
         </TouchableOpacity>
@@ -140,48 +152,26 @@ export function ClientSearchField({
         </View>
       ) : null}
       <View style={styles.inputRow}>
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={openDropdown}
+          style={[styles.input, inputStyle, styles.inputPressable]}
+        >
+          <Text
+            style={[
+              styles.readonlyInputText,
+              { color: hasSelectedClient ? Theme.textPrimary : Theme.placeholder }
+            ]}
+            numberOfLines={1}
+          >
+            {hasSelectedClient ? clientName : (showCreateClientOption ? "Select client or add new" : "Select client")}
+          </Text>
+        </TouchableOpacity>
+        
         {hasSelectedClient ? (
           <TouchableOpacity
-            style={[styles.input, inputStyle, styles.readonlyInput]}
-            onPress={() => {
-              if (dropdownOpen) {
-                closeDropdown();
-              } else {
-                openDropdown();
-              }
-            }}
-            activeOpacity={0.7}
-          >
-            <Text
-              style={styles.readonlyInputText}
-              numberOfLines={1}
-            >
-              {clientName}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <TextInput
-            style={[styles.input, inputStyle]}
-            placeholder={
-              showCreateClientOption
-                ? "Select client or add new"
-                : "Select client"
-            }
-            placeholderTextColor={Theme.placeholder}
-            value={clientName}
-            onChangeText={onClientNameChange}
-            onFocus={openDropdown}
-            onBlur={() => setTimeout(closeDropdown, 180)}
-            autoCapitalize="words"
-            autoCorrect={false}
-            spellCheck={false}
-            autoComplete="off"
-          />
-        )}
-        {selectedId ? (
-          <TouchableOpacity
             style={styles.clearBtn}
-            onPress={onClearSelection}
+            onPress={handleClear}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <FontAwesome
@@ -193,13 +183,7 @@ export function ClientSearchField({
         ) : (
           <TouchableOpacity
             style={styles.chevronBtn}
-            onPress={() => {
-              if (dropdownOpen) {
-                closeDropdown();
-              } else {
-                openDropdown();
-              }
-            }}
+            onPress={() => (dropdownOpen ? closeDropdown() : openDropdown())}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <FontAwesome
@@ -221,6 +205,35 @@ export function ClientSearchField({
               onStartShouldSetResponder={() => true}
             >
               <Text style={styles.dropdownModalTitle}>Select client</Text>
+              <View style={styles.modalSearchRow}>
+                <FontAwesome name="search" size={14} color={Theme.textMuted} />
+                <TextInput
+                  ref={modalInputRef}
+                  style={styles.modalSearchInput}
+                  value={draft}
+                  onChangeText={(t) => {
+                    setDraft(t);
+                    onClientNameChange(t);
+                  }}
+                  placeholder="Search client name..."
+                  placeholderTextColor={Theme.placeholder}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+                {draft.trim().length > 0 ? (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setDraft("");
+                      onClientNameChange("");
+                    }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <FontAwesome name="times-circle" size={18} color={Theme.textMuted} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
               <ScrollView
                 style={styles.dropdownScroll}
                 contentContainerStyle={styles.dropdownScrollContent}
@@ -254,15 +267,19 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   input: {
-    borderWidth: 2,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
     minHeight: 48,
     paddingRight: 44,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
-  readonlyInput: {
+  inputPressable: {
     justifyContent: "center",
   },
   readonlyInputText: {
@@ -312,6 +329,28 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
+  },
+  modalSearchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+  },
+  modalSearchInput: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 8,
+    fontSize: 16,
+    color: Theme.textPrimary,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   dropdownScroll: {
     maxHeight: 260,

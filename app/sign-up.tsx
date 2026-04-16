@@ -27,10 +27,15 @@ import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
 import { validateEmail } from '@/lib/emailValidation';
 import { isPhoneValid, validatePhone } from '@/lib/phoneValidation';
-import { validateFullName, validatePassword } from '@/lib/validation';
+import { formatMobileNumber } from '@/lib/format';
+import { VALIDATION, maxLength, validateFullName, validatePassword } from '@/lib/validation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
-import { checkExistingUserByPhone, type OperatingModel } from '@/features/auth';
+import {
+  checkExistingUserByPhone,
+  checkOrganizationNameTaken,
+  type OperatingModel,
+} from '@/features/auth';
 
 const OPERATING_MODELS: { value: OperatingModel; label: string }[] = [
   { value: 'ASSET_BASED', label: 'Asset' },
@@ -51,6 +56,7 @@ export default function SignUp() {
   const router = useRouter();
   const [operatingModel, setOperatingModel] = useState<OperatingModel>('HYBRID');
   const [fullName, setFullName] = useState('');
+  const [companyName, setCompanyName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -65,10 +71,15 @@ export default function SignUp() {
     masked_email?: string;
   } | null>(null);
   const phoneCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const companyCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [companyNameTakenCheck, setCompanyNameTakenCheck] = useState<{
+    loading: boolean;
+    taken: boolean;
+  } | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const fieldYRef = useRef({ fullName: 0, phone: 0, email: 0, password: 0 });
+  const fieldYRef = useRef({ fullName: 0, company: 0, phone: 0, email: 0, password: 0 });
 
   /** Extra scroll offset so focused field stays above keyboard. Use larger offset on iOS when focusing password so the field stays above the "Strong Password" / autofill bar. */
   const SCROLL_OFFSET_DEFAULT = 100;
@@ -146,6 +157,52 @@ export default function SignUp() {
     };
   }, [phone, isOnline]);
 
+  useEffect(() => {
+    const raw = companyName.trim();
+    if (!raw) {
+      setCompanyNameTakenCheck(null);
+      if (companyCheckTimeoutRef.current) {
+        clearTimeout(companyCheckTimeoutRef.current);
+        companyCheckTimeoutRef.current = null;
+      }
+      return;
+    }
+    const lenErr = maxLength(
+      VALIDATION.COMPANY_NAME_MAX_LENGTH,
+      `Company name must be at most ${VALIDATION.COMPANY_NAME_MAX_LENGTH} characters.`,
+    )(raw);
+    if (lenErr) {
+      setCompanyNameTakenCheck(null);
+      if (companyCheckTimeoutRef.current) {
+        clearTimeout(companyCheckTimeoutRef.current);
+        companyCheckTimeoutRef.current = null;
+      }
+      return;
+    }
+    if (!isOnline) {
+      setCompanyNameTakenCheck(null);
+      return;
+    }
+    if (companyCheckTimeoutRef.current) clearTimeout(companyCheckTimeoutRef.current);
+    setCompanyNameTakenCheck((prev) =>
+      prev ? { ...prev, loading: true } : { loading: true, taken: false },
+    );
+    companyCheckTimeoutRef.current = setTimeout(async () => {
+      companyCheckTimeoutRef.current = null;
+      const result = await checkOrganizationNameTaken(raw);
+      setCompanyNameTakenCheck({
+        loading: false,
+        taken: !result.error && result.taken,
+      });
+    }, 600);
+    return () => {
+      if (companyCheckTimeoutRef.current) {
+        clearTimeout(companyCheckTimeoutRef.current);
+        companyCheckTimeoutRef.current = null;
+      }
+    };
+  }, [companyName, isOnline]);
+
   const handleSignUp = async () => {
     setErrorMsg(null);
     if (!isOnline) {
@@ -168,44 +225,84 @@ export default function SignUp() {
       setErrorMsg(fullNameErr);
       return;
     }
+    const companyTrim = companyName.trim();
+    if (companyTrim.length === 0) {
+      setErrorMsg('Please enter company name.');
+      return;
+    }
+    const companyErr = maxLength(
+      VALIDATION.COMPANY_NAME_MAX_LENGTH,
+      `Company name must be at most ${VALIDATION.COMPANY_NAME_MAX_LENGTH} characters.`,
+    )(companyTrim);
+    if (companyErr) {
+      setErrorMsg(companyErr);
+      return;
+    }
+    if (companyNameTakenCheck?.taken) {
+      setErrorMsg('Company name already exists.');
+      return;
+    }
+    if (companyNameTakenCheck?.loading) {
+      setLoading(true);
+      const dup = await checkOrganizationNameTaken(companyTrim);
+      setLoading(false);
+      if (dup.error) {
+        setErrorMsg(dup.error.message);
+        return;
+      }
+      if (dup.taken) {
+        setErrorMsg('Company name already exists.');
+        return;
+      }
+    }
     if (!trimmedEmail) {
       setErrorMsg('Please enter email.');
       return;
     }
     const normalizedPhone = normalizePhone(phone);
-    if (normalizedPhone.length > 0) {
-      const phoneErr = validatePhone(phone);
-      if (phoneErr) {
-        setErrorMsg(phoneErr);
-        return;
-      }
-      setLoading(true);
-      const existing = await checkExistingUserByPhone(normalizedPhone);
-      setLoading(false);
-      if (existing.error) {
-        setErrorMsg(existing.error.message);
-        return;
-      }
-      if (existing.exists && existing.email) {
-        Alert.alert(
-          'Account already exists',
-          existing.masked_email
-            ? `Sign in with ${existing.masked_email}. We've filled your email—enter your password.`
-            : 'An account with this phone already exists. Sign in below—we\'ve filled your email.',
-          [
-            {
-              text: 'OK',
-              onPress: () =>
-                router.replace(`/sign-in?email=${encodeURIComponent(existing.email!)}`),
-            },
-          ]
-        );
-        return;
-      }
+    if (normalizedPhone.length === 0) {
+      setErrorMsg('Please enter your phone number.');
+      return;
+    }
+    const phoneErr = validatePhone(phone);
+    if (phoneErr) {
+      setErrorMsg(phoneErr);
+      return;
     }
     setLoading(true);
-    const phoneToSave = normalizedPhone.length > 0 ? normalizedPhone : undefined;
-    const { error } = await signUp(trimmedEmail, password, fullName.trim() || undefined, 'user', operatingModel, phoneToSave);
+    const existing = await checkExistingUserByPhone(normalizedPhone);
+    setLoading(false);
+    if (existing.error) {
+      setErrorMsg(existing.error.message);
+      return;
+    }
+    if (existing.exists && existing.email) {
+      Alert.alert(
+        'Account already exists',
+        existing.masked_email
+          ? `Sign in with ${existing.masked_email}. We've filled your email—enter your password.`
+          : 'An account with this phone already exists. Sign in below—we\'ve filled your email.',
+        [
+          {
+            text: 'OK',
+            onPress: () =>
+              router.replace(`/sign-in?email=${encodeURIComponent(existing.email!)}`),
+          },
+        ]
+      );
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await signUp(
+      trimmedEmail,
+      password,
+      fullName.trim() || undefined,
+      'user',
+      operatingModel,
+      normalizedPhone,
+      companyTrim,
+    );
     setLoading(false);
     if (error) {
       const isNetwork = error.message.includes('Cannot reach server');
@@ -262,25 +359,6 @@ export default function SignUp() {
             </View>
           ) : null}
 
-          <Text style={styles.label}>Business Model</Text>
-          <View style={styles.modelRow}>
-            {OPERATING_MODELS.map(({ value, label }) => {
-              const isActive = operatingModel === value;
-              return (
-                <TouchableOpacity
-                  key={value}
-                  style={[styles.modelChip, isActive && styles.modelChipActive]}
-                  onPress={() => setOperatingModel(value)}
-                  disabled={loading}
-                >
-                  <Text style={[styles.modelChipText, isActive && styles.modelChipTextActive]}>
-                    {label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
           <View
             style={styles.inputWrap}
             onLayout={(e) => { fieldYRef.current.fullName = e.nativeEvent.layout.y; }}
@@ -301,14 +379,42 @@ export default function SignUp() {
           </View>
           <View
             style={styles.inputWrap}
+            onLayout={(e) => { fieldYRef.current.company = e.nativeEvent.layout.y; }}
+          >
+            <TextInput
+              style={[styles.input, styles.inputNoMargin]}
+              placeholder="Company Name"
+              placeholderTextColor={Theme.authTextMuted}
+              value={companyName}
+              onChangeText={setCompanyName}
+              onFocus={() => scrollToField('company')}
+              autoCapitalize="words"
+              autoCorrect={false}
+              spellCheck={false}
+              autoComplete="organization"
+              editable={!loading}
+            />
+          </View>
+          {companyName.trim().length > 0 ? (
+            companyNameTakenCheck?.loading ? (
+              <Text style={styles.phoneExistsHint}>Checking company name…</Text>
+            ) : companyNameTakenCheck?.taken ? (
+              <Text style={[styles.phoneExistsText, styles.companyTakenHint]}>
+                Company name already exists.
+              </Text>
+            ) : null
+          ) : null}
+          <View
+            style={styles.inputWrap}
             onLayout={(e) => { fieldYRef.current.phone = e.nativeEvent.layout.y; }}
           >
             <TextInput
               style={[styles.input, styles.inputNoMargin]}
-              placeholder="Phone (Optional for invites)"
+              placeholder="10-digit Phone"
               placeholderTextColor={Theme.authTextMuted}
               value={phone}
-              onChangeText={setPhone}
+              onChangeText={(text) => setPhone(formatMobileNumber(text))}
+              maxLength={10}
               onFocus={() => scrollToField('phone')}
               keyboardType="phone-pad"
               autoCorrect={false}
@@ -319,19 +425,31 @@ export default function SignUp() {
           </View>
           {phoneExistsCheck?.loading ? (
             <Text style={styles.phoneExistsHint}>Checking…</Text>
-          ) : phoneExistsCheck?.exists && phoneExistsCheck.email ? (
+          ) : phoneExistsCheck?.exists ? (
             <View style={styles.phoneExistsRow}>
-              <Text style={styles.phoneExistsText}>This number is already registered. </Text>
-              <TouchableOpacity
-                onPress={() =>
-                  router.replace(`/sign-in?email=${encodeURIComponent(phoneExistsCheck.email!)}`)}
-                hitSlop={8}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.phoneExistsLink}>Sign in</Text>
-              </TouchableOpacity>
+              <Text style={styles.phoneExistsText}>This number is already registered.</Text>
             </View>
           ) : null}
+
+          <Text style={styles.label}>Business Model</Text>
+          <View style={styles.modelRow}>
+            {OPERATING_MODELS.map(({ value, label }) => {
+              const isActive = operatingModel === value;
+              return (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.modelChip, isActive && styles.modelChipActive]}
+                  onPress={() => setOperatingModel(value)}
+                  disabled={loading}
+                >
+                  <Text style={[styles.modelChipText, isActive && styles.modelChipTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
           <View
             style={styles.inputWrap}
             onLayout={(e) => { fieldYRef.current.email = e.nativeEvent.layout.y; }}
@@ -420,7 +538,7 @@ export default function SignUp() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.screenBackground,
     padding: Layout.screenPaddingHorizontal + 8,
   },
   scrollContent: {
@@ -457,19 +575,19 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 34,
     fontWeight: '800',
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
     marginBottom: 8,
     letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 16,
-    color: Theme.authTextMuted,
+    color: Theme.textMuted,
     letterSpacing: 0.5,
   },
   errorAlert: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: Theme.authSurface,
+    backgroundColor: Theme.surface,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.authPrimary + '80',
@@ -489,7 +607,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 12,
     fontWeight: '700',
-    color: Theme.authTextMuted,
+    color: Theme.textMuted,
     marginBottom: 12,
     letterSpacing: 1,
   },
@@ -503,8 +621,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.authBorder,
-    backgroundColor: Theme.authSurface,
+    borderColor: Theme.border,
+    backgroundColor: Theme.surface,
     alignItems: 'center',
   },
   modelChipActive: {
@@ -514,19 +632,19 @@ const styles = StyleSheet.create({
   modelChipText: {
     fontSize: 14,
     fontWeight: '600',
-    color: Theme.authTextMuted,
+    color: Theme.textMuted,
   },
   modelChipTextActive: {
     color: '#ffffff',
   },
   input: {
-    backgroundColor: Theme.authInputBg,
+    backgroundColor: Theme.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.authBorder,
+    borderColor: Theme.border,
     padding: 16,
     fontSize: 16,
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
     marginBottom: 16,
   },
   inputWrap: {
@@ -535,9 +653,13 @@ const styles = StyleSheet.create({
   inputNoMargin: {
     marginBottom: 0,
   },
+  companyTakenHint: {
+    marginTop: -8,
+    marginBottom: 12,
+  },
   phoneExistsHint: {
     fontSize: 13,
-    color: Theme.authTextMuted,
+    color: Theme.textMuted,
     marginTop: -8,
     marginBottom: 12,
   },
@@ -563,14 +685,14 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   inputPassword: {
-    backgroundColor: Theme.authInputBg,
+    backgroundColor: Theme.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.authBorder,
+    borderColor: Theme.border,
     padding: 16,
     paddingRight: 48,
     fontSize: 16,
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
   },
   eyeButton: {
     position: 'absolute',
@@ -610,12 +732,12 @@ const styles = StyleSheet.create({
   },
   footerMuted: {
     fontSize: 14,
-    color: Theme.authTextMuted,
+    color: Theme.textMuted,
     fontWeight: '500',
   },
   footerLink: {
     fontSize: 14,
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
     fontWeight: '700',
   },
 });

@@ -1,16 +1,8 @@
-/**
- * Placeholder for web support when react-native-maps is not available.
- */
-
-import React from "react";
-import {
-  StyleSheet,
-  Text,
-  View,
-  FontAwesome,
-} from "react-native";
+import React, { useMemo } from "react";
+import { StyleSheet, Text, View } from "react-native";
 import FontAwesomeIcon from "@expo/vector-icons/FontAwesome";
 import Theme from "@/constants/Theme";
+import { LeafletMap, type LeafletLatLng, type LeafletMarker } from "@/components/driver/LeafletMap.web";
 
 export type TrackingMapLocationLabels = [string, string, string, string, string];
 
@@ -18,11 +10,11 @@ export interface TrackingMapBlockProps {
   mapHeight: number;
   vehicleLabel: string | null;
   locationLabels?: TrackingMapLocationLabels;
-  originCoordinate?: any;
-  destinationCoordinate?: any;
-  latestLocation?: any;
+  originCoordinate?: { latitude: number; longitude: number } | null;
+  destinationCoordinate?: { latitude: number; longitude: number } | null;
+  latestLocation?: { latitude: number; longitude: number } | null;
   driverLocationLoading?: boolean;
-  tripLocationPoints?: any[];
+  tripLocationPoints?: { latitude: number; longitude: number }[];
   locationAddress?: string | null;
 }
 
@@ -71,8 +63,8 @@ const styles = StyleSheet.create({
   trackingMapNodeIcon: {
     width: 40,
     height: 40,
-    borderRadius: 12,
-    backgroundColor: Theme.textPrimaryDark,
+    borderRadius: 20,
+    backgroundColor: Theme.primary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -148,13 +140,78 @@ const styles = StyleSheet.create({
   },
 });
 
-export function TrackingMapBlock({ mapHeight }: TrackingMapBlockProps) {
+export function TrackingMapBlock({
+  mapHeight,
+  originCoordinate,
+  destinationCoordinate,
+  latestLocation,
+  tripLocationPoints = [],
+}: TrackingMapBlockProps) {
+  const center = useMemo<LeafletLatLng>(() => {
+    if (latestLocation?.latitude != null && latestLocation?.longitude != null) {
+      return { latitude: latestLocation.latitude, longitude: latestLocation.longitude };
+    }
+    if (originCoordinate?.latitude != null && originCoordinate?.longitude != null) {
+      return { latitude: originCoordinate.latitude, longitude: originCoordinate.longitude };
+    }
+    return { latitude: 20.5937, longitude: 78.9629 };
+  }, [latestLocation, originCoordinate]);
+
+  const markers = useMemo<LeafletMarker[]>(() => {
+    const next: LeafletMarker[] = [];
+    if (originCoordinate?.latitude != null && originCoordinate?.longitude != null) {
+      next.push({
+        id: "origin",
+        coordinate: originCoordinate,
+        label: "Origin",
+        color: "#ef4444",
+      });
+    }
+    if (destinationCoordinate?.latitude != null && destinationCoordinate?.longitude != null) {
+      next.push({
+        id: "destination",
+        coordinate: destinationCoordinate,
+        label: "Destination",
+        color: "#10b981",
+      });
+    }
+    if (latestLocation?.latitude != null && latestLocation?.longitude != null) {
+      next.push({
+        id: "live",
+        coordinate: latestLocation,
+        label: "Live",
+        color: Theme.primary,
+      });
+    }
+    return next;
+  }, [originCoordinate, destinationCoordinate, latestLocation]);
+
+  const polyline = useMemo<LeafletLatLng[]>(() => {
+    const points = tripLocationPoints
+      .filter((p) => p?.latitude != null && p?.longitude != null)
+      .map((p) => ({ latitude: p.latitude, longitude: p.longitude }));
+    if (points.length >= 2) return points;
+    if (
+      originCoordinate?.latitude != null &&
+      originCoordinate?.longitude != null &&
+      destinationCoordinate?.latitude != null &&
+      destinationCoordinate?.longitude != null
+    ) {
+      return [originCoordinate, destinationCoordinate];
+    }
+    return [];
+  }, [tripLocationPoints, originCoordinate, destinationCoordinate]);
+
   return (
     <View style={[styles.trackingPageMapArea, { height: mapHeight }]}>
-      <FontAwesomeIcon name="map-o" size={40} color={Theme.textMuted} />
-      <Text style={styles.placeholderText}>
-        Map view is not supported on web yet.
-      </Text>
+      <LeafletMap
+        style={StyleSheet.absoluteFill}
+        center={center}
+        zoom={11}
+        markers={markers}
+        polyline={polyline}
+        polylineColor={Theme.primary}
+      />
     </View>
   );
 }

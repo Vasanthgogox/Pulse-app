@@ -1,12 +1,12 @@
 # Ledger layout: Treasury-style mock → app mapping
 
-This doc maps the **Treasury / Fiscal Matrix** web mock (dark header + light table) to the current q-mobile Finance tab so we can plan or adopt the layout.
+This doc maps the **Treasury / Financial Summary** web mock (dark header + light table) to the current q-mobile Finance tab so we can plan or adopt the layout.
 
 ## Mock structure (summary)
 
 | Section | Mock (web) | Current app (`app/(tabs)/finance.tsx` + `LedgerTab`) |
 |--------|------------|------------------------------------------------------|
-| **Header** | "TREASURY" + "Fiscal Matrix", icons: LayoutGrid, Globe, Bell, User | TeslaHeader with org/title; no "TREASURY" / "Fiscal Matrix" wording |
+| **Header** | "TREASURY" + "Financial Summary", icons: LayoutGrid, Globe, Bell, User | TeslaHeader with org/title; no "TREASURY" / "Financial Summary" wording |
 | **Tabs** | LEDGER \| CUSTOMERS \| SUPPLIERS \| GARRAGE \| DRIVERS | Same tabs (`TABS`, `financeSubTab`) |
 | **Summary** | Total Cash In (green) \| Total Cash Out (red) | `TreasurySummaryCard` / tab-specific labels (Total Cash In/Out for ledger) |
 | **Toolbar** | Search + "RANGE" + "ALL" + FileText | Search (`searchQuery`) + period filter + entity/source filters; no explicit "RANGE" / "ALL" pills |
@@ -33,7 +33,7 @@ So the **current data model and LedgerTab/FinancialRow already support** the moc
 ## Optional UI tweaks (if we adopt this layout)
 
 1. **Header**
-   - Optionally show title "TREASURY" and subtitle "Fiscal Matrix" (e.g. when on Finance tab) using Theme colors.
+   - Optionally show title "TREASURY" and subtitle "Financial Summary" (e.g. when on Finance tab) using Theme colors.
    - Icons: map LayoutGrid/Globe/Bell/User to existing or new header actions (e.g. layout toggle, notifications, profile).
 
 2. **Theme**

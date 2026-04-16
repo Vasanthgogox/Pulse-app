@@ -10,7 +10,7 @@ const STORAGE_KEY = 'driver_theme';
 const MAP_STORAGE_KEY = 'driver_map_theme';
 export type DriverThemeMode = 'light' | 'dark';
 export type MapThemeMode = 'light' | 'dark' | 'auto';
-const DEFAULT_THEME: DriverThemeMode = 'dark';
+const DEFAULT_THEME: DriverThemeMode = 'light';
 const DEFAULT_MAP_THEME: MapThemeMode = 'auto';
 
 type DriverThemeContextType = {
@@ -48,6 +48,7 @@ export function getDriverThemeColors(mode: DriverThemeMode) {
     textOnPrimary: Theme.textOnPrimary,
     primary: Theme.driverPrimary,
     emerald: Theme.driverEmerald,
+    emeraldDark: Theme.driverEmeraldDark,
     gold: Theme.driverGold,
     tabBarBg: isDark ? Theme.driverTabBarBg : Theme.surface,
     tabInactive: isDark ? Theme.driverTabInactive : Theme.textMuted,

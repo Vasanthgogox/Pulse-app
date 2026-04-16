@@ -58,7 +58,10 @@ export function FloatingOpsAgentButton() {
 
   if (!show) return null;
 
-  const bottom = Layout.tabBarHeight + insets.bottom + Layout.tabBarBottomPaddingMin + 8;
+  const bottom =
+    Layout.demoTabBarScrollBottomInset +
+    insets.bottom +
+    Layout.tabBarBottomPaddingMin;
 
   return (
     <View
@@ -67,7 +70,7 @@ export function FloatingOpsAgentButton() {
     >
       <TouchableOpacity
         activeOpacity={0.85}
-        onPress={() => router.push('/(tabs)/index' as import('expo-router').Href)}
+        onPress={() => router.navigate('/')}
         style={styles.touchable}
         accessibilityLabel="Open Ops Agent"
       >
