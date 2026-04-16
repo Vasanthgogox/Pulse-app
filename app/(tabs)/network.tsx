@@ -3223,15 +3223,15 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   networkActionStack: {
-    alignItems: "flex-end",
+    alignItems: "center",
     gap: 4,
   },
   networkActionHint: {
     maxWidth: 110,
     fontSize: 8,
     fontWeight: "700",
-    color: Theme.textSecondary,
-    textAlign: "right",
+    color: TESLA_BLACK,
+    textAlign: "center",
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
