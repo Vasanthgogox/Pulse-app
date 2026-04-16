@@ -94,6 +94,7 @@ export function useFinanceEntities({
     () => tripsWhereOrgIsSupplier.map((t) => t.id),
     [tripsWhereOrgIsSupplier]
   );
+  const shouldLoadTripSubcontracts = !!orgId && tripIdsWhereOrgIsSupplier.length > 0;
   
   const { data: tripSubcontracts = [], isPending: subcontractsLoading } = 
     useTripSubcontractsQuery(orgId, tripIdsWhereOrgIsSupplier);
@@ -132,7 +133,7 @@ export function useFinanceEntities({
     connLoading ||
     tripsAsClientLoading ||
     tripsAsSupplierLoading ||
-    subcontractsLoading ||
+    (shouldLoadTripSubcontracts && subcontractsLoading) ||
     indentsForFinanceLoading ||
     acceptedQuotesLoading;
 

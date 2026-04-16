@@ -1155,6 +1155,20 @@ export default function DriverRadarScreen() {
     incomingTripOrgInvite?.from_org_logo_url?.trim() ||
     incomingTripOrgInvite?.from_org_avatar_url?.trim() ||
     null;
+  const incomingOtpPopupPickup =
+    effectiveFirstIncoming?.pickup_area?.trim() || "Pickup";
+  const incomingOtpPopupDrop =
+    effectiveFirstIncoming?.drop_location?.trim() || "Drop-off";
+  const incomingOtpPopupBadge = firstIncomingRequiresOtp
+    ? "OTP verification required"
+    : "New trip";
+  const incomingOtpPopupEarnings =
+    newAssignmentCommission > 0 ? formatINR(newAssignmentCommission) : null;
+  const handleDismissIncomingOtpPopup = () => {
+    if (!effectiveFirstIncoming) return;
+    setAcknowledgedOtpPopupTripId(String(effectiveFirstIncoming.id));
+    setIncomingOtpPopupTripId(null);
+  };
   const activeGuidanceTrip =
     activeMission ??
     (effectiveFirstIncoming &&
@@ -3534,7 +3548,7 @@ export default function DriverRadarScreen() {
         visible={shouldShowIncomingOtpPopup}
         animationType="fade"
         transparent
-        onRequestClose={() => {}}
+        onRequestClose={handleDismissIncomingOtpPopup}
       >
         <View style={styles.incomingOtpPopupBackdrop}>
           <View
@@ -3545,61 +3559,193 @@ export default function DriverRadarScreen() {
           >
             <View
               style={[
-                styles.incomingOtpPopupAvatarWrap,
+                styles.incomingOtpPopupBadge,
                 {
-                  backgroundColor: colors.emeraldMuted ?? Theme.surfaceLight,
+                  backgroundColor:
+                    colors.emeraldMuted ?? Theme.driverEmeraldMuted,
+                  borderColor:
+                    colors.emeraldBorder ?? Theme.driverEmeraldBorder,
+                },
+              ]}
+            >
+              <FontAwesome name="bolt" size={11} color={colors.emerald} />
+              <Text
+                style={[
+                  styles.incomingOtpPopupBadgeText,
+                  { color: colors.emerald },
+                ]}
+              >
+                {incomingOtpPopupBadge}
+              </Text>
+            </View>
+
+            <View style={styles.incomingOtpPopupHero}>
+              <View
+                style={[
+                  styles.incomingOtpPopupAvatarWrap,
+                  {
+                    backgroundColor: colors.emeraldMuted ?? Theme.surfaceLight,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                {incomingOtpPopupAvatarUri ? (
+                  <Image
+                    source={{ uri: incomingOtpPopupAvatarUri }}
+                    style={styles.incomingOtpPopupAvatar}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <FontAwesome
+                    name={firstIncomingIsAggregate ? "building" : "user"}
+                    size={24}
+                    color={colors.emerald}
+                  />
+                )}
+              </View>
+              <View style={styles.incomingOtpPopupHeroText}>
+                <Text
+                  style={[styles.incomingOtpPopupEyebrow, { color: colors.textMuted }]}
+                >
+                  {firstIncomingCounterpartyLabel.toUpperCase()}
+                </Text>
+                <Text
+                  style={[styles.incomingOtpPopupTitle, { color: colors.text }]}
+                >
+                  {incomingOtpPopupTitle}
+                </Text>
+                <Text
+                  style={[styles.incomingOtpPopupName, { color: colors.text }]}
+                  numberOfLines={2}
+                >
+                  {incomingOtpPopupName}
+                </Text>
+              </View>
+            </View>
+
+            <View
+              style={[
+                styles.incomingOtpPopupRouteCard,
+                {
+                  backgroundColor: colors.surfaceElevated,
                   borderColor: colors.border,
                 },
               ]}
             >
-              {incomingOtpPopupAvatarUri ? (
-                <Image
-                  source={{ uri: incomingOtpPopupAvatarUri }}
-                  style={styles.incomingOtpPopupAvatar}
-                  resizeMode="cover"
-                />
-              ) : (
-                <FontAwesome
-                  name={firstIncomingIsAggregate ? "building" : "user"}
-                  size={24}
-                  color={colors.emerald}
-                />
-              )}
+              <View style={styles.incomingOtpPopupRouteRow}>
+                <View
+                  style={[
+                    styles.incomingOtpPopupRouteIcon,
+                    { backgroundColor: colors.emeraldMuted ?? Theme.positiveMuted },
+                  ]}
+                >
+                  <FontAwesome name="circle" size={9} color={colors.emerald} />
+                </View>
+                <Text
+                  style={[styles.incomingOtpPopupRouteValue, { color: colors.text }]}
+                  numberOfLines={2}
+                >
+                  {incomingOtpPopupPickup}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.incomingOtpPopupRouteDivider,
+                  { backgroundColor: colors.border },
+                ]}
+              />
+              <View style={styles.incomingOtpPopupRouteRow}>
+                <View
+                  style={[
+                    styles.incomingOtpPopupRouteIcon,
+                    { backgroundColor: Theme.negativeMuted },
+                  ]}
+                >
+                  <FontAwesome name="map-marker" size={11} color={Theme.negative} />
+                </View>
+                <Text
+                  style={[styles.incomingOtpPopupRouteValue, { color: colors.text }]}
+                  numberOfLines={2}
+                >
+                  {incomingOtpPopupDrop}
+                </Text>
+              </View>
             </View>
+
+            <View style={styles.incomingOtpPopupMetaRow}>
+              <View
+                style={[
+                  styles.incomingOtpPopupMetaPill,
+                  {
+                    backgroundColor: colors.surfaceElevated,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.incomingOtpPopupMetaLabel,
+                    { color: colors.textMuted },
+                  ]}
+                >
+                  Trip type
+                </Text>
+                <Text
+                  style={[
+                    styles.incomingOtpPopupMetaValue,
+                    { color: colors.text },
+                  ]}
+                >
+                  {firstIncomingCounterpartyLabel}
+                </Text>
+              </View>
+              {incomingOtpPopupEarnings ? (
+                <View
+                  style={[
+                    styles.incomingOtpPopupMetaPill,
+                    {
+                      backgroundColor: colors.surfaceElevated,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.incomingOtpPopupMetaLabel,
+                      { color: colors.textMuted },
+                    ]}
+                  >
+                    Est. earning
+                  </Text>
+                  <Text
+                    style={[
+                      styles.incomingOtpPopupMetaValue,
+                      { color: colors.emerald },
+                    ]}
+                  >
+                    {incomingOtpPopupEarnings}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
             <Text
-              style={[styles.incomingOtpPopupTitle, { color: colors.text }]}
+              style={[styles.incomingOtpPopupCaption, { color: colors.textMuted }]}
             >
-              {incomingOtpPopupTitle}
-            </Text>
-            <Text
-              style={[styles.incomingOtpPopupName, { color: colors.text }]}
-              numberOfLines={2}
-            >
-              {incomingOtpPopupName}
-            </Text>
-            <Text
-              style={[
-                styles.incomingOtpPopupRoute,
-                { color: colors.textMuted },
-              ]}
-              numberOfLines={3}
-            >
-              {effectiveFirstIncoming?.pickup_area?.trim() || "Pickup"} to{" "}
-              {effectiveFirstIncoming?.drop_location?.trim() || "Drop-off"}
+              Review the assignment details and continue to OTP claim when you are ready.
             </Text>
             <TouchableOpacity
               style={[
                 styles.incomingOtpPopupButton,
-                { backgroundColor: colors.emerald },
+                {
+                  backgroundColor: colors.emerald,
+                  shadowColor: colors.emerald,
+                },
               ]}
               activeOpacity={0.85}
-              onPress={() => {
-                if (!effectiveFirstIncoming) return;
-                setAcknowledgedOtpPopupTripId(String(effectiveFirstIncoming.id));
-                setIncomingOtpPopupTripId(null);
-              }}
+              onPress={handleDismissIncomingOtpPopup}
             >
-              <Text style={styles.incomingOtpPopupButtonText}>OK</Text>
+              <Text style={styles.incomingOtpPopupButtonText}>Continue</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -4896,58 +5042,158 @@ const styles = StyleSheet.create({
   incomingOtpPopupCard: {
     width: "100%",
     maxWidth: 360,
-    borderRadius: 24,
+    borderRadius: 28,
     borderWidth: 1,
     paddingHorizontal: 24,
-    paddingVertical: 28,
+    paddingVertical: 24,
+    alignItems: "stretch",
+    ...(Platform.OS === "ios"
+      ? {
+          shadowColor: Theme.shadow,
+          shadowOffset: { width: 0, height: 18 },
+          shadowOpacity: 0.18,
+          shadowRadius: 36,
+        }
+      : { elevation: 10 }),
+  },
+  incomingOtpPopupBadge: {
+    alignSelf: "center",
+    minHeight: 32,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: "row",
     alignItems: "center",
+    gap: 6,
+    marginBottom: 18,
+  },
+  incomingOtpPopupBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  incomingOtpPopupHero: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
   },
   incomingOtpPopupAvatarWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 68,
+    height: 68,
+    borderRadius: 22,
     borderWidth: 1,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
   },
   incomingOtpPopupAvatar: {
     width: "100%",
     height: "100%",
   },
+  incomingOtpPopupHeroText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  incomingOtpPopupEyebrow: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
   incomingOtpPopupTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "900",
-    textAlign: "center",
+    letterSpacing: -0.5,
   },
   incomingOtpPopupName: {
-    marginTop: 8,
-    fontSize: 18,
+    marginTop: 6,
+    fontSize: 17,
     fontWeight: "800",
-    textAlign: "center",
   },
-  incomingOtpPopupRoute: {
-    marginTop: 10,
+  incomingOtpPopupRouteCard: {
+    marginTop: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  incomingOtpPopupRouteRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  incomingOtpPopupRouteIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  incomingOtpPopupRouteValue: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 14,
-    fontWeight: "600",
-    textAlign: "center",
+    fontWeight: "700",
     lineHeight: 20,
   },
+  incomingOtpPopupRouteDivider: {
+    height: 1,
+    marginLeft: 14,
+  },
+  incomingOtpPopupMetaRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 14,
+  },
+  incomingOtpPopupMetaPill: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    minWidth: 0,
+  },
+  incomingOtpPopupMetaLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  incomingOtpPopupMetaValue: {
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  incomingOtpPopupCaption: {
+    marginTop: 14,
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 19,
+    textAlign: "center",
+  },
   incomingOtpPopupButton: {
-    marginTop: 20,
-    minWidth: 160,
+    marginTop: 18,
+    minWidth: 180,
     minHeight: Layout.minTouchTargetSize,
-    borderRadius: 14,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,
-    paddingVertical: 12,
+    paddingVertical: 14,
+    ...(Platform.OS === "ios"
+      ? {
+          shadowOffset: { width: 0, height: 10 },
+          shadowOpacity: 0.22,
+          shadowRadius: 20,
+        }
+      : { elevation: 6 }),
   },
   incomingOtpPopupButtonText: {
     fontSize: 16,
     fontWeight: "800",
     color: Theme.textOnPrimary,
+    letterSpacing: 0.2,
   },
   fullMapModal: {
     flex: 1,
