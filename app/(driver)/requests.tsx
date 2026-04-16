@@ -9,7 +9,6 @@ const GRAY_700 = '#374151';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import { DriverInviteCard } from '@/components/driver/DriverInviteCard';
 import Layout from '@/constants/Layout';
-import Theme from '@/constants/Theme';
 import { tripEarningsForDriver } from '@/lib/driverUtils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
@@ -227,6 +226,402 @@ export default function DriverRequestsScreen() {
     [handleLeaveFleet]
   );
 
+  const styles = useMemo(() => StyleSheet.create({
+    container: { flex: 1 },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: Layout.driverHeaderHorizontalPadding,
+      paddingBottom: Layout.driverHeaderBottomPadding,
+      borderBottomWidth: 1,
+    },
+    headerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Layout.driverHeaderGap,
+      flex: 1,
+      minWidth: 0,
+    },
+    headerTextWrap: {
+      flex: 1,
+      minWidth: 0,
+    },
+    avatarBtn: { padding: 2 },
+    avatarCircle: {
+      width: Layout.driverHeaderAvatarSize,
+      height: Layout.driverHeaderAvatarSize,
+      borderRadius: Layout.driverHeaderAvatarSize / 2,
+      borderWidth: 2,
+      overflow: 'hidden',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    avatarImage: { width: '100%', height: '100%', borderRadius: Layout.driverHeaderAvatarSize / 2 },
+    brand: { fontSize: 9, fontWeight: '800', letterSpacing: 1.6, marginBottom: 1 },
+    welcomeTitle: { fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
+    creditsSection: {
+      paddingHorizontal: 16,
+      paddingTop: 20,
+      paddingBottom: 24,
+    },
+    creditsTitle: {
+      fontSize: 36,
+      fontWeight: '900',
+      letterSpacing: -0.5,
+      fontStyle: 'italic',
+      textTransform: 'uppercase',
+      color: EMERALD_500,
+    },
+    creditsSubtitle: {
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+      marginTop: 8,
+      textTransform: 'uppercase',
+      color: GRAY_700,
+    },
+    notificationBtn: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      borderWidth: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    scroll: { flex: 1, alignSelf: 'stretch' },
+    scrollContent: { paddingHorizontal: 24, paddingTop: 8 },
+    section: { marginBottom: 28 },
+    sectionTitle: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginBottom: 4 },
+    sectionSubtitle: { fontSize: 12, marginBottom: 16, lineHeight: 18 },
+    card: {
+      width: '100%',
+      borderRadius: 18,
+      borderWidth: 1,
+      padding: 18,
+      marginBottom: 14,
+    },
+    cardReadOnly: { paddingBottom: 16 },
+    premiumHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 12,
+    },
+    premiumHeaderLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      flex: 1,
+      minWidth: 0,
+    },
+    premiumInfoBtn: {
+      width: 28,
+      height: 28,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: 8,
+    },
+    cardHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginBottom: 14,
+    },
+    cardIconWrap: {
+      width: 44,
+      height: 44,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    cardHeaderText: { flex: 1, minWidth: 0 },
+    cardOrgName: { fontSize: 16, fontWeight: '800', marginBottom: 4 },
+    cardOffer: { fontSize: 10, lineHeight: 16, fontWeight: '500' },
+    cardActions: { flexDirection: 'row', gap: 12 },
+    btnSecondary: {
+      flex: 1,
+      paddingVertical: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderRadius: 10,
+    },
+    btnSecondaryText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
+    btnPrimary: {
+      flex: 1,
+      paddingVertical: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 10,
+    },
+    btnPrimaryText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
+    btnDisabled: { opacity: 0.6 },
+    statusBadge: {
+      flexDirection: 'column',
+      alignItems: 'center',
+      position: 'absolute',
+      paddingHorizontal: 6,
+      paddingVertical: 4,
+      borderRadius: 8,
+    },
+    statusBadgeText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.2, marginTop: 2 },
+    quickStatsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 12,
+      marginBottom: 14,
+      paddingHorizontal: 2,
+    },
+    quickStatCol: { flex: 1, minWidth: 0 },
+    quickStatLabel: {
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 0.7,
+      textTransform: 'uppercase',
+    },
+    quickStatValue: { fontSize: 13, fontWeight: '800', marginTop: 4 },
+    quickDivider: { width: 1, height: 28, marginHorizontal: 8 },
+    insightCard: {
+      borderRadius: 18,
+      padding: 14,
+      marginBottom: 10,
+    },
+    insightHeader: {
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 10,
+    },
+    insightIconWrap: {
+      width: 26,
+      height: 26,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    insightLabel: {
+      color: colors.textMuted,
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 1,
+      textAlign: 'center',
+    },
+    insightAmount: {
+      color: colors.text,
+      fontSize: 24,
+      fontWeight: '800',
+      textAlign: 'center',
+      marginTop: 2,
+    },
+    insightProgressHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 6,
+    },
+    insightProgressLabel: { fontSize: 11, fontWeight: '600', color: colors.textMuted },
+    insightProgressValue: { fontSize: 11, fontWeight: '700' },
+    insightProgressTrack: {
+      width: '100%',
+      height: 8,
+      borderRadius: 99,
+      backgroundColor: 'rgba(255,255,255,0.08)',
+      overflow: 'hidden',
+    },
+    insightProgressFill: { height: '100%', borderRadius: 99 },
+    insightFooter: {
+      marginTop: 10,
+      paddingTop: 10,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    insightFooterText: { color: colors.textMuted, fontSize: 10, fontWeight: '600', flex: 1 },
+    insightFooterAmount: { color: colors.text, fontWeight: '800' },
+    metricsSplitRow: { flexDirection: 'row', gap: 10 },
+    metricTile: {
+      flex: 1,
+      borderWidth: 1,
+      borderRadius: 12,
+      padding: 12,
+    },
+    metricTileHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+    metricTileLabel: {
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 0.7,
+      textTransform: 'uppercase',
+    },
+    metricTileValue: { fontSize: 18, fontWeight: '800' },
+    passbookBlock: {
+      marginTop: 14,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+    },
+    passbookRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 7,
+    },
+    passbookLabel: { fontSize: 13, fontWeight: '600' },
+    passbookValue: { fontSize: 14, fontWeight: '800' },
+    passbookActions: { flexDirection: 'row', gap: 12, marginTop: 12, alignItems: 'center' },
+    passbookActionsColumn: {
+      marginTop: 14,
+      gap: 10,
+    },
+    viewPassbookBtnLarge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 14,
+      paddingHorizontal: 18,
+      borderRadius: 16,
+      elevation: 4,
+    },
+    viewPassbookBtnLargeLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-start',
+      gap: 10,
+    },
+    viewPassbookBtnLargeSpacer: { flex: 1 },
+    viewPassbookBtnLargeText: {
+      fontSize: 13,
+      fontWeight: '900',
+      letterSpacing: 0.8,
+      textTransform: 'uppercase',
+    },
+    viewPassbookBtnLargeArrow: { opacity: 0.35 },
+    leaveFleetLink: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 6,
+    },
+    leaveFleetLinkText: { fontSize: 13, fontWeight: '700' },
+    viewPassbookBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 12,
+      borderRadius: 10,
+    },
+    viewPassbookBtnText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5, color: colors.textOnPrimary },
+    leaveFleetBtn: {
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderRadius: 10,
+      borderWidth: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      minWidth: 100,
+    },
+    leaveFleetBtnText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.3 },
+    historyCardMinimal: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderRadius: 12,
+      borderWidth: 1,
+      marginBottom: 10,
+    },
+    historyCardName: { fontSize: 15, fontWeight: '700', flex: 1, minWidth: 0 },
+    viewPassbookBtnSmall: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      borderRadius: 10,
+    },
+    seeMoreWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 12,
+      marginTop: 4,
+    },
+    seeMoreText: { fontSize: 13, fontWeight: '700', letterSpacing: 0.3 },
+    passbookHistoryEmpty: {
+      paddingVertical: 20,
+      paddingHorizontal: 16,
+      borderRadius: 12,
+      borderWidth: 1,
+      marginBottom: 12,
+    },
+    passbookHistoryEmptyText: {
+      fontSize: 14,
+      textAlign: 'center',
+      lineHeight: 20,
+    },
+    viewHistoryBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+      paddingVertical: 14,
+      paddingHorizontal: 20,
+      borderRadius: 12,
+      borderWidth: 1,
+    },
+    viewHistoryBtnText: { fontSize: 14, fontWeight: '800', letterSpacing: 0.3 },
+    viewHistoryLink: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      flexWrap: 'wrap',
+      gap: 6,
+      paddingVertical: 2,
+    },
+    viewHistoryLinkEyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginRight: 6 },
+    viewHistoryLinkText: { fontSize: 14, fontWeight: '700', letterSpacing: 0.1 },
+    emptyCard: {
+      width: '100%',
+      padding: 28,
+      borderRadius: 16,
+      borderWidth: 1,
+      alignItems: 'center',
+    },
+    emptyIconWrap: {
+      width: 72,
+      height: 72,
+      borderRadius: 36,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 20,
+    },
+    emptyTitle: { fontSize: 17, fontWeight: '800', marginBottom: 8, letterSpacing: 0.3 },
+    emptySubtitle: { fontSize: 13, textAlign: 'center', lineHeight: 20, paddingHorizontal: 8 },
+    cardOrgAvatar: {
+      width: '100%',
+      height: '100%',
+      borderRadius: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    cardOrgAvatarText: {
+      fontSize: 18,
+      fontWeight: '800',
+      letterSpacing: 0.2,
+    },
+  }), [colors]);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + Layout.driverHeaderTopOffset, backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -357,57 +752,112 @@ export default function DriverRequestsScreen() {
               {connectedAcceptedInvites.map((inv) => {
                 const passbook = passbookByOrgId[inv.from_organization_id];
                 const isLeaving = leavingOrgId === inv.from_organization_id;
+                const receivedPercentage =
+                  passbook && passbook.totalEarned > 0
+                    ? Math.min(100, Math.round((passbook.totalReceived / passbook.totalEarned) * 100))
+                    : 0;
                 return (
                   <View
                     key={inv.id}
                     style={[styles.card, styles.cardReadOnly, { backgroundColor: colors.surface, borderColor: colors.border }]}
                   >
-                    <View style={styles.cardHeader}>
-                      <View style={[styles.cardIconWrap, { backgroundColor: colors.emeraldMuted }]}>
-                        <FontAwesome name="building" size={22} color={colors.emerald} />
+                    <View style={styles.premiumHeaderRow}>
+                      <View style={styles.premiumHeaderLeft}>
+                        <View style={[styles.cardIconWrap, { backgroundColor: colors.emeraldMuted }]}>
+                          <FontAwesome name="building" size={18} color={colors.emerald} />
+                        </View>
+                        <View style={styles.cardHeaderText}>
+                          <Text style={[styles.cardOrgName, { color: colors.text }]} numberOfLines={1}>
+                            {inv.from_org_name || 'Organisation'}
+                          </Text>
+                          <Text style={[styles.cardOffer, { color: colors.textMuted }]} numberOfLines={1}>
+                            {buildOfferText(inv)}
+                          </Text>
+                        </View>
                       </View>
-                      <View style={styles.cardHeaderText}>
-                        <Text style={[styles.cardOrgName, { color: colors.text }]} numberOfLines={1}>
-                          {inv.from_org_name || 'Organisation'}
-                        </Text>
-                        <Text style={[styles.cardOffer, { color: colors.textMuted }]} numberOfLines={2}>
-                          {buildOfferText(inv)}
-                        </Text>
-                      </View>
+                      <TouchableOpacity
+                        style={[styles.premiumInfoBtn, { backgroundColor: colors.surfaceElevated }]}
+                        activeOpacity={0.8}
+                        onPress={() => {}}
+                      >
+                        <FontAwesome name="info" size={12} color={colors.textMuted} />
+                      </TouchableOpacity>
                     </View>
-                    <View style={[styles.statusBadge, { backgroundColor: colors.emeraldMuted, borderColor: colors.emerald }]}>
-                      <FontAwesome name="check-circle" size={12} color={colors.emerald} />
-                      <Text style={[styles.statusBadgeText, { color: colors.text }]}>Accepted</Text>
+
+                    <View style={[styles.statusBadge, { backgroundColor: 'transparent', top: 18, right: 18 }]}>
+                      <FontAwesome name="check-circle" size={10} color={colors.emerald} />
+                      <Text style={[styles.statusBadgeText, { color: colors.text, textAlign: 'center' }]}>Accepted</Text>
                     </View>
-                    {passbook != null && (
-                      <View style={[styles.passbookBlock, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                        <View style={styles.passbookRow}>
-                          <Text style={[styles.passbookLabel, { color: colors.textMuted }]}>Trips</Text>
-                          <Text style={[styles.passbookValue, { color: colors.text }]}>{passbook.completedCount} completed</Text>
-                        </View>
-                        <View style={styles.passbookRow}>
-                          <Text style={[styles.passbookLabel, { color: colors.textMuted }]}>Earned</Text>
-                          <Text style={[styles.passbookValue, { color: colors.emerald }]}>₹{passbook.totalEarned.toLocaleString('en-IN')}</Text>
-                        </View>
-                        <View style={styles.passbookRow}>
-                          <Text style={[styles.passbookLabel, { color: colors.textMuted }]}>Received</Text>
-                          <Text style={[styles.passbookValue, { color: colors.text }]}>₹{passbook.totalReceived.toLocaleString('en-IN')}</Text>
-                        </View>
-                        {passbook.pendingAmount > 0 && (
-                          <View style={styles.passbookRow}>
-                            <Text style={[styles.passbookLabel, { color: colors.textMuted }]}>Pending</Text>
-                            <Text style={[styles.passbookValue, { color: colors.gold }]}>₹{passbook.pendingAmount.toLocaleString('en-IN')}</Text>
+
+                    {passbook != null ? (
+                      <>
+                        <View style={styles.quickStatsRow}>
+                          <View style={styles.quickStatCol}>
+                            <Text style={[styles.quickStatLabel, { color: colors.textMuted }]}>Rate</Text>
+                            <Text style={[styles.quickStatValue, { color: colors.text }]}>₹{inv.base_rate_per_month?.toLocaleString('en-IN') ?? 0}</Text>
                           </View>
-                        )}
-                      </View>
-                    )}
+                          <View style={[styles.quickDivider, { backgroundColor: colors.border }]} />
+                          <View style={styles.quickStatCol}>
+                            <Text style={[styles.quickStatLabel, { color: colors.textMuted }]}>Commission</Text>
+                            <Text style={[styles.quickStatValue, { color: colors.text }]}>{inv.per_trip_commission_percent ?? 0}%</Text>
+                          </View>
+                          <View style={[styles.quickDivider, { backgroundColor: colors.border }]} />
+                          <View style={styles.quickStatCol}>
+                            <Text style={[styles.quickStatLabel, { color: colors.textMuted }]}>Completed</Text>
+                            <Text style={[styles.quickStatValue, { color: colors.text }]}>{passbook.completedCount}</Text>
+                          </View>
+                        </View>
+
+                        <View style={[styles.insightCard, { backgroundColor: colors.surfaceElevated }]}>
+                          <View style={styles.insightHeader}>
+                            <View>
+                              <Text style={styles.insightLabel}>TOTAL EARNINGS</Text>
+                              <Text style={styles.insightAmount}>₹{passbook.totalEarned.toLocaleString('en-IN')}</Text>
+                            </View>
+                          </View>
+                          <View style={styles.insightProgressHeader}>
+                            <Text style={[styles.insightProgressLabel, { color: colors.textMuted }]}>Payout progress</Text>
+                            <Text style={[styles.insightProgressValue, { color: colors.emerald }]}>
+                              {receivedPercentage}% settled
+                            </Text>
+                          </View>
+                          <View style={styles.insightProgressTrack}>
+                            <View style={[styles.insightProgressFill, { backgroundColor: colors.emerald, width: `${receivedPercentage}%` }]} />
+                          </View>
+                          <View style={styles.insightFooter}>
+                            <FontAwesome name="line-chart" size={10} color={colors.emerald} />
+                            <Text style={styles.insightFooterText}>
+                              Pending <Text style={styles.insightFooterAmount}>₹{passbook.pendingAmount.toLocaleString('en-IN')}</Text> to be released
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.metricsSplitRow}>
+                          <View style={[styles.metricTile, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
+                            <View style={styles.metricTileHead}>
+                              <FontAwesome name="money" size={12} color={colors.textMuted} />
+                              <Text style={[styles.metricTileLabel, { color: colors.textMuted }]}>Received</Text>
+                            </View>
+                            <Text style={[styles.metricTileValue, { color: colors.text }]}>₹{passbook.totalReceived.toLocaleString('en-IN')}</Text>
+                          </View>
+                          <View style={[styles.metricTile, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
+                            <View style={styles.metricTileHead}>
+                              <FontAwesome name="clock-o" size={12} color={colors.textMuted} />
+                              <Text style={[styles.metricTileLabel, { color: colors.textMuted }]}>Pending</Text>
+                            </View>
+                            <Text style={[styles.metricTileValue, { color: colors.gold }]}>₹{passbook.pendingAmount.toLocaleString('en-IN')}</Text>
+                          </View>
+                        </View>
+                      </>
+                    ) : null}
+
                     <View style={styles.passbookActionsColumn}>
                       <TouchableOpacity
                         style={[
                           styles.viewPassbookBtnLarge,
                           {
                             backgroundColor: colors.emerald,
-                            shadowColor: Theme.textPrimaryDark,
+                            shadowColor: colors.text,
                             shadowOffset: { width: 4, height: 4 },
                             shadowOpacity: 0.2,
                             shadowRadius: 0,
@@ -420,11 +870,11 @@ export default function DriverRequestsScreen() {
                         activeOpacity={0.9}
                       >
                         <View style={styles.viewPassbookBtnLargeLeft}>
-                          <FontAwesome name="credit-card" size={22} color={colors.textOnPrimary} />
-                          <Text style={[styles.viewPassbookBtnLargeText, { color: colors.textOnPrimary }]}>VIEW DETAILS</Text>
+                          <FontAwesome name="credit-card" size={16} color={colors.textOnPrimary} />
+                          <Text style={[styles.viewPassbookBtnLargeText, { color: colors.textOnPrimary }]}>VIEW DETAILED STATEMENT</Text>
                         </View>
                         <View style={styles.viewPassbookBtnLargeSpacer} />
-                        <FontAwesome name="chevron-right" size={20} color={colors.textOnPrimary} style={styles.viewPassbookBtnLargeArrow} />
+                        <FontAwesome name="chevron-right" size={16} color={colors.textOnPrimary} style={styles.viewPassbookBtnLargeArrow} />
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.leaveFleetLink}
@@ -441,15 +891,15 @@ export default function DriverRequestsScreen() {
                             <FontAwesome
                               name="sign-out"
                               size={16}
-                              color={leaveFleetPressedOrgId === inv.from_organization_id ? Theme.destructive : colors.textMuted}
+                              color={leaveFleetPressedOrgId === inv.from_organization_id ? colors.negative : colors.textMuted}
                             />
                             <Text
                               style={[
                                 styles.leaveFleetLinkText,
-                                { color: leaveFleetPressedOrgId === inv.from_organization_id ? Theme.destructive : colors.textMuted },
+                                { color: leaveFleetPressedOrgId === inv.from_organization_id ? colors.negative : colors.textMuted },
                               ]}
                             >
-                              Leave this fleet
+                              Exit fleet
                             </Text>
                           </>
                         )}
@@ -491,287 +941,3 @@ export default function DriverRequestsScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: Layout.driverHeaderHorizontalPadding,
-    paddingBottom: Layout.driverHeaderBottomPadding,
-    borderBottomWidth: 1,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Layout.driverHeaderGap,
-    flex: 1,
-    minWidth: 0,
-  },
-  headerTextWrap: {
-    flex: 1,
-    minWidth: 0,
-  },
-  avatarBtn: { padding: 2 },
-  avatarCircle: {
-    width: Layout.driverHeaderAvatarSize,
-    height: Layout.driverHeaderAvatarSize,
-    borderRadius: Layout.driverHeaderAvatarSize / 2,
-    borderWidth: 2,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarImage: { width: '100%', height: '100%', borderRadius: Layout.driverHeaderAvatarSize / 2 },
-  brand: { fontSize: 9, fontWeight: '800', letterSpacing: 1.6, marginBottom: 1 },
-  welcomeTitle: { fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
-  creditsSection: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 24,
-  },
-  creditsTitle: {
-    fontSize: 36,
-    fontWeight: '900',
-    letterSpacing: -0.5,
-    fontStyle: 'italic',
-    textTransform: 'uppercase',
-  },
-  creditsSubtitle: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    marginTop: 8,
-    textTransform: 'uppercase',
-  },
-  notificationBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  scroll: { flex: 1, alignSelf: 'stretch' },
-  scrollContent: { paddingHorizontal: 24, paddingTop: 8 },
-  section: { marginBottom: 28 },
-  sectionTitle: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginBottom: 4 },
-  sectionSubtitle: { fontSize: 12, marginBottom: 16, lineHeight: 18 },
-  card: {
-    width: '100%',
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 20,
-    marginBottom: 14,
-  },
-  cardReadOnly: { paddingBottom: 20 },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    marginBottom: 18,
-  },
-  cardIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardHeaderText: { flex: 1, minWidth: 0 },
-  cardOrgName: { fontSize: 17, fontWeight: '800', marginBottom: 4 },
-  cardOffer: { fontSize: 13, lineHeight: 18 },
-  cardActions: { flexDirection: 'row', gap: 12 },
-  btnSecondary: {
-    flex: 1,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderRadius: 10,
-  },
-  btnSecondaryText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
-  btnPrimary: {
-    flex: 1,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-  },
-  btnPrimaryText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3, color: Theme.textOnPrimary },
-  btnDisabled: { opacity: 0.6 },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  statusBadgeText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.3 },
-  passbookBlock: {
-    marginTop: 16,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  passbookRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  passbookLabel: { fontSize: 12, fontWeight: '600' },
-  passbookValue: { fontSize: 14, fontWeight: '700' },
-  passbookActions: { flexDirection: 'row', gap: 12, marginTop: 12, alignItems: 'center' },
-  passbookActionsColumn: {
-    marginTop: 16,
-    gap: 12,
-  },
-  viewPassbookBtnLarge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 16,
-    elevation: 4,
-  },
-  viewPassbookBtnLargeLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: 12,
-  },
-  viewPassbookBtnLargeSpacer: { flex: 1 },
-  viewPassbookBtnLargeText: {
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-  viewPassbookBtnLargeArrow: { opacity: 0.3 },
-  leaveFleetLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 8,
-  },
-  leaveFleetLinkText: { fontSize: 14, fontWeight: '700' },
-  viewPassbookBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 10,
-  },
-  viewPassbookBtnText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5, color: Theme.textOnPrimary },
-  leaveFleetBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    minWidth: 100,
-  },
-  leaveFleetBtnText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.3 },
-  historyCardMinimal: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 10,
-  },
-  historyCardName: { fontSize: 15, fontWeight: '700', flex: 1, minWidth: 0 },
-  viewPassbookBtnSmall: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-  },
-  seeMoreWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    marginTop: 4,
-  },
-  seeMoreText: { fontSize: 13, fontWeight: '700', letterSpacing: 0.3 },
-  passbookHistoryEmpty: {
-    paddingVertical: 20,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 12,
-  },
-  passbookHistoryEmptyText: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  viewHistoryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  viewHistoryBtnText: { fontSize: 14, fontWeight: '800', letterSpacing: 0.3 },
-  viewHistoryLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    flexWrap: 'wrap',
-    gap: 6,
-    paddingVertical: 2,
-  },
-  viewHistoryLinkEyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginRight: 6 },
-  viewHistoryLinkText: { fontSize: 14, fontWeight: '700', letterSpacing: 0.1 },
-  emptyCard: {
-    width: '100%',
-    padding: 28,
-    borderRadius: 16,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  emptyIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  emptyTitle: { fontSize: 17, fontWeight: '800', marginBottom: 8, letterSpacing: 0.3 },
-  emptySubtitle: { fontSize: 13, textAlign: 'center', lineHeight: 20, paddingHorizontal: 8 },
-  cardOrgAvatar: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardOrgAvatarText: {
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-  },
-});
