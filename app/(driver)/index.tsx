@@ -40,6 +40,7 @@ import {
   Animated,
   AppState,
   Dimensions,
+  Image,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -393,6 +394,12 @@ export default function DriverRadarScreen() {
   const [pendingOtpTrips, setPendingOtpTrips] = useState<
     tripsService.TripRow[]
   >([]);
+  const [incomingOtpPopupTripId, setIncomingOtpPopupTripId] = useState<
+    string | null
+  >(null);
+  const [acknowledgedOtpPopupTripId, setAcknowledgedOtpPopupTripId] = useState<
+    string | null
+  >(null);
   const [otpClaimTripId, setOtpClaimTripId] = useState<string | null>(null);
   const [otpValue, setOtpValue] = useState("");
   const [otpSubmitting, setOtpSubmitting] = useState(false);
@@ -1130,6 +1137,24 @@ export default function DriverRadarScreen() {
         )
         ?.from_org_name?.trim() ?? "Supplier")
     : effectiveFirstIncoming?.client_name?.trim() || "Customer";
+  const incomingTripOrgInvite =
+    effectiveFirstIncoming == null
+      ? null
+      : invites.find(
+          (i) =>
+            (i.from_organization_id ?? "").trim() ===
+            (effectiveFirstIncoming.organization_id ?? "").trim(),
+        ) ?? null;
+  const incomingOtpPopupTitle = firstIncomingIsAggregate
+    ? "Trip received from supplier"
+    : "Trip received from customer";
+  const incomingOtpPopupName = firstIncomingIsAggregate
+    ? incomingTripOrgInvite?.from_org_name?.trim() || firstIncomingCounterpartyName
+    : firstIncomingCounterpartyName;
+  const incomingOtpPopupAvatarUri =
+    incomingTripOrgInvite?.from_org_logo_url?.trim() ||
+    incomingTripOrgInvite?.from_org_avatar_url?.trim() ||
+    null;
   const activeGuidanceTrip =
     activeMission ??
     (effectiveFirstIncoming &&
@@ -1253,6 +1278,16 @@ export default function DriverRadarScreen() {
   const shouldUseStaticMapSheetCard = Boolean(
     showNewAssignmentCard || activeMission || isAcceptedIncomingFlow,
   );
+  const shouldShowIncomingOtpPopup = Boolean(
+    effectiveFirstIncoming &&
+      firstIncomingRequiresOtp &&
+      incomingOtpPopupTripId != null &&
+      String(incomingOtpPopupTripId).toLowerCase() ===
+        String(effectiveFirstIncoming.id).toLowerCase() &&
+      !assignmentFeedback &&
+      !activeMission &&
+      !isAcceptedIncomingFlow,
+  );
   useEffect(() => {
     if (!showNewAssignmentCard) return;
     newAssignmentBlinkAnim.setValue(0);
@@ -1273,6 +1308,27 @@ export default function DriverRadarScreen() {
     loop.start();
     return () => loop.stop();
   }, [showNewAssignmentCard, newAssignmentBlinkAnim]);
+
+  useEffect(() => {
+    if (!effectiveFirstIncoming || !firstIncomingRequiresOtp) {
+      setIncomingOtpPopupTripId(null);
+      return;
+    }
+    const tripId = String(effectiveFirstIncoming.id);
+    if (
+      String(acceptedTripId ?? "").toLowerCase() === tripId.toLowerCase() ||
+      String(acknowledgedOtpPopupTripId ?? "").toLowerCase() ===
+        tripId.toLowerCase()
+    ) {
+      return;
+    }
+    setIncomingOtpPopupTripId(tripId);
+  }, [
+    effectiveFirstIncoming,
+    firstIncomingRequiresOtp,
+    acceptedTripId,
+    acknowledgedOtpPopupTripId,
+  ]);
 
   // Show map shell for active mission, incoming assignment (including load-based pending OTP),
   // or assignment feedback.
@@ -3035,6 +3091,7 @@ export default function DriverRadarScreen() {
         />
       ) : showNewAssignmentCard &&
         effectiveFirstIncoming &&
+        !shouldShowIncomingOtpPopup &&
         !assignmentFeedback ? (
         <JobRequestCard
           pickup={effectiveFirstIncoming.pickup_area?.trim() || "—"}
@@ -3470,6 +3527,81 @@ export default function DriverRadarScreen() {
           style={[styles.fullMapModal, { backgroundColor: colors.background }]}
         >
           {renderDriverMap(fullMapRef, { fullScreen: true })}
+        </View>
+      </Modal>
+
+      <Modal
+        visible={shouldShowIncomingOtpPopup}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {}}
+      >
+        <View style={styles.incomingOtpPopupBackdrop}>
+          <View
+            style={[
+              styles.incomingOtpPopupCard,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <View
+              style={[
+                styles.incomingOtpPopupAvatarWrap,
+                {
+                  backgroundColor: colors.emeraldMuted ?? Theme.surfaceLight,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              {incomingOtpPopupAvatarUri ? (
+                <Image
+                  source={{ uri: incomingOtpPopupAvatarUri }}
+                  style={styles.incomingOtpPopupAvatar}
+                  resizeMode="cover"
+                />
+              ) : (
+                <FontAwesome
+                  name={firstIncomingIsAggregate ? "building" : "user"}
+                  size={24}
+                  color={colors.emerald}
+                />
+              )}
+            </View>
+            <Text
+              style={[styles.incomingOtpPopupTitle, { color: colors.text }]}
+            >
+              {incomingOtpPopupTitle}
+            </Text>
+            <Text
+              style={[styles.incomingOtpPopupName, { color: colors.text }]}
+              numberOfLines={2}
+            >
+              {incomingOtpPopupName}
+            </Text>
+            <Text
+              style={[
+                styles.incomingOtpPopupRoute,
+                { color: colors.textMuted },
+              ]}
+              numberOfLines={3}
+            >
+              {effectiveFirstIncoming?.pickup_area?.trim() || "Pickup"} to{" "}
+              {effectiveFirstIncoming?.drop_location?.trim() || "Drop-off"}
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.incomingOtpPopupButton,
+                { backgroundColor: colors.emerald },
+              ]}
+              activeOpacity={0.85}
+              onPress={() => {
+                if (!effectiveFirstIncoming) return;
+                setAcknowledgedOtpPopupTripId(String(effectiveFirstIncoming.id));
+                setIncomingOtpPopupTripId(null);
+              }}
+            >
+              <Text style={styles.incomingOtpPopupButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
 
@@ -4753,6 +4885,69 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.2,
     maxWidth: 120,
+  },
+  incomingOtpPopupBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(10, 16, 28, 0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  incomingOtpPopupCard: {
+    width: "100%",
+    maxWidth: 360,
+    borderRadius: 24,
+    borderWidth: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+    alignItems: "center",
+  },
+  incomingOtpPopupAvatarWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 1,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  incomingOtpPopupAvatar: {
+    width: "100%",
+    height: "100%",
+  },
+  incomingOtpPopupTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  incomingOtpPopupName: {
+    marginTop: 8,
+    fontSize: 18,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  incomingOtpPopupRoute: {
+    marginTop: 10,
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  incomingOtpPopupButton: {
+    marginTop: 20,
+    minWidth: 160,
+    minHeight: Layout.minTouchTargetSize,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  incomingOtpPopupButtonText: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: Theme.textOnPrimary,
   },
   fullMapModal: {
     flex: 1,
