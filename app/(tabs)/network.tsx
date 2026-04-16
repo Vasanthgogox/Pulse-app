@@ -1541,41 +1541,48 @@ export default function NetworkScreen() {
                                             </Text>
                                           </View>
                                         ) : (
-                                          <TouchableOpacity
-                                            style={
-                                              onPlatform
-                                                ? styles.connectBtn
-                                                : styles.inviteInlineBtn
-                                            }
-                                            onPress={() =>
-                                              handleSendInviteOrRequest(node)
-                                            }
-                                            disabled={sendingNodeId === node.id}
-                                            activeOpacity={0.8}
-                                          >
-                                            {sendingNodeId === node.id ? (
-                                              <ActivityIndicator
-                                                size="small"
-                                                color={
-                                                  onPlatform
-                                                    ? Theme.textOnPrimary
-                                                    : Theme.textPrimaryDark
-                                                }
-                                              />
-                                            ) : (
-                                              <Text
-                                                style={
-                                                  onPlatform
-                                                    ? styles.connectBtnText
-                                                    : styles.inviteInlineBtnText
-                                                }
-                                              >
-                                                {onPlatform
-                                                  ? "Send request"
-                                                  : "Send invitation"}
+                                          <View style={styles.networkActionStack}>
+                                            <TouchableOpacity
+                                              style={
+                                                onPlatform
+                                                  ? styles.connectBtn
+                                                  : styles.inviteInlineBtn
+                                              }
+                                              onPress={() =>
+                                                handleSendInviteOrRequest(node)
+                                              }
+                                              disabled={sendingNodeId === node.id}
+                                              activeOpacity={0.8}
+                                            >
+                                              {sendingNodeId === node.id ? (
+                                                <ActivityIndicator
+                                                  size="small"
+                                                  color={
+                                                    onPlatform
+                                                      ? Theme.textOnPrimary
+                                                      : Theme.textPrimaryDark
+                                                  }
+                                                />
+                                              ) : (
+                                                <Text
+                                                  style={
+                                                    onPlatform
+                                                      ? styles.connectBtnText
+                                                      : styles.inviteInlineBtnText
+                                                  }
+                                                >
+                                                  {onPlatform
+                                                    ? "Send request"
+                                                    : "Send invitation"}
+                                                </Text>
+                                              )}
+                                            </TouchableOpacity>
+                                            {!onPlatform ? (
+                                              <Text style={styles.networkActionHint}>
+                                                USER IS NOT IN APP
                                               </Text>
-                                            )}
-                                          </TouchableOpacity>
+                                            ) : null}
+                                          </View>
                                         )}
                                       </View>
                                     </View>
@@ -2031,35 +2038,42 @@ export default function NetworkScreen() {
                             </View>
                           ) : null
                         ) : (
-                          <TouchableOpacity
-                            style={[
-                              styles.connectBtn,
-                              !onPlatform && styles.inviteBtn,
-                            ]}
-                            onPress={() => handleSendInviteOrRequest(node)}
-                            disabled={sendingNodeId === node.id}
-                            activeOpacity={0.8}
-                          >
-                            {sendingNodeId === node.id ? (
-                              <ActivityIndicator
-                                size="small"
-                                color={
-                                  onPlatform
-                                    ? Theme.textOnPrimary
-                                    : Theme.textPrimaryDark
-                                }
-                              />
-                            ) : (
-                              <Text
-                                style={[
-                                  styles.connectBtnText,
-                                  !onPlatform && styles.inviteBtnText,
-                                ]}
-                              >
-                                {onPlatform ? "Connect" : "Invite"}
+                          <View style={styles.networkActionStack}>
+                            <TouchableOpacity
+                              style={[
+                                styles.connectBtn,
+                                !onPlatform && styles.inviteBtn,
+                              ]}
+                              onPress={() => handleSendInviteOrRequest(node)}
+                              disabled={sendingNodeId === node.id}
+                              activeOpacity={0.8}
+                            >
+                              {sendingNodeId === node.id ? (
+                                <ActivityIndicator
+                                  size="small"
+                                  color={
+                                    onPlatform
+                                      ? Theme.textOnPrimary
+                                      : Theme.textPrimaryDark
+                                  }
+                                />
+                              ) : (
+                                <Text
+                                  style={[
+                                    styles.connectBtnText,
+                                    !onPlatform && styles.inviteBtnText,
+                                  ]}
+                                >
+                                  {onPlatform ? "Connect" : "Invite"}
+                                </Text>
+                              )}
+                            </TouchableOpacity>
+                            {!onPlatform ? (
+                              <Text style={styles.networkActionHint}>
+                                USER IS NOT IN APP
                               </Text>
-                            )}
-                          </TouchableOpacity>
+                            ) : null}
+                          </View>
                         )}
                       </View>
                     </View>
@@ -3207,6 +3221,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     flexShrink: 0,
+  },
+  networkActionStack: {
+    alignItems: "center",
+    gap: 4,
+  },
+  networkActionHint: {
+    maxWidth: 110,
+    fontSize: 8,
+    fontWeight: "700",
+    color: TESLA_BLACK,
+    textAlign: "center",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
   requestTitleMeta: {
     flex: 1,
