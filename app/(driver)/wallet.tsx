@@ -306,10 +306,14 @@ export default function DriverWalletScreen() {
         const message = isDriverLedgerRls
           ? "You don't have permission to record this payment. Ensure the database has the driver settlement policy applied (migration: 20250324120000_driver_ledger_driver_settlement_insert)."
           : error.message;
-        Alert.alert('Could not mark as paid', message);
+        if (Platform.OS === 'web') {
+          window.alert(`Could not mark as paid: ${message}`);
+        } else {
+          Alert.alert('Could not mark as paid', message);
+        }
         return;
       }
-      setExpandedTripId(null);
+      
       if (row) {
         setLedgerEntries(prev => [row!, ...prev]);
       } else {
@@ -324,14 +328,21 @@ export default function DriverWalletScreen() {
     (trip: tripsService.TripRow, amount: number) => {
       const displayId = tripsService.getTripDisplayNumber(trip);
       const amtStr = `₹${Math.round(amount).toLocaleString('en-IN')}`;
-      Alert.alert(
-        'Mark as paid',
-        `Record ${amtStr} for ${displayId} as received? This will update your wallet.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Proceed', onPress: () => markTripAsPaid(trip, amount) },
-        ]
-      );
+      
+      if (Platform.OS === 'web') {
+        if (window.confirm(`Record ${amtStr} for ${displayId} as received? This will update your wallet.`)) {
+          markTripAsPaid(trip, amount);
+        }
+      } else {
+        Alert.alert(
+          'Mark as paid',
+          `Record ${amtStr} for ${displayId} as received? This will update your wallet.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Proceed', onPress: () => markTripAsPaid(trip, amount) },
+          ]
+        );
+      }
     },
     [markTripAsPaid]
   );
