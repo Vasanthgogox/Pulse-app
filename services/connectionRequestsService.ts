@@ -119,10 +119,32 @@ export async function getConnectionInviteesByPhones(phones: string[]): Promise<{
 
   if (error) {
     const msg = error.message ?? '';
-    if (/function.*get_invitees_by_phones.*does not exist/i.test(msg)) {
-      return { error: null, inviteesByPhone };
+    // Best-effort fallback: if the batch RPC isn't available yet, or fails due to
+    // permissions/RLS differences, fall back to the single-phone RPC so UI can still
+    // detect "ON APP" accounts and show the right CTA.
+    const settled = await Promise.allSettled(
+      normalizedPhones.map(async (p) => {
+        const { invitee } = await getConnectionInviteeByPhone(p);
+        return invitee;
+      }),
+    );
+    for (let i = 0; i < settled.length; i++) {
+      const res = settled[i];
+      if (res.status !== "fulfilled") continue;
+      const invitee = res.value;
+      if (!invitee?.organization_id) continue;
+      const phoneKey = normalizePhoneForInviteeLookup(
+        invitee.phone ?? normalizedPhones[i] ?? "",
+      );
+      if (!phoneKey) continue;
+      if (inviteesByPhone.has(phoneKey)) continue;
+      inviteesByPhone.set(phoneKey, invitee);
     }
-    return { error: new Error(msg), inviteesByPhone };
+    // Even if the batch call failed, return best-effort results so UI can update labels.
+    // If fallback couldn't resolve any, still surface the original error to callers that care.
+    return inviteesByPhone.size > 0
+      ? { error: null, inviteesByPhone }
+      : { error: new Error(msg), inviteesByPhone };
   }
 
   const rows = (data ?? []) as ConnectionInviteeByPhoneRow[];

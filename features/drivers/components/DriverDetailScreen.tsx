@@ -162,11 +162,13 @@ function getSalaryRequestTypeLabel(
 export interface DriverDetailScreenProps {
   driverId: string;
   onBack: () => void;
+  autoOpenProfile?: boolean;
 }
 
 export default function DriverDetailScreen({
   driverId,
   onBack,
+  autoOpenProfile,
 }: DriverDetailScreenProps) {
   const { t } = useLanguage();
   const { profile } = useAuth();
@@ -220,6 +222,10 @@ export default function DriverDetailScreen({
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
   const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    if (autoOpenProfile) setShowProfileModal(true);
+  }, [autoOpenProfile]);
 
   const load = useCallback(() => {
     if (!driverId || !currentOrganization?.id) {

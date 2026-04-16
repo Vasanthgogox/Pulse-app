@@ -76,11 +76,13 @@ function normalizePhoneDisplay(value: string | null | undefined): string {
 export interface SupplierDetailScreenProps {
   supplierId: string;
   onBack: () => void;
+  autoOpenProfile?: boolean;
 }
 
 export default function SupplierDetailScreen({
   supplierId,
   onBack,
+  autoOpenProfile,
 }: SupplierDetailScreenProps) {
   const router = useRouter();
   const { t } = useLanguage();
@@ -112,8 +114,13 @@ export default function SupplierDetailScreen({
   const [isLinked, setIsLinked] = useState(false);
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   const [isInApp, setIsInApp] = useState(false);
+  const [sendingInvitation, setSendingInvitation] = useState(false);
   const insets = useSafeAreaInsets();
   const initialLoadDoneRef = useRef(false);
+
+  useEffect(() => {
+    if (autoOpenProfile) setShowProfileModal(true);
+  }, [autoOpenProfile]);
 
   useEffect(() => {
     if (supplier?.phone) {
@@ -124,6 +131,50 @@ export default function SupplierDetailScreen({
       });
     }
   }, [supplier?.phone]);
+
+  const handleSendInvitation = useCallback(async () => {
+    if (!currentOrganization?.id || !supplier?.phone) return;
+    setSendingInvitation(true);
+    try {
+      const { createConnectionRequest, getConnectionInviteeByPhone } = await import(
+        "@/services/connectionRequestsService"
+      );
+      const { invitee, error: lookupError } = await getConnectionInviteeByPhone(
+        supplier.phone,
+      );
+      if (lookupError) {
+        Alert.alert("Unable to send invitation", lookupError.message);
+        return;
+      }
+      if (!invitee?.organization_id) {
+        Alert.alert(
+          "Unable to send invitation",
+          "This supplier is not available in the application yet.",
+        );
+        return;
+      }
+      const { error, alreadyInvited } = await createConnectionRequest(
+        currentOrganization.id,
+        invitee.organization_id,
+        {
+          requestShipperClient: false,
+          requestCarrierSupplier: true,
+        },
+      );
+      if (error) {
+        Alert.alert("Unable to send invitation", error.message);
+        return;
+      }
+      setIsLinked(true);
+      setSuccessTitle(
+        alreadyInvited ? "INVITATION_ALREADY_SENT" : "CONNECTION_REQUESTED",
+      );
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 1500);
+    } finally {
+      setSendingInvitation(false);
+    }
+  }, [currentOrganization?.id, supplier?.phone]);
 
   const load = useCallback(() => {
     if (!supplierId || !currentOrganization?.id) {
@@ -1032,11 +1083,38 @@ export default function SupplierDetailScreen({
               <FontAwesome name="refresh" size={14} color={Theme.primary} />
               <Text style={styles.profileEditBtnText}>Edit Node Profile</Text>
             </TouchableOpacity>
+            {!supplier?.linked_organization_id && isInApp && !isLinked && (
+              <TouchableOpacity
+                style={[
+                  styles.profileSecondaryBtn,
+                  { marginTop: 12 },
+                ]}
+                onPress={() => void handleSendInvitation()}
+                activeOpacity={0.8}
+                disabled={sendingInvitation}
+              >
+                <FontAwesome name="paper-plane" size={14} color={Theme.primary} />
+                <Text style={styles.profileSecondaryBtnText}>
+                  {sendingInvitation ? "Sending..." : "Send invitation"}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {!supplier?.linked_organization_id && isInApp && isLinked && (
+              <View
+                style={[
+                  styles.profileSecondaryBtn,
+                  { marginTop: 12, opacity: 0.7 },
+                ]}
+              >
+                <FontAwesome name="check" size={14} color={Theme.primary} />
+                <Text style={styles.profileSecondaryBtnText}>Invitation sent</Text>
+              </View>
+            )}
             {!supplier?.linked_organization_id && !isInApp && (
               <TouchableOpacity
                 style={[
-                  styles.profileEditBtn,
-                  { backgroundColor: Theme.surface, borderWidth: 1, borderColor: Theme.borderLight, marginTop: 12 }
+                  styles.profileSecondaryBtn,
+                  { marginTop: 12 }
                 ]}
                 onPress={() => {
                   const message = `Join me on Q to sync our ledger and compare books with ${supplierName}. Download the Q app to get started.`;
@@ -1045,7 +1123,7 @@ export default function SupplierDetailScreen({
                 activeOpacity={0.8}
               >
                 <FontAwesome name="link" size={14} color={Theme.primary} />
-                <Text style={styles.profileEditBtnText}>{t("linkToAppAccount")}</Text>
+                <Text style={styles.profileSecondaryBtnText}>{t("linkToAppAccount")}</Text>
               </TouchableOpacity>
             )}
           </ScrollView>
@@ -1379,6 +1457,24 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
     color: Theme.textOnPrimary,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  profileSecondaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    paddingVertical: 14,
+    backgroundColor: Theme.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  profileSecondaryBtnText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.primary,
     letterSpacing: 1,
     textTransform: "uppercase",
   },

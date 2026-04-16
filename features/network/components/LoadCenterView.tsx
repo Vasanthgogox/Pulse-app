@@ -1373,7 +1373,7 @@ export function LoadCenterView({
           isClaimedTab && styles.loadDarkHeaderClaimed,
         ]}
       >
-        {/* Sub-tabs: HIRE PARTNER | FIND WORK | CLAIMED */}
+        {/* Sub-tabs: GIVE LOAD | GET LOAD | CLAIMED */}
         <View style={styles.loadFilterHeaderRow}>
           <SubTabs<LoadSubTab>
             variant="dark"
@@ -1383,10 +1383,10 @@ export function LoadCenterView({
             items={[
               {
                 key: "GIVE_LOAD",
-                label: "HIRE PARTNER",
+                label: "GIVE LOAD",
                 badgeCount: hirePartnerLoads.length,
               },
-              { key: "GET_LOAD", label: "FIND WORK", badgeCount: findWorkLoads.length },
+              { key: "GET_LOAD", label: "GET LOAD", badgeCount: findWorkLoads.length },
               {
                 key: "AWARDED",
                 label: "CLAIMED",
@@ -1557,7 +1557,7 @@ export function LoadCenterView({
                       <View style={styles.loadCardTop}>
                         <View style={styles.loadPillRow}>
                           <View style={styles.loadTypePill}>
-                            <Text style={styles.loadTypePillText}>HIRE PARTNER</Text>
+                            <Text style={styles.loadTypePillText}>GIVE LOAD</Text>
                           </View>
                           <View style={styles.loadStatePill}>
                             <Text style={styles.loadStatePillText}>
@@ -1724,7 +1724,7 @@ export function LoadCenterView({
                   size={40}
                   color={Theme.textMuted}
                 />
-                <Text style={styles.emptyTitle}>Find Work</Text>
+                <Text style={styles.emptyTitle}>Get Load</Text>
                 <Text style={styles.emptySub}>
                   Unable to load loads. Check your connection or try again.
                 </Text>
@@ -1754,7 +1754,7 @@ export function LoadCenterView({
                     color={Theme.textMuted}
                   />
                 </View>
-                <Text style={styles.emptyTitle}>Find Work</Text>
+                <Text style={styles.emptyTitle}>Get Load</Text>
                 <Text style={styles.emptySub}>
                   Loads shared with you by partners will appear here. Connect as
                   an integrated supplier to see loads from shippers.
@@ -1791,7 +1791,7 @@ export function LoadCenterView({
                     <View style={styles.loadCardTop}>
                       <View style={styles.loadPillRow}>
                         <View style={styles.loadTypePill}>
-                          <Text style={styles.loadTypePillText}>FIND WORK</Text>
+                          <Text style={styles.loadTypePillText}>GET LOAD</Text>
                         </View>
                         <View style={styles.loadStatePill}>
                           <Text style={styles.loadStatePillText}>

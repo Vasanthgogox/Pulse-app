@@ -68,11 +68,13 @@ function isPlaceholderPhone(value: string | null | undefined): boolean {
 export interface ClientDetailScreenProps {
   clientId: string;
   onBack: () => void;
+  autoOpenProfile?: boolean;
 }
 
 export default function ClientDetailScreen({
   clientId,
   onBack,
+  autoOpenProfile,
 }: ClientDetailScreenProps) {
   const router = useRouter();
   const { t } = useLanguage();
@@ -115,6 +117,10 @@ export default function ClientDetailScreen({
   const [isInApp, setIsInApp] = useState(false);
   const initialLoadDoneRef = useRef(false);
   
+  useEffect(() => {
+    if (autoOpenProfile) setShowProfileModal(true);
+  }, [autoOpenProfile]);
+
   useEffect(() => {
     if (client?.phone) {
       import("@/services/connectionRequestsService").then(({ getConnectionInviteeByPhone }) => {

@@ -9,10 +9,16 @@ import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { getLinkedOrgProfile } from "@/features/clients/services/clients.service";
-import { cancelDriverInvite, getDriverProfileDisplay } from "@/features/drivers/services/drivers.service";
+import {
+  cancelDriverInvite,
+  getDriverInviteeByPhone,
+  getDriverProfileDisplay,
+  inviteDriver,
+} from "@/features/drivers/services/drivers.service";
 import { type IndentRow } from "@/features/indents";
 import { LoadCenterView } from "@/features/network/components/LoadCenterView";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
+import { normalizePhoneForInviteeLookup } from "@/lib/phoneLookup";
 import {
   useClientsQuery,
   useConnectionRequestsReceivedQuery,
@@ -28,11 +34,12 @@ import {
   cancelConnectionRequest,
   createConnectionRequest,
   getConnectionInviteeByPhone,
+  getConnectionInviteesByPhones,
   rejectConnectionRequest,
 } from "@/services/connectionRequestsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Building2, CircleCheck, Truck, User } from "lucide-react-native";
+import { Building2, CircleCheck, Handshake, Truck, User } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -191,6 +198,10 @@ function formatRequestStatus(status: string): string {
   if (normalized === "rejected") return "REJECTED";
   if (normalized === "pending") return "PENDING";
   return normalized.replace(/_/g, " ").toUpperCase();
+}
+
+function normalizeRequestStatus(status: string): string {
+  return (status ?? "").trim().toLowerCase();
 }
 
 function getDriverFallbackSeed(id: string): string {
@@ -432,6 +443,13 @@ export default function NetworkScreen() {
   const [manageView, setManageView] = useState<ManageView>("CONNECTIONS");
   const [invitationSegment, setInvitationSegment] =
     useState<InvitationSegment>("RECEIVED");
+  const [showInvitationSearch, setShowInvitationSearch] = useState(false);
+  const [phoneOnAppByNodeId, setPhoneOnAppByNodeId] = useState<
+    Record<string, boolean>
+  >({});
+  const [inviteeOrgIdByNodeId, setInviteeOrgIdByNodeId] = useState<
+    Record<string, string>
+  >({});
   const [nodeKind, setNodeKind] = useState<NodeKindFilter>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [showSuccess, setShowSuccess] = useState(false);
@@ -490,6 +508,8 @@ export default function NetworkScreen() {
   const [dismissedSentRequestIds, setDismissedSentRequestIds] = useState<
     Record<string, true>
   >({});
+  const [optimisticallyHiddenInviteSearchNodeIds, setOptimisticallyHiddenInviteSearchNodeIds] =
+    useState<Record<string, true>>({});
 
   const {
     data: clients = [],
@@ -572,8 +592,9 @@ export default function NetworkScreen() {
           name: (d.name || "Unnamed").toUpperCase(),
           type: "DRIVER",
           status: isDisconnected ? "DISCONNECTED" : "INTEGRATED",
-          availableOnApp: !isDisconnected,
+          availableOnApp: Boolean(d.user_id),
           isIntegrated: !isDisconnected,
+          phone: d.phone ?? null,
           user_id: d.user_id,
           avatar_url: d.avatar_url,
           avatar_seed: d.avatar_seed,
@@ -591,6 +612,79 @@ export default function NetworkScreen() {
   const loading = clientsLoading || suppliersLoading || driversLoading;
   const loadingRequests = recLoading;
   const invalidateNetwork = useInvalidateNetwork(orgId);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      const byNodeId: Record<string, boolean> = {};
+      const inviteeOrgByNodeId: Record<string, string> = {};
+      const withPhone = nodes.filter((n) => (n.phone ?? "").trim().length >= 8);
+      if (withPhone.length === 0) {
+        if (!cancelled) {
+          setPhoneOnAppByNodeId({});
+          setInviteeOrgIdByNodeId({});
+        }
+        return;
+      }
+
+      const clientSupplierNodes = withPhone.filter(
+        (n) => n.type === "CLIENT" || n.type === "SUPPLIER",
+      );
+      if (clientSupplierNodes.length > 0) {
+        const { inviteesByPhone } = await getConnectionInviteesByPhones(
+          clientSupplierNodes.map((n) => n.phone ?? ""),
+        );
+        clientSupplierNodes.forEach((n) => {
+          const key = normalizePhoneForInviteeLookup(n.phone ?? "");
+          const invitee = key ? inviteesByPhone.get(key) : undefined;
+          byNodeId[n.id] = !!invitee;
+          if (invitee?.organization_id) inviteeOrgByNodeId[n.id] = invitee.organization_id;
+        });
+      }
+
+      const driverNodes = withPhone.filter((n) => n.type === "DRIVER");
+      if (driverNodes.length > 0) {
+        const rows = await Promise.all(
+          driverNodes.map(async (n) => {
+            const res = await getDriverInviteeByPhone(n.phone ?? "");
+            return { nodeId: n.id, onApp: !!res.user_id };
+          }),
+        );
+        rows.forEach((r) => {
+          byNodeId[r.nodeId] = r.onApp;
+        });
+      }
+
+      if (!cancelled) {
+        setPhoneOnAppByNodeId(byNodeId);
+        setInviteeOrgIdByNodeId(inviteeOrgByNodeId);
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [nodes]);
+
+  const isNodeOnApp = useCallback(
+    (node: NetworkNode) => {
+      if (node.isIntegrated && node.availableOnApp === true) return true;
+      const byPhone = phoneOnAppByNodeId[node.id];
+      if (typeof byPhone === "boolean") return byPhone;
+      return Boolean(node.availableOnApp);
+    },
+    [phoneOnAppByNodeId],
+  );
+
+  const pendingSentRequestToOrgIds = useMemo(() => {
+    const s = new Set<string>();
+    (sent ?? []).forEach((row) => {
+      if (!row) return;
+      if ((row.status ?? "").toLowerCase() !== "pending") return;
+      if (row.to_organization_id) s.add(row.to_organization_id);
+    });
+    return s;
+  }, [sent]);
 
   const refetchAll = useCallback(
     () =>
@@ -678,6 +772,17 @@ export default function NetworkScreen() {
     }
     // Optimistic removal from list so card disappears immediately.
     setDismissedSentRequestIds((prev) => ({ ...prev, [item.id]: true }));
+    if (item.type === "SENT" && item.row?.to_organization_id) {
+      const toOrgId = item.row.to_organization_id;
+      setOptimisticallyHiddenInviteSearchNodeIds((prev) => {
+        if (!prev || Object.keys(prev).length === 0) return prev;
+        const next: Record<string, true> = { ...prev };
+        for (const [nodeId, orgId] of Object.entries(inviteeOrgIdByNodeId)) {
+          if (orgId === toOrgId) delete next[nodeId];
+        }
+        return next;
+      });
+    }
     invalidateNetwork();
     triggerSyncToast();
     setActingRequestId(null);
@@ -724,9 +829,39 @@ export default function NetworkScreen() {
               setActionError(createErr.message);
               return;
             }
+            setOptimisticallyHiddenInviteSearchNodeIds((prev) => ({
+              ...prev,
+              [node.id]: true,
+            }));
             triggerSyncToast();
             return;
           }
+        }
+        if (node.type === "DRIVER" && phone.length >= 8) {
+          const res = await inviteDriver(
+            orgId,
+            {
+              name: (node.name || "").trim() || "Driver",
+              phone: node.phone ?? null,
+            },
+            currentOrganization?.name ?? null,
+          );
+          invalidateNetwork();
+          setSendingNodeId(null);
+          if (res.error) {
+            setActionError(res.error.message);
+            return;
+          }
+          // If an in-app invite couldn't be sent (no account yet), share the invite link.
+          if (!res.inviteSent) {
+            await Share.share({
+              message:
+                "Join me on Q to sync our ledger and manage trips. Download the Q app.",
+              title: "Invite to Q",
+            });
+          }
+          triggerSyncToast();
+          return;
         }
         await Share.share({
           message:
@@ -739,13 +874,21 @@ export default function NetworkScreen() {
         setSendingNodeId(null);
       }
     },
-    [orgId, invalidateNetwork],
+    [orgId, invalidateNetwork, currentOrganization?.name],
   );
 
   const filteredNodes = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return nodes.filter((n) => {
       if (manageView === "CONNECTIONS" && !n.isIntegrated) return false;
+      if (manageView === "INVITATIONS" && showInvitationSearch && n.isIntegrated)
+        return false;
+      if (manageView === "INVITATIONS" && showInvitationSearch) {
+        if (optimisticallyHiddenInviteSearchNodeIds[n.id]) return false;
+        const inviteeOrgId = inviteeOrgIdByNodeId[n.id];
+        if (inviteeOrgId && pendingSentRequestToOrgIds.has(inviteeOrgId))
+          return false;
+      }
       const matchesSearch =
         !q ||
         n.name.toLowerCase().includes(q) ||
@@ -756,11 +899,22 @@ export default function NetworkScreen() {
       if (nodeKind !== "ALL" && n.type !== nodeKind) return false;
       return true;
     });
-  }, [manageView, nodeKind, nodes, searchQuery]);
+  }, [
+    invitationSegment,
+    manageView,
+    nodeKind,
+    nodes,
+    inviteeOrgIdByNodeId,
+    optimisticallyHiddenInviteSearchNodeIds,
+    pendingSentRequestToOrgIds,
+    searchQuery,
+    showInvitationSearch,
+  ]);
 
   const filteredRequests = useMemo(() => {
     return requestItems.filter((item) => {
       if (dismissedSentRequestIds[item.id]) return false;
+      if (normalizeRequestStatus(item.status) === "approved") return false;
       if (invitationSegment === "SENT" && item.type !== "SENT") return false;
       if (invitationSegment === "RECEIVED" && item.type !== "RECEIVED")
         return false;
@@ -773,7 +927,9 @@ export default function NetworkScreen() {
   }, [dismissedSentRequestIds, invitationSegment, requestItems, searchQuery]);
 
   const pendingRequestCount = requestItems.filter(
-    (item) => item.type === "RECEIVED" && item.status === "pending",
+    (item) =>
+      item.type === "RECEIVED" &&
+      normalizeRequestStatus(item.status) === "pending",
   ).length;
 
   const handleAddPress = useCallback(() => {
@@ -961,10 +1117,16 @@ export default function NetworkScreen() {
               style={styles.filterScroll}
               contentContainerStyle={styles.filterScrollContent}
             >
-              {(["SENT", "RECEIVED"] as const).map((tab) => (
+              {(["RECEIVED", "SENT"] as const).map((tab) => (
                 <TouchableOpacity
                   key={tab}
-                  onPress={() => setInvitationSegment(tab)}
+                  onPress={() => {
+                    setInvitationSegment(tab);
+                    if (showInvitationSearch) {
+                      setShowInvitationSearch(false);
+                      setSearchQuery("");
+                    }
+                  }}
                   style={styles.filterTab}
                   activeOpacity={0.8}
                 >
@@ -983,17 +1145,70 @@ export default function NetworkScreen() {
                   ) : null}
                 </TouchableOpacity>
               ))}
+              <TouchableOpacity
+                style={styles.filterTab}
+                onPress={() => setShowInvitationSearch(true)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.filterTabLabelRow}>
+                  <FontAwesome
+                    name="search"
+                    size={12}
+                    color={
+                      showInvitationSearch
+                        ? Theme.textOnDark
+                        : Theme.textOnDarkMuted
+                    }
+                  />
+                </View>
+                {showInvitationSearch ? (
+                  <View style={styles.filterTabUnderline} />
+                ) : null}
+              </TouchableOpacity>
             </ScrollView>
           </View>
         ) : null}
 
+        {manageView === "INVITATIONS" && showInvitationSearch ? (
+          <View style={styles.invitationSearchRow}>
+            <TouchableOpacity
+              style={styles.invitationSearchBackBtn}
+              onPress={() => {
+                setShowInvitationSearch(false);
+                setSearchQuery("");
+              }}
+              activeOpacity={0.8}
+            >
+              <FontAwesome name="arrow-left" size={13} color={Theme.textOnDark} />
+            </TouchableOpacity>
+            <View style={styles.searchWrapDark}>
+              <FontAwesome
+                name="search"
+                size={14}
+                color={Theme.textOnDarkMuted}
+                style={styles.searchIconDark}
+              />
+              <TextInput
+                style={styles.searchInputDark}
+                placeholder="Search clients, suppliers, drivers..."
+                placeholderTextColor={Theme.textOnDarkMuted}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoCapitalize="none"
+                autoFocus
+              />
+            </View>
+          </View>
+        ) : null}
+
         {/* Search + Type filter — inside black block */}
-        <View
-          style={[
-            styles.searchRowDark,
-            manageView === "INVITATIONS" && styles.searchRowDarkSingle,
-          ]}
-        >
+        {manageView === "CONNECTIONS" ? (
+          <View
+            style={[
+              styles.searchRowDark,
+              styles.searchRowDarkSingle,
+            ]}
+          >
           <View style={styles.searchWrapDark}>
             <FontAwesome
               name="search"
@@ -1003,11 +1218,7 @@ export default function NetworkScreen() {
             />
             <TextInput
               style={styles.searchInputDark}
-              placeholder={
-                manageView === "CONNECTIONS"
-                  ? "Search connections..."
-                  : "Search invitations..."
-              }
+              placeholder={"Search connections..."}
               placeholderTextColor={Theme.textOnDarkMuted}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -1042,7 +1253,8 @@ export default function NetworkScreen() {
               )}
             </View>
           ) : null}
-        </View>
+          </View>
+        ) : null}
       </View>
 
       {actionError ? (
@@ -1085,7 +1297,7 @@ export default function NetworkScreen() {
                 contentContainerStyle={styles.storiesRow}
               >
                 {filteredNodes.slice(0, 24).map((node) => {
-                  const onPlatform = node.availableOnApp ?? node.isIntegrated;
+                  const onPlatform = isNodeOnApp(node);
                   return (
                     <TouchableOpacity
                       key={`story-${node.id}`}
@@ -1115,7 +1327,232 @@ export default function NetworkScreen() {
             </View>
           ) : null}
           {manageView === "INVITATIONS" ? (
-            loadingRequests ? (
+            showInvitationSearch ? (
+              loading ? (
+                <Text style={styles.loadingText}>Loading…</Text>
+              ) : filteredNodes.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <FontAwesome name="users" size={48} color={Theme.textMuted} />
+                  <Text style={styles.emptyStateText}>Empty Registry</Text>
+                </View>
+              ) : (
+                <View style={isLargeScreen ? styles.gridContainer : undefined}>
+                  {filteredNodes.map((node) => {
+                    const onPlatform = isNodeOnApp(node);
+                    const typePillStyle =
+                      node.type === "CLIENT"
+                        ? styles.networkTypePillClient
+                        : node.type === "SUPPLIER"
+                          ? styles.networkTypePillSupplier
+                          : styles.networkTypePillDriver;
+                    const typePillTextStyle =
+                      node.type === "CLIENT"
+                        ? styles.networkTypePillTextClient
+                        : node.type === "SUPPLIER"
+                          ? styles.networkTypePillTextSupplier
+                          : styles.networkTypePillTextDriver;
+                    const isConnected = node.isIntegrated;
+                    return (
+                      <View
+                        key={`invite-search-${node.id}`}
+                        style={isLargeScreen ? styles.gridItem : undefined}
+                      >
+                        <View style={styles.networkCardWrap}>
+                          <View
+                            style={[
+                              styles.networkCard,
+                              !isLargeScreen && styles.networkCardElevated,
+                            ]}
+                          >
+                            <View style={styles.networkCardCornerRight}>
+                              {node.isIntegrated ? (
+                                <View style={styles.networkCardIntegratedBadge}>
+                                  <Handshake
+                                    size={11}
+                                    strokeWidth={1.9}
+                                    color={Theme.darkGreen}
+                                  />
+                                </View>
+                              ) : null}
+                              <View style={styles.networkCardCornerChevron}>
+                                <FontAwesome
+                                  name="chevron-right"
+                                  size={12}
+                                  color={Theme.textMuted}
+                                />
+                              </View>
+                            </View>
+                            <View
+                              style={styles.networkCardOrb}
+                              pointerEvents="none"
+                            />
+                            <View style={styles.networkCardMainRow}>
+                              <TouchableOpacity
+                                style={styles.networkCardBody}
+                                activeOpacity={0.7}
+                                onPress={() => {
+                                  if (node.type === "CLIENT")
+                                    router.push(
+                                      onPlatform
+                                        ? `/client/${node.id}?profile=1`
+                                        : `/client/${node.id}`,
+                                    );
+                                  else if (node.type === "SUPPLIER")
+                                    router.push(
+                                      onPlatform
+                                        ? `/supplier/${node.id}?profile=1`
+                                        : `/supplier/${node.id}`,
+                                    );
+                                  else if (node.type === "DRIVER")
+                                    router.push(
+                                      onPlatform
+                                        ? `/driver/${node.id}?profile=1`
+                                        : `/driver/${node.id}`,
+                                    );
+                                }}
+                              >
+                                <View style={styles.networkCardTop}>
+                                  <View style={styles.networkCardTopLeft}>
+                                    <View
+                                      style={[
+                                        styles.networkTypePill,
+                                        typePillStyle,
+                                      ]}
+                                    >
+                                      <Text
+                                        style={[
+                                          styles.networkTypePillTextBase,
+                                          typePillTextStyle,
+                                        ]}
+                                      >
+                                        {node.type}
+                                      </Text>
+                                    </View>
+                                    <View
+                                      style={[
+                                        styles.networkTypePill,
+                                        onPlatform
+                                          ? styles.networkPlatformPillOn
+                                          : styles.networkPlatformPillOff,
+                                      ]}
+                                    >
+                                      <Text
+                                        style={[
+                                          styles.networkPlatformPillText,
+                                          onPlatform
+                                            ? styles.networkPlatformPillTextOn
+                                            : styles.networkPlatformPillTextOff,
+                                        ]}
+                                      >
+                                        {onPlatform ? "ON APP" : "OFFLINE"}
+                                      </Text>
+                                    </View>
+                                  </View>
+                                  <View style={styles.networkCardTopRight} />
+                                </View>
+                                <View style={styles.networkCardInner}>
+                                  <View style={styles.networkCardInnerRow}>
+                                    <View
+                                      style={[
+                                        styles.networkCardIconWrap,
+                                        onPlatform
+                                          ? styles.networkCardIconWrapOn
+                                          : styles.networkCardIconWrapOff,
+                                      ]}
+                                    >
+                                      <View style={styles.networkAvatarInCard}>
+                                        <NetworkAvatar
+                                          node={node}
+                                          onPlatform={onPlatform}
+                                        />
+                                      </View>
+                                      <View
+                                        style={[
+                                          styles.connectionDot,
+                                          onPlatform
+                                            ? styles.connectionDotActive
+                                            : styles.connectionDotMuted,
+                                        ]}
+                                      />
+                                    </View>
+                                    <View
+                                      style={[
+                                        styles.networkCardInnerCol,
+                                        !isLargeScreen &&
+                                          styles.networkCardInnerColSolo,
+                                      ]}
+                                    >
+                                      <View style={styles.networkCardTitleRow}>
+                                        <Text
+                                          style={styles.networkCardTitleInline}
+                                          numberOfLines={1}
+                                        >
+                                          {node.name}
+                                        </Text>
+
+                                        {isConnected ? (
+                                          <View style={styles.activePill}>
+                                            <CircleCheck
+                                              size={12}
+                                              strokeWidth={1.7}
+                                              color={Theme.darkGreen}
+                                              style={{ marginRight: 5 }}
+                                            />
+                                            <Text style={styles.activePillText}>
+                                              Connected
+                                            </Text>
+                                          </View>
+                                        ) : (
+                                          <TouchableOpacity
+                                            style={
+                                              onPlatform
+                                                ? styles.connectBtn
+                                                : styles.inviteInlineBtn
+                                            }
+                                            onPress={() =>
+                                              handleSendInviteOrRequest(node)
+                                            }
+                                            disabled={sendingNodeId === node.id}
+                                            activeOpacity={0.8}
+                                          >
+                                            {sendingNodeId === node.id ? (
+                                              <ActivityIndicator
+                                                size="small"
+                                                color={
+                                                  onPlatform
+                                                    ? Theme.textOnPrimary
+                                                    : Theme.textPrimaryDark
+                                                }
+                                              />
+                                            ) : (
+                                              <Text
+                                                style={
+                                                  onPlatform
+                                                    ? styles.connectBtnText
+                                                    : styles.inviteInlineBtnText
+                                                }
+                                              >
+                                                {onPlatform
+                                                  ? "Send request"
+                                                  : "Invite link"}
+                                              </Text>
+                                            )}
+                                          </TouchableOpacity>
+                                        )}
+                                      </View>
+                                    </View>
+                                  </View>
+                                </View>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              )
+            ) : loadingRequests ? (
               <Text style={styles.loadingText}>{t("loadingRequests")}</Text>
             ) : filteredRequests.length === 0 ? (
               <View style={styles.emptyState}>
@@ -1123,9 +1560,7 @@ export default function NetworkScreen() {
                 <Text style={styles.emptyStateText}>Empty Registry</Text>
               </View>
             ) : (
-              <View
-                style={isLargeScreen ? styles.gridContainer : undefined}
-              >
+              <View style={isLargeScreen ? styles.gridContainer : undefined}>
                 {filteredRequests.map((item) => {
                 const displayName =
                   item.type === "RECEIVED"
@@ -1218,17 +1653,6 @@ export default function NetworkScreen() {
                               </View>
                             </View>
                           </View>
-                          <View style={styles.titleRow}>
-                            <Text
-                              style={styles.networkCardTitleInline}
-                              numberOfLines={1}
-                            >
-                              {displayName}
-                            </Text>
-                            <Text style={styles.cardTimeAgoInline}>
-                              {shortRelativeTime(item.created_at)}
-                            </Text>
-                          </View>
                           <View style={styles.networkCardInner}>
                             <View style={styles.networkCardInnerRow}>
                               <View
@@ -1259,14 +1683,11 @@ export default function NetworkScreen() {
                                 </View>
                               </View>
                               <View style={styles.networkCardInnerCol}>
-                                <Text style={styles.networkCardInnerLabel}>
-                                  CONNECTION
-                                </Text>
                                 <Text
-                                  style={styles.networkCardInnerMeta}
-                                  numberOfLines={2}
+                                  style={styles.networkCardTitleInline}
+                                  numberOfLines={1}
                                 >
-                                  {kindLabel} • {item.status.toUpperCase()}
+                                  {displayName}
                                 </Text>
                               </View>
                             </View>
@@ -1324,7 +1745,7 @@ export default function NetworkScreen() {
               style={isLargeScreen ? styles.gridContainer : undefined}
             >
               {filteredNodes.map((node) => {
-              const onPlatform = node.availableOnApp ?? node.isIntegrated;
+              const onPlatform = isNodeOnApp(node);
               const typePillStyle =
                 node.type === "CLIENT"
                   ? styles.networkTypePillClient
@@ -1355,12 +1776,23 @@ export default function NetworkScreen() {
                         !isLargeScreen && styles.networkCardElevated,
                       ]}
                     >
-                      <View style={styles.networkCardCornerChevron}>
-                        <FontAwesome
-                          name="chevron-right"
-                          size={12}
-                          color={Theme.textMuted}
-                        />
+                      <View style={styles.networkCardCornerRight}>
+                        {node.isIntegrated ? (
+                          <View style={styles.networkCardIntegratedBadge}>
+                            <Handshake
+                              size={11}
+                              strokeWidth={1.9}
+                              color={Theme.darkGreen}
+                            />
+                          </View>
+                        ) : null}
+                        <View style={styles.networkCardCornerChevron}>
+                          <FontAwesome
+                            name="chevron-right"
+                            size={12}
+                            color={Theme.textMuted}
+                          />
+                        </View>
                       </View>
                       <View
                         style={styles.networkCardOrb}
@@ -1415,9 +1847,6 @@ export default function NetworkScreen() {
                           </View>
                           <View style={styles.networkCardTopRight} />
                         </View>
-                        <Text style={styles.networkCardTitle} numberOfLines={2}>
-                          {node.name}
-                        </Text>
                         <View style={styles.networkCardInner}>
                           <View style={styles.networkCardInnerRow}>
                             <View
@@ -1449,15 +1878,11 @@ export default function NetworkScreen() {
                                 !isLargeScreen && styles.networkCardInnerColSolo,
                               ]}
                             >
-                              <Text style={styles.networkCardInnerLabel}>
-                                NETWORK NODE
-                              </Text>
                               <Text
-                                style={styles.networkCardInnerMeta}
-                                numberOfLines={2}
+                                style={styles.networkCardTitleInline}
+                                numberOfLines={1}
                               >
-                                {node.type} •{" "}
-                                {onPlatform ? "ON APP" : "OFFLINE"}
+                                {node.name}
                               </Text>
                             </View>
                           </View>
@@ -1734,7 +2159,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   filterScrollContent: {
-    paddingLeft: 4,
+    paddingLeft: 0,
     paddingRight: 24,
     gap: 16,
     flexGrow: 0,
@@ -1807,6 +2232,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginLeft: 4,
   },
+  filterAddBtnActive: {
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderColor: "rgba(248,250,252,0.4)",
+  },
+  invitationSearchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingTop: 6,
+  },
+  invitationSearchBackBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   mainTabRow: {
     flexDirection: "row",
     gap: 16,
@@ -1838,7 +2282,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingTop: 6,
+    paddingTop: 4,
   },
   searchRowDarkSingle: {
     gap: 0,
@@ -2127,21 +2571,39 @@ const styles = StyleSheet.create({
     gap: 6,
     flex: 1,
     minWidth: 0,
-    paddingRight: 18,
   },
   networkCardTopRight: {
-    position: "absolute",
-    top: 0,
-    right: 0,
+    flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "flex-end",
-    justifyContent: "flex-start",
+    justifyContent: "flex-end",
+    gap: 6,
+    marginLeft: 8,
+    flexShrink: 0,
   },
   networkCardChevron: { marginLeft: 0 },
-  networkCardCornerChevron: {
+  networkCardCornerRight: {
     position: "absolute",
     top: 12,
     right: 12,
     zIndex: 3,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  networkCardCornerChevron: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  networkCardIntegratedBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    alignItems: "center",
+    justifyContent: "center",
   },
   networkTypePill: {
     paddingHorizontal: 6,
@@ -2211,7 +2673,7 @@ const styles = StyleSheet.create({
   networkStagePillTextDark: { color: TESLA_BLACK },
   networkCardTitle: {
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: "500",
     color: TESLA_BLACK,
     textTransform: "uppercase",
     marginBottom: 12,
@@ -2224,7 +2686,7 @@ const styles = StyleSheet.create({
   },
   networkCardTitleInline: {
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: "500",
     color: TESLA_BLACK,
     textTransform: "uppercase",
   },
@@ -2286,6 +2748,12 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: TESLA_BLACK,
     textTransform: "uppercase",
+  },
+  networkCardTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
   },
   networkCardActionsCol: {
     justifyContent: "flex-end",
@@ -2409,12 +2877,36 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1.1,
   },
+  requestInlineBtn: {
+    alignSelf: "flex-start",
+    marginTop: 8,
+    minHeight: 44,
+    justifyContent: "center",
+  },
   inviteBtn: {
     backgroundColor: Theme.surface,
     borderWidth: 1,
     borderColor: Theme.border,
   },
   inviteBtnText: { color: Theme.textPrimaryDark },
+  inviteInlineBtn: {
+    alignSelf: "flex-end",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 11,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  inviteInlineBtnText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
   activePill: {
     flexDirection: "row",
     alignItems: "center",
@@ -2471,7 +2963,6 @@ const styles = StyleSheet.create({
     backgroundColor: ROSE_500,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 4,
   },
   cancelInlineBtnText: {
     fontSize: 7,
