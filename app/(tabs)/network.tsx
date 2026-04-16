@@ -659,8 +659,13 @@ export default function NetworkScreen() {
       const withPhone = nodes.filter((n) => (n.phone ?? "").trim().length >= 8);
       if (withPhone.length === 0) {
         if (!cancelled) {
-          setPhoneOnAppByNodeId({});
-          setInviteeOrgIdByNodeId({});
+          // Important: keep this idempotent. `nodes` may be a new reference each render
+          // (because query results are re-materialized). Avoid repeatedly setting new
+          // `{}` objects, which can trigger a render loop.
+          const phoneMapIsEmpty = Object.keys(phoneOnAppByNodeId).length === 0;
+          const inviteeMapIsEmpty = Object.keys(inviteeOrgIdByNodeId).length === 0;
+          if (!phoneMapIsEmpty) setPhoneOnAppByNodeId({});
+          if (!inviteeMapIsEmpty) setInviteeOrgIdByNodeId({});
         }
         return;
       }
@@ -702,7 +707,7 @@ export default function NetworkScreen() {
     return () => {
       cancelled = true;
     };
-  }, [nodes]);
+  }, [nodes, phoneOnAppByNodeId, inviteeOrgIdByNodeId]);
 
   const isNodeOnApp = useCallback(
     (node: NetworkNode) => {

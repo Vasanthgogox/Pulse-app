@@ -545,6 +545,9 @@
   "dateFilter": "Date Filter",
   "todayTrips": "Today",
   "tomorrowTrips": "Tomorrow",
+  "yesterdayTrips": "Yesterday",
   "thisWeekTrips": "This week",
-  "thisMonthTrips": "This month"
+  "thisMonthTrips": "This month",
+  "customRangeTrips": "Custom range",
+  "dateRangeLabel": "Date range"
 }

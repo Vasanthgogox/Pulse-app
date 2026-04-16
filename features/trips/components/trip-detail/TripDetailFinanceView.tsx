@@ -13,13 +13,26 @@ import type { TripAssignmentAuditRow } from "@/features/trips/services/trip-assi
 import type { TripRow } from "@/features/trips/services/trips.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import type { ReactNode } from "react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
+  LayoutAnimation,
+  Modal,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
+  UIManager,
   View,
 } from "react-native";
+
+/** Enable LayoutAnimation on Android (one-time no-op on iOS). */
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 function formatLedgerDateShort(s: string | null | undefined): string {
   if (!s) return "—";
@@ -52,6 +65,48 @@ function trackingStepFromStatus(status: string | null | undefined): number {
   )
     return 2;
   return 1; // draft, assigned, cancelled, or unknown
+}
+
+/**
+ * Party types for the multi-party Trip Ledger hero.
+ * - `client`  = customer (we're the supplier/trip owner; their book shows payments to us)
+ * - `supplier`= downstream supplier we subcontracted / paid on this trip
+ * - `driver`  = internal (no shared-ledger partner); shows our payments to the driver
+ */
+export type ReconciliationPartyType = "client" | "supplier" | "driver";
+
+/** One party's view of the trip ledger — rendered as a tab inside the dark hero. */
+export interface ReconciliationPartyInfo {
+  type: ReconciliationPartyType;
+  /** Display name (e.g. "AASAAR LOGISTICS", "A PACKERS", "Ramesh Kumar"). */
+  name: string;
+  /** Client/supplier: true if party is on the network. Drivers: ignored (always internal). */
+  integrated: boolean;
+  /** Shared-ledger entries from the partner for this trip (client/supplier only). */
+  counterpartyEntries?: Array<{
+    id: string;
+    partnerKey: string;
+    amount: number;
+    transaction_date: string;
+    reference_id?: string;
+  }>;
+  /** Our book total for this party on this trip (received-from / paid-to). */
+  ourTotal: number;
+  /** Short label for our side (e.g. "Your received total"). Default inferred from type. */
+  ourTotalLabel?: string;
+  /** Partner book total (sum of their shared entries). Not used for driver. */
+  theirTotal: number;
+  /** Expected amount: client_price, supplier_rate, or driver commission. Used for driver progress. */
+  expectedAmount?: number;
+  /** Dispute status for this party on this trip (client/supplier only). */
+  disputeStatus?: "OPEN" | "RESOLVED" | null;
+  disputeDirection?: "RAISED_BY_US" | "RECEIVED" | null;
+  actionLoading?: boolean;
+  onAcceptPartnerView?: () => void;
+  onRaiseDispute?: () => void;
+  onOpenCompareVerify?: () => void;
+  /** Driver-only: opens add-transaction pre-filled to pay the driver. */
+  onRecordPayment?: () => void;
 }
 
 export interface TripDetailFinanceViewProps {
@@ -97,6 +152,44 @@ export interface TripDetailFinanceViewProps {
   subcontractRate?: number | null;
   /** Current org display name; used when the supplier viewer cannot resolve the linked supplier row (e.g. indent / RLS). */
   viewerOrganizationName?: string | null;
+  /** Opposite-party entries fetched from shared-ledger for this trip (preview + validate). */
+  counterpartyEntries?: Array<{
+    id: string;
+    partnerKey: string;
+    amount: number;
+    transaction_date: string;
+    reference_id?: string;
+  }>;
+  /** True when counterparty is integrated/network-connected; offline parties show NA. */
+  counterpartyIntegrated?: boolean;
+  /** Open Compare & Verify / reconciliation flow for this trip context. */
+  onOpenCompareVerify?: () => void;
+  /** Current reconciliation/dispute status for this trip+partner (drives hero status chip + inline actions). */
+  reconcileState?: {
+    /** 'OPEN' when dispute was raised and is awaiting resolution; 'RESOLVED' after accept/decline; null when none. */
+    disputeStatus?: "OPEN" | "RESOLVED" | null;
+    /** Was this dispute raised by us or received from partner. Affects wording + CTA. */
+    disputeDirection?: "RAISED_BY_US" | "RECEIVED" | null;
+    /** True while an Accept/Raise action is in-flight; disables buttons. */
+    actionLoading?: boolean;
+  };
+  /**
+   * Accept partner's numbers for this trip; updates local ledger. Called from hero inline action.
+   * Parent is responsible for confirmation dialog + service call (acceptPartnerView).
+   */
+  onAcceptPartnerView?: () => void;
+  /**
+   * Raise a dispute for this trip to alert partner. Called from hero inline action.
+   * Parent is responsible for confirmation dialog + service call (createDispute).
+   */
+  onRaiseDispute?: () => void;
+  /**
+   * Multi-party hero: when provided, the Trip Ledger renders a party tab switcher
+   * at the top and swaps body per selected party (client / supplier / driver).
+   * When omitted, falls back to the legacy single-counterparty hero using the
+   * scalar props above.
+   */
+  reconciliationParties?: ReconciliationPartyInfo[];
 }
 
 export type DocCategory = "vehicle" | "trip" | "driver";
@@ -211,6 +304,737 @@ function formatAssignmentDateActivityMeta(iso: string | null | undefined): strin
   return s.toUpperCase().replace(", ", " AT ");
 }
 
+/**
+ * Modern multi-party reconciliation hero — renders the Trip Ledger dark card with
+ * a horizontal tab switcher for each party (client, supplier, driver) and swaps
+ * body content per selection. Trip-wide Received/Pending footer sits under the
+ * tab content so it stays visible regardless of selected party.
+ *
+ * Status signals (per party):
+ * - Offline  → party not on network; compare unavailable (red dot)
+ * - Awaiting → integrated but no partner entries yet (neutral dot)
+ * - Match    → variance = 0 (green dot)
+ * - Review   → variance > 0 (amber dot)
+ * - Dispute  → open dispute overrides tab color (red pulse)
+ * - Driver   → internal (indigo dot); paid-vs-expected progress
+ */
+function MultiPartyReconHero({
+  parties,
+  receivedFromCustomer,
+  dueFromCustomer,
+  reconciliationSummary,
+  onPreviewCounterpartyEntry,
+}: {
+  parties: ReconciliationPartyInfo[];
+  receivedFromCustomer: number;
+  dueFromCustomer: number;
+  reconciliationSummary: {
+    matchedCount: number;
+    reconciledCount: number;
+    mismatchCount: number;
+  };
+  onPreviewCounterpartyEntry: (row: {
+    id: string;
+    partnerKey: string;
+    amount: number;
+    transaction_date: string;
+    reference_id?: string;
+  }) => void;
+}) {
+  /** Default-select the party most needing attention: dispute > mismatch > awaiting > match > offline/driver. */
+  const priorityFor = (p: ReconciliationPartyInfo): number => {
+    if (p.disputeStatus === "OPEN") return 0;
+    if (p.type === "driver") {
+      if (p.expectedAmount != null && p.expectedAmount > p.ourTotal) return 2;
+      return 4;
+    }
+    if (!p.integrated) return 5;
+    const hasEntries = (p.counterpartyEntries ?? []).length > 0;
+    const variance = Math.abs(p.theirTotal - p.ourTotal);
+    if (hasEntries && variance > 0) return 1;
+    if (!hasEntries) return 3;
+    return 4;
+  };
+  const defaultIdx = useMemo(() => {
+    let bestIdx = 0;
+    let bestP = Number.POSITIVE_INFINITY;
+    parties.forEach((p, i) => {
+      const s = priorityFor(p);
+      if (s < bestP) {
+        bestP = s;
+        bestIdx = i;
+      }
+    });
+    return bestIdx;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parties.length]);
+  const [selectedIdx, setSelectedIdx] = useState<number>(defaultIdx);
+  /** Guard against array shrinking (e.g. after a reload): clamp idx. */
+  const safeIdx = Math.min(selectedIdx, parties.length - 1);
+  const party = parties[safeIdx];
+
+  /** Subtle fade-in on party switch for a modern, premium feel. */
+  const bodyOpacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    bodyOpacity.setValue(0.4);
+    Animated.timing(bodyOpacity, {
+      toValue: 1,
+      duration: 220,
+      useNativeDriver: true,
+    }).start();
+  }, [safeIdx, bodyOpacity]);
+
+  const handleTabPress = (i: number) => {
+    if (i === safeIdx) return;
+    /** Springy layout animation makes tab-switch feel tactile on iOS/Android. */
+    LayoutAnimation.configureNext({
+      duration: 220,
+      create: { type: "easeInEaseOut", property: "opacity" },
+      update: { type: "spring", springDamping: 0.7 },
+    });
+    setSelectedIdx(i);
+  };
+
+  const varianceAbs = Math.abs(party.theirTotal - party.ourTotal);
+  const hasEntries = (party.counterpartyEntries ?? []).length > 0;
+  const isDriver = party.type === "driver";
+  const isOffline = !isDriver && !party.integrated;
+  const isAwaiting = !isDriver && party.integrated && !hasEntries;
+  const isMatch = !isDriver && party.integrated && hasEntries && varianceAbs === 0;
+  const hasVariance = !isDriver && party.integrated && hasEntries && varianceAbs > 0;
+
+  return (
+    <View style={styles.reconHero}>
+      {/* Party tab switcher */}
+      <View style={styles.partyTabsRow}>
+        {parties.map((p, i) => {
+          const active = i === safeIdx;
+          const badge = partyTabBadge(p);
+          return (
+            <TouchableOpacity
+              key={`${p.type}-${i}`}
+              activeOpacity={0.85}
+              onPress={() => handleTabPress(i)}
+              style={[styles.partyTab, active && styles.partyTabActive]}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+            >
+              <View style={[styles.partyTabIcon, active && styles.partyTabIconActive]}>
+                <FontAwesome
+                  name={partyIconName(p.type)}
+                  size={12}
+                  color={active ? Theme.textPrimaryDark : Theme.textOnDark}
+                />
+                {badge.dotColor ? (
+                  <View
+                    style={[
+                      styles.partyTabDot,
+                      { backgroundColor: badge.dotColor },
+                    ]}
+                  />
+                ) : null}
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text
+                  style={[
+                    styles.partyTabRole,
+                    active && styles.partyTabRoleActive,
+                  ]}
+                >
+                  {partyRoleLabel(p.type)}
+                </Text>
+                <Text
+                  style={[
+                    styles.partyTabName,
+                    active && styles.partyTabNameActive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {p.name}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* Hero header for selected party — animated on tab switch for a premium feel */}
+      <Animated.View style={{ opacity: bodyOpacity, gap: 14 }}>
+      <View style={styles.reconHeroHeader}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <View style={styles.reconHeroKickerRow}>
+            <FontAwesome
+              name={
+                isDriver ? "id-badge" : isOffline ? "unlink" : "link"
+              }
+              size={10}
+              color={Theme.textOnDarkMuted}
+            />
+            <Text style={styles.reconHeroKicker}>
+              TRIP LEDGER · {partyRoleLabel(party.type)}
+            </Text>
+          </View>
+          <Text style={styles.reconHeroParty} numberOfLines={1}>
+            {(party.name || partyRoleLabel(party.type)).toUpperCase()}
+          </Text>
+        </View>
+        <View
+          style={[
+            styles.reconStatusRow,
+            heroStatusRingStyle(
+              isDriver ? "driver" : isOffline ? "offline" : isAwaiting ? "await" : isMatch ? "match" : "warn",
+            ),
+          ]}
+        >
+          <View
+            style={[
+              styles.reconStatusDot,
+              statusDotStyleFor(party, { isDriver, isOffline, isAwaiting, isMatch }),
+            ]}
+          />
+          <Text
+            style={[
+              styles.reconStatusText,
+              statusTextStyleFor(party, { isDriver, isOffline, isAwaiting, isMatch }),
+            ]}
+          >
+            {statusLabelFor(party, { isDriver, isOffline, isAwaiting, isMatch })}
+          </Text>
+        </View>
+      </View>
+
+      {/* Dispute status chip — only for integrated client/supplier */}
+      {!isDriver && party.disputeStatus === "OPEN" ? (
+        <View style={styles.reconDisputeChip}>
+          <FontAwesome name="exclamation-circle" size={11} color={"#FCA5A5"} />
+          <Text style={styles.reconDisputeChipText}>
+            {party.disputeDirection === "RECEIVED"
+              ? "DISPUTE RECEIVED · PARTNER REQUESTS REVIEW"
+              : "DISPUTE OPEN · PARTNER NOTIFIED"}
+          </Text>
+        </View>
+      ) : !isDriver && party.disputeStatus === "RESOLVED" ? (
+        <View style={[styles.reconDisputeChip, styles.reconDisputeChipResolved]}>
+          <FontAwesome name="check-circle" size={11} color={Theme.driverEmerald} />
+          <Text
+            style={[
+              styles.reconDisputeChipText,
+              styles.reconDisputeChipTextResolved,
+            ]}
+          >
+            DISPUTE RESOLVED
+          </Text>
+        </View>
+      ) : null}
+
+      {/* Body — state-specific per selected party */}
+      {isDriver ? (
+        <DriverReconBody party={party} />
+      ) : isOffline ? (
+        <View style={styles.reconOfflineBody}>
+          <View style={styles.reconOfflineIcon}>
+            <FontAwesome name="unlink" size={16} color={Theme.textOnDark} />
+          </View>
+          <Text style={styles.reconOfflineTitle}>
+            Compare &amp; verify unavailable
+          </Text>
+          <Text style={styles.reconOfflineBody2}>
+            Opposite-party entry preview is available only for integrated network
+            partners. Invite this party to unlock two-way reconciliation.
+          </Text>
+        </View>
+      ) : isAwaiting ? (
+        <View style={styles.reconAwaitingCard}>
+          <FontAwesome name="clock-o" size={14} color={Theme.textOnDarkMuted} />
+          <Text style={styles.reconAwaitingText}>
+            No opposite-party entry marked yet for this trip.
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.reconGlass}>
+          <View style={styles.reconGlassHeader}>
+            <Text style={styles.reconGlassKicker}>FINANCIAL AUDIT VIEW</Text>
+            <Text
+              style={[
+                styles.reconGlassStatus,
+                isMatch ? styles.reconGlassStatusGood : styles.reconGlassStatusWarn,
+              ]}
+            >
+              {isMatch
+                ? "Verified"
+                : `₹${varianceAbs.toLocaleString("en-IN")} Var`}
+            </Text>
+          </View>
+
+          {[
+            {
+              key: "partner",
+              label: "Marked by partner",
+              value: party.theirTotal,
+            },
+            {
+              key: "ours",
+              label: party.ourTotalLabel ?? defaultOurLabel(party.type),
+              value: party.ourTotal,
+            },
+          ].map((row) => (
+            <View key={row.key} style={styles.reconLineItem}>
+              <View style={styles.reconLineItemLabelRow}>
+                <Text style={styles.reconLineItemLabel}>
+                  {row.label.toUpperCase()}
+                </Text>
+              </View>
+              <View style={styles.reconLineItemChip}>
+                <Text style={styles.reconLineItemChipValue}>
+                  {formatINR(row.value)}
+                </Text>
+              </View>
+            </View>
+          ))}
+
+          <View style={styles.reconVarianceRow}>
+            <Text style={styles.reconVarianceLabel}>VARIANCE</Text>
+            <Text
+              style={[
+                styles.reconVarianceValue,
+                isMatch
+                  ? styles.reconVarianceValueMatch
+                  : styles.reconVarianceValueMismatch,
+              ]}
+            >
+              {isMatch
+                ? "₹0"
+                : `${party.theirTotal - party.ourTotal > 0 ? "+" : "−"}${formatINR(varianceAbs)}`}
+            </Text>
+          </View>
+
+          <View style={styles.reconCounters}>
+            <View style={styles.reconCounterItem}>
+              <Text style={styles.reconCounterValue}>
+                {reconciliationSummary.matchedCount}
+              </Text>
+              <Text style={styles.reconCounterLabel}>Matched</Text>
+            </View>
+            <View style={styles.reconCounterDivider} />
+            <View style={styles.reconCounterItem}>
+              <Text
+                style={[
+                  styles.reconCounterValue,
+                  styles.reconCounterValueMuted,
+                ]}
+              >
+                {reconciliationSummary.reconciledCount}
+              </Text>
+              <Text style={styles.reconCounterLabel}>Reconciled</Text>
+            </View>
+            <View style={styles.reconCounterDivider} />
+            <View style={styles.reconCounterItem}>
+              <Text
+                style={[
+                  styles.reconCounterValue,
+                  styles.reconCounterValueWarn,
+                ]}
+              >
+                {reconciliationSummary.mismatchCount}
+              </Text>
+              <Text style={styles.reconCounterLabel}>Mismatch</Text>
+            </View>
+          </View>
+
+          <Text style={styles.reconEntriesHead}>
+            Partner entries · latest{" "}
+            {Math.min((party.counterpartyEntries ?? []).length, 5)} of{" "}
+            {(party.counterpartyEntries ?? []).length}
+          </Text>
+          <View style={styles.reconEntriesList}>
+            {(party.counterpartyEntries ?? []).slice(0, 5).map((row) => (
+              <TouchableOpacity
+                key={row.id}
+                style={styles.reconEntryCard}
+                activeOpacity={0.85}
+                onPress={() => onPreviewCounterpartyEntry(row)}
+              >
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.reconEntryAmount}>
+                    {formatINR(Number(row.amount ?? 0))}
+                  </Text>
+                  <Text style={styles.reconEntryMeta} numberOfLines={1}>
+                    {formatLedgerDateShort(row.transaction_date)} · Ref{" "}
+                    {row.reference_id ?? "—"}
+                  </Text>
+                </View>
+                <FontAwesome
+                  name="chevron-right"
+                  size={10}
+                  color={Theme.textOnDarkMuted}
+                />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Inline actions — Accept partner / Raise dispute (client/supplier only, when variance) */}
+      {!isDriver &&
+      hasVariance &&
+      party.disputeStatus !== "OPEN" &&
+      (party.onAcceptPartnerView || party.onRaiseDispute) ? (
+        <View style={styles.reconActionRow}>
+          {party.onAcceptPartnerView ? (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              disabled={party.actionLoading}
+              onPress={party.onAcceptPartnerView}
+              style={[
+                styles.reconActionBtn,
+                styles.reconActionBtnAccept,
+                party.actionLoading && styles.reconActionBtnDisabled,
+              ]}
+            >
+              <FontAwesome name="check" size={11} color={Theme.textPrimaryDark} />
+              <Text style={styles.reconActionBtnAcceptText}>
+                PARTNER IS RIGHT
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+          {party.onRaiseDispute ? (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              disabled={party.actionLoading}
+              onPress={party.onRaiseDispute}
+              style={[
+                styles.reconActionBtn,
+                styles.reconActionBtnDispute,
+                party.actionLoading && styles.reconActionBtnDisabled,
+              ]}
+            >
+              <FontAwesome name="exclamation" size={11} color={"#FCA5A5"} />
+              <Text style={styles.reconActionBtnDisputeText}>RAISE DISPUTE</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
+
+      {/* Inline Accept when dispute received */}
+      {!isDriver &&
+      party.disputeStatus === "OPEN" &&
+      party.disputeDirection === "RECEIVED" &&
+      party.onAcceptPartnerView ? (
+        <View style={styles.reconActionRow}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            disabled={party.actionLoading}
+            onPress={party.onAcceptPartnerView}
+            style={[
+              styles.reconActionBtn,
+              styles.reconActionBtnAccept,
+              party.actionLoading && styles.reconActionBtnDisabled,
+            ]}
+          >
+            <FontAwesome name="check" size={11} color={Theme.textPrimaryDark} />
+            <Text style={styles.reconActionBtnAcceptText}>
+              ACCEPT & UPDATE BOOK
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      {/* Driver-only inline action */}
+      {isDriver && party.onRecordPayment ? (
+        <View style={styles.reconActionRow}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            disabled={party.actionLoading}
+            onPress={party.onRecordPayment}
+            style={[
+              styles.reconActionBtn,
+              styles.reconActionBtnAccept,
+              party.actionLoading && styles.reconActionBtnDisabled,
+            ]}
+          >
+            <FontAwesome name="plus" size={11} color={Theme.textPrimaryDark} />
+            <Text style={styles.reconActionBtnAcceptText}>
+              RECORD DRIVER PAYMENT
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      {/* CTA: Compare & Verify (client/supplier only) */}
+      {!isDriver && !isOffline && party.onOpenCompareVerify ? (
+        <TouchableOpacity
+          style={styles.reconCtaButton}
+          activeOpacity={0.9}
+          onPress={party.onOpenCompareVerify}
+        >
+          <Text style={styles.reconCtaButtonText}>
+            {party.disputeStatus === "OPEN"
+              ? "VIEW IN COMPARE & VERIFY"
+              : hasVariance
+                ? "BRIDGE VARIANCES"
+                : "OPEN COMPARE & VERIFY"}
+          </Text>
+          <FontAwesome name="chevron-right" size={12} color={Theme.textOnDark} />
+        </TouchableOpacity>
+      ) : null}
+      </Animated.View>
+
+      {/* Trip-wide footer — Received / Pending (unchanged across party tabs) */}
+      <View style={styles.reconFooterRow}>
+        <View style={styles.reconFooterCard}>
+          <View style={styles.reconFooterIconRow}>
+            <FontAwesome
+              name="arrow-down"
+              size={9}
+              color={Theme.driverEmerald}
+            />
+            <Text style={styles.reconFooterLabel}>RECEIVED</Text>
+          </View>
+          <Text style={styles.reconFooterValue}>
+            {formatINR(receivedFromCustomer)}
+          </Text>
+        </View>
+        <View style={styles.reconFooterCard}>
+          <View style={styles.reconFooterIconRow}>
+            <FontAwesome
+              name="arrow-up"
+              size={9}
+              color={Theme.textOnDarkMuted}
+            />
+            <Text style={styles.reconFooterLabel}>PENDING</Text>
+          </View>
+          <Text
+            style={[
+              styles.reconFooterValue,
+              dueFromCustomer === 0 && styles.reconFooterValueMuted,
+            ]}
+          >
+            {dueFromCustomer === 0 ? "0.00" : formatINR(dueFromCustomer)}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/** Driver body — internal payments; shows paid vs expected as a progress bar. */
+function DriverReconBody({ party }: { party: ReconciliationPartyInfo }) {
+  const expected = party.expectedAmount ?? 0;
+  const paid = party.ourTotal;
+  const pending = Math.max(0, expected - paid);
+  const pct =
+    expected > 0
+      ? Math.max(0, Math.min(1, paid / expected))
+      : paid > 0
+        ? 1
+        : 0;
+  const pctPercent = Math.round(pct * 100);
+  const isSettled = expected > 0 ? paid >= expected : paid > 0;
+  return (
+    <View style={styles.reconGlass}>
+      <View style={styles.reconGlassHeader}>
+        <View style={styles.reconGlassKickerRow}>
+          <Text style={styles.reconGlassKicker}>DRIVER SETTLEMENT</Text>
+          <View
+            style={[
+              styles.driverRequiredPill,
+              isSettled
+                ? styles.driverRequiredPillDone
+                : styles.driverRequiredPillOpen,
+            ]}
+          >
+            <Text
+              style={[
+                styles.driverRequiredPillText,
+                isSettled
+                  ? styles.driverRequiredPillTextDone
+                  : styles.driverRequiredPillTextOpen,
+              ]}
+            >
+              {isSettled ? "COMPLETED" : "REQUIRED"}
+            </Text>
+          </View>
+        </View>
+        <Text
+          style={[
+            styles.reconGlassStatus,
+            isSettled
+              ? styles.reconGlassStatusGood
+              : styles.reconGlassStatusWarn,
+          ]}
+        >
+          {isSettled ? "Settled" : `${pctPercent}% paid`}
+        </Text>
+      </View>
+
+      {/* Progress bar */}
+      <View style={styles.driverProgressTrack}>
+        <View
+          style={[
+            styles.driverProgressFill,
+            { width: `${Math.max(4, pctPercent)}%` },
+            isSettled
+              ? styles.driverProgressFillSettled
+              : styles.driverProgressFillPending,
+          ]}
+        />
+      </View>
+
+      {/* Paid / Expected row */}
+      <View style={styles.driverStatsRow}>
+        <View style={styles.driverStatCell}>
+          <Text style={styles.driverStatLabel}>PAID</Text>
+          <Text style={styles.driverStatValue}>{formatINR(paid)}</Text>
+        </View>
+        <View style={styles.driverStatCellDivider} />
+        <View style={styles.driverStatCell}>
+          <Text style={styles.driverStatLabel}>EXPECTED</Text>
+          <Text
+            style={[
+              styles.driverStatValue,
+              expected === 0 && styles.driverStatValueMuted,
+            ]}
+          >
+            {expected > 0 ? formatINR(expected) : "—"}
+          </Text>
+        </View>
+        <View style={styles.driverStatCellDivider} />
+        <View style={styles.driverStatCell}>
+          <Text style={styles.driverStatLabel}>PENDING</Text>
+          <Text
+            style={[
+              styles.driverStatValue,
+              pending > 0
+                ? styles.driverStatValueWarn
+                : styles.driverStatValueMuted,
+            ]}
+          >
+            {expected > 0 ? formatINR(pending) : "—"}
+          </Text>
+        </View>
+      </View>
+
+      <Text style={styles.driverInternalNote}>
+        Internal payment — no network sync needed.
+      </Text>
+    </View>
+  );
+}
+
+function partyIconName(type: ReconciliationPartyType): "user" | "truck" | "id-badge" {
+  if (type === "supplier") return "truck";
+  if (type === "driver") return "id-badge";
+  return "user";
+}
+
+function partyRoleLabel(type: ReconciliationPartyType): string {
+  if (type === "supplier") return "Supplier";
+  if (type === "driver") return "Driver";
+  return "Client";
+}
+
+function defaultOurLabel(type: ReconciliationPartyType): string {
+  if (type === "supplier") return "Your paid total";
+  if (type === "client") return "Your received total";
+  return "Paid to driver";
+}
+
+function partyTabBadge(p: ReconciliationPartyInfo): { dotColor: string | null } {
+  if (p.disputeStatus === "OPEN") return { dotColor: "#EF4444" };
+  if (p.type === "driver") {
+    if (p.expectedAmount != null && p.ourTotal < p.expectedAmount)
+      return { dotColor: "#F59E0B" };
+    return { dotColor: null };
+  }
+  if (!p.integrated) return { dotColor: "#EF4444" };
+  const hasEntries = (p.counterpartyEntries ?? []).length > 0;
+  if (!hasEntries) return { dotColor: null };
+  const variance = Math.abs(p.theirTotal - p.ourTotal);
+  if (variance > 0) return { dotColor: "#F59E0B" };
+  return { dotColor: "#10B981" };
+}
+
+function heroStatusRingStyle(
+  kind: "driver" | "offline" | "await" | "match" | "warn",
+): { borderColor: string; backgroundColor: string } {
+  switch (kind) {
+    case "driver":
+      return {
+        borderColor: "rgba(129,140,248,0.28)",
+        backgroundColor: "rgba(129,140,248,0.10)",
+      };
+    case "offline":
+      return {
+        borderColor: "rgba(239,68,68,0.28)",
+        backgroundColor: "rgba(239,68,68,0.10)",
+      };
+    case "await":
+      return {
+        borderColor: "rgba(255,255,255,0.08)",
+        backgroundColor: "rgba(255,255,255,0.06)",
+      };
+    case "match":
+      return {
+        borderColor: "rgba(16,185,129,0.28)",
+        backgroundColor: "rgba(16,185,129,0.10)",
+      };
+    case "warn":
+      return {
+        borderColor: "rgba(245,158,11,0.28)",
+        backgroundColor: "rgba(245,158,11,0.10)",
+      };
+  }
+}
+
+function statusDotStyleFor(
+  p: ReconciliationPartyInfo,
+  s: { isDriver: boolean; isOffline: boolean; isAwaiting: boolean; isMatch: boolean },
+): { backgroundColor: string } {
+  if (p.disputeStatus === "OPEN") return { backgroundColor: "#EF4444" };
+  if (s.isDriver) {
+    if (p.expectedAmount != null && p.ourTotal < p.expectedAmount)
+      return { backgroundColor: "#F59E0B" };
+    return { backgroundColor: "#818CF8" };
+  }
+  if (s.isOffline) return { backgroundColor: "#EF4444" };
+  if (s.isAwaiting) return { backgroundColor: "rgba(255,255,255,0.45)" };
+  if (s.isMatch) return { backgroundColor: Theme.driverEmerald };
+  return { backgroundColor: "#F59E0B" };
+}
+
+function statusTextStyleFor(
+  p: ReconciliationPartyInfo,
+  s: { isDriver: boolean; isOffline: boolean; isAwaiting: boolean; isMatch: boolean },
+): { color: string } {
+  if (p.disputeStatus === "OPEN") return { color: "#FCA5A5" };
+  if (s.isDriver) {
+    if (p.expectedAmount != null && p.ourTotal < p.expectedAmount)
+      return { color: "#F59E0B" };
+    return { color: "#C7D2FE" };
+  }
+  if (s.isOffline) return { color: "#FCA5A5" };
+  if (s.isAwaiting) return { color: Theme.textOnDarkMuted };
+  if (s.isMatch) return { color: Theme.driverEmerald };
+  return { color: "#F59E0B" };
+}
+
+function statusLabelFor(
+  p: ReconciliationPartyInfo,
+  s: { isDriver: boolean; isOffline: boolean; isAwaiting: boolean; isMatch: boolean },
+): string {
+  if (p.disputeStatus === "OPEN") {
+    return p.disputeDirection === "RECEIVED" ? "DISPUTE RECEIVED" : "DISPUTE OPEN";
+  }
+  if (s.isDriver) {
+    if (p.expectedAmount != null && p.ourTotal < p.expectedAmount) return "PENDING";
+    return "INTERNAL";
+  }
+  if (s.isOffline) return "PARTNER OFFLINE";
+  if (s.isAwaiting) return "AWAITING SYNC";
+  if (s.isMatch) return "MATCH SECURED";
+  return "REVIEW NEEDED";
+}
+
 export function TripDetailFinanceView({
   trip,
   tripLedgerEntries,
@@ -235,6 +1059,13 @@ export function TripDetailFinanceView({
   clientName,
   subcontractRate,
   viewerOrganizationName = null,
+  counterpartyEntries = [],
+  counterpartyIntegrated = true,
+  onOpenCompareVerify,
+  reconcileState,
+  onAcceptPartnerView,
+  onRaiseDispute,
+  reconciliationParties,
 }: TripDetailFinanceViewProps) {
   const { t } = useLanguage();
   const routeStr = `${trip.pickup_area ?? "—"} → ${trip.drop_location ?? "—"}`.trim() || "—";
@@ -325,6 +1156,74 @@ export function TripDetailFinanceView({
     () => tripLedgerEntries.filter((tx) => Number(tx.amount_out ?? 0) > 0),
     [tripLedgerEntries],
   );
+
+  const reconciliationSummary = useMemo(() => {
+    const rows = tripLedgerEntries.filter(
+      (tx) =>
+        tx.reconciliation_status != null ||
+        tx.reconciliation_label != null ||
+        tx.reconciliation_action_label != null,
+    );
+    if (!rows.length) {
+      return {
+        hasSignals: false,
+        matchedCount: 0,
+        reconciledCount: 0,
+        mismatchCount: 0,
+        latestLabel: null as string | null,
+        latestAction: null as string | null,
+      };
+    }
+    let matchedCount = 0;
+    let reconciledCount = 0;
+    let mismatchCount = 0;
+    for (const row of rows) {
+      if (row.reconciliation_status === "match_found") matchedCount += 1;
+      else if (row.reconciliation_status === "reconciled") reconciledCount += 1;
+      else if (row.reconciliation_status === "mismatch") mismatchCount += 1;
+    }
+    const latest = rows
+      .slice()
+      .sort((a, b) => {
+        const ta = new Date(a.transaction_date ?? a.created_at).getTime();
+        const tb = new Date(b.transaction_date ?? b.created_at).getTime();
+        return tb - ta;
+      })[0];
+    return {
+      hasSignals: true,
+      matchedCount,
+      reconciledCount,
+      mismatchCount,
+      latestLabel: latest?.reconciliation_label ?? null,
+      latestAction: latest?.reconciliation_action_label ?? null,
+    };
+  }, [tripLedgerEntries]);
+
+  const counterpartySummary = useMemo(() => {
+    if (!counterpartyEntries.length) {
+      return {
+        hasEntries: false,
+        totalMarked: 0,
+        varianceVsPaid: 0,
+      };
+    }
+    const totalMarked = counterpartyEntries.reduce(
+      (sum, row) => sum + Number(row.amount ?? 0),
+      0,
+    );
+    return {
+      hasEntries: true,
+      totalMarked,
+      varianceVsPaid: totalMarked - paidToSupplier,
+    };
+  }, [counterpartyEntries, paidToSupplier]);
+  const [selectedCounterpartyEntry, setSelectedCounterpartyEntry] = useState<{
+    id: string;
+    partnerKey: string;
+    amount: number;
+    transaction_date: string;
+    reference_id?: string;
+  } | null>(null);
 
   const revenueAdjustments = useMemo(
     () => adjustments.filter((a) => a.type === "revenue"),
@@ -433,7 +1332,28 @@ export function TripDetailFinanceView({
           <View>
             <Text style={styles.financeTitle}>Trip Finances</Text>
             {(clientName ?? partnerName) && (
-              <Text style={styles.financeSubtitle}>{clientName ?? partnerName}</Text>
+              <View style={styles.financeSubtitleRow}>
+                <Text style={styles.financeSubtitle}>{clientName ?? partnerName}</Text>
+                <View
+                  style={[
+                    styles.partnerIntegrationPill,
+                    counterpartyIntegrated
+                      ? styles.partnerIntegrationPillOn
+                      : styles.partnerIntegrationPillOff,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.partnerIntegrationPillText,
+                      counterpartyIntegrated
+                        ? styles.partnerIntegrationPillTextOn
+                        : styles.partnerIntegrationPillTextOff,
+                    ]}
+                  >
+                    {counterpartyIntegrated ? "Integrated" : "Offline"}
+                  </Text>
+                </View>
+              </View>
             )}
           </View>
           <View style={styles.financeProfitWrap}>
@@ -441,6 +1361,419 @@ export function TripDetailFinanceView({
             <Text style={styles.financeProfitValue}>{formatINR(adjMargin)}</Text>
           </View>
         </View>
+
+        {/* MULTI-PARTY RECONCILIATION HERO (client + supplier + driver) */}
+        {reconciliationParties && reconciliationParties.length > 0 ? (
+          <MultiPartyReconHero
+            parties={reconciliationParties}
+            receivedFromCustomer={receivedFromCustomer}
+            dueFromCustomer={dueFromCustomer}
+            reconciliationSummary={reconciliationSummary}
+            onPreviewCounterpartyEntry={setSelectedCounterpartyEntry}
+          />
+        ) : null}
+
+        {/* PREMIUM RECONCILIATION HERO — legacy single-counterparty fallback */}
+        {!reconciliationParties || reconciliationParties.length === 0 ? (() => {
+          const varianceAbs = Math.abs(counterpartySummary.varianceVsPaid);
+          const hasVariance =
+            counterpartyIntegrated &&
+            counterpartySummary.hasEntries &&
+            varianceAbs > 0;
+          const isMatch =
+            counterpartyIntegrated &&
+            counterpartySummary.hasEntries &&
+            varianceAbs === 0;
+          const isAwaiting =
+            counterpartyIntegrated && !counterpartySummary.hasEntries;
+          const isOffline = !counterpartyIntegrated;
+          const statusLabel = isOffline
+            ? "PARTNER OFFLINE"
+            : isAwaiting
+              ? "AWAITING SYNC"
+              : isMatch
+                ? "MATCH SECURED"
+                : "REVIEW NEEDED";
+          const statusDotStyle = isOffline
+            ? styles.reconStatusDotOffline
+            : isAwaiting
+              ? styles.reconStatusDotNeutral
+              : isMatch
+                ? styles.reconStatusDotGood
+                : styles.reconStatusDotWarn;
+          const statusTextStyle = isOffline
+            ? styles.reconStatusTextOffline
+            : isAwaiting
+              ? styles.reconStatusTextNeutral
+              : isMatch
+                ? styles.reconStatusTextGood
+                : styles.reconStatusTextWarn;
+          return (
+            <View style={styles.reconHero}>
+              {/* Header */}
+              <View style={styles.reconHeroHeader}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <View style={styles.reconHeroKickerRow}>
+                    <FontAwesome
+                      name={isOffline ? "unlink" : "link"}
+                      size={10}
+                      color={Theme.textOnDarkMuted}
+                    />
+                    <Text style={styles.reconHeroKicker}>TRIP LEDGER</Text>
+                  </View>
+                  <Text style={styles.reconHeroParty} numberOfLines={1}>
+                    {(clientName ?? partnerName ?? "Reconciliation").toUpperCase()}
+                  </Text>
+                </View>
+                <View style={styles.reconStatusRow}>
+                  <View style={[styles.reconStatusDot, statusDotStyle]} />
+                  <Text style={[styles.reconStatusText, statusTextStyle]}>
+                    {statusLabel}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Dispute status chip — shown when a dispute is OPEN for this trip+partner */}
+              {reconcileState?.disputeStatus === "OPEN" ? (
+                <View style={styles.reconDisputeChip}>
+                  <FontAwesome
+                    name="exclamation-circle"
+                    size={11}
+                    color={"#FCA5A5"}
+                  />
+                  <Text style={styles.reconDisputeChipText}>
+                    {reconcileState.disputeDirection === "RECEIVED"
+                      ? "DISPUTE RECEIVED · PARTNER REQUESTS REVIEW"
+                      : "DISPUTE OPEN · PARTNER NOTIFIED"}
+                  </Text>
+                </View>
+              ) : reconcileState?.disputeStatus === "RESOLVED" ? (
+                <View
+                  style={[
+                    styles.reconDisputeChip,
+                    styles.reconDisputeChipResolved,
+                  ]}
+                >
+                  <FontAwesome
+                    name="check-circle"
+                    size={11}
+                    color={Theme.driverEmerald}
+                  />
+                  <Text
+                    style={[
+                      styles.reconDisputeChipText,
+                      styles.reconDisputeChipTextResolved,
+                    ]}
+                  >
+                    DISPUTE RESOLVED
+                  </Text>
+                </View>
+              ) : null}
+
+              {/* State-specific body */}
+              {isOffline ? (
+                <View style={styles.reconOfflineBody}>
+                  <View style={styles.reconOfflineIcon}>
+                    <FontAwesome name="unlink" size={16} color={Theme.textOnDark} />
+                  </View>
+                  <Text style={styles.reconOfflineTitle}>
+                    Compare &amp; verify unavailable
+                  </Text>
+                  <Text style={styles.reconOfflineBody2}>
+                    Opposite-party entry preview is available only for integrated
+                    network partners. Invite this party to unlock two-way
+                    reconciliation.
+                  </Text>
+                </View>
+              ) : isAwaiting ? (
+                <View style={styles.reconAwaitingCard}>
+                  <FontAwesome
+                    name="clock-o"
+                    size={14}
+                    color={Theme.textOnDarkMuted}
+                  />
+                  <Text style={styles.reconAwaitingText}>
+                    No opposite-party entry marked yet for this trip.
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  {/* Financial audit sub-card */}
+                  <View style={styles.reconGlass}>
+                    <View style={styles.reconGlassHeader}>
+                      <Text style={styles.reconGlassKicker}>
+                        FINANCIAL AUDIT VIEW
+                      </Text>
+                      <Text
+                        style={[
+                          styles.reconGlassStatus,
+                          isMatch
+                            ? styles.reconGlassStatusGood
+                            : styles.reconGlassStatusWarn,
+                        ]}
+                      >
+                        {isMatch
+                          ? "Verified"
+                          : `₹${varianceAbs.toLocaleString("en-IN")} Var`}
+                      </Text>
+                    </View>
+
+                    {/* Rows: Marked by partner vs Your paid total */}
+                    {[
+                      {
+                        key: "partner",
+                        label: "Marked by partner",
+                        value: counterpartySummary.totalMarked,
+                        highlight: false,
+                      },
+                      {
+                        key: "paid",
+                        label: "Your paid total",
+                        value: paidToSupplier,
+                        highlight: false,
+                      },
+                    ].map((row) => (
+                      <View key={row.key} style={styles.reconLineItem}>
+                        <View style={styles.reconLineItemLabelRow}>
+                          <Text style={styles.reconLineItemLabel}>
+                            {row.label.toUpperCase()}
+                          </Text>
+                        </View>
+                        <View style={styles.reconLineItemChip}>
+                          <Text style={styles.reconLineItemChipValue}>
+                            {formatINR(row.value)}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+
+                    {/* Variance row */}
+                    <View style={styles.reconVarianceRow}>
+                      <Text style={styles.reconVarianceLabel}>VARIANCE</Text>
+                      <Text
+                        style={[
+                          styles.reconVarianceValue,
+                          isMatch
+                            ? styles.reconVarianceValueMatch
+                            : styles.reconVarianceValueMismatch,
+                        ]}
+                      >
+                        {isMatch
+                          ? "₹0"
+                          : `${counterpartySummary.varianceVsPaid > 0 ? "+" : "−"}${formatINR(varianceAbs)}`}
+                      </Text>
+                    </View>
+
+                    {/* Counters */}
+                    <View style={styles.reconCounters}>
+                      <View style={styles.reconCounterItem}>
+                        <Text style={styles.reconCounterValue}>
+                          {reconciliationSummary.matchedCount}
+                        </Text>
+                        <Text style={styles.reconCounterLabel}>Matched</Text>
+                      </View>
+                      <View style={styles.reconCounterDivider} />
+                      <View style={styles.reconCounterItem}>
+                        <Text
+                          style={[
+                            styles.reconCounterValue,
+                            styles.reconCounterValueMuted,
+                          ]}
+                        >
+                          {reconciliationSummary.reconciledCount}
+                        </Text>
+                        <Text style={styles.reconCounterLabel}>Reconciled</Text>
+                      </View>
+                      <View style={styles.reconCounterDivider} />
+                      <View style={styles.reconCounterItem}>
+                        <Text
+                          style={[
+                            styles.reconCounterValue,
+                            styles.reconCounterValueWarn,
+                          ]}
+                        >
+                          {reconciliationSummary.mismatchCount}
+                        </Text>
+                        <Text style={styles.reconCounterLabel}>Mismatch</Text>
+                      </View>
+                    </View>
+
+                    {/* Entries list */}
+                    <Text style={styles.reconEntriesHead}>
+                      Partner entries · latest {Math.min(counterpartyEntries.length, 5)} of {counterpartyEntries.length}
+                    </Text>
+                    <View style={styles.reconEntriesList}>
+                      {counterpartyEntries.slice(0, 5).map((row) => (
+                        <TouchableOpacity
+                          key={row.id}
+                          style={styles.reconEntryCard}
+                          activeOpacity={0.85}
+                          onPress={() => setSelectedCounterpartyEntry(row)}
+                        >
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={styles.reconEntryAmount}>
+                              {formatINR(Number(row.amount ?? 0))}
+                            </Text>
+                            <Text style={styles.reconEntryMeta} numberOfLines={1}>
+                              {formatLedgerDateShort(row.transaction_date)} · Ref{" "}
+                              {row.reference_id ?? "—"}
+                            </Text>
+                          </View>
+                          <FontAwesome
+                            name="chevron-right"
+                            size={10}
+                            color={Theme.textOnDarkMuted}
+                          />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                </>
+              )}
+
+              {/* Inline variance actions — Accept partner / Raise dispute */}
+              {!isOffline &&
+              hasVariance &&
+              reconcileState?.disputeStatus !== "OPEN" &&
+              (onAcceptPartnerView || onRaiseDispute) ? (
+                <View style={styles.reconActionRow}>
+                  {onAcceptPartnerView ? (
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      disabled={reconcileState?.actionLoading}
+                      onPress={onAcceptPartnerView}
+                      style={[
+                        styles.reconActionBtn,
+                        styles.reconActionBtnAccept,
+                        reconcileState?.actionLoading &&
+                          styles.reconActionBtnDisabled,
+                      ]}
+                    >
+                      <FontAwesome
+                        name="check"
+                        size={11}
+                        color={Theme.textPrimaryDark}
+                      />
+                      <Text style={styles.reconActionBtnAcceptText}>
+                        PARTNER IS RIGHT
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {onRaiseDispute ? (
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      disabled={reconcileState?.actionLoading}
+                      onPress={onRaiseDispute}
+                      style={[
+                        styles.reconActionBtn,
+                        styles.reconActionBtnDispute,
+                        reconcileState?.actionLoading &&
+                          styles.reconActionBtnDisabled,
+                      ]}
+                    >
+                      <FontAwesome
+                        name="exclamation"
+                        size={11}
+                        color={"#FCA5A5"}
+                      />
+                      <Text style={styles.reconActionBtnDisputeText}>
+                        RAISE DISPUTE
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              ) : null}
+
+              {/* When dispute is OPEN and we received it: inline Accept / Decline via Compare flow */}
+              {!isOffline &&
+              reconcileState?.disputeStatus === "OPEN" &&
+              reconcileState?.disputeDirection === "RECEIVED" &&
+              onAcceptPartnerView ? (
+                <View style={styles.reconActionRow}>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    disabled={reconcileState?.actionLoading}
+                    onPress={onAcceptPartnerView}
+                    style={[
+                      styles.reconActionBtn,
+                      styles.reconActionBtnAccept,
+                      reconcileState?.actionLoading &&
+                        styles.reconActionBtnDisabled,
+                    ]}
+                  >
+                    <FontAwesome
+                      name="check"
+                      size={11}
+                      color={Theme.textPrimaryDark}
+                    />
+                    <Text style={styles.reconActionBtnAcceptText}>
+                      ACCEPT & UPDATE BOOK
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+
+              {/* CTA */}
+              {!isOffline && onOpenCompareVerify ? (
+                <TouchableOpacity
+                  style={styles.reconCtaButton}
+                  activeOpacity={0.9}
+                  onPress={onOpenCompareVerify}
+                >
+                  <Text style={styles.reconCtaButtonText}>
+                    {reconcileState?.disputeStatus === "OPEN"
+                      ? "VIEW IN COMPARE & VERIFY"
+                      : hasVariance
+                        ? "BRIDGE VARIANCES"
+                        : "OPEN COMPARE & VERIFY"}
+                  </Text>
+                  <FontAwesome
+                    name="chevron-right"
+                    size={12}
+                    color={Theme.textOnDark}
+                  />
+                </TouchableOpacity>
+              ) : null}
+
+              {/* Hero footer: Received / Pending (trip-level snapshot) */}
+              <View style={styles.reconFooterRow}>
+                <View style={styles.reconFooterCard}>
+                  <View style={styles.reconFooterIconRow}>
+                    <FontAwesome
+                      name="arrow-down"
+                      size={9}
+                      color={Theme.driverEmerald}
+                    />
+                    <Text style={styles.reconFooterLabel}>RECEIVED</Text>
+                  </View>
+                  <Text style={styles.reconFooterValue}>
+                    {formatINR(receivedFromCustomer)}
+                  </Text>
+                </View>
+                <View style={styles.reconFooterCard}>
+                  <View style={styles.reconFooterIconRow}>
+                    <FontAwesome
+                      name="arrow-up"
+                      size={9}
+                      color={Theme.textOnDarkMuted}
+                    />
+                    <Text style={styles.reconFooterLabel}>PENDING</Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.reconFooterValue,
+                      dueFromCustomer === 0 && styles.reconFooterValueMuted,
+                    ]}
+                  >
+                    {dueFromCustomer === 0
+                      ? "0.00"
+                      : formatINR(dueFromCustomer)}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          );
+        })() : null}
 
         {/* Customer Billing Section */}
         <View style={styles.financeSection}>
@@ -572,6 +1905,72 @@ export function TripDetailFinanceView({
           )}
         </View>
       </View>
+
+      <Modal
+        visible={selectedCounterpartyEntry != null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedCounterpartyEntry(null)}
+      >
+        <View style={styles.entryPreviewOverlay}>
+          <View style={styles.entryPreviewCard}>
+            <View style={styles.entryPreviewHeader}>
+              <Text style={styles.entryPreviewTitle}>Partner entry details</Text>
+              <TouchableOpacity
+                onPress={() => setSelectedCounterpartyEntry(null)}
+                style={styles.entryPreviewCloseBtn}
+                hitSlop={8}
+              >
+                <FontAwesome name="times" size={16} color={Theme.textMuted} />
+              </TouchableOpacity>
+            </View>
+            {selectedCounterpartyEntry ? (
+              <View style={styles.entryPreviewBody}>
+                <View style={styles.entryPreviewRow}>
+                  <Text style={styles.entryPreviewLabel}>Amount</Text>
+                  <Text style={styles.entryPreviewValue}>
+                    {formatINR(Number(selectedCounterpartyEntry.amount ?? 0))}
+                  </Text>
+                </View>
+                <View style={styles.entryPreviewRow}>
+                  <Text style={styles.entryPreviewLabel}>Date</Text>
+                  <Text style={styles.entryPreviewValue}>
+                    {formatLedgerDateShort(selectedCounterpartyEntry.transaction_date)}
+                  </Text>
+                </View>
+                <View style={styles.entryPreviewRow}>
+                  <Text style={styles.entryPreviewLabel}>Reference</Text>
+                  <Text style={styles.entryPreviewValue}>
+                    {selectedCounterpartyEntry.reference_id ?? "—"}
+                  </Text>
+                </View>
+                <View style={styles.entryPreviewRow}>
+                  <Text style={styles.entryPreviewLabel}>Partner key</Text>
+                  <Text style={styles.entryPreviewValue}>
+                    {selectedCounterpartyEntry.partnerKey}
+                  </Text>
+                </View>
+                <View style={styles.entryPreviewActions}>
+                  {onOpenCompareVerify ? (
+                    <TouchableOpacity
+                      style={styles.entryPreviewPrimaryBtn}
+                      activeOpacity={0.9}
+                      onPress={() => {
+                        setSelectedCounterpartyEntry(null);
+                        onOpenCompareVerify();
+                      }}
+                    >
+                      <Text style={styles.entryPreviewPrimaryBtnText}>
+                        Verify & Validate
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
 
       {/* Transaction list */}
       <Text style={styles.handshakesLabel}>Transaction list</Text>
@@ -995,6 +2394,39 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     marginTop: 2,
   },
+  financeSubtitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 2,
+    flexWrap: "wrap",
+  },
+  partnerIntegrationPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  partnerIntegrationPillOn: {
+    backgroundColor: "#DCFCE7",
+    borderColor: "#BBF7D0",
+  },
+  partnerIntegrationPillOff: {
+    backgroundColor: Theme.surfaceGray,
+    borderColor: Theme.borderLight,
+  },
+  partnerIntegrationPillText: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  partnerIntegrationPillTextOn: {
+    color: Theme.darkGreen,
+  },
+  partnerIntegrationPillTextOff: {
+    color: Theme.textMuted,
+  },
   financeProfitWrap: {
     alignItems: "flex-end",
   },
@@ -1009,6 +2441,645 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.darkGreen,
     marginTop: 2,
+  },
+  reconHero: {
+    marginTop: 12,
+    marginBottom: 14,
+    backgroundColor: Theme.textPrimaryDark,
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 6,
+    gap: 14,
+  },
+  partyTabsRow: {
+    flexDirection: "row",
+    gap: 8,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    borderRadius: 16,
+    padding: 6,
+  },
+  partyTab: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "transparent",
+    backgroundColor: "transparent",
+  },
+  partyTabActive: {
+    backgroundColor: Theme.textOnDark,
+    borderColor: Theme.textOnDark,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  partyTabIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    position: "relative",
+  },
+  partyTabIconActive: {
+    backgroundColor: "rgba(15,23,42,0.08)",
+  },
+  partyTabDot: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: Theme.textPrimaryDark,
+  },
+  partyTabRole: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  partyTabRoleActive: {
+    color: Theme.textMuted,
+  },
+  partyTabName: {
+    marginTop: 1,
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    letterSpacing: -0.1,
+  },
+  partyTabNameActive: {
+    color: Theme.textPrimaryDark,
+  },
+  driverProgressTrack: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    overflow: "hidden",
+  },
+  driverProgressFill: {
+    height: "100%",
+    borderRadius: 999,
+  },
+  driverProgressFillSettled: {
+    backgroundColor: Theme.driverEmerald,
+  },
+  driverProgressFillPending: {
+    backgroundColor: "#F59E0B",
+  },
+  driverStatsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+  },
+  driverStatCell: {
+    flex: 1,
+    alignItems: "center",
+    gap: 3,
+  },
+  driverStatCellDivider: {
+    width: 1,
+    alignSelf: "stretch",
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  driverStatLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  driverStatValue: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: Theme.textOnDark,
+    letterSpacing: -0.2,
+  },
+  driverStatValueMuted: {
+    color: Theme.textOnDarkMuted,
+  },
+  driverStatValueWarn: {
+    color: "#FBBF24",
+  },
+  driverInternalNote: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textOnDarkMuted,
+    fontStyle: "italic",
+    letterSpacing: 0.2,
+  },
+  reconHeroHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  reconHeroKickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  reconHeroKicker: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+  },
+  reconHeroParty: {
+    marginTop: 4,
+    fontSize: 16,
+    fontWeight: "900",
+    color: Theme.textOnDark,
+    letterSpacing: -0.3,
+  },
+  reconStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  reconStatusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+  },
+  reconStatusDotGood: {
+    backgroundColor: Theme.driverEmerald,
+  },
+  reconStatusDotWarn: {
+    backgroundColor: "#F59E0B",
+  },
+  reconStatusDotNeutral: {
+    backgroundColor: "rgba(255,255,255,0.45)",
+  },
+  reconStatusDotOffline: {
+    backgroundColor: "#EF4444",
+  },
+  reconStatusText: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+  reconStatusTextGood: {
+    color: Theme.driverEmerald,
+  },
+  reconStatusTextWarn: {
+    color: "#F59E0B",
+  },
+  reconStatusTextNeutral: {
+    color: Theme.textOnDarkMuted,
+  },
+  reconStatusTextOffline: {
+    color: "#FCA5A5",
+  },
+  reconOfflineBody: {
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 14,
+    paddingVertical: 16,
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  reconOfflineIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: "rgba(239,68,68,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reconOfflineTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    letterSpacing: 0.2,
+  },
+  reconOfflineBody2: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textOnDarkMuted,
+    lineHeight: 16,
+  },
+  reconAwaitingCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  reconAwaitingText: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textOnDarkMuted,
+    lineHeight: 16,
+  },
+  reconGlass: {
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 14,
+    paddingVertical: 16,
+    gap: 12,
+  },
+  reconGlassHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  reconGlassKickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+    minWidth: 0,
+  },
+  reconGlassKicker: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  driverRequiredPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  driverRequiredPillOpen: {
+    backgroundColor: "rgba(245,158,11,0.14)",
+    borderColor: "rgba(245,158,11,0.4)",
+  },
+  driverRequiredPillDone: {
+    backgroundColor: "rgba(16,185,129,0.12)",
+    borderColor: "rgba(16,185,129,0.35)",
+  },
+  driverRequiredPillText: {
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 0.9,
+  },
+  driverRequiredPillTextOpen: {
+    color: "#FBBF24",
+  },
+  driverRequiredPillTextDone: {
+    color: Theme.driverEmerald,
+  },
+  reconGlassStatus: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  reconGlassStatusGood: {
+    color: Theme.driverEmerald,
+  },
+  reconGlassStatusWarn: {
+    color: "#FBBF24",
+  },
+  reconLineItem: {
+    gap: 6,
+  },
+  reconLineItemLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  reconLineItemLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 0.6,
+  },
+  reconLineItemChip: {
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  reconLineItemChipValue: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    letterSpacing: -0.2,
+  },
+  reconVarianceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.06)",
+  },
+  reconVarianceLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 0.8,
+  },
+  reconVarianceValue: {
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: -0.2,
+  },
+  reconVarianceValueMatch: {
+    color: Theme.driverEmerald,
+  },
+  reconVarianceValueMismatch: {
+    color: "#FBBF24",
+  },
+  reconCounters: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  reconCounterItem: {
+    flex: 1,
+    alignItems: "center",
+    gap: 2,
+  },
+  reconCounterDivider: {
+    width: 1,
+    alignSelf: "stretch",
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  reconCounterValue: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: Theme.textOnDark,
+    letterSpacing: -0.2,
+  },
+  reconCounterValueMuted: {
+    color: Theme.textOnDarkMuted,
+  },
+  reconCounterValueWarn: {
+    color: "#FBBF24",
+  },
+  reconCounterLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  reconEntriesHead: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  reconEntriesList: {
+    gap: 6,
+  },
+  reconEntryCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  reconEntryAmount: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    letterSpacing: -0.1,
+  },
+  reconEntryMeta: {
+    marginTop: 2,
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textOnDarkMuted,
+  },
+  reconDisputeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(239,68,68,0.14)",
+    borderColor: "rgba(239,68,68,0.28)",
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  reconDisputeChipResolved: {
+    backgroundColor: "rgba(16,185,129,0.14)",
+    borderColor: "rgba(16,185,129,0.28)",
+  },
+  reconDisputeChipText: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#FCA5A5",
+    letterSpacing: 0.8,
+  },
+  reconDisputeChipTextResolved: {
+    color: Theme.driverEmerald,
+  },
+  reconActionRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  reconActionBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 14,
+    paddingVertical: 13,
+    borderWidth: 1,
+  },
+  reconActionBtnAccept: {
+    backgroundColor: Theme.textOnDark,
+    borderColor: Theme.textOnDark,
+  },
+  reconActionBtnAcceptText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 1.2,
+  },
+  reconActionBtnDispute: {
+    backgroundColor: "rgba(239,68,68,0.12)",
+    borderColor: "rgba(239,68,68,0.35)",
+  },
+  reconActionBtnDisputeText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#FCA5A5",
+    letterSpacing: 1.2,
+  },
+  reconActionBtnDisabled: {
+    opacity: 0.5,
+  },
+  reconCtaButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderRadius: 14,
+    paddingVertical: 13,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+  reconCtaButtonText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: Theme.textOnDark,
+    letterSpacing: 1.4,
+  },
+  reconFooterRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  reconFooterCard: {
+    flex: 1,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 6,
+  },
+  reconFooterIconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  reconFooterLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  reconFooterValue: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: Theme.textOnDark,
+    letterSpacing: -0.2,
+  },
+  reconFooterValueMuted: {
+    color: Theme.textOnDarkMuted,
+    fontStyle: "italic",
+  },
+  entryPreviewOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15,23,42,0.5)",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  entryPreviewCard: {
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 14,
+  },
+  entryPreviewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  entryPreviewTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  entryPreviewCloseBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.surfaceGray,
+  },
+  entryPreviewBody: {
+    gap: 8,
+  },
+  entryPreviewRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  entryPreviewLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+  },
+  entryPreviewValue: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    flexShrink: 1,
+    textAlign: "right",
+  },
+  entryPreviewActions: {
+    marginTop: 6,
+  },
+  entryPreviewPrimaryBtn: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 8,
+    backgroundColor: Theme.primary,
+    paddingVertical: 10,
+  },
+  entryPreviewPrimaryBtnText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textOnPrimary,
   },
   financeSection: {
     marginBottom: 0,

@@ -621,11 +621,25 @@ export default function LedgerSyncScreen() {
         data.driverPaymentType &&
         data.contactId
       ) {
-        const driverLedgerType = data.driverPaymentType === "bonus" ? "adjustment" : data.driverPaymentType;
+        // Trip-based settlements are stored as "fleet pending" until the driver verifies.
+        // This avoids instantly increasing driver's cash/balance from org entries.
+        const baseDriverLedgerType = data.driverPaymentType === "bonus" ? "adjustment" : data.driverPaymentType;
+        const shouldCreateFleetPending =
+          data.driverPaymentType === "settlement" && data.tripId !== undefined && data.tripId !== null;
+
+        const driverLedgerType = shouldCreateFleetPending ? "adjustment" : baseDriverLedgerType;
         await createDriverLedgerEntry(orgId, data.contactId, data.amount, driverLedgerType, {
           tripId: data.tripId ?? null,
           createdBy: profile?.uid ?? null,
-          description: typeof driverPaymentLabel === "string" ? driverPaymentLabel : null,
+          // Reuse the same description parts used for the finance ledger entry
+          // (e.g. includes Mode + UTR when available) so driver wallet can show
+          // correct payment pills on both the "pending verification" and "settled" views.
+          description: (() => {
+            const baseDescription = payload.description ?? (typeof driverPaymentLabel === "string" ? driverPaymentLabel : null);
+            if (!shouldCreateFleetPending) return baseDescription;
+            // Token used by the driver app to detect "fleet marked paid (awaiting verification)" entries.
+            return baseDescription ? `${baseDescription} | Sync: FLEET_PAID_PENDING` : "Sync: FLEET_PAID_PENDING";
+          })(),
         });
       }
 

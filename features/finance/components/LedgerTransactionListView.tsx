@@ -7,7 +7,7 @@ import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { getDoubleEntryDisplayLabel } from "@/features/finance/accounting/accountingModel";
-import type { LedgerRow } from "@/features/finance/services/finance.service";
+import { type LedgerRow } from "@/features/finance/services/finance.service";
 import { formatLedgerAmount } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useMemo, useState, type ReactNode } from "react";
@@ -196,6 +196,7 @@ function TransactionRowDetail({ row }: { row: LedgerRow }) {
   const inAmt = Number(row.amount_in ?? 0);
   const outAmt = Number(row.amount_out ?? 0);
   const hasNote = note && note !== "GENERAL";
+  const hasReconciliation = !!row.reconciliation_label;
 
   return (
     <View style={styles.detailCard}>
@@ -231,6 +232,29 @@ function TransactionRowDetail({ row }: { row: LedgerRow }) {
           {party}
         </Text>
       </View>
+      {(row.payment_mode || row.payment_reference) && (
+        <View style={styles.detailRow}>
+          <Text style={styles.detailLabel}>Payment</Text>
+          <Text style={styles.detailValue} numberOfLines={2}>
+            {[row.payment_mode, row.payment_reference && `Ref ${row.payment_reference}`]
+              .filter(Boolean)
+              .join(" · ")}
+          </Text>
+        </View>
+      )}
+      {hasReconciliation && (
+        <View style={[styles.detailRow, !hasNote && styles.detailRowLast]}>
+          <Text style={styles.detailLabel}>Reconcile</Text>
+          <View style={styles.detailReconValueWrap}>
+            <Text style={styles.detailReconBadge}>{row.reconciliation_label}</Text>
+            {row.reconciliation_action_label ? (
+              <Text style={styles.detailReconAction}>
+                {row.reconciliation_action_label}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      )}
       {hasNote && (
         <View style={[styles.detailRow, styles.detailRowLast]}>
           <Text style={styles.detailLabel}>Note</Text>
@@ -4201,6 +4225,27 @@ const styles = StyleSheet.create({
   detailValueRed: {
     color: Theme.negative,
     fontWeight: "500",
+  },
+  detailReconValueWrap: {
+    flex: 1,
+    alignItems: "flex-end",
+    gap: 4,
+  },
+  detailReconBadge: {
+    color: Theme.primary,
+    backgroundColor: Theme.primary + "14",
+    borderRadius: 999,
+    overflow: "hidden",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  detailReconAction: {
+    fontSize: 9,
+    color: Theme.textSecondary,
+    fontWeight: "600",
+    textAlign: "right",
   },
   timelineExpandedWrap: {
     paddingHorizontal: 10,

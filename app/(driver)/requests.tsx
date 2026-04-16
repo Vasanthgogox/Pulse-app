@@ -3,6 +3,7 @@ import { DriverInviteCard } from '@/components/driver/DriverInviteCard';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { tripEarningsForDriver } from '@/lib/driverUtils';
+import { phonePeMetaDate } from '@/lib/driverGpayTransactions';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import * as driversService from '@/services/driversService';
@@ -36,6 +37,8 @@ import { isCompleted, buildOfferText } from '@/lib/driverUtils';
 const EMERALD_500 = '#10b981';
 const GRAY_700 = '#374151';
 
+type RequestsQuickTab = 'all' | 'payment_updates';
+
 /** Per-org passbook stats (trips, earned, received from DB). */
 export interface ConnectionPassbook {
   driverId: string;
@@ -68,6 +71,7 @@ export default function DriverRequestsScreen() {
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);
   const [leavingOrgId, setLeavingOrgId] = useState<string | null>(null);
   const [leaveFleetPressedOrgId, setLeaveFleetPressedOrgId] = useState<string | null>(null);
+  const [quickTab, setQuickTab] = useState<RequestsQuickTab>('all');
 
   const fetch = useCallback(() => {
     if (!profile?.uid) {
@@ -191,6 +195,103 @@ export default function DriverRequestsScreen() {
 
   const hasAccepted = connectedAcceptedInvites.length > 0 || pastLinkedDrivers.length > 0;
 
+  const hasFleetPaidPendingToken = useCallback((raw?: string | null) => {
+    const s = (raw ?? '').trim();
+    if (!s) return false;
+    return /Sync\s*:\s*FLEET_PAID_PENDING/i.test(s);
+  }, []);
+
+  const isLegacyFleetPendingEvidence = useCallback((raw?: string | null) => {
+    const s = (raw ?? '').trim();
+    if (!s) return false;
+    return /(\bUTR\b|\bMode\s*:|\bTrip\s*Commission\b|\bTrip\s*Payment\b|\bSettlement\b)/i.test(s);
+  }, []);
+
+  const derivePaymentMode = useCallback((raw?: string | null): 'UPI' | 'BANK TRANSFER' | 'CASH' | null => {
+    const s = (raw ?? '').toLowerCase();
+    if (!s) return null;
+    if (s.includes('upi')) return 'UPI';
+    if (s.includes('bank') || s.includes('neft') || s.includes('rtgs') || s.includes('imps')) return 'BANK TRANSFER';
+    if (s.includes('cash')) return 'CASH';
+    return null;
+  }, []);
+
+  const extractUtr = useCallback((raw?: string | null): string | null => {
+    const s = (raw ?? '').trim();
+    if (!s) return null;
+    const m = s.match(/\bUTR\b\s*[:=]?\s*([0-9A-Za-z-]{8,24})\b/i);
+    return m?.[1] ?? null;
+  }, []);
+
+  const paymentUpdates = useMemo(() => {
+    const driverByOrg = new Map<string, driversService.DriverRow>();
+    activeLinkedDrivers.forEach((d) => {
+      driverByOrg.set(String(d.organization_id), d);
+    });
+    const tripById = new Map<string, tripsService.TripRow>();
+    allTrips.forEach((t) => tripById.set(t.id, t));
+    const receivedByTripId: Record<string, number> = {};
+    allLedger.forEach((e) => {
+      if (!e.trip_id) return;
+      if (e.type !== 'settlement') return;
+      const amt = Number(e.amount) || 0;
+      receivedByTripId[e.trip_id] = (receivedByTripId[e.trip_id] ?? 0) + amt;
+    });
+
+    const updates = allLedger
+      .filter((e) => {
+        if (!e.trip_id) return false;
+        if (e.type === 'settlement') return false;
+        const amt = Number(e.amount) || 0;
+        if (amt <= 0) return false;
+        return hasFleetPaidPendingToken(e.description) || isLegacyFleetPendingEvidence(e.description);
+      })
+      .map((e) => {
+        const trip = e.trip_id ? tripById.get(e.trip_id) ?? null : null;
+        if (!trip) return null;
+        const orgId = String(trip.organization_id ?? '');
+        const linked = driverByOrg.get(orgId);
+        if (!linked) return null;
+        const isAlreadySettled = (receivedByTripId[trip.id] ?? 0) > 0;
+        if (isAlreadySettled) return null;
+        return {
+          id: e.id,
+          orgId,
+          orgName:
+            connectedAcceptedInvites.find((inv) => inv.from_organization_id === orgId)?.from_org_name ??
+            passbookByOrgId[orgId]?.orgName ??
+            'Fleet',
+          tripId: trip.id,
+          tripRef: tripsService.getTripDisplayNumber(trip),
+          amount: Math.round(Number(e.amount) || 0),
+          createdAt: e.created_at,
+          paymentMode: derivePaymentMode(e.description) ?? 'BANK TRANSFER',
+          utr: extractUtr(e.description) ?? '—',
+        };
+      })
+      .filter((u): u is NonNullable<typeof u> => u != null)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const byTrip: Record<string, (typeof updates)[number]> = {};
+    updates.forEach((u) => {
+      const prev = byTrip[u.tripId];
+      if (!prev || new Date(u.createdAt).getTime() > new Date(prev.createdAt).getTime()) {
+        byTrip[u.tripId] = u;
+      }
+    });
+    return Object.values(byTrip);
+  }, [
+    activeLinkedDrivers,
+    allTrips,
+    allLedger,
+    connectedAcceptedInvites,
+    passbookByOrgId,
+    hasFleetPaidPendingToken,
+    isLegacyFleetPendingEvidence,
+    derivePaymentMode,
+    extractUtr,
+  ]);
+
   const handleLeaveFleet = useCallback(
     async (organizationId: string) => {
       setLeavingOrgId(organizationId);
@@ -268,6 +369,101 @@ export default function DriverRequestsScreen() {
       paddingHorizontal: 16,
       paddingTop: 20,
       paddingBottom: 24,
+    },
+    quickTabsWrap: {
+      marginHorizontal: 24,
+      marginTop: -6,
+      marginBottom: 12,
+      flexDirection: 'row',
+      borderWidth: 1,
+      borderRadius: 999,
+      padding: 6,
+      gap: 6,
+    },
+    quickTabBtn: {
+      flex: 1,
+      minHeight: 42,
+      borderRadius: 999,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 10,
+    },
+    quickTabBtnActive: {
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.16,
+      shadowRadius: 18,
+      elevation: 6,
+    },
+    quickTabText: {
+      fontSize: 9,
+      fontWeight: '800',
+      letterSpacing: 1.2,
+      textTransform: 'uppercase',
+    },
+    paymentUpdatesSection: {
+      marginBottom: 26,
+    },
+    paymentUpdatesTitle: {
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 1.2,
+      marginBottom: 6,
+    },
+    paymentUpdatesSubtitle: {
+      fontSize: 12,
+      lineHeight: 18,
+      marginBottom: 14,
+    },
+    paymentUpdateCard: {
+      borderRadius: 14,
+      borderWidth: 1,
+      padding: 14,
+      marginBottom: 10,
+    },
+    paymentUpdateTopRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: 10,
+      marginBottom: 8,
+    },
+    paymentUpdateOrg: {
+      fontSize: 14,
+      fontWeight: '800',
+      flex: 1,
+      minWidth: 0,
+    },
+    paymentUpdateAmount: {
+      fontSize: 16,
+      fontWeight: '900',
+      letterSpacing: -0.2,
+    },
+    paymentUpdateMeta: {
+      fontSize: 11,
+      fontWeight: '600',
+      marginBottom: 2,
+    },
+    paymentUpdateSubMeta: {
+      fontSize: 11,
+      fontWeight: '500',
+      marginBottom: 10,
+    },
+    paymentUpdateAction: {
+      minHeight: 34,
+      borderRadius: 10,
+      borderWidth: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingHorizontal: 12,
+      alignSelf: 'flex-start',
+    },
+    paymentUpdateActionText: {
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 0.9,
+      textTransform: 'uppercase',
     },
     creditsTitle: {
       fontSize: 36,
@@ -664,6 +860,37 @@ export default function DriverRequestsScreen() {
           {hasAccepted ? 'Fleet connections.' : 'Connection invites.'}
         </Text>
       </View>
+      <View
+        style={[
+          styles.quickTabsWrap,
+          {
+            backgroundColor: isDark ? colors.surfaceElevated : 'rgba(226,232,240,0.55)',
+            borderColor: isDark ? colors.borderSubtle : 'rgba(255,255,255,0.7)',
+          },
+        ]}
+      >
+        {[
+          { id: 'all' as const, label: 'All' },
+          { id: 'payment_updates' as const, label: `Payment updates (${paymentUpdates.length})` },
+        ].map((tab) => {
+          const active = quickTab === tab.id;
+          return (
+            <TouchableOpacity
+              key={tab.id}
+              onPress={() => setQuickTab(tab.id)}
+              activeOpacity={0.85}
+              style={[
+                styles.quickTabBtn,
+                active && [styles.quickTabBtnActive, { backgroundColor: '#0f172a', shadowColor: isDark ? '#000' : 'rgba(15,23,42,0.22)' }],
+              ]}
+            >
+              <Text style={[styles.quickTabText, { color: active ? Theme.textOnPrimary : colors.textMuted }]}>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
       {loading ? (
         <View style={styles.loadingWrap}>
@@ -678,6 +905,71 @@ export default function DriverRequestsScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.emerald} />
           }
         >
+          {quickTab === 'payment_updates' && (
+            <View style={[styles.section, styles.paymentUpdatesSection]}>
+              <Text style={[styles.paymentUpdatesTitle, { color: colors.textMuted }]}>PAYMENT UPDATES</Text>
+              <Text style={[styles.paymentUpdatesSubtitle, { color: colors.textMuted }]}>
+                Fleet owner marked these trips as paid. Review and verify from passbook.
+              </Text>
+              {paymentUpdates.length === 0 ? (
+                <View style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <View style={[styles.emptyIconWrap, { backgroundColor: colors.whiteMuted }]}>
+                    <FontAwesome name="bell-slash" size={34} color={colors.textMuted} />
+                  </View>
+                  <Text style={[styles.emptyTitle, { color: colors.text }]}>No payment updates yet</Text>
+                  <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>
+                    New fleet-marked-paid updates will appear here across all your connected fleets.
+                  </Text>
+                </View>
+              ) : (
+                paymentUpdates.map((u) => (
+                  <View
+                    key={u.id}
+                    style={[
+                      styles.paymentUpdateCard,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: isDark ? colors.border : 'rgba(226,232,240,0.9)',
+                      },
+                    ]}
+                  >
+                    <View style={styles.paymentUpdateTopRow}>
+                      <Text style={[styles.paymentUpdateOrg, { color: colors.text }]} numberOfLines={1}>
+                        {u.orgName}
+                      </Text>
+                      <Text style={[styles.paymentUpdateAmount, { color: colors.emerald }]}>
+                        ₹{u.amount.toLocaleString('en-IN')}
+                      </Text>
+                    </View>
+                    <Text style={[styles.paymentUpdateMeta, { color: colors.textMuted }]}>
+                      {u.tripRef} · {phonePeMetaDate(u.createdAt)}
+                    </Text>
+                    <Text style={[styles.paymentUpdateSubMeta, { color: colors.textMuted }]}>
+                      {u.paymentMode} · UTR {u.utr}
+                    </Text>
+                    <TouchableOpacity
+                      style={[styles.paymentUpdateAction, { borderColor: colors.emerald, backgroundColor: colors.emeraldMuted }]}
+                      onPress={() =>
+                        router.push({
+                          pathname: `/(driver)/passbook/${u.orgId}` as const,
+                          params: { orgName: u.orgName, from: 'requests' },
+                        } as Parameters<typeof router.push>[0])
+                      }
+                      activeOpacity={0.85}
+                    >
+                      <FontAwesome name="book" size={12} color={colors.emerald} />
+                      <Text style={[styles.paymentUpdateActionText, { color: colors.emerald }]}>
+                        Open passbook
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+            </View>
+          )}
+
+          {quickTab === 'all' && (
+            <>
           {pendingInvites.length > 0 && (
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>PENDING</Text>
@@ -949,6 +1241,8 @@ export default function DriverRequestsScreen() {
                 Organisation invites will appear here. Accept to connect and receive trip assignments on the Dashboard.
               </Text>
             </View>
+          )}
+            </>
           )}
         </ScrollView>
       )}

@@ -25,6 +25,7 @@ import {
     resolveDispute,
     resolveDisputeTableOnly,
     type DisputeRow,
+    type SharedLedgerEntry,
 } from "@/services/sharedLedgerService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -308,6 +309,100 @@ function getLedgerEscalationKind(
   return "raise_dispute";
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+ *  StatusFilter UI helpers — colors + labels for chips / pills / icons.
+ *  Keeping them as module-level pure functions so they don't re-create on
+ *  every render and are easy to unit test.
+ *
+ *  (Shared across the By-Trip and By-Transaction views in the shared-ledger.)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+function filterChipDotStyle(key: "matched" | "no_entry" | "pending" | "conflict") {
+  switch (key) {
+    case "matched":
+      return { backgroundColor: Theme.darkGreen };
+    case "no_entry":
+      return { backgroundColor: Theme.primary };
+    case "pending":
+      return { backgroundColor: Theme.driverGold };
+    case "conflict":
+      return { backgroundColor: Theme.teslaRed };
+  }
+}
+
+function txnStatusLabel(s: "matched" | "no_entry" | "pending" | "conflict") {
+  if (s === "matched") return "MATCHED";
+  if (s === "no_entry") return "ADD TO MY BOOKS";
+  if (s === "pending") return "AWAITING PARTNER";
+  return "CONFLICT";
+}
+
+function txnStatusPillStyle(s: "matched" | "no_entry" | "pending" | "conflict") {
+  switch (s) {
+    case "matched":
+      return {
+        backgroundColor: Theme.positiveMuted,
+        borderColor: Theme.darkGreen,
+      };
+    case "no_entry":
+      return {
+        backgroundColor: Theme.surfaceLight,
+        borderColor: Theme.primary,
+      };
+    case "pending":
+      return {
+        backgroundColor: Theme.surfaceLight,
+        borderColor: Theme.driverGold,
+      };
+    case "conflict":
+      return {
+        backgroundColor: Theme.negativeMuted,
+        borderColor: Theme.teslaRed,
+      };
+  }
+}
+
+function txnStatusPillTextStyle(
+  s: "matched" | "no_entry" | "pending" | "conflict",
+) {
+  switch (s) {
+    case "matched":
+      return { color: Theme.darkGreen };
+    case "no_entry":
+      return { color: Theme.primary };
+    case "pending":
+      return { color: Theme.driverGold };
+    case "conflict":
+      return { color: Theme.teslaRed };
+  }
+}
+
+function txnIconColor(s: "matched" | "no_entry" | "pending" | "conflict") {
+  switch (s) {
+    case "matched":
+      return Theme.darkGreen;
+    case "no_entry":
+      return Theme.primary;
+    case "pending":
+      return Theme.driverGold;
+    case "conflict":
+      return Theme.teslaRed;
+  }
+}
+
+function txnIconWrapStyle(s: "matched" | "no_entry" | "pending" | "conflict") {
+  switch (s) {
+    case "matched":
+      return { backgroundColor: Theme.positiveMuted };
+    case "no_entry":
+      return { backgroundColor: Theme.surfaceLight };
+    case "pending":
+      return { backgroundColor: Theme.surfaceLight };
+    case "conflict":
+      return { backgroundColor: Theme.negativeMuted };
+  }
+}
+
 export function SharedLedgerContent({
   entity,
   entityType,
@@ -354,6 +449,21 @@ export function SharedLedgerContent({
   const [pendingAcceptDispute, setPendingAcceptDispute] =
     useState<DisputeRow | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  /**
+   * Party-level shared-ledger view has two modes:
+   *  - "trip": existing mission-level comparison (one row per trip).
+   *  - "txn":  transaction-level feed, including entries the partner has
+   *           logged but that are not yet in our books ("No entry from my side").
+   * Both modes are filtered by a common status chip — all, matched,
+   * no_entry (partner only), pending (we only), conflict (amounts disagree).
+   */
+  type ViewMode = "trip" | "txn";
+  type StatusFilter = "all" | "matched" | "no_entry" | "pending" | "conflict";
+  const [viewMode, setViewMode] = useState<ViewMode>("trip");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  /** Raw partner entries used to build the "By Transaction" view. */
+  const [partnerEntries, setPartnerEntries] = useState<SharedLedgerEntry[]>([]);
 
   // Manual partner (not integrated): resolve phone → invitee in app or not → Request vs Invite
   type InviteeStatus =
@@ -506,6 +616,7 @@ export function SharedLedgerContent({
         getSharedLedgerEntriesForPartner(organizationId, entity.id).then(({ error: e2, entries }) => {
           if (cancelled) return;
           setLoadingShared(false);
+          if (!e2 && entries) setPartnerEntries(entries);
           const byTrip = new Map<string, number>();
           if (!e2 && entries?.length) {
             const partnerPaidFromOut = entityType === "CLIENT"; // client pays us = their amount_out
@@ -533,6 +644,7 @@ export function SharedLedgerContent({
       getSharedLedgerEntriesForPartner(organizationId, entity.id).then(({ error: e2, entries }) => {
         if (cancelled) return;
         setLoadingShared(false);
+        if (!e2 && entries) setPartnerEntries(entries);
         if (e2 || !entries?.length) return;
         const byTrip = new Map<string, { in: number; out: number }>();
         for (const e of entries) {
@@ -595,15 +707,218 @@ export function SharedLedgerContent({
   );
 
   const searchLower = (searchQuery ?? "").trim().toLowerCase();
-  const filteredRows = useMemo(
-    () =>
-      searchLower
-        ? reconciledRows.filter((r) =>
-            (r.missionId ?? "").toLowerCase().includes(searchLower),
-          )
-        : reconciledRows,
-    [reconciledRows, searchLower],
-  );
+
+  /**
+   * Map a reconciled-row status to the common StatusFilter vocabulary
+   * shared by both the Trip and Transaction views.
+   * - VERIFIED      → matched
+   * - MISMATCH      → conflict
+   * - PENDING       → pending (we have entry, partner hasn't)
+   * - UNRECOGNIZED  → no_entry (partner logged a trip we don't have)
+   */
+  const tripRowFilterStatus = useCallback((r: ReconciledRow): StatusFilter => {
+    if (r.status === "VERIFIED") return "matched";
+    if (r.status === "MISMATCH") return "conflict";
+    if (r.status === "UNRECOGNIZED") return "no_entry";
+    return "pending";
+  }, []);
+
+  const filteredRows = useMemo(() => {
+    let rows = reconciledRows;
+    if (statusFilter !== "all") {
+      rows = rows.filter((r) => tripRowFilterStatus(r) === statusFilter);
+    }
+    if (searchLower) {
+      rows = rows.filter((r) =>
+        (r.missionId ?? "").toLowerCase().includes(searchLower),
+      );
+    }
+    return rows;
+  }, [reconciledRows, searchLower, statusFilter, tripRowFilterStatus]);
+
+  /**
+   * Transaction-level rows: merge partner entries + local entries into one
+   * list, each tagged with a StatusFilter so the chip bar can filter them.
+   *
+   * Status resolution (per (tripRef, amount) pair):
+   *  - both partner & local entry exist with equal amount → "matched"
+   *  - both exist for same trip but amounts differ         → "conflict"
+   *  - partner entry exists, no local entry for that trip  → "no_entry"
+   *  - local entry exists, no partner entry for that trip  → "pending"
+   */
+  /** Row-level status subset — "all" is a filter value, never a row value. */
+  type TxnRowStatus = Exclude<StatusFilter, "all">;
+  type TxnRowItem = {
+    id: string;
+    source: "partner" | "local";
+    status: TxnRowStatus;
+    tripRef: string;
+    date: string;
+    /** signed amount (+ = in, − = out) as displayed */
+    amount: number;
+    /** absolute value shown on cards */
+    amountAbs: number;
+    /** whether this entry represents a debit/credit in our book */
+    direction: "in" | "out";
+    partyLabel: string;
+    /** For "conflict" we know both numbers. */
+    partnerAmount?: number;
+    localAmount?: number;
+    /** Underlying local row if we have it (for open-in-ledger). */
+    localRowId?: string;
+  };
+
+  const txnRows = useMemo<TxnRowItem[]>(() => {
+    const norm = (s: string | null | undefined) =>
+      s == null ? "" : String(s).trim().toLowerCase();
+    const contactType = entityType === "CLIENT" ? "client" : "supplier";
+
+    /** Only entries for this partner, bilateral (ignore driver/vehicle/etc). */
+    const localRelevant = txs.filter(
+      (t) =>
+        t.contact_type === contactType &&
+        t.contact_id != null &&
+        t.contact_id === entity.id,
+    );
+
+    /** Index local entries by tripId (may have multiple per trip). */
+    const localByTrip = new Map<string, typeof localRelevant>();
+    for (const l of localRelevant) {
+      const trip = norm(l.trip_id);
+      if (!trip) continue;
+      const arr = localByTrip.get(trip) ?? [];
+      arr.push(l);
+      localByTrip.set(trip, arr);
+    }
+
+    const rows: TxnRowItem[] = [];
+    const matchedLocalIds = new Set<string>();
+
+    for (const p of partnerEntries) {
+      const tripRef = norm(p.reference_id);
+      if (!tripRef) continue;
+      const amt = Number(p.amount ?? 0);
+      const amtAbs = Math.abs(amt);
+      const locals = localByTrip.get(tripRef) ?? [];
+
+      /** Try to pair partner entry with a local one on the same trip.
+       *  Exact match (same absolute amount) → matched. Otherwise → conflict. */
+      const exact = locals.find((l) => {
+        if (matchedLocalIds.has(l.id)) return false;
+        const net = (l.amount_in ?? 0) + (l.amount_out ?? 0);
+        return Math.abs(net - amtAbs) < 0.5;
+      });
+      const nearest = locals.find((l) => !matchedLocalIds.has(l.id));
+      /** Direction is derived from partner perspective: partner paying us
+       *  appears as amount_out on their side (negative in the signed value). */
+      const direction: "in" | "out" = amt < 0 ? "out" : "in";
+
+      if (exact) {
+        matchedLocalIds.add(exact.id);
+        rows.push({
+          id: p.id || `p:${tripRef}:${amtAbs}`,
+          source: "partner",
+          status: "matched",
+          tripRef,
+          date: p.transaction_date || exact.transaction_date || "",
+          amount: amt,
+          amountAbs: amtAbs,
+          direction,
+          partyLabel: exact.party_name || entity.name,
+          localRowId: exact.id,
+        });
+      } else if (nearest) {
+        matchedLocalIds.add(nearest.id);
+        const localNet =
+          (nearest.amount_in ?? 0) + (nearest.amount_out ?? 0);
+        rows.push({
+          id: p.id || `p:${tripRef}:${amtAbs}`,
+          source: "partner",
+          status: "conflict",
+          tripRef,
+          date: p.transaction_date || nearest.transaction_date || "",
+          amount: amt,
+          amountAbs: amtAbs,
+          direction,
+          partyLabel: nearest.party_name || entity.name,
+          partnerAmount: amtAbs,
+          localAmount: Math.abs(localNet),
+          localRowId: nearest.id,
+        });
+      } else {
+        rows.push({
+          id: p.id || `p:${tripRef}:${amtAbs}`,
+          source: "partner",
+          status: "no_entry",
+          tripRef,
+          date: p.transaction_date || "",
+          amount: amt,
+          amountAbs: amtAbs,
+          direction,
+          partyLabel: entity.name,
+          partnerAmount: amtAbs,
+        });
+      }
+    }
+
+    /** Any local entry not matched to a partner entry is still pending. */
+    for (const l of localRelevant) {
+      if (matchedLocalIds.has(l.id)) continue;
+      const amtIn = l.amount_in ?? 0;
+      const amtOut = l.amount_out ?? 0;
+      const net = amtIn + amtOut;
+      const amtAbs = Math.abs(net);
+      rows.push({
+        id: `l:${l.id}`,
+        source: "local",
+        status: "pending",
+        tripRef: norm(l.trip_id),
+        date: l.transaction_date || "",
+        amount: net,
+        amountAbs: amtAbs,
+        direction: amtIn > 0 ? "in" : "out",
+        partyLabel: l.party_name || entity.name,
+        localAmount: amtAbs,
+        localRowId: l.id,
+      });
+    }
+
+    /** Most recent first. */
+    rows.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    return rows;
+  }, [partnerEntries, txs, entity.id, entity.name, entityType]);
+
+  const filteredTxnRows = useMemo(() => {
+    let rows = txnRows;
+    if (statusFilter !== "all") {
+      rows = rows.filter((r) => r.status === statusFilter);
+    }
+    if (searchLower) {
+      rows = rows.filter((r) =>
+        (r.tripRef ?? "").toLowerCase().includes(searchLower),
+      );
+    }
+    return rows;
+  }, [txnRows, statusFilter, searchLower]);
+
+  /** Live counts for status chips — always computed from the unfiltered sets. */
+  const tripCounts = useMemo(() => {
+    const c = { all: reconciledRows.length, matched: 0, no_entry: 0, pending: 0, conflict: 0 };
+    for (const r of reconciledRows) {
+      const s = tripRowFilterStatus(r);
+      c[s] += 1;
+    }
+    return c;
+  }, [reconciledRows, tripRowFilterStatus]);
+
+  const txnCounts = useMemo(() => {
+    const c = { all: txnRows.length, matched: 0, no_entry: 0, pending: 0, conflict: 0 };
+    for (const r of txnRows) c[r.status] += 1;
+    return c;
+  }, [txnRows]);
+
+  /** Which counts drive the chip numbers depends on the active view. */
+  const activeCounts = viewMode === "trip" ? tripCounts : txnCounts;
 
   const disputeSentByTripId = useMemo(() => {
     const m = new Map<string, DisputeRow>();
@@ -1077,6 +1392,180 @@ export function SharedLedgerContent({
             </>
           )}
 
+          {/* View-mode segment — Trip vs Transaction */}
+          <View style={styles.viewModeWrap}>
+            <View style={styles.viewModeTabs}>
+              {(["trip", "txn"] as const).map((m) => {
+                const active = viewMode === m;
+                const label = m === "trip" ? "By Trip" : "By Transaction";
+                const count = m === "trip" ? tripCounts.all : txnCounts.all;
+                return (
+                  <TouchableOpacity
+                    key={m}
+                    style={[styles.viewModeTab, active && styles.viewModeTabActive]}
+                    onPress={() => setViewMode(m)}
+                    activeOpacity={0.85}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text style={[styles.viewModeTabText, active && styles.viewModeTabTextActive]}>
+                      {label}
+                    </Text>
+                    <View style={[styles.viewModeCount, active && styles.viewModeCountActive]}>
+                      <Text style={[styles.viewModeCountText, active && styles.viewModeCountTextActive]}>
+                        {count}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Status filter chips — shared across both views */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterChipsRow}
+          >
+            {(
+              [
+                { key: "all", label: "All" },
+                { key: "matched", label: "Matched" },
+                { key: "no_entry", label: "No entry from my side" },
+                { key: "pending", label: "Awaiting partner" },
+                { key: "conflict", label: "Conflict" },
+              ] as Array<{ key: StatusFilter; label: string }>
+            ).map((f) => {
+              const active = statusFilter === f.key;
+              const count = activeCounts[f.key];
+              return (
+                <TouchableOpacity
+                  key={f.key}
+                  style={[styles.filterChip, active && styles.filterChipActive]}
+                  onPress={() => setStatusFilter(f.key)}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${f.label} filter, ${count} items`}
+                >
+                  {f.key !== "all" ? (
+                    <View
+                      style={[
+                        styles.filterChipDot,
+                        filterChipDotStyle(f.key as Exclude<StatusFilter, "all">),
+                      ]}
+                    />
+                  ) : null}
+                  <Text
+                    style={[styles.filterChipText, active && styles.filterChipTextActive]}
+                    numberOfLines={1}
+                  >
+                    {f.label}
+                  </Text>
+                  <Text
+                    style={[styles.filterChipCount, active && styles.filterChipCountActive]}
+                  >
+                    {count}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {viewMode === "txn" ? (
+            <View style={styles.txnListWrap}>
+              <Text style={styles.sectionTitle}>COMPARE BY TRANSACTION</Text>
+              {filteredTxnRows.length === 0 ? (
+                <View style={styles.emptyTable}>
+                  <FontAwesome name="inbox" size={28} color={Theme.textMuted} />
+                  <Text style={styles.emptyTableText}>
+                    {txnRows.length === 0
+                      ? "No partner transactions yet."
+                      : "No transactions match this filter."}
+                  </Text>
+                </View>
+              ) : (
+                filteredTxnRows.map((r) => (
+                  <View key={r.id} style={styles.txnCard}>
+                    {/* Header row */}
+                    <View style={styles.txnHeaderRow}>
+                      <View style={styles.txnLeftCol}>
+                        <View style={[styles.txnIconWrap, txnIconWrapStyle(r.status)]}>
+                          <FontAwesome
+                            name={r.direction === "in" ? "arrow-down" : "arrow-up"}
+                            size={12}
+                            color={txnIconColor(r.status)}
+                          />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={styles.txnTripRef} numberOfLines={1}>
+                            {r.tripRef ? r.tripRef.toUpperCase() : "No trip ref"}
+                          </Text>
+                          <Text style={styles.txnMeta} numberOfLines={1}>
+                            {r.date ? r.date.slice(0, 10) : "—"} ·{" "}
+                            {r.source === "partner" ? "From partner" : "My book"}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.txnRightCol}>
+                        <Text style={styles.txnAmount}>{formatINR(r.amountAbs)}</Text>
+                        <View style={[styles.txnStatusPill, txnStatusPillStyle(r.status)]}>
+                          <Text style={[styles.txnStatusPillText, txnStatusPillTextStyle(r.status)]}>
+                            {txnStatusLabel(r.status)}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* Conflict: show both numbers side-by-side */}
+                    {r.status === "conflict" &&
+                    r.partnerAmount != null &&
+                    r.localAmount != null ? (
+                      <View style={styles.txnCompareRow}>
+                        <View style={styles.txnCompareCell}>
+                          <Text style={styles.txnCompareLabel}>My book</Text>
+                          <Text style={styles.txnCompareValue}>
+                            {formatINR(r.localAmount)}
+                          </Text>
+                        </View>
+                        <View style={styles.txnCompareDivider} />
+                        <View style={styles.txnCompareCell}>
+                          <Text style={styles.txnCompareLabel}>Partner</Text>
+                          <Text style={[styles.txnCompareValue, styles.txnCompareValueAccent]}>
+                            {formatINR(r.partnerAmount)}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : null}
+
+                    {/* Hint line + actions */}
+                    {r.status === "no_entry" ? (
+                      <View style={styles.txnHintRow}>
+                        <Text style={styles.txnHintText} numberOfLines={2}>
+                          Partner logged this entry. Not yet in your books.
+                        </Text>
+                      </View>
+                    ) : r.status === "pending" ? (
+                      <View style={styles.txnHintRow}>
+                        <Text style={styles.txnHintText} numberOfLines={2}>
+                          Waiting for partner to confirm on their side.
+                        </Text>
+                      </View>
+                    ) : r.status === "matched" ? (
+                      <View style={styles.txnHintRow}>
+                        <FontAwesome name="check" size={11} color={Theme.darkGreen} />
+                        <Text style={[styles.txnHintText, styles.txnHintTextPositive]} numberOfLines={2}>
+                          Linked across both books
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                ))
+              )}
+            </View>
+          ) : null}
+
+          {viewMode === "trip" ? (
           <View style={styles.tableWrap}>
             <Text style={styles.sectionTitle}>COMPARE BY MISSION</Text>
             <View style={styles.table}>
@@ -1177,13 +1666,13 @@ export function SharedLedgerContent({
                               {row.missionId}
                             </Text>
                             {row.status === "VERIFIED" && (
-                              <Text style={styles.badgeMatched}>MATCHED</Text>
+                              <Text style={styles.badgeMatched}>RECONCILED</Text>
                             )}
                             {row.status === "PENDING" && !hasDisputeSent && (
                               <Text style={styles.badgePending}>PENDING</Text>
                             )}
                             {row.status === "MISMATCH" && !hasDisputeSent && (
-                              <Text style={styles.badgeVariance}>VARIANCE</Text>
+                              <Text style={styles.badgeVariance}>MISMATCH</Text>
                             )}
                             {row.status === "UNRECOGNIZED" &&
                               !hasDisputeSent && (
@@ -1248,7 +1737,7 @@ export function SharedLedgerContent({
                           <View style={styles.expandedWrap}>
                             <View style={styles.reconHeader}>
                               <Text style={styles.reconTitle}>
-                                Reconciliation Statement
+                                Reconcile Transaction
                               </Text>
                               <Text style={styles.reconRef}>
                                 REF: {row.missionId}
@@ -1388,7 +1877,7 @@ export function SharedLedgerContent({
                                       color={Theme.textOnDark}
                                     />
                                     <Text style={styles.acceptBtnText}>
-                                      Accept & Auto-Update Ledger
+                                      Validate & Link
                                     </Text>
                                   </TouchableOpacity>
                                   <TouchableOpacity
@@ -1478,7 +1967,7 @@ export function SharedLedgerContent({
                                             color="#16A34A"
                                           />
                                           <Text style={styles.varianceBtnUpdateText}>
-                                            Update My Book
+                                            Adjust & Match
                                           </Text>
                                         </TouchableOpacity>
                                       )}
@@ -1520,6 +2009,7 @@ export function SharedLedgerContent({
               </ScrollView>
             </View>
           </View>
+          ) : null}
         </>
       )}
 
@@ -2471,5 +2961,244 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textMuted,
     marginTop: 8,
+  },
+
+  /* ─── View-mode segment (By Trip / By Transaction) ─── */
+  viewModeWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 4,
+  },
+  viewModeTabs: {
+    flexDirection: "row",
+    backgroundColor: Theme.surfaceLight,
+    borderRadius: 14,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  viewModeTab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 11,
+    minHeight: 40,
+  },
+  viewModeTabActive: {
+    backgroundColor: Theme.textPrimaryDark,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  viewModeTabText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  viewModeTabTextActive: {
+    color: Theme.textOnDark,
+  },
+  viewModeCount: {
+    minWidth: 22,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: "rgba(17, 24, 39, 0.06)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewModeCountActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.18)",
+  },
+  viewModeCountText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textMuted,
+  },
+  viewModeCountTextActive: {
+    color: Theme.textOnDark,
+  },
+
+  /* ─── Status filter chips ─── */
+  filterChipsRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceLight,
+    marginRight: 8,
+  },
+  filterChipActive: {
+    backgroundColor: Theme.textPrimaryDark,
+    borderColor: Theme.textPrimaryDark,
+  },
+  filterChipDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  filterChipText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.2,
+  },
+  filterChipTextActive: {
+    color: Theme.textOnDark,
+  },
+  filterChipCount: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    minWidth: 14,
+    textAlign: "right",
+  },
+  filterChipCountActive: {
+    color: Theme.textOnDark,
+  },
+
+  /* ─── By-Transaction list ─── */
+  txnListWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 24,
+  },
+  txnCard: {
+    backgroundColor: Theme.surfaceLight,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 14,
+    marginBottom: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 12,
+    elevation: 1,
+  },
+  txnHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  txnLeftCol: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+    minWidth: 0,
+  },
+  txnRightCol: {
+    alignItems: "flex-end",
+    gap: 6,
+  },
+  txnIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  txnTripRef: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.3,
+  },
+  txnMeta: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    marginTop: 2,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  txnAmount: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  txnStatusPill: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  txnStatusPillText: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+  },
+  txnCompareRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 14,
+    padding: 10,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  txnCompareCell: {
+    flex: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    gap: 3,
+  },
+  txnCompareDivider: {
+    width: 1,
+    backgroundColor: Theme.borderLight,
+    marginVertical: 2,
+  },
+  txnCompareLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  txnCompareValue: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  txnCompareValueAccent: {
+    color: Theme.teslaRed,
+  },
+  txnHintRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+  },
+  txnHintText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    flex: 1,
+  },
+  txnHintTextPositive: {
+    color: Theme.darkGreen,
   },
 });
