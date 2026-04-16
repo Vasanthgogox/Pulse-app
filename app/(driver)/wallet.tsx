@@ -5,7 +5,7 @@ import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import {
-    phonePeMetaDate
+  phonePeMetaDate
 } from '@/lib/driverGpayTransactions';
 import { isAggregateTrip, tripEarningsForDriver } from '@/lib/driverUtils';
 import { usePreventScreenCapture } from '@/lib/usePreventScreenCapture';
@@ -16,16 +16,16 @@ import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 

@@ -1,18 +1,18 @@
-import React, { useEffect } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
-import * as Haptics from 'expo-haptics';
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { useDriverThemeColors, useDriverTheme } from '@/contexts/DriverThemeContext';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
+import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
+import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import * as Haptics from 'expo-haptics';
+import React, { useEffect } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSequence,
-  withSpring,
+    useAnimatedStyle,
+    useSharedValue,
+    withSequence,
+    withSpring,
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const springBounce = { damping: 14, stiffness: 400 };
 const springSettle = { damping: 18, stiffness: 320 };

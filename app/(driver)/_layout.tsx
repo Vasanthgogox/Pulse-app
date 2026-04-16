@@ -3,9 +3,9 @@
  * Tabs: Dashboard, Trip, History, Wallet.
  * Not to be confused with app/driver/ which is for dispatchers (e.g. /driver/[id] = driver detail).
  */
+import { DriverTabBar } from '@/components/driver/DriverTabBar';
 import { DriverAvatarProvider } from '@/contexts/DriverAvatarContext';
 import { DriverThemeProvider } from '@/contexts/DriverThemeContext';
-import { DriverTabBar } from '@/components/driver/DriverTabBar';
 import { Tabs } from 'expo-router';
 
 function DriverTabsNavigator() {
