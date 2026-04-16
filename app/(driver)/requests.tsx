@@ -1,15 +1,8 @@
-/**
- * Driver Requests page — connection invites + passbook per fleet (driver_invites, trips, driver_ledger).
- * PENDING: accept/decline. CONNECTED: accepted/declined with optional Passbook summary and link to detail.
- */
-// Wallet-style hero text (match wallet.tsx creditsSection)
-const EMERALD_500 = '#10b981';
-const GRAY_700 = '#374151';
-
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import { DriverInviteCard } from '@/components/driver/DriverInviteCard';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
+import Typography from '@/constants/Typography';
 import { tripEarningsForDriver } from '@/lib/driverUtils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
@@ -34,6 +27,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { isCompleted, buildOfferText } from '@/lib/driverUtils';
+
+/**
+ * Driver Requests page — connection invites + passbook per fleet (driver_invites, trips, driver_ledger).
+ * PENDING: accept/decline. CONNECTED: accepted/declined with optional Passbook summary and link to detail.
+ */
+// Wallet-style hero text (match wallet.tsx creditsSection)
+const EMERALD_500 = '#10b981';
+const GRAY_700 = '#374151';
 
 /** Per-org passbook stats (trips, earned, received from DB). */
 export interface ConnectionPassbook {
@@ -524,8 +525,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarImage: { width: '100%', height: '100%', borderRadius: Layout.driverHeaderAvatarSize / 2 },
-  brand: { fontSize: 9, fontWeight: '800', letterSpacing: 1.6, marginBottom: 1 },
-  welcomeTitle: { fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
+  brand: { ...Typography.headerSubtitle, marginBottom: 1 },
+  welcomeTitle: { ...Typography.headerTitle, textTransform: 'none', fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
   creditsSection: {
     paddingHorizontal: 16,
     paddingTop: 20,
@@ -557,7 +558,7 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, alignSelf: 'stretch' },
   scrollContent: { paddingHorizontal: 24, paddingTop: 8 },
   section: { marginBottom: 28 },
-  sectionTitle: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginBottom: 4 },
+  sectionTitle: { ...Typography.subTabLabel, fontSize: 10, letterSpacing: 1.2, marginBottom: 4 },
   sectionSubtitle: { fontSize: 12, marginBottom: 16, lineHeight: 18 },
   card: {
     width: '100%',

@@ -1,5 +1,6 @@
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
+import Typography from '@/constants/Typography';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
@@ -195,9 +196,8 @@ const styles = StyleSheet.create({
     minHeight: Layout.minTouchTargetSize,
   },
   dockLabel: {
+    ...Typography.subTabLabel,
     fontSize: 7,
-    fontWeight: '800',
-    textTransform: 'uppercase',
     letterSpacing: 1,
   },
   dockLabelActive: {

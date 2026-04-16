@@ -1,5 +1,6 @@
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
+import Typography from '@/constants/Typography';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
@@ -981,12 +982,12 @@ const styles = StyleSheet.create({
     borderRadius: Layout.driverHeaderAvatarSize / 2,
   },
   brand: {
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1.6,
+    ...Typography.headerSubtitle,
     marginBottom: 1,
   },
   welcomeTitle: {
+    ...Typography.headerTitle,
+    textTransform: 'none',
     fontSize: 15,
     fontWeight: '700',
     letterSpacing: -0.2,

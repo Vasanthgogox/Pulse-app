@@ -1,5 +1,6 @@
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
+import Typography from '@/constants/Typography';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import React from 'react';
@@ -179,13 +180,12 @@ const styles = StyleSheet.create({
     borderRadius: Layout.driverHeaderAvatarSize / 2,
   },
   brand: {
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1.6,
+    ...Typography.headerSubtitle,
     marginBottom: 1,
-    lineHeight: 11,
   },
   welcomeTitle: {
+    ...Typography.headerTitle,
+    textTransform: 'none',
     fontSize: 15,
     fontWeight: '700',
     letterSpacing: -0.2,
