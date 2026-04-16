@@ -772,7 +772,6 @@ export default function DriverRequestsScreen() {
                       },
                     ]}
                   >
-<<<<<<< HEAD
                     <View style={styles.premiumHeaderRow}>
                       <View style={styles.premiumHeaderLeft}>
                         <View style={[styles.cardIconWrap, { backgroundColor: colors.emeraldMuted }]}>
@@ -786,27 +785,7 @@ export default function DriverRequestsScreen() {
                             {buildOfferText(inv)}
                           </Text>
                         </View>
-=======
-                    <View style={styles.cardHeader}>
-                      <View
-                        style={[
-                          styles.cardIconWrap,
-                          {
-                            backgroundColor: isDark ? colors.surfaceElevated : '#d1fae5',
-                            borderColor: isDark ? colors.borderSubtle : '#a7f3d0',
-                          },
-                        ]}
-                      >
-                        <FontAwesome name="building-o" size={20} color={colors.emerald} />
-                      </View>
-                      <View style={styles.cardHeaderText}>
-                        <Text style={[styles.cardOrgName, { color: colors.text }]} numberOfLines={1}>
-                          {inv.from_org_name || 'Organisation'}
-                        </Text>
-                        <Text style={[styles.cardOffer, { color: colors.textMuted }]} numberOfLines={2}>
-                          {buildOfferText(inv)}
-                        </Text>
->>>>>>> gowtham/gowtham
+
                       </View>
                       <TouchableOpacity
                         style={[styles.premiumInfoBtn, { backgroundColor: colors.surfaceElevated }]}
@@ -816,7 +795,6 @@ export default function DriverRequestsScreen() {
                         <FontAwesome name="info" size={12} color={colors.textMuted} />
                       </TouchableOpacity>
                     </View>
-<<<<<<< HEAD
 
                     <View style={[styles.statusBadge, { backgroundColor: 'transparent', top: 18, right: 18 }]}>
                       <FontAwesome name="check-circle" size={10} color={colors.emerald} />
@@ -829,46 +807,7 @@ export default function DriverRequestsScreen() {
                           <View style={styles.quickStatCol}>
                             <Text style={[styles.quickStatLabel, { color: colors.textMuted }]}>Rate</Text>
                             <Text style={[styles.quickStatValue, { color: colors.text }]}>₹{inv.payable_amount?.toLocaleString('en-IN') ?? 0}</Text>
-=======
-                    <View
-                      style={[
-                        styles.statusBadge,
-                        {
-                          backgroundColor: isDark ? 'rgba(16,185,129,0.18)' : '#d1fae5',
-                          borderColor: isDark ? colors.emerald : '#6ee7b7',
-                        },
-                      ]}
-                    >
-                      <FontAwesome name="check-circle" size={12} color={colors.emerald} />
-                      <Text style={[styles.statusBadgeText, { color: colors.text }]}>Accepted</Text>
-                    </View>
-                    {passbook != null && (
-                      <View
-                        style={[
-                          styles.passbookBlock,
-                          {
-                            backgroundColor: isDark ? colors.surfaceElevated : '#f8fafc',
-                            borderColor: isDark ? colors.borderSubtle : '#e2e8f0',
-                          },
-                        ]}
-                      >
-                        <View style={styles.passbookRow}>
-                          <Text style={[styles.passbookLabel, { color: colors.textMuted }]}>Trips</Text>
-                          <Text style={[styles.passbookValue, { color: colors.text }]}>{passbook.completedCount} completed</Text>
-                        </View>
-                        <View style={styles.passbookRow}>
-                          <Text style={[styles.passbookLabel, { color: colors.textMuted }]}>Earned</Text>
-                          <Text style={[styles.passbookValue, { color: colors.emerald }]}>₹{passbook.totalEarned.toLocaleString('en-IN')}</Text>
-                        </View>
-                        <View style={styles.passbookRow}>
-                          <Text style={[styles.passbookLabel, { color: colors.textMuted }]}>Received</Text>
-                          <Text style={[styles.passbookValue, { color: colors.text }]}>₹{passbook.totalReceived.toLocaleString('en-IN')}</Text>
-                        </View>
-                        {passbook.pendingAmount > 0 && (
-                          <View style={styles.passbookRow}>
-                            <Text style={[styles.passbookLabel, { color: colors.textMuted }]}>Pending</Text>
-                            <Text style={[styles.passbookValue, { color: colors.gold }]}>₹{passbook.pendingAmount.toLocaleString('en-IN')}</Text>
->>>>>>> gowtham/gowtham
+
                           </View>
                           <View style={[styles.quickDivider, { backgroundColor: colors.border }]} />
                           <View style={styles.quickStatCol}>
@@ -931,20 +870,12 @@ export default function DriverRequestsScreen() {
                           styles.viewPassbookBtnLarge,
                           {
                             backgroundColor: colors.emerald,
-<<<<<<< HEAD
                             shadowColor: colors.text,
                             shadowOffset: { width: 4, height: 4 },
                             shadowOpacity: 0.2,
                             shadowRadius: 0,
                           },
-=======
-                            shadowColor: isDark ? '#000' : 'rgba(16,185,129,0.6)',
-                            shadowOffset: { width: 0, height: 8 },
-                            shadowOpacity: isDark ? 0.35 : 0.24,
-                            shadowRadius: 16,
-                            elevation: 6,
-                          }
->>>>>>> gowtham/gowtham
+
                         ]}
                         onPress={() => router.push({
                           pathname: `/(driver)/passbook/${passbook?.orgId ?? inv.from_organization_id}` as const,
@@ -1024,291 +955,4 @@ export default function DriverRequestsScreen() {
     </View>
   );
 }
-<<<<<<< HEAD
-=======
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: Layout.driverHeaderHorizontalPadding,
-    paddingBottom: Layout.driverHeaderBottomPadding,
-    borderBottomWidth: 1,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Layout.driverHeaderGap,
-    flex: 1,
-    minWidth: 0,
-  },
-  headerTextWrap: {
-    flex: 1,
-    minWidth: 0,
-  },
-  avatarBtn: { padding: 2 },
-  avatarCircle: {
-    width: Layout.driverHeaderAvatarSize,
-    height: Layout.driverHeaderAvatarSize,
-    borderRadius: Layout.driverHeaderAvatarSize / 2,
-    borderWidth: 2,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarImage: { width: '100%', height: '100%', borderRadius: Layout.driverHeaderAvatarSize / 2 },
-  brand: { ...Typography.headerSubtitle, marginBottom: 1 },
-  welcomeTitle: { ...Typography.headerTitle, textTransform: 'none', fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
-  creditsSection: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 24,
-  },
-  creditsTitle: {
-    fontSize: 36,
-    fontWeight: '900',
-    letterSpacing: -0.5,
-    fontStyle: 'italic',
-    textTransform: 'uppercase',
-  },
-  creditsSubtitle: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    marginTop: 8,
-    textTransform: 'uppercase',
-  },
-  notificationBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  scroll: { flex: 1, alignSelf: 'stretch' },
-  scrollContent: { paddingHorizontal: 24, paddingTop: 8 },
-  section: { marginBottom: 28 },
-  sectionTitle: { ...Typography.subTabLabel, fontSize: 10, letterSpacing: 1.2, marginBottom: 4 },
-  sectionSubtitle: { fontSize: 12, marginBottom: 16, lineHeight: 18 },
-  card: {
-    width: '100%',
-    borderRadius: 18,
-    borderWidth: 1,
-    padding: 22,
-    marginBottom: 14,
-  },
-  cardReadOnly: { paddingBottom: 18 },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 14,
-  },
-  cardIconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardHeaderText: { flex: 1, minWidth: 0 },
-  cardOrgName: { fontSize: 17, fontWeight: '800', marginBottom: 3 },
-  cardOffer: { fontSize: 15, lineHeight: 19 },
-  cardActions: { flexDirection: 'row', gap: 12 },
-  btnSecondary: {
-    flex: 1,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderRadius: 10,
-  },
-  btnSecondaryText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
-  btnPrimary: {
-    flex: 1,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-  },
-  btnPrimaryText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3, color: Theme.textOnPrimary },
-  btnDisabled: { opacity: 0.6 },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 6,
-    paddingHorizontal: 13,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginBottom: 12,
-  },
-  statusBadgeText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.25 },
-  passbookBlock: {
-    marginTop: 8,
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
-  passbookRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  passbookLabel: { fontSize: 12, fontWeight: '700' },
-  passbookValue: { fontSize: 15, fontWeight: '800' },
-  passbookActions: { flexDirection: 'row', gap: 12, marginTop: 12, alignItems: 'center' },
-  passbookActionsColumn: {
-    marginTop: 14,
-    gap: 10,
-  },
-  viewPassbookBtnLarge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderRadius: 15,
-  },
-  viewPassbookBtnLargeLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: 12,
-  },
-  viewPassbookBtnLargeSpacer: { flex: 1 },
-  viewPassbookBtnLargeText: {
-    fontSize: 17,
-    fontWeight: '900',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  viewPassbookBtnLargeArrow: { opacity: 0.45 },
-  leaveFleetLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 7,
-  },
-  leaveFleetLinkText: { fontSize: 15, fontWeight: '700' },
-  viewPassbookBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 10,
-  },
-  viewPassbookBtnText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5, color: Theme.textOnPrimary },
-  leaveFleetBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    minWidth: 100,
-  },
-  leaveFleetBtnText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.3 },
-  historyCardMinimal: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 10,
-  },
-  historyCardName: { fontSize: 15, fontWeight: '700', flex: 1, minWidth: 0 },
-  viewPassbookBtnSmall: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-  },
-  seeMoreWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    marginTop: 4,
-  },
-  seeMoreText: { fontSize: 13, fontWeight: '700', letterSpacing: 0.3 },
-  passbookHistoryEmpty: {
-    paddingVertical: 20,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 12,
-  },
-  passbookHistoryEmptyText: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  viewHistoryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  viewHistoryBtnText: { fontSize: 14, fontWeight: '800', letterSpacing: 0.3 },
-  viewHistoryLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    flexWrap: 'wrap',
-    gap: 6,
-    paddingVertical: 2,
-  },
-  viewHistoryLinkEyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginRight: 6 },
-  viewHistoryLinkText: { fontSize: 14, fontWeight: '700', letterSpacing: 0.1 },
-  emptyCard: {
-    width: '100%',
-    padding: 28,
-    borderRadius: 16,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  emptyIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  emptyTitle: { fontSize: 17, fontWeight: '800', marginBottom: 8, letterSpacing: 0.3 },
-  emptySubtitle: { fontSize: 13, textAlign: 'center', lineHeight: 20, paddingHorizontal: 8 },
-  cardOrgAvatar: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardOrgAvatarText: {
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-  },
-});
->>>>>>> gowtham/gowtham
