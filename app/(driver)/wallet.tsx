@@ -390,7 +390,7 @@ export default function DriverWalletScreen() {
           </TouchableOpacity>
           <View style={styles.headerTextWrap}>
             <Text style={[styles.brand, { color: colors.textMuted }]}>Q PILOT</Text>
-            <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>Transactions</Text>
+            <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>Cash</Text>
           </View>
         </View>
         <TouchableOpacity
@@ -416,7 +416,7 @@ export default function DriverWalletScreen() {
       </View>
 
       <View style={styles.creditsSection}>
-        <Text style={[styles.creditsTitle, { color: EMERALD_500 }]}>Transactions.</Text>
+        <Text style={[styles.creditsTitle, { color: EMERALD_500 }]}>SALARY.</Text>
         <Text style={[styles.creditsSubtitle, { color: GRAY_700 }]}>Financial audit & settlements.</Text>
       </View>
 
@@ -554,7 +554,7 @@ export default function DriverWalletScreen() {
 
       <View style={[styles.ledgerSection, { paddingHorizontal: Layout.screenPaddingHorizontal }]}>
         <Text style={[styles.transactionHistoryTitle, { color: colors.text }]}>
-          Transaction history
+          Earnings history
         </Text>
         {(pendingTotal > 0 || receivedTotal > 0) && (
           <View style={styles.filterSummaryRow}>
