@@ -65,6 +65,22 @@ export async function getDriversByOrganization(
   orgId: string,
   opts?: PageOpts,
 ): Promise<{ error: Error | null; drivers: DriverRow[]; hasMore?: boolean }> {
+  // Try profile-joined RPC first (returns avatar_url + avatar_seed from profiles via user_id join).
+  if (opts == null) {
+    try {
+      const { data, error: rpcError } = await supabase().rpc(
+        "get_drivers_with_profiles",
+        { p_org_id: orgId },
+      );
+      if (!rpcError && data) {
+        const raw = excludeTrackingOnly((data ?? []) as DriverRow[]);
+        return { error: null, drivers: raw.map((d) => normalizeDriverRow(d)) };
+      }
+    } catch {
+      // Fall through to direct select
+    }
+  }
+
   const base = () =>
     supabase()
       .from("drivers")

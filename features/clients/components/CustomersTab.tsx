@@ -3,7 +3,7 @@
  * Supports matrix (table) view and ledger (transaction cards) view with toggle.
  */
 import { FAB } from "@/components/FAB";
-import { IntegrationModeTag } from "@/components/IntegrationModeTag";
+import { EntityAvatar } from "@/components/EntityAvatar";
 import { LiquidFillPill } from "@/components/LiquidFillPill";
 import Theme from "@/constants/Theme";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
@@ -1850,6 +1850,11 @@ export function CustomersTab({
     [clients],
   );
 
+  const clientAvatarById = useMemo(
+    () => new Map(clients.map((c) => [c.id, { avatar_url: c.avatar_url, avatar_seed: c.avatar_seed }])),
+    [clients],
+  );
+
   const { rows, totals } = useMemo(() => {
     return aggregateCustomers(clients, allTrips, transactions, tripPartyMap, indentsProp);
   }, [clients, allTrips, transactions, tripPartyMap, indentsProp]);
@@ -2007,6 +2012,7 @@ export function CustomersTab({
             const receivedDisplay =
               received >= 1000 ? `${(received / 1000).toFixed(1)}k` : received.toLocaleString("en-IN");
             const tripCount = data.trips ?? 0;
+            const avatarData = clientAvatarById.get(data.id);
             return (
               <TouchableOpacity
                 key={data.id}
@@ -2014,11 +2020,15 @@ export function CustomersTab({
                 onPress={() => handleRowSelect(data)}
                 activeOpacity={0.7}
               >
+                <EntityAvatar
+                  name={data.name ?? ""}
+                  avatarUrl={avatarData?.avatar_url}
+                  avatarSeed={avatarData?.avatar_seed}
+                  entityType="client"
+                  isIntegrated={!!data.is_integrated}
+                />
                 <View style={[styles.customerTableCell, styles.ctEntity]}>
                   <View style={styles.customerTableEntityHeader}>
-                    <IntegrationModeTag
-                      mode={data.is_integrated ? "integrated" : "manual"}
-                    />
                     <Text
                       style={styles.customerTableEntityName}
                       numberOfLines={1}
@@ -2216,6 +2226,7 @@ const styles = StyleSheet.create({
   customerTableRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 10,
     minHeight: 62,
     paddingVertical: 10,
     paddingHorizontal: 14,
