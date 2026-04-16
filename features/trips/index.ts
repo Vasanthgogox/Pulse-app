@@ -4,6 +4,7 @@ export { default as TripDetailScreen } from './components/trip-detail/TripDetail
 export type { AddTripFormData, AddTripModalProps } from './components/add-trip';
 export {
   isLoadBasedTrip,
+  isCrossOrgIntegrationTrip,
   canOrgSeeTripAsIntegratedClient,
   canOrgSeeTripAsIntegratedSupplier,
   isTripVisibleToOrgViaIntegration,
@@ -26,6 +27,7 @@ export {
   createTrip,
   createTripWithOtp,
   updateTripAssignment,
+  updateTripSupplier,
   assignTripDriverByPhone,
   assignAggregateTripDriverByPhone,
   updateTripStatus,
@@ -35,6 +37,7 @@ export {
   type CreateTripData,
   type TripOtpInfo,
   type UpdateTripAssignmentOptions,
+  type UpdateTripSupplierData,
   type UpdateTripStatusData,
   type UpdateTripPaymentData,
 } from './services/trips.service';

@@ -93,6 +93,10 @@ export interface TripDetailFinanceViewProps {
   viewerOrgId?: string | null;
   /** Display name of the client for this trip */
   clientName?: string | null;
+  /** If the viewer is the supplier and subcontracted the trip, the subcontract rate. */
+  subcontractRate?: number | null;
+  /** Current org display name; used when the supplier viewer cannot resolve the linked supplier row (e.g. indent / RLS). */
+  viewerOrganizationName?: string | null;
 }
 
 export type DocCategory = "vehicle" | "trip" | "driver";
@@ -218,7 +222,7 @@ export function TripDetailFinanceView({
   assignmentDriverNames = {},
   assignmentVehicleLabels = {},
   tripOtp: _tripOtp = null,
-  partnerName: _partnerName = null,
+  partnerName = null,
   onAddAdjustment,
   onRemoveAdjustment,
   assignmentBlock,
@@ -229,6 +233,8 @@ export function TripDetailFinanceView({
   onOpenDoc,
   viewerOrgId = null,
   clientName,
+  subcontractRate,
+  viewerOrganizationName = null,
 }: TripDetailFinanceViewProps) {
   const { t } = useLanguage();
   const routeStr = `${trip.pickup_area ?? "—"} → ${trip.drop_location ?? "—"}`.trim() || "—";
@@ -242,9 +248,43 @@ export function TripDetailFinanceView({
   /** Non-owner + indent: supplier_rate. Otherwise: client_price. */
   const sales =
     trip.indent_id != null && !isTripOwner ? supplierCost : customerSales;
-  /** Owner + indent: cost = supplier_rate. Non-owner + indent: no cost. Non-indent: supplier_rate. */
+  /** Owner + indent: cost = supplier_rate. Non-owner + indent: cost = subcontractRate (or 0). Non-indent: supplier_rate. */
   const cost =
-    trip.indent_id != null && !isTripOwner ? 0 : supplierCost;
+    trip.indent_id != null && !isTripOwner
+      ? (subcontractRate ?? supplierCost) // Fallback to supplierCost if no subcontractRate
+      : supplierCost;
+  const isPartnerSettlementView = trip.indent_id != null && !isTripOwner;
+  const billingOriginalLabel = isPartnerSettlementView ? "Partner Amount" : "Original Price";
+  const billingFinalLabel = isPartnerSettlementView ? "Final Partner Amount" : "Final Price";
+  const billingSectionTitle = isPartnerSettlementView ? "Partner Settlement" : "Customer Billing";
+
+  const supplierNameFromLedger = useMemo(() => {
+    for (const tx of tripLedgerEntries) {
+      if (tx.contact_type !== "supplier") continue;
+      if (Number(tx.amount_out ?? 0) <= 0) continue;
+      const p = (tx.party_name ?? "").trim();
+      if (p && p !== "—") return p;
+    }
+    return null;
+  }, [tripLedgerEntries]);
+
+  const supplierDisplayName = useMemo(() => {
+    const fromTrip =
+      (partnerName ?? trip.supplier_name ?? "").trim() || null;
+    if (fromTrip) return fromTrip;
+    if (supplierNameFromLedger) return supplierNameFromLedger;
+    if (isPartnerSettlementView) {
+      const v = (viewerOrganizationName ?? "").trim();
+      return v || null;
+    }
+    return null;
+  }, [
+    partnerName,
+    trip.supplier_name,
+    supplierNameFromLedger,
+    isPartnerSettlementView,
+    viewerOrganizationName,
+  ]);
 
   const adjSales = useMemo(() => adjustedRevenue(sales, adjustments), [sales, adjustments]);
   const adjCost = useMemo(() => adjustedCost(cost, adjustments), [cost, adjustments]);
@@ -392,7 +432,9 @@ export function TripDetailFinanceView({
         <View style={styles.financeHeader}>
           <View>
             <Text style={styles.financeTitle}>Trip Finances</Text>
-            {clientName && <Text style={styles.financeSubtitle}>{clientName}</Text>}
+            {(clientName ?? partnerName) && (
+              <Text style={styles.financeSubtitle}>{clientName ?? partnerName}</Text>
+            )}
           </View>
           <View style={styles.financeProfitWrap}>
             <Text style={styles.financeProfitLabel}>Profit</Text>
@@ -402,9 +444,9 @@ export function TripDetailFinanceView({
 
         {/* Customer Billing Section */}
         <View style={styles.financeSection}>
-          <Text style={styles.financeSectionTitle}>Customer Billing</Text>
+          <Text style={styles.financeSectionTitle}>{billingSectionTitle}</Text>
           <View style={styles.financeRow}>
-            <Text style={styles.financeLabel}>Original Price</Text>
+            <Text style={styles.financeLabel}>{billingOriginalLabel}</Text>
             <Text style={styles.financeValue}>{formatINR(sales)}</Text>
           </View>
           
@@ -433,7 +475,7 @@ export function TripDetailFinanceView({
           )}
 
           <View style={styles.financeTotalRow}>
-            <Text style={styles.financeTotalLabel}>Final Price</Text>
+            <Text style={styles.financeTotalLabel}>{billingFinalLabel}</Text>
             <Text style={styles.financeTotalValue}>{formatINR(adjSales)}</Text>
           </View>
 
@@ -457,6 +499,9 @@ export function TripDetailFinanceView({
         {/* Supplier Payments Section */}
         <View style={styles.financeSection}>
           <Text style={styles.financeSectionTitle}>Supplier Payments</Text>
+          {supplierDisplayName ? (
+            <Text style={styles.financeSectionSubtitle}>{supplierDisplayName}</Text>
+          ) : null}
           <View style={styles.financeRow}>
             <Text style={styles.financeLabel}>Original Cost</Text>
             <Text style={styles.financeValue}>{formatINR(cost)}</Text>
@@ -975,6 +1020,13 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  financeSectionSubtitle: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    marginTop: -4,
+    marginBottom: 8,
   },
   financeRow: {
     flexDirection: "row",

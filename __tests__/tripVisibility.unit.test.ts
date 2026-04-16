@@ -6,6 +6,7 @@ import {
   buildUniqueLinkedOrgIdMap,
   canOrgSeeTripAsIntegratedClient,
   canOrgSeeTripAsIntegratedSupplier,
+  isCrossOrgIntegrationTrip,
   isTripEligibleForSharedLedger,
   isLoadBasedTrip,
 } from '@/features/trips/visibility/tripVisibility';
@@ -36,6 +37,22 @@ describe('trip visibility contract', () => {
     expect(canOrgSeeTripAsIntegratedClient(loadTrip, 'viewer-org', clientById)).toBe(true);
     expect(canOrgSeeTripAsIntegratedSupplier(loadTrip, 'viewer-org', supplierById)).toBe(true);
     expect(isTripEligibleForSharedLedger(loadTrip, 'viewer-org', { clientById, supplierById })).toBe(true);
+  });
+
+  it('treats cross-org aggregate trips as integration trips for finance remap', () => {
+    const agg = {
+      organization_id: 'carrier-org',
+      indent_id: null as string | null,
+      supplier_id: 'partner-supplier-uuid',
+    };
+    expect(isCrossOrgIntegrationTrip(agg, 'shipper-org')).toBe(true);
+    expect(isCrossOrgIntegrationTrip(agg, 'carrier-org')).toBe(false);
+    expect(
+      isCrossOrgIntegrationTrip(
+        { ...agg, supplier_id: null },
+        'shipper-org',
+      ),
+    ).toBe(false);
   });
 
   it('rejects ambiguous duplicate linked rows', () => {
@@ -136,5 +153,47 @@ describe('integrated aggregation guardrails', () => {
     expect(manualRows[0]?.payables).toBe(0);
     expect(loadRows[0]?.trips).toBe(1);
     expect(loadRows[0]?.payables).toBe(900);
+  });
+
+  it('attributes supplier cash out to local supplier via tripPartyMap when contact_id is partner-org uuid', () => {
+    const suppliers = [
+      {
+        id: 'local-gokul',
+        name: 'GOKUL TRANSPORTS',
+        supplier_type: 'integrated' as const,
+        linked_organization_id: 'carrier-org',
+      },
+    ];
+    const tripsWhereOrgIsClient = [
+      {
+        supplier_id: 'foreign-supplier-uuid',
+        supplier_name: 'Partner',
+        supplier_rate: 0,
+        client_price: 15000,
+        organization_id: 'carrier-org',
+        indent_id: 'indent-agg',
+      },
+    ];
+    const tripPartyMap = {
+      'trip-a': { supplier_id: 'local-gokul', client_id: null as string | null },
+    };
+    const txs = [
+      {
+        contact_type: 'supplier' as const,
+        contact_id: 'foreign-supplier-uuid',
+        amount_out: 15000,
+        amount_in: 0,
+        trip_id: 'trip-a',
+      },
+    ];
+    const { rows } = aggregateSuppliers(
+      suppliers,
+      [],
+      txs,
+      tripsWhereOrgIsClient,
+      tripPartyMap,
+    );
+    expect(rows[0]?.paid).toBe(15000);
+    expect(rows[0]?.due).toBe(0);
   });
 });

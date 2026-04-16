@@ -29,6 +29,7 @@ import {
   useTripsWhereOrgIsClientQuery,
   useTripsWhereOrgIsSupplierQuery,
   useVehiclesQuery,
+  useTripSubcontractsQuery,
 } from "@/lib/queries";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -89,6 +90,26 @@ export function useFinanceEntities({
     useAcceptedDirectQuotesForFinanceQuery(orgId);
   const { data: salaryRequestsFromQuery = [] } = useSalaryRequestsQuery(orgId, "pending");
 
+  const tripIdsWhereOrgIsSupplier = useMemo(
+    () => tripsWhereOrgIsSupplier.map((t) => t.id),
+    [tripsWhereOrgIsSupplier]
+  );
+  
+  const { data: tripSubcontracts = [], isPending: subcontractsLoading } = 
+    useTripSubcontractsQuery(orgId, tripIdsWhereOrgIsSupplier);
+
+  const tripsWhereOrgIsSupplierWithSubcontracts = useMemo(() => {
+    if (!tripSubcontracts.length) return tripsWhereOrgIsSupplier;
+    const subMap = new Map(tripSubcontracts.map(s => [s.trip_id, s]));
+    return tripsWhereOrgIsSupplier.map(t => {
+      const sub = subMap.get(t.id);
+      if (sub) {
+        return { ...t, supplier_id: sub.supplier_id, supplier_rate: sub.rate };
+      }
+      return t;
+    });
+  }, [tripsWhereOrgIsSupplier, tripSubcontracts]);
+
   const [pendingDriverSalaryRequests, setPendingDriverSalaryRequests] = useState<
     SalaryRequestWithDriverRow[]
   >([]);
@@ -111,6 +132,7 @@ export function useFinanceEntities({
     connLoading ||
     tripsAsClientLoading ||
     tripsAsSupplierLoading ||
+    subcontractsLoading ||
     indentsForFinanceLoading ||
     acceptedQuotesLoading;
 
@@ -170,7 +192,7 @@ export function useFinanceEntities({
     trips,
     tripRows,
     tripsWhereOrgIsClient: loadBoardOnlyTripsAsClient,
-    tripsWhereOrgIsSupplier,
+    tripsWhereOrgIsSupplier: tripsWhereOrgIsSupplierWithSubcontracts,
     supplierRows,
     suppliersList,
     vehicleRows,

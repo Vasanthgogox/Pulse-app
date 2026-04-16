@@ -9,7 +9,10 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getDriverById } from "@/features/drivers/services/drivers.service";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
-import { getSupplierById } from "@/features/suppliers/services/suppliers.service";
+import {
+  getSupplierById,
+  getSupplierDetails,
+} from "@/features/suppliers/services/suppliers.service";
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
 import { canAssignTrip, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { formatINR } from "@/lib/format";
@@ -194,15 +197,54 @@ export function TripExpandableCard({
   }, [expanded, trip.organization_id, assignmentAuditRows]);
 
   useEffect(() => {
-    if (!expanded || !trip.supplier_id) {
+    if (!expanded || !trip.supplier_id || !trip.organization_id) {
       setPartnerName(null);
       return;
     }
-    getSupplierById(trip.organization_id!, trip.supplier_id).then((r) => {
-      const s = r.supplier;
-      setPartnerName(r.error ? null : (s?.company_name || s?.name || s?.contact_person || null));
-    });
-  }, [expanded, trip.organization_id, trip.supplier_id]);
+    let cancelled = false;
+    const supplierId = trip.supplier_id;
+    const ownerOrgId = trip.organization_id;
+    const fallback = (trip.supplier_name ?? "").trim() || null;
+    const pick = (
+      s: { company_name?: string | null; name?: string | null; contact_person?: string | null } | null,
+    ) => (s?.company_name || s?.name || s?.contact_person || "").trim() || null;
+
+    void (async () => {
+      const { supplier: fromRpc } = await getSupplierDetails(supplierId);
+      if (cancelled) return;
+      const n = pick(fromRpc);
+      if (n) {
+        setPartnerName(n);
+        return;
+      }
+      const { supplier: fromOwner, error: errOwner } = await getSupplierById(ownerOrgId, supplierId);
+      if (cancelled) return;
+      if (!errOwner) {
+        const n2 = pick(fromOwner);
+        if (n2) {
+          setPartnerName(n2);
+          return;
+        }
+      }
+      const viewerOrgId = currentOrganization?.id;
+      if (viewerOrgId && viewerOrgId !== ownerOrgId) {
+        const { supplier: fromViewer, error: errViewer } = await getSupplierById(viewerOrgId, supplierId);
+        if (cancelled) return;
+        if (!errViewer) {
+          const n3 = pick(fromViewer);
+          if (n3) {
+            setPartnerName(n3);
+            return;
+          }
+        }
+      }
+      setPartnerName(fallback);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [expanded, trip.organization_id, trip.supplier_id, trip.supplier_name, currentOrganization?.id]);
 
   const assignmentSource = useMemo((): AssignmentSource => {
     const latest = assignmentAuditRows[0];
@@ -408,6 +450,7 @@ export function TripExpandableCard({
             trip={trip}
             tripLedgerEntries={tripLedgerEntries}
             viewerOrgId={currentOrganization?.id ?? null}
+            viewerOrganizationName={currentOrganization?.name ?? null}
             driverName={driverName ?? undefined}
             vehicleLabel={effectiveVehicleLabel ?? vehicleLabel ?? undefined}
             assignmentAuditRows={assignmentAuditRows}

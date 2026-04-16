@@ -18,8 +18,10 @@ import {
     getTripDisplayNumber,
     getTripsByOrganization,
     getTripsWhereOrgIsClient,
+    getTripsWhereOrgIsSupplier,
     type TripRow,
 } from "@/features/trips";
+import { getTripSubcontracts } from "@/features/finance/services/tripSubcontracts.service";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import {
     canAccessFinance,
@@ -143,8 +145,17 @@ export default function SupplierDetailScreen({
         r.error ? [] : (r.trips ?? []),
       );
     });
-    Promise.all([supplierPromise, tripsPromise, txPromise, asClientPromise, suppliersPromise])
-      .then(([res, tripsRes, txRes, asClientTrips, suppliersRes]) => {
+    const subcontractsPromise = getTripsWhereOrgIsSupplier(orgId).then((res) => {
+      if (res.error) return { sharedTrips: [], subcontracts: [] };
+      const sharedTrips = res.trips ?? [];
+      const tripIds = sharedTrips.map((t) => t.id);
+      if (tripIds.length === 0) return { sharedTrips, subcontracts: [] };
+      return getTripSubcontracts({ viewerOrgId: orgId, tripIds }).then((subRes) => {
+        return { sharedTrips, subcontracts: subRes.error ? [] : subRes.rows };
+      });
+    });
+    Promise.all([supplierPromise, tripsPromise, txPromise, asClientPromise, suppliersPromise, subcontractsPromise])
+      .then(([res, tripsRes, txRes, asClientTrips, suppliersRes, subRes]) => {
         if (res.error) {
           setError(res.error.message);
           setSupplier(null);
@@ -172,6 +183,26 @@ export default function SupplierDetailScreen({
         );
         const seen = new Set(fromOwned.map((t) => t.id));
         const merged: TripRow[] = [...fromOwned];
+        
+        // Add shared trips where we are the supplier and we subcontracted to THIS supplier
+        const { sharedTrips, subcontracts } = subRes;
+        const tripIdToSubcontract = new Map(subcontracts.map(s => [s.trip_id, s]));
+        for (const t of sharedTrips) {
+          const sub = tripIdToSubcontract.get(t.id);
+          if (sub && sub.supplier_id === supplierId) {
+            if (!seen.has(t.id)) {
+              seen.add(t.id);
+              // Overwrite supplier_rate so the UI displays the subcontract rate
+              merged.push({ ...t, supplier_rate: sub.rate });
+            }
+          } else if (t.supplier_id === supplierId || (!t.supplier_id && supplierDisplayName && (t.supplier_name ?? "").trim().toLowerCase() === supplierDisplayName)) {
+            if (!seen.has(t.id)) {
+                seen.add(t.id);
+                merged.push(t);
+            }
+          }
+        }
+        
         if (linkedOrgId && Array.isArray(asClientTrips)) {
           for (const t of asClientTrips) {
             if (
