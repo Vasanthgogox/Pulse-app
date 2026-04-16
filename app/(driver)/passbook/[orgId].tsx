@@ -388,13 +388,11 @@ export default function DriverPassbookDetailScreen() {
                     const listDivider = isDark ? colors.borderSubtle : Theme.borderMedium;
                     const subColor = colors.textMuted;
                     const metaColor = colors.textMuted;
-                    const secondaryLine = routeSummary || tripRef;
+                    const secondaryLine = routeSummary || 'Route not specified';
                     const primaryLine =
                       isAggregate && earned === 0
-                        ? 'Ad hoc trip'
-                        : receivedAmt > 0
-                          ? 'Received for trip'
-                          : 'Trip earnings';
+                        ? `Ad hoc trip ${tripRef}`
+                        : `Trip ${tripRef}`;
                     const metaRight =
                       receivedAmt > 0
                         ? 'Added to cash balance'
@@ -494,7 +492,7 @@ const styles = StyleSheet.create({
   summaryMetaText: { fontSize: 12 },
   section: { marginTop: 28 },
   gpayListSection: { marginHorizontal: Layout.screenPaddingHorizontal },
-  sectionTitle: { fontSize: 17, fontWeight: '500', marginBottom: 6, letterSpacing: 0.1 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 6, letterSpacing: -0.2 },
   sectionSubtitle: { fontSize: 13, marginBottom: 12, lineHeight: 18 },
   ledgerCard: { borderWidth: 1, borderRadius: 16, overflow: 'hidden' },
   ledgerEmpty: { padding: 32, alignItems: 'center', gap: 12 },
@@ -551,9 +549,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   ppPrimary: {
-    fontSize: 15,
-    fontWeight: '500',
-    letterSpacing: 0.1,
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: -0.2,
     flexShrink: 1,
   },
   txStatusPill: {
@@ -566,21 +564,21 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   txStatusPillText: {
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 0.7,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   ppSecondary: {
     fontSize: 13,
     fontWeight: '400',
     marginTop: 4,
     lineHeight: 18,
-    letterSpacing: 0.1,
+    letterSpacing: 0,
   },
   ppAmount: {
     fontSize: 16,
-    fontWeight: '500',
-    letterSpacing: 0.1,
+    fontWeight: '600',
+    letterSpacing: -0.2,
     flexShrink: 0,
     maxWidth: '40%',
     textAlign: 'right',

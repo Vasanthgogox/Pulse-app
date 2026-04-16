@@ -679,13 +679,11 @@ export default function DriverWalletScreen() {
                     const listDivider = isDark ? colors.borderSubtle : Theme.borderMedium;
                     const subColor = colors.textMuted;
                     const metaColor = colors.textMuted;
-                    const secondaryLine = routeSummary ? `${tripRef} • ${routeSummary}` : tripRef;
+                    const secondaryLine = routeSummary || 'Route not specified';
                     const isOtpAdHocPending = isAdHocTrip && earned === 0;
                     const primaryLine = isOtpAdHocPending
-                      ? 'Ad hoc trip'
-                      : receivedAmt > 0
-                        ? 'Received for trip'
-                        : 'Trip earnings';
+                      ? `Ad hoc trip ${tripRef}`
+                      : `Trip ${tripRef}`;
                     const metaRight =
                       receivedAmt > 0
                         ? 'Added to cash balance'
@@ -1094,10 +1092,10 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   transactionHistoryTitle: {
-    fontSize: 17,
-    fontWeight: '500',
-    letterSpacing: 0.1,
-    marginBottom: 12,
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+    marginBottom: 14,
   },
   filterTabRow: {
     flexDirection: 'row',
@@ -1340,10 +1338,9 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   ppPrimary: {
-    fontSize: 15,
-    fontWeight: '500',
-    /* classic body emphasis — not heavy display bold */
-    letterSpacing: 0.1,
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: -0.2,
     flexShrink: 1,
   },
   txStatusPill: {
@@ -1356,21 +1353,21 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   txStatusPillText: {
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 0.7,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   ppSecondary: {
     fontSize: 13,
     fontWeight: '400',
     marginTop: 4,
     lineHeight: 18,
-    letterSpacing: 0.1,
+    letterSpacing: 0,
   },
   ppAmount: {
     fontSize: 16,
-    fontWeight: '500',
-    letterSpacing: 0.1,
+    fontWeight: '600',
+    letterSpacing: -0.2,
     flexShrink: 0,
     maxWidth: '40%',
     textAlign: 'right',
