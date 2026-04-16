@@ -5,7 +5,7 @@ import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
 import { tripEarningsForDriver } from '@/lib/driverUtils';
 import { useAuth } from '@/contexts/AuthContext';
-import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import * as driversService from '@/services/driversService';
 import * as tripsService from '@/services/tripsService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -51,7 +51,9 @@ export interface ConnectionPassbook {
 export default function DriverRequestsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { theme } = useDriverTheme();
   const colors = useDriverThemeColors();
+  const isDark = theme === 'dark';
   const { profile } = useAuth();
   const { avatarUri } = useDriverAvatarUri();
 
@@ -361,11 +363,26 @@ export default function DriverRequestsScreen() {
                 return (
                   <View
                     key={inv.id}
-                    style={[styles.card, styles.cardReadOnly, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    style={[
+                      styles.card,
+                      styles.cardReadOnly,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: isDark ? colors.border : 'rgba(226,232,240,0.9)',
+                      },
+                    ]}
                   >
                     <View style={styles.cardHeader}>
-                      <View style={[styles.cardIconWrap, { backgroundColor: colors.emeraldMuted }]}>
-                        <FontAwesome name="building" size={22} color={colors.emerald} />
+                      <View
+                        style={[
+                          styles.cardIconWrap,
+                          {
+                            backgroundColor: isDark ? colors.surfaceElevated : '#d1fae5',
+                            borderColor: isDark ? colors.borderSubtle : '#a7f3d0',
+                          },
+                        ]}
+                      >
+                        <FontAwesome name="building-o" size={20} color={colors.emerald} />
                       </View>
                       <View style={styles.cardHeaderText}>
                         <Text style={[styles.cardOrgName, { color: colors.text }]} numberOfLines={1}>
@@ -376,12 +393,28 @@ export default function DriverRequestsScreen() {
                         </Text>
                       </View>
                     </View>
-                    <View style={[styles.statusBadge, { backgroundColor: colors.emeraldMuted, borderColor: colors.emerald }]}>
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        {
+                          backgroundColor: isDark ? 'rgba(16,185,129,0.18)' : '#d1fae5',
+                          borderColor: isDark ? colors.emerald : '#6ee7b7',
+                        },
+                      ]}
+                    >
                       <FontAwesome name="check-circle" size={12} color={colors.emerald} />
                       <Text style={[styles.statusBadgeText, { color: colors.text }]}>Accepted</Text>
                     </View>
                     {passbook != null && (
-                      <View style={[styles.passbookBlock, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                      <View
+                        style={[
+                          styles.passbookBlock,
+                          {
+                            backgroundColor: isDark ? colors.surfaceElevated : '#f8fafc',
+                            borderColor: isDark ? colors.borderSubtle : '#e2e8f0',
+                          },
+                        ]}
+                      >
                         <View style={styles.passbookRow}>
                           <Text style={[styles.passbookLabel, { color: colors.textMuted }]}>Trips</Text>
                           <Text style={[styles.passbookValue, { color: colors.text }]}>{passbook.completedCount} completed</Text>
@@ -408,11 +441,12 @@ export default function DriverRequestsScreen() {
                           styles.viewPassbookBtnLarge,
                           {
                             backgroundColor: colors.emerald,
-                            shadowColor: Theme.textPrimaryDark,
-                            shadowOffset: { width: 4, height: 4 },
-                            shadowOpacity: 0.2,
-                            shadowRadius: 0,
-                          },
+                            shadowColor: isDark ? '#000' : 'rgba(16,185,129,0.6)',
+                            shadowOffset: { width: 0, height: 8 },
+                            shadowOpacity: isDark ? 0.35 : 0.24,
+                            shadowRadius: 16,
+                            elevation: 6,
+                          }
                         ]}
                         onPress={() => router.push({
                           pathname: `/(driver)/passbook/${passbook?.orgId ?? inv.from_organization_id}` as const,
@@ -562,28 +596,29 @@ const styles = StyleSheet.create({
   sectionSubtitle: { fontSize: 12, marginBottom: 16, lineHeight: 18 },
   card: {
     width: '100%',
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
-    padding: 20,
+    padding: 22,
     marginBottom: 14,
   },
-  cardReadOnly: { paddingBottom: 20 },
+  cardReadOnly: { paddingBottom: 18 },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    marginBottom: 18,
+    gap: 12,
+    marginBottom: 14,
   },
   cardIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cardHeaderText: { flex: 1, minWidth: 0 },
-  cardOrgName: { fontSize: 17, fontWeight: '800', marginBottom: 4 },
-  cardOffer: { fontSize: 13, lineHeight: 18 },
+  cardOrgName: { fontSize: 17, fontWeight: '800', marginBottom: 3 },
+  cardOffer: { fontSize: 15, lineHeight: 19 },
   cardActions: { flexDirection: 'row', gap: 12 },
   btnSecondary: {
     flex: 1,
@@ -608,16 +643,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 13,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
+    marginBottom: 12,
   },
-  statusBadgeText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.3 },
+  statusBadgeText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.25 },
   passbookBlock: {
-    marginTop: 16,
-    padding: 16,
-    borderRadius: 12,
+    marginTop: 8,
+    padding: 14,
+    borderRadius: 14,
     borderWidth: 1,
   },
   passbookRow: {
@@ -626,21 +662,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  passbookLabel: { fontSize: 12, fontWeight: '600' },
-  passbookValue: { fontSize: 14, fontWeight: '700' },
+  passbookLabel: { fontSize: 12, fontWeight: '700' },
+  passbookValue: { fontSize: 15, fontWeight: '800' },
   passbookActions: { flexDirection: 'row', gap: 12, marginTop: 12, alignItems: 'center' },
   passbookActionsColumn: {
-    marginTop: 16,
-    gap: 12,
+    marginTop: 14,
+    gap: 10,
   },
   viewPassbookBtnLarge: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 16,
-    elevation: 4,
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    borderRadius: 15,
   },
   viewPassbookBtnLargeLeft: {
     flexDirection: 'row',
@@ -650,20 +685,20 @@ const styles = StyleSheet.create({
   },
   viewPassbookBtnLargeSpacer: { flex: 1 },
   viewPassbookBtnLargeText: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '900',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
-  viewPassbookBtnLargeArrow: { opacity: 0.3 },
+  viewPassbookBtnLargeArrow: { opacity: 0.45 },
   leaveFleetLink: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 8,
+    paddingVertical: 7,
   },
-  leaveFleetLinkText: { fontSize: 14, fontWeight: '700' },
+  leaveFleetLinkText: { fontSize: 15, fontWeight: '700' },
   viewPassbookBtn: {
     flexDirection: 'row',
     alignItems: 'center',

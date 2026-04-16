@@ -84,6 +84,7 @@ export default function DriverPassbookDetailScreen() {
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
   const [ledgerEntries, setLedgerEntries] = useState<driversService.DriverLedgerRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activityTab, setActivityTab] = useState<'all' | 'trips' | 'settled'>('all');
 
   const load = useCallback(() => {
     if (!profile?.uid || !orgId) {
@@ -147,6 +148,80 @@ export default function DriverPassbookDetailScreen() {
   const totalReceived = Math.round(
     ledgerEntries.reduce((sum, e) => sum + (Number(e.amount) ?? 0), 0),
   );
+
+  const totalEarned = useMemo(() => {
+    return Math.round(completedTrips.reduce((sum, trip) => sum + tripEarnings(trip), 0));
+  }, [completedTrips]);
+
+  const pendingToCollect = useMemo(() => Math.max(0, totalEarned - totalReceived), [totalEarned, totalReceived]);
+
+  const joinedLabel = useMemo(() => {
+    const raw = driver?.created_at ?? null;
+    if (!raw) return null;
+    return new Date(raw).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  }, [driver?.created_at]);
+
+  const activeLabel = useMemo(() => {
+    const raw = driver?.created_at ?? null;
+    if (!raw) return null;
+    const start = new Date(raw).getTime();
+    const now = Date.now();
+    const days = Math.max(0, Math.round((now - start) / (1000 * 60 * 60 * 24)));
+    const years = Math.floor(days / 365);
+    const months = Math.floor((days % 365) / 30);
+    if (years <= 0 && months <= 0) return 'ACTIVE';
+    if (years <= 0) return `${months}M ACTIVE`;
+    return `${years}Y ${months}M ACTIVE`;
+  }, [driver?.created_at]);
+
+  const filteredCompletedTrips = useMemo(() => {
+    if (activityTab === 'all') return completedTrips;
+    if (activityTab === 'settled') return completedTrips.filter((t) => (receivedByTripId[t.id] ?? 0) > 0);
+    // trips = non-settled trips
+    return completedTrips.filter((t) => (receivedByTripId[t.id] ?? 0) === 0);
+  }, [activityTab, completedTrips, receivedByTripId]);
+
+  const activitySections = useMemo(() => {
+    const list = filteredCompletedTrips
+      .slice()
+      .sort((a, b) => {
+        const da = new Date(a.completed_at ?? a.updated_at ?? a.created_at).getTime();
+        const db = new Date(b.completed_at ?? b.updated_at ?? b.created_at).getTime();
+        return db - da;
+      })
+      .slice(0, 50);
+    const bySection: { sectionLabel: string; dateKey: string; trips: typeof list }[] = [];
+    let currentKey = '';
+    let currentGroup: typeof list = [];
+    for (let i = 0; i < list.length; i++) {
+      const t = list[i];
+      const raw = t.completed_at ?? t.updated_at ?? t.created_at ?? '';
+      const dateKey = raw ? new Date(raw).toISOString().slice(0, 10) : '';
+      if (dateKey !== currentKey) {
+        if (currentGroup.length > 0) {
+          const first = currentGroup[0];
+          bySection.push({
+            sectionLabel: formatTransactionDateSection(first.completed_at ?? first.updated_at ?? first.created_at ?? ''),
+            dateKey: currentKey,
+            trips: currentGroup,
+          });
+        }
+        currentKey = dateKey;
+        currentGroup = [t];
+      } else {
+        currentGroup.push(t);
+      }
+    }
+    if (currentGroup.length > 0) {
+      const first = currentGroup[0];
+      bySection.push({
+        sectionLabel: formatTransactionDateSection(first.completed_at ?? first.updated_at ?? first.created_at ?? ''),
+        dateKey: currentKey,
+        trips: currentGroup,
+      });
+    }
+    return bySection;
+  }, [filteredCompletedTrips]);
 
   const transactionSections = useMemo(() => {
     const list = completedTrips
@@ -229,27 +304,180 @@ export default function DriverPassbookDetailScreen() {
       contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
       showsVerticalScrollIndicator={false}
     >
-      <View style={[styles.header, { paddingTop: insets.top + Layout.driverHeaderTopOffset, paddingBottom: Layout.driverHeaderBottomPadding, backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <TouchableOpacity onPress={handleBack} style={styles.backBtn} hitSlop={12}>
-          <FontAwesome name="arrow-left" size={20} color={colors.text} />
+      <View style={[styles.headerLite, { paddingTop: insets.top + 14 }]}>
+        <TouchableOpacity onPress={handleBack} style={[styles.backPill, { backgroundColor: colors.surface }]} activeOpacity={0.85}>
+          <FontAwesome name="arrow-left" size={16} color={colors.text} />
+          <Text style={[styles.backPillText, { color: colors.textMuted }]}>Back to fleets</Text>
         </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>{orgName}</Text>
-          <Text style={[styles.headerSubtitle, { color: colors.textMuted }]}>Passbook · Trip & revenue</Text>
-          {driver.left_at && (
-            <Text style={[styles.headerLeftAt, { color: colors.textMuted }]}>
-              Left on {new Date(driver.left_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-            </Text>
-          )}
+      </View>
+
+      <View style={[styles.fleetHero, { backgroundColor: '#0b1220' }]}>
+        <View style={styles.fleetHeroTop}>
+          <View style={styles.fleetHeroTitleWrap}>
+            <Text style={styles.fleetHeroTitle} numberOfLines={1}>{orgName}</Text>
+            <View style={styles.fleetHeroMetaRow}>
+              <FontAwesome name="calendar-o" size={12} color={'rgba(255,255,255,0.55)'} />
+              <Text style={styles.fleetHeroMetaText} numberOfLines={1}>
+                {joinedLabel ? `Joined ${joinedLabel}` : 'Joined'}
+              </Text>
+              <Text style={styles.fleetHeroMetaDot}>•</Text>
+              <View style={styles.fleetHeroActivePill}>
+                <View style={styles.fleetHeroActiveDot} />
+                <Text style={styles.fleetHeroActiveText}>{activeLabel ?? 'ACTIVE'}</Text>
+              </View>
+            </View>
+          </View>
+          <View style={[styles.fleetHeroIcon, { backgroundColor: colors.emerald }]}>
+            <FontAwesome name="building-o" size={16} color={Theme.textOnPrimary} />
+          </View>
+        </View>
+
+        <View style={styles.fleetHeroPendingCard}>
+          <Text style={styles.fleetHeroPendingLabel}>Pending to collect</Text>
+          <View style={styles.fleetHeroPendingRow}>
+            <Text style={styles.fleetHeroPendingAmount}>₹{pendingToCollect.toLocaleString('en-IN')}</Text>
+            <View style={styles.fleetHeroBoltBadge}>
+              <FontAwesome name="bolt" size={14} color={'rgb(251,146,60)'} />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.fleetHeroStatsRow}>
+          <View style={styles.fleetHeroStat}>
+            <Text style={styles.fleetHeroStatLabel}>Life earnings</Text>
+            <Text style={styles.fleetHeroStatValue}>₹{totalEarned.toLocaleString('en-IN')}</Text>
+          </View>
+          <View style={styles.fleetHeroStatDivider} />
+          <View style={styles.fleetHeroStat}>
+            <Text style={styles.fleetHeroStatLabel}>Settled funds</Text>
+            <Text style={[styles.fleetHeroStatValue, { color: colors.emerald }]}>₹{totalReceived.toLocaleString('en-IN')}</Text>
+          </View>
         </View>
       </View>
 
-      <View style={[styles.summaryCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Total received from this fleet</Text>
-        <Text style={[styles.summaryAmount, { color: colors.emerald }]}>₹{totalReceived.toLocaleString('en-IN')}</Text>
-        <View style={styles.summaryMeta}>
-          <Text style={[styles.summaryMetaText, { color: colors.textMuted }]}>{completedTrips.length} trips completed</Text>
+      <View style={[styles.activityTabsWrap, { backgroundColor: isDark ? colors.surfaceElevated : 'rgba(226,232,240,0.55)', borderColor: isDark ? colors.borderSubtle : 'rgba(255,255,255,0.7)' }]}>
+        {[
+          { id: 'all' as const, label: 'All' },
+          { id: 'trips' as const, label: 'Trips' },
+          { id: 'settled' as const, label: 'Settled' },
+        ].map((t) => {
+          const active = activityTab === t.id;
+          return (
+            <TouchableOpacity
+              key={t.id}
+              onPress={() => setActivityTab(t.id)}
+              activeOpacity={0.85}
+              style={[
+                styles.activityTab,
+                active && [
+                  styles.activityTabActive,
+                  { backgroundColor: '#0f172a', shadowColor: isDark ? '#000' : 'rgba(15,23,42,0.22)' },
+                ],
+              ]}
+            >
+              <Text style={[styles.activityTabText, { color: active ? Theme.textOnPrimary : colors.textMuted }]}>
+                {t.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <View style={[styles.section, styles.gpayListSection]}>
+        <View style={styles.activitiesHeaderRow}>
+          <FontAwesome name="sliders" size={14} color={colors.textMuted} />
+          <Text style={[styles.activitiesHeaderText, { color: colors.textMuted }]}>
+            Activities ({activityTab})
+          </Text>
         </View>
+
+        {activitySections.length === 0 ? (
+          <View style={[styles.ledgerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={[styles.ledgerEmpty, { borderBottomWidth: 0 }]}>
+              <FontAwesome name="search" size={32} color={colors.textMuted} />
+              <Text style={[styles.ledgerEmptyText, { color: colors.textMuted }]}>No activities found</Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.upiListWrap}>
+            {activitySections.map(({ sectionLabel, dateKey, trips }) => (
+              <View key={dateKey || sectionLabel} style={styles.upiSection}>
+                <Text style={[styles.upiSectionHeader, { color: colors.textMuted }]}>{sectionLabel}</Text>
+                <View style={[styles.upiListBlock, { backgroundColor: 'transparent' }]}>
+                  {trips.map((trip, tripIdx) => {
+                    const receivedAmt = receivedByTripId[trip.id] ?? 0;
+                    const pending = receivedAmt === 0;
+                    const tripRef = tripsService.getTripDisplayNumber(trip);
+                    const from = trip.pickup_area?.trim() || 'Unknown origin';
+                    const to = trip.drop_location?.trim() || 'Unknown destination';
+                    const isLastTrip = tripIdx === trips.length - 1;
+                    const listDivider = isDark ? colors.borderSubtle : Theme.borderMedium;
+                    return (
+                      <View
+                        key={trip.id}
+                        style={[
+                          styles.passbookTripCard,
+                          { backgroundColor: colors.surface, borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.9)' },
+                          !isLastTrip && { marginBottom: 14 },
+                        ]}
+                      >
+                        <View style={styles.passbookTripTop}>
+                          <View style={[styles.passbookTripIcon, { backgroundColor: '#0f172a' }]}>
+                            <FontAwesome name="line-chart" size={18} color={Theme.textOnPrimary} />
+                          </View>
+                          <View style={styles.passbookTripHead}>
+                            <Text style={[styles.passbookTripId, { color: colors.text }]}>{tripRef}</Text>
+                            <Text style={[styles.passbookTripMeta, { color: colors.textMuted }]}>
+                              {new Date(trip.completed_at ?? trip.updated_at ?? trip.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}{' '}
+                              • {sectionLabel.toUpperCase()}
+                            </Text>
+                          </View>
+                          <View style={styles.passbookTripRight}>
+                            <Text style={[styles.passbookTripAmount, { color: colors.text }]}>
+                              ₹{Math.round(tripEarnings(trip)).toLocaleString('en-IN')}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.passbookTripStatusPill,
+                                pending ? styles.passbookTripStatusInfo : styles.passbookTripStatusSuccess,
+                              ]}
+                            >
+                              {pending ? 'PENDING FROM FLEET' : 'PAID TO BANK'}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View
+                          style={[
+                            styles.passbookRouteCard,
+                            {
+                              backgroundColor: isDark ? colors.surfaceElevated : 'rgba(248,250,252,0.85)',
+                              borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.65)',
+                            },
+                          ]}
+                        >
+                          <View style={styles.passbookRouteSide}>
+                            <Text style={[styles.passbookRouteLabel, { color: colors.textMuted }]}>Origin</Text>
+                            <Text style={[styles.passbookRouteValue, { color: colors.text }]} numberOfLines={1}>{from}</Text>
+                          </View>
+                          <View style={styles.passbookRouteMiddle}>
+                            <View style={[styles.passbookRouteDot, { backgroundColor: colors.emerald }]} />
+                            <View style={[styles.passbookRouteLine, { backgroundColor: colors.border }]} />
+                            <View style={[styles.passbookRouteDot, { backgroundColor: colors.textMuted }]} />
+                          </View>
+                          <View style={[styles.passbookRouteSide, styles.passbookRouteSideRight]}>
+                            <Text style={[styles.passbookRouteLabel, { color: colors.textMuted }]}>Destination</Text>
+                            <Text style={[styles.passbookRouteValue, { color: colors.text }]} numberOfLines={1}>{to}</Text>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
 
       {nonTripLedgerEntries.length > 0 && (
@@ -465,6 +693,327 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   loadingText: { fontSize: 14 },
+  headerLite: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 14,
+  },
+  backPill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(226,232,240,0.7)',
+    shadowColor: 'rgba(15,23,42,0.08)',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 6,
+  },
+  backPillText: {
+    fontSize: 8,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+  },
+  fleetHero: {
+    marginHorizontal: Layout.screenPaddingHorizontal,
+    borderRadius: 34,
+    padding: 22,
+    overflow: 'hidden',
+    shadowColor: 'rgba(15,23,42,0.30)',
+    shadowOffset: { width: 0, height: 22 },
+    shadowOpacity: 0.22,
+    shadowRadius: 36,
+    elevation: 14,
+  },
+  fleetHeroTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 16,
+  },
+  fleetHeroTitleWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  fleetHeroTitle: {
+    fontSize: 22,
+    fontWeight: '500',
+    letterSpacing: -0.6,
+    color: '#ffffff',
+    marginBottom: 8,
+  },
+  fleetHeroMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  fleetHeroMetaText: {
+    fontSize: 8,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    color: 'rgba(255,255,255,0.55)',
+  },
+  fleetHeroMetaDot: {
+    fontSize: 10,
+    fontWeight: '400',
+    color: 'rgba(16,185,129,0.85)',
+  },
+  fleetHeroActivePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(16,185,129,0.25)',
+    backgroundColor: 'rgba(16,185,129,0.10)',
+  },
+  fleetHeroActiveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(16,185,129,0.9)',
+  },
+  fleetHeroActiveText: {
+    fontSize: 8,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    color: 'rgba(16,185,129,0.95)',
+  },
+  fleetHeroIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.22,
+    shadowRadius: 30,
+    elevation: 10,
+  },
+  fleetHeroPendingCard: {
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    padding: 16,
+    marginBottom: 16,
+  },
+  fleetHeroPendingLabel: {
+    fontSize: 8,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 2.2,
+    color: 'rgba(251,146,60,0.85)',
+    marginBottom: 8,
+  },
+  fleetHeroPendingRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 12,
+  },
+  fleetHeroPendingAmount: {
+    fontSize: 36,
+    fontWeight: '500',
+    letterSpacing: -1.1,
+    color: 'rgb(251,146,60)',
+  },
+  fleetHeroBoltBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: 'rgba(251,146,60,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(251,146,60,0.20)',
+  },
+  fleetHeroStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  fleetHeroStat: {
+    flex: 1,
+    minWidth: 0,
+  },
+  fleetHeroStatDivider: {
+    width: 1,
+    height: 42,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  fleetHeroStatLabel: {
+    fontSize: 8,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    color: 'rgba(255,255,255,0.35)',
+    marginBottom: 6,
+  },
+  fleetHeroStatValue: {
+    fontSize: 18,
+    fontWeight: '500',
+    letterSpacing: -0.4,
+    color: '#ffffff',
+  },
+  activityTabsWrap: {
+    marginTop: 16,
+    marginHorizontal: Layout.screenPaddingHorizontal,
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderRadius: 999,
+    padding: 6,
+    gap: 6,
+  },
+  activityTab: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
+    borderRadius: 999,
+  },
+  activityTabActive: {
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.22,
+    shadowRadius: 26,
+    elevation: 10,
+  },
+  activityTabText: {
+    fontSize: 9,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+  },
+  activitiesHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 2,
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  activitiesHeaderText: {
+    fontSize: 9,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 2.2,
+  },
+  passbookTripCard: {
+    borderWidth: 1,
+    borderRadius: 30,
+    padding: 20,
+  },
+  passbookTripTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 14,
+    marginBottom: 16,
+  },
+  passbookTripIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  passbookTripHead: {
+    flex: 1,
+    minWidth: 0,
+  },
+  passbookTripId: {
+    fontSize: 14,
+    fontWeight: '500',
+    letterSpacing: -0.2,
+    marginBottom: 6,
+  },
+  passbookTripMeta: {
+    fontSize: 9,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 1.4,
+  },
+  passbookTripRight: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  passbookTripAmount: {
+    fontSize: 18,
+    fontWeight: '500',
+    letterSpacing: -0.7,
+  },
+  passbookTripStatusPill: {
+    fontSize: 8,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  passbookTripStatusInfo: {
+    backgroundColor: '#eff6ff',
+    color: '#2563eb',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  passbookTripStatusSuccess: {
+    backgroundColor: '#ecfdf5',
+    color: '#059669',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
+  passbookRouteCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  passbookRouteSide: {
+    flex: 1,
+    minWidth: 0,
+  },
+  passbookRouteSideRight: {
+    alignItems: 'flex-end',
+  },
+  passbookRouteLabel: {
+    fontSize: 8,
+    fontWeight: '400',
+    textTransform: 'uppercase',
+    letterSpacing: 1.3,
+    marginBottom: 4,
+  },
+  passbookRouteValue: {
+    fontSize: 12,
+    fontWeight: '400',
+  },
+  passbookRouteMiddle: {
+    alignItems: 'center',
+    width: 44,
+  },
+  passbookRouteDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  passbookRouteLine: {
+    width: 1,
+    height: 22,
+    marginVertical: 2,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -479,18 +1028,89 @@ const styles = StyleSheet.create({
   summaryCard: {
     marginHorizontal: 24,
     marginTop: 24,
-    padding: 20,
-    borderRadius: 16,
+    padding: 22,
+    borderRadius: 18,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 1,
+    shadowRadius: 26,
+    elevation: 8,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 14,
+  },
+  summaryIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  summaryHeaderText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  summaryTitle: {
+    fontSize: 18,
+    fontWeight: '500',
+    marginBottom: 3,
+  },
+  summarySubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  summaryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  summaryBadgeText: {
+    fontSize: 8,
+    fontWeight: '400',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  summaryStats: {
+    padding: 14,
+    borderRadius: 14,
     borderWidth: 1,
   },
-  summaryLabel: { fontSize: 12, fontWeight: '600', marginBottom: 4 },
-  summaryAmount: { fontSize: 24, fontWeight: '800' },
-  summaryMeta: { marginTop: 8 },
-  summaryMetaText: { fontSize: 12 },
+  summaryStatRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  summaryStatLabel: {
+    fontSize: 8,
+    fontWeight: '400',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  summaryStatValue: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
   section: { marginTop: 28 },
   gpayListSection: { marginHorizontal: Layout.screenPaddingHorizontal },
-  sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 6, letterSpacing: -0.2 },
-  sectionSubtitle: { fontSize: 13, marginBottom: 12, lineHeight: 18 },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '400',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  sectionSubtitle: { fontSize: 11, fontWeight: '400', marginBottom: 12, lineHeight: 16 },
   ledgerCard: { borderWidth: 1, borderRadius: 16, overflow: 'hidden' },
   ledgerEmpty: { padding: 32, alignItems: 'center', gap: 12 },
   ledgerEmptyText: { fontSize: 14 },
@@ -504,14 +1124,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
   },
-  emptyTitle: { fontSize: 16, fontWeight: '800', marginTop: 16 },
+  emptyTitle: { fontSize: 16, fontWeight: '500', marginTop: 16 },
   emptySubtitle: { fontSize: 13, textAlign: 'center', marginTop: 8, lineHeight: 20 },
   upiListWrap: { marginTop: 4, gap: 22 },
   upiSection: { gap: 6 },
   upiSectionHeader: {
-    fontSize: 12,
-    fontWeight: '500',
-    letterSpacing: 0.15,
+    fontSize: 8,
+    fontWeight: '400',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
   },
   upiListBlock: {
     borderRadius: 0,
@@ -547,7 +1168,7 @@ const styles = StyleSheet.create({
   },
   ppPrimary: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '500',
     letterSpacing: -0.2,
     flexShrink: 1,
   },
@@ -561,9 +1182,9 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   txStatusPillText: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontSize: 8,
+    fontWeight: '400',
+    letterSpacing: 2,
   },
   ppSecondary: {
     fontSize: 13,
@@ -574,7 +1195,7 @@ const styles = StyleSheet.create({
   },
   ppAmount: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '500',
     letterSpacing: -0.2,
     flexShrink: 0,
     maxWidth: '40%',
