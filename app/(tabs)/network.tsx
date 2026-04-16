@@ -58,6 +58,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getInitials } from "@/lib/stringUtils";
 
 type InvitationSegment = "SENT" | "RECEIVED";
 type ManageView = "CONNECTIONS" | "INVITATIONS";
@@ -299,6 +300,8 @@ function NetworkAvatar({
   ]);
 
   const iconSize = frameSize ? Math.round(frameSize * 0.4) : 18;
+  const initials = getInitials(node.name);
+  const fallbackColor = onPlatform ? Theme.darkGreen : Theme.iconSecondary;
 
   if (uri) {
     const inner = frameSize ? frameSize - 4 : undefined;
@@ -357,36 +360,45 @@ function NetworkAvatar({
           backgroundColor: Theme.surface,
         }}
       >
-        {node.type === "DRIVER" ? (
-          <User
-            size={iconSize}
-            strokeWidth={1.5}
-            color={onPlatform ? Theme.darkGreen : Theme.iconSecondary}
-          />
+        {initials ? (
+          <Text
+            style={[
+              styles.avatarInitials,
+              {
+                fontSize: Math.max(12, Math.round(frameSize * 0.32)),
+                color: fallbackColor,
+              },
+            ]}
+            numberOfLines={1}
+          >
+            {initials}
+          </Text>
+        ) : node.type === "DRIVER" ? (
+          <User size={iconSize} strokeWidth={1.5} color={fallbackColor} />
         ) : node.type === "SUPPLIER" ? (
-          <Truck
-            size={iconSize}
-            strokeWidth={1.5}
-            color={onPlatform ? Theme.darkGreen : Theme.iconSecondary}
-          />
+          <Truck size={iconSize} strokeWidth={1.5} color={fallbackColor} />
         ) : (
-          <Building2
-            size={iconSize}
-            strokeWidth={1.5}
-            color={onPlatform ? Theme.darkGreen : Theme.iconSecondary}
-          />
+          <Building2 size={iconSize} strokeWidth={1.5} color={fallbackColor} />
         )}
       </View>
     ) : null;
 
   if (iconWrap) return iconWrap;
 
+  if (initials) {
+    return (
+      <Text style={[styles.avatarInitialsSmall, { color: fallbackColor }]}>
+        {initials}
+      </Text>
+    );
+  }
+
   if (node.type === "DRIVER") {
     return (
       <User
         size={18}
         strokeWidth={1.5}
-        color={onPlatform ? Theme.darkGreen : Theme.iconSecondary}
+        color={fallbackColor}
       />
     );
   }
@@ -395,7 +407,7 @@ function NetworkAvatar({
       <Truck
         size={18}
         strokeWidth={1.5}
-        color={onPlatform ? Theme.darkGreen : Theme.iconSecondary}
+        color={fallbackColor}
       />
     );
   }
@@ -403,7 +415,7 @@ function NetworkAvatar({
     <Building2
       size={18}
       strokeWidth={1.5}
-      color={onPlatform ? Theme.darkGreen : Theme.iconSecondary}
+      color={fallbackColor}
     />
   );
 }
@@ -1573,7 +1585,11 @@ export default function NetworkScreen() {
                 const kindLabel =
                   item.kind === "DRIVER_INVITE"
                     ? "DRIVER INVITE"
-                    : item.kind.replace(/_/g, " + ");
+                    : item.kind === "CLIENT"
+                      ? "WANTS TO ADD AS CLIENT"
+                      : item.kind === "SUPPLIER"
+                        ? "WANTS TO ADD AS SUPPLIER"
+                        : "WANTS TO ADD AS CLIENT + SUPPLIER";
                 return (
                   <View
                     key={item.id}
@@ -1610,25 +1626,6 @@ export default function NetworkScreen() {
                               </View>
                             </View>
                             <View style={styles.networkCardTopRight}>
-                              {isSentPending ? (
-                                <TouchableOpacity
-                                  style={styles.cancelInlineBtn}
-                                  onPress={() => handleCancelRequest(item)}
-                                  disabled={actingRequestId === item.id}
-                                  activeOpacity={0.8}
-                                >
-                                  {actingRequestId === item.id ? (
-                                    <ActivityIndicator
-                                      size="small"
-                                      color={Theme.screenBackground}
-                                    />
-                                  ) : (
-                                    <Text style={styles.cancelInlineBtnText}>
-                                      Cancel
-                                    </Text>
-                                  )}
-                                </TouchableOpacity>
-                              ) : null}
                               <View
                                 style={[
                                   styles.networkStagePill,
@@ -1683,48 +1680,86 @@ export default function NetworkScreen() {
                                 </View>
                               </View>
                               <View style={styles.networkCardInnerCol}>
-                                <Text
-                                  style={styles.networkCardTitleInline}
-                                  numberOfLines={1}
-                                >
-                                  {displayName}
-                                </Text>
+                                <View style={styles.networkCardTitleRow}>
+                                  <Text
+                                    style={styles.networkCardTitleInline}
+                                    numberOfLines={1}
+                                  >
+                                    {displayName}
+                                  </Text>
+
+                                  {isReceivedPending && item.row ? (
+                                    <View style={styles.networkCardInlineActions}>
+                                      <TouchableOpacity
+                                        style={styles.acceptBtn}
+                                        onPress={() => handleOpenAcceptTerms(item)}
+                                        disabled={actingRequestId === item.id}
+                                        activeOpacity={0.8}
+                                        hitSlop={{
+                                          top: 6,
+                                          bottom: 6,
+                                          left: 6,
+                                          right: 6,
+                                        }}
+                                      >
+                                        {actingRequestId === item.id ? (
+                                          <ActivityIndicator
+                                            size="small"
+                                            color="#fff"
+                                          />
+                                        ) : (
+                                          <FontAwesome
+                                            name="check-circle"
+                                            size={16}
+                                            color="#fff"
+                                          />
+                                        )}
+                                      </TouchableOpacity>
+                                      <TouchableOpacity
+                                        style={styles.rejectBtn}
+                                        onPress={() => handleReject(item.id)}
+                                        disabled={actingRequestId === item.id}
+                                        activeOpacity={0.8}
+                                        hitSlop={{
+                                          top: 6,
+                                          bottom: 6,
+                                          left: 6,
+                                          right: 6,
+                                        }}
+                                      >
+                                        <FontAwesome
+                                          name="times-circle"
+                                          size={16}
+                                          color={ROSE_500}
+                                        />
+                                      </TouchableOpacity>
+                                    </View>
+                                  ) : null}
+
+                                  {!isReceivedPending && isSentPending ? (
+                                    <TouchableOpacity
+                                      style={styles.cancelInlineBtn}
+                                      onPress={() => handleCancelRequest(item)}
+                                      disabled={actingRequestId === item.id}
+                                      activeOpacity={0.8}
+                                    >
+                                      {actingRequestId === item.id ? (
+                                        <ActivityIndicator
+                                          size="small"
+                                          color={Theme.screenBackground}
+                                        />
+                                      ) : (
+                                        <Text style={styles.cancelInlineBtnText}>
+                                          Withdraw
+                                        </Text>
+                                      )}
+                                    </TouchableOpacity>
+                                  ) : null}
+                                </View>
                               </View>
                             </View>
                           </View>
                         </View>
-                        {isReceivedPending && item.row ? (
-                          <View style={styles.networkCardActionsCol}>
-                            <TouchableOpacity
-                              style={styles.acceptBtn}
-                              onPress={() => handleOpenAcceptTerms(item)}
-                              disabled={actingRequestId === item.id}
-                              activeOpacity={0.8}
-                            >
-                              {actingRequestId === item.id ? (
-                                <ActivityIndicator size="small" color="#fff" />
-                              ) : (
-                                <FontAwesome
-                                  name="user-plus"
-                                  size={14}
-                                  color="#fff"
-                                />
-                              )}
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={styles.rejectBtn}
-                              onPress={() => handleReject(item.id)}
-                              disabled={actingRequestId === item.id}
-                              activeOpacity={0.8}
-                            >
-                              <FontAwesome
-                                name="close"
-                                size={14}
-                                color={ROSE_500}
-                              />
-                            </TouchableOpacity>
-                          </View>
-                        ) : null}
                       </View>
                     </View>
                     </View>
@@ -1954,9 +1989,9 @@ export default function NetworkScreen() {
       >
         <View style={styles.confirmModalBackdrop}>
           <View style={styles.confirmModalCard}>
-            <Text style={styles.confirmModalTitle}>Cancel Invitation</Text>
+            <Text style={styles.confirmModalTitle}>Withdraw Invitation</Text>
             <Text style={styles.confirmModalBody}>
-              Are you sure you want to cancel this invitation?
+              Are you sure you want to withdraw this invitation?
             </Text>
             <View style={styles.confirmModalActions}>
               <TouchableOpacity
@@ -1971,7 +2006,7 @@ export default function NetworkScreen() {
                 onPress={() => void confirmCancelRequest()}
                 activeOpacity={0.8}
               >
-                <Text style={styles.confirmModalCancelText}>Yes, Cancel</Text>
+                <Text style={styles.confirmModalCancelText}>Yes, Withdraw</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2640,7 +2675,7 @@ const styles = StyleSheet.create({
   networkKindPillText: {
     fontSize: 6,
     fontWeight: "800",
-    color: Theme.textMuted,
+    color: TESLA_BLACK,
     letterSpacing: 0.3,
   },
   networkPlatformPillOn: { borderColor: Theme.darkGreen },
@@ -2689,6 +2724,8 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: TESLA_BLACK,
     textTransform: "uppercase",
+    flexShrink: 1,
+    minWidth: 0,
   },
   cardTimeAgoInline: {
     fontSize: 10,
@@ -2761,6 +2798,12 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingLeft: 4,
   },
+  networkCardInlineActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
+  },
   nodeAvatar: {
     width: "100%",
     height: "100%",
@@ -2814,6 +2857,17 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.textSecondary,
   },
   nodeCardText: { flex: 1, minWidth: 0 },
+  avatarInitials: {
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  avatarInitialsSmall: {
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
   nodeName: {
     fontSize: 12,
     fontWeight: "600",
@@ -2830,17 +2884,17 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   acceptBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: EMERALD,
     alignItems: "center",
     justifyContent: "center",
   },
   rejectBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "rgba(244,63,94,0.15)",
     borderWidth: 1,
     borderColor: "rgba(244,63,94,0.3)",
