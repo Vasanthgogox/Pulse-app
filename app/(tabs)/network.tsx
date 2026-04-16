@@ -47,6 +47,7 @@ import {
   Image,
   Modal,
   Platform,
+  Pressable,
   RefreshControl,
   ScrollView,
   Share,
@@ -435,8 +436,16 @@ function shortRelativeTime(iso: string): string {
   return `${days}d`;
 }
 
+function requestPreviewRole(kind: RequestKind): string {
+  if (kind === "DRIVER_INVITE") return "Driver invite";
+  if (kind === "CLIENT") return "Add as client";
+  if (kind === "SUPPLIER") return "Add as supplier";
+  return "Add as client + supplier";
+}
+
 export default function NetworkScreen() {
   const { width } = useWindowDimensions();
+  const isWeb = Platform.OS === "web";
   const isLargeScreen = Platform.OS === "web" && width >= 1024;
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -519,6 +528,11 @@ export default function NetworkScreen() {
   const [acceptTermsItem, setAcceptTermsItem] = useState<RequestItem | null>(
     null,
   );
+  const [previewRequestItem, setPreviewRequestItem] = useState<RequestItem | null>(
+    null,
+  );
+  const [previewOpenedAtMs, setPreviewOpenedAtMs] = useState<number>(0);
+  const [hoveredRequestId, setHoveredRequestId] = useState<string | null>(null);
   const [dismissedSentRequestIds, setDismissedSentRequestIds] = useState<
     Record<string, true>
   >({});
@@ -1584,6 +1598,7 @@ export default function NetworkScreen() {
                   item.type === "RECEIVED" && item.status === "pending";
                 const isSentPending =
                   item.type === "SENT" && item.status === "pending";
+                const showInlineSenderPreview = false;
                 const kindLabel =
                   item.kind === "DRIVER_INVITE"
                     ? "DRIVER INVITE"
@@ -1607,7 +1622,18 @@ export default function NetworkScreen() {
                       <View style={styles.networkCard}>
                       <View style={styles.networkCardOrb} pointerEvents="none" />
                       <View style={styles.networkCardMainRow}>
-                        <View style={styles.networkCardBody}>
+                        <Pressable
+                          style={styles.networkCardBody}
+                          disabled={item.type !== "RECEIVED"}
+                          onPress={() => {
+                            if (item.type === "RECEIVED") {
+                              setPreviewRequestItem((prev) =>
+                                prev?.id === item.id ? null : item,
+                              );
+                              setPreviewOpenedAtMs(Date.now());
+                            }
+                          }}
+                        >
                           <View style={styles.networkCardTop}>
                             <View style={styles.networkCardTopLeft}>
                               <View
@@ -1766,8 +1792,46 @@ export default function NetworkScreen() {
                                 </View>
                               </View>
                             </View>
+
+                            {showInlineSenderPreview ? (
+                              <View style={styles.requestPreviewCard}>
+                                <View style={styles.requestPreviewHeader}>
+                                  <View style={styles.requestPreviewAvatar}>
+                                    <Text style={styles.requestPreviewAvatarText}>
+                                      {getInitials(item.from_org_name || "S")}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.requestPreviewHeaderBody}>
+                                    <Text style={styles.requestPreviewTitle}>
+                                      {item.from_org_name}
+                                    </Text>
+                                    <Text style={styles.requestPreviewSubtitle}>
+                                      Sender information
+                                    </Text>
+                                  </View>
+                                </View>
+                                <View style={styles.requestPreviewMetaRow}>
+                                  <Text style={styles.requestPreviewMetaLabel}>Request</Text>
+                                  <Text style={styles.requestPreviewMetaValue}>
+                                    {requestPreviewRole(item.kind)}
+                                  </Text>
+                                </View>
+                                <View style={styles.requestPreviewMetaRow}>
+                                  <Text style={styles.requestPreviewMetaLabel}>Status</Text>
+                                  <Text style={styles.requestPreviewMetaValue}>
+                                    {formatRequestStatus(item.status)}
+                                  </Text>
+                                </View>
+                                <View style={styles.requestPreviewMetaRow}>
+                                  <Text style={styles.requestPreviewMetaLabel}>Received</Text>
+                                  <Text style={styles.requestPreviewMetaValue}>
+                                    {shortRelativeTime(item.created_at)}
+                                  </Text>
+                                </View>
+                              </View>
+                            ) : null}
                           </View>
-                        </View>
+                        </Pressable>
                       </View>
                     </View>
                     </View>
@@ -2025,6 +2089,68 @@ export default function NetworkScreen() {
             </View>
           </View>
         </View>
+      </Modal>
+
+      <Modal
+        transparent
+        animationType="fade"
+        visible={previewRequestItem != null}
+        onRequestClose={() => setPreviewRequestItem(null)}
+      >
+        <Pressable
+          style={[
+            styles.confirmModalBackdrop,
+            {
+              paddingTop: Math.max(insets.top, 12),
+              paddingBottom: Math.max(insets.bottom, 12),
+            },
+          ]}
+          onPress={() => {
+            // Guard: avoid instant close when modal mounts mid-gesture.
+            if (Date.now() - previewOpenedAtMs < 250) return;
+            setPreviewRequestItem(null);
+          }}
+        >
+          {previewRequestItem ? (
+            <View style={[styles.confirmModalCard, styles.requestPreviewModalCard]}>
+              <View style={styles.requestPreviewHeader}>
+                <View style={styles.requestPreviewAvatar}>
+                  <Text style={styles.requestPreviewAvatarText}>
+                    {getInitials(previewRequestItem.from_org_name || "S")}
+                  </Text>
+                </View>
+                <View style={styles.requestPreviewHeaderBody}>
+                  <Text style={styles.confirmModalTitle}>
+                    {previewRequestItem.from_org_name}
+                  </Text>
+                  <Text style={styles.termsModalSubtitle}>
+                    Minimal sender information
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.requestPreviewMetaList}>
+                <View style={styles.requestPreviewMetaRow}>
+                  <Text style={styles.requestPreviewMetaLabel}>Request</Text>
+                  <Text style={styles.requestPreviewMetaValue}>
+                    {requestPreviewRole(previewRequestItem.kind)}
+                  </Text>
+                </View>
+                <View style={styles.requestPreviewMetaRow}>
+                  <Text style={styles.requestPreviewMetaLabel}>Status</Text>
+                  <Text style={styles.requestPreviewMetaValue}>
+                    {formatRequestStatus(previewRequestItem.status)}
+                  </Text>
+                </View>
+                <View style={styles.requestPreviewMetaRow}>
+                  <Text style={styles.requestPreviewMetaLabel}>Received</Text>
+                  <Text style={styles.requestPreviewMetaValue}>
+                    {shortRelativeTime(previewRequestItem.created_at)}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          ) : null}
+        </Pressable>
       </Modal>
 
       <Modal
@@ -2756,6 +2882,83 @@ const styles = StyleSheet.create({
   networkCardInnerRow: {
     flexDirection: "row",
     alignItems: "center",
+  },
+  requestPreviewCard: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+    gap: 8,
+  },
+  requestPreviewModalCard: {
+    maxWidth: 360,
+    gap: 14,
+    alignItems: "stretch",
+  },
+  requestPreviewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  requestPreviewHeaderBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  requestPreviewAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Theme.aggregatePillBg,
+    borderWidth: 1.5,
+    borderColor: Theme.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  requestPreviewAvatarText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.primary,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  requestPreviewTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+  },
+  requestPreviewSubtitle: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginTop: 2,
+  },
+  requestPreviewMetaList: {
+    gap: 10,
+  },
+  requestPreviewMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  requestPreviewMetaLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  requestPreviewMetaValue: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    textAlign: "right",
+    textTransform: "uppercase",
   },
   /** Matches TripExpandableCard `cardRouteIconWrap` (36×36, radius 10) */
   networkCardIconWrap: {
