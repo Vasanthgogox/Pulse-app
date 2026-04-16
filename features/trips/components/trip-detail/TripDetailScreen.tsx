@@ -7,7 +7,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getDriverById, getDriverProfileDisplay } from "@/features/drivers/services/drivers.service";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
-import { getSupplierById } from "@/features/suppliers/services/suppliers.service";
+import {
+  getSupplierById,
+  getSupplierDetails,
+} from "@/features/suppliers/services/suppliers.service";
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
 import { getVehicleDocumentViewUrl } from "@/features/vehicles/services/vehicleDocuments.service";
 import type { VehicleDocuments } from "@/features/vehicles/utils/vehicleDocuments.util";
@@ -1067,25 +1070,42 @@ export default function TripDetailScreen({
       setVehicleDocs(null);
     }
     const fallbackSupplierName = (trip.supplier_name ?? "").trim() || null;
+    const pickSupplierDisplayName = (
+      s: {
+        company_name?: string | null;
+        name?: string | null;
+        contact_person?: string | null;
+      } | null,
+    ) => (s?.company_name || s?.name || s?.contact_person || "").trim() || null;
+
     if (trip.supplier_id) {
       setPartnerName(fallbackSupplierName);
-      
-      // We might be looking at a shared trip owned by another org.
-      // To get the supplier name correctly, use the viewer's org ID if we have it,
-      // because the supplier record lives in the viewer's org, not the trip owner's org.
-      const orgIdToUse = currentOrganization?.id ?? orgId;
-      
-      getSupplierById(orgIdToUse, trip.supplier_id).then((r) => {
-        if (!cancelled) {
-          const s = r.supplier;
-          setPartnerName(
-            s?.company_name ||
-              s?.name ||
-              s?.contact_person ||
-              fallbackSupplierName,
-          );
+      const supplierId = trip.supplier_id;
+      const ownerOrgId = trip.organization_id;
+
+      void (async () => {
+        const { supplier: fromRpc } = await getSupplierDetails(supplierId);
+        if (cancelled) return;
+        const n = pickSupplierDisplayName(fromRpc);
+        if (n) {
+          setPartnerName(n);
+          return;
         }
-      });
+        const { supplier: fromOwnerOrg } = await getSupplierById(ownerOrgId, supplierId);
+        if (cancelled) return;
+        const n2 = pickSupplierDisplayName(fromOwnerOrg);
+        if (n2) {
+          setPartnerName(n2);
+          return;
+        }
+        const viewerOrgId = currentOrganization?.id;
+        if (viewerOrgId && viewerOrgId !== ownerOrgId) {
+          const { supplier: fromViewerOrg } = await getSupplierById(viewerOrgId, supplierId);
+          if (cancelled) return;
+          const n3 = pickSupplierDisplayName(fromViewerOrg);
+          if (n3) setPartnerName(n3);
+        }
+      })();
     } else setPartnerName(fallbackSupplierName);
     return () => {
       cancelled = true;
@@ -1603,6 +1623,7 @@ export default function TripDetailScreen({
             tripLedgerEntries={tripLedgerEntries}
             adjustments={adjustments}
             viewerOrgId={currentOrganization?.id ?? null}
+            viewerOrganizationName={currentOrganization?.name ?? null}
             clientName={displayClientName}
             subcontractRate={subcontractRate}
             assignmentAuditRows={assignmentAuditRows}

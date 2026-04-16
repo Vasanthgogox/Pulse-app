@@ -95,6 +95,8 @@ export interface TripDetailFinanceViewProps {
   clientName?: string | null;
   /** If the viewer is the supplier and subcontracted the trip, the subcontract rate. */
   subcontractRate?: number | null;
+  /** Current org display name; used when the supplier viewer cannot resolve the linked supplier row (e.g. indent / RLS). */
+  viewerOrganizationName?: string | null;
 }
 
 export type DocCategory = "vehicle" | "trip" | "driver";
@@ -232,6 +234,7 @@ export function TripDetailFinanceView({
   viewerOrgId = null,
   clientName,
   subcontractRate,
+  viewerOrganizationName = null,
 }: TripDetailFinanceViewProps) {
   const { t } = useLanguage();
   const routeStr = `${trip.pickup_area ?? "—"} → ${trip.drop_location ?? "—"}`.trim() || "—";
@@ -254,8 +257,34 @@ export function TripDetailFinanceView({
   const billingOriginalLabel = isPartnerSettlementView ? "Partner Amount" : "Original Price";
   const billingFinalLabel = isPartnerSettlementView ? "Final Partner Amount" : "Final Price";
   const billingSectionTitle = isPartnerSettlementView ? "Partner Settlement" : "Customer Billing";
-  const supplierDisplayName =
-    (partnerName ?? trip.supplier_name ?? "").trim() || null;
+
+  const supplierNameFromLedger = useMemo(() => {
+    for (const tx of tripLedgerEntries) {
+      if (tx.contact_type !== "supplier") continue;
+      if (Number(tx.amount_out ?? 0) <= 0) continue;
+      const p = (tx.party_name ?? "").trim();
+      if (p && p !== "—") return p;
+    }
+    return null;
+  }, [tripLedgerEntries]);
+
+  const supplierDisplayName = useMemo(() => {
+    const fromTrip =
+      (partnerName ?? trip.supplier_name ?? "").trim() || null;
+    if (fromTrip) return fromTrip;
+    if (supplierNameFromLedger) return supplierNameFromLedger;
+    if (isPartnerSettlementView) {
+      const v = (viewerOrganizationName ?? "").trim();
+      return v || null;
+    }
+    return null;
+  }, [
+    partnerName,
+    trip.supplier_name,
+    supplierNameFromLedger,
+    isPartnerSettlementView,
+    viewerOrganizationName,
+  ]);
 
   const adjSales = useMemo(() => adjustedRevenue(sales, adjustments), [sales, adjustments]);
   const adjCost = useMemo(() => adjustedCost(cost, adjustments), [cost, adjustments]);
