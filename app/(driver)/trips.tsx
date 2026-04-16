@@ -1096,58 +1096,6 @@ export default function DriverTripsScreen() {
                       );
                     })}
                   </View>
-                  <View style={styles.logBadgesGridRef}>
-                    <View
-                      style={[
-                        styles.logBadgeCardRef,
-                        { backgroundColor: colors.surface, borderColor: colors.border },
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.logBadgeIconWrapRef,
-                          { backgroundColor: colors.whiteMuted },
-                        ]}
-                      >
-                        <FontAwesome
-                          name="check-circle"
-                          size={11}
-                          color={colors.text}
-                        />
-                      </View>
-                      <Text style={[styles.logBadgeTitleRef, { color: colors.text }]}>
-                        Proof of Delivery
-                      </Text>
-                      <Text
-                        style={[styles.logBadgeSubtitleRef, { color: colors.textMuted }]}
-                      >
-                        Digital signature & Photo verified
-                      </Text>
-                    </View>
-                    <View
-                      style={[
-                        styles.logBadgeCardRef,
-                        { backgroundColor: colors.surface, borderColor: colors.border },
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.logBadgeIconWrapRef,
-                          { backgroundColor: colors.whiteMuted },
-                        ]}
-                      >
-                        <FontAwesome name="dashboard" size={11} color={colors.text} />
-                      </View>
-                      <Text style={[styles.logBadgeTitleRef, { color: colors.text }]}>
-                        Performance
-                      </Text>
-                      <Text
-                        style={[styles.logBadgeSubtitleRef, { color: colors.textMuted }]}
-                      >
-                        Maintained 94% Cruise speed
-                      </Text>
-                    </View>
-                  </View>
                 </>
               )}
 
@@ -2021,41 +1969,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.2,
     textTransform: "uppercase",
-  },
-  logBadgesGridRef: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 12,
-  },
-  logBadgeCardRef: {
-    flex: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderRadius: 18,
-    borderWidth: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  logBadgeIconWrapRef: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 10,
-  },
-  logBadgeTitleRef: {
-    fontSize: 12,
-    fontWeight: "700",
-    marginBottom: 2,
-  },
-  logBadgeSubtitleRef: {
-    fontSize: 11,
-    fontWeight: "500",
-    lineHeight: 15,
   },
   yieldCardSettlementRef: {
     paddingHorizontal: 18,
