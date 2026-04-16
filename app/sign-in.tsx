@@ -50,6 +50,7 @@ export default function SignIn() {
   const [keepSignedIn, setKeepSignedInState] = useState(true);
   const [loading, setLoading] = useState(false);
   const [waitingForAuthState, setWaitingForAuthState] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
   const emailPrefilled = Boolean(getEmailFromParams(params));
   const scrollRef = useRef<ScrollView>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -119,17 +120,18 @@ export default function SignIn() {
     'English';
 
   const handleSignIn = async () => {
+    setSignInError(null);
     if (!isOnline) {
       Alert.alert(t('noInternet'), t('connectToSignIn'));
       return;
     }
     const trimmedEmail = email.trim();
     if (!trimmedEmail || !password) {
-      Alert.alert(t('error'), t('enterEmailPassword'));
+      setSignInError(t('enterEmailPassword'));
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      Alert.alert(t('invalidEmail'), t('validEmailAddress'));
+      setSignInError(t('validEmailAddress'));
       return;
     }
     setLoading(true);
@@ -137,9 +139,19 @@ export default function SignIn() {
     setLoading(false);
     if (error) {
       const isNetwork = error.message.includes('Cannot reach server');
-      Alert.alert(
-        isNetwork ? t('connectionError') : t('signInFailed'),
-        isNetwork ? t('cannotReachServer') : error.message
+      if (isNetwork) {
+        Alert.alert(t('connectionError'), t('cannotReachServer'));
+        return;
+      }
+      const normalizedMessage = error.message.toLowerCase();
+      const isInvalidCredentials =
+        normalizedMessage.includes('invalid login credentials') ||
+        normalizedMessage.includes('invalid email or password') ||
+        normalizedMessage.includes('invalid credentials');
+      setSignInError(
+        isInvalidCredentials
+          ? 'Incorrect email or password.'
+          : error.message || t('signInFailed')
       );
       return;
     }
@@ -189,11 +201,14 @@ export default function SignIn() {
           </TouchableOpacity>
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, signInError ? styles.inputError : null]}
             placeholder={t('emailPlaceholder')}
             placeholderTextColor={Theme.authTextMuted}
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(value) => {
+              setEmail(value);
+              if (signInError) setSignInError(null);
+            }}
             autoCapitalize="none"
             autoCorrect={false}
             spellCheck={false}
@@ -203,11 +218,14 @@ export default function SignIn() {
           />
           <View style={styles.passwordRow}>
             <TextInput
-              style={styles.inputPassword}
+              style={[styles.inputPassword, signInError ? styles.inputError : null]}
               placeholder={t('passwordPlaceholder')}
               placeholderTextColor={Theme.authTextMuted}
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(value) => {
+                setPassword(value);
+                if (signInError) setSignInError(null);
+              }}
               secureTextEntry={!showPassword}
               autoCorrect={false}
               spellCheck={false}
@@ -227,6 +245,17 @@ export default function SignIn() {
               />
             </TouchableOpacity>
           </View>
+
+          {signInError ? (
+            <View style={styles.errorBanner}>
+              <FontAwesome
+                name="exclamation-circle"
+                size={16}
+                color={Theme.negative}
+              />
+              <Text style={styles.errorBannerText}>{signInError}</Text>
+            </View>
+          ) : null}
 
           <TouchableOpacity
             style={styles.keepSignedInRow}
@@ -386,6 +415,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Theme.textPrimaryDark,
   },
+  inputError: {
+    borderColor: Theme.negative,
+  },
   eyeButton: {
     position: 'absolute',
     right: 16,
@@ -400,6 +432,25 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingRight: 8,
     gap: 10,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: -4,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: Theme.negativeMuted,
+    borderWidth: 1,
+    borderColor: Theme.negative,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+    color: Theme.negative,
+    fontWeight: '500',
   },
   keepSignedInLabel: {
     fontSize: 15,
