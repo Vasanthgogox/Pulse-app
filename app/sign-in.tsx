@@ -50,6 +50,7 @@ export default function SignIn() {
   const [keepSignedIn, setKeepSignedInState] = useState(true);
   const [loading, setLoading] = useState(false);
   const [waitingForAuthState, setWaitingForAuthState] = useState(false);
+  const [errorText, setErrorText] = useState<string>('');
   const emailPrefilled = Boolean(getEmailFromParams(params));
   const scrollRef = useRef<ScrollView>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -119,31 +120,45 @@ export default function SignIn() {
     'English';
 
   const handleSignIn = async () => {
+    setErrorText('');
     if (!isOnline) {
-      Alert.alert(t('noInternet'), t('connectToSignIn'));
+      const msg = t('connectToSignIn');
+      setErrorText(msg);
+      Alert.alert(t('noInternet'), msg);
       return;
     }
     const trimmedEmail = email.trim();
     if (!trimmedEmail || !password) {
-      Alert.alert(t('error'), t('enterEmailPassword'));
+      const msg = t('enterEmailPassword');
+      setErrorText(msg);
+      Alert.alert(t('error'), msg);
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      Alert.alert(t('invalidEmail'), t('validEmailAddress'));
+      const msg = t('validEmailAddress');
+      setErrorText(msg);
+      Alert.alert(t('invalidEmail'), msg);
       return;
     }
-    setLoading(true);
-    const { error } = await signIn(trimmedEmail, password, keepSignedIn);
-    setLoading(false);
-    if (error) {
-      const isNetwork = error.message.includes('Cannot reach server');
-      Alert.alert(
-        isNetwork ? t('connectionError') : t('signInFailed'),
-        isNetwork ? t('cannotReachServer') : error.message
-      );
-      return;
+    try {
+      setLoading(true);
+      const { error } = await signIn(trimmedEmail, password, keepSignedIn);
+      setLoading(false);
+      if (error) {
+        const isNetwork = error.message.includes('Cannot reach server');
+        const title = isNetwork ? t('connectionError') : t('signInFailed');
+        const msg = isNetwork ? t('cannotReachServer') : (error.message || t('unknownError'));
+        setErrorText(msg);
+        Alert.alert(title, msg);
+        return;
+      }
+      setWaitingForAuthState(true);
+    } catch (e) {
+      setLoading(false);
+      const msg = e instanceof Error ? (e.message || t('unknownError')) : t('unknownError');
+      setErrorText(msg);
+      Alert.alert(t('signInFailed'), msg);
     }
-    setWaitingForAuthState(true);
   };
 
   const scrollContentStyle = [
@@ -193,7 +208,10 @@ export default function SignIn() {
             placeholder={t('emailPlaceholder')}
             placeholderTextColor={Theme.authTextMuted}
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(v) => {
+              setEmail(v);
+              if (errorText) setErrorText('');
+            }}
             autoCapitalize="none"
             autoCorrect={false}
             spellCheck={false}
@@ -207,7 +225,10 @@ export default function SignIn() {
               placeholder={t('passwordPlaceholder')}
               placeholderTextColor={Theme.authTextMuted}
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(v) => {
+                setPassword(v);
+                if (errorText) setErrorText('');
+              }}
               secureTextEntry={!showPassword}
               autoCorrect={false}
               spellCheck={false}
@@ -262,6 +283,8 @@ export default function SignIn() {
               <Text style={styles.buttonText}>{t('logIn')}</Text>
             )}
           </TouchableOpacity>
+
+          {!!errorText && <Text style={styles.errorText}>{errorText}</Text>}
 
           <TouchableOpacity activeOpacity={0.8} disabled={loading}>
             <Text style={styles.forgotPasswordText}>{t('forgotPassword')}</Text>
@@ -433,6 +456,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: Theme.textPrimaryDark,
+    textAlign: 'center',
+  },
+  errorText: {
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: '600',
+    color: Theme.authPrimary,
     textAlign: 'center',
   },
   footer: {
