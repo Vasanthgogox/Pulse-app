@@ -1,6 +1,6 @@
 /**
  * Trip Ledger Detail — matches reference: Treasury header + summary card with search,
- * Entity Ledger Protocol (MISSION ID / SALES / PAID / DUE), Contact, Tax & Compliance,
+ * Transaction Ledger (TRIP ID / SALES / PAID / DUE), Contact, Tax & Compliance,
  * Telemetry History, and FAB. Uses TreasuryDetailLayout for alignment with app.
  */
 import { TreasuryDetailLayout } from "./TreasuryDetailLayout";
@@ -149,6 +149,7 @@ export function TripLedgerDetailScreen({
   const [error, setError] = useState<string | null>(null);
   const [vehicleLabel, setVehicleLabel] = useState<string | null>(null);
   const [driverName, setDriverName] = useState<string | null>(null);
+  const initialLoadDoneRef = React.useRef(false);
 
   const load = useCallback(() => {
     if (isPreview) return;
@@ -156,7 +157,7 @@ export function TripLedgerDetailScreen({
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!initialLoadDoneRef.current) setLoading(true);
     setError(null);
     Promise.all([getTripById(tripId), getTransactionsByOrganization(orgId)])
       .then(([tripRes, txRes]) => {
@@ -168,7 +169,10 @@ export function TripLedgerDetailScreen({
         }
         setTransactions(txRes.error ? [] : (txRes.transactions ?? []));
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        initialLoadDoneRef.current = true;
+      });
   }, [tripId, orgId, isPreview]);
 
   useEffect(() => {

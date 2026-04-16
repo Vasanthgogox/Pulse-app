@@ -14,7 +14,7 @@ import * as tripsService from '@/services/tripsService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -102,6 +102,9 @@ export default function DriverWalletScreen() {
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
   const [ledgerEntries, setLedgerEntries] = useState<driversService.DriverLedgerRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const isRefreshingRef = useRef(false);
+  const initialLoadDoneRef = useRef(false);
   const [transactionFilter, setTransactionFilter] = useState<'all' | 'pending' | 'received'>('all');
   /** Expand/collapse transaction detail (trip id or null). No redirect. */
   const [expandedTripId, setExpandedTripId] = useState<string | null>(null);
@@ -113,7 +116,7 @@ export default function DriverWalletScreen() {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
     Promise.all([
       driversService.getLinkedDriversForCurrentUser(profile.uid),
       driversService.getDriverInvitesReceived(),
@@ -131,11 +134,22 @@ export default function DriverWalletScreen() {
           setTrips(tRes.trips ?? []);
           setLedgerEntries(ledgerRes.entries ?? []);
           setLoading(false);
+          initialLoadDoneRef.current = true;
+          isRefreshingRef.current = false;
+          setRefreshing(false);
         });
       } else {
         setLoading(false);
+        initialLoadDoneRef.current = true;
+        isRefreshingRef.current = false;
+        setRefreshing(false);
       }
-    }).catch(() => setLoading(false));
+    }).catch(() => {
+      setLoading(false);
+      initialLoadDoneRef.current = true;
+      isRefreshingRef.current = false;
+      setRefreshing(false);
+    });
   }, [profile?.uid]);
 
   useEffect(() => {
@@ -376,7 +390,7 @@ export default function DriverWalletScreen() {
           </TouchableOpacity>
           <View style={styles.headerTextWrap}>
             <Text style={[styles.brand, { color: colors.textMuted }]}>Q PILOT</Text>
-            <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>Activity</Text>
+            <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>Transactions</Text>
           </View>
         </View>
         <TouchableOpacity

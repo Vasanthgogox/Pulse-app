@@ -18,8 +18,10 @@ import {
     getTripDisplayNumber,
     getTripsByOrganization,
     getTripsWhereOrgIsClient,
+    getTripsWhereOrgIsSupplier,
     type TripRow,
 } from "@/features/trips";
+import { getTripSubcontracts } from "@/features/finance/services/tripSubcontracts.service";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import {
     canAccessFinance,
@@ -111,6 +113,7 @@ export default function SupplierDetailScreen({
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   const [isInApp, setIsInApp] = useState(false);
   const insets = useSafeAreaInsets();
+  const initialLoadDoneRef = useRef(false);
 
   useEffect(() => {
     if (supplier?.phone) {
@@ -127,7 +130,7 @@ export default function SupplierDetailScreen({
       setLoading(false);
       return;
     }
-    if (!isRefreshingRef.current) setLoading(true);
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
     const supplierPromise = getSupplierDetails(supplierId);
@@ -142,8 +145,17 @@ export default function SupplierDetailScreen({
         r.error ? [] : (r.trips ?? []),
       );
     });
-    Promise.all([supplierPromise, tripsPromise, txPromise, asClientPromise, suppliersPromise])
-      .then(([res, tripsRes, txRes, asClientTrips, suppliersRes]) => {
+    const subcontractsPromise = getTripsWhereOrgIsSupplier(orgId).then((res) => {
+      if (res.error) return { sharedTrips: [], subcontracts: [] };
+      const sharedTrips = res.trips ?? [];
+      const tripIds = sharedTrips.map((t) => t.id);
+      if (tripIds.length === 0) return { sharedTrips, subcontracts: [] };
+      return getTripSubcontracts({ viewerOrgId: orgId, tripIds }).then((subRes) => {
+        return { sharedTrips, subcontracts: subRes.error ? [] : subRes.rows };
+      });
+    });
+    Promise.all([supplierPromise, tripsPromise, txPromise, asClientPromise, suppliersPromise, subcontractsPromise])
+      .then(([res, tripsRes, txRes, asClientTrips, suppliersRes, subRes]) => {
         if (res.error) {
           setError(res.error.message);
           setSupplier(null);
@@ -171,6 +183,26 @@ export default function SupplierDetailScreen({
         );
         const seen = new Set(fromOwned.map((t) => t.id));
         const merged: TripRow[] = [...fromOwned];
+        
+        // Add shared trips where we are the supplier and we subcontracted to THIS supplier
+        const { sharedTrips, subcontracts } = subRes;
+        const tripIdToSubcontract = new Map(subcontracts.map(s => [s.trip_id, s]));
+        for (const t of sharedTrips) {
+          const sub = tripIdToSubcontract.get(t.id);
+          if (sub && sub.supplier_id === supplierId) {
+            if (!seen.has(t.id)) {
+              seen.add(t.id);
+              // Overwrite supplier_rate so the UI displays the subcontract rate
+              merged.push({ ...t, supplier_rate: sub.rate });
+            }
+          } else if (t.supplier_id === supplierId || (!t.supplier_id && supplierDisplayName && (t.supplier_name ?? "").trim().toLowerCase() === supplierDisplayName)) {
+            if (!seen.has(t.id)) {
+                seen.add(t.id);
+                merged.push(t);
+            }
+          }
+        }
+        
         if (linkedOrgId && Array.isArray(asClientTrips)) {
           for (const t of asClientTrips) {
             if (
@@ -208,6 +240,7 @@ export default function SupplierDetailScreen({
       })
       .finally(() => {
         setLoading(false);
+        initialLoadDoneRef.current = true;
         isRefreshingRef.current = false;
         setRefreshing(false);
       });
@@ -629,7 +662,7 @@ export default function SupplierDetailScreen({
   const lockedPartyName = supplierName.trim() || t("supplier");
 
   const tabConfig = [
-    { id: "trips" as const, label: "Missions" },
+    { id: "trips" as const, label: "Trips" },
     { id: "cash" as const, label: "Cash Flow" },
     { id: "shared" as const, label: "Shared" },
   ];
@@ -695,7 +728,7 @@ export default function SupplierDetailScreen({
         <View style={styles.scorecard}>
           <View style={styles.scorecardTop}>
             <View style={styles.scorecardLeft}>
-              <Text style={styles.scorecardLabel}>GRID FISCAL DNA</Text>
+              <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
               <Text style={styles.scorecardSalesLabel}>CONTRACT VALUE</Text>
               <Text style={styles.scorecardAmount}>{formatINR(contractValue)}</Text>
             </View>
@@ -744,7 +777,7 @@ export default function SupplierDetailScreen({
         {detailSubTab === "trips" && (
           <View style={styles.tableCard}>
             <View style={styles.tableHeader}>
-              <Text style={[styles.th, styles.thMission]}>Mission</Text>
+              <Text style={[styles.th, styles.thMission]}>Trip</Text>
               <Text style={[styles.th, styles.thSales]}>Contract</Text>
               <Text style={[styles.th, styles.thRight]}>Paid</Text>
               <Text style={[styles.th, styles.thRight]}>Due</Text>
@@ -774,7 +807,7 @@ export default function SupplierDetailScreen({
               ))
             ) : (
               <View style={styles.emptyRow}>
-                <Text style={styles.emptyRowText}>No missions</Text>
+                <Text style={styles.emptyRowText}>No trips</Text>
               </View>
             )}
           </View>

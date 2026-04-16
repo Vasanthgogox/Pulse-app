@@ -1,6 +1,6 @@
 /**
  * Shared modal to link a ledger transaction to a trip. Used by FinancialRow (Ledger tab).
- * Layout: "Link mission" / Mission Registry style — compact header, rounded trip cards.
+ * Layout: "Link mission" / Trip Registry style — compact header, rounded trip cards.
  * Selecting a card shows a confirmation bar; Confirm links the trip and closes.
  */
 import Theme from "@/constants/Theme";

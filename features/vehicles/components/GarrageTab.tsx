@@ -248,7 +248,7 @@ export function GarrageTab({
         {topContent}
         <View style={styles.receivablesSummaryRow}>
           <View style={styles.receivablesSummaryCard}>
-            <Text style={styles.receivablesSummaryLabel}>Asset Revenue</Text>
+            <Text style={styles.receivablesSummaryLabel}>Vehicle Revenue</Text>
             <Text style={styles.receivablesSummaryRevenue}>
               ₹{totalRevenue.toLocaleString("en-IN")}
             </Text>
@@ -264,7 +264,7 @@ export function GarrageTab({
         <View style={styles.listHeader}>
           <View style={styles.headerEntityCol}>
             <Text style={[styles.listHeaderCell, styles.ctHeaderLeft]} numberOfLines={1}>
-              {viewTab === "trips" ? "Mission" : "Vehicle Entity"}
+              {viewTab === "trips" ? "Trip" : "Vehicle Entity"}
             </Text>
           </View>
           <View style={styles.headerTripsCol}>

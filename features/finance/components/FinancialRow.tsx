@@ -1,5 +1,5 @@
 /**
- * Single table row for Treasury Fiscal Matrix — matches demo2 FinancialRow.
+ * Single table row for Treasury Financial Summary — matches demo2 FinancialRow.
  *
  * Column flex is defined in features/finance/constants/tableColumns.ts (single source of truth);
  * headers in FinanceScreen.styles use the same constants so columns align.

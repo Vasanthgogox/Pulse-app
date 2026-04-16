@@ -15,7 +15,7 @@ import * as tripsService from "@/services/tripsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     AppState,
     FlatList,
@@ -141,7 +141,7 @@ interface MissionLogEntry {
   loc: string;
 }
 
-/** Mission log from trip timestamps (Assigned → Pickup → In-transit → Delivered). */
+/** Trip log from trip timestamps (Assigned → Pickup → In-transit → Delivered). */
 function buildMissionLog(trip: tripsService.TripRow): MissionLogEntry[] {
   const entries: MissionLogEntry[] = [];
   if (trip.created_at) {
@@ -261,6 +261,9 @@ export default function DriverTripsScreen() {
   const [driver, setDriver] = useState<driversService.DriverRow | null>(null);
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const isRefreshingRef = useRef(false);
+  const initialLoadDoneRef = useRef(false);
   const [selectedTrip, setSelectedTrip] = useState<tripsService.TripRow | null>(
     null,
   );
@@ -276,7 +279,7 @@ export default function DriverTripsScreen() {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
     driversService.getLinkedDriversForCurrentUser(profile.uid).then((res) => {
       const drivers = (res.drivers ?? []).filter((d) => !d.left_at);
       if (drivers.length > 0) {
@@ -286,9 +289,15 @@ export default function DriverTripsScreen() {
           .then((tRes) => {
             setTrips(tRes.trips ?? []);
             setLoading(false);
+            initialLoadDoneRef.current = true;
+            isRefreshingRef.current = false;
+            setRefreshing(false);
           });
       } else {
         setLoading(false);
+        initialLoadDoneRef.current = true;
+        isRefreshingRef.current = false;
+        setRefreshing(false);
       }
     });
   }, [profile?.uid]);
@@ -1010,7 +1019,7 @@ export default function DriverTripsScreen() {
                       <FontAwesome name="list-alt" size={14} color={colors.text} />
                     </View>
                     <Text style={[styles.logSectionTitleRef, { color: colors.text }]}>
-                      Mission Log
+                      Trip Log
                     </Text>
                   </View>
                   <View

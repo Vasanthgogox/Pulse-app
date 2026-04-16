@@ -32,6 +32,7 @@ import {
 } from '@/constants/UserAvatars';
 import { useAuth } from '@/contexts/AuthContext';
 import { pickAndUploadAvatar, getSignedAvatarUrl } from '@/lib/avatarUpload';
+import { formatMobileNumber } from '@/lib/format';
 import { validatePhone } from '@/lib/phoneValidation';
 import { VALIDATION, maxLength, validateFullName } from '@/lib/validation';
 import * as authService from '../services/auth.service';
@@ -726,7 +727,7 @@ export function EditProfileModal({
                   placeholder="555-012-3456"
                   placeholderTextColor={Theme.textMuted}
                   value={phone}
-                  onChangeText={setPhone}
+                  onChangeText={(v) => setPhone(formatMobileNumber(v))}
                   keyboardType="phone-pad"
                   autoCorrect={false}
                   spellCheck={false}
@@ -895,7 +896,7 @@ export function EditProfileModal({
                 placeholder="e.g. 9025186111"
                 placeholderTextColor={Theme.textMuted}
                 value={phone}
-                onChangeText={setPhone}
+                onChangeText={(v) => setPhone(formatMobileNumber(v))}
                 keyboardType="phone-pad"
                 autoCorrect={false}
                 spellCheck={false}

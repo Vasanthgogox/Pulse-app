@@ -10,6 +10,7 @@ import { getDriversByOrganization, updateDriver } from "@/features/drivers";
 import { getTransactionsByOrganization } from "@/features/finance";
 import { getSuppliersByOrganization, updateSupplier } from "@/features/suppliers";
 import { getVehiclesByOrganization, updateVehicle } from "@/features/vehicles";
+import { formatMobileNumber } from "@/lib/format";
 import { getCapabilitiesFromProfile } from "@/lib/capabilities";
 import {
   CONFIRM_EXPIRY_MS,
@@ -1261,7 +1262,7 @@ export default function OpsAgentScreen() {
                                 <TextInput
                                   style={styles.modalInput}
                                   value={String(msg.pendingConfirm.data.phone ?? "")}
-                                  onChangeText={(t) => updatePendingConfirmData(i, { ...msg.pendingConfirm!.data, phone: t })}
+                                  onChangeText={(t) => updatePendingConfirmData(i, { ...msg.pendingConfirm!.data, phone: formatMobileNumber(t) })}
                                   placeholder="e.g. 943214566"
                                   placeholderTextColor={REF.text3}
                                   keyboardType="phone-pad"
@@ -1287,7 +1288,7 @@ export default function OpsAgentScreen() {
                                 <TextInput
                                   style={styles.modalInput}
                                   value={String(msg.pendingConfirm.data.phone ?? "")}
-                                  onChangeText={(t) => updatePendingConfirmData(i, { ...msg.pendingConfirm!.data, phone: t })}
+                                  onChangeText={(t) => updatePendingConfirmData(i, { ...msg.pendingConfirm!.data, phone: formatMobileNumber(t) })}
                                   placeholder="e.g. 943214566"
                                   placeholderTextColor={REF.text3}
                                   keyboardType="phone-pad"
@@ -1402,7 +1403,7 @@ export default function OpsAgentScreen() {
                                 <TextInput
                                   style={styles.modalInput}
                                   value={String(msg.pendingConfirm.data.phone ?? "")}
-                                  onChangeText={(t) => updatePendingConfirmData(i, { ...msg.pendingConfirm!.data, phone: t })}
+                                  onChangeText={(t) => updatePendingConfirmData(i, { ...msg.pendingConfirm!.data, phone: formatMobileNumber(t) })}
                                   placeholder="e.g. 943214566"
                                   placeholderTextColor={REF.text3}
                                   keyboardType="phone-pad"
@@ -1719,7 +1720,7 @@ export default function OpsAgentScreen() {
                                 <TextInput
                                   style={styles.modalInput}
                                   value={String(msg.createdPreview.data.phone ?? "")}
-                                  onChangeText={(t) => updatePreviewData(i, { ...msg.createdPreview!.data, phone: t })}
+                                  onChangeText={(t) => updatePreviewData(i, { ...msg.createdPreview!.data, phone: formatMobileNumber(t) })}
                                   placeholder="e.g. 943214566"
                                   placeholderTextColor={REF.text3}
                                   keyboardType="phone-pad"
@@ -1745,7 +1746,7 @@ export default function OpsAgentScreen() {
                                 <TextInput
                                   style={styles.modalInput}
                                   value={String(msg.createdPreview.data.phone ?? "")}
-                                  onChangeText={(t) => updatePreviewData(i, { ...msg.createdPreview!.data, phone: t })}
+                                  onChangeText={(t) => updatePreviewData(i, { ...msg.createdPreview!.data, phone: formatMobileNumber(t) })}
                                   placeholder="e.g. 943214566"
                                   placeholderTextColor={REF.text3}
                                   keyboardType="phone-pad"
@@ -1860,7 +1861,7 @@ export default function OpsAgentScreen() {
                                 <TextInput
                                   style={styles.modalInput}
                                   value={String(msg.createdPreview.data.phone ?? "")}
-                                  onChangeText={(t) => updatePreviewData(i, { ...msg.createdPreview!.data, phone: t })}
+                                  onChangeText={(t) => updatePreviewData(i, { ...msg.createdPreview!.data, phone: formatMobileNumber(t) })}
                                   placeholder="e.g. 943214566"
                                   placeholderTextColor={REF.text3}
                                   keyboardType="phone-pad"

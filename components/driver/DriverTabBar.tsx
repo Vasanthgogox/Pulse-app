@@ -43,7 +43,7 @@ function AnimatedTabIcon({ selected, children }: { selected: boolean; children: 
 export const TAB_CONFIG = [
   { name: 'index', label: 'Dashboard', icon: 'crosshairs' as const },
   { name: 'trips', label: 'History', icon: 'history' as const },
-  { name: 'wallet', label: 'Activity', icon: 'wallet' as const },
+  { name: 'wallet', label: 'Transactions', icon: 'wallet' as const },
 ];
 
 export function DriverTabBar({ state, navigation }: BottomTabBarProps) {

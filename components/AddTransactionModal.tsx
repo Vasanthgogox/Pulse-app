@@ -8,7 +8,7 @@ import type { LedgerRow } from "@/features/finance";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import { VALIDATION, dateISO } from "@/lib/validation";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
+import { isCrossOrgIntegrationTrip } from "@/features/trips/visibility/tripVisibility";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
@@ -487,11 +487,7 @@ export function AddTransactionModal({
   const partyOptions = useMemo(() => {
     if (type === "in" && selectedTrip) {
       const lid = (selectedTrip as any).organization_id;
-      const isIntegrated =
-        viewerOrgId != null &&
-        lid != null &&
-        lid !== viewerOrgId &&
-        isLoadBasedTrip(selectedTrip);
+      const isIntegrated = isCrossOrgIntegrationTrip(selectedTrip, viewerOrgId);
 
       if (isIntegrated) {
         const localCid =
@@ -538,11 +534,7 @@ export function AddTransactionModal({
     }
     if (type === "out" && selectedTrip) {
       const lid = (selectedTrip as any).organization_id;
-      const isIntegrated =
-        viewerOrgId != null &&
-        lid != null &&
-        lid !== viewerOrgId &&
-        isLoadBasedTrip(selectedTrip);
+      const isIntegrated = isCrossOrgIntegrationTrip(selectedTrip, viewerOrgId);
 
       if (isIntegrated) {
         const localSid =
@@ -636,6 +628,11 @@ export function AddTransactionModal({
     initialEntry?.party_name,
     defaultPartyId,
     defaultPartyName,
+    viewerOrgId,
+    linkedClientIdByOrgId,
+    linkedSupplierIdByOrgId,
+    lockedPartyId,
+    lockedPartyName,
   ]);
 
   const effectivePartyName = isPartyLocked
@@ -733,7 +730,8 @@ export function AddTransactionModal({
       !isDriverPayment &&
       !isVehicleExpenseOut &&
       category != null &&
-      (EXPENSE_CATEGORIES as readonly string[]).includes(category));
+      ((EXPENSE_CATEGORIES as readonly string[]).includes(category) ||
+        category === "SUPPLIER COST"));
 
   /** Entry date: when non-empty must be valid YYYY-MM-DD; empty falls back to today in submit. */
   const entryDateError =
@@ -982,7 +980,7 @@ export function AddTransactionModal({
     )
       setCategory(null);
   }, [visible, hidePartyForCashOut, type, category]);
-  // Default category by party: Receivables (Cash IN) → Trip Payment; Supplier (Cash OUT) → Trip Payment; legacy Cash OUT → SUPPLIER COST or DRIVER SALARY.
+  // Default category by party: Receivables (Cash IN) -> Trip Payment; Supplier (Cash OUT) -> Trip Payment; legacy Cash OUT -> SUPPLIER PAYMENT or DRIVER SALARY.
   useEffect(() => {
     if (!visible) return;
     if (type === "in") {
@@ -1001,8 +999,8 @@ export function AddTransactionModal({
       return;
     }
     if (type === "out") {
-      if (category !== "SUPPLIER COST" && category !== "DRIVER SALARY")
-        setCategory("SUPPLIER COST");
+      if (category !== "SUPPLIER PAYMENT" && category !== "DRIVER SALARY")
+        setCategory("SUPPLIER PAYMENT");
     }
   }, [
     visible,
@@ -1033,16 +1031,13 @@ export function AddTransactionModal({
     let derivedContactType: AddTransactionData["contactType"] = null;
     let derivedPartyName: string | null = null;
     if (tripLocked && selectedTrip) {
-      const lid = (selectedTrip as any).organization_id;
-      const isIntegrated =
-        viewerOrgId != null &&
-        lid != null &&
-        lid !== viewerOrgId &&
-        isLoadBasedTrip(selectedTrip);
+      const lid = (selectedTrip as { organization_id?: string | null })
+        .organization_id;
+      const isIntegrated = isCrossOrgIntegrationTrip(selectedTrip, viewerOrgId);
 
       if (type === "in") {
         let localCid: string | null = null;
-        if (isIntegrated) {
+        if (isIntegrated && lid != null) {
           localCid =
             (linkedClientIdByOrgId instanceof Map
               ? linkedClientIdByOrgId.get(lid)
@@ -1064,7 +1059,7 @@ export function AddTransactionModal({
         }
       } else {
         let localSid: string | null = null;
-        if (isIntegrated) {
+        if (isIntegrated && lid != null) {
           localSid =
             (linkedSupplierIdByOrgId instanceof Map
               ? linkedSupplierIdByOrgId.get(lid)
@@ -1078,6 +1073,17 @@ export function AddTransactionModal({
             safeSuppliers.find((s) => s.id === localSid)?.name ??
             lockedPartyName ??
             defaultPartyName ??
+            null;
+        } else if (
+          isPartyLocked &&
+          lockedPartyId &&
+          safeSuppliers.some((s) => s.id === lockedPartyId)
+        ) {
+          derivedContactId = lockedPartyId;
+          derivedContactType = "supplier";
+          derivedPartyName =
+            safeSuppliers.find((s) => s.id === lockedPartyId)?.name ??
+            lockedPartyName ??
             null;
         } else {
           derivedContactId =
@@ -1146,6 +1152,9 @@ export function AddTransactionModal({
           : isUnlinkedMisc
             ? "Misc / Unlinked"
             : (effectivePartyName ?? null);
+    const normalizedCategory =
+      category === "SUPPLIER COST" ? "SUPPLIER PAYMENT" : category;
+
     const data: AddTransactionData = {
       type,
       amount,
@@ -1161,12 +1170,12 @@ export function AddTransactionModal({
       category:
         type === "in"
           ? (isClientPayment || tripLocked)
-            ? (category ?? undefined)
+            ? (normalizedCategory ?? undefined)
             : undefined
           : type === "out" && !isDriverPayment
             ? isVehicleExpenseOut
               ? (effectivePartyId ?? undefined)
-              : (category ?? undefined)
+              : (normalizedCategory ?? undefined)
             : undefined,
       driverPaymentType: finalDriverPaymentType,
       contactId: finalContactId ?? undefined,
@@ -1285,6 +1294,10 @@ export function AddTransactionModal({
           ref={scrollRef}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          onScrollBeginDrag={() => {
+            Keyboard.dismiss();
+            closeAllPickers();
+          }}
           scrollEnabled={
             fullPage ||
             (!showPartyPicker &&
@@ -2119,9 +2132,9 @@ export function AddTransactionModal({
         {formContent}
         {pickerModalVisible ? (
           <Modal transparent visible animationType="fade" onRequestClose={closeAllPickers}>
-            <TouchableOpacity style={StyleSheet.absoluteFill} onPress={closeAllPickers} activeOpacity={1} />
-            <View style={[styles.pickerModalContainer, { paddingBottom: insets.bottom + 16 }]}>
-              <View style={[styles.pickerModalPanel, { height: Math.min(windowHeight * 0.5, 380) }]}>
+            <View style={[styles.pickerModalContainer, { paddingBottom: insets.bottom + 16 }]} pointerEvents="box-none">
+              <TouchableOpacity style={StyleSheet.absoluteFill} onPress={closeAllPickers} activeOpacity={1} />
+              <View style={[styles.pickerModalPanel, { height: Math.min(windowHeight * 0.5, 380) }]} pointerEvents="auto">
                 {renderPickerModalContent()}
               </View>
             </View>
@@ -2142,7 +2155,21 @@ export function AddTransactionModal({
       <View style={styles.backdrop}>
         <TouchableOpacity
           style={StyleSheet.absoluteFill}
-          onPress={handleClose}
+          onPress={() => {
+            const hasOpenPicker =
+              showPartyPicker ||
+              showTripPicker ||
+              showCategoryPicker ||
+              showDriverPaymentTypePicker ||
+              showDriverForSalaryPicker ||
+              showVehiclePicker ||
+              showPaymentPicker;
+            if (hasOpenPicker) {
+              closeAllPickers();
+            } else {
+              handleClose();
+            }
+          }}
           activeOpacity={1}
         />
         {formContent}

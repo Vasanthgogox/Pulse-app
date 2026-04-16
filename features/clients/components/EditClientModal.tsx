@@ -1,6 +1,7 @@
 import { useLanguage } from "@/contexts/LanguageContext";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { formatMobileNumber } from "@/lib/format";
 import type {
   ClientRow,
   UpdateClientData,
@@ -295,7 +296,7 @@ export function EditClientModal({
                     }
                     placeholderTextColor={Theme.textMutedDemo}
                     value={phone}
-                    onChangeText={setPhone}
+                    onChangeText={(t) => setPhone(formatMobileNumber(t))}
                     editable={canEditPhone}
                     keyboardType="phone-pad"
                   />

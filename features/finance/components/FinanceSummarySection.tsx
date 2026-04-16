@@ -18,7 +18,7 @@ export type LedgerViewMode = "table" | "transaction";
 export interface FinanceSummarySectionProps {
   /** Header title (e.g. translated "Treasury"). */
   title?: string;
-  /** Header subtitle (e.g. translated "Fiscal Matrix"). */
+  /** Header subtitle (e.g. translated "Financial Summary"). */
   subtitle?: string;
   activeTab: FinanceSubTab;
   onTabPress: (tabId: FinanceSubTab) => void;
@@ -64,7 +64,7 @@ export interface FinanceSummarySectionProps {
 
 export function FinanceSummarySection({
   title = "Treasury",
-  subtitle = "Fiscal Matrix",
+  subtitle = "Financial Summary",
   activeTab,
   onTabPress,
   screenWidth,

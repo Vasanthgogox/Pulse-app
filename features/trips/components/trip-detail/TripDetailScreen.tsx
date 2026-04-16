@@ -5,18 +5,22 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { getDriverById } from "@/features/drivers/services/drivers.service";
+import { getDriverById, getDriverProfileDisplay } from "@/features/drivers/services/drivers.service";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
-import { getSupplierById } from "@/features/suppliers/services/suppliers.service";
+import {
+  getSupplierById,
+  getSupplierDetails,
+} from "@/features/suppliers/services/suppliers.service";
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
 import { getVehicleDocumentViewUrl } from "@/features/vehicles/services/vehicleDocuments.service";
 import type { VehicleDocuments } from "@/features/vehicles/utils/vehicleDocuments.util";
 import { DOCUMENT_LABELS, DOCUMENT_EXPIRY_ORDER } from "@/features/vehicles/utils/vehicleDocuments.util";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { canAssignTrip, getCapabilitiesFromProfile } from "@/lib/capabilities";
+import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatIndianVehicleNumber } from "@/lib/format";
-import { useShipperDisplayNamesQuery, useTransactionsQuery } from "@/lib/queries";
+import { useShipperDisplayNamesQuery, useTransactionsQuery, useTripSubcontractsQuery } from "@/lib/queries";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -223,6 +227,7 @@ export default function TripDetailScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [driverName, setDriverName] = useState<string | null>(null);
+  const [driverAvatarUri, setDriverAvatarUri] = useState<string | null>(null);
   const [vehicleLabel, setVehicleLabel] = useState<string | null>(null);
   const [vehicleDocs, setVehicleDocs] = useState<VehicleDocuments | null>(null);
   const [displayVehicleFromInput, setDisplayVehicleFromInput] = useState("");
@@ -267,6 +272,7 @@ export default function TripDetailScreen({
   const [vehiclePreviewUrls, setVehiclePreviewUrls] = useState<Record<string, string | null>>({});
   const [vehiclePreviewIndex, setVehiclePreviewIndex] = useState(0);
   const isRefreshingRef = useRef(false);
+  const initialLoadDoneRef = useRef(false);
   const refetchTransactionsRef = useRef<() => void>(() => {});
   const prevDriverIdRef = useRef<string | null>(null);
   const podModalRefetchDoneRef = useRef(false);
@@ -392,7 +398,7 @@ export default function TripDetailScreen({
     const isRepeatLoadForSameId = loadCompletedForIdRef.current === tripId;
     if (isRepeatLoadForSameId || isRefreshingRef.current) {
       isRefreshingRef.current = true;
-    } else {
+    } else if (!initialLoadDoneRef.current) {
       setLoading(true);
     }
     setError(null);
@@ -431,6 +437,7 @@ export default function TripDetailScreen({
       .finally(() => {
         loadCompletedForIdRef.current = tripId;
         setLoading(false);
+        initialLoadDoneRef.current = true;
         isRefreshingRef.current = false;
         setRefreshing(false);
       });
@@ -509,7 +516,12 @@ export default function TripDetailScreen({
     loadTripOtp,
   ]);
 
-  const orgIdForTransactions = trip?.organization_id ?? null;
+  /**
+   * Always read ledger from the viewer org.
+   * In shared/partner trip views, trip.organization_id can be the counterparty org,
+   * which would hide current-org entries and keep finance totals stale.
+   */
+  const orgIdForTransactions = currentOrganization?.id ?? null;
   const { data: transactionsData = [], refetch: refetchTransactions } =
     useTransactionsQuery(orgIdForTransactions);
   refetchTransactionsRef.current = refetchTransactions;
@@ -520,6 +532,19 @@ export default function TripDetailScreen({
   const tripLedgerEntries = useMemo(() => {
     return getTripLedgerEntries(transactions, trip?.id);
   }, [transactions, trip?.id]);
+
+  const { data: tripSubcontracts = [] } = useTripSubcontractsQuery(
+    currentOrganization?.id ?? null,
+    trip ? [trip.id] : []
+  );
+
+  const subcontractRate = useMemo(() => {
+    if (tripSubcontracts.length > 0 && trip) {
+      const exact = tripSubcontracts.find((row) => row.trip_id === trip.id);
+      return exact?.rate ?? null;
+    }
+    return null;
+  }, [tripSubcontracts, trip]);
 
   /** When opening from load flow (supplier Authorize Voyage), use stashed trip so we never show "Trip not found". */
   useEffect(() => {
@@ -927,6 +952,7 @@ export default function TripDetailScreen({
   useEffect(() => {
     if (!trip?.organization_id) {
       setDriverName(null);
+      setDriverAvatarUri(null);
       setVehicleLabel(null);
       setPartnerName(null);
       setDriverLinked(false);
@@ -935,8 +961,22 @@ export default function TripDetailScreen({
     const fallbackDriverName = (trip.driver_display_name ?? "").trim() || null;
     let cancelled = false;
     const orgId = trip.organization_id;
+    const resolveDriverAvatarUri = async (driverId: string, candidateUrl?: string | null) => {
+      let rawAvatar = (candidateUrl ?? "").trim();
+      if (!rawAvatar) {
+        const profileRes = await getDriverProfileDisplay(driverId);
+        rawAvatar = (profileRes.profile?.avatarUrl ?? "").trim();
+      }
+      if (!rawAvatar) return null;
+      if (rawAvatar.startsWith("http://") || rawAvatar.startsWith("https://")) {
+        return rawAvatar;
+      }
+      const signed = await getSignedAvatarUrl(rawAvatar);
+      return signed ?? null;
+    };
     if (trip.driver_id) {
       setDriverName(fallbackDriverName);
+      setDriverAvatarUri(null);
       setDriverLinked(false);
       getDriverById(orgId, trip.driver_id).then((res) => {
         if (cancelled) return;
@@ -945,6 +985,11 @@ export default function TripDetailScreen({
           const fromDriver = (d.name || d.phone || "").trim() || null;
           setDriverName(fromDriver ?? fallbackDriverName ?? "—");
           setDriverLinked(!!d.user_id);
+          void resolveDriverAvatarUri(trip.driver_id!, d.avatar_url ?? null).then(
+            (uri) => {
+              if (!cancelled) setDriverAvatarUri(uri);
+            },
+          );
           return;
         }
         // Driver not in trip org: for load-based (aggregate) trips the driver may live in the supplier's org
@@ -964,6 +1009,11 @@ export default function TripDetailScreen({
                   const fromDriver2 = (d2.name || d2.phone || "").trim() || null;
                   setDriverName(fromDriver2 ?? fallbackDriverName ?? "—");
                   setDriverLinked(!!d2.user_id);
+                  void resolveDriverAvatarUri(trip.driver_id!, d2.avatar_url ?? null).then(
+                    (uri) => {
+                      if (!cancelled) setDriverAvatarUri(uri);
+                    },
+                  );
                   return;
                 }
                 tryViewerOrg();
@@ -977,6 +1027,9 @@ export default function TripDetailScreen({
           const viewerOrgId = currentOrganization?.id;
           if (!viewerOrgId || viewerOrgId === orgId) {
             setDriverName(fallbackDriverName ?? "—");
+            void resolveDriverAvatarUri(trip.driver_id!, null).then((uri) => {
+              if (!cancelled) setDriverAvatarUri(uri);
+            });
             setDriverLinked(false);
             return;
           }
@@ -985,6 +1038,11 @@ export default function TripDetailScreen({
             const d3 = res3.driver;
             const fromDriver3 = d3 ? (d3.name || d3.phone || "").trim() || null : null;
             setDriverName(fromDriver3 ?? fallbackDriverName ?? "—");
+            void resolveDriverAvatarUri(trip.driver_id!, d3?.avatar_url ?? null).then(
+              (uri) => {
+                if (!cancelled) setDriverAvatarUri(uri);
+              },
+            );
             setDriverLinked(!!d3?.user_id);
           });
         };
@@ -992,6 +1050,7 @@ export default function TripDetailScreen({
       });
     } else {
       setDriverName(fallbackDriverName);
+      setDriverAvatarUri(null);
       setDriverLinked(false);
     }
     if (trip.vehicle_id) {
@@ -1012,18 +1071,44 @@ export default function TripDetailScreen({
       setVehicleLabel(null);
       setVehicleDocs(null);
     }
+    const fallbackSupplierName = (trip.supplier_name ?? "").trim() || null;
+    const pickSupplierDisplayName = (
+      s: {
+        company_name?: string | null;
+        name?: string | null;
+        contact_person?: string | null;
+      } | null,
+    ) => (s?.company_name || s?.name || s?.contact_person || "").trim() || null;
+
     if (trip.supplier_id) {
-      getSupplierById(orgId, trip.supplier_id).then((r) => {
-        if (!cancelled) {
-          const s = r.supplier;
-          setPartnerName(
-            r.error
-              ? null
-              : s?.company_name || s?.name || s?.contact_person || null,
-          );
+      setPartnerName(fallbackSupplierName);
+      const supplierId = trip.supplier_id;
+      const ownerOrgId = trip.organization_id;
+
+      void (async () => {
+        const { supplier: fromRpc } = await getSupplierDetails(supplierId);
+        if (cancelled) return;
+        const n = pickSupplierDisplayName(fromRpc);
+        if (n) {
+          setPartnerName(n);
+          return;
         }
-      });
-    } else setPartnerName(null);
+        const { supplier: fromOwnerOrg } = await getSupplierById(ownerOrgId, supplierId);
+        if (cancelled) return;
+        const n2 = pickSupplierDisplayName(fromOwnerOrg);
+        if (n2) {
+          setPartnerName(n2);
+          return;
+        }
+        const viewerOrgId = currentOrganization?.id;
+        if (viewerOrgId && viewerOrgId !== ownerOrgId) {
+          const { supplier: fromViewerOrg } = await getSupplierById(viewerOrgId, supplierId);
+          if (cancelled) return;
+          const n3 = pickSupplierDisplayName(fromViewerOrg);
+          if (n3) setPartnerName(n3);
+        }
+      })();
+    } else setPartnerName(fallbackSupplierName);
     return () => {
       cancelled = true;
     };
@@ -1035,6 +1120,7 @@ export default function TripDetailScreen({
     trip?.vehicle_id,
     trip?.vehicle_display_number,
     trip?.supplier_id,
+    trip?.supplier_name,
     currentOrganization?.id,
   ]);
 
@@ -1485,7 +1571,7 @@ export default function TripDetailScreen({
           <Text style={styles.headerTitle} numberOfLines={1}>
             {getTripDisplayNumber(trip)}
           </Text>
-          <Text style={styles.headerSubtitle}>Mission Control Blueprint</Text>
+          <Text style={styles.headerSubtitle}>Trip Details</Text>
           <Text style={styles.headerTripTypeLabel}>
             {displayAsAsset ? t("assetBasedTrip") : t("aggregateBasedTrip")}
           </Text>
@@ -1539,6 +1625,9 @@ export default function TripDetailScreen({
             tripLedgerEntries={tripLedgerEntries}
             adjustments={adjustments}
             viewerOrgId={currentOrganization?.id ?? null}
+            viewerOrganizationName={currentOrganization?.name ?? null}
+            clientName={displayClientName}
+            subcontractRate={subcontractRate}
             assignmentAuditRows={assignmentAuditRows}
             assignmentDriverNames={assignmentDriverNames}
             assignmentVehicleLabels={assignmentVehicleLabels}
@@ -1591,6 +1680,7 @@ export default function TripDetailScreen({
             organizationId={currentOrganization.id}
             partnerName={partnerName}
             driverName={driverName}
+            driverAvatarUri={driverAvatarUri}
             onRatingsLoaded={handleRatingsLoaded}
           />
         )}

@@ -30,12 +30,14 @@ import {
 import {
   formatIndianVehicleNumber,
   formatIndianVehicleNumberInput,
+  formatMobileNumber,
 } from "@/lib/format";
 import { validatePhone } from "@/lib/phoneValidation";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Image,
   Modal,
   Platform,
   ScrollView,
@@ -44,6 +46,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -142,6 +145,8 @@ export function TripAssignmentBlock({
   const [cardVehicleSaving, setCardVehicleSaving] = useState(false);
   const [phoneModalIsReassign, setPhoneModalIsReassign] = useState(false);
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && windowWidth >= 768;
 
   useEffect(() => {
     setPickDriverId(trip.driver_id);
@@ -620,6 +625,43 @@ export function TripAssignmentBlock({
     );
   }, [vehicles, assignSearch]);
 
+  const getDriverRatingMeta = useCallback((driver: DriverRow) => {
+    const data = driver as DriverRow & {
+      rating?: number | string | null;
+      rating_avg?: number | string | null;
+      avg_rating?: number | string | null;
+      rating_count?: number | string | null;
+      ratings_count?: number | string | null;
+      total_ratings?: number | string | null;
+    };
+
+    const rawRating = data.rating ?? data.rating_avg ?? data.avg_rating ?? null;
+    const numericRating =
+      rawRating == null
+        ? NaN
+        : typeof rawRating === "number"
+          ? rawRating
+          : Number(rawRating);
+    if (!Number.isFinite(numericRating)) return null;
+
+    const rawCount =
+      data.rating_count ?? data.ratings_count ?? data.total_ratings ?? null;
+    const numericCount =
+      rawCount == null
+        ? NaN
+        : typeof rawCount === "number"
+          ? rawCount
+          : Number(rawCount);
+
+    return {
+      ratingLabel: numericRating.toFixed(1),
+      countLabel:
+        Number.isFinite(numericCount) && numericCount > 0
+          ? `(${Math.round(numericCount)})`
+          : null,
+    };
+  }, []);
+
   return (
     <View style={[styles.wrapper, styles.wrapperStretch]}>
       <View style={styles.card}>
@@ -641,12 +683,12 @@ export function TripAssignmentBlock({
         </View>
 
         {/* Driver and Vehicle rows — side-by-side on web view */}
-        <View style={Platform.OS === 'web' ? styles.twoCol : null}>
+        <View style={isDesktop ? styles.twoCol : null}>
           {/* Driver row — reference: Driver Node, + Assign / Change */}
-          <View style={[styles.assignRow, Platform.OS === 'web' && styles.webAssignRow]}>
+          <View style={[styles.assignRow, isDesktop && styles.webAssignRow]}>
             <View style={styles.assignRowLeft}>
               <View style={[styles.assignIcon, hasDriver ? styles.assignIconDriverActive : styles.assignIconInactive]}>
-                <FontAwesome name="user" size={20} color={hasDriver ? Theme.primary : Theme.textMuted} />
+                <FontAwesome name="user" size={16} color={Theme.textMuted} />
               </View>
               <View style={styles.assignRowText}>
                 <Text style={styles.assignRowLabel}>Driver</Text>
@@ -686,10 +728,10 @@ export function TripAssignmentBlock({
           </View>
 
           {/* Vehicle row — reference: Vehicle Registry, Change */}
-          <View style={[styles.assignRow, styles.assignRowLast, Platform.OS === 'web' && styles.webAssignRow]}>
+          <View style={[styles.assignRow, isDesktop && styles.webAssignRow]}>
             <View style={styles.assignRowLeft}>
-              <View style={[styles.assignIcon, hasVehicle ? styles.assignIconVehicleActive : styles.assignIconInactive]}>
-                <FontAwesome name="truck" size={18} color={hasVehicle ? "#ffffff" : Theme.textMuted} />
+              <View style={[styles.assignIcon, hasVehicle ? styles.assignIconVehicleActive : styles.assignIconVehicleInactive]}>
+                <FontAwesome name="truck" size={14} color={Theme.textMuted} />
               </View>
               <View style={styles.assignRowText}>
                 <Text style={styles.assignRowLabel}>Vehicle</Text>
@@ -699,17 +741,17 @@ export function TripAssignmentBlock({
                         .split(" • ")
                         .map((part, i) => (i === 0 ? part : part.toUpperCase()))
                         .join(" • ")
-                    : "No vehicle assigned"}
+                    : "No assigned node"}
                 </Text>
               </View>
             </View>
             {effectiveCanAssign ? (
               <TouchableOpacity
-                style={[styles.actionBtn, styles.actionBtnSecondaryAlt]}
+                style={[styles.actionBtn, hasVehicle ? styles.actionBtnSecondary : styles.actionBtnPrimary]}
                 onPress={openVehiclePicker}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.actionBtnText, styles.actionBtnTextSecondaryAlt]}>
+                <Text style={[styles.actionBtnText, hasVehicle ? styles.actionBtnTextSecondary : styles.actionBtnTextPrimary]}>
                   {hasVehicle ? "Change" : "+ Assign"}
                 </Text>
               </TouchableOpacity>
@@ -810,9 +852,11 @@ export function TripAssignmentBlock({
           <View style={styles.assignModalHeader}>
             <View style={styles.assignModalHeaderText}>
               <Text style={styles.assignModalTitle}>
-                {assignMode === "driver" ? "Assign Driver" : "Registry Vehicle"}
+                {assignMode === "driver" ? "Assign Driver" : "Select Vehicle"}
               </Text>
-              <Text style={styles.assignModalSubtitle}>Network Node Selection</Text>
+              <Text style={styles.assignModalSubtitle}>
+                {assignMode === "driver" ? "Choose a driver" : "Choose a vehicle"}
+              </Text>
             </View>
             <TouchableOpacity
               onPress={() => setAssignMode(null)}
@@ -830,7 +874,7 @@ export function TripAssignmentBlock({
               style={styles.assignSearchInput}
               value={assignSearch}
               onChangeText={setAssignSearch}
-              placeholder={assignMode === "driver" ? "Search driver node…" : "Search vehicle node…"}
+              placeholder={assignMode === "driver" ? "Search driver..." : "Search vehicle..."}
               placeholderTextColor={Theme.textMuted}
             />
           </View>
@@ -852,8 +896,10 @@ export function TripAssignmentBlock({
                   const isOnTrip = activeDriverIds.has(d.id) && d.id !== trip.driver_id;
                   const isAvailable = !d.left_at && !isOnTrip;
                   const initial = (d.name ?? "D").trim().charAt(0).toUpperCase();
+                  const ratingMeta = getDriverRatingMeta(d);
+                  const hasAvatar = !!(d.avatar_url && d.avatar_url.trim());
                   const statusText = isOnTrip
-                    ? "On active trip"
+                    ? "On trip"
                     : isAvailable
                       ? "Available"
                       : "On leave";
@@ -869,15 +915,25 @@ export function TripAssignmentBlock({
                       activeOpacity={isOnTrip ? 1 : 0.98}
                     >
                       <View style={styles.assignRegistryCardLeft}>
-                        <View style={[
-                          styles.assignDriverAvatarRegistry,
-                          isOnTrip && styles.assignDriverAvatarBusy,
-                        ]}>
-                          <Text style={[
-                            styles.assignDriverInitialRegistry,
-                            isOnTrip && styles.assignDriverInitialBusy,
-                          ]}>{initial}</Text>
-                        </View>
+                        {hasAvatar ? (
+                          <Image
+                            source={{ uri: d.avatar_url!.trim() }}
+                            style={[
+                              styles.assignDriverAvatarImage,
+                              isOnTrip && styles.assignDriverAvatarBusy,
+                            ]}
+                          />
+                        ) : (
+                          <View style={[
+                            styles.assignDriverAvatarRegistry,
+                            isOnTrip && styles.assignDriverAvatarBusy,
+                          ]}>
+                            <Text style={[
+                              styles.assignDriverInitialRegistry,
+                              isOnTrip && styles.assignDriverInitialBusy,
+                            ]}>{initial}</Text>
+                          </View>
+                        )}
                         <View style={styles.assignCardBody}>
                           <Text style={[
                             styles.assignCardTitle,
@@ -891,15 +947,24 @@ export function TripAssignmentBlock({
                           ]}>
                             {statusText}
                           </Text>
+                          {ratingMeta ? (
+                            <View style={styles.assignRatingRow}>
+                              <FontAwesome name="star" size={10} color={Theme.driverGold} />
+                              <Text style={styles.assignRatingText}>
+                                Rating {ratingMeta.ratingLabel}
+                                {ratingMeta.countLabel ? ` ${ratingMeta.countLabel}` : ""}
+                              </Text>
+                            </View>
+                          ) : null}
                         </View>
                       </View>
                       {isOnTrip ? (
                         <View style={styles.assignBusyBadge}>
-                          <Text style={styles.assignBusyBadgeText}>In Trip</Text>
+                          <Text style={styles.assignBusyBadgeText}>On Trip</Text>
                         </View>
                       ) : (
                         <View style={styles.assignSyncBadge}>
-                          <Text style={styles.assignSyncBadgeText}>Sync Node</Text>
+                          <Text style={styles.assignSyncBadgeText}>Assign</Text>
                         </View>
                       )}
                     </TouchableOpacity>
@@ -960,17 +1025,17 @@ export function TripAssignmentBlock({
                       >
                       <View style={styles.assignRegistryCardLeft}>
                         <View style={styles.assignVehicleIconWrapRegistry}>
-                          <FontAwesome name="truck" size={16} color="#ffffff" />
+                          <FontAwesome name="truck" size={16} color={Theme.textPrimaryDark} />
                         </View>
                         <View style={styles.assignCardBody}>
                           <Text style={styles.assignCardTitle} numberOfLines={1}>
                             {plate}
                           </Text>
-                          <Text style={styles.assignRegistrySubtext}>{typeLabel} Node</Text>
+                          <Text style={styles.assignRegistrySubtext}>{typeLabel}</Text>
                         </View>
                       </View>
                       <View style={styles.assignUpdateLinkBadge}>
-                        <Text style={styles.assignUpdateLinkBadgeText}>Update Link</Text>
+                        <Text style={styles.assignUpdateLinkBadgeText}>Select</Text>
                       </View>
                     </TouchableOpacity>
                   );
@@ -992,7 +1057,7 @@ export function TripAssignmentBlock({
               onPress={() => setAssignMode(null)}
               activeOpacity={0.9}
             >
-              <Text style={styles.assignCancelBtnText}>Cancel Registry</Text>
+              <Text style={styles.assignCancelBtnText}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1040,7 +1105,7 @@ export function TripAssignmentBlock({
               placeholderTextColor={Theme.textMuted}
               value={phoneInput}
               onChangeText={(v) => {
-                setPhoneInput(v);
+                setPhoneInput(formatMobileNumber(v));
                 setPhoneError(null);
               }}
               keyboardType="phone-pad"
@@ -1139,8 +1204,8 @@ const styles = StyleSheet.create({
     borderBottomColor: Theme.borderLight,
   },
   currentHeaderTitle: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 14,
+    fontWeight: "800",
     color: Theme.textPrimaryDark,
   },
   currentHeaderRight: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -1191,37 +1256,41 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   assignIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
   },
   assignIconInactive: {
     backgroundColor: Theme.surfaceGray,
-    borderColor: Theme.borderLight,
+    borderColor: "transparent",
   },
   assignIconDriverActive: {
-    backgroundColor: (Theme as any).primaryMuted ?? Theme.surfaceGray,
-    borderColor: Theme.primary,
+    backgroundColor: Theme.surfaceGray,
+    borderColor: "transparent",
   },
   assignIconVehicleActive: {
-    backgroundColor: Theme.primary,
-    borderColor: Theme.primary,
+    backgroundColor: Theme.surfaceGray,
+    borderColor: "transparent",
+  },
+  assignIconVehicleInactive: {
+    backgroundColor: Theme.surfaceGray,
+    borderColor: "transparent",
   },
   assignRowText: { flex: 1, minWidth: 0 },
   assignRowLabel: {
     fontSize: 9,
-    fontWeight: "400",
+    fontWeight: "700",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.8,
-    marginBottom: 1,
+    marginBottom: 2,
   },
   assignRowValue: {
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
   assignRowValueEmpty: {
@@ -1231,39 +1300,35 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
   actionBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 10,
-    minWidth: 72,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 80,
     alignItems: "center",
     justifyContent: "center",
   },
   actionBtnPrimary: {
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: "#000",
   },
   actionBtnSecondary: {
-    backgroundColor: (Theme as any).primaryMuted ?? Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.primary,
+    backgroundColor: Theme.surfaceGray,
   },
   actionBtnSecondaryAlt: {
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   actionBtnText: {
     fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 0.8,
+    fontWeight: "800",
+    letterSpacing: 0.5,
     textTransform: "uppercase",
   },
-  actionBtnTextPrimary: { color: Theme.textOnDark },
-  actionBtnTextSecondary: { color: Theme.primary },
+  actionBtnTextPrimary: { color: "#fff" },
+  actionBtnTextSecondary: { color: Theme.textPrimaryDark },
   actionBtnTextSecondaryAlt: { color: Theme.textPrimaryDark },
 
   otpInline: {
-    marginTop: 8,
-    paddingTop: 8,
+    marginTop: 12,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: Theme.borderLight,
     gap: 6,
@@ -1275,7 +1340,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   otpInlineLabel: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "800",
     color: Theme.textMuted,
     textTransform: "uppercase",
@@ -1287,7 +1352,7 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     letterSpacing: 1.2,
   },
-  otpInlineMuted: { fontSize: 9, fontWeight: "700", color: Theme.textMuted },
+  otpInlineMuted: { fontSize: 10, fontWeight: "700", color: Theme.textMuted },
   otpInlineBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -1295,7 +1360,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   otpInlineBtnText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "800",
     color: Theme.primary,
     textTransform: "uppercase",
@@ -1332,28 +1397,28 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   badgePrivate: {
-    backgroundColor: Theme.surfaceBorder,
-    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceGray,
+    borderColor: Theme.surfaceGray,
   },
   badgeShared: {
-    backgroundColor: Theme.darkGreen,
-    borderColor: Theme.darkGreen,
+    backgroundColor: Theme.surfaceGray,
+    borderColor: Theme.surfaceGray,
   },
   badgeUnassigned: {
     backgroundColor: Theme.surfaceLight,
     borderColor: Theme.borderInput,
   },
   sourceBadgeText: {
-    fontSize: 7,
-    fontWeight: "600",
-    letterSpacing: 0.6,
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.8,
     textTransform: "uppercase",
   },
   sourceBadgeTextShared: {
-    color: Theme.textOnDark,
+    color: Theme.textSection,
   },
   sourceBadgeTextPrivate: {
-    color: Theme.textPrimaryDark,
+    color: Theme.textSection,
   },
   sourceBadgeTextUnassigned: {
     color: Theme.textPrimaryDark,
@@ -1418,8 +1483,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   assignmentLogText: {
-    fontSize: 11,
-    fontWeight: "400",
+    fontSize: 12,
+    fontWeight: "500",
     color: Theme.textMuted,
     marginTop: 4,
     lineHeight: 16,
@@ -1440,14 +1505,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   assignAggregateMetaLabel: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "800",
-    color: Theme.textMuted,
+    color: Theme.textSection,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
   assignAggregateMetaValue: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
     flex: 1,
@@ -1456,15 +1521,15 @@ const styles = StyleSheet.create({
   },
   col: { flex: 1, minWidth: 0 },
   label: {
-    fontSize: 8,
-    fontWeight: "400",
-    color: Theme.textMuted,
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textSection,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
   value: {
-    fontSize: 12,
-    fontWeight: "500",
+    fontSize: 13,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     marginTop: 4,
   },
@@ -1554,7 +1619,7 @@ const styles = StyleSheet.create({
   // Premium assignment picker modal
   assignModalWrap: {
     flex: 1,
-    backgroundColor: "#f4f5f7",
+    backgroundColor: Theme.surfaceGray,
   },
   assignModalHeader: {
     flexDirection: "row",
@@ -1570,7 +1635,7 @@ const styles = StyleSheet.create({
   assignModalTitle: {
     fontSize: 18,
     fontWeight: "800",
-    color: Theme.primary,
+    color: Theme.textPrimaryDark,
   },
   assignModalSubtitle: {
     fontSize: 11,
@@ -1785,7 +1850,7 @@ const styles = StyleSheet.create({
     marginVertical: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: Theme.screenBackground,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -1830,22 +1895,29 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: Theme.fiscalTabActiveBg ?? "#e8eaf6",
+    backgroundColor: "transparent",
     borderWidth: 1,
-    borderColor: Theme.primary,
+    borderColor: Theme.textPrimaryDark,
     alignItems: "center",
     justifyContent: "center",
+  },
+  assignDriverAvatarImage: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
   },
   assignDriverInitialRegistry: {
     fontSize: 12,
     fontWeight: "800",
-    color: Theme.primary,
+    color: Theme.textPrimaryDark,
   },
   assignSyncBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: Theme.positiveMuted,
+    backgroundColor: "transparent",
     borderWidth: 1,
     borderColor: Theme.darkGreen,
   },
@@ -1856,8 +1928,8 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   assignRegistryCardBusy: {
-    opacity: 0.6,
-    backgroundColor: Theme.surfaceGray,
+    opacity: 0.75,
+    backgroundColor: Theme.screenBackground,
   },
   assignDriverAvatarBusy: {
     backgroundColor: Theme.surfaceGray,
@@ -1876,7 +1948,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: (Theme as any).warningMuted ?? "#FEF3C7",
+    backgroundColor: "transparent",
     borderWidth: 1,
     borderColor: (Theme as any).warning ?? "#D97706",
   },
@@ -1890,24 +1962,24 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: Theme.primary,
+    backgroundColor: "transparent",
     borderWidth: 1,
-    borderColor: Theme.primary,
+    borderColor: Theme.textPrimaryDark,
     alignItems: "center",
     justifyContent: "center",
   },
   assignUpdateLinkBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: Theme.fiscalTabActiveBg ?? "#e8eaf6",
+    backgroundColor: "transparent",
     borderWidth: 1,
-    borderColor: Theme.primary,
+    borderColor: Theme.textPrimaryDark,
   },
   assignUpdateLinkBadgeText: {
     fontSize: 8,
     fontWeight: "800",
-    color: Theme.primary,
+    color: Theme.textPrimaryDark,
     textTransform: "uppercase",
   },
   assignRegistrySubtext: {
@@ -1917,6 +1989,17 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.8,
     marginTop: 2,
+  },
+  assignRatingRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  assignRatingText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textSecondary,
   },
   assignCancelBtn: {
     paddingVertical: 16,
@@ -1937,13 +2020,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.textPrimaryDark,
     paddingVertical: 16,
     borderRadius: 12,
-    shadowColor: Theme.primary,
+    shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
     elevation: 4,
   },
   assignConfirmBtnDisabled: { opacity: 0.7 },

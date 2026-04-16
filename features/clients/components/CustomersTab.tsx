@@ -1,5 +1,5 @@
 /**
- * Treasury Fiscal Matrix — Customers tab. O(n) aggregation: received = ledger only, billed = trips only.
+ * Treasury Financial Summary — Customers tab. O(n) aggregation: received = ledger only, billed = trips only.
  * Supports matrix (table) view and ledger (transaction cards) view with toggle.
  */
 import { FAB } from "@/components/FAB";
@@ -289,7 +289,7 @@ function CustomerDetailView({
           <View style={detailStyles.scorecard}>
             <View style={detailStyles.scorecardTop}>
               <View>
-                <Text style={detailStyles.scorecardLabel}>Grid Fiscal DNA</Text>
+                <Text style={detailStyles.scorecardLabel}>Financial Overview</Text>
                 <Text style={detailStyles.scorecardAmount}>
                   ₹{sales.toLocaleString("en-IN")}
                 </Text>
@@ -315,7 +315,7 @@ function CustomerDetailView({
           </View>
         )}
 
-        {/* Tab content: Trip-level receivables (Missions) */}
+        {/* Tab content: Trip-level receivables (Trips) */}
         {detailTab === "receivables" && (
           <View style={detailStyles.section}>
             <View style={detailStyles.tableCard}>
@@ -382,7 +382,7 @@ function CustomerDetailView({
                 })
               ) : (
                 <View style={detailStyles.missionEmpty}>
-                  <Text style={detailStyles.missionEmptyText}>No missions</Text>
+                  <Text style={detailStyles.missionEmptyText}>No trips</Text>
                 </View>
               )}
             </View>
@@ -434,7 +434,7 @@ function CustomerDetailView({
               </View>
               <TextInput
                 style={detailStyles.byTripSearchInput}
-                placeholder="Search mission, destination..."
+                placeholder="Search trip, destination..."
                 placeholderTextColor={Theme.driverPlaceholder}
                 value={byTripSearch}
                 onChangeText={setByTripSearch}

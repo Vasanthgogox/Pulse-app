@@ -119,7 +119,7 @@ flowchart LR
 |------------|---------|-------------|----------------|--------------|------|
 | US-060 | Network (tab) | Node Management; filters ALL / REQUESTS / CLIENT / SUPPLIER / DRIVER; node cards from org clients, suppliers, drivers; tap → entity detail | [app/(tabs)/network.tsx](../app/(tabs)/network.tsx) | getClientsByOrganization, getSuppliersByOrganization, getDriversByOrganization | Network |
 | US-061 | Network (standalone) | Same as tab; "Network Registry / Handshake Center"; TeslaHeader; filter tabs; mock node cards; Accept / Invite / Request (mock) | [app/network.tsx](../app/network.tsx) | — | Network |
-| US-062 | Load Board (root/modal) | Mission Exchange; GIVE LOAD / GET LOAD; indents; CREATE INDENT; Sync Nodes → (tabs)/network | [app/load-board.tsx](../app/load-board.tsx), [app/(modals)/load-board.tsx](../app/(modals)/load-board.tsx) | US-060 | Load Board |
+| US-062 | Load Board (root/modal) | Trip Exchange; GIVE LOAD / GET LOAD; indents; CREATE INDENT; Sync Nodes → (tabs)/network | [app/load-board.tsx](../app/load-board.tsx), [app/(modals)/load-board.tsx](../app/(modals)/load-board.tsx) | US-060 | Load Board |
 
 ---
 

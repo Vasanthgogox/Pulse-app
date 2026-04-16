@@ -5,6 +5,8 @@ import React from "react";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
+export type ThemedConfirmModalVariant = "neutral" | "warning";
+
 export interface ThemedConfirmModalProps {
   visible: boolean;
   title: string;
@@ -13,7 +15,9 @@ export interface ThemedConfirmModalProps {
   confirmText?: string;
   onCancel: () => void;
   onConfirm: () => void;
-  confirmVariant?: "primary" | "destructive";
+  onRequestClose?: () => void;
+  variant?: ThemedConfirmModalVariant;
+  confirmVariant?: "primary" | "secondary" | "destructive";
 }
 
 export function ThemedConfirmModal({
@@ -24,28 +28,37 @@ export function ThemedConfirmModal({
   confirmText = "Confirm",
   onCancel,
   onConfirm,
+  onRequestClose,
+  variant = "neutral",
   confirmVariant = "primary",
 }: ThemedConfirmModalProps) {
   const insets = useSafeAreaInsets();
 
   const variantConfig = React.useMemo(() => {
-    if (confirmVariant === "destructive") {
+    if (variant === "warning") {
       return {
         accentColor: Theme.negative,
-        iconName: "exclamation-circle" as const,
-        iconColor: Theme.negative,
-        iconBg: Theme.negativeMuted,
-        btnStyle: styles.confirmButtonDestructive,
+        iconName: "exclamation",
+        iconInnerBg: Theme.negative,
+        iconBg: Theme.negativeMuted || "rgba(239, 68, 68, 0.12)",
       };
     }
     return {
       accentColor: Theme.primary,
-      iconName: "question-circle" as const,
-      iconColor: Theme.primary,
-      iconBg: Theme.aggregatePillBg,
-      btnStyle: styles.confirmButtonPrimary,
+      iconName: "question",
+      iconInnerBg: Theme.primary,
+      iconBg: "rgba(26, 35, 126, 0.08)",
     };
-  }, [confirmVariant]);
+  }, [variant]);
+
+  const confirmButtonStyle =
+    confirmVariant === "destructive"
+      ? styles.buttonDestructive
+      : confirmVariant === "secondary"
+      ? styles.buttonSecondary
+      : styles.buttonPrimary;
+  const confirmTextStyle =
+    confirmVariant === "secondary" ? styles.textSecondary : styles.textPrimary;
 
   return (
     <Modal
@@ -53,24 +66,46 @@ export function ThemedConfirmModal({
       animationType="fade"
       transparent
       statusBarTranslucent
-      onRequestClose={onCancel}
+      onRequestClose={onRequestClose ?? onCancel}
     >
-      <View style={[styles.backdrop, { paddingBottom: insets.bottom }]}>
-        <View style={styles.modalContent}>
-          <View style={styles.header}>
-            <View style={[styles.iconWrap, { backgroundColor: variantConfig.iconBg }]}>
-              <FontAwesome name={variantConfig.iconName} size={28} color={variantConfig.iconColor} />
+      <View
+        style={[
+          styles.overlay,
+          {
+            paddingTop: insets.top,
+            paddingBottom: insets.bottom,
+          },
+        ]}
+      >
+        <View style={styles.card}>
+          <View style={[styles.accentBar, { backgroundColor: variantConfig.accentColor }]} />
+
+          <View style={[styles.iconCircle, { backgroundColor: variantConfig.iconBg }]}>
+            <View style={[styles.iconInnerCircle, { backgroundColor: variantConfig.iconInnerBg }]}>
+              <FontAwesome name={variantConfig.iconName as any} size={20} color="#FFFFFF" />
             </View>
           </View>
-          <Text style={[styles.title, { color: Theme.textPrimaryDark }]}>{title}</Text>
-          <Text style={[styles.message, { color: Theme.textMuted }]}>{message}</Text>
-          
-          <View style={styles.actions}>
-            <TouchableOpacity style={styles.cancelButton} onPress={onCancel} activeOpacity={0.8}>
-              <Text style={styles.cancelText}>{cancelText}</Text>
+
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.message}>{message}</Text>
+
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              onPress={onCancel}
+              style={[styles.buttonBase, styles.buttonSecondary]}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.textBase, styles.textSecondary]}>{cancelText}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.confirmButton, variantConfig.btnStyle]} onPress={onConfirm} activeOpacity={0.8}>
-              <Text style={styles.confirmText}>{confirmText}</Text>
+
+            <TouchableOpacity
+              onPress={onConfirm}
+              style={[styles.buttonBase, confirmButtonStyle]}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.textBase, confirmTextStyle]}>{confirmText}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -80,82 +115,101 @@ export function ThemedConfirmModal({
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
+  overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
+    backgroundColor: Theme.overlayBackdrop,
     alignItems: "center",
-    padding: Layout.screenPaddingHorizontal,
+    justifyContent: "center",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
   },
-  modalContent: {
+  card: {
+    width: "100%",
+    maxWidth: 360,
     backgroundColor: Theme.screenBackground,
     borderRadius: 24,
-    padding: 24,
-    width: "100%",
-    maxWidth: 320,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 24,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 24,
-    elevation: 10,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 14,
   },
-  header: {
+  accentBar: {
+    position: "absolute",
+    top: 16,
+    width: "70%",
+    height: 4,
+    borderRadius: 2,
+  },
+  iconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
     marginBottom: 16,
   },
-  iconWrap: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: "center",
+  iconInnerCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
+    justifyContent: "center",
   },
   title: {
-    fontSize: 20,
-    fontWeight: "700",
+    fontSize: 22,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
     marginBottom: 8,
     textAlign: "center",
   },
   message: {
-    fontSize: 15,
-    textAlign: "center",
-    lineHeight: 22,
+    fontSize: 14,
+    fontWeight: "500",
+    color: Theme.textSecondary,
     marginBottom: 24,
+    textAlign: "center",
+    lineHeight: 20,
   },
-  actions: {
+  buttonRow: {
     flexDirection: "row",
-    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 12,
+    width: "100%",
   },
-  cancelButton: {
+  buttonBase: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: Theme.surfaceMuted,
-    justifyContent: "center",
+    borderRadius: 999,
+    minHeight: 48,
     alignItems: "center",
-  },
-  cancelText: {
-    color: Theme.textPrimaryDark,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  confirmButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
     justifyContent: "center",
-    alignItems: "center",
+    paddingHorizontal: 16,
   },
-  confirmButtonPrimary: {
+  buttonPrimary: {
     backgroundColor: Theme.primary,
   },
-  confirmButtonDestructive: {
+  buttonSecondary: {
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 0,
+  },
+  buttonDestructive: {
     backgroundColor: Theme.negative,
   },
-  confirmText: {
-    color: Theme.textOnPrimary,
+  textBase: {
     fontSize: 16,
     fontWeight: "600",
+  },
+  textPrimary: {
+    color: Theme.textOnPrimary,
+  },
+  textSecondary: {
+    color: Theme.textPrimaryDark,
   },
 });

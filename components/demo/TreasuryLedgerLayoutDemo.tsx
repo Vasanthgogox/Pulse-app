@@ -1,5 +1,5 @@
 /**
- * Treasury / Fiscal Matrix ledger layout demo.
+ * Treasury / Financial Summary ledger layout demo.
  * Matches the web mock: dark top (header, tabs, summary, toolbar) + light table (ENTITY/DESC | LINK | RECEIVED | PAID).
  * Uses Theme, Layout, safe area. For comparison with the real Finance tab; see docs/LEDGER_LAYOUT_TREASURY_MOCK.md.
  */

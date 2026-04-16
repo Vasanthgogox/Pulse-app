@@ -495,7 +495,7 @@ export function FinanceScreen() {
     if (financeSubTab === "suppliers") {
       const { rows } = aggregateSuppliers(
         supplierRows,
-        tripRows,
+        allTripsForLedger,
         ledgerRows,
         tripsWhereOrgIsClient,
         tripPartyMap,
@@ -1181,7 +1181,7 @@ export function FinanceScreen() {
               tripDetailsMap={tripDetailsMap}
               onLedgerMissionChange={handleLedgerMissionChange}
               clientRows={clientRows}
-              tripRows={tripRows}
+              tripRows={allTripsForLedger}
               supplierRows={supplierRows}
               tripsWhereOrgIsClient={tripsWhereOrgIsClient}
               tripsWhereOrgIsSupplier={tripsWhereOrgIsSupplier}

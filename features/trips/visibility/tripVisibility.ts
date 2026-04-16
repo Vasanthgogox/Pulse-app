@@ -29,6 +29,25 @@ export function isLoadBasedTrip(
   return trip?.indent_id != null;
 }
 
+/**
+ * Trip is owned by another org and the viewer should use linked client/supplier maps (indent-based load
+ * or aggregate partner trip with supplier_id). Used for finance party remap and ledger attribution.
+ */
+export function isCrossOrgIntegrationTrip(
+  trip:
+    | Pick<TripRow, 'organization_id' | 'indent_id' | 'supplier_id'>
+    | null
+    | undefined,
+  viewerOrgId: string | null | undefined,
+): boolean {
+  if (viewerOrgId == null || !trip?.organization_id) return false;
+  if (trip.organization_id === viewerOrgId) return false;
+  return (
+    isLoadBasedTrip(trip) ||
+    !!(trip.supplier_id && String(trip.supplier_id).trim())
+  );
+}
+
 export function isIntegratedClientRow(
   client: Pick<TripVisibilityClientLike, 'is_integrated' | 'linked_organization_id'> | null | undefined,
 ): boolean {

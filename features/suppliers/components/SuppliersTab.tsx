@@ -1,5 +1,5 @@
 /**
- * Treasury Fiscal Matrix — Suppliers tab. O(n): due = trips only, paid = ledger only, unsettled = max(0, due - paid).
+ * Treasury Financial Summary — Suppliers tab. O(n): due = trips only, paid = ledger only, unsettled = max(0, due - paid).
  * Layout aligned with Customers tab: wrap, header, summary row, table card.
  */
 import { IntegrationModeTag } from "@/components/IntegrationModeTag";

@@ -2,6 +2,8 @@
  * Create Indent — Deploy New Load.
  * Full-screen form: origin, destination, client, budget, supplier target, vehicle, load type, weight, pickup date.
  */
+import { ThemedAlertModal } from "@/components/ThemedAlertModal";
+import { ThemedConfirmModal } from "@/components/ThemedConfirmModal";
 import { TeslaHeader } from "@/components/TeslaHeader";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -220,38 +222,42 @@ export default function CreateIndentScreen() {
     : params.draftId;
   const routeDraftId = isUuid(routeDraftIdRaw) ? routeDraftIdRaw : null;
 
+  const [alertState, setAlertState] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+  }>({
+    visible: false,
+    title: "",
+    message: "",
+  });
+
+  const [confirmState, setConfirmState] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    resolve: ((value: boolean) => void) | null;
+  }>({
+    visible: false,
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    resolve: null,
+  });
+
   const showDialog = useCallback((title: string, message?: string) => {
-    if (
-      Platform.OS === "web" &&
-      typeof window !== "undefined" &&
-      typeof window.alert === "function"
-    ) {
-      const body =
-        message && message.trim().length > 0 ? `${title}\n\n${message}` : title;
-      window.alert(body);
-      return;
-    }
-    Alert.alert(title, message);
+    setAlertState({ visible: true, title, message: message ?? "" });
   }, []);
 
   const confirmDialog = useCallback(
-    async (
+    (
       title: string,
       message: string,
       confirmText = "Confirm",
     ): Promise<boolean> => {
-      if (
-        Platform.OS === "web" &&
-        typeof window !== "undefined" &&
-        typeof window.confirm === "function"
-      ) {
-        return window.confirm(`${title}\n\n${message}`);
-      }
       return new Promise((resolve) => {
-        Alert.alert(title, message, [
-          { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
-          { text: confirmText, onPress: () => resolve(true) },
-        ]);
+        setConfirmState({ visible: true, title, message, confirmText, resolve });
       });
     },
     [],
@@ -1352,6 +1358,27 @@ export default function CreateIndentScreen() {
             </View>
           </View>
         </ScrollView>
+        {/* Modals */}
+        <ThemedAlertModal
+          visible={alertState.visible}
+          title={alertState.title}
+          message={alertState.message}
+          onOk={() => setAlertState((prev) => ({ ...prev, visible: false }))}
+        />
+        <ThemedConfirmModal
+          visible={confirmState.visible}
+          title={confirmState.title}
+          message={confirmState.message}
+          confirmText={confirmState.confirmText}
+          onCancel={() => {
+            if (confirmState.resolve) confirmState.resolve(false);
+            setConfirmState((prev) => ({ ...prev, visible: false, resolve: null }));
+          }}
+          onConfirm={() => {
+            if (confirmState.resolve) confirmState.resolve(true);
+            setConfirmState((prev) => ({ ...prev, visible: false, resolve: null }));
+          }}
+        />
       </View>
     </KeyboardAvoidingView>
   );

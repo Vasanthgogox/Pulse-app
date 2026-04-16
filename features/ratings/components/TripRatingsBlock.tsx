@@ -12,6 +12,7 @@ import {
   Animated,
   Alert,
   Easing,
+  Image,
   Modal,
   StyleSheet,
   Text,
@@ -38,6 +39,8 @@ export interface TripRatingsBlockProps {
   partnerName?: string | null;
   /** Resolved driver display name */
   driverName?: string | null;
+  /** Resolved driver profile avatar uri (signed/public URL). */
+  driverAvatarUri?: string | null;
   /** Called when trip ratings have been loaded (so parent can show driver rating in tracking block) */
   onRatingsLoaded?: (ratings: RatingRow[]) => void;
 }
@@ -121,11 +124,30 @@ function formatDate(s: string) {
   return `${day} ${months[Number(m) - 1]} ${y}`;
 }
 
+function getScoreLabel(value: number): string {
+  if (value <= 0) return 'Select rating';
+  if (value === 1) return 'Needs improvement';
+  if (value === 2) return 'Below expectations';
+  if (value === 3) return 'Good';
+  if (value === 4) return 'Very good';
+  return 'Excellent';
+}
+
+function getScoreEmoji(value: number): string {
+  if (value <= 0) return '⭐';
+  if (value === 1) return '😕';
+  if (value === 2) return '🙁';
+  if (value === 3) return '🙂';
+  if (value === 4) return '😊';
+  return '🤩';
+}
+
 export function TripRatingsBlock({
   trip,
   organizationId,
   partnerName,
   driverName,
+  driverAvatarUri,
   onRatingsLoaded,
 }: TripRatingsBlockProps) {
   const insets = useSafeAreaInsets();
@@ -423,6 +445,8 @@ export function TripRatingsBlock({
   const activeRoleLabel = flow?.type === 'client_supplier' ? 'Supplier' : 'Driver';
   const activePrompt = flow?.type === 'client_supplier' ? 'How was the supplier?' : 'How was your trip?';
   const activeQuickTags = flow?.type === 'client_supplier' ? SUPPLIER_RATING_TAGS : DRIVER_RATING_TAGS;
+  const scoreLabel = getScoreLabel(score);
+  const scoreEmoji = getScoreEmoji(score);
 
   if (!isCompleted) return null;
   if (!canRateSupplier && !canRateDriver && ratings.length === 0) {
@@ -431,7 +455,15 @@ export function TripRatingsBlock({
 
   return (
     <View style={styles.wrapper}>
-      <Text style={styles.sectionTitle}>RATINGS</Text>
+      <View style={styles.sectionHeading}>
+        <View style={styles.sectionIconWrap}>
+          <Feather name="award" size={14} color={Theme.textOnPrimary} />
+        </View>
+        <View style={styles.sectionHeadingTextWrap}>
+          <Text style={styles.sectionTitle}>Ratings</Text>
+          <Text style={styles.sectionSubtitle}>Track service quality across completed trips</Text>
+        </View>
+      </View>
       <View style={styles.card}>
         {loading ? (
           <View style={styles.loading}>
@@ -443,14 +475,16 @@ export function TripRatingsBlock({
             {ratings.length > 0 && (
               <View style={styles.summary}>
                 {supplierAvg != null && (
-                  <Text style={styles.summaryText}>
-                    Supplier: {supplierAvg.toFixed(1)} ★
-                  </Text>
+                  <View style={styles.summaryPill}>
+                    <Feather name="briefcase" size={12} color={Theme.textPrimaryDark} />
+                    <Text style={styles.summaryText}>Supplier {supplierAvg.toFixed(1)} ★</Text>
+                  </View>
                 )}
                 {driverAvg != null && (
-                  <Text style={styles.summaryText}>
-                    Driver: {driverAvg.toFixed(1)} ★
-                  </Text>
+                  <View style={styles.summaryPill}>
+                    <Feather name="truck" size={12} color={Theme.textPrimaryDark} />
+                    <Text style={styles.summaryText}>Driver {driverAvg.toFixed(1)} ★</Text>
+                  </View>
                 )}
               </View>
             )}
@@ -504,6 +538,7 @@ export function TripRatingsBlock({
                   onPress={openRateSupplier}
                   activeOpacity={0.8}
                 >
+                  <Feather name="briefcase" size={14} color={Theme.darkGreen} />
                   <Text style={styles.btnText}>Rate supplier</Text>
                 </TouchableOpacity>
               )}
@@ -513,6 +548,7 @@ export function TripRatingsBlock({
                   onPress={openRateDriver}
                   activeOpacity={0.8}
                 >
+                  <Feather name="truck" size={14} color={Theme.textPrimaryDark} />
                   <Text style={styles.btnText}>Rate driver</Text>
                 </TouchableOpacity>
               )}
@@ -554,11 +590,21 @@ export function TripRatingsBlock({
             ) : (
               <>
                 <View style={styles.heroHeader}>
+                  <View style={styles.heroGlowOne} />
+                  <View style={styles.heroGlowTwo} />
                   <View style={styles.heroTopRow}>
                     <View style={styles.avatarWrap}>
-                      <Text style={styles.avatarText}>
-                        {(activeSubjectName || activeRoleLabel).slice(0, 1).toUpperCase()}
-                      </Text>
+                      {flow?.type === 'supplier_driver' && driverAvatarUri ? (
+                        <Image
+                          source={{ uri: driverAvatarUri }}
+                          style={styles.avatarImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <Text style={styles.avatarText}>
+                          {(activeSubjectName || activeRoleLabel).slice(0, 1).toUpperCase()}
+                        </Text>
+                      )}
                       <View style={styles.avatarBadge}>
                         <Feather
                           name={flow?.type === 'client_supplier' ? 'briefcase' : 'truck'}
@@ -587,6 +633,10 @@ export function TripRatingsBlock({
                 <View style={styles.modalBody}>
                   <View style={styles.ratingIntro}>
                     <Text style={styles.ratingPrompt}>{activePrompt}</Text>
+                    <View style={styles.scorePill}>
+                      <Text style={styles.scoreEmoji}>{scoreEmoji}</Text>
+                      <Text style={styles.scorePillText}>{scoreLabel}</Text>
+                    </View>
                     <View style={styles.stars}>
                       {[1, 2, 3, 4, 5].map((n) => (
                         <TouchableOpacity
@@ -663,24 +713,33 @@ export function TripRatingsBlock({
                         </View>
                       )}
 
-                      <TouchableOpacity
-                        style={[
-                          styles.modalSubmit,
-                          (submitting || score === 0) ? styles.modalSubmitDisabled : null,
-                        ]}
-                        onPress={handleSubmit}
-                        disabled={submitting || score === 0}
-                        activeOpacity={0.85}
-                      >
-                        {submitting ? (
-                          <ActivityIndicator size="small" color={Theme.textOnPrimary} />
-                        ) : (
-                          <>
-                            <Text style={styles.modalSubmitText}>Submit rating</Text>
-                            <Feather name="chevron-right" size={18} color={Theme.textOnPrimary} />
-                          </>
-                        )}
-                      </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.modalSubmit,
+                            (submitting || score === 0) ? styles.modalSubmitDisabled : null,
+                          ]}
+                          onPress={handleSubmit}
+                          disabled={submitting || score === 0}
+                          activeOpacity={0.85}
+                        >
+                          {submitting ? (
+                            <ActivityIndicator size="small" color={Theme.textMuted} />
+                          ) : (
+                            <>
+                              <Text style={[
+                                styles.modalSubmitText,
+                                (submitting || score === 0) ? { color: Theme.textMuted } : null
+                              ]}>
+                                Submit Rating
+                              </Text>
+                              <Feather 
+                                name="chevron-right" 
+                                size={20} 
+                                color={(submitting || score === 0) ? Theme.textMuted : Theme.textOnPrimary} 
+                              />
+                            </>
+                          )}
+                        </TouchableOpacity>
                     </Animated.View>
                   ) : null}
 
@@ -701,13 +760,34 @@ export function TripRatingsBlock({
 
 const styles = StyleSheet.create({
   wrapper: { marginBottom: 12, alignSelf: 'stretch' as const },
-  sectionTitle: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: Theme.textMutedDemo,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
+  sectionHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 12,
+    gap: 10,
+  },
+  sectionIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.textPrimaryDark,
+  },
+  sectionHeadingTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+    textTransform: 'capitalize',
+  },
+  sectionSubtitle: {
+    marginTop: 2,
+    fontSize: 11,
+    color: Theme.textMuted,
   },
   card: {
     backgroundColor: Theme.screenBackground,
@@ -726,14 +806,37 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Theme.textMuted,
   },
-  summary: { marginBottom: 8, gap: 4 },
+  summary: {
+    marginBottom: 12,
+    gap: 8,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  summaryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
   summaryText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     color: Theme.textPrimaryDark,
   },
   list: { gap: 8, marginBottom: 12 },
-  row: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Theme.surfaceBorder },
+  row: {
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 10,
+    backgroundColor: Theme.surface,
+  },
   rowLabel: { fontSize: 8, fontWeight: '700', color: Theme.textMutedDemo, textTransform: 'uppercase', letterSpacing: 0.8 },
   rowScore: { fontSize: 12, fontWeight: '700', color: Theme.driverGold, marginTop: 4 },
   rowTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
@@ -752,12 +855,16 @@ const styles = StyleSheet.create({
   },
   rowComment: { fontSize: 11, color: Theme.textSecondary, marginTop: 4 },
   rowDate: { fontSize: 10, color: Theme.textMuted, marginTop: 2 },
-  actions: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
+  actions: { flexDirection: 'row', gap: 10, flexWrap: 'wrap', marginTop: 6 },
   btn: {
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 10,
     minWidth: 120,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   btnSupplier: {
     backgroundColor: Theme.darkGreen + '22',
@@ -784,7 +891,7 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 18,
+    borderRadius: 20,
     width: '100%',
     maxWidth: 420,
     overflow: 'hidden',
@@ -794,8 +901,28 @@ const styles = StyleSheet.create({
   heroHeader: {
     backgroundColor: Theme.textPrimaryDark,
     paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 18,
+    paddingTop: 24,
+    paddingBottom: 20,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  heroGlowOne: {
+    position: 'absolute',
+    width: 170,
+    height: 170,
+    borderRadius: 85,
+    right: -78,
+    top: -70,
+    backgroundColor: Theme.primary + '33',
+  },
+  heroGlowTwo: {
+    position: 'absolute',
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    left: -62,
+    top: 26,
+    backgroundColor: Theme.driverGold + '22',
   },
   closeButton: {
     position: 'absolute',
@@ -804,7 +931,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: Theme.onPrimaryMuted,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
@@ -822,13 +949,18 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Theme.borderOnDark,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   avatarText: {
     fontSize: 22,
     fontWeight: '800',
     color: Theme.textPrimaryDark,
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 29,
   },
   avatarBadge: {
     position: 'absolute',
@@ -840,94 +972,118 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.driverGold,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: Theme.textPrimaryDark,
   },
   heroTextWrap: {
     flex: 1,
     minWidth: 0,
+    gap: 2,
   },
   heroEyebrow: {
     fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 1,
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
-    color: Theme.textOnPrimary,
-    opacity: 0.8,
-    marginBottom: 4,
+    color: 'rgba(255, 255, 255, 0.7)',
   },
   heroName: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
     color: Theme.textOnPrimary,
+    letterSpacing: -0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   heroMeta: {
-    marginTop: 4,
     fontSize: 12,
     fontWeight: '500',
-    color: Theme.textOnPrimary,
-    opacity: 0.84,
+    color: 'rgba(255, 255, 255, 0.8)',
   },
   modalBody: {
-    paddingHorizontal: 24,
     paddingTop: 24,
-    paddingBottom: 24,
     backgroundColor: Theme.screenBackground,
   },
   ratingIntro: {
     alignItems: 'center',
-    marginBottom: 18,
-    paddingBottom: 18,
+    marginBottom: 20,
+    paddingBottom: 20,
+    paddingHorizontal: 24,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
   ratingPrompt: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Theme.textPrimary,
-    marginBottom: 14,
+    fontSize: 18,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+    marginBottom: 12,
   },
-  stars: { flexDirection: 'row', justifyContent: 'center', gap: 10 },
-  starBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-  },
-  composerSection: {
-    overflow: 'hidden',
+  scorePill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 999,
     backgroundColor: Theme.surface,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    borderRadius: 16,
-    padding: 16,
+    marginBottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  scoreEmoji: {
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  scorePillText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+  },
+  stars: { flexDirection: 'row', justifyContent: 'center', gap: 12 },
+  starBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+  },
+  composerSection: {
+    overflow: 'hidden',
+    backgroundColor: Theme.surfaceGray,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 24,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
   },
   tagsTitle: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '800',
     color: Theme.textMutedDemo,
     textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 12,
+    letterSpacing: 1.2,
+    marginBottom: 16,
   },
   tagsWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 18,
+    marginBottom: 20,
   },
   tagChip: {
-    borderRadius: 16,
-    paddingHorizontal: 14,
+    borderRadius: 999,
+    paddingHorizontal: 16,
     paddingVertical: 10,
     borderWidth: 1,
   },
   tagChipIdle: {
-    backgroundColor: Theme.surfaceGray,
-    borderColor: Theme.borderInput,
+    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.borderLight,
   },
   tagChipActive: {
     backgroundColor: Theme.textPrimaryDark,
     borderColor: Theme.textPrimaryDark,
   },
   tagChipText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
   },
   tagChipTextIdle: {
@@ -953,8 +1109,8 @@ const styles = StyleSheet.create({
   commentInput: {
     borderWidth: 1,
     borderColor: Theme.borderInput,
-    backgroundColor: Theme.surfaceGray,
-    borderRadius: 16,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 14,
@@ -972,7 +1128,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.textPrimaryDark,
     paddingVertical: 16,
     paddingHorizontal: 18,
-    borderRadius: 16,
+    borderRadius: 18,
     minWidth: 90,
     alignItems: 'center',
     justifyContent: 'center',
@@ -980,14 +1136,17 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   modalSubmitDisabled: {
-    backgroundColor: Theme.textSecondary,
+    backgroundColor: Theme.surfaceGray,
+    borderColor: Theme.borderInput,
+    borderWidth: 1,
   },
-  modalSubmitText: { fontSize: 15, fontWeight: '800', color: Theme.textOnPrimary, textTransform: 'capitalize' },
+  modalSubmitText: { fontSize: 15, fontWeight: '800', color: Theme.textOnPrimary, textTransform: 'none' },
   helperText: {
     fontSize: 12,
     color: Theme.textMuted,
     textAlign: 'center',
-    marginTop: 16,
+    marginTop: 0,
+    marginBottom: 24,
   },
   successWrap: {
     paddingHorizontal: 24,

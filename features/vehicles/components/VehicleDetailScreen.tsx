@@ -71,16 +71,17 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
   const [error, setError] = useState<string | null>(null);
   const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [detailSubTab, setDetailSubTab] = useState<"missions" | "cash">("missions");
+  const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash">("trips");
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
+  const initialLoadDoneRef = useRef(false);
 
   const load = useCallback(() => {
     if (!vehicleId || !currentOrganization?.id) {
       setLoading(false);
       return;
     }
-    if (!isRefreshingRef.current) setLoading(true);
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
     Promise.all([
@@ -108,6 +109,7 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
       setTransactions(allTx);
     }).finally(() => {
       setLoading(false);
+      initialLoadDoneRef.current = true;
       isRefreshingRef.current = false;
       setRefreshing(false);
     });
@@ -151,12 +153,18 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
   );
 
   const vehicleTransactions = useMemo(() => {
-    if (!vehicleTrips.length) return [];
     const tripIds = new Set(vehicleTrips.map((t) => t.id));
+    const targetVehicleNum = vehicle ? normalizeVehicleNumberForMatch(vehicle.vehicle_number) : null;
     return transactions.filter(
-      (tx) => tx.trip_id != null && tripIds.has(tx.trip_id),
+      (tx) => {
+        if (tx.trip_id != null && tripIds.has(tx.trip_id)) return true;
+        if (targetVehicleNum && tx.vehicle_number) {
+          return normalizeVehicleNumberForMatch(tx.vehicle_number) === targetVehicleNum;
+        }
+        return false;
+      }
     );
-  }, [vehicleTrips, transactions]);
+  }, [vehicleTrips, transactions, vehicle]);
 
   const vehicleTransactionsByTripId = useMemo(() => {
     const map = new Map<string, LedgerRow[]>();
@@ -307,7 +315,7 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
           <Text style={styles.headerTitle} numberOfLines={1}>
             {vehicle.vehicle_number}
           </Text>
-          <Text style={styles.headerSubtitle}>ASSET FISCAL VIEW</Text>
+          <Text style={styles.headerSubtitle}>VEHICLE FINANCIAL VIEW</Text>
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity
@@ -347,8 +355,8 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
         <View style={styles.scorecard}>
           <View style={styles.scorecardTop}>
             <View style={styles.scorecardLeft}>
-              <Text style={styles.scorecardLabel}>GRID FISCAL DNA</Text>
-              <Text style={styles.scorecardSalesLabel}>ASSET SALES</Text>
+              <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
+              <Text style={styles.scorecardSalesLabel}>VEHICLE SALES</Text>
               <Text style={styles.scorecardAmount}>
                 {formatINR(contractValue)}
               </Text>
@@ -381,18 +389,18 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
           <TouchableOpacity
             style={[
               styles.tabItem,
-              detailSubTab === "missions" && styles.tabItemActive,
+              detailSubTab === "trips" && styles.tabItemActive,
             ]}
-            onPress={() => setDetailSubTab("missions")}
+            onPress={() => setDetailSubTab("trips")}
             activeOpacity={0.8}
           >
             <Text
               style={[
                 styles.tabItemText,
-                detailSubTab === "missions" && styles.tabItemTextActive,
+                detailSubTab === "trips" && styles.tabItemTextActive,
               ]}
             >
-              Missions
+              Trips
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -414,10 +422,10 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
           </TouchableOpacity>
         </View>
 
-        {detailSubTab === "missions" && (
+        {detailSubTab === "trips" && (
           <View style={styles.tableCard}>
             <View style={styles.tableHeader}>
-              <Text style={[styles.th, styles.thMission]}>Mission</Text>
+              <Text style={[styles.th, styles.thMission]}>Trip</Text>
               <Text style={[styles.th, styles.thSales]}>Sales</Text>
               <Text style={[styles.th, styles.thRight]}>Expense</Text>
               <Text style={[styles.th, styles.thRight]}>Profit</Text>
@@ -465,7 +473,7 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
               ))
             ) : (
               <View style={styles.emptyRow}>
-                <Text style={styles.emptyRowText}>No missions</Text>
+                <Text style={styles.emptyRowText}>No trips</Text>
               </View>
             )}
           </View>
@@ -844,9 +852,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     textTransform: "uppercase",
   },
-  thMission: { flex: 1.5, minWidth: 0 },
-  thSales: { width: 80, textAlign: "right" as const },
-  thRight: { width: 72, textAlign: "right" as const },
+  thMission: { flex: 2, minWidth: 0 },
+  thSales: { flex: 1, textAlign: "right" as const },
+  thRight: { flex: 1, textAlign: "right" as const },
   tableRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -860,7 +868,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textPrimaryDark,
   },
-  tdMission: { flex: 1.5, minWidth: 0 },
+  tdMission: { flex: 2, minWidth: 0 },
   tdMissionId: {
     fontSize: 11,
     fontWeight: "700",
@@ -872,8 +880,8 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     marginTop: 4,
   },
-  tdSales: { width: 80, textAlign: "right" as const },
-  tdRight: { width: 72, textAlign: "right" as const },
+  tdSales: { flex: 1, textAlign: "right" as const },
+  tdRight: { flex: 1, textAlign: "right" as const },
   tdGreen: { color: Theme.darkGreen },
   tdRed: { color: Theme.teslaRed },
   emptyRow: { paddingVertical: 24, alignItems: "center" },

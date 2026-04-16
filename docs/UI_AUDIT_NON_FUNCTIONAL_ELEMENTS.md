@@ -49,7 +49,7 @@ Project-wide scan of `.tsx`/`.ts` in `app/`, `components/`, `features/` for UI e
 ─────────────────────────────
 **TouchableOpacity** at line ~557:
   Code: `<TouchableOpacity style={styles.matrixRow} activeOpacity={0.7}>` (no onPress)
-  Issue: "Hardware Link" row looks tappable (chevron-right) but has no onPress.
+  Issue: "Linked Devices" row looks tappable (chevron-right) but has no onPress.
   Suggested fix: Add onPress to open hardware/settings or remove chevron and make it non-interactive.
 
 ---
@@ -145,7 +145,7 @@ Project-wide scan of `.tsx`/`.ts` in `app/`, `components/`, `features/` for UI e
 | 7 | app/(tabs)/indents.tsx | EntityRow (each indent) | Empty onPress | S | Med |
 | 8 | app/(driver)/index.tsx | Notification bell | Empty onPress | S | Med |
 | 9 | app/(driver)/requests.tsx | Notification bell | Empty onPress | S | Low |
-| 10 | app/(tabs)/profile.tsx | "Hardware Link" row | No onPress | S | Low |
+| 10 | app/(tabs)/profile.tsx | "Linked Devices" row | No onPress | S | Low |
 | 11 | components/demo/TeslaHeader.tsx | Bell icon | No onPress | S | Low |
 | 12 | features/ops-agent/OpsAgentScreen.tsx | Add contact | Hardcoded "Raj Kumar" | L | Med |
 | 13 | app/(tabs)/finance.tsx | Entity list panel inner tap | onPress={() => {}} (intentional?) | — | Low |
