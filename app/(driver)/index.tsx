@@ -2925,28 +2925,6 @@ export default function DriverRadarScreen() {
               }
             : {})}
         />
-      ) : !isOnline && !effectiveFirstIncoming ? (
-      <View style={[styles.centerCardWrap, styles.offlineCardContent]}>
-        <Text style={[styles.offlineCardTitle, { color: colors.text }]}>You are currently offline</Text>
-        <Text style={[styles.offlineCardSubtitle, { color: colors.textMuted }]}>Go online to view and accept trip assignments.</Text>
-        <TouchableOpacity
-          style={[styles.searchOfflineBtn, { marginTop: 12, backgroundColor: colors.surface, borderColor: colors.border }]}
-          onPress={() => {
-            setIsOnline(true);
-            triggerSuccess("You are online now.");
-            fetch();
-            setLocationStatus("loading");
-            fetchLocation();
-            if (driver?.organization_id && driver?.id) {
-               void driversService.updateDriver(driver.organization_id, driver.id, { status: 'online' }).catch(() => {});
-            }
-          }}
-          activeOpacity={0.8}
-        >
-          <FontAwesome name="wifi" size={16} color={colors.text} />
-          <Text style={[styles.searchOfflineBtnText, { color: colors.text }]}>Go online</Text>
-        </TouchableOpacity>
-      </View>
       ) : assignmentFeedback === "accepted" ? (
         <View style={styles.feedbackBlock}>
           <View
@@ -3005,6 +2983,28 @@ export default function DriverRadarScreen() {
             Looking for your next trip.
           </Text>
         </View>
+      ) : !isOnline && !effectiveFirstIncoming ? (
+      <View style={[styles.centerCardWrap, styles.offlineCardContent]}>
+        <Text style={[styles.offlineCardTitle, { color: colors.text }]}>You are currently offline</Text>
+        <Text style={[styles.offlineCardSubtitle, { color: colors.textMuted }]}>Go online to view and accept trip assignments.</Text>
+        <TouchableOpacity
+          style={[styles.searchOfflineBtn, { marginTop: 12, backgroundColor: colors.surface, borderColor: colors.border }]}
+          onPress={() => {
+            setIsOnline(true);
+            triggerSuccess("You are online now.");
+            fetch();
+            setLocationStatus("loading");
+            fetchLocation();
+            if (driver?.organization_id && driver?.id) {
+               void driversService.updateDriver(driver.organization_id, driver.id, { status: 'online' }).catch(() => {});
+            }
+          }}
+          activeOpacity={0.8}
+        >
+          <FontAwesome name="wifi" size={16} color={colors.text} />
+          <Text style={[styles.searchOfflineBtnText, { color: colors.text }]}>Go online</Text>
+        </TouchableOpacity>
+      </View>
       ) : effectiveFirstIncoming &&
         String(acceptedTripId ?? "").toLowerCase() ===
           String(effectiveFirstIncoming.id).toLowerCase() ? (
