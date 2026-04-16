@@ -281,13 +281,24 @@ export default function DriverWalletScreen() {
         return;
       }
       setMarkPaidLoadingTripId(trip.id);
-      const { error } = await driversService.createDriverLedgerEntry(
+      let { error, row } = await driversService.createDriverLedgerEntry(
         trip.organization_id,
         driverId,
         Math.round(amount),
         'settlement',
         { tripId: trip.id, createdBy: profile?.uid ?? null, description: `Trip ${tripsService.getTripDisplayNumber(trip)}` }
       );
+      if (error?.message?.includes("driver_ledger_created_by_fkey")) {
+        const retry = await driversService.createDriverLedgerEntry(
+          trip.organization_id,
+          driverId,
+          Math.round(amount),
+          'settlement',
+          { tripId: trip.id, createdBy: null, description: `Trip ${tripsService.getTripDisplayNumber(trip)}` }
+        );
+        error = retry.error;
+        if (retry.row) row = retry.row;
+      }
       setMarkPaidLoadingTripId(null);
       if (error) {
         const isDriverLedgerRls =
@@ -299,7 +310,11 @@ export default function DriverWalletScreen() {
         return;
       }
       setExpandedTripId(null);
-      load();
+      if (row) {
+        setLedgerEntries(prev => [row!, ...prev]);
+      } else {
+        load();
+      }
     },
     [linkedDrivers, profile?.uid, load]
   );
@@ -798,7 +813,7 @@ export default function DriverWalletScreen() {
                             </View>
 
                             {/* Actions */}
-                            {isPending && !isOtpAdHocPending ? (
+                            {isPending && !isOtpAdHocPending && earned > 0 ? (
                               <View style={styles.dropdownActions}>
                                 <TouchableOpacity
                                   style={[styles.dropdownPrimaryBtn, { backgroundColor: isDark ? colors.surfaceElevated : '#0f172a' }]}
