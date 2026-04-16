@@ -387,9 +387,11 @@ function NetworkAvatar({
 
   if (initials) {
     return (
-      <Text style={[styles.avatarInitialsSmall, { color: fallbackColor }]}>
-        {initials}
-      </Text>
+      <View style={styles.networkFallbackAvatar}>
+        <Text style={[styles.avatarInitialsSmall, { color: fallbackColor }]}>
+          {initials}
+        </Text>
+      </View>
     );
   }
 
@@ -1546,7 +1548,7 @@ export default function NetworkScreen() {
                                               >
                                                 {onPlatform
                                                   ? "Send request"
-                                                  : "Invite link"}
+                                                  : "Send invitation"}
                                               </Text>
                                             )}
                                           </TouchableOpacity>
@@ -1586,10 +1588,16 @@ export default function NetworkScreen() {
                   item.kind === "DRIVER_INVITE"
                     ? "DRIVER INVITE"
                     : item.kind === "CLIENT"
-                      ? "WANTS TO ADD AS CLIENT"
+                      ? item.type === "SENT"
+                        ? "ADD AS CLIENT"
+                        : "WANTS TO ADD AS CLIENT"
                       : item.kind === "SUPPLIER"
-                        ? "WANTS TO ADD AS SUPPLIER"
-                        : "WANTS TO ADD AS CLIENT + SUPPLIER";
+                        ? item.type === "SENT"
+                          ? "ADD AS SUPPLIER"
+                          : "WANTS TO ADD AS SUPPLIER"
+                        : item.type === "SENT"
+                          ? "ADD AS CLIENT + SUPPLIER"
+                          : "WANTS TO ADD AS CLIENT + SUPPLIER";
                 return (
                   <View
                     key={item.id}
@@ -1812,15 +1820,6 @@ export default function NetworkScreen() {
                       ]}
                     >
                       <View style={styles.networkCardCornerRight}>
-                        {node.isIntegrated ? (
-                          <View style={styles.networkCardIntegratedBadge}>
-                            <Handshake
-                              size={11}
-                              strokeWidth={1.9}
-                              color={Theme.darkGreen}
-                            />
-                          </View>
-                        ) : null}
                         <View style={styles.networkCardCornerChevron}>
                           <FontAwesome
                             name="chevron-right"
@@ -1913,12 +1912,27 @@ export default function NetworkScreen() {
                                 !isLargeScreen && styles.networkCardInnerColSolo,
                               ]}
                             >
-                              <Text
-                                style={styles.networkCardTitleInline}
-                                numberOfLines={1}
-                              >
-                                {node.name}
-                              </Text>
+                              <View style={styles.networkCardNameRow}>
+                                <Text
+                                  style={[
+                                    styles.networkCardTitleInline,
+                                    styles.networkCardNameText,
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  {node.name}
+                                </Text>
+
+                                {node.isIntegrated ? (
+                                  <View style={styles.networkCardIntegratedBadge}>
+                                    <Handshake
+                                      size={16}
+                                      strokeWidth={1.9}
+                                      color={Theme.darkGreen}
+                                    />
+                                  </View>
+                                ) : null}
+                              </View>
                             </View>
                           </View>
                         </View>
@@ -2631,9 +2645,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   networkCardIntegratedBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
@@ -2792,6 +2806,18 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 10,
   },
+  networkCardNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    minWidth: 0,
+    width: "100%",
+  },
+  networkCardNameText: {
+    flex: 1,
+    minWidth: 0,
+  },
   networkCardActionsCol: {
     justifyContent: "flex-end",
     alignItems: "flex-end",
@@ -2867,6 +2893,16 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.4,
     textTransform: "uppercase",
+  },
+  networkFallbackAvatar: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.surface,
+    borderWidth: 1.5,
+    borderColor: Theme.surfaceBorder,
   },
   nodeName: {
     fontSize: 12,
@@ -2945,19 +2981,18 @@ const styles = StyleSheet.create({
   inviteBtnText: { color: Theme.textPrimaryDark },
   inviteInlineBtn: {
     alignSelf: "flex-end",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    minWidth: 92,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 11,
-    backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.border,
-    minHeight: 44,
+    backgroundColor: Theme.primary,
+    alignItems: "center",
     justifyContent: "center",
   },
   inviteInlineBtnText: {
     fontSize: 10,
     fontWeight: "600",
-    color: Theme.textPrimaryDark,
+    color: Theme.textOnPrimary,
     textTransform: "uppercase",
     letterSpacing: 1.1,
   },
@@ -3011,19 +3046,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   cancelInlineBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    minWidth: 92,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 11,
     backgroundColor: ROSE_500,
     alignItems: "center",
     justifyContent: "center",
   },
   cancelInlineBtnText: {
-    fontSize: 7,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "600",
     color: Theme.screenBackground,
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 1.1,
   },
   confirmModalBackdrop: {
     flex: 1,
