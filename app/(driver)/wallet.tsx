@@ -681,11 +681,6 @@ export default function DriverWalletScreen() {
                                   <Text style={[styles.ppPrimary, { color: colors.text }]} numberOfLines={1}>
                                     {primaryLine}
                                   </Text>
-                                  <View style={[styles.txStatusPill, { backgroundColor: statusPillBg, borderColor: statusPillBorderColor }]}>
-                                    <Text style={[styles.txStatusPillText, { color: statusPillTextColor }]}>
-                                      {statusLabel}
-                                    </Text>
-                                  </View>
                                 </View>
                                 <Text style={[styles.ppSecondary, { color: subColor }]} numberOfLines={2}>
                                   {secondaryLine}
@@ -873,9 +868,6 @@ export default function DriverWalletScreen() {
                                 <Text style={[styles.ppPrimary, { color: colors.text }]} numberOfLines={1}>
                                   {tripRef}
                                 </Text>
-                                <View style={[styles.txStatusPill, { backgroundColor: colors.emeraldMuted, borderColor: colors.emeraldBorderSoft }]}>
-                                  <Text style={[styles.txStatusPillText, { color: colors.emerald }]}>RECEIVED</Text>
-                                </View>
                               </View>
                               <Text style={[styles.ppSecondary, { color: subColor }]} numberOfLines={2}>
                                 {routeSummary || 'Route not specified'}
