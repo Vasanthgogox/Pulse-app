@@ -2314,11 +2314,17 @@ const styles = StyleSheet.create({
   amountLabel: {
     marginBottom: 10,
   },
-  amountRow: { flexDirection: "row", alignItems: "center", minHeight: 36 },
+  amountRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 36,
+    gap: 10,
+  },
   amountSymbol: {
     fontSize: 22,
     fontWeight: "800",
-    marginRight: 10,
+    width: 16,
+    textAlign: "center",
   },
   amountSymbolIn: { color: Theme.darkGreen },
   amountSymbolOut: { color: Theme.teslaRed },
@@ -2328,8 +2334,8 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.textPrimaryDark,
     paddingVertical: 0,
+    minWidth: 0,
     borderWidth: 0,
-    letterSpacing: -0.5,
     ...Platform.select({
       web: {
         outlineStyle: "none",

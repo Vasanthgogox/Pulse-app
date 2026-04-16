@@ -28,6 +28,7 @@ import {
   useInvalidateNetwork,
   useSuppliersQuery,
 } from "@/lib/queries";
+import { getInitials } from "@/lib/stringUtils";
 import { useRefreshWithFeedback } from "@/lib/useRefreshWithFeedback";
 import {
   approveConnectionRequest,
@@ -69,7 +70,6 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { getInitials } from "@/lib/stringUtils";
 
 type InvitationSegment = "SENT" | "RECEIVED";
 type ManageView = "CONNECTIONS" | "INVITATIONS";
@@ -1328,7 +1328,7 @@ export default function NetworkScreen() {
           !isLargeScreen &&
           filteredNodes.length > 0 ? (
             <View style={styles.storiesSection}>
-              <Text style={styles.storiesSectionLabel}>On your grid</Text>
+              <Text style={styles.storiesSectionLabel}>On your network</Text>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
