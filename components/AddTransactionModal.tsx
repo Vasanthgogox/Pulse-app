@@ -1031,11 +1031,13 @@ export function AddTransactionModal({
     let derivedContactType: AddTransactionData["contactType"] = null;
     let derivedPartyName: string | null = null;
     if (tripLocked && selectedTrip) {
+      const lid = (selectedTrip as { organization_id?: string | null })
+        .organization_id;
       const isIntegrated = isCrossOrgIntegrationTrip(selectedTrip, viewerOrgId);
 
       if (type === "in") {
         let localCid: string | null = null;
-        if (isIntegrated) {
+        if (isIntegrated && lid != null) {
           localCid =
             (linkedClientIdByOrgId instanceof Map
               ? linkedClientIdByOrgId.get(lid)
@@ -1057,7 +1059,7 @@ export function AddTransactionModal({
         }
       } else {
         let localSid: string | null = null;
-        if (isIntegrated) {
+        if (isIntegrated && lid != null) {
           localSid =
             (linkedSupplierIdByOrgId instanceof Map
               ? linkedSupplierIdByOrgId.get(lid)
