@@ -26,7 +26,7 @@ import {
 } from "@/services/connectionRequestsService";
 import { cancelDriverInvite } from "@/features/drivers/services/drivers.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Building2, CircleCheck, Truck, User } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -418,6 +418,7 @@ export default function NetworkScreen() {
   const isLargeScreen = Platform.OS === "web" && width >= 1024;
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { tab: initialTab, indentId: initialIndentId } = useLocalSearchParams<{ tab?: SubTab; indentId?: string }>();
   const { t } = useLanguage();
    const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
@@ -445,13 +446,21 @@ export default function NetworkScreen() {
     });
   }, []);
 
-  const [subTab, setSubTab] = useState<SubTab>("manage");
+  const [subTab, setSubTab] = useState<SubTab>(initialTab ?? "manage");
+  const [highlightedIndentId, setHighlightedIndentId] = useState<string | null>(initialIndentId ?? null);
   const [segment, setSegment] = useState<NetworkSegment>("ALL");
   const [nodeKind, setNodeKind] = useState<NodeKindFilter>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [showSuccess, setShowSuccess] = useState(false);
   const syncToastOpacity = useRef(new Animated.Value(0)).current;
   const syncToastTranslate = useRef(new Animated.Value(-16)).current;
+
+  useEffect(() => {
+    if (initialIndentId) {
+      setSubTab("load");
+      setHighlightedIndentId(initialIndentId);
+    }
+  }, [initialIndentId]);
 
   const triggerSyncToast = useCallback(() => {
     setShowSuccess(true);
@@ -828,6 +837,7 @@ export default function NetworkScreen() {
           onIndentPress={(indent: IndentRow) =>
             router.push(`/indent/${indent.id}` as import("expo-router").Href)
           }
+          highlightedIndentId={highlightedIndentId}
         />
       </View>
     );

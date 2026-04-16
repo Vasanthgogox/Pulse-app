@@ -8,13 +8,16 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import { useTransactionsQuery } from "@/lib/queries";
 import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
 import * as financeService from "../services/finance.service";
+import { getProfileImage } from "../services/finance.service";
+import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
 import { FinancialRow, type FinancialRowData } from "./FinancialRow";
 import { LedgerTransactionListView } from "./LedgerTransactionListView";
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
+
 
 export type LedgerViewMode = "table" | "transaction";
 
@@ -109,6 +112,7 @@ export function LedgerTab({
   const isViewOnly = onAddTransactionPress === undefined;
   const isControlled = transactionsProp !== undefined;
   const [expandedLedgerRowId, setExpandedLedgerRowId] = useState<string | null>(null);
+  const [profileImages, setProfileImages] = useState<Record<string, string>>({});
   const viewMode = viewModeProp ?? "table";
 
   const clientById = new Map(clientRows.map(c => [c.id, c]));
@@ -187,6 +191,26 @@ export function LedgerTab({
       })),
     [rows, clientRows, supplierRows, tripPartyMap, tripDetailsMap],
   );
+
+  useEffect(() => {
+    // Only drivers need async fetching (clients/suppliers resolve from already-fetched rows synchronously).
+    const fetchDriverProfileImages = async () => {
+      const newProfileImages: Record<string, string> = {};
+      for (const row of rows) {
+        const contactId = row.contact_id;
+        if (contactId && row.contact_type === 'driver' && !profileImages[contactId]) {
+          const imageUrl = await getProfileImage(contactId, 'driver');
+          if (imageUrl) {
+            newProfileImages[contactId] = imageUrl;
+          }
+        }
+      }
+      if (Object.keys(newProfileImages).length > 0) {
+        setProfileImages((prev) => ({ ...prev, ...newProfileImages }));
+      }
+    };
+    fetchDriverProfileImages();
+  }, [rows]);
 
   // Truck-related expense: contact_id/contact_type NULL; entity = vehicle_number (from row or trip) or party_name; LINK = route + vehicle badge only when trip.vehicle_id set. See docs/LEDGER_TRUCK_EXPENSE_AND_TRIP_DISPLAY.md for NULL handling (trip_id null, trip not in map, vehicle_id null).
 
@@ -380,6 +404,8 @@ export function LedgerTab({
       if (row.amount_out && pm.supplier_id) derivedPartyType = 'supplier';
     }
 
+    const profileImageUrl = row.contact_id ? profileImages[row.contact_id] : null;
+
     const ledgerPartyType =
       derivedPartyType === "client"
         ? "client"
@@ -411,6 +437,7 @@ export function LedgerTab({
       transactionTypeLabel: getDoubleEntryDisplayLabel(row) ?? undefined,
       tripPaymentSummary: tripPaymentSummary ?? undefined,
       sameTripTransactions: sameTripTransactions ?? undefined,
+      profileImageUrl: profileImageUrl,
     };
   }
 
@@ -440,6 +467,26 @@ export function LedgerTab({
       tripOptions={tripOptions}
       onMissionChange={onMissionChange}
       fullWidth
+      renderPartyAvatar={(row) => {
+        if (!row.contact_id) return null;
+        let url: string | null = null;
+        if (row.contact_type === 'client') {
+          // avatar_url from get_clients_with_profiles RPC — synchronous public URL
+          url = resolveAvatarPublicUrl(clientById.get(row.contact_id)?.avatar_url);
+        } else if (row.contact_type === 'supplier') {
+          url = resolveAvatarPublicUrl(supplierById.get(row.contact_id)?.avatar_url);
+        } else {
+          // Drivers: resolved via async profileImages state
+          url = profileImages[row.contact_id] ?? null;
+        }
+        if (!url) return null;
+        return (
+          <Image
+            source={{ uri: url }}
+            style={{ width: 40, height: 40 }}
+          />
+        );
+      }}
     />
   );
 

@@ -45,7 +45,7 @@ import { useFinanceEntities } from "../hooks/useFinanceEntities";
 import { useFinanceLedger } from "../hooks/useFinanceLedger";
 import { useFinanceTransactionSubmit } from "../hooks/useFinanceTransactionSubmit";
 import type { LedgerRow } from "../services/finance.service";
-import { updateLedgerEntry } from "../services/finance.service";
+import { getProfileImage, updateLedgerEntry } from "../services/finance.service";
 import type { FinanceSubTab } from "../types";
 import type { TripEntryContext } from "./EntityDetailOverlay";
 import { EntityListCategoryModal } from "./EntityListCategoryModal";
@@ -195,6 +195,49 @@ export function FinanceScreen() {
   const [editingEntry, setEditingEntry] = useState<LedgerRow | null>(null);
   const [tabTotals, setTabTotals] = useState({ totalIn: 0, totalOut: 0 });
   const [refreshing, setRefreshing] = useState(false);
+  const [profileImages, setProfileImages] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchProfileImages = async () => {
+      const pending = new Map<string, { id: string; type: "client" | "supplier" | "driver" }>();
+      for (const row of filteredLedgerForDisplay) {
+        const id = (row.contact_id ?? "").trim();
+        const type = row.contact_type;
+        if (!id || !type) continue;
+        if (profileImages[id]) continue;
+        const dedupeKey = `${type}:${id}`;
+        if (!pending.has(dedupeKey)) {
+          pending.set(dedupeKey, { id, type });
+        }
+      }
+
+      if (pending.size === 0) return;
+      const entries = Array.from(pending.values());
+      const resolved = await Promise.all(
+        entries.map(async ({ id, type }) => {
+          const uri = await getProfileImage(id, type);
+          return uri ? ([id, uri] as const) : null;
+        }),
+      );
+
+      if (cancelled) return;
+      const next: Record<string, string> = {};
+      for (const row of resolved) {
+        if (!row) continue;
+        next[row[0]] = row[1];
+      }
+      if (Object.keys(next).length > 0) {
+        setProfileImages((prev) => ({ ...prev, ...next }));
+      }
+    };
+
+    void fetchProfileImages();
+    return () => {
+      cancelled = true;
+    };
+  }, [filteredLedgerForDisplay, profileImages]);
 
   const isAnyFilterActive = useMemo(
     () => ledgerAnyFilterActive || entityFilter !== "all",
@@ -1217,6 +1260,7 @@ export function FinanceScreen() {
                 Layout.demoTabBarScrollBottomInset +
                 40
               }
+              profileImages={profileImages}
             />
           </View>
         </View>

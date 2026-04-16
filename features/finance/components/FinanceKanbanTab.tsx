@@ -10,21 +10,14 @@ import { formatIndianVehicleNumber, formatLedgerAmount } from '@/lib/format';
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import React, { useMemo, useState } from 'react';
 import Animated, { FadeInUp, Layout } from 'react-native-reanimated';
-import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-    LayoutAnimation,
-    Platform
-} from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, LayoutAnimation, Platform } from 'react-native';
 import type { LedgerRow } from '../services/finance.service';
 import { LedgerExpandedCardFromData, type FinancialRowData } from "./FinancialRow";
 import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
 
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
+import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
 export interface FinanceKanbanTabProps {
   transactions: LedgerRow[];
   onRowSelect?: (data: any) => void;
@@ -57,6 +50,7 @@ export interface FinanceKanbanTabProps {
       driver_id?: string | null;
     }
   >;
+  profileImages: Record<string, string>;
 }
 
 const COLUMN_TYPES = ['customers', 'suppliers', 'garage', 'drivers'] as const;
@@ -115,7 +109,7 @@ function formatTxDate(iso: string | null | undefined): string {
   return `${day} ${MONTHS_SHORT[Number(m) - 1] ?? m} ${y}`;
 }
 
-function KanbanCard({ row, index, cat, isExpanded, toggleExpand, hasAmtIn, amount, dateStr, vehicleStr, partyName, routeWhyLine, rowData, tripIdOnly, onRowSelect }: any) {
+function KanbanCard({ row, index, cat, isExpanded, toggleExpand, hasAmtIn, amount, dateStr, vehicleStr, partyName, routeWhyLine, rowData, tripIdOnly, onRowSelect, profileImageUrl }: any) {
   const avatarBg = avatarColor(partyName);
   const initialText = initials(partyName);
 
@@ -133,17 +127,21 @@ function KanbanCard({ row, index, cat, isExpanded, toggleExpand, hasAmtIn, amoun
         activeOpacity={0.7}
         onPress={() => toggleExpand(row.id)}
       >
-        <View
-          style={[
-            styles.timelineCardAvatar,
-            { backgroundColor: avatarBg },
-            hasAmtIn ? styles.avatarWrapIn : styles.avatarWrapOut,
-          ]}
-        >
-          <Text style={styles.avatarText} numberOfLines={1}>
-            {initialText}
-          </Text>
-        </View>
+        {profileImageUrl ? (
+          <Image source={{ uri: profileImageUrl }} style={styles.profileImage} />
+        ) : (
+          <View
+            style={[
+              styles.timelineCardAvatar,
+              { backgroundColor: avatarBg },
+              hasAmtIn ? styles.avatarWrapIn : styles.avatarWrapOut,
+            ]}
+          >
+            <Text style={styles.avatarText} numberOfLines={1}>
+              {initialText}
+            </Text>
+          </View>
+        )}
 
         <View style={styles.timelineCardBody}>
           <Text style={styles.timelineCardParty} numberOfLines={1}>
@@ -272,6 +270,7 @@ export function FinanceKanbanTab({
   clientRows = [],
   supplierRows = [],
   tripPartyMap = {},
+  profileImages,
 }: FinanceKanbanTabProps) {
   const { t } = useLanguage();
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
@@ -481,6 +480,19 @@ export function FinanceKanbanTab({
     const rowData = buildFinancialRowData(row);
     const tripIdOnly = tripDetail?.trip_number || row.trip_number || (row.trip_id ? "TRIP" : null);
 
+    // Resolve profile image — clients/suppliers from already-fetched rows (sync), drivers from async state
+    let profileImageUrl: string | null = null;
+    if (row.contact_id) {
+      if (row.contact_type === 'client') {
+        profileImageUrl = resolveAvatarPublicUrl(clientById.get(row.contact_id)?.avatar_url);
+      } else if (row.contact_type === 'supplier') {
+        profileImageUrl = resolveAvatarPublicUrl(supplierById.get(row.contact_id)?.avatar_url);
+      } else {
+        profileImageUrl = profileImages[row.contact_id] ?? null;
+      }
+    }
+
+
     return (
       <KanbanCard 
         key={row.id}
@@ -498,6 +510,7 @@ export function FinanceKanbanTab({
         rowData={rowData}
         tripIdOnly={tripIdOnly}
         onRowSelect={onRowSelect}
+        profileImageUrl={profileImageUrl}
       />
     );
   };
@@ -618,6 +631,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1.5,
+  },
+  profileImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
   avatarWrapIn: {
     borderColor: Theme.positiveMuted,

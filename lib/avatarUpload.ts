@@ -129,14 +129,63 @@ export async function pickAndUploadAvatar(userId: string): Promise<PickAndUpload
   }
 }
 
-/**
- * Normalize avatar path: if DB stores only the user id (no slash), the file is at {id}/avatar.jpg.
- */
-function normalizeAvatarPath(path: string): string {
+/** Image file extensions supported for avatar object discovery. */
+const AVATAR_IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
+
+function hasImageExtension(name: string): boolean {
+  const lower = name.toLowerCase();
+  return AVATAR_IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+async function findLatestAvatarPathForUserFolder(
+  bucket: string,
+  userIdFolder: string
+): Promise<string | null> {
+  const folder = userIdFolder.trim();
+  if (!folder) return null;
+
+  const { data, error } = await supabase()
+    .storage
+    .from(bucket)
+    .list(folder, {
+      limit: 100,
+      sortBy: { column: "updated_at", order: "desc" },
+    });
+
+  if (error || !Array.isArray(data) || data.length === 0) return null;
+
+  const files = data.filter((entry) => {
+    const name = (entry?.name ?? "").trim();
+    return name.length > 0 && !name.endsWith("/") && hasImageExtension(name);
+  });
+  if (files.length === 0) return null;
+
+  files.sort((a, b) => {
+    const aTime = Date.parse(a.updated_at ?? a.created_at ?? "") || 0;
+    const bTime = Date.parse(b.updated_at ?? b.created_at ?? "") || 0;
+    return bTime - aTime;
+  });
+
+  const top = files[0]?.name?.trim();
+  return top ? `${folder}/${top}` : null;
+}
+
+async function buildAvatarPathCandidates(path: string): Promise<string[]> {
   const p = path.trim();
-  if (!p) return p;
-  if (p.includes('/')) return p;
-  return `${p}/avatar.jpg`;
+  if (!p) return [];
+  if (p.includes("/")) return [p];
+
+  // Legacy records sometimes stored only the user-id folder in avatar_url.
+  // In that case discover the newest image object under that folder first.
+  const discoveredPrimary = await findLatestAvatarPathForUserFolder(AVATAR_BUCKET, p);
+  const discoveredLegacy = await findLatestAvatarPathForUserFolder(LEGACY_AVATAR_BUCKET, p);
+  const fallbackConventional = [`${p}/avatar.jpg`, `${p}/avatar.jpeg`, `${p}/avatar.png`];
+
+  const deduped = new Set<string>();
+  if (discoveredPrimary) deduped.add(discoveredPrimary);
+  if (discoveredLegacy) deduped.add(discoveredLegacy);
+  for (const candidate of fallbackConventional) deduped.add(candidate);
+  return Array.from(deduped);
 }
 
 function extractPathFromStorageUrl(
@@ -162,45 +211,63 @@ function extractPathFromStorageUrl(
 }
 
 /**
+ * Synchronously resolve a storage path to a public URL.
+ * Use this when the bucket is PUBLIC — no network round-trip needed.
+ * Returns null if path is empty. Passes through full HTTP(S) URLs unchanged.
+ */
+export function resolveAvatarPublicUrl(path: string | null | undefined): string | null {
+  const p = (path ?? '').trim();
+  if (!p) return null;
+  if (p.startsWith('http://') || p.startsWith('https://')) return p;
+  const { data } = supabase().storage.from(AVATAR_BUCKET).getPublicUrl(p);
+  return data?.publicUrl ?? null;
+}
+
+/**
  * Get a signed URL for an avatar storage path (private bucket).
  * Returns null if path is empty or signed URL fails.
  * Accepts path as "userId" or "userId/avatar.jpg".
  */
 export async function getSignedAvatarUrl(path: string): Promise<string | null> {
-  const normalized = normalizeAvatarPath(path);
-  if (!normalized) return null;
+  const candidates = await buildAvatarPathCandidates(path);
+  if (candidates.length === 0) return null;
 
   const withCacheBust = (url: string): string =>
     `${url}${url.includes('?') ? '&' : '?'}cb=${Date.now()}`;
 
-  const primary = await supabase()
-    .storage
-    .from(AVATAR_BUCKET)
-    .createSignedUrl(normalized, SIGNED_URL_EXPIRY_SEC);
-  if (!primary.error && primary.data?.signedUrl) {
-    return withCacheBust(primary.data.signedUrl);
-  }
+  for (const candidate of candidates) {
+    const primary = await supabase()
+      .storage
+      .from(AVATAR_BUCKET)
+      .createSignedUrl(candidate, SIGNED_URL_EXPIRY_SEC);
+    if (!primary.error && primary.data?.signedUrl) {
+      return withCacheBust(primary.data.signedUrl);
+    }
 
-  // If bucket is public or signed URL policy is unavailable, try public URL.
-  const primaryPublic = supabase()
-    .storage
-    .from(AVATAR_BUCKET)
-    .getPublicUrl(normalized);
-  if (primaryPublic.data?.publicUrl) return withCacheBust(primaryPublic.data.publicUrl);
+    // If bucket is public or signed URL policy is unavailable, try public URL.
+    const primaryPublic = supabase()
+      .storage
+      .from(AVATAR_BUCKET)
+      .getPublicUrl(candidate);
+    if (primaryPublic.data?.publicUrl) return withCacheBust(primaryPublic.data.publicUrl);
+  }
 
   // Backward compatibility: old avatars may still be in the previous bucket.
-  const legacy = await supabase()
-    .storage
-    .from(LEGACY_AVATAR_BUCKET)
-    .createSignedUrl(normalized, SIGNED_URL_EXPIRY_SEC);
-  if (!legacy.error && legacy.data?.signedUrl) {
-    return withCacheBust(legacy.data.signedUrl);
+  for (const candidate of candidates) {
+    const legacy = await supabase()
+      .storage
+      .from(LEGACY_AVATAR_BUCKET)
+      .createSignedUrl(candidate, SIGNED_URL_EXPIRY_SEC);
+    if (!legacy.error && legacy.data?.signedUrl) {
+      return withCacheBust(legacy.data.signedUrl);
+    }
+    const legacyPublic = supabase()
+      .storage
+      .from(LEGACY_AVATAR_BUCKET)
+      .getPublicUrl(candidate);
+    if (legacyPublic.data?.publicUrl) return withCacheBust(legacyPublic.data.publicUrl);
   }
-  const legacyPublic = supabase()
-    .storage
-    .from(LEGACY_AVATAR_BUCKET)
-    .getPublicUrl(normalized);
-  if (legacyPublic.data?.publicUrl) return withCacheBust(legacyPublic.data.publicUrl);
+
   return null;
 }
 

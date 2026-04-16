@@ -66,6 +66,7 @@
     "expo-status-bar": "~3.0.9",
     "expo-web-browser": "~15.0.10",
     "html2canvas": "^1.4.1",
+    "jest-expo": "^55.0.16",
     "jspdf": "^4.2.1",
     "leaflet": "^1.9.4",
     "lucide-react-native": "^0.577.0",
@@ -84,7 +85,8 @@
     "react-native-webview": "^13.16.1",
     "react-native-worklets": "0.5.1",
     "tslib": "^2.8.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "@shopify/flash-list": "^1.6.0"
   },
   "devDependencies": {
     "@expo/ngrok": "^4.1.0",

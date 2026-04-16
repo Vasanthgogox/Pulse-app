@@ -14,23 +14,46 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { CUSTOMERS_SUPPLIERS, DRIVERS, LEDGER } from "@/features/finance/constants/tableColumns";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useEffect, useState } from "react";
-import {
-    Pressable,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from "react-native";
+import React, { useEffect, useState } from "react";
+import { Image, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Animated, {
-    useAnimatedStyle,
-    useSharedValue,
-    withRepeat,
-    withSequence,
-    withTiming,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
 } from "react-native-reanimated";
 import { LedgerExpandedCard } from "./LedgerExpandedCard";
 import { TripPickerModal } from "./TripPickerModal";
+
+const AVATAR_COLORS = [
+  Theme.primary,
+  Theme.primaryLight,
+  Theme.aggregatePillText,
+  Theme.darkGreen,
+  Theme.teslaRed,
+  Theme.textPrimary,
+  Theme.buttonSecondary,
+  Theme.integratedIcon,
+  Theme.iconSlate,
+  Theme.primaryText,
+];
+
+/** Initials from party/name (max 2 chars, uppercase). */
+function initials(name: string): string {
+  const t = (name ?? "").trim();
+  if (!t) return "—";
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length >= 2)
+    return (words[0][0] + words[words.length - 1][0]).toUpperCase().slice(0, 2);
+  return t.slice(0, 2).toUpperCase();
+}
+
+function avatarColor(str: string): string {
+  let n = 0;
+  for (let i = 0; i < str.length; i++) n = (n * 31 + str.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[n % AVATAR_COLORS.length];
+}
 
 function formatNum(n: number): string {
   return n.toLocaleString("en-IN", {
@@ -170,6 +193,7 @@ export interface FinancialRowTripDetail {
  * with the `type` prop (e.g. when type === "ledger", data has ledger-specific fields).
  */
 export interface FinancialRowData {
+  profileImageUrl?: string | null;
   id: string;
   name?: string;
   /** Ledger: category // desc; garage: model; drivers: status */
@@ -623,13 +647,17 @@ export function FinancialRow({
         ledgerEntityLines
       ) : type === "drivers" ? (
         <View style={styles.driverCellWithDot}>
-          <View
-            style={[
-              styles.driverStatusDot,
-              { backgroundColor: driverStatusDotColor },
-            ]}
-            accessibilityLabel={data.left_at ? "Disconnected" : (data.status ?? "OFFLINE")}
-          />
+          {data.profileImageUrl ? (
+            <Image source={{ uri: data.profileImageUrl }} style={styles.profileImage} />
+          ) : (
+            <View
+              style={[
+                styles.driverStatusDot,
+                { backgroundColor: driverStatusDotColor },
+              ]}
+              accessibilityLabel={data.left_at ? "Disconnected" : (data.status ?? "OFFLINE")}
+            />
+          )}
           <View style={styles.driverCellTextWrap}>
             <View style={styles.driverCellNameWrap}>
               <Text style={styles.cellNodeMainDriver} numberOfLines={1} ellipsizeMode="tail">
@@ -646,15 +674,30 @@ export function FinancialRow({
       ) : (
         <>
           <View style={styles.cellNodeMainRow}>
-            {showIntegrationIcon ? (
-              <View style={styles.cellNodeSubIntegrationIconWrap}>
-                <FontAwesome
-                  name={data.is_integrated ? 'link' : 'unlink'}
-                  size={9}
-                  color={data.is_integrated ? Theme.integratedIcon : Theme.nonIntegratedIcon}
-                />
-              </View>
-            ) : null}
+            {data.profileImageUrl ? (
+              <Image source={{ uri: data.profileImageUrl }} style={styles.profileImage} />
+            ) : (
+              showIntegrationIcon ? (
+                <View style={styles.cellNodeSubIntegrationIconWrap}>
+                  <FontAwesome
+                    name={data.is_integrated ? 'link' : 'unlink'}
+                    size={9}
+                    color={data.is_integrated ? Theme.integratedIcon : Theme.nonIntegratedIcon}
+                  />
+                </View>
+              ) : (
+                <View
+                  style={[
+                    styles.initialsAvatar,
+                    { backgroundColor: avatarColor(nodeMain ?? "—") },
+                  ]}
+                >
+                  <Text style={styles.initialsText}>
+                    {initials(nodeMain ?? "—")}
+                  </Text>
+                </View>
+              )
+            )}
             <Text style={styles.cellNodeMain} numberOfLines={1} ellipsizeMode="tail">
               {nodeMain ?? "—"}
             </Text>
@@ -704,6 +747,7 @@ export function FinancialRow({
       )}
     </View>
   );
+
 
   const content = (
     <>
@@ -1059,6 +1103,25 @@ const styles = StyleSheet.create({
   },
   driverStatusDotOnline: { backgroundColor: Theme.darkGreen },
   driverStatusDotOffline: { backgroundColor: Theme.teslaRed },
+  profileImage: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    marginRight: 6,
+  },
+  initialsAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    marginRight: 6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  initialsText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textOnPrimary,
+  },
   cellNodeMain: {
     fontSize: 12,
     fontWeight: "400",

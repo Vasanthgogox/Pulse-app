@@ -5,7 +5,19 @@
  */
 import { DEFAULT_PAGE_SIZE, type PageOpts } from "@/lib/pagination";
 import { supabase } from "@/lib/supabase";
-import type { DriverFormData } from "../components/AddDriverModal";
+
+export interface CreateDriverServiceData {
+  driverSource?: string;
+  name: string;
+  phone: string | null;
+  email?: string | null;
+  emergencyContact?: string;
+  emergencyName?: string;
+  licenseNumber?: string;
+  payableAmount?: number | null;
+  commissionPercent?: number | null;
+  commissionPerKm?: number | null;
+}
 
 export interface DriverRow {
   id: string;
@@ -106,7 +118,7 @@ function normalizePhone(phone: string | null | undefined): string {
  */
 export async function createDriver(
   orgId: string,
-  data: DriverFormData,
+  data: CreateDriverServiceData,
 ): Promise<{ error: Error | null; driver: DriverRow | null }> {
   const phoneNorm = normalizePhone(data.phone);
   if (phoneNorm) {
@@ -479,7 +491,7 @@ async function reopenDriverInvite(
  */
 export async function inviteDriver(
   orgId: string,
-  data: DriverFormData,
+  data: CreateDriverServiceData,
   orgName?: string | null,
   options?: {
     allowReinviteRejected?: boolean;

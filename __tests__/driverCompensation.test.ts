@@ -1,69 +1,151 @@
-/**
- * Driver Compensation Integration Tests
- * Tests the complete flow of compensation data storage for offline drivers and invite acceptance
- */
-
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { createDriver, inviteDriver, updateDriver } from '../features/drivers';
-import type { DriverFormData } from '../features/drivers/components/AddDriverModal';
+import { createDriver, inviteDriver, updateDriver } from '../features/drivers/services/drivers.service';
 import { linkOfflineDriversToNewUsers } from '../features/drivers/services/driverMatching.service';
 
-// Mock supabase
+const mockOfflineDrivers = [
+  {
+    id: 'test-driver-id',
+    organization_id: 'test-org-id',
+    user_id: null,
+    name: 'Test Driver',
+    phone: '+919876543210',
+    email: 'test@example.com',
+    status: 'offline',
+    payable_amount: 25000,
+    commission_percent: 10,
+    commission_per_km: 5,
+  },
+];
+
 jest.mock('@/lib/supabase', () => ({
-  supabase: jest.fn(() => ({
-    from: jest.fn(() => ({
-      select: jest.fn(() => ({
-        eq: jest.fn(() => ({
-          eq: jest.fn(() => ({
-            limit: jest.fn(() => ({
-              maybeSingle: jest.fn(() => Promise.resolve({ data: null, error: null }))
-            }))
-          }))
-        }))
+  supabase: jest.fn(() => {
+    const mockEq = jest.fn(() => ({ // Mock for chainable .eq().eq()...
+      order: jest.fn(() => ({
+        limit: jest.fn(() => ({
+          maybeSingle: jest.fn(() => Promise.resolve({ data: null, error: null })),
+        })),
+        maybeSingle: jest.fn(() => Promise.resolve({ data: null, error: null })),
+        select: jest.fn(() => Promise.resolve({ data: [], error: null })),
       })),
-      insert: jest.fn(() => ({
+      is: jest.fn(() => mockEq()), // .is() returns another chainable mock object
+      eq: jest.fn(() => mockEq()), // .eq() returns another chainable mock object
+      not: jest.fn(() => mockEq()), // .not() returns another chainable mock object
+      limit: jest.fn(() => ({
+        maybeSingle: jest.fn(() => Promise.resolve({ data: null, error: null })),
+        select: jest.fn(() => Promise.resolve({ data: [], error: null })),
+      })),
+      select: jest.fn(() => Promise.resolve({ data: [], error: null })),
+      single: jest.fn(() => Promise.resolve({ data: null, error: null })),
+      maybeSingle: jest.fn(() => Promise.resolve({ data: null, error: null })),
+    }));
+
+    const mockSelect = jest.fn(() => ({
+      eq: jest.fn((key, value) => {
+        if (key === 'status' && value === 'offline') {
+          return {
+            is: jest.fn((isKey, isValue) => {
+              if (isKey === 'user_id' && isValue === null) {
+                return {
+                  eq: jest.fn((eqKey, eqValue) => {
+                    if (eqKey === 'organization_id' && eqValue === 'test-org-id') {
+                      return {
+                        order: jest.fn(() => Promise.resolve({ data: mockOfflineDrivers, error: null })),
+                        select: jest.fn(() => Promise.resolve({ data: mockOfflineDrivers, error: null })),
+                        single: jest.fn(() => Promise.resolve({ data: mockOfflineDrivers[0], error: null })),
+                        maybeSingle: jest.fn(() => Promise.resolve({ data: mockOfflineDrivers[0], error: null })),
+                      };
+                    }
+                    return mockEq();
+                  }),
+                  order: jest.fn(() => Promise.resolve({ data: mockOfflineDrivers, error: null })),
+                  select: jest.fn(() => Promise.resolve({ data: mockOfflineDrivers, error: null })),
+                  single: jest.fn(() => Promise.resolve({ data: mockOfflineDrivers[0], error: null })),
+                  maybeSingle: jest.fn(() => Promise.resolve({ data: mockOfflineDrivers[0], error: null })),
+                };
+              }
+              return mockEq();
+            }),
+            order: jest.fn(() => Promise.resolve({ data: mockOfflineDrivers, error: null })),
+            select: jest.fn(() => Promise.resolve({ data: mockOfflineDrivers, error: null })),
+            single: jest.fn(() => Promise.resolve({ data: mockOfflineDrivers[0], error: null })),
+            maybeSingle: jest.fn(() => Promise.resolve({ data: mockOfflineDrivers[0], error: null })),
+          };
+        }
+        return mockEq();
+      }),
+      single: jest.fn(() => Promise.resolve({ data: null, error: null })),
+      maybeSingle: jest.fn(() => Promise.resolve({ data: null, error: null })),
+      order: jest.fn(() => Promise.resolve({ data: [], error: null })),
+      in: jest.fn(() => mockEq()),
+      or: jest.fn(() => mockEq()),
+    }));
+
+    const mockFrom = jest.fn(() => ({
+      select: mockSelect(),
+      insert: jest.fn((payload) => ({
         select: jest.fn(() => ({
-          single: jest.fn(() => Promise.resolve({ 
+          single: jest.fn(() => Promise.resolve({
             data: {
               id: 'test-driver-id',
               organization_id: 'test-org-id',
-              name: 'Test Driver',
-              phone: '+919876543210',
-              email: 'test@example.com',
-              status: 'offline',
-              payable_amount: 25000,
-              commission_percent: 10,
-              commission_per_km: 5
-            }, 
-            error: null 
-          }))
-        }))
+              name: payload.name,
+              phone: payload.phone,
+              email: payload.email,
+              status: payload.status,
+              payable_amount: payload.payable_amount,
+              commission_percent: payload.commission_percent,
+              commission_per_km: payload.commission_per_km,
+            },
+            error: null,
+          })),
+        })),
       })),
       update: jest.fn(() => ({
         eq: jest.fn(() => ({
           eq: jest.fn(() => ({
             select: jest.fn(() => ({
-              single: jest.fn(() => Promise.resolve({ 
+              single: jest.fn(() => Promise.resolve({
                 data: {
                   id: 'test-driver-id',
                   payable_amount: 30000,
                   commission_percent: 12,
-                  commission_per_km: 6
-                }, 
-                error: null 
-              }))
-            }))
-          }))
-        }))
-      }))
-    })),
-    rpc: jest.fn(() => Promise.resolve({ data: null, error: null }))
-  }))
+                  commission_per_km: 6,
+                },
+                error: null,
+              })),
+            })),
+          })),
+        })),
+      })),
+      delete: jest.fn(() => mockEq()),
+      range: jest.fn(() => Promise.resolve({ data: [], error: null })),
+    }));
+
+    return {
+      from: mockFrom,
+      rpc: jest.fn((rpcName, params) => {
+        if (rpcName === "get_driver_invitee_by_phone") {
+          if (params.p_phone === '+919876543210') {
+            return Promise.resolve({ data: [{
+              user_id: 'test-user-id',
+              full_name: 'Test Invitee',
+              phone: '+919876543210',
+              email: 'test@example.com',
+            }], error: null });
+          }
+          return Promise.resolve({ data: [], error: null });
+        } else if (rpcName === "get_current_organization_id") {
+          return Promise.resolve({ data: 'test-org-id', error: null });
+        }
+        return Promise.resolve({ data: null, error: null });
+      }),
+    };
+  }),
 }));
 
 describe('Driver Compensation Storage', () => {
   const mockOrgId = 'test-org-id';
-  const mockDriverData: DriverFormData = {
+  const mockDriverData = {
     driverSource: 'organization',
     name: 'Test Driver',
     phone: '+919876543210',
@@ -73,7 +155,7 @@ describe('Driver Compensation Storage', () => {
     licenseNumber: 'DL-123456789',
     payableAmount: 25000,
     commissionPercent: 10,
-    commissionPerKm: 5
+    commissionPerKm: 5,
   };
 
   beforeEach(() => {
@@ -96,7 +178,7 @@ describe('Driver Compensation Storage', () => {
         ...mockDriverData,
         payableAmount: null,
         commissionPercent: null,
-        commissionPerKm: null
+        commissionPerKm: null,
       };
 
       const result = await createDriver(mockOrgId, dataWithoutCompensation);
@@ -127,7 +209,7 @@ describe('Driver Compensation Storage', () => {
       const result = await updateDriver(mockOrgId, 'test-driver-id', {
         payable_amount: 30000,
         commission_percent: 12,
-        commission_per_km: 6
+        commission_per_km: 6,
       });
 
       expect(result.error).toBeNull();
@@ -145,8 +227,8 @@ describe('Driver Compensation Storage', () => {
           id: 'user-1',
           phone: '+919876543210',
           name: 'Test Driver',
-          email: 'test@example.com'
-        }
+          email: 'test@example.com',
+        },
       ];
 
       const result = await linkOfflineDriversToNewUsers(newUsers, mockOrgId);
@@ -163,7 +245,7 @@ describe('Driver Compensation Storage', () => {
         id: `user-${i}`,
         phone: `+9198765432${i.toString().padStart(3, '0')}`,
         name: `Driver ${i}`,
-        email: `driver${i}@example.com`
+        email: `driver${i}@example.com`,
       }));
 
       // This should complete in reasonable time (O(n) complexity)
@@ -183,8 +265,8 @@ describe('Driver Compensation Storage', () => {
           id: 'user-1',
           phone: '9876543210', // Without +91
           name: 'Test Driver',
-          email: 'test@example.com'
-        }
+          email: 'test@example.com',
+        },
       ];
 
       const result = await linkOfflineDriversToNewUsers(newUsers, mockOrgId);
@@ -200,8 +282,8 @@ describe('Driver Compensation Storage', () => {
           id: 'user-1',
           phone: '+919876543210',
           name: 'Test Driver',
-          email: 'test@example.com'
-        }
+          email: 'test@example.com',
+        },
       ];
 
       const result = await linkOfflineDriversToNewUsers(newUsers, mockOrgId);
