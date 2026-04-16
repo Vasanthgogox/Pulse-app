@@ -1371,7 +1371,10 @@ export default function NetworkScreen() {
               ) : filteredNodes.length === 0 ? (
                 <View style={styles.emptyState}>
                   <FontAwesome name="users" size={48} color={Theme.textMuted} />
-                  <Text style={styles.emptyStateText}>Empty Registry</Text>
+                  <Text style={styles.emptyStateText}>No contacts found</Text>
+                  <Text style={styles.emptyStateSubtext}>
+                    Search by name or phone number to find people to connect with.
+                  </Text>
                 </View>
               ) : (
                 <View style={isLargeScreen ? styles.gridContainer : undefined}>
@@ -1602,7 +1605,11 @@ export default function NetworkScreen() {
             ) : filteredRequests.length === 0 ? (
               <View style={styles.emptyState}>
                 <FontAwesome name="users" size={48} color={Theme.textMuted} />
-                <Text style={styles.emptyStateText}>Empty Registry</Text>
+                <Text style={styles.emptyStateText}>No invitations found</Text>
+                <Text style={styles.emptyStateSubtext}>
+                  Sent and received invitations will appear here when you start
+                  connecting with clients or suppliers.
+                </Text>
               </View>
             ) : (
               <View style={isLargeScreen ? styles.gridContainer : undefined}>
@@ -1867,7 +1874,11 @@ export default function NetworkScreen() {
           ) : filteredNodes.length === 0 ? (
             <View style={styles.emptyState}>
               <FontAwesome name="users" size={48} color={Theme.textMuted} />
-              <Text style={styles.emptyStateText}>Empty Registry</Text>
+              <Text style={styles.emptyStateText}>No connections found</Text>
+              <Text style={styles.emptyStateSubtext}>
+                Your connected clients, suppliers, and drivers will appear here
+                after requests are accepted.
+              </Text>
             </View>
           ) : (
             <View
@@ -2144,19 +2155,19 @@ export default function NetworkScreen() {
             <View style={[styles.confirmModalCard, styles.requestPreviewModalCard]}>
               <View style={styles.requestPreviewAccentBar} />
               <View style={styles.requestPreviewHeader}>
-                <View style={styles.requestPreviewAvatar}>
-                  {previewRequestItem.nodeInfo ? (
-                    <NetworkAvatar
-                      node={previewRequestItem.nodeInfo as NetworkNode}
-                      onPlatform={true}
-                      frameSize={44}
-                    />
-                  ) : (
+                {previewRequestItem.nodeInfo ? (
+                  <NetworkAvatar
+                    node={previewRequestItem.nodeInfo as NetworkNode}
+                    onPlatform={true}
+                    frameSize={44}
+                  />
+                ) : (
+                  <View style={styles.requestPreviewAvatar}>
                     <Text style={styles.requestPreviewAvatarText}>
                       {getInitials(previewRequestItem.from_org_name || "S")}
                     </Text>
-                  )}
-                </View>
+                  </View>
+                )}
                 <View style={styles.requestPreviewHeaderBody}>
                   <Text style={styles.requestPreviewHeading}>
                     {previewRequestItem.from_org_name}
@@ -2737,11 +2748,19 @@ const styles = StyleSheet.create({
   },
   emptyStateText: {
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "500",
     color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
-    letterSpacing: 2,
+    letterSpacing: 0.2,
     marginTop: 16,
+  },
+  emptyStateSubtext: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: "400",
+    color: Theme.textSecondary,
+    textAlign: "center",
+    lineHeight: 18,
+    maxWidth: 260,
   },
   /** Same grid as Trips tab (`app/(tabs)/trips.tsx`) for web ≥1024px */
   gridContainer: {
