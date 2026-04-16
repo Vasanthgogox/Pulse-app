@@ -5,6 +5,7 @@ import { DriverTripFlowCard } from '@/components/DriverTripFlowCard';
 import { JobRequestCard } from '@/components/JobRequestCard';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
+import Typography from '@/constants/Typography';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
@@ -3561,18 +3562,16 @@ export default function DriverRadarScreen() {
               style={[
                 styles.incomingOtpPopupBadge,
                 {
-                  backgroundColor:
-                    colors.emeraldMuted ?? Theme.driverEmeraldMuted,
-                  borderColor:
-                    colors.emeraldBorder ?? Theme.driverEmeraldBorder,
+                  backgroundColor: colors.surfaceElevated,
+                  borderColor: colors.border,
                 },
               ]}
             >
-              <FontAwesome name="bolt" size={11} color={colors.emerald} />
+              <FontAwesome name="shield" size={11} color={colors.textMuted} />
               <Text
                 style={[
                   styles.incomingOtpPopupBadgeText,
-                  { color: colors.emerald },
+                  { color: colors.textMuted },
                 ]}
               >
                 {incomingOtpPopupBadge}
@@ -3584,7 +3583,7 @@ export default function DriverRadarScreen() {
                 style={[
                   styles.incomingOtpPopupAvatarWrap,
                   {
-                    backgroundColor: colors.emeraldMuted ?? Theme.surfaceLight,
+                    backgroundColor: colors.surfaceElevated,
                     borderColor: colors.border,
                   },
                 ]}
@@ -3597,9 +3596,9 @@ export default function DriverRadarScreen() {
                   />
                 ) : (
                   <FontAwesome
-                    name={firstIncomingIsAggregate ? "building" : "user"}
-                    size={24}
-                    color={colors.emerald}
+                    name={firstIncomingIsAggregate ? "briefcase" : "user-circle-o"}
+                    size={18}
+                    color={colors.textPrimary}
                   />
                 )}
               </View>
@@ -3636,10 +3635,17 @@ export default function DriverRadarScreen() {
                 <View
                   style={[
                     styles.incomingOtpPopupRouteIcon,
-                    { backgroundColor: colors.emeraldMuted ?? Theme.positiveMuted },
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
                   ]}
                 >
-                  <FontAwesome name="circle" size={9} color={colors.emerald} />
+                  <FontAwesome
+                    name="arrow-up"
+                    size={11}
+                    color={colors.textMuted}
+                  />
                 </View>
                 <Text
                   style={[styles.incomingOtpPopupRouteValue, { color: colors.text }]}
@@ -3658,10 +3664,17 @@ export default function DriverRadarScreen() {
                 <View
                   style={[
                     styles.incomingOtpPopupRouteIcon,
-                    { backgroundColor: Theme.negativeMuted },
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
                   ]}
                 >
-                  <FontAwesome name="map-marker" size={11} color={Theme.negative} />
+                  <FontAwesome
+                    name="arrow-down"
+                    size={11}
+                    color={colors.textMuted}
+                  />
                 </View>
                 <Text
                   style={[styles.incomingOtpPopupRouteValue, { color: colors.text }]}
@@ -5045,7 +5058,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     borderWidth: 1,
     paddingHorizontal: 24,
-    paddingVertical: 24,
+    paddingVertical: 22,
     alignItems: "stretch",
     ...(Platform.OS === "ios"
       ? {
@@ -5058,21 +5071,21 @@ const styles = StyleSheet.create({
   },
   incomingOtpPopupBadge: {
     alignSelf: "center",
-    minHeight: 32,
+    minHeight: 30,
     borderRadius: 999,
     borderWidth: 1,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 7,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginBottom: 18,
+    marginBottom: 16,
   },
   incomingOtpPopupBadgeText: {
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
+    ...Typography.headerTitle,
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.6,
   },
   incomingOtpPopupHero: {
     flexDirection: "row",
@@ -5080,9 +5093,9 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   incomingOtpPopupAvatarWrap: {
-    width: 68,
-    height: 68,
-    borderRadius: 22,
+    width: 64,
+    height: 64,
+    borderRadius: 20,
     borderWidth: 1,
     overflow: "hidden",
     alignItems: "center",
@@ -5097,38 +5110,42 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   incomingOtpPopupEyebrow: {
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1,
-    marginBottom: 6,
+    ...Typography.headerTitle,
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    marginBottom: 4,
   },
   incomingOtpPopupTitle: {
-    fontSize: 22,
-    fontWeight: "900",
-    letterSpacing: -0.5,
+    fontSize: 18,
+    fontWeight: "700",
+    letterSpacing: -0.3,
+    lineHeight: 22,
   },
   incomingOtpPopupName: {
-    marginTop: 6,
-    fontSize: 17,
-    fontWeight: "800",
+    marginTop: 8,
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 18,
   },
   incomingOtpPopupRouteCard: {
-    marginTop: 20,
+    marginTop: 18,
     borderRadius: 20,
     borderWidth: 1,
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
+    paddingVertical: 13,
+    gap: 10,
   },
   incomingOtpPopupRouteRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 14,
   },
   incomingOtpPopupRouteIcon: {
-    width: 28,
-    height: 28,
+    width: 32,
+    height: 32,
     borderRadius: 999,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -5136,8 +5153,8 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     fontSize: 14,
-    fontWeight: "700",
-    lineHeight: 20,
+    fontWeight: "600",
+    lineHeight: 19,
   },
   incomingOtpPopupRouteDivider: {
     height: 1,
@@ -5146,7 +5163,7 @@ const styles = StyleSheet.create({
   incomingOtpPopupMetaRow: {
     flexDirection: "row",
     gap: 10,
-    marginTop: 14,
+    marginTop: 16,
   },
   incomingOtpPopupMetaPill: {
     flex: 1,
@@ -5157,19 +5174,20 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   incomingOtpPopupMetaLabel: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "600",
+    letterSpacing: 0.2,
     marginBottom: 4,
   },
   incomingOtpPopupMetaValue: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 14,
+    fontWeight: "600",
   },
   incomingOtpPopupCaption: {
     marginTop: 14,
     fontSize: 13,
-    fontWeight: "600",
-    lineHeight: 19,
+    fontWeight: "500",
+    lineHeight: 20,
     textAlign: "center",
   },
   incomingOtpPopupButton: {
@@ -5180,7 +5198,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,
-    paddingVertical: 14,
+    paddingVertical: 13,
+    borderWidth: 0,
+    ...(Platform.OS === "web"
+      ? {
+          outlineWidth: 0,
+        }
+      : null),
     ...(Platform.OS === "ios"
       ? {
           shadowOffset: { width: 0, height: 10 },
@@ -5190,8 +5214,8 @@ const styles = StyleSheet.create({
       : { elevation: 6 }),
   },
   incomingOtpPopupButtonText: {
-    fontSize: 16,
-    fontWeight: "800",
+    fontSize: 14,
+    fontWeight: "700",
     color: Theme.textOnPrimary,
     letterSpacing: 0.2,
   },
