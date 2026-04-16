@@ -18,12 +18,17 @@ import * as driversService from '@/services/driversService';
 import { getOptimalRoute, RouteResult } from '@/services/routingService';
 import * as tripsService from '@/services/tripsService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import BottomSheet, {
-  BottomSheetScrollView
-} from '@gorhom/bottom-sheet';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ComponentType,
+  type ReactNode,
+} from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -43,7 +48,6 @@ import {
   TouchableWithoutFeedback,
   View
 } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import MapView, { Callout, Marker, Polyline } from 'react-native-maps';
 import Reanimated, {
   useAnimatedProps,
@@ -52,6 +56,61 @@ import Reanimated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+type BottomSheetComponentProps = {
+  children?: ReactNode;
+  snapPoints?: Array<string | number>;
+  index?: number;
+  enablePanDownToClose?: boolean;
+  bottomInset?: number;
+  backgroundStyle?: ComponentProps<typeof View>['style'];
+  handleIndicatorStyle?: ComponentProps<typeof View>['style'];
+};
+
+type BottomSheetScrollViewComponentProps = ComponentProps<typeof ScrollView>;
+type GestureHandlerRootViewComponentProps = ComponentProps<typeof View>;
+
+type DriverPanelRuntime = {
+  BottomSheet: ComponentType<BottomSheetComponentProps>;
+  BottomSheetScrollView: ComponentType<BottomSheetScrollViewComponentProps>;
+  GestureHandlerRootView: ComponentType<GestureHandlerRootViewComponentProps>;
+  nativeSupported: boolean;
+};
+
+function BottomSheetFallback({ children }: BottomSheetComponentProps) {
+  return <View style={{ flex: 1 }}>{children}</View>;
+}
+
+function BottomSheetScrollViewFallback({
+  children,
+  contentContainerStyle,
+  ...props
+}: BottomSheetScrollViewComponentProps) {
+  return (
+    <ScrollView {...props} contentContainerStyle={contentContainerStyle}>
+      {children}
+    </ScrollView>
+  );
+}
+
+function GestureHandlerRootViewFallback({
+  children,
+  style,
+  ...props
+}: GestureHandlerRootViewComponentProps) {
+  return (
+    <View {...props} style={style}>
+      {children}
+    </View>
+  );
+}
+
+const FALLBACK_DRIVER_PANEL_RUNTIME: DriverPanelRuntime = {
+  BottomSheet: BottomSheetFallback,
+  BottomSheetScrollView: BottomSheetScrollViewFallback,
+  GestureHandlerRootView: GestureHandlerRootViewFallback,
+  nativeSupported: false,
+};
 
 /** Default map region when driver location is not yet available (India center). */
 const DEFAULT_MAP_REGION = {
@@ -327,6 +386,9 @@ export default function DriverDashboard() {
     return { transform: [{ rotate: `${youHeadingSv.value}deg` }] };
   });
 
+  const [driverPanelRuntime, setDriverPanelRuntime] = useState<DriverPanelRuntime>(
+    FALLBACK_DRIVER_PANEL_RUNTIME
+  );
   const OlaAnimatedMarker = Reanimated.createAnimatedComponent(Marker);
   const [stopsExpanded, setStopsExpanded] = useState(false);
   const [justCompletedTrip, setJustCompletedTrip] = useState(false);
@@ -342,12 +404,41 @@ export default function DriverDashboard() {
   const lastAnimatedTripIdRef = useRef<string | null>(null);
   const mapRef = useRef<MapView | null>(null);
   const fullMapRef = useRef<MapView | null>(null);
-  const bottomSheetRef = useRef<BottomSheet | null>(null);
   const inlineMapViewportHeightRef = useRef(0);
   const inlineMapLastFitKeyRef = useRef<string | null>(null);
   const fullMapLastFitKeyRef = useRef<string | null>(null);
   const otpInputRef = useRef<TextInput | null>(null);
   const lastGuidanceKeyRef = useRef<string | null>(null);
+  const {
+    BottomSheet: BottomSheetComponent,
+    BottomSheetScrollView: BottomSheetScrollViewComponent,
+    GestureHandlerRootView: GestureHandlerRootViewComponent,
+    nativeSupported: hasNativeBottomSheetSupport,
+  } = driverPanelRuntime;
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([import('@gorhom/bottom-sheet'), import('react-native-gesture-handler')])
+      .then(([bottomSheetModule, gestureHandlerModule]) => {
+        if (cancelled) return;
+        setDriverPanelRuntime({
+          BottomSheet: bottomSheetModule.default as ComponentType<BottomSheetComponentProps>,
+          BottomSheetScrollView:
+            bottomSheetModule.BottomSheetScrollView as ComponentType<BottomSheetScrollViewComponentProps>,
+          GestureHandlerRootView:
+            gestureHandlerModule.GestureHandlerRootView as ComponentType<GestureHandlerRootViewComponentProps>,
+          nativeSupported: true,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDriverPanelRuntime(FALLBACK_DRIVER_PANEL_RUNTIME);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     AsyncStorage.getItem(DRIVER_ACCEPTED_TRIP_ID_KEY).then((id) => {
@@ -1775,7 +1866,7 @@ export default function DriverDashboard() {
 
       {/* Ola-style persistent Operations Panel (bottom sheet) */}
       {shouldShowMap ? (
-        <GestureHandlerRootView style={styles.olaDriverRoot}>
+        <GestureHandlerRootViewComponent style={styles.olaDriverRoot}>
           <KeyboardAvoidingView
             style={styles.olaDriverKeyboardAvoid}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -1831,11 +1922,10 @@ export default function DriverDashboard() {
               </View>
             </TouchableWithoutFeedback>
 
-            <BottomSheet
+            <BottomSheetComponent
               snapPoints={['25%', '50%', '90%']}
               index={1}
               enablePanDownToClose={false}
-              ref={bottomSheetRef}
               bottomInset={driverTabBarClearance}
               backgroundStyle={{
                 backgroundColor: colors.surface,
@@ -1850,11 +1940,28 @@ export default function DriverDashboard() {
                 borderRadius: 999,
               }}
             >
-              <BottomSheetScrollView
+              <BottomSheetScrollViewComponent
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={[styles.olaSheetContent, { paddingBottom: insets.bottom }]}
               >
+                {!hasNativeBottomSheetSupport ? (
+                  <View
+                    style={[
+                      styles.driverNoticeCard,
+                      {
+                        backgroundColor: colors.whiteMuted,
+                        borderColor: colors.border,
+                        marginBottom: 16,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.driverNoticeTitle, { color: colors.text }]}>Limited driver panel</Text>
+                    <Text style={[styles.driverNoticeBody, { color: colors.textMuted }]}>
+                      This build is missing native gesture support, so the sheet is shown in a basic scroll view.
+                    </Text>
+                  </View>
+                ) : null}
                 <View style={styles.assignedSheetContent}>
                   {showNewAssignmentCard && effectiveFirstIncoming
                     ? assignmentFeedback === 'accepted'
@@ -2075,10 +2182,10 @@ export default function DriverDashboard() {
                                 <View style={{ paddingTop: 10 }} />
                               )}
                 </View>
-              </BottomSheetScrollView>
-            </BottomSheet>
+              </BottomSheetScrollViewComponent>
+            </BottomSheetComponent>
           </KeyboardAvoidingView>
-        </GestureHandlerRootView>
+        </GestureHandlerRootViewComponent>
       ) : null}
 
       <Modal
@@ -3778,6 +3885,21 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
     paddingHorizontal: 0,
     paddingTop: 0,
+  },
+  driverNoticeCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  driverNoticeTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  driverNoticeBody: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 18,
   },
   assignedNewOrderTitleWrap: {
     alignItems: 'center',
