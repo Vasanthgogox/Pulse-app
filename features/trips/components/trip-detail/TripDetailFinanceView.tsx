@@ -683,10 +683,10 @@ export function TripDetailFinanceView({
                       : "";
                   const isFallback = row.id === "fallback";
                   const driverPrev = !isFallback && row.driver_id_prev
-                    ? (assignmentDriverNames[row.driver_id_prev] ?? row.driver_id_prev)
+                    ? (assignmentDriverNames[row.driver_id_prev] ?? null)
                     : null;
                   const driverNew = row.driver_id_new
-                    ? (assignmentDriverNames[row.driver_id_new] ?? (isFallback ? (driverName ?? null) : row.driver_id_new))
+                    ? (assignmentDriverNames[row.driver_id_new] ?? (isFallback ? (driverName ?? null) : null))
                     : null;
                   const vehiclePrev = !isFallback && row.vehicle_id_prev
                     ? (assignmentVehicleLabels[row.vehicle_id_prev] ?? row.vehicle_id_prev)
