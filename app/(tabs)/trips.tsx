@@ -3,6 +3,7 @@
  * Private Book = driver/vehicle assigned by you; Shared Ledger = assigned by another user.
  */
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { DateRangePickerModal } from "@/components/DateRangePickerModal";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -52,7 +53,14 @@ type SortBy =
   | "client_asc"
   | "client_desc";
 type PaymentFilter = "all" | "pending" | "partial" | "paid";
-type DateFilter = "all" | "today" | "tomorrow" | "this_week" | "this_month";
+type DateFilter =
+  | "all"
+  | "today"
+  | "yesterday"
+  | "tomorrow"
+  | "this_week"
+  | "this_month"
+  | "custom";
 
 const TRIPS_PAGE_BG = "#f4f5f7";
 
@@ -80,6 +88,9 @@ export default function TripsScreen() {
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
   const [loadTypeFilter, setLoadTypeFilter] = useState<string>("all");
   const [dateRangeFilter, setDateRangeFilter] = useState<DateFilter>("all");
+  const [customDateFrom, setCustomDateFrom] = useState<string | null>(null);
+  const [customDateTo, setCustomDateTo] = useState<string | null>(null);
+  const [showDateRangePicker, setShowDateRangePicker] = useState(false);
   const [showSortModal, setShowSortModal] = useState(false);
   const [sortAnchorY, setSortAnchorY] = useState(0);
 
@@ -196,33 +207,51 @@ export default function TripsScreen() {
     }
 
     if (dateRangeFilter !== "all") {
-      const now = new Date();
+      const nowBase = new Date();
       const startOfDay = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
+        nowBase.getFullYear(),
+        nowBase.getMonth(),
+        nowBase.getDate(),
       ).getTime();
       const endOfDay = startOfDay + 24 * 60 * 60 * 1000;
+      const yesterdayStart = startOfDay - 24 * 60 * 60 * 1000;
+      const yesterdayEnd = startOfDay;
       const tomorrowStart = endOfDay;
       const tomorrowEnd = tomorrowStart + 24 * 60 * 60 * 1000;
 
+      const weekCursor = new Date(nowBase);
       const startOfWeek = new Date(
-        now.setDate(now.getDate() - now.getDay()),
+        weekCursor.setDate(weekCursor.getDate() - weekCursor.getDay()),
       ).getTime();
       const startOfMonth = new Date(
-        now.getFullYear(),
-        now.getMonth(),
+        nowBase.getFullYear(),
+        nowBase.getMonth(),
         1,
       ).getTime();
+
+      let customFromMs: number | null = null;
+      let customToMs: number | null = null;
+      if (dateRangeFilter === "custom" && customDateFrom && customDateTo) {
+        const [fy, fm, fd] = customDateFrom.split("-").map(Number);
+        const [ty, tm, td] = customDateTo.split("-").map(Number);
+        customFromMs = new Date(fy, fm - 1, fd).getTime();
+        customToMs = new Date(ty, tm - 1, td).getTime() + 24 * 60 * 60 * 1000;
+      }
 
       list = list.filter((t) => {
         const date = new Date(t.pickup_date || t.created_at).getTime();
         if (dateRangeFilter === "today")
           return date >= startOfDay && date < endOfDay;
+        if (dateRangeFilter === "yesterday")
+          return date >= yesterdayStart && date < yesterdayEnd;
         if (dateRangeFilter === "tomorrow")
           return date >= tomorrowStart && date < tomorrowEnd;
         if (dateRangeFilter === "this_week") return date >= startOfWeek;
         if (dateRangeFilter === "this_month") return date >= startOfMonth;
+        if (dateRangeFilter === "custom") {
+          if (customFromMs == null || customToMs == null) return true;
+          return date >= customFromMs && date < customToMs;
+        }
         return true;
       });
     }
@@ -287,6 +316,8 @@ export default function TripsScreen() {
     paymentFilter,
     loadTypeFilter,
     dateRangeFilter,
+    customDateFrom,
+    customDateTo,
   ]);
 
   const loadTypeOptions = useMemo(() => {
@@ -538,10 +569,7 @@ export default function TripsScreen() {
                 styles.tripsSupplyChipsScroll,
                 isLargeScreen && styles.tripsSupplyChipsScrollRow,
               ]}
-              contentContainerStyle={[
-                styles.tripsSupplyChipsScrollInner,
-                { flexGrow: isLargeScreen ? 0 : 1 },
-              ]}
+              contentContainerStyle={styles.tripsSupplyChipsScrollInner}
             >
               <View style={styles.tripsSupplyChipsRail}>
                 {(
@@ -599,6 +627,96 @@ export default function TripsScreen() {
               <FontAwesome name="sort" size={12} color={Theme.textOnDark} />
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* Date-range quick filter row */}
+        <View style={styles.tripsDateFilterRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tripsDateChipsContent}
+            style={styles.tripsDateChipsScroll}
+          >
+            {(
+              [
+                { id: "all" as const, label: tr("all") },
+                { id: "today" as const, label: tr("todayTrips") },
+                { id: "yesterday" as const, label: tr("yesterdayTrips") },
+                { id: "this_week" as const, label: tr("thisWeekTrips") },
+                { id: "this_month" as const, label: tr("thisMonthTrips") },
+              ] as const
+            ).map(({ id, label }) => (
+              <TouchableOpacity
+                key={id}
+                style={[
+                  styles.tripsDateChip,
+                  dateRangeFilter === id && styles.tripsDateChipActive,
+                  Platform.OS === "web" && styles.tripsSupplyChipWeb,
+                ]}
+                onPress={() => {
+                  setDateRangeFilter(id);
+                  setCustomDateFrom(null);
+                  setCustomDateTo(null);
+                }}
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[
+                    styles.tripsDateChipText,
+                    dateRangeFilter === id && styles.tripsDateChipTextActive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            {dateRangeFilter === "custom" && customDateFrom && customDateTo ? (
+              <View style={[styles.tripsDateChip, styles.tripsDateChipCustom]}>
+                <FontAwesome
+                  name="calendar"
+                  size={9}
+                  color={Theme.textOnDark}
+                  style={styles.tripsDateChipCustomIcon}
+                />
+                <Text
+                  style={[styles.tripsDateChipText, styles.tripsDateChipTextActive]}
+                  numberOfLines={1}
+                >
+                  {formatLedgerDate(customDateFrom).toUpperCase()} →{" "}
+                  {formatLedgerDate(customDateTo).toUpperCase()}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setDateRangeFilter("all");
+                    setCustomDateFrom(null);
+                    setCustomDateTo(null);
+                  }}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  style={styles.tripsDateChipCustomClose}
+                >
+                  <FontAwesome name="times" size={9} color={Theme.textOnDark} />
+                </TouchableOpacity>
+              </View>
+            ) : null}
+          </ScrollView>
+          <TouchableOpacity
+            style={[
+              styles.tripsDateRangeIconBtn,
+              dateRangeFilter === "custom" && styles.tripsDateRangeIconBtnActive,
+              Platform.OS === "web" && styles.tripsSupplyChipWeb,
+            ]}
+            onPress={() => setShowDateRangePicker(true)}
+            activeOpacity={0.8}
+            accessibilityLabel={tr("dateRangeLabel")}
+            accessibilityRole="button"
+          >
+            <FontAwesome
+              name="calendar"
+              size={12}
+              color={Theme.textOnDark}
+            />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -810,6 +928,25 @@ export default function TripsScreen() {
         </TouchableWithoutFeedback>
       </Modal>
 
+      <DateRangePickerModal
+        visible={showDateRangePicker}
+        initialFrom={customDateFrom}
+        initialTo={customDateTo}
+        onDismiss={() => setShowDateRangePicker(false)}
+        onApply={(from, to) => {
+          setCustomDateFrom(from);
+          setCustomDateTo(to);
+          setDateRangeFilter("custom");
+          setShowDateRangePicker(false);
+        }}
+        onClear={() => {
+          setCustomDateFrom(null);
+          setCustomDateTo(null);
+          setDateRangeFilter("all");
+          setShowDateRangePicker(false);
+        }}
+      />
+
       {loading ? (
         <View style={styles.scroll}>
           <CenteredLoadingView message={tr("loading")} />
@@ -993,7 +1130,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    flexShrink: 0,
+    flex: 1,
+    minWidth: 0,
   },
   tripsSearchWrap: {
     flexDirection: "row",
@@ -1039,6 +1177,83 @@ const styles = StyleSheet.create({
     borderColor: Theme.separatorDark,
     alignItems: "center",
     justifyContent: "center",
+  },
+  tripsDateFilterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 10,
+    paddingBottom: 12,
+    gap: 10,
+    backgroundColor: "#000000",
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.separatorDark,
+  },
+  tripsDateChipsScroll: {
+    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+  },
+  tripsDateChipsContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    gap: 6,
+    paddingRight: 4,
+    paddingLeft: 0,
+  },
+  tripsDateChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: Theme.darkSurface,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  tripsDateChipActive: {
+    backgroundColor: "rgba(255,255,255,0.16)",
+    borderColor: "rgba(255,255,255,0.22)",
+  },
+  tripsDateChipCustom: {
+    backgroundColor: Theme.teslaRed,
+    borderColor: Theme.teslaRed,
+    gap: 6,
+  },
+  tripsDateChipCustomIcon: {
+    marginRight: 2,
+  },
+  tripsDateChipCustomClose: {
+    marginLeft: 4,
+    paddingLeft: 6,
+    borderLeftWidth: 1,
+    borderLeftColor: "rgba(255,255,255,0.25)",
+  },
+  tripsDateChipText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textOnDarkMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  tripsDateChipTextActive: {
+    color: Theme.textOnDark,
+  },
+  tripsDateRangeIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1,
+    borderColor: Theme.separatorDark,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  tripsDateRangeIconBtnActive: {
+    backgroundColor: Theme.teslaRed,
+    borderColor: Theme.teslaRed,
   },
   modalOverlay: {
     flex: 1,
@@ -1173,17 +1388,19 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   tripsSupplyChipsScroll: {
-    flexGrow: 0,
+    flex: 1,
+    minWidth: 0,
     flexShrink: 1,
   },
   tripsSupplyChipsScrollRow: {
     flexGrow: 0,
     flexShrink: 0,
-    alignSelf: "center",
+    alignSelf: "auto",
   },
   tripsSupplyChipsScrollInner: {
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
+    paddingRight: 2,
   },
   tripsSupplyChipsRail: {
     flexDirection: "row",

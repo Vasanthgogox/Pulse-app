@@ -14,7 +14,8 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { CUSTOMERS_SUPPLIERS, DRIVERS, LEDGER } from "@/features/finance/constants/tableColumns";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import React, { useEffect, useState } from "react";
+import { useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -237,9 +238,23 @@ export interface FinancialRowData {
   /** Customers/Suppliers/Drivers */
   is_integrated?: boolean | null;
   linked_organization_id?: string | null;
+  /** Ledger-specific: counterparty (client/supplier) integration status resolved from clientById/supplierById. */
+  counterpartyIntegrated?: boolean | null;
+  /** Ledger-specific: counterparty entity id (client/supplier) for opening Compare & Verify. */
+  counterpartyId?: string | null;
+  /** Ledger-specific: open/resolved dispute status for this trip+partner (drives status chip in expanded card). */
+  disputeStatus?: "OPEN" | "RESOLVED" | null;
+  /** Ledger-specific: who raised the dispute — affects chip wording. */
+  disputeDirection?: "RAISED_BY_US" | "RECEIVED" | null;
   contactPercent?: number | null;
   contactPerson?: string | null;
   transactionTypeLabel?: string | null;
+  paymentMode?: string | null;
+  paymentReference?: string | null;
+  reconciliationStatus?: "match_found" | "reconciled" | "mismatch" | null;
+  reconciliationLabel?: string | null;
+  reconciliationActionLabel?: string | null;
+  reconciliationHelperText?: string | null;
   left_at?: string | null;
   tripPaymentSummary?: {
     received: number;
@@ -294,10 +309,35 @@ function getAgingLabelForExpanded(iso: string | null | undefined): string {
 export function LedgerExpandedCardFromData({
   data,
   onDownloadPress,
+  onOpenCompareVerify: onOpenCompareVerifyProp,
 }: {
   data: FinancialRowData;
   onDownloadPress?: () => void;
+  onOpenCompareVerify?: () => void;
 }) {
+  const router = useRouter();
+  const defaultOpenCompareVerify = useCallback(() => {
+    const partyType = data.ledgerPartyType ?? null;
+    const tripId = data.tripId ?? null;
+    const entityId = data.counterpartyId ?? null;
+    if (
+      !tripId ||
+      !entityId ||
+      (partyType !== "client" && partyType !== "supplier")
+    ) {
+      return;
+    }
+    router.push({
+      pathname: "/trip-ledger/[id]",
+      params: {
+        id: tripId,
+        entityType: partyType === "client" ? "CLIENT" : "SUPPLIER",
+        entityId,
+        partyName: data.name ?? "",
+      },
+    });
+  }, [data.ledgerPartyType, data.tripId, data.counterpartyId, data.name, router]);
+  const onOpenCompareVerify = onOpenCompareVerifyProp ?? (data.counterpartyIntegrated ? defaultOpenCompareVerify : undefined);
   const hasTripDetail = data.tripDetail != null;
   const tripDateStr = hasTripDetail ? formatDateForExpanded(data.tripDetail!.pickup_date) : "";
   const hasTripDate = tripDateStr !== "" && tripDateStr !== "—";
@@ -364,6 +404,11 @@ export function LedgerExpandedCardFromData({
       paymentIn={paymentIn}
       paymentOut={paymentOut}
       note={data.desc}
+      paymentMode={data.paymentMode}
+      paymentReference={data.paymentReference}
+      reconciliationLabel={data.reconciliationLabel}
+      reconciliationActionLabel={data.reconciliationActionLabel}
+      reconciliationHelperText={data.reconciliationHelperText}
       hasMergedDetails={hasMergedDetails}
       tripNumber={expandedTripNumber}
       tripDateStr={tripDateStr}
@@ -403,6 +448,10 @@ export function LedgerExpandedCardFromData({
       formatNumSignedFn={formatNumSigned}
       highlightTransactionId={data.id}
       onDownloadPress={onDownloadPress}
+      counterpartyIntegrated={data.counterpartyIntegrated}
+      onOpenCompareVerify={onOpenCompareVerify}
+      disputeStatus={data.disputeStatus}
+      disputeDirection={data.disputeDirection}
     />
   );
 }
@@ -598,6 +647,18 @@ export function FinancialRow({
     : '';
   /** Ledger: show integration icon on name row when present (e.g. from contact_type/contact_id). */
   const showLedgerIntegrationIcon = type === "ledger" && data.is_integrated != null;
+  const ledgerReconBadgeStyle =
+    data.reconciliationStatus === "reconciled"
+      ? styles.ledgerReconBadgeReconciled
+      : data.reconciliationStatus === "mismatch"
+        ? styles.ledgerReconBadgeMismatch
+        : styles.ledgerReconBadgeMatch;
+  const ledgerReconTextStyle =
+    data.reconciliationStatus === "reconciled"
+      ? styles.ledgerReconBadgeTextReconciled
+      : data.reconciliationStatus === "mismatch"
+        ? styles.ledgerReconBadgeTextMismatch
+        : styles.ledgerReconBadgeTextMatch;
   /** Ledger collapsed row: [icon] name, category (uppercase), date/time — same layout as entity tabs. */
   const ledgerEntityLines =
     type === "ledger" ? (
@@ -619,6 +680,27 @@ export function FinancialRow({
         <Text style={styles.cellNodeSubCategory} numberOfLines={1} ellipsizeMode="tail">
           {(data.category ?? "GENERAL").toUpperCase()}
         </Text>
+        {data.reconciliationLabel ? (
+          <View style={styles.ledgerReconRow}>
+            <View style={[styles.ledgerReconBadge, ledgerReconBadgeStyle]}>
+              <Text
+                style={[styles.ledgerReconBadgeText, ledgerReconTextStyle]}
+                numberOfLines={1}
+              >
+                {data.reconciliationLabel.toUpperCase()}
+              </Text>
+            </View>
+            {data.reconciliationActionLabel ? (
+              <Text
+                style={styles.ledgerReconActionText}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {data.reconciliationActionLabel}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
         <Text
           style={styles.cellNodeSubDate}
           numberOfLines={1}
@@ -1199,6 +1281,48 @@ const styles = StyleSheet.create({
   },
   cellNodeSubStandalone: {
     marginTop: 2,
+  },
+  ledgerReconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 4,
+    minWidth: 0,
+  },
+  ledgerReconBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  ledgerReconBadgeMatch: {
+    backgroundColor: Theme.primary + "1F",
+  },
+  ledgerReconBadgeReconciled: {
+    backgroundColor: Theme.darkGreen + "1F",
+  },
+  ledgerReconBadgeMismatch: {
+    backgroundColor: Theme.teslaRed + "1A",
+  },
+  ledgerReconBadgeText: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
+  ledgerReconBadgeTextMatch: {
+    color: Theme.primary,
+  },
+  ledgerReconBadgeTextReconciled: {
+    color: Theme.darkGreen,
+  },
+  ledgerReconBadgeTextMismatch: {
+    color: Theme.teslaRed,
+  },
+  ledgerReconActionText: {
+    flexShrink: 1,
+    minWidth: 0,
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textSecondary,
   },
   /** Drivers tab: red icon left of driver name. Same width as cellNodeSubIntegrationIconWrap (14) + gap so text aligns with other tabs. */
   cellNodeDriverIconWrap: {

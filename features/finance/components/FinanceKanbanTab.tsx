@@ -8,11 +8,12 @@ import Theme from '@/constants/Theme';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatIndianVehicleNumber, formatLedgerAmount } from '@/lib/format';
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { useRouter } from "expo-router";
 import React, { useMemo, useState } from 'react';
 import Animated, { FadeInUp, Layout } from 'react-native-reanimated';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, LayoutAnimation, Platform } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
 import type { LedgerRow } from '../services/finance.service';
-import { LedgerExpandedCardFromData, type FinancialRowData } from "./FinancialRow";
+import { type FinancialRowData } from "./FinancialRow";
 import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
 
 import type { ClientRow } from "@/features/clients/services/clients.service";
@@ -109,23 +110,22 @@ function formatTxDate(iso: string | null | undefined): string {
   return `${day} ${MONTHS_SHORT[Number(m) - 1] ?? m} ${y}`;
 }
 
-function KanbanCard({ row, index, cat, isExpanded, toggleExpand, hasAmtIn, amount, dateStr, vehicleStr, partyName, routeWhyLine, rowData, tripIdOnly, onRowSelect, profileImageUrl }: any) {
+function KanbanCard({ row, index, cat, openDetail, hasAmtIn, amount, dateStr, vehicleStr, partyName, routeWhyLine, rowData, tripIdOnly, onRowSelect, profileImageUrl }: any) {
   const avatarBg = avatarColor(partyName);
   const initialText = initials(partyName);
 
   return (
-    <Animated.View 
+    <Animated.View
       style={styles.cardContainer}
       entering={FadeInUp.delay(index * 30).springify()}
       layout={Layout.springify()}
     >
-      <TouchableOpacity 
-        style={[
-          styles.timelineCard, 
-          isExpanded && styles.cardExpanded
-        ]}
+      <TouchableOpacity
+        style={styles.timelineCard}
         activeOpacity={0.7}
-        onPress={() => toggleExpand(row.id)}
+        onPress={() => openDetail(rowData)}
+        accessibilityRole="button"
+        accessibilityLabel={`Open cash entry for ${partyName}`}
       >
         {profileImageUrl ? (
           <Image source={{ uri: profileImageUrl }} style={styles.profileImage} />
@@ -159,7 +159,7 @@ function KanbanCard({ row, index, cat, isExpanded, toggleExpand, hasAmtIn, amoun
 
         <View style={styles.rightCol}>
           {tripIdOnly && (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.tripPillWithCheck}
               onPress={() => onRowSelect?.(row)}
               activeOpacity={0.6}
@@ -182,24 +182,9 @@ function KanbanCard({ row, index, cat, isExpanded, toggleExpand, hasAmtIn, amoun
         </View>
 
         <View style={styles.expandHint}>
-          <FontAwesome name={isExpanded ? "chevron-up" : "chevron-down"} size={8} color={Theme.textMuted} />
+          <FontAwesome name="chevron-right" size={8} color={Theme.textMuted} />
         </View>
       </TouchableOpacity>
-      
-      {isExpanded && (
-        <View style={styles.expandedContent}>
-          <LedgerExpandedCardFromData data={rowData} />
-          {row.trip_id && (
-              <TouchableOpacity 
-                  style={styles.viewTripBtn}
-                  onPress={() => onRowSelect?.(row)}
-              >
-                  <Text style={styles.viewTripBtnText}>VIEW FULL TRIP</Text>
-                  <FontAwesome name="arrow-right" size={10} color={Theme.primary} />
-              </TouchableOpacity>
-          )}
-        </View>
-      )}
     </Animated.View>
   );
 }
@@ -273,7 +258,7 @@ export function FinanceKanbanTab({
   profileImages,
 }: FinanceKanbanTabProps) {
   const { t } = useLanguage();
-  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+  const router = useRouter();
 
   const clientById = useMemo(() => new Map(clientRows.map(c => [c.id, c])), [clientRows]);
   const supplierById = useMemo(() => new Map(supplierRows.map(s => [s.id, s])), [supplierRows]);
@@ -446,26 +431,18 @@ export function FinanceKanbanTab({
     };
   };
 
-  const toggleExpand = (rowId: string) => {
-    if (Platform.OS === 'web') {
-      // @ts-ignore - document transition support on web
-      if (document.startViewTransition) {
-        // @ts-ignore
-        document.startViewTransition(() => {
-          setExpandedRowId(expandedRowId === rowId ? null : rowId);
-        });
-        return;
-      }
-    }
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setExpandedRowId(expandedRowId === rowId ? null : rowId);
+  const openDetail = (rowData: FinancialRowData) => {
+    const payload = JSON.stringify(rowData);
+    router.push({
+      pathname: "/finance-entry/[id]",
+      params: { id: rowData.id, payload },
+    });
   };
 
   const renderCard = (row: LedgerRow, index: number) => {
     const cat = getRowCategory(row);
     const hasAmtIn = (row.amount_in ?? 0) > 0;
     const amount = hasAmtIn ? row.amount_in : row.amount_out;
-    const isExpanded = expandedRowId === row.id;
     const dateStr = formatTxDate(row.transaction_date ?? row.created_at);
     const vehicleNum = row.vehicle_number ?? (row.trip_id != null ? (getVehicleNumberForTripId?.(row.trip_id) ?? null) : null);
     const vehicleStr = vehicleNum ? formatIndianVehicleNumber(vehicleNum) : null;
@@ -494,13 +471,12 @@ export function FinanceKanbanTab({
 
 
     return (
-      <KanbanCard 
+      <KanbanCard
         key={row.id}
         row={row}
         index={index}
         cat={cat}
-        isExpanded={isExpanded}
-        toggleExpand={toggleExpand}
+        openDetail={openDetail}
         hasAmtIn={hasAmtIn}
         amount={amount}
         dateStr={dateStr}

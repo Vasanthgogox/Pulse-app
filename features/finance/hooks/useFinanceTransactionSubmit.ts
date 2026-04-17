@@ -80,19 +80,33 @@ function doSubmit(
         data.driverPaymentType &&
         data.contactId
       ) {
-        const description =
-          driverPaymentLabel != null && typeof driverPaymentLabel === "string"
-            ? driverPaymentLabel
-            : null;
+        const shouldCreateFleetPending =
+          data.driverPaymentType === "settlement" &&
+          data.tripId !== undefined &&
+          data.tripId !== null;
+
+        const description = (() => {
+          const baseDescription =
+            typeof payload.description === "string" && payload.description.trim().length > 0
+              ? payload.description
+              : driverPaymentLabel != null && typeof driverPaymentLabel === "string"
+                ? driverPaymentLabel
+                : null;
+          if (!shouldCreateFleetPending) return baseDescription;
+          return baseDescription
+            ? `${baseDescription} | Sync: FLEET_PAID_PENDING`
+            : "Sync: FLEET_PAID_PENDING";
+        })();
         const ledgerPayload = {
           tripId: data.tripId ?? null,
           createdBy: profileUid ?? null,
           description,
         };
-        const driverLedgerType =
+        const baseDriverLedgerType =
           data.driverPaymentType === "bonus"
             ? "adjustment"
             : data.driverPaymentType;
+        const driverLedgerType = shouldCreateFleetPending ? "adjustment" : baseDriverLedgerType;
         let { error: ledgerErr } = await createDriverLedgerEntry(
           orgId,
           data.contactId,
@@ -105,7 +119,7 @@ function doSubmit(
             orgId,
             data.contactId,
             data.amount,
-            data.driverPaymentType,
+            driverLedgerType,
             { ...ledgerPayload, createdBy: null },
           );
           ledgerErr = retry.error;

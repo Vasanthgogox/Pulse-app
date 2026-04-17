@@ -5,6 +5,7 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { getClientById } from "@/features/clients/services/clients.service";
 import { getDriverById, getDriverProfileDisplay } from "@/features/drivers/services/drivers.service";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import {
@@ -29,6 +30,7 @@ import { ReceiptText } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     Animated,
     Dimensions,
     Image,
@@ -73,9 +75,23 @@ import {
     type AssignmentSource,
 } from "../TripAssignmentBlock";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
-import { TripDetailFinanceView, type TripDocItem } from "./TripDetailFinanceView";
+import {
+  TripDetailFinanceView,
+  type ReconciliationPartyInfo,
+  type TripDocItem,
+} from "./TripDetailFinanceView";
 import { TrackingMapBlock, VehicleTrackingCard } from "./TrackingMapBlock";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
+import {
+  acceptPartnerView,
+  createDispute,
+  getDisputesForPartner,
+  getDisputesReceived,
+  getSharedLedgerEntriesForPartner,
+  resolveDispute,
+  resolveDisputeTableOnly,
+} from "@/services/sharedLedgerService";
+import type { DisputeRow } from "@/services/sharedLedgerService";
 import type * as ExpoLocationTypes from "expo-location";
 
 let ExpoLocationModule: typeof ExpoLocationTypes | null = null;
@@ -232,6 +248,39 @@ export default function TripDetailScreen({
   const [vehicleDocs, setVehicleDocs] = useState<VehicleDocuments | null>(null);
   const [displayVehicleFromInput, setDisplayVehicleFromInput] = useState("");
   const [partnerName, setPartnerName] = useState<string | null>(null);
+  const [counterpartyIntegrated, setCounterpartyIntegrated] = useState<boolean | null>(null);
+  const [partnerOrgId, setPartnerOrgId] = useState<string | null>(null);
+  /**
+   * Per-party resolution for multi-party Trip Ledger (client + supplier).
+   * Unlike the legacy single-partner state above (which prefers supplier), these
+   * track BOTH sides independently so the hero can render a tab per real party.
+   */
+  const [clientPartyRes, setClientPartyRes] = useState<{
+    name: string | null;
+    integrated: boolean;
+    orgId: string | null;
+  } | null>(null);
+  const [supplierPartyRes, setSupplierPartyRes] = useState<{
+    name: string | null;
+    integrated: boolean;
+    orgId: string | null;
+  } | null>(null);
+  const [tripDispute, setTripDispute] = useState<DisputeRow | null>(null);
+  const [tripDisputeDirection, setTripDisputeDirection] = useState<
+    "RAISED_BY_US" | "RECEIVED" | null
+  >(null);
+  /** Dispute state per party type (client vs supplier). Drives per-tab chip + inline actions. */
+  const [tripDisputeByType, setTripDisputeByType] = useState<
+    Partial<Record<"client" | "supplier", {
+      dispute: DisputeRow;
+      direction: "RAISED_BY_US" | "RECEIVED";
+    }>>
+  >({});
+  const [reconcileActionLoading, setReconcileActionLoading] = useState(false);
+  /** Per-party action loading (used when Accept/Raise is in-flight on a specific tab). */
+  const [reconcileLoadingByType, setReconcileLoadingByType] = useState<
+    Partial<Record<"client" | "supplier", boolean>>
+  >({});
   const [financeRefreshKey, setFinanceRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [adjustments, setAdjustments] = useState<TripAdjustment[]>([]);
@@ -266,6 +315,15 @@ export default function TripDetailScreen({
   /** Reverse-geocoded addresses for first two trip location history points (Past 1, Past 2 on map). */
   const [pastLocationAddresses, setPastLocationAddresses] = useState<[string | null, string | null]>([null, null]);
   const [tripDocuments, setTripDocuments] = useState<tripDocumentsService.TripDocumentRow[]>([]);
+  const [counterpartyEntries, setCounterpartyEntries] = useState<
+    Array<{
+      id: string;
+      partnerKey: string;
+      amount: number;
+      transaction_date: string;
+      reference_id?: string;
+    }>
+  >([]);
   const [docPreviewUrl, setDocPreviewUrl] = useState<string | null>(null);
   const [docPreviewLoading, setDocPreviewLoading] = useState(false);
   const [docPreviewError, setDocPreviewError] = useState(false);
@@ -515,6 +573,136 @@ export default function TripDetailScreen({
     trip?.vehicle_id,
     loadTripOtp,
   ]);
+
+  useEffect(() => {
+    const orgId = currentOrganization?.id ?? null;
+    if (!orgId || !trip?.id) {
+      setCounterpartyEntries([]);
+      return;
+    }
+    if (counterpartyIntegrated === false) {
+      setCounterpartyEntries([]);
+      return;
+    }
+    const partnerKeys = [trip.supplier_id, trip.client_id]
+      .map((k) => (k ?? "").trim())
+      .filter(Boolean)
+      .filter((k, idx, arr) => arr.indexOf(k) === idx);
+    if (!partnerKeys.length) {
+      setCounterpartyEntries([]);
+      return;
+    }
+    let cancelled = false;
+    Promise.all(
+      partnerKeys.map((partnerKey) =>
+        getSharedLedgerEntriesForPartner(orgId, partnerKey).then((res) => ({
+          partnerKey,
+          entries: res.entries ?? [],
+        })),
+      ),
+    )
+      .then((results) => {
+        if (cancelled) return;
+        const tripRef = String(trip.id).trim().toLowerCase();
+        const merged = results.flatMap((result) =>
+          result.entries
+            .filter((entry) => String(entry.reference_id ?? "").trim().toLowerCase() === tripRef)
+            .map((entry) => ({
+              id: entry.id,
+              partnerKey: result.partnerKey,
+              amount: Number(entry.amount ?? 0),
+              transaction_date: entry.transaction_date,
+              reference_id: entry.reference_id,
+            })),
+        );
+        const deduped = Array.from(new Map(merged.map((row) => [row.id, row])).values())
+          .sort((a, b) => new Date(b.transaction_date).getTime() - new Date(a.transaction_date).getTime());
+        setCounterpartyEntries(deduped);
+      })
+      .catch(() => {
+        if (!cancelled) setCounterpartyEntries([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentOrganization?.id, trip?.id, trip?.supplier_id, trip?.client_id, counterpartyIntegrated]);
+
+  /** Current contact id (supplier or client) used when Accept-partner writes to our ledger for this trip. */
+  const tripContactId = useMemo<string | null>(() => {
+    if (!trip) return null;
+    return trip.supplier_id ?? trip.client_id ?? null;
+  }, [trip]);
+
+  /** Fetch any open dispute between us and partner for this specific trip.
+   * Resolves disputes for BOTH client and supplier parties when both are
+   * integrated; stored per-type so each tab in the hero renders its own chip.
+   * Legacy `tripDispute`/`tripDisputeDirection` are kept in sync for back-compat.
+   */
+  const refreshTripDispute = useCallback(async () => {
+    const orgId = currentOrganization?.id ?? null;
+    const tId = trip?.id ?? null;
+    const clientOrg = clientPartyRes?.orgId ?? null;
+    const supplierOrg = supplierPartyRes?.orgId ?? null;
+    if (!orgId || !tId || (!clientOrg && !supplierOrg)) {
+      setTripDispute(null);
+      setTripDisputeDirection(null);
+      setTripDisputeByType({});
+      return;
+    }
+    try {
+      const [received, clientRaised, supplierRaised] = await Promise.all([
+        getDisputesReceived(orgId),
+        clientOrg ? getDisputesForPartner(orgId, clientOrg) : Promise.resolve({ disputes: [] as DisputeRow[] }),
+        supplierOrg ? getDisputesForPartner(orgId, supplierOrg) : Promise.resolve({ disputes: [] as DisputeRow[] }),
+      ]);
+      const matchByTrip = (d: DisputeRow) =>
+        String(d.transaction_id ?? "").toLowerCase() === String(tId).toLowerCase();
+      const receivedByOrg = new Map<string, DisputeRow>();
+      for (const d of received.disputes ?? []) {
+        if (!matchByTrip(d) || d.status !== "OPEN") continue;
+        if (d.raised_by_org_id) receivedByOrg.set(d.raised_by_org_id, d);
+      }
+      const byType: Partial<Record<"client" | "supplier", { dispute: DisputeRow; direction: "RAISED_BY_US" | "RECEIVED" }>> = {};
+      const pickForSide = (
+        side: "client" | "supplier",
+        partnerOrg: string | null,
+        raised: { disputes: DisputeRow[] | undefined },
+      ) => {
+        if (!partnerOrg) return;
+        const raisedOpen = (raised.disputes ?? []).filter(
+          (d) => matchByTrip(d) && d.status === "OPEN",
+        )[0];
+        if (raisedOpen) {
+          byType[side] = { dispute: raisedOpen, direction: "RAISED_BY_US" };
+          return;
+        }
+        const receivedOpen = receivedByOrg.get(partnerOrg);
+        if (receivedOpen) {
+          byType[side] = { dispute: receivedOpen, direction: "RECEIVED" };
+        }
+      };
+      pickForSide("client", clientOrg, clientRaised);
+      pickForSide("supplier", supplierOrg, supplierRaised);
+      setTripDisputeByType(byType);
+      /** Legacy single-party mirror: prefer supplier; falls back to client. */
+      const primary = byType.supplier ?? byType.client ?? null;
+      setTripDispute(primary?.dispute ?? null);
+      setTripDisputeDirection(primary?.direction ?? null);
+    } catch {
+      setTripDispute(null);
+      setTripDisputeDirection(null);
+      setTripDisputeByType({});
+    }
+  }, [
+    currentOrganization?.id,
+    trip?.id,
+    clientPartyRes?.orgId,
+    supplierPartyRes?.orgId,
+  ]);
+
+  useEffect(() => {
+    void refreshTripDispute();
+  }, [refreshTripDispute, financeRefreshKey]);
 
   /**
    * Always read ledger from the viewer org.
@@ -955,6 +1143,10 @@ export default function TripDetailScreen({
       setDriverAvatarUri(null);
       setVehicleLabel(null);
       setPartnerName(null);
+      setCounterpartyIntegrated(null);
+      setPartnerOrgId(null);
+      setClientPartyRes(null);
+      setSupplierPartyRes(null);
       setDriverLinked(false);
       return;
     }
@@ -1080,14 +1272,40 @@ export default function TripDetailScreen({
       } | null,
     ) => (s?.company_name || s?.name || s?.contact_person || "").trim() || null;
 
+    /** Reset per-party resolutions; they'll be populated independently below. */
+    setSupplierPartyRes(
+      trip.supplier_id
+        ? { name: fallbackSupplierName, integrated: false, orgId: null }
+        : null,
+    );
+    setClientPartyRes(
+      trip.client_id
+        ? { name: (trip.client_name ?? "").trim() || null, integrated: false, orgId: null }
+        : null,
+    );
+
     if (trip.supplier_id) {
       setPartnerName(fallbackSupplierName);
+      setCounterpartyIntegrated(false);
       const supplierId = trip.supplier_id;
       const ownerOrgId = trip.organization_id;
 
       void (async () => {
         const { supplier: fromRpc } = await getSupplierDetails(supplierId);
         if (cancelled) return;
+        if (fromRpc) {
+          const integrated =
+            !!fromRpc.linked_organization_id ||
+            fromRpc.supplier_type === "integrated";
+          setCounterpartyIntegrated(integrated);
+          if (fromRpc.linked_organization_id)
+            setPartnerOrgId(fromRpc.linked_organization_id);
+          setSupplierPartyRes((prev) => ({
+            name: pickSupplierDisplayName(fromRpc) ?? prev?.name ?? null,
+            integrated,
+            orgId: fromRpc.linked_organization_id ?? prev?.orgId ?? null,
+          }));
+        }
         const n = pickSupplierDisplayName(fromRpc);
         if (n) {
           setPartnerName(n);
@@ -1095,6 +1313,19 @@ export default function TripDetailScreen({
         }
         const { supplier: fromOwnerOrg } = await getSupplierById(ownerOrgId, supplierId);
         if (cancelled) return;
+        if (fromOwnerOrg) {
+          const integrated =
+            !!fromOwnerOrg.linked_organization_id ||
+            fromOwnerOrg.supplier_type === "integrated";
+          setCounterpartyIntegrated(integrated);
+          if (fromOwnerOrg.linked_organization_id)
+            setPartnerOrgId(fromOwnerOrg.linked_organization_id);
+          setSupplierPartyRes((prev) => ({
+            name: pickSupplierDisplayName(fromOwnerOrg) ?? prev?.name ?? null,
+            integrated,
+            orgId: fromOwnerOrg.linked_organization_id ?? prev?.orgId ?? null,
+          }));
+        }
         const n2 = pickSupplierDisplayName(fromOwnerOrg);
         if (n2) {
           setPartnerName(n2);
@@ -1104,11 +1335,60 @@ export default function TripDetailScreen({
         if (viewerOrgId && viewerOrgId !== ownerOrgId) {
           const { supplier: fromViewerOrg } = await getSupplierById(viewerOrgId, supplierId);
           if (cancelled) return;
+          if (fromViewerOrg) {
+            const integrated =
+              !!fromViewerOrg.linked_organization_id ||
+              fromViewerOrg.supplier_type === "integrated";
+            setCounterpartyIntegrated(integrated);
+            if (fromViewerOrg.linked_organization_id)
+              setPartnerOrgId(fromViewerOrg.linked_organization_id);
+            setSupplierPartyRes((prev) => ({
+              name: pickSupplierDisplayName(fromViewerOrg) ?? prev?.name ?? null,
+              integrated,
+              orgId: fromViewerOrg.linked_organization_id ?? prev?.orgId ?? null,
+            }));
+          }
           const n3 = pickSupplierDisplayName(fromViewerOrg);
           if (n3) setPartnerName(n3);
         }
       })();
-    } else setPartnerName(fallbackSupplierName);
+    } else {
+      setPartnerName(fallbackSupplierName);
+      if (!trip.client_id) {
+        setCounterpartyIntegrated(false);
+      }
+    }
+
+    /**
+     * Resolve the client party independently so aggregate trips (which have both
+     * supplier and client) show BOTH tabs in the hero. Legacy single-partner state
+     * (partnerName/partnerOrgId/counterpartyIntegrated) still prefers supplier.
+     */
+    if (trip.client_id) {
+      getClientById(trip.organization_id, trip.client_id).then((res) => {
+        if (cancelled) return;
+        const c = res.client;
+        const integrated = !!c?.linked_organization_id || !!c?.is_integrated;
+        const clientName =
+          (c?.name ?? c?.contact_person ?? "").trim() ||
+          (trip.client_name ?? "").trim() ||
+          null;
+        setClientPartyRes({
+          name: clientName,
+          integrated,
+          orgId: c?.linked_organization_id ?? null,
+        });
+        /**
+         * Legacy single-partner fallback: only update if supplier path didn't
+         * already claim these states (i.e. trip has no supplier). Otherwise
+         * the supplier path is the "primary" partner for legacy consumers.
+         */
+        if (!trip.supplier_id) {
+          setCounterpartyIntegrated(integrated);
+          if (c?.linked_organization_id) setPartnerOrgId(c.linked_organization_id);
+        }
+      });
+    }
     return () => {
       cancelled = true;
     };
@@ -1469,6 +1749,453 @@ export default function TripDetailScreen({
   ]);
 
   const handleAddAdjustment = () => setShowAdjustmentModal(true);
+  const openCompareVerifyFromTrip = useCallback((
+    /** Which party tab the user tapped Compare & Verify on. Defaults to supplier-first. */
+    partyType?: "client" | "supplier",
+  ) => {
+    if (!trip?.id) return;
+    if (counterpartyIntegrated === false && !clientPartyRes?.integrated && !supplierPartyRes?.integrated) {
+      return;
+    }
+    const params = new URLSearchParams();
+    const preferSupplier =
+      partyType === "supplier" ||
+      (partyType == null && !!trip.supplier_id);
+    if (preferSupplier && trip.supplier_id) {
+      params.set("entityType", "SUPPLIER");
+      params.set("entityId", trip.supplier_id);
+      const n = supplierPartyRes?.name ?? partnerName ?? null;
+      if (n) params.set("partyName", n);
+    } else if (trip.client_id) {
+      params.set("entityType", "CLIENT");
+      params.set("entityId", trip.client_id);
+      const n =
+        clientPartyRes?.name ?? displayClientName ?? trip.client_name ?? null;
+      if (n) params.set("partyName", n);
+    }
+    const q = params.toString();
+    router.push(q ? `/trip-ledger/${trip.id}?${q}` : `/trip-ledger/${trip.id}`);
+  }, [
+    trip?.id,
+    trip?.supplier_id,
+    trip?.client_id,
+    trip?.client_name,
+    partnerName,
+    displayClientName,
+    counterpartyIntegrated,
+    clientPartyRes,
+    supplierPartyRes,
+    router,
+  ]);
+  /**
+   * Accept partner's numbers for this trip — updates our ledger to match partner.
+   * When a dispute is OPEN (raised_by_us): falls back to acceptPartnerView + mark resolved.
+   * When a dispute was RECEIVED: resolve via RPC (preferred) or fallback.
+   * When no dispute: direct acceptPartnerView call.
+   */
+  const handleAcceptPartnerView = useCallback(async (
+    /** Which party to accept — supplier or client. Falls back to primary (supplier first). */
+    partyType?: "client" | "supplier",
+  ) => {
+    const orgId = currentOrganization?.id ?? null;
+    if (!orgId || !trip?.id) return;
+    /** Resolve party-scoped state (integrated flag, partner entries, contact id, dispute). */
+    const sideSupplier = !!trip.supplier_id;
+    const sideClient = !!trip.client_id;
+    const type: "client" | "supplier" =
+      partyType ?? (sideSupplier ? "supplier" : sideClient ? "client" : "supplier");
+    const sideRes =
+      type === "client" ? clientPartyRes : supplierPartyRes;
+    const sideIntegrated =
+      sideRes?.integrated ?? (counterpartyIntegrated !== false);
+    if (!sideIntegrated) {
+      Alert.alert(
+        "Partner offline",
+        "This party is not connected on the network, so Compare & Verify isn't available yet.",
+      );
+      return;
+    }
+    const sideContactId =
+      type === "client" ? trip.client_id ?? null : trip.supplier_id ?? null;
+    const sideDispute = tripDisputeByType[type];
+    const dispute = sideDispute?.dispute ?? null;
+    const direction = sideDispute?.direction ?? null;
+    const sidePartnerKey = (
+      type === "client" ? trip.client_id : trip.supplier_id
+    )?.toString().trim().toLowerCase();
+    const sideEntries = counterpartyEntries.filter(
+      (e) => e.partnerKey.toLowerCase() === sidePartnerKey,
+    );
+    const entriesForCalc = sideEntries.length > 0 ? sideEntries : counterpartyEntries;
+
+    // Pull amounts from counterparty shared entries (sum for this trip) as our best-known "their" snapshot.
+    const partnerAmount = entriesForCalc.reduce(
+      (s, e) => s + Number(e.amount ?? 0),
+      0,
+    );
+    const partnerSales =
+      dispute?.raised_sales != null ? Number(dispute.raised_sales) : partnerAmount;
+    const partnerPaid =
+      dispute?.raised_paid != null ? Number(dispute.raised_paid) : partnerAmount;
+
+    Alert.alert(
+      "Update your book to match partner?",
+      `Sales ₹${partnerSales.toLocaleString("en-IN", { maximumFractionDigits: 0 })} · Paid ₹${partnerPaid.toLocaleString("en-IN", { maximumFractionDigits: 0 })}\n\nThis will update your ledger for this trip.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Update my book",
+          onPress: async () => {
+            setReconcileActionLoading(true);
+            setReconcileLoadingByType((prev) => ({ ...prev, [type]: true }));
+            try {
+              // If we have a RECEIVED dispute, try resolve RPC first (writes ledger + marks resolved atomically).
+              if (dispute && direction === "RECEIVED") {
+                const { error, rpcUnavailable } = await resolveDispute(
+                  dispute.id,
+                  "ACCEPT",
+                  orgId,
+                );
+                if (!error) {
+                  setFinanceRefreshKey((k) => k + 1);
+                  await refreshTripDispute();
+                  Alert.alert(
+                    "Ledger updated",
+                    "Your book has been updated to match the partner. The trip is now matched.",
+                  );
+                  return;
+                }
+                if (!rpcUnavailable) {
+                  Alert.alert("Update failed", error.message);
+                  return;
+                }
+                // Fallthrough to manual path below
+              }
+
+              // Fallback or no-dispute: call acceptPartnerView + resolveDisputeTableOnly if needed.
+              const { error: acceptErr } = await acceptPartnerView(
+                orgId,
+                trip.id,
+                partnerSales,
+                partnerPaid,
+                sideContactId,
+              );
+              if (acceptErr) {
+                const isMissingRpc =
+                  /could not find the function.*schema cache|function.*accept_partner_view.*does not exist/i.test(
+                    acceptErr.message,
+                  );
+                Alert.alert(
+                  "Update failed",
+                  isMissingRpc
+                    ? "The accept_partner_view function is not in your database yet. Open Supabase → SQL Editor and run: supabase/migrations/20250312120000_accept_partner_view.sql"
+                    : acceptErr.message,
+                );
+                return;
+              }
+              if (dispute) {
+                const { error: tableErr } = await resolveDisputeTableOnly(
+                  dispute.id,
+                  orgId,
+                );
+                if (tableErr) {
+                  Alert.alert("Dispute not closed", tableErr.message);
+                }
+              }
+              setFinanceRefreshKey((k) => k + 1);
+              await refreshTripDispute();
+              Alert.alert(
+                "Ledger updated",
+                "Your book now matches the partner. Trip is reconciled.",
+              );
+            } finally {
+              setReconcileActionLoading(false);
+              setReconcileLoadingByType((prev) => ({ ...prev, [type]: false }));
+            }
+          },
+        },
+      ],
+    );
+  }, [
+    currentOrganization?.id,
+    trip?.id,
+    trip?.client_id,
+    trip?.supplier_id,
+    clientPartyRes,
+    supplierPartyRes,
+    tripDisputeByType,
+    counterpartyIntegrated,
+    counterpartyEntries,
+    refreshTripDispute,
+  ]);
+
+  /**
+   * Raise a dispute for this trip — alerts partner and tracks status.
+   * Uses our current ledger totals as our snapshot, and partner's summed entries as their snapshot.
+   */
+  const handleRaiseDispute = useCallback(async (
+    /** Which party to raise against (client or supplier). Defaults to primary. */
+    partyType?: "client" | "supplier",
+  ) => {
+    const orgId = currentOrganization?.id ?? null;
+    if (!orgId || !trip?.id) return;
+    const sideSupplier = !!trip.supplier_id;
+    const sideClient = !!trip.client_id;
+    const type: "client" | "supplier" =
+      partyType ?? (sideSupplier ? "supplier" : sideClient ? "client" : "supplier");
+    const sideRes = type === "client" ? clientPartyRes : supplierPartyRes;
+    const sidePartnerOrgId = sideRes?.orgId ?? null;
+    const sideIntegrated = sideRes?.integrated ?? false;
+    if (!sidePartnerOrgId || !sideIntegrated) {
+      Alert.alert(
+        "Cannot raise dispute",
+        "This party is not connected on the network. Invite them to unlock Compare & Verify.",
+      );
+      return;
+    }
+    const sidePartnerKey = (
+      type === "client" ? trip.client_id : trip.supplier_id
+    )?.toString().trim().toLowerCase();
+    /**
+     * Scope our snapshot to the selected party:
+     * - Client: our inflows (receipts) only
+     * - Supplier: our outflows (payments) only
+     * This avoids cross-contamination on aggregate trips with both parties.
+     */
+    const sideOurIn = tripLedgerEntries.reduce(
+      (s, r) =>
+        s +
+        (type === "client" && r.contact_type === "client"
+          ? Number(r.amount_in ?? 0)
+          : type === "client"
+            ? 0
+            : Number(r.amount_in ?? 0)),
+      0,
+    );
+    const sideOurOut = tripLedgerEntries.reduce(
+      (s, r) =>
+        s +
+        (type === "supplier" && r.contact_type === "supplier"
+          ? Number(r.amount_out ?? 0)
+          : type === "supplier"
+            ? 0
+            : Number(r.amount_out ?? 0)),
+      0,
+    );
+    const ourNet = sideOurIn - sideOurOut;
+    const sideEntries = counterpartyEntries.filter(
+      (e) => e.partnerKey.toLowerCase() === sidePartnerKey,
+    );
+    const theirNet = (sideEntries.length > 0 ? sideEntries : counterpartyEntries).reduce(
+      (s, e) => s + Number(e.amount ?? 0),
+      0,
+    );
+    const varianceLine = `Your total: ₹${Math.abs(ourNet).toLocaleString("en-IN", { maximumFractionDigits: 0 })} · Partner total: ₹${theirNet.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+    Alert.alert(
+      "Raise dispute?",
+      `Partner will be notified of the mismatch for this trip.\n\n${varianceLine}`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Raise dispute",
+          style: "destructive",
+          onPress: async () => {
+            setReconcileActionLoading(true);
+            setReconcileLoadingByType((prev) => ({ ...prev, [type]: true }));
+            try {
+              const { error, alreadyInDispute } = await createDispute({
+                orgId,
+                transaction_id: trip.id,
+                partner_org_id: sidePartnerOrgId,
+                internal_snapshot: ourNet,
+                partner_snapshot: theirNet,
+                raised_sales: sideOurIn,
+                raised_paid: sideOurOut,
+              });
+              if (error) {
+                Alert.alert(
+                  alreadyInDispute ? "Already in dispute" : "Error",
+                  error.message,
+                );
+                return;
+              }
+              await refreshTripDispute();
+              Alert.alert(
+                "Dispute raised",
+                `Partner has been notified. You can track status in Compare & Verify.`,
+              );
+            } finally {
+              setReconcileActionLoading(false);
+              setReconcileLoadingByType((prev) => ({ ...prev, [type]: false }));
+            }
+          },
+        },
+      ],
+    );
+  }, [
+    currentOrganization?.id,
+    trip?.id,
+    trip?.client_id,
+    trip?.supplier_id,
+    clientPartyRes,
+    supplierPartyRes,
+    tripLedgerEntries,
+    counterpartyEntries,
+    refreshTripDispute,
+  ]);
+
+  /** Open add-transaction modal pre-filled to pay the trip's driver. */
+  const handleRecordDriverPayment = useCallback(() => {
+    if (!trip?.id || !trip.driver_id) return;
+    const tripNumber = getTripDisplayNumber(trip);
+    const params = new URLSearchParams({
+      tripId: trip.id,
+      tripNumber,
+      defaultType: "out",
+      partyContext: "drivers",
+      partyId: trip.driver_id,
+      partyName: driverName ?? t("driver"),
+    });
+    router.push(`/(modals)/ledger-sync?${params.toString()}`);
+  }, [trip, driverName, router, t]);
+
+  /** Sum driver payments (amount_out where contact_type=driver) — internal-only "paid" side. */
+  const paidToDriver = useMemo(
+    () =>
+      tripLedgerEntries.reduce(
+        (s, r) =>
+          r.contact_type === "driver" ? s + Number(r.amount_out ?? 0) : s,
+        0,
+      ),
+    [tripLedgerEntries],
+  );
+
+  /**
+   * Build per-party data for the multi-party Trip Ledger hero. Renders one tab
+   * per real party (client, supplier, driver). Legacy single-party hero falls
+   * back automatically when this array is empty.
+   */
+  const reconciliationParties = useMemo<ReconciliationPartyInfo[]>(() => {
+    if (!trip) return [];
+    const out: ReconciliationPartyInfo[] = [];
+    const clientKey = trip.client_id?.toString().trim().toLowerCase() ?? null;
+    const supplierKey = trip.supplier_id?.toString().trim().toLowerCase() ?? null;
+    /** Our-book totals scoped to the party (avoid double-counting on aggregate trips). */
+    const receivedFromClient = tripLedgerEntries.reduce(
+      (s, r) =>
+        r.contact_type === "client" ? s + Number(r.amount_in ?? 0) : s,
+      0,
+    );
+    const paidToSupplier = tripLedgerEntries.reduce(
+      (s, r) =>
+        r.contact_type === "supplier" ? s + Number(r.amount_out ?? 0) : s,
+      0,
+    );
+
+    if (trip.client_id && clientPartyRes) {
+      const entries = clientKey
+        ? counterpartyEntries.filter((e) => e.partnerKey.toLowerCase() === clientKey)
+        : [];
+      const theirTotal = entries.reduce((s, e) => s + Number(e.amount ?? 0), 0);
+      const disp = tripDisputeByType.client ?? null;
+      out.push({
+        type: "client",
+        name:
+          clientPartyRes.name ??
+          displayClientName ??
+          trip.client_name ??
+          t("client"),
+        integrated: clientPartyRes.integrated,
+        counterpartyEntries: entries,
+        ourTotal: receivedFromClient,
+        ourTotalLabel: "Your received total",
+        theirTotal,
+        expectedAmount: Number(trip.client_price ?? 0) || undefined,
+        disputeStatus: disp ? "OPEN" : null,
+        disputeDirection: disp?.direction ?? null,
+        actionLoading: !!reconcileLoadingByType.client,
+        onAcceptPartnerView: clientPartyRes.integrated
+          ? () => void handleAcceptPartnerView("client")
+          : undefined,
+        onRaiseDispute:
+          clientPartyRes.integrated && !disp
+            ? () => void handleRaiseDispute("client")
+            : undefined,
+        onOpenCompareVerify: clientPartyRes.integrated
+          ? () => openCompareVerifyFromTrip("client")
+          : undefined,
+      });
+    }
+    if (trip.supplier_id && supplierPartyRes) {
+      const entries = supplierKey
+        ? counterpartyEntries.filter((e) => e.partnerKey.toLowerCase() === supplierKey)
+        : [];
+      const theirTotal = entries.reduce((s, e) => s + Number(e.amount ?? 0), 0);
+      const disp = tripDisputeByType.supplier ?? null;
+      out.push({
+        type: "supplier",
+        name:
+          supplierPartyRes.name ?? partnerName ?? trip.supplier_name ?? t("supplier"),
+        integrated: supplierPartyRes.integrated,
+        counterpartyEntries: entries,
+        ourTotal: paidToSupplier,
+        ourTotalLabel: "Your paid total",
+        theirTotal,
+        expectedAmount: Number(trip.supplier_rate ?? 0) || undefined,
+        disputeStatus: disp ? "OPEN" : null,
+        disputeDirection: disp?.direction ?? null,
+        actionLoading: !!reconcileLoadingByType.supplier,
+        onAcceptPartnerView: supplierPartyRes.integrated
+          ? () => void handleAcceptPartnerView("supplier")
+          : undefined,
+        onRaiseDispute:
+          supplierPartyRes.integrated && !disp
+            ? () => void handleRaiseDispute("supplier")
+            : undefined,
+        onOpenCompareVerify: supplierPartyRes.integrated
+          ? () => openCompareVerifyFromTrip("supplier")
+          : undefined,
+      });
+    }
+    /**
+     * Driver payments only apply to ASSET trips (we own the truck, we pay the driver).
+     * On AGGREGATE (load-based / outsourced) trips the supplier pays their own driver —
+     * we only settle with the supplier — so we hide the driver finance party entirely.
+     */
+    const showDriverParty = trip.driver_id != null && !isAggregateTrip(trip);
+    if (showDriverParty) {
+      const expected = Number(trip.driver_commission ?? 0);
+      out.push({
+        type: "driver",
+        name: driverName ?? t("driver"),
+        integrated: false,
+        ourTotal: paidToDriver,
+        ourTotalLabel: "Paid to driver",
+        theirTotal: 0,
+        expectedAmount: expected > 0 ? expected : undefined,
+        onRecordPayment: handleRecordDriverPayment,
+      });
+    }
+    return out;
+  }, [
+    trip,
+    tripLedgerEntries,
+    counterpartyEntries,
+    clientPartyRes,
+    supplierPartyRes,
+    tripDisputeByType,
+    reconcileLoadingByType,
+    displayClientName,
+    partnerName,
+    driverName,
+    paidToDriver,
+    handleAcceptPartnerView,
+    handleRaiseDispute,
+    handleRecordDriverPayment,
+    openCompareVerifyFromTrip,
+    t,
+  ]);
+
   const handleSaveAdjustment = useCallback(
     async (params: {
       type: "revenue" | "cost";
@@ -1572,17 +2299,35 @@ export default function TripDetailScreen({
             {getTripDisplayNumber(trip)}
           </Text>
           <Text style={styles.headerSubtitle}>Trip Details</Text>
-          <Text style={styles.headerTripTypeLabel}>
-            {displayAsAsset ? t("assetBasedTrip") : t("aggregateBasedTrip")}
-          </Text>
-          <Text
+          <View
             style={[
-              styles.headerTripOwnershipLabel,
-              isAggregate ? styles.headerTripOwnershipLoadBased : styles.headerTripOwnershipOwn,
+              styles.tripKindPill,
+              isAggregate
+                ? styles.tripKindPillAggregate
+                : styles.tripKindPillAsset,
             ]}
+            accessibilityLabel={
+              isAggregate ? "Aggregate based trip" : "Asset based trip"
+            }
           >
-            {isAggregate ? "Load-based" : "Own"}
-          </Text>
+            <FontAwesome
+              name={isAggregate ? "link" : "truck"}
+              size={9}
+              color={
+                isAggregate ? Theme.aggregatePillText : Theme.darkGreen
+              }
+            />
+            <Text
+              style={[
+                styles.tripKindPillText,
+                isAggregate
+                  ? styles.tripKindPillTextAggregate
+                  : styles.tripKindPillTextAsset,
+              ]}
+            >
+              {isAggregate ? "AGGREGATE" : "ASSET"}
+            </Text>
+          </View>
         </View>
         <TouchableOpacity
           onPress={openAddEntry}
@@ -1628,6 +2373,25 @@ export default function TripDetailScreen({
             viewerOrganizationName={currentOrganization?.name ?? null}
             clientName={displayClientName}
             subcontractRate={subcontractRate}
+            counterpartyEntries={counterpartyEntries}
+            counterpartyIntegrated={counterpartyIntegrated !== false}
+            onOpenCompareVerify={openCompareVerifyFromTrip}
+            reconcileState={{
+              disputeStatus: tripDispute ? "OPEN" : null,
+              disputeDirection: tripDisputeDirection,
+              actionLoading: reconcileActionLoading,
+            }}
+            onAcceptPartnerView={
+              counterpartyIntegrated !== false
+                ? () => void handleAcceptPartnerView()
+                : undefined
+            }
+            onRaiseDispute={
+              counterpartyIntegrated !== false && !tripDispute
+                ? () => void handleRaiseDispute()
+                : undefined
+            }
+            reconciliationParties={reconciliationParties}
             assignmentAuditRows={assignmentAuditRows}
             assignmentDriverNames={assignmentDriverNames}
             assignmentVehicleLabels={assignmentVehicleLabels}
@@ -1645,10 +2409,9 @@ export default function TripDetailScreen({
             currentUserId={currentUserId}
             isDriverOffline={isDriverOffline}
             onOpenTracking={() => setShowTrackingModal(true)}
-          tripDocs={computedTripDocs}
-          onOpenDoc={(doc) => setSelectedDoc(doc)}
-          clientName={displayClientName}
-          assignmentBlock={
+            tripDocs={computedTripDocs}
+            onOpenDoc={(doc) => setSelectedDoc(doc)}
+            assignmentBlock={
             trip.organization_id ? (
               <TripAssignmentBlock
                 trip={trip}
@@ -2558,6 +3321,36 @@ const styles = StyleSheet.create({
   },
   headerTripOwnershipLoadBased: {
     color: Theme.darkGreen,
+  },
+  tripKindPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "center",
+    gap: 5,
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  tripKindPillAsset: {
+    backgroundColor: "rgba(21,128,61,0.10)",
+    borderColor: "rgba(21,128,61,0.35)",
+  },
+  tripKindPillAggregate: {
+    backgroundColor: Theme.aggregatePillBg,
+    borderColor: Theme.aggregatePillBorder,
+  },
+  tripKindPillText: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  tripKindPillTextAsset: {
+    color: Theme.darkGreen,
+  },
+  tripKindPillTextAggregate: {
+    color: Theme.aggregatePillText,
   },
   headerAction: {
     width: 40,

@@ -5,8 +5,8 @@
  *
  * Refactored: logic in useOpsContext + useOpsAgentChat, UI in components/, shared types/constants/utils/styles in module files.
  */
-import { useAuth } from "@/contexts/AuthContext";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOptionalAuth } from "@/contexts/AuthContext";
+import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Keyboard, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -28,18 +28,50 @@ import { useClientsForTrip } from "@/features/trips/components/add-trip/useClien
 
 export default function OpsAgentScreen() {
   const insets = useSafeAreaInsets();
-  const scrollRef = useRef<ScrollView>(null);
-  const { profile, user } = useAuth();
-  const { currentOrganization } = useOrganization();
-  const opsContext = useOpsContext(currentOrganization?.id);
-  const { clients: tripClients, loading: tripClientsLoading } = useClientsForTrip(
-    currentOrganization?.id ?? null
-  );
-
+  const auth = useOptionalAuth();
+  const organization = useOptionalOrganization();
   const [isDarkMode, setIsDarkMode] = useState(true);
   const REF: OpsRef = isDarkMode ? REF_DARK : REF_LIGHT;
   const styles = useMemo(() => getOpsAgentStyles(REF), [isDarkMode]);
 
+  if (!auth || !organization) {
+    return <View style={[styles.container, { backgroundColor: REF.bg }]} />;
+  }
+
+  return (
+    <OpsAgentScreenContent
+      insets={insets}
+      isDarkMode={isDarkMode}
+      onToggleTheme={() => setIsDarkMode((p) => !p)}
+      auth={auth}
+      organization={organization}
+    />
+  );
+}
+
+function OpsAgentScreenContent({
+  insets,
+  isDarkMode,
+  onToggleTheme,
+  auth,
+  organization,
+}: {
+  insets: ReturnType<typeof useSafeAreaInsets>;
+  isDarkMode: boolean;
+  onToggleTheme: () => void;
+  auth: NonNullable<ReturnType<typeof useOptionalAuth>>;
+  organization: NonNullable<ReturnType<typeof useOptionalOrganization>>;
+}) {
+  const scrollRef = useRef<ScrollView>(null);
+  const profile = auth.profile ?? null;
+  const user = auth.user ?? null;
+  const currentOrganization = organization.currentOrganization ?? null;
+  const opsContext = useOpsContext(currentOrganization?.id);
+  const { clients: tripClients, loading: tripClientsLoading } = useClientsForTrip(
+    currentOrganization?.id ?? null
+  );
+  const REF: OpsRef = isDarkMode ? REF_DARK : REF_LIGHT;
+  const styles = useMemo(() => getOpsAgentStyles(REF), [isDarkMode]);
   const userInitial = (
     profile?.full_name?.trim() ||
     user?.email?.split("@")[0]?.trim() ||
@@ -47,14 +79,12 @@ export default function OpsAgentScreen() {
   )
     .charAt(0)
     .toUpperCase();
-
   const chat = useOpsAgentChat({
     currentOrganization,
     profile,
     user,
     opsContext,
   });
-
   const {
     messages,
     setChatInput,
@@ -116,7 +146,7 @@ export default function OpsAgentScreen() {
 
       <OpsAgentHeader
         isDarkMode={isDarkMode}
-        onToggleTheme={() => setIsDarkMode((p) => !p)}
+        onToggleTheme={onToggleTheme}
         userInitial={userInitial}
         styles={styles}
         themeRef={REF}
