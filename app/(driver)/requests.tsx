@@ -2,11 +2,9 @@ import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import { DriverInviteCard } from '@/components/driver/DriverInviteCard';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
-import { tripEarningsForDriver } from '@/lib/driverUtils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import * as driversService from '@/services/driversService';
-import * as tripsService from '@/services/tripsService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
@@ -26,27 +24,15 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { isCompleted, buildOfferText } from '@/lib/driverUtils';
+import { buildOfferText } from '@/lib/driverUtils';
 
 /**
- * Driver Requests page — connection invites + passbook per fleet (driver_invites, trips, driver_ledger).
- * PENDING: accept/decline. CONNECTED: accepted/declined with optional Passbook summary and link to detail.
+ * Driver Requests page — connection invites.
+ * PENDING: accept/decline.
  */
 // Wallet-style hero text (match wallet.tsx creditsSection)
 const EMERALD_500 = '#10b981';
 const GRAY_700 = '#374151';
-
-/** Per-org passbook stats (trips, earned, received from DB). */
-export interface ConnectionPassbook {
-  driverId: string;
-  orgId: string;
-  orgName: string;
-  tripsCount: number;
-  completedCount: number;
-  totalEarned: number;
-  totalReceived: number;
-  pendingAmount: number;
-}
 
 export default function DriverRequestsScreen() {
   const insets = useSafeAreaInsets();
@@ -59,15 +45,11 @@ export default function DriverRequestsScreen() {
 
   const [invites, setInvites] = useState<driversService.DriverInviteRow[]>([]);
   const [linkedDrivers, setLinkedDrivers] = useState<driversService.DriverRow[]>([]);
-  const [allTrips, setAllTrips] = useState<tripsService.TripRow[]>([]);
-  const [allLedger, setAllLedger] = useState<driversService.DriverLedgerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);
-  const [leavingOrgId, setLeavingOrgId] = useState<string | null>(null);
-  const [leaveFleetPressedOrgId, setLeaveFleetPressedOrgId] = useState<string | null>(null);
 
   const fetch = useCallback(() => {
     if (!profile?.uid) {
@@ -82,27 +64,10 @@ export default function DriverRequestsScreen() {
       setInvites(invRes.invites ?? []);
       const drivers = driversRes.drivers ?? [];
       setLinkedDrivers(drivers);
-      const driverIds = drivers.map((d) => d.id);
-      if (driverIds.length === 0) {
-        setAllTrips([]);
-        setAllLedger([]);
-        setLoading(false);
-        initialLoadDoneRef.current = true;
-        isRefreshingRef.current = false;
-        setRefreshing(false);
-        return Promise.resolve();
-      }
-      return Promise.all([
-        tripsService.getTripsByDriverIds(driverIds),
-        driversService.getDriverLedgerByDriverIds(driverIds),
-      ]).then(([tRes, ledgerRes]) => {
-        setAllTrips(tRes.trips ?? []);
-        setAllLedger(ledgerRes.entries ?? []);
-        setLoading(false);
-        initialLoadDoneRef.current = true;
-        isRefreshingRef.current = false;
-        setRefreshing(false);
-      });
+      setLoading(false);
+      initialLoadDoneRef.current = true;
+      isRefreshingRef.current = false;
+      setRefreshing(false);
     }).catch(() => {
       setLoading(false);
       initialLoadDoneRef.current = true;
@@ -134,100 +99,10 @@ export default function DriverRequestsScreen() {
   }, [fetch]);
 
   const pendingInvites = invites.filter((i) => i.status === 'pending');
-  const resolvedInvites = invites.filter((i) => i.status !== 'pending');
-  const acceptedInvites = resolvedInvites.filter((i) => i.status === 'accepted');
 
   const activeLinkedDrivers = useMemo(
     () => linkedDrivers.filter((d) => !d.left_at),
     [linkedDrivers]
-  );
-  const pastLinkedDrivers = useMemo(
-    () =>
-      linkedDrivers
-        .filter((d) => !!d.left_at)
-        .sort((a, b) => new Date((b.left_at ?? 0) as string).getTime() - new Date((a.left_at ?? 0) as string).getTime()),
-    [linkedDrivers]
-  );
-
-  /** Accepted invites where the driver is still active (not left). */
-  const connectedAcceptedInvites = useMemo(
-    () =>
-      acceptedInvites.filter((inv) =>
-        activeLinkedDrivers.some((d) => d.organization_id === inv.from_organization_id)
-      ),
-    [acceptedInvites, activeLinkedDrivers]
-  );
-
-  /** Map: orgId -> ConnectionPassbook for accepted invites where we have a linked driver (active or past). */
-  const passbookByOrgId = useMemo(() => {
-    const map: Record<string, ConnectionPassbook> = {};
-    const accepted = resolvedInvites.filter((i) => i.status === 'accepted');
-    for (const inv of accepted) {
-      const orgId = inv.from_organization_id;
-      const driver = linkedDrivers.find((d) => d.organization_id === orgId);
-      if (!driver) continue;
-      const driverTrips = allTrips.filter((t) => t.driver_id === driver.id);
-      const driverLedger = allLedger.filter((e) => e.driver_id === driver.id);
-      const completed = driverTrips.filter((t) => isCompleted(t.status));
-      const totalEarned = Math.round(
-        completed.reduce((sum, t) => sum + tripEarningsForDriver(t), 0)
-      );
-      const totalReceived = Math.round(
-        driverLedger.reduce((s, e) => s + (Number(e.amount) ?? 0), 0)
-      );
-      map[orgId] = {
-        driverId: driver.id,
-        orgId,
-        orgName: inv.from_org_name ?? 'Fleet',
-        tripsCount: driverTrips.length,
-        completedCount: completed.length,
-        totalEarned,
-        totalReceived,
-        pendingAmount: Math.max(0, totalEarned - totalReceived),
-      };
-    }
-    return map;
-  }, [resolvedInvites, linkedDrivers, allTrips, allLedger]);
-
-  const hasAccepted = connectedAcceptedInvites.length > 0 || pastLinkedDrivers.length > 0;
-
-  const handleLeaveFleet = useCallback(
-    async (organizationId: string) => {
-      setLeavingOrgId(organizationId);
-      const { error } = await driversService.leaveFleet(organizationId);
-      setLeavingOrgId(null);
-      if (error) {
-        const msg = error.message ?? 'Could not leave fleet.';
-        Alert.alert(
-          'Leave fleet failed',
-          /function.*does not exist|relation.*does not exist/i.test(msg)
-            ? 'Server is not set up for leaving fleets yet. Please try again later or contact support.'
-            : msg,
-          [{ text: 'OK' }]
-        );
-        return;
-      }
-      fetch();
-    },
-    [fetch]
-  );
-
-  const handleLeaveFleetPress = useCallback(
-    (organizationId: string, orgName: string) => {
-      Alert.alert(
-        'Leave fleet?',
-        `You will no longer receive trip assignments from ${orgName}. Your passbook for this fleet will remain available under Passbook history. You can connect again if they send a new invite.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Leave fleet',
-            style: 'destructive',
-            onPress: () => handleLeaveFleet(organizationId),
-          },
-        ]
-      );
-    },
-    [handleLeaveFleet]
   );
 
   const styles = useMemo(() => StyleSheet.create({
@@ -462,49 +337,6 @@ export default function DriverRequestsScreen() {
       textTransform: 'uppercase',
     },
     metricTileValue: { fontSize: 18, fontWeight: '800' },
-    passbookBlock: {
-      marginTop: 14,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      borderRadius: 12,
-      borderWidth: 1,
-    },
-    passbookRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 7,
-    },
-    passbookLabel: { fontSize: 13, fontWeight: '600' },
-    passbookValue: { fontSize: 14, fontWeight: '800' },
-    passbookActions: { flexDirection: 'row', gap: 12, marginTop: 12, alignItems: 'center' },
-    passbookActionsColumn: {
-      marginTop: 14,
-      gap: 10,
-    },
-    viewPassbookBtnLarge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingVertical: 14,
-      paddingHorizontal: 18,
-      borderRadius: 16,
-      elevation: 4,
-    },
-    viewPassbookBtnLargeLeft: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'flex-start',
-      gap: 10,
-    },
-    viewPassbookBtnLargeSpacer: { flex: 1 },
-    viewPassbookBtnLargeText: {
-      fontSize: 13,
-      fontWeight: '900',
-      letterSpacing: 0.8,
-      textTransform: 'uppercase',
-    },
-    viewPassbookBtnLargeArrow: { opacity: 0.35 },
     leaveFleetLink: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -513,15 +345,6 @@ export default function DriverRequestsScreen() {
       paddingVertical: 6,
     },
     leaveFleetLinkText: { fontSize: 13, fontWeight: '700' },
-    viewPassbookBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      paddingVertical: 12,
-      borderRadius: 10,
-    },
-    viewPassbookBtnText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5, color: colors.textOnPrimary },
     leaveFleetBtn: {
       paddingVertical: 12,
       paddingHorizontal: 16,
@@ -544,57 +367,6 @@ export default function DriverRequestsScreen() {
       marginBottom: 10,
     },
     historyCardName: { fontSize: 15, fontWeight: '700', flex: 1, minWidth: 0 },
-    viewPassbookBtnSmall: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-      paddingVertical: 10,
-      paddingHorizontal: 14,
-      borderRadius: 10,
-    },
-    seeMoreWrap: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-      paddingVertical: 12,
-      marginTop: 4,
-    },
-    seeMoreText: { fontSize: 13, fontWeight: '700', letterSpacing: 0.3 },
-    passbookHistoryEmpty: {
-      paddingVertical: 20,
-      paddingHorizontal: 16,
-      borderRadius: 12,
-      borderWidth: 1,
-      marginBottom: 12,
-    },
-    passbookHistoryEmptyText: {
-      fontSize: 14,
-      textAlign: 'center',
-      lineHeight: 20,
-    },
-    viewHistoryBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 10,
-      paddingVertical: 14,
-      paddingHorizontal: 20,
-      borderRadius: 12,
-      borderWidth: 1,
-    },
-    viewHistoryBtnText: { fontSize: 14, fontWeight: '800', letterSpacing: 0.3 },
-    viewHistoryLink: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      alignSelf: 'flex-start',
-      flexWrap: 'wrap',
-      gap: 6,
-      paddingVertical: 2,
-    },
-    viewHistoryLinkEyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginRight: 6 },
-    viewHistoryLinkText: { fontSize: 14, fontWeight: '700', letterSpacing: 0.1 },
     emptyCard: {
       width: '100%',
       padding: 28,
@@ -642,7 +414,7 @@ export default function DriverRequestsScreen() {
           <View style={styles.headerTextWrap}>
             <Text style={[styles.brand, { color: colors.textMuted }]}>Q PILOT</Text>
             <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>
-              {hasAccepted ? 'Passbook' : 'Requests'}
+              Requests
             </Text>
           </View>
         </View>
@@ -658,10 +430,10 @@ export default function DriverRequestsScreen() {
 
       <View style={[styles.creditsSection, { backgroundColor: colors.background }]}>
         <Text style={[styles.creditsTitle, { color: EMERALD_500, textTransform: 'uppercase' }]}>
-          {hasAccepted ? 'Passbook.' : 'Requests.'}
+          Requests.
         </Text>
         <Text style={[styles.creditsSubtitle, { color: GRAY_700 }]}>
-          {hasAccepted ? 'Fleet connections.' : 'Connection invites.'}
+          Connection invites.
         </Text>
       </View>
 
@@ -748,194 +520,6 @@ export default function DriverRequestsScreen() {
                   }}
                 />
               ))}
-            </View>
-          )}
-
-          {connectedAcceptedInvites.length > 0 && (
-            <View style={styles.section}>
-              {connectedAcceptedInvites.map((inv) => {
-                const passbook = passbookByOrgId[inv.from_organization_id];
-                const isLeaving = leavingOrgId === inv.from_organization_id;
-                const receivedPercentage =
-                  passbook && passbook.totalEarned > 0
-                    ? Math.min(100, Math.round((passbook.totalReceived / passbook.totalEarned) * 100))
-                    : 0;
-                return (
-                  <View
-                    key={inv.id}
-                    style={[
-                      styles.card,
-                      styles.cardReadOnly,
-                      {
-                        backgroundColor: colors.surface,
-                        borderColor: isDark ? colors.border : 'rgba(226,232,240,0.9)',
-                      },
-                    ]}
-                  >
-                    <View style={styles.premiumHeaderRow}>
-                      <View style={styles.premiumHeaderLeft}>
-                        <View style={[styles.cardIconWrap, { backgroundColor: colors.emeraldMuted }]}>
-                          <FontAwesome name="building" size={18} color={colors.emerald} />
-                        </View>
-                        <View style={styles.cardHeaderText}>
-                          <Text style={[styles.cardOrgName, { color: colors.text }]} numberOfLines={1}>
-                            {inv.from_org_name || 'Organisation'}
-                          </Text>
-                          <Text style={[styles.cardOffer, { color: colors.textMuted }]} numberOfLines={1}>
-                            {buildOfferText(inv)}
-                          </Text>
-                        </View>
-
-                      </View>
-                      <TouchableOpacity
-                        style={[styles.premiumInfoBtn, { backgroundColor: colors.surfaceElevated }]}
-                        activeOpacity={0.8}
-                        onPress={() => {}}
-                      >
-                        <FontAwesome name="info" size={12} color={colors.textMuted} />
-                      </TouchableOpacity>
-                    </View>
-
-                    <View style={[styles.statusBadge, { backgroundColor: 'transparent', top: 18, right: 18 }]}>
-                      <FontAwesome name="check-circle" size={10} color={colors.emerald} />
-                      <Text style={[styles.statusBadgeText, { color: colors.text, textAlign: 'center' }]}>Accepted</Text>
-                    </View>
-
-                    {passbook != null ? (
-                      <>
-                        <View style={styles.quickStatsRow}>
-                          <View style={styles.quickStatCol}>
-                            <Text style={[styles.quickStatLabel, { color: colors.textMuted }]}>Rate</Text>
-                            <Text style={[styles.quickStatValue, { color: colors.text }]}>₹{inv.payable_amount?.toLocaleString('en-IN') ?? 0}</Text>
-
-                          </View>
-                          <View style={[styles.quickDivider, { backgroundColor: colors.border }]} />
-                          <View style={styles.quickStatCol}>
-                            <Text style={[styles.quickStatLabel, { color: colors.textMuted }]}>Commission</Text>
-                            <Text style={[styles.quickStatValue, { color: colors.text }]}>{inv.commission_percent ?? 0}%</Text>
-                          </View>
-                          <View style={[styles.quickDivider, { backgroundColor: colors.border }]} />
-                          <View style={styles.quickStatCol}>
-                            <Text style={[styles.quickStatLabel, { color: colors.textMuted }]}>Completed</Text>
-                            <Text style={[styles.quickStatValue, { color: colors.text }]}>{passbook.completedCount}</Text>
-                          </View>
-                        </View>
-
-                        <View style={[styles.insightCard, { backgroundColor: colors.surfaceElevated }]}>
-                          <View style={styles.insightHeader}>
-                            <View>
-                              <Text style={styles.insightLabel}>TOTAL EARNINGS</Text>
-                              <Text style={styles.insightAmount}>₹{passbook.totalEarned.toLocaleString('en-IN')}</Text>
-                            </View>
-                          </View>
-                          <View style={styles.insightProgressHeader}>
-                            <Text style={[styles.insightProgressLabel, { color: colors.textMuted }]}>Payout progress</Text>
-                            <Text style={[styles.insightProgressValue, { color: colors.emerald }]}>
-                              {receivedPercentage}% settled
-                            </Text>
-                          </View>
-                          <View style={styles.insightProgressTrack}>
-                            <View style={[styles.insightProgressFill, { backgroundColor: colors.emerald, width: `${receivedPercentage}%` }]} />
-                          </View>
-                          <View style={styles.insightFooter}>
-                            <FontAwesome name="line-chart" size={10} color={colors.emerald} />
-                            <Text style={styles.insightFooterText}>
-                              Pending <Text style={styles.insightFooterAmount}>₹{passbook.pendingAmount.toLocaleString('en-IN')}</Text> to be released
-                            </Text>
-                          </View>
-                        </View>
-
-                        <View style={styles.metricsSplitRow}>
-                          <View style={[styles.metricTile, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
-                            <View style={styles.metricTileHead}>
-                              <FontAwesome name="money" size={12} color={colors.textMuted} />
-                              <Text style={[styles.metricTileLabel, { color: colors.textMuted }]}>Received</Text>
-                            </View>
-                            <Text style={[styles.metricTileValue, { color: colors.text }]}>₹{passbook.totalReceived.toLocaleString('en-IN')}</Text>
-                          </View>
-                          <View style={[styles.metricTile, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
-                            <View style={styles.metricTileHead}>
-                              <FontAwesome name="clock-o" size={12} color={colors.textMuted} />
-                              <Text style={[styles.metricTileLabel, { color: colors.textMuted }]}>Pending</Text>
-                            </View>
-                            <Text style={[styles.metricTileValue, { color: colors.gold }]}>₹{passbook.pendingAmount.toLocaleString('en-IN')}</Text>
-                          </View>
-                        </View>
-                      </>
-                    ) : null}
-
-                    <View style={styles.passbookActionsColumn}>
-                      <TouchableOpacity
-                        style={[
-                          styles.viewPassbookBtnLarge,
-                          {
-                            backgroundColor: colors.emerald,
-                            shadowColor: colors.text,
-                            shadowOffset: { width: 4, height: 4 },
-                            shadowOpacity: 0.2,
-                            shadowRadius: 0,
-                          },
-
-                        ]}
-                        onPress={() => router.push({
-                          pathname: `/(driver)/passbook/${passbook?.orgId ?? inv.from_organization_id}` as const,
-                          params: { orgName: passbook?.orgName ?? inv.from_org_name ?? 'Fleet', from: 'requests' },
-                        } as Parameters<typeof router.push>[0])}
-                        activeOpacity={0.9}
-                      >
-                        <View style={styles.viewPassbookBtnLargeLeft}>
-                          <FontAwesome name="credit-card" size={16} color={colors.textOnPrimary} />
-                          <Text style={[styles.viewPassbookBtnLargeText, { color: colors.textOnPrimary }]}>VIEW DETAILED STATEMENT</Text>
-                        </View>
-                        <View style={styles.viewPassbookBtnLargeSpacer} />
-                        <FontAwesome name="chevron-right" size={16} color={colors.textOnPrimary} style={styles.viewPassbookBtnLargeArrow} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.leaveFleetLink}
-                        onPress={() => handleLeaveFleetPress(inv.from_organization_id, inv.from_org_name ?? 'this organisation')}
-                        onPressIn={() => setLeaveFleetPressedOrgId(inv.from_organization_id)}
-                        onPressOut={() => setLeaveFleetPressedOrgId(null)}
-                        disabled={!!isLeaving}
-                        activeOpacity={1}
-                      >
-                        {isLeaving ? (
-                          <ActivityIndicator size="small" color={colors.textMuted} />
-                        ) : (
-                          <>
-                            <FontAwesome
-                              name="sign-out"
-                              size={16}
-                              color={leaveFleetPressedOrgId === inv.from_organization_id ? Theme.negative : colors.textMuted}
-                            />
-                            <Text
-                              style={[
-                                styles.leaveFleetLinkText,
-                                { color: leaveFleetPressedOrgId === inv.from_organization_id ? Theme.negative : colors.textMuted },
-                              ]}
-                            >
-                              Exit fleet
-                            </Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          )}
-
-          {pastLinkedDrivers.length > 0 && (
-            <View style={styles.section}>
-              <TouchableOpacity
-                style={styles.viewHistoryLink}
-                onPress={() => router.push('/(driver)/passbook/history')}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.viewHistoryLinkEyebrow, { color: colors.textMuted }]}>PASSBOOK HISTORY</Text>
-                <Text style={[styles.viewHistoryLinkText, { color: colors.emerald }]}>View history</Text>
-                <FontAwesome name="chevron-right" size={12} color={colors.emerald} />
-              </TouchableOpacity>
             </View>
           )}
 
