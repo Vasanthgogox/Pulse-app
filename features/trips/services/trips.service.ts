@@ -265,10 +265,150 @@ export interface CreateTripData {
   vehicle_display_number?: string | null;
 }
 
+const ONGOING_TRIP_TERMINAL_STATUSES = ["completed", "cancelled", "done", "delivered"] as const;
+
+async function getDriverOngoingTrip(
+  driverId: string,
+  excludeTripId?: string,
+): Promise<{
+  error: Error | null;
+  trip: Pick<TripRow, "id" | "trip_number" | "display_trip_id"> | null;
+}> {
+  let q = supabase()
+    .from("trips")
+    .select("id, trip_number, display_trip_id")
+    .eq("driver_id", driverId)
+    .not("status", "in", `("${ONGOING_TRIP_TERMINAL_STATUSES.join('","')}")`)
+    .order("updated_at", { ascending: false })
+    .limit(1);
+  if (excludeTripId != null && excludeTripId.trim() !== "") {
+    q = q.neq("id", excludeTripId);
+  }
+  const { data, error } = await q.maybeSingle();
+  if (error) return { error: new Error(error.message), trip: null };
+  return {
+    error: null,
+    trip: (data ?? null) as Pick<TripRow, "id" | "trip_number" | "display_trip_id"> | null,
+  };
+}
+
+function getTripIdentifierLabel(
+  trip: Pick<TripRow, "trip_number" | "display_trip_id"> | null | undefined,
+): string {
+  return trip?.display_trip_id ?? trip?.trip_number ?? "another ongoing trip";
+}
+
+export interface DriverAvailabilityByPhoneResult {
+  isBusy: boolean;
+  driverId: string | null;
+  ongoingTripId: string | null;
+  ongoingTripLabel: string | null;
+}
+
+/**
+ * Check if a phone maps to a driver in this org who is already on an ongoing trip.
+ * Used as preflight validation for OTP/aggregate assignment flows.
+ */
+export async function getDriverAvailabilityByPhone(
+  orgId: string,
+  phone: string,
+  opts?: { excludeTripId?: string | null },
+): Promise<{ error: Error | null; result: DriverAvailabilityByPhoneResult }> {
+  const normalized = (phone ?? "").trim().replace(/\s+/g, "");
+  if (!normalized) {
+    return {
+      error: null,
+      result: {
+        isBusy: false,
+        driverId: null,
+        ongoingTripId: null,
+        ongoingTripLabel: null,
+      },
+    };
+  }
+
+  const last10 = normalized.replace(/\D/g, "").slice(-10);
+  const { data: orgDrivers, error: driverError } = await supabase()
+    .from("drivers")
+    .select("id, phone")
+    .eq("organization_id", orgId)
+    .not("phone", "is", null);
+  if (driverError) {
+    return {
+      error: new Error(driverError.message),
+      result: {
+        isBusy: false,
+        driverId: null,
+        ongoingTripId: null,
+        ongoingTripLabel: null,
+      },
+    };
+  }
+
+  const match = ((orgDrivers ?? []) as { id: string; phone: string | null }[]).find((d) => {
+    const p = (d.phone ?? "").replace(/\s+/g, "");
+    if (!p) return false;
+    if (p === normalized) return true;
+    if (last10.length < 10) return false;
+    return p.replace(/\D/g, "").slice(-10) === last10;
+  });
+  if (!match) {
+    return {
+      error: null,
+      result: {
+        isBusy: false,
+        driverId: null,
+        ongoingTripId: null,
+        ongoingTripLabel: null,
+      },
+    };
+  }
+
+  const { error: ongoingError, trip } = await getDriverOngoingTrip(
+    match.id,
+    opts?.excludeTripId ?? undefined,
+  );
+  if (ongoingError) {
+    return {
+      error: ongoingError,
+      result: {
+        isBusy: false,
+        driverId: match.id,
+        ongoingTripId: null,
+        ongoingTripLabel: null,
+      },
+    };
+  }
+  return {
+    error: null,
+    result: {
+      isBusy: trip != null,
+      driverId: match.id,
+      ongoingTripId: trip?.id ?? null,
+      ongoingTripLabel: trip ? getTripIdentifierLabel(trip) : null,
+    },
+  };
+}
+
 export async function createTrip(
   orgId: string,
   data: CreateTripData,
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
+  if (data.driver_id != null) {
+    const { error: conflictCheckError, trip: ongoingTrip } = await getDriverOngoingTrip(
+      data.driver_id,
+    );
+    if (conflictCheckError) return { error: conflictCheckError, trip: null };
+    if (ongoingTrip != null) {
+      return {
+        error: new Error(
+          `Driver is already assigned to ${getTripIdentifierLabel(ongoingTrip)}. Complete or unassign that trip first.`,
+        ),
+        trip: null,
+      };
+    }
+  }
+
   const clientPrice = Number(data.client_price) || 0;
   const supplierRate = Number(data.supplier_rate) || 0;
   const insertData = {
@@ -373,6 +513,22 @@ export async function updateTripAssignment(
   data: UpdateTripAssignmentData,
   options?: UpdateTripAssignmentOptions,
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
+  if (data.driver_id != null) {
+    const { error: conflictCheckError, trip: ongoingTrip } = await getDriverOngoingTrip(
+      data.driver_id,
+      tripId,
+    );
+    if (conflictCheckError) return { error: conflictCheckError, trip: null };
+    if (ongoingTrip != null) {
+      return {
+        error: new Error(
+          `Driver is already assigned to ${getTripIdentifierLabel(ongoingTrip)}. Complete or unassign that trip first.`,
+        ),
+        trip: null,
+      };
+    }
+  }
+
   const updates: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };
@@ -489,6 +645,20 @@ export async function assignAggregateTripDriverByPhone(
   if (!normalized) {
     return { error: new Error("Phone is required"), trip: null };
   }
+  const { error: availabilityError, result: availability } =
+    await getDriverAvailabilityByPhone(driverOrgId, normalized, {
+      excludeTripId: tripId,
+    });
+  if (availabilityError) return { error: availabilityError, trip: null };
+  if (availability.isBusy) {
+    return {
+      error: new Error(
+        `Driver is already assigned to ${availability.ongoingTripLabel ?? "another ongoing trip"}. Complete or unassign that trip first.`,
+      ),
+      trip: null,
+    };
+  }
+
   const { data, error } = await supabase().rpc("assign_aggregate_trip_driver", {
     p_trip_id: tripId,
     p_driver_org_id: driverOrgId,
@@ -696,7 +866,7 @@ export async function getActiveDriverIds(orgId: string): Promise<Set<string>> {
     .select("driver_id")
     .eq("organization_id", orgId)
     .not("driver_id", "is", null)
-    .not("status", "in", '("completed","cancelled","done","delivered")');
+    .not("status", "in", `("${ONGOING_TRIP_TERMINAL_STATUSES.join('","')}")`);
 
   const ids = new Set<string>();
   (data ?? []).forEach((row: { driver_id: string | null }) => {

@@ -17,6 +17,7 @@ import {
 import {
   assignAggregateTripDriverByPhone,
   assignTripDriverByPhone,
+  getDriverAvailabilityByPhone,
   getActiveDriverIds,
   getTripDisplayNumber,
   isTripCompleted,
@@ -110,6 +111,8 @@ export function TripAssignmentBlock({
   const [phoneInput, setPhoneInput] = useState("");
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [phoneName, setPhoneName] = useState<string | null>(null);
+  const [phoneDriverBusy, setPhoneDriverBusy] = useState(false);
+  const [phoneBusyTripLabel, setPhoneBusyTripLabel] = useState<string | null>(null);
   const [pickPhoneVehicleId, setPickPhoneVehicleId] = useState<string | null>(
     null,
   );
@@ -250,6 +253,8 @@ export function TripAssignmentBlock({
     const trimmed = phoneInput.trim();
     if (!trimmed) {
       setPhoneName(null);
+      setPhoneDriverBusy(false);
+      setPhoneBusyTripLabel(null);
       return;
     }
     if (phoneLookupTimeoutRef.current)
@@ -259,17 +264,28 @@ export function TripAssignmentBlock({
       const normalized = trimmed.replace(/\s+/g, "");
       if (normalized.length < 10) {
         setPhoneName(null);
+        setPhoneDriverBusy(false);
+        setPhoneBusyTripLabel(null);
         return;
       }
-      searchExistingDriversByPhone(normalized).then(({ matches }) => {
+      searchExistingDriversByPhone(normalized).then(async ({ matches }) => {
         setPhoneName(matches[0]?.full_name ?? null);
+        const orgForDriver =
+          (driverAssignOrgId ?? organizationId).trim() || organizationId;
+        const { result } = await getDriverAvailabilityByPhone(
+          orgForDriver,
+          normalized,
+          { excludeTripId: trip.id },
+        );
+        setPhoneDriverBusy(result.isBusy);
+        setPhoneBusyTripLabel(result.ongoingTripLabel ?? null);
       });
     }, 400);
     return () => {
       if (phoneLookupTimeoutRef.current)
         clearTimeout(phoneLookupTimeoutRef.current);
     };
-  }, [phoneInput]);
+  }, [phoneInput, driverAssignOrgId, organizationId, trip.id]);
 
   const assignByPhone = useCallback(async () => {
     const trimmed = phoneInput.trim();
@@ -280,6 +296,25 @@ export function TripAssignmentBlock({
     const err = validatePhone(trimmed);
     if (err) {
       setPhoneError(err);
+      return;
+    }
+    const orgForDriver = (driverAssignOrgId ?? organizationId).trim() || organizationId;
+    const { error: availabilityError, result: availability } = await getDriverAvailabilityByPhone(
+      orgForDriver,
+      trimmed,
+      { excludeTripId: trip.id },
+    );
+    if (availabilityError) {
+      setPhoneError(availabilityError.message);
+      return;
+    }
+    if (availability.isBusy) {
+      const conflictTripLabel = availability.ongoingTripLabel ?? "another ongoing trip";
+      setPhoneDriverBusy(true);
+      setPhoneBusyTripLabel(conflictTripLabel);
+      setPhoneError(
+        `Driver is already assigned to ${conflictTripLabel}. Complete or unassign that trip first.`,
+      );
       return;
     }
     setPhoneError(null);
@@ -298,7 +333,6 @@ export function TripAssignmentBlock({
       // For reassignment, always require OTP claim (do not show trip directly to any driver).
       forceOtpClaim: phoneModalIsReassign,
     };
-    const orgForDriver = (driverAssignOrgId ?? organizationId).trim() || organizationId;
     const vehicleNumNorm = normalizeVehicleNumber(phoneVehicleInput);
     const matchedVehicle = vehicleNumNorm
       ? phoneModalVehicles.find(
@@ -1107,6 +1141,8 @@ export function TripAssignmentBlock({
               onChangeText={(v) => {
                 setPhoneInput(formatMobileNumber(v));
                 setPhoneError(null);
+                setPhoneDriverBusy(false);
+                setPhoneBusyTripLabel(null);
               }}
               keyboardType="phone-pad"
               autoCorrect={false}
@@ -1121,6 +1157,11 @@ export function TripAssignmentBlock({
                     : "Tap Assign below to confirm."}
                 </Text>
               </View>
+            ) : null}
+            {phoneDriverBusy ? (
+              <Text style={styles.phoneModalInTrip}>
+                Driver is on {phoneBusyTripLabel ?? "another ongoing trip"}
+              </Text>
             ) : null}
             {phoneError ? (
               <Text style={styles.phoneModalError}>{phoneError}</Text>
@@ -1151,10 +1192,10 @@ export function TripAssignmentBlock({
             <TouchableOpacity
               style={[
                 styles.assignConfirmBtn,
-                phoneSaving && styles.assignConfirmBtnDisabled,
+                (phoneSaving || phoneDriverBusy) && styles.assignConfirmBtnDisabled,
               ]}
               onPress={assignByPhone}
-              disabled={phoneSaving}
+              disabled={phoneSaving || phoneDriverBusy}
               activeOpacity={0.9}
             >
               <FontAwesome
@@ -1167,6 +1208,8 @@ export function TripAssignmentBlock({
                   ? phoneModalIsReassign
                     ? "Reassigning…"
                     : "Assigning…"
+                  : phoneDriverBusy
+                    ? "On Trip"
                   : phoneModalIsReassign
                     ? "Reassign"
                     : "Assign"}
@@ -2069,6 +2112,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Theme.negative,
     marginBottom: 10,
+  },
+  phoneModalInTrip: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: (Theme as any).warning ?? "#B45309",
+    marginBottom: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   phoneInput: {
     borderWidth: 1,

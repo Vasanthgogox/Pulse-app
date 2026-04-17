@@ -25,6 +25,7 @@ import { shareDraftIndent } from "@/features/indents/services/indents.service";
 import { acceptAwardedQuote } from "@/features/indents/services/accept-awarded-quote.service";
 import {
   assignAggregateTripDriverByPhone,
+  getDriverAvailabilityByPhone,
   generateTripOtp,
   isTripCompleted,
   regenerateTripOtp,
@@ -332,7 +333,6 @@ export function LoadCenterView({
 
       searchExistingDriversByPhone(last10).then(async ({ matches }) => {
         const direct = matches[0]?.full_name ?? null;
-        let userId = matches[0]?.user_id ?? null;
         let foundName = direct;
 
         if (!foundName) {
@@ -341,46 +341,23 @@ export function LoadCenterView({
             `+91${last10}`,
           );
           foundName = matchesWithCode[0]?.full_name ?? null;
-          userId = userId ?? matchesWithCode[0]?.user_id ?? null;
         }
 
         setAggregatePhoneName(foundName);
         setAggregatePhoneNotFound(!foundName);
-
-        // If driver exists in app, show if they're currently assigned to an active trip.
-        const driverRow =
-          userId != null
-            ? drivers.find((d) => d.user_id === userId) ??
-              drivers.find(
-                (d) =>
-                  (d.phone ?? "").replace(/\D/g, "").slice(-10) === last10,
-              ) ??
-              null
-            : drivers.find(
-                (d) =>
-                  (d.phone ?? "").replace(/\D/g, "").slice(-10) === last10,
-              ) ?? null;
-
-        if (!driverRow?.id) {
+        if (!orgId) {
           setAggregatePhoneInTrip(false);
           return;
         }
-
-        const activeTrip =
-          (trips ?? []).find(
-            (t) =>
-              (t as { driver_id?: string | null }).driver_id === driverRow.id &&
-              !isTripCompleted(t as any) &&
-              String((t as any).status ?? "").toLowerCase() !== "cancelled",
-          ) ?? null;
-        setAggregatePhoneInTrip(!!activeTrip);
+        const { result } = await getDriverAvailabilityByPhone(orgId, last10);
+        setAggregatePhoneInTrip(result.isBusy);
       });
     }, 400);
     return () => {
       if (aggregatePhoneLookupTimeoutRef.current)
         clearTimeout(aggregatePhoneLookupTimeoutRef.current);
     };
-  }, [aggregateDriverPhone, drivers, trips]);
+  }, [aggregateDriverPhone, orgId]);
 
   /** Indent ids that already have a trip (owner or supplier). Exclude these from Claimed so we don't show "ASSIGN STAFF & DEPLOY" again after deploy. */
   const indentIdsWithTrip = useMemo(() => {
@@ -1126,6 +1103,30 @@ export function LoadCenterView({
         triggerSuccess("Trip created (OTP not generated)");
         // Do not treat this as an error. OTP can be generated later from Trip Detail
         // after providing a driver phone number.
+        return;
+      }
+      const { error: availabilityError, result: availability } =
+        await getDriverAvailabilityByPhone(orgId, phoneTrimmed, {
+          excludeTripId: trip.id,
+        });
+      if (availabilityError) {
+        throw availabilityError;
+      }
+      if (availability.isBusy) {
+        await saveSubcontract();
+        await updateIndent(load.id, { status: "completed" });
+        invalidateTrips(orgId);
+        invalidateIndents(orgId);
+        setLoadAction(null);
+        setAssigningTripId(null);
+        Alert.alert(
+          "Trip created",
+          `Driver is already assigned to ${availability.ongoingTripLabel ?? "another ongoing trip"}.\n\nComplete or unassign that trip before assigning this one.`,
+        );
+        setInitialTripForDetail(trip);
+        router.push(
+          `/trip/${trip.id}?entryContext=supplier` as import("expo-router").Href,
+        );
         return;
       }
 
@@ -3193,6 +3194,11 @@ export function LoadCenterView({
                     <TouchableOpacity
                       style={[styles.modalSubmit, styles.handshakeBtnModal]}
                       onPress={() => handleDeployAdHoc(loadAction.load)}
+                      disabled={
+                        assigningTripId === loadAction.load.id ||
+                        (aggregateDriverPhone.trim().length > 0 &&
+                          aggregatePhoneInTrip)
+                      }
                       activeOpacity={0.9}
                     >
                       <FontAwesome
@@ -3202,7 +3208,9 @@ export function LoadCenterView({
                         style={{ marginRight: 8 }}
                       />
                       <Text style={styles.modalSubmitText}>
-                        Deploy & get OTP
+                        {aggregateDriverPhone.trim().length > 0 && aggregatePhoneInTrip
+                          ? "Driver On Trip"
+                          : "Deploy & get OTP"}
                       </Text>
                     </TouchableOpacity>
                   )}
