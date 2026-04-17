@@ -1,66 +1,88 @@
-import { DriverHeader } from '@/components/driver/DriverHeader';
-import { DriverInviteCard } from '@/components/driver/DriverInviteCard';
-import { LeafletMap, type LeafletMapRef, type LeafletMarker } from '@/components/driver/LeafletMap';
-import { DriverTripFlowCard } from '@/components/DriverTripFlowCard';
-import { JobRequestCard } from '@/components/JobRequestCard';
-import Layout from '@/constants/Layout';
-import Theme from '@/constants/Theme';
-import Typography from '@/constants/Typography';
-import { useAuth } from '@/contexts/AuthContext';
-import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
-import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
-import { computeDriverCommissionForTrip } from '@/features/finance/aggregation/aggregateDrivers';
-import { claimTripByOtp, getPendingOtpTrips } from '@/features/trips';
-import { useDriverAvatarUri } from '@/lib/avatarUpload';
-import { buildOfferText, isActiveMission, isAggregateTrip, isAssignedNotStarted, isCompletedStatus, isRosterTrip } from '@/lib/driverUtils';
-import { formatINR } from '@/lib/format';
-import { formatEstimatedDuration } from '@/lib/formatEstimatedDuration';
-import { darkMapStyle } from '@/lib/mapStyles';
-import { getPopularPlacesInIndia } from '@/lib/placesService';
-import MapView, { Callout, Marker, Polyline } from '@/lib/reactNativeMapsCompat';
-import * as driverLocationService from '@/services/driverLocationService';
-import * as driversService from '@/services/driversService';
+import { DriverHeader } from "@/components/driver/DriverHeader";
+import { DriverInviteCard } from "@/components/driver/DriverInviteCard";
 import {
-  buildRouteFetchKey,
-  getOptimalRoute,
-  parseRouteFetchKey,
-  type RouteResult,
-} from '@/services/routingService';
-import * as tripsService from '@/services/tripsService';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput, BottomSheetView } from '@gorhom/bottom-sheet';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect } from '@react-navigation/native';
-import Constants from 'expo-constants';
-import * as Location from 'expo-location';
-import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+    LeafletMap,
+    type LeafletMapRef,
+    type LeafletMarker,
+} from "@/components/driver/LeafletMap";
+import { DriverTripFlowCard } from "@/components/DriverTripFlowCard";
+import { JobRequestCard } from "@/components/JobRequestCard";
+import Layout from "@/constants/Layout";
+import Theme from "@/constants/Theme";
+import Typography from "@/constants/Typography";
+import { useAuth } from "@/contexts/AuthContext";
+import { useDriverAvatar } from "@/contexts/DriverAvatarContext";
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  AppState,
-  Dimensions,
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
-} from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+    useDriverTheme,
+    useDriverThemeColors,
+} from "@/contexts/DriverThemeContext";
+import { computeDriverCommissionForTrip } from "@/features/finance/aggregation/aggregateDrivers";
+import { claimTripByOtp, getPendingOtpTrips } from "@/features/trips";
+import { useDriverAvatarUri } from "@/lib/avatarUpload";
+import {
+    buildOfferText,
+    isActiveMission,
+    isAggregateTrip,
+    isAssignedNotStarted,
+    isCompletedStatus,
+    isRosterTrip,
+} from "@/lib/driverUtils";
+import { formatINR } from "@/lib/format";
+import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
+import { darkMapStyle } from "@/lib/mapStyles";
+import { getPopularPlacesInIndia } from "@/lib/placesService";
+import MapView, {
+    Callout,
+    Marker,
+    Polyline,
+} from "@/lib/reactNativeMapsCompat";
+import * as driverLocationService from "@/services/driverLocationService";
+import * as driversService from "@/services/driversService";
+import {
+    buildRouteFetchKey,
+    getOptimalRoute,
+    parseRouteFetchKey,
+    type RouteResult,
+} from "@/services/routingService";
+import * as tripsService from "@/services/tripsService";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
+import BottomSheet, {
+    BottomSheetScrollView,
+    BottomSheetTextInput,
+    BottomSheetView,
+} from "@gorhom/bottom-sheet";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
+import Constants from "expo-constants";
+import * as Location from "expo-location";
+import { useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+    ActivityIndicator,
+    Alert,
+    Animated,
+    AppState,
+    Dimensions,
+    Image,
+    Keyboard,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import Reanimated, {
-  useAnimatedProps,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+    useAnimatedProps,
+    useAnimatedStyle,
+    useSharedValue,
+    withTiming,
+} from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /** Default map region when driver location is not yet available (India center). */
 const DEFAULT_MAP_REGION = {
@@ -69,7 +91,6 @@ const DEFAULT_MAP_REGION = {
   latitudeDelta: 0.5,
   longitudeDelta: 0.5,
 };
-
 
 const DRIVER_MAP_BOOT_KEY = "@q-mobile/driver-map-native-booting";
 const DRIVER_MAP_BOOT_TS_KEY = "@q-mobile/driver-map-native-boot-ts";
@@ -284,13 +305,13 @@ function bearingDegrees(
 }
 
 const DECLINE_WARNING_TITLE = "Decline this trip?";
-const DECLINE_WARNING_MSG = "Warning: you will no longer be assigned to this trip. The fleet can reassign it to another driver.";
+const DECLINE_WARNING_MSG =
+  "Warning: you will no longer be assigned to this trip. The fleet can reassign it to another driver.";
 
 /** Keep fitToCoordinates responsive on long hauls (many vertices). */
-function subsampleRouteCoordinates<T extends { latitude: number; longitude: number }>(
-  coords: T[],
-  maxPoints: number,
-): T[] {
+function subsampleRouteCoordinates<
+  T extends { latitude: number; longitude: number },
+>(coords: T[], maxPoints: number): T[] {
   if (coords.length <= maxPoints) return coords;
   const step = Math.ceil(coords.length / maxPoints);
   const out: T[] = [];
@@ -338,9 +359,7 @@ export default function DriverRadarScreen() {
   const jobRequestSheetPrimary = isDark
     ? Theme.textOnPrimary
     : Theme.textPrimaryDark;
-  const jobRequestSheetMuted = isDark
-    ? Theme.textOnDarkMuted
-    : Theme.textMuted;
+  const jobRequestSheetMuted = isDark ? Theme.textOnDarkMuted : Theme.textMuted;
   const jobRequestHoldTrack = isDark
     ? "rgba(255,255,255,0.22)"
     : Theme.textPrimaryDark;
@@ -377,7 +396,12 @@ export default function DriverRadarScreen() {
 
   // Show notification if there's any pending invite and user hasn't acted recently
   useEffect(() => {
-    if (invites.filter((i) => i.status === "pending").length > 0 && !invitationAccepted && !invitationDeclined && !invitationDismissed) {
+    if (
+      invites.filter((i) => i.status === "pending").length > 0 &&
+      !invitationAccepted &&
+      !invitationDeclined &&
+      !invitationDismissed
+    ) {
       setShowNotification(true);
     } else {
       setShowNotification(false);
@@ -448,7 +472,10 @@ export default function DriverRadarScreen() {
   });
 
   const OlaAnimatedMarker = useMemo(
-    () => (Platform.OS === "web" ? null : Reanimated.createAnimatedComponent(Marker)) as any,
+    () =>
+      (Platform.OS === "web"
+        ? null
+        : Reanimated.createAnimatedComponent(Marker)) as any,
     [],
   );
   const [stopsExpanded, setStopsExpanded] = useState(false);
@@ -550,86 +577,89 @@ export default function DriverRadarScreen() {
       return Promise.resolve();
     }
     setAcceptError(null);
-    if (!initialLoadDoneRef.current && !isRefreshingRef.current) setLoading(true);
+    if (!initialLoadDoneRef.current && !isRefreshingRef.current)
+      setLoading(true);
     return Promise.all([
       driversService.getLinkedDriversForCurrentUser(profile.uid),
       driversService.getDriverInvitesReceived(),
       getPendingOtpTrips(),
-    ]).then(([driversRes, invitesRes, pendingTripsRes]) => {
-      setInvites(invitesRes.invites ?? []);
-      setPendingOtpTrips(
-        pendingTripsRes?.error ? [] : (pendingTripsRes?.trips ?? []),
-      );
-      const drivers = (driversRes.drivers ?? []).filter((d) => !d.left_at);
-      if (drivers.length > 0) {
-        const primaryDriver = drivers[0];
-        setDriver(primaryDriver);
-        const driverIds = drivers.map((d) => d.id);
-        return tripsService.getTripsByDriverIds(driverIds).then((tRes) => {
-          const trips = tRes.trips ?? [];
-          const currentIds = new Set(trips.map((t) => t.id));
-          const disappearedLabels: string[] = [];
-          previousTripsRef.current.forEach((displayNum, id) => {
-            if (!currentIds.has(id)) disappearedLabels.push(displayNum);
+    ])
+      .then(([driversRes, invitesRes, pendingTripsRes]) => {
+        setInvites(invitesRes.invites ?? []);
+        setPendingOtpTrips(
+          pendingTripsRes?.error ? [] : (pendingTripsRes?.trips ?? []),
+        );
+        const drivers = (driversRes.drivers ?? []).filter((d) => !d.left_at);
+        if (drivers.length > 0) {
+          const primaryDriver = drivers[0];
+          setDriver(primaryDriver);
+          const driverIds = drivers.map((d) => d.id);
+          return tripsService.getTripsByDriverIds(driverIds).then((tRes) => {
+            const trips = tRes.trips ?? [];
+            const currentIds = new Set(trips.map((t) => t.id));
+            const disappearedLabels: string[] = [];
+            previousTripsRef.current.forEach((displayNum, id) => {
+              if (!currentIds.has(id)) disappearedLabels.push(displayNum);
+            });
+            if (disappearedLabels.length > 0)
+              setReassignedTripLabels(disappearedLabels);
+            previousTripsRef.current = new Map(
+              trips.map((t) => [t.id, tripsService.getTripDisplayNumber(t)]),
+            );
+            setAllTrips(trips);
+            const normalizedDriverStatus = String(
+              primaryDriver.status ?? "",
+            ).toLowerCase();
+            const hasActiveTrip = trips.some((t) => isTripInProgress(t));
+            setIsOnline(
+              (prev) =>
+                prev ||
+                normalizedDriverStatus === "online" ||
+                normalizedDriverStatus === "on_trip" ||
+                hasActiveTrip,
+            );
+            setLoading(false);
+            initialLoadDoneRef.current = true;
+            isRefreshingRef.current = false;
+            setRefreshing(false);
+            setAcceptedTripId((prev) => {
+              if (prev == null) return prev;
+              const trip = trips.find((t) => t.id === prev);
+
+              // If we found the trip and it's already started or completed, we can clear the "accepted" flag
+              // because the active mission flow will take over, or it's done.
+              if (
+                !isOtpClaiming &&
+                trip &&
+                (isTripInProgress(trip) || isCompletedStatus(trip.status))
+              ) {
+                AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
+                return null;
+              }
+
+              // DO NOT clear if not found. Let lag catch up or let the user manually go back from the card.
+              // This prevents the JobRequestCard ("Hold to accept") from reappearing due to replication lag.
+              return prev;
+            });
           });
-          if (disappearedLabels.length > 0)
-            setReassignedTripLabels(disappearedLabels);
-          previousTripsRef.current = new Map(
-            trips.map((t) => [t.id, tripsService.getTripDisplayNumber(t)]),
-          );
-          setAllTrips(trips);
-          const normalizedDriverStatus = String(
-            primaryDriver.status ?? "",
-          ).toLowerCase();
-          const hasActiveTrip = trips.some((t) => isTripInProgress(t));
-          setIsOnline(
-            (prev) =>
-              prev ||
-              normalizedDriverStatus === "online" ||
-              normalizedDriverStatus === "on_trip" ||
-              hasActiveTrip,
-          );
+        } else {
+          setDriver(null);
+          setAllTrips([]);
+          setPendingOtpTrips([]);
+          setIsOnline(false);
+          previousTripsRef.current = new Map();
           setLoading(false);
           initialLoadDoneRef.current = true;
           isRefreshingRef.current = false;
           setRefreshing(false);
-          setAcceptedTripId((prev) => {
-            if (prev == null) return prev;
-            const trip = trips.find((t) => t.id === prev);
-
-            // If we found the trip and it's already started or completed, we can clear the "accepted" flag
-            // because the active mission flow will take over, or it's done.
-            if (
-              !isOtpClaiming &&
-              trip &&
-              (isTripInProgress(trip) || isCompletedStatus(trip.status))
-            ) {
-              AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
-              return null;
-            }
-
-            // DO NOT clear if not found. Let lag catch up or let the user manually go back from the card.
-            // This prevents the JobRequestCard ("Hold to accept") from reappearing due to replication lag.
-            return prev;
-          });
-        });
-      } else {
-        setDriver(null);
-        setAllTrips([]);
-        setPendingOtpTrips([]);
-        setIsOnline(false);
-        previousTripsRef.current = new Map();
+        }
+      })
+      .finally(() => {
         setLoading(false);
         initialLoadDoneRef.current = true;
         isRefreshingRef.current = false;
         setRefreshing(false);
-      }
-    }).finally(() => {
-      setLoading(false);
-      initialLoadDoneRef.current = true;
-      isRefreshingRef.current = false;
-      setRefreshing(false);
-    });
+      });
   }, [profile?.uid]);
 
   const runDeclineTrip = useCallback(
@@ -652,7 +682,10 @@ export default function DriverRadarScreen() {
         );
         return;
       }
-      if (String(acceptedTripId ?? "").toLowerCase() === String(tripId).toLowerCase()) {
+      if (
+        String(acceptedTripId ?? "").toLowerCase() ===
+        String(tripId).toLowerCase()
+      ) {
         setAcceptedTripId(null);
         await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
       }
@@ -666,27 +699,23 @@ export default function DriverRadarScreen() {
         assignmentFeedbackTimeoutRef.current = null;
       }, 1200);
     },
-    [
-      declineLoading,
-      otpClaimTripId,
-      acceptedTripId,
-      fetch,
-      setDeclinedTripId,
-    ],
+    [declineLoading, otpClaimTripId, acceptedTripId, fetch, setDeclinedTripId],
   );
 
   const confirmDeclineTrip = useCallback(
     (tripId: string) => {
-      // Use web-native confirm window for the web, otherwise Expo's Alert.alert 
+      // Use web-native confirm window for the web, otherwise Expo's Alert.alert
       // silently fails to block/render if window.confirm isn't hooked up correctly
       if (Platform.OS === "web" && typeof window !== "undefined") {
-        const confirmed = window.confirm(`${DECLINE_WARNING_TITLE}\n\n${DECLINE_WARNING_MSG}`);
+        const confirmed = window.confirm(
+          `${DECLINE_WARNING_TITLE}\n\n${DECLINE_WARNING_MSG}`,
+        );
         if (confirmed) {
           void runDeclineTrip(tripId);
         }
         return;
       }
-      
+
       Alert.alert(DECLINE_WARNING_TITLE, DECLINE_WARNING_MSG, [
         { text: "Cancel", style: "cancel" },
         {
@@ -825,7 +854,9 @@ export default function DriverRadarScreen() {
   // Clear declinedTripId once the declined trip is no longer present in any assignment source.
   useEffect(() => {
     if (!declinedTripId) return;
-    const stillVisibleInAssigned = allTrips.some((t) => t.id === declinedTripId);
+    const stillVisibleInAssigned = allTrips.some(
+      (t) => t.id === declinedTripId,
+    );
     const stillVisibleInPendingOtp = pendingOtpTrips.some(
       (t) => t.id === declinedTripId,
     );
@@ -1065,7 +1096,8 @@ export default function DriverRadarScreen() {
   // Load-based (assign by phone): trip is in pendingOtpTrips, not allTrips. Use same assignment card and flow.
   const firstPendingOtpIncoming =
     pendingOtpTrips.find((t) => t.id !== declinedTripId) ?? null;
-  const effectiveFirstIncoming = firstIncoming ?? firstPendingOtpIncoming ?? null;
+  const effectiveFirstIncoming =
+    firstIncoming ?? firstPendingOtpIncoming ?? null;
   // OTP only for non-roster (ad-hoc) trips; connected/roster trips accept directly.
   const pendingOtpTripsRequiringOtp = pendingOtpTrips.filter(
     (t) => !isRosterTrip(t),
@@ -1092,7 +1124,9 @@ export default function DriverRadarScreen() {
     : null;
 
   const hasIncomingTrip = Boolean(effectiveFirstIncoming);
-  const effectiveIncomingId = String(effectiveFirstIncoming?.id ?? "").toLowerCase();
+  const effectiveIncomingId = String(
+    effectiveFirstIncoming?.id ?? "",
+  ).toLowerCase();
 
   // Use driver's accepted offer (commission % or per km) for this org so commission matches control screen
   const acceptedInviteForOrg =
@@ -1126,7 +1160,7 @@ export default function DriverRadarScreen() {
 
   // For driver view: load-based (roster/ad hoc) counterparty is the supplier (fleet); asset-only is the customer.
   const firstIncomingCounterpartyLabel = firstIncomingIsAggregate
-    ? "Supplier"
+    ? "Partner load"
     : "Customer";
   const firstIncomingCounterpartyName = firstIncomingIsAggregate
     ? (invites
@@ -1136,21 +1170,22 @@ export default function DriverRadarScreen() {
               (driver?.organization_id ?? "").trim() &&
             String(i.status ?? "").toLowerCase() === "accepted",
         )
-        ?.from_org_name?.trim() ?? "Supplier")
+        ?.from_org_name?.trim() ?? "Partner")
     : effectiveFirstIncoming?.client_name?.trim() || "Customer";
   const incomingTripOrgInvite =
     effectiveFirstIncoming == null
       ? null
-      : invites.find(
+      : (invites.find(
           (i) =>
             (i.from_organization_id ?? "").trim() ===
             (effectiveFirstIncoming.organization_id ?? "").trim(),
-        ) ?? null;
+        ) ?? null);
   const incomingOtpPopupTitle = firstIncomingIsAggregate
     ? "Trip received from supplier"
     : "Trip received from customer";
   const incomingOtpPopupName = firstIncomingIsAggregate
-    ? incomingTripOrgInvite?.from_org_name?.trim() || firstIncomingCounterpartyName
+    ? incomingTripOrgInvite?.from_org_name?.trim() ||
+      firstIncomingCounterpartyName
     : firstIncomingCounterpartyName;
   const incomingOtpPopupAvatarUri =
     incomingTripOrgInvite?.from_org_logo_url?.trim() ||
@@ -1277,31 +1312,28 @@ export default function DriverRadarScreen() {
   const showNewAssignmentCard = Boolean(
     hasIncomingTrip &&
     (assignmentFeedback != null ||
-      (effectiveIncomingId !==
-        String(acceptedTripId ?? "").toLowerCase() &&
-        effectiveIncomingId !==
-          justClaimedTripIdRef.current &&
-        effectiveIncomingId !==
-          justClaimedOldTripIdRef.current &&
+      (effectiveIncomingId !== String(acceptedTripId ?? "").toLowerCase() &&
+        effectiveIncomingId !== justClaimedTripIdRef.current &&
+        effectiveIncomingId !== justClaimedOldTripIdRef.current &&
         !activeMission)),
   );
   const isAcceptedIncomingFlow = Boolean(
     effectiveFirstIncoming &&
-      String(acceptedTripId ?? "").toLowerCase() ===
-        String(effectiveFirstIncoming.id).toLowerCase(),
+    String(acceptedTripId ?? "").toLowerCase() ===
+      String(effectiveFirstIncoming.id).toLowerCase(),
   );
   const shouldUseStaticMapSheetCard = Boolean(
     showNewAssignmentCard || activeMission || isAcceptedIncomingFlow,
   );
   const shouldShowIncomingOtpPopup = Boolean(
     effectiveFirstIncoming &&
-      firstIncomingRequiresOtp &&
-      incomingOtpPopupTripId != null &&
-      String(incomingOtpPopupTripId).toLowerCase() ===
-        String(effectiveFirstIncoming.id).toLowerCase() &&
-      !assignmentFeedback &&
-      !activeMission &&
-      !isAcceptedIncomingFlow,
+    firstIncomingRequiresOtp &&
+    incomingOtpPopupTripId != null &&
+    String(incomingOtpPopupTripId).toLowerCase() ===
+      String(effectiveFirstIncoming.id).toLowerCase() &&
+    !assignmentFeedback &&
+    !activeMission &&
+    !isAcceptedIncomingFlow,
   );
   useEffect(() => {
     if (!showNewAssignmentCard) return;
@@ -1348,9 +1380,7 @@ export default function DriverRadarScreen() {
   // Show map shell for active mission, incoming assignment (including load-based pending OTP),
   // or assignment feedback.
   const shouldShowMap = Boolean(
-    activeMission ||
-      hasIncomingTrip ||
-      assignmentFeedback != null,
+    activeMission || hasIncomingTrip || assignmentFeedback != null,
   );
   const activeGuidanceStep = activeGuidanceTrip
     ? deriveDriverGuidanceStep(activeGuidanceTrip)
@@ -1366,8 +1396,10 @@ export default function DriverRadarScreen() {
   const highlightedTarget = activeGuidance?.target ?? null;
 
   // Ola-style: keep the important route/marker in the top ~50% of the screen.
-  const olaMapBottomPaddingPx = Math.round(Dimensions.get('window').height * 0.5);
-  const screenHeight = Dimensions.get('window').height;
+  const olaMapBottomPaddingPx = Math.round(
+    Dimensions.get("window").height * 0.5,
+  );
+  const screenHeight = Dimensions.get("window").height;
   const sheetSnapPoints = useMemo(() => {
     if (shouldUseStaticMapSheetCard) {
       // In dynamic sizing mode (v5), we still need to provide valid snap points.
@@ -1377,10 +1409,7 @@ export default function DriverRadarScreen() {
     const mid = Math.round(Dimensions.get("window").height * 0.5); // Fixed half-screen
     const min = Math.max(
       220,
-      Math.min(
-        mid - 60,
-        Math.round(Dimensions.get("window").height * 0.28),
-      ),
+      Math.min(mid - 60, Math.round(Dimensions.get("window").height * 0.28)),
     ); // Smaller card
     const expanded = Math.max(
       mid + 80,
@@ -1392,44 +1421,51 @@ export default function DriverRadarScreen() {
     return [min, mid, expanded];
   }, [screenHeight, insets.top, shouldUseStaticMapSheetCard]);
 
-  const snapSheetToIndex = useCallback((idx: number) => {
-    try {
-      const sheetAny = bottomSheetRef.current as any;
-      // If we only have one snap point (static mode), always snap to index 0
-      const targetIdx = sheetSnapPoints.length === 1 ? 0 : idx;
-      if (targetIdx < sheetSnapPoints.length) {
-        sheetAny?.snapToIndex?.(targetIdx);
+  const snapSheetToIndex = useCallback(
+    (idx: number) => {
+      try {
+        const sheetAny = bottomSheetRef.current as any;
+        // If we only have one snap point (static mode), always snap to index 0
+        const targetIdx = sheetSnapPoints.length === 1 ? 0 : idx;
+        if (targetIdx < sheetSnapPoints.length) {
+          sheetAny?.snapToIndex?.(targetIdx);
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
-    }
-  }, [sheetSnapPoints.length]);
+    },
+    [sheetSnapPoints.length],
+  );
 
-  const handleTripFlowOperationActiveChange = useCallback((active: boolean) => {
-    sheetOperationActiveRef.current = active;
-    setSheetOperationActive(active);
+  const handleTripFlowOperationActiveChange = useCallback(
+    (active: boolean) => {
+      sheetOperationActiveRef.current = active;
+      setSheetOperationActive(active);
 
-    if (sheetSnapTimerRef.current) {
-      clearTimeout(sheetSnapTimerRef.current);
-      sheetSnapTimerRef.current = null;
-    }
+      if (sheetSnapTimerRef.current) {
+        clearTimeout(sheetSnapTimerRef.current);
+        sheetSnapTimerRef.current = null;
+      }
 
-    if (active) {
-      // Keep at mid (index 1) or allow manual scroll during operation.
-      // snapSheetToIndex(1); // Optionally snap to mid if not at mid
-      return;
-    }
+      if (active) {
+        // Keep at mid (index 1) or allow manual scroll during operation.
+        // snapSheetToIndex(1); // Optionally snap to mid if not at mid
+        return;
+      }
 
-    // Return to the "resting" half position shortly after operations end.
-    sheetSnapTimerRef.current = setTimeout(() => {
-      if (!sheetOperationActiveRef.current) snapSheetToIndex(1);
-    }, 180);
-  }, [snapSheetToIndex]);
+      // Return to the "resting" half position shortly after operations end.
+      sheetSnapTimerRef.current = setTimeout(() => {
+        if (!sheetOperationActiveRef.current) snapSheetToIndex(1);
+      }, 180);
+    },
+    [snapSheetToIndex],
+  );
 
   // When a fresh assignment appears, expand the bottom sheet once so the full card is visible.
   // This does not lock scrolling; user can still drag/scroll the sheet normally afterward.
   useEffect(() => {
-    if (!shouldShowMap || !showNewAssignmentCard || !effectiveFirstIncoming) return;
+    if (!shouldShowMap || !showNewAssignmentCard || !effectiveFirstIncoming)
+      return;
     const tripId = String(effectiveFirstIncoming.id).toLowerCase();
     if (lastAutoExpandedIncomingTripIdRef.current === tripId) return;
 
@@ -1445,14 +1481,17 @@ export default function DriverRadarScreen() {
     snapSheetToIndex,
   ]);
 
-  const openOtpClaim = useCallback((trip: tripsService.TripRow) => {
-    setAcceptError(null);
-    setOtpError(null);
-    setOtpValue("");
-    setOtpClaimTripId(trip.id);
-    if (shouldShowMap) snapSheetToIndex(2);
-    setTimeout(() => otpInputRef.current?.focus(), 150);
-  }, [snapSheetToIndex, shouldShowMap]);
+  const openOtpClaim = useCallback(
+    (trip: tripsService.TripRow) => {
+      setAcceptError(null);
+      setOtpError(null);
+      setOtpValue("");
+      setOtpClaimTripId(trip.id);
+      if (shouldShowMap) snapSheetToIndex(2);
+      setTimeout(() => otpInputRef.current?.focus(), 150);
+    },
+    [snapSheetToIndex, shouldShowMap],
+  );
 
   // Clear OTP claim UI only on explicit cancel or after a successful claim feedback timeout.
   // We removed the auto-clear useEffect to prevent race conditions during backend lag.
@@ -1499,7 +1538,8 @@ export default function DriverRadarScreen() {
           justClaimedTripIdRef.current = String(tripIdToSet).toLowerCase();
           // Also track the original ID used to claim, as it may change during the process
           if (otpClaimTripId) {
-            justClaimedOldTripIdRef.current = String(otpClaimTripId).toLowerCase();
+            justClaimedOldTripIdRef.current =
+              String(otpClaimTripId).toLowerCase();
           }
           void AsyncStorage.setItem(DRIVER_ACCEPTED_TRIP_ID_KEY, tripIdToSet);
           setAcceptedTripId(tripIdToSet);
@@ -1559,14 +1599,18 @@ export default function DriverRadarScreen() {
     };
   }, []);
   const lastCameraAnimTsRef = useRef(0);
-  const lastCameraCenterRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const lastCameraCenterRef = useRef<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
 
   // Smoothly follow the driver marker with `animateCamera` (avoid jitter from `fitToCoordinates`).
   useEffect(() => {
     if (!shouldShowMap) return;
     if (!driverMapPosition) return;
 
-    const showLeaflet = Platform.OS === "web" || useLeafletFallback || leafLetForced;
+    const showLeaflet =
+      Platform.OS === "web" || useLeafletFallback || leafLetForced;
 
     if (!showLeaflet && !mapRef.current) return;
 
@@ -1591,7 +1635,7 @@ export default function DriverRadarScreen() {
     if (showLeaflet) {
       const targetRef = isFullMapVisible ? fullLeafletRef : leafletRef;
       if (targetRef.current) {
-         targetRef.current.focusCurrentLocation(driverMapPosition, 15);
+        targetRef.current.focusCurrentLocation(driverMapPosition, 15);
       }
       return;
     }
@@ -1608,12 +1652,16 @@ export default function DriverRadarScreen() {
           pitch: 0,
           heading: Number.isFinite(heading) ? heading : 0,
         },
-        { duration: 450 }
+        { duration: 450 },
       );
     } catch {
       // ignore camera animation failures
     }
-  }, [driverMapPosition?.latitude, driverMapPosition?.longitude, shouldShowMap]);
+  }, [
+    driverMapPosition?.latitude,
+    driverMapPosition?.longitude,
+    shouldShowMap,
+  ]);
 
   const [optimalRoute, setOptimalRoute] = useState<RouteResult | null>(null);
   const [optimalRouteLoading, setOptimalRouteLoading] = useState(false);
@@ -1624,16 +1672,28 @@ export default function DriverRadarScreen() {
   // not a straight-line fallback, throughout assignment -> completion.
   const routeFetchKey = useMemo(() => {
     if (!shouldShowMap) return null;
-    const tripForRoute = (activeMission || effectiveFirstIncoming) as tripsService.TripRow | null;
-    const pickup = tripForRoute ? getTripStopCoordinate(tripForRoute, 'pickup') : null;
-    const drop = tripForRoute ? getTripStopCoordinate(tripForRoute, 'drop') : null;
+    const tripForRoute = (activeMission ||
+      effectiveFirstIncoming) as tripsService.TripRow | null;
+    const pickup = tripForRoute
+      ? getTripStopCoordinate(tripForRoute, "pickup")
+      : null;
+    const drop = tripForRoute
+      ? getTripStopCoordinate(tripForRoute, "drop")
+      : null;
 
-    const start = activeMission && driverMapPosition ? driverMapPosition : pickup;
+    const start =
+      activeMission && driverMapPosition ? driverMapPosition : pickup;
     const end = activeMission ? guidanceTargetCoordinate : drop;
 
     if (!start || !end || !tripForRoute) return null;
     return buildRouteFetchKey(tripForRoute.id, start, end);
-  }, [shouldShowMap, activeMission, effectiveFirstIncoming, driverMapPosition, guidanceTargetCoordinate]);
+  }, [
+    shouldShowMap,
+    activeMission,
+    effectiveFirstIncoming,
+    driverMapPosition,
+    guidanceTargetCoordinate,
+  ]);
 
   useEffect(() => {
     if (!routeFetchKey) {
@@ -2099,10 +2159,7 @@ export default function DriverRadarScreen() {
 
   // Pulsating circle when searching for assignments (online, no mission, no incoming)
   const showSearchingOverlay = Boolean(
-    driver &&
-    isOnline &&
-    !activeMission &&
-    !effectiveFirstIncoming
+    driver && isOnline && !activeMission && !effectiveFirstIncoming,
   );
 
   useEffect(() => {
@@ -2119,7 +2176,8 @@ export default function DriverRadarScreen() {
     return () => loop.stop();
   }, [showSearchingOverlay, searchPulseAnim]);
 
-  const driverName = profile?.full_name?.trim() || profile?.displayName?.trim() || "Pilot";
+  const driverName =
+    profile?.full_name?.trim() || profile?.displayName?.trim() || "Pilot";
 
   const handleFocusCurrentLocation = useCallback(async (): Promise<boolean> => {
     try {
@@ -2157,7 +2215,8 @@ export default function DriverRadarScreen() {
 
       if (!currentPos) return false;
 
-      const showLeaflet = Platform.OS === "web" || useLeafletFallback || leafLetForced;
+      const showLeaflet =
+        Platform.OS === "web" || useLeafletFallback || leafLetForced;
 
       if (showLeaflet) {
         const targetRef = isFullMapVisible ? fullLeafletRef : leafletRef;
@@ -2183,7 +2242,7 @@ export default function DriverRadarScreen() {
             pitch: 0,
             heading: Number(youHeadingSv.value) || 0,
           },
-          { duration: 500 }
+          { duration: 500 },
         );
       } else if (mapAny?.animateToRegion) {
         // Fallback to animateToRegion which is universally supported
@@ -2194,7 +2253,7 @@ export default function DriverRadarScreen() {
             latitudeDelta: 0.005,
             longitudeDelta: 0.005,
           },
-          500
+          500,
         );
       }
       return true;
@@ -2232,9 +2291,13 @@ export default function DriverRadarScreen() {
 
         // Ensure only one watcher exists.
         locationWatchRef.current?.remove?.();
-        locationWatchRef.current = await (expoLocation as any).watchPositionAsync(
+        locationWatchRef.current = await (
+          expoLocation as any
+        ).watchPositionAsync(
           {
-            accuracy: (expoLocation as any).Accuracy?.Balanced ?? (expoLocation as any).Accuracy?.High,
+            accuracy:
+              (expoLocation as any).Accuracy?.Balanced ??
+              (expoLocation as any).Accuracy?.High,
             distanceInterval: 20,
             timeInterval: 5000,
           } as any,
@@ -2250,7 +2313,8 @@ export default function DriverRadarScreen() {
             youLonSv.value = withTiming(next.longitude, { duration: 450 });
 
             // Keep the visible map centered while following.
-            const showLeaflet = Platform.OS === "web" || useLeafletFallback || leafLetForced;
+            const showLeaflet =
+              Platform.OS === "web" || useLeafletFallback || leafLetForced;
             if (showLeaflet) {
               const targetRef = isFullMapVisible ? fullLeafletRef : leafletRef;
               targetRef.current?.focusCurrentLocation?.(next, 15);
@@ -2329,7 +2393,8 @@ export default function DriverRadarScreen() {
 
     const mapCenter = driverMapPosition ?? DEFAULT_MAP_REGION;
 
-    const showLeaflet = Platform.OS === "web" || useLeafletFallback || leafLetForced;
+    const showLeaflet =
+      Platform.OS === "web" || useLeafletFallback || leafLetForced;
 
     const pickup =
       shouldShowMap && (effectiveFirstIncoming || activeMission)
@@ -2417,11 +2482,17 @@ export default function DriverRadarScreen() {
             style={isFullScreen ? styles.fullMapView : styles.assignedMapInHalf}
             initialRegion={
               driverMapPosition
-                ? { ...driverMapPosition, latitudeDelta: 0.02, longitudeDelta: 0.02 }
+                ? {
+                    ...driverMapPosition,
+                    latitudeDelta: 0.02,
+                    longitudeDelta: 0.02,
+                  }
                 : DEFAULT_MAP_REGION
             }
-            mapType={Platform.OS === 'ios' ? ('mutedStandard' as any) : 'standard'}
-            userInterfaceStyle={mapIsDark ? ('dark' as any) : ('light' as any)}
+            mapType={
+              Platform.OS === "ios" ? ("mutedStandard" as any) : "standard"
+            }
+            userInterfaceStyle={mapIsDark ? ("dark" as any) : ("light" as any)}
             customMapStyle={mapIsDark ? (darkMapStyle as any) : undefined}
             showsUserLocation={false}
             scrollEnabled={!mapInteractionsLocked}
@@ -2432,12 +2503,21 @@ export default function DriverRadarScreen() {
             pointerEvents="auto"
             onMapReady={() => {
               // Native map became ready — clear "booting" so we don't fallback on next launch.
-              void AsyncStorage.setItem(DRIVER_MAP_BOOT_KEY, "0").catch(() => {});
-              void AsyncStorage.removeItem(DRIVER_MAP_BOOT_TS_KEY).catch(() => {});
+              void AsyncStorage.setItem(DRIVER_MAP_BOOT_KEY, "0").catch(
+                () => {},
+              );
+              void AsyncStorage.removeItem(DRIVER_MAP_BOOT_TS_KEY).catch(
+                () => {},
+              );
               // Do not animateCamera here — it fights fitMapToActiveContext and user pan/pinch
               // (including at drop-off / Upload POD when the bottom sheet layout shifts).
             }}
-            mapPadding={{ top: 0, left: 0, right: 0, bottom: olaMapBottomPaddingPx }}
+            mapPadding={{
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: olaMapBottomPaddingPx,
+            }}
           >
             {/* Always render the "You" marker so the current-location indication is visible
               immediately, then it updates as driverMapPosition becomes available. */}
@@ -2451,16 +2531,44 @@ export default function DriverRadarScreen() {
                   style={[
                     styles.olaYouMarker,
                     youIconAnimatedStyle,
-                    { backgroundColor: Theme.primary, borderColor: colors.border }
+                    {
+                      backgroundColor: Theme.primary,
+                      borderColor: colors.border,
+                    },
                   ]}
                 >
-                  <FontAwesome name="location-arrow" size={16} color={Theme.textOnPrimary} />
+                  <FontAwesome
+                    name="location-arrow"
+                    size={16}
+                    color={Theme.textOnPrimary}
+                  />
                 </Reanimated.View>
                 <Callout>
-                  <View style={[styles.assignedMapCallout, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                    <Text style={[styles.assignedMapCalloutTitle, { color: colors.text }]}>You</Text>
-                    <Text style={[styles.assignedMapCalloutSub, { color: colors.textMuted }]} numberOfLines={2}>
-                      {locationLabel ?? 'Current location'}
+                  <View
+                    style={[
+                      styles.assignedMapCallout,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.assignedMapCalloutTitle,
+                        { color: colors.text },
+                      ]}
+                    >
+                      You
+                    </Text>
+                    <Text
+                      style={[
+                        styles.assignedMapCalloutSub,
+                        { color: colors.textMuted },
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {locationLabel ?? "Current location"}
                     </Text>
                   </View>
                 </Callout>
@@ -2521,7 +2629,11 @@ export default function DriverRadarScreen() {
                           styles.customMapMarkerActive,
                       ]}
                     >
-                      <FontAwesome name="flag" size={highlightedTarget === 'drop' ? 12 : 10} color="white" />
+                      <FontAwesome
+                        name="flag"
+                        size={highlightedTarget === "drop" ? 12 : 10}
+                        color="white"
+                      />
                     </View>
                   </Marker>
                 )}
@@ -2543,17 +2655,22 @@ export default function DriverRadarScreen() {
                     />
                   </>
                 ) : (
-                  showRouteFallback && (() => {
+                  showRouteFallback &&
+                  (() => {
                     const fallbackPickup = getTripStopCoordinate(
-                      (activeMission || effectiveFirstIncoming) as tripsService.TripRow,
-                      'pickup'
+                      (activeMission ||
+                        effectiveFirstIncoming) as tripsService.TripRow,
+                      "pickup",
                     );
                     const fallbackDrop = getTripStopCoordinate(
-                      (activeMission || effectiveFirstIncoming) as tripsService.TripRow,
-                      'drop'
+                      (activeMission ||
+                        effectiveFirstIncoming) as tripsService.TripRow,
+                      "drop",
                     );
                     const fallbackCoordinates =
-                      activeMission && driverMapPosition && guidanceTargetCoordinate
+                      activeMission &&
+                      driverMapPosition &&
+                      guidanceTargetCoordinate
                         ? [driverMapPosition, guidanceTargetCoordinate]
                         : fallbackPickup && fallbackDrop
                           ? [fallbackPickup, fallbackDrop]
@@ -2623,108 +2740,115 @@ export default function DriverRadarScreen() {
           </View>
         ) : null}
 
-
-        
         {/* Full route (modal) + live location — top of map, aligned.
             Hide controls during OTP entry UI. */}
         {otpClaimTripId == null ? (
-        <View
-          style={[
-            styles.mapTopControlsRow,
-            {
-              // IMPORTANT:
-              // - In the main Driver screen, the map is rendered "fullScreen" behind the header.
-              //   So controls must be pushed down below the header (embedded variant).
-              // - In the modal full-map view, controls should sit at the top safe area.
-              top:
-                controlsVariant === "embedded"
-                  ? insets.top + 96
-                  : insets.top + 10,
-            },
-          ]}
-          pointerEvents="box-none"
-        >
-          {controlsVariant === "embedded" ? (
-            <TouchableOpacity
-              style={[
-                styles.mapTopPillButton,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-              ]}
-              onPress={() => {
-                setIsFullMapVisible(true);
-                setTimeout(() => {
-                  try {
-                    fitMapToActiveContext(fullMapRef, { isFullScreen: true, force: true });
-                  } catch {}
-                }, 350);
-              }}
-              activeOpacity={0.88}
-              accessibilityLabel="Open full screen map"
-              accessibilityRole="button"
-            >
-              <FontAwesome name="expand" size={15} color={colors.text} />
-              <Text
-                style={[styles.mapTopPillLabel, { color: colors.text }]}
-                numberOfLines={1}
-              >
-                Full view
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[
-                styles.mapTopPillButton,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-              ]}
-              onPress={() => {
-                setIsFullMapVisible(false);
-                setTimeout(() => {
-                  try {
-                    fitMapToActiveContext(mapRef, { force: true });
-                  } catch {}
-                }, 200);
-              }}
-              activeOpacity={0.88}
-              accessibilityLabel="Close full screen map"
-              accessibilityRole="button"
-            >
-              <FontAwesome name="compress" size={15} color={colors.text} />
-              <Text
-                style={[styles.mapTopPillLabel, { color: colors.text }]}
-                numberOfLines={1}
-              >
-                Done
-              </Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity
+          <View
             style={[
-              styles.mapTopPillButton,
-              { backgroundColor: colors.surface, borderColor: colors.border },
+              styles.mapTopControlsRow,
+              {
+                // IMPORTANT:
+                // - In the main Driver screen, the map is rendered "fullScreen" behind the header.
+                //   So controls must be pushed down below the header (embedded variant).
+                // - In the modal full-map view, controls should sit at the top safe area.
+                top:
+                  controlsVariant === "embedded"
+                    ? insets.top + 96
+                    : insets.top + 10,
+              },
             ]}
-            onPress={async () => {
-              // First: center immediately. Only enable follow if we got a real fix.
-              const ok = await handleFocusCurrentLocation();
-              if (ok) setIsFollowingLocation(true);
-            }}
-            onLongPress={() => setIsFollowingLocation(false)}
-            accessibilityLabel="Track current location"
-            accessibilityRole="button"
-            disabled={isFetchingLocation}
+            pointerEvents="box-none"
           >
-            {isFetchingLocation ? (
-              <ActivityIndicator size="small" color={Theme.primary} />
+            {controlsVariant === "embedded" ? (
+              <TouchableOpacity
+                style={[
+                  styles.mapTopPillButton,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+                onPress={() => {
+                  setIsFullMapVisible(true);
+                  setTimeout(() => {
+                    try {
+                      fitMapToActiveContext(fullMapRef, {
+                        isFullScreen: true,
+                        force: true,
+                      });
+                    } catch {}
+                  }, 350);
+                }}
+                activeOpacity={0.88}
+                accessibilityLabel="Open full screen map"
+                accessibilityRole="button"
+              >
+                <FontAwesome name="expand" size={15} color={colors.text} />
+                <Text
+                  style={[styles.mapTopPillLabel, { color: colors.text }]}
+                  numberOfLines={1}
+                >
+                  Full view
+                </Text>
+              </TouchableOpacity>
             ) : (
-              <FontAwesome name="crosshairs" size={17} color={colors.text} />
+              <TouchableOpacity
+                style={[
+                  styles.mapTopPillButton,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+                onPress={() => {
+                  setIsFullMapVisible(false);
+                  setTimeout(() => {
+                    try {
+                      fitMapToActiveContext(mapRef, { force: true });
+                    } catch {}
+                  }, 200);
+                }}
+                activeOpacity={0.88}
+                accessibilityLabel="Close full screen map"
+                accessibilityRole="button"
+              >
+                <FontAwesome name="compress" size={15} color={colors.text} />
+                <Text
+                  style={[styles.mapTopPillLabel, { color: colors.text }]}
+                  numberOfLines={1}
+                >
+                  Done
+                </Text>
+              </TouchableOpacity>
             )}
-            <Text
-              style={[styles.mapTopPillLabel, { color: colors.text }]}
-              numberOfLines={1}
+            <TouchableOpacity
+              style={[
+                styles.mapTopPillButton,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+              onPress={async () => {
+                // First: center immediately. Only enable follow if we got a real fix.
+                const ok = await handleFocusCurrentLocation();
+                if (ok) setIsFollowingLocation(true);
+              }}
+              onLongPress={() => setIsFollowingLocation(false)}
+              accessibilityLabel="Track current location"
+              accessibilityRole="button"
+              disabled={isFetchingLocation}
             >
-              {isFollowingLocation ? "Tracking" : "My location"}
-            </Text>
-          </TouchableOpacity>
-        </View>
+              {isFetchingLocation ? (
+                <ActivityIndicator size="small" color={Theme.primary} />
+              ) : (
+                <FontAwesome name="crosshairs" size={17} color={colors.text} />
+              )}
+              <Text
+                style={[styles.mapTopPillLabel, { color: colors.text }]}
+                numberOfLines={1}
+              >
+                {isFollowingLocation ? "Tracking" : "My location"}
+              </Text>
+            </TouchableOpacity>
+          </View>
         ) : null}
       </View>
     );
@@ -2732,202 +2856,178 @@ export default function DriverRadarScreen() {
 
   const renderDriverDashboardTripInner = (mapSheet: boolean) => (
     <>
-    {/* Only show separate OTP block when first pending OTP (non-roster) is not already the main assignment card */}
-    {!shouldShowMap &&
-      pendingOtpTripsRequiringOtp.length > 0 &&
-      !(
-        effectiveFirstIncoming &&
-        pendingOtpTripsRequiringOtp[0]?.id ===
-          effectiveFirstIncoming.id
-      ) && (
-        <View
-          style={[
-            styles.centerCardWrap,
-            styles.centerCardConstraint,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              marginBottom: 16,
-            },
-          ]}
-        >
+      {/* Only show separate OTP block when first pending OTP (non-roster) is not already the main assignment card */}
+      {!shouldShowMap &&
+        pendingOtpTripsRequiringOtp.length > 0 &&
+        !(
+          effectiveFirstIncoming &&
+          pendingOtpTripsRequiringOtp[0]?.id === effectiveFirstIncoming.id
+        ) && (
           <View
             style={[
-              styles.offlineIconWrap,
-              { backgroundColor: colors.emeraldMuted },
+              styles.centerCardWrap,
+              styles.centerCardConstraint,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                marginBottom: 16,
+              },
             ]}
           >
-            <FontAwesome
-              name="key"
-              size={28}
-              color={colors.emerald}
-            />
-          </View>
-          <Text
-            style={[
-              styles.offlineCardTitle,
-              { color: colors.text },
-            ]}
-          >
-            Trip{pendingOtpTripsRequiringOtp.length > 1 ? "s" : ""}{" "}
-            waiting for OTP
-          </Text>
-          <Text
-            style={[
-              styles.offlineCardSubtitle,
-              { color: colors.textMuted, marginTop: 4 },
-            ]}
-          >
-            Enter the OTP from your dispatcher in the app to claim{" "}
-            {pendingOtpTripsRequiringOtp.length > 1 ? "them" : "it"}
-            .
-          </Text>
-          <TouchableOpacity
-            style={[
-              styles.goOnlineBtn,
-              { backgroundColor: colors.emerald, marginTop: 16 },
-            ]}
-            onPress={() =>
-              openOtpClaim(pendingOtpTripsRequiringOtp[0])
-            }
-            activeOpacity={0.8}
-          >
-            <FontAwesome
-              name="key"
-              size={16}
-              color={Theme.textOnPrimary}
-              style={styles.goOnlineBtnIcon}
-            />
-            <Text style={styles.goOnlineBtnText}>
-              Enter OTP to claim
-            </Text>
-            <FontAwesome
-              name="chevron-right"
-              size={14}
-              color={Theme.textOnPrimary}
-            />
-          </TouchableOpacity>
-        </View>
-      )}
-    {!shouldShowMap &&
-      pendingOtpTripsRequiringOtp.length > 0 &&
-      !(
-        effectiveFirstIncoming &&
-        pendingOtpTripsRequiringOtp[0]?.id ===
-          effectiveFirstIncoming.id
-      ) && (
-        <View style={styles.centerCardConstraint}>
-          {pendingOtpTripsRequiringOtp.map((trip) => (
             <View
-              key={trip.id}
               style={[
-                styles.centerCardWrap,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  marginBottom: 12,
-                },
+                styles.offlineIconWrap,
+                { backgroundColor: colors.emeraldMuted },
               ]}
             >
-              <Text
+              <FontAwesome name="key" size={28} color={colors.emerald} />
+            </View>
+            <Text style={[styles.offlineCardTitle, { color: colors.text }]}>
+              Trip{pendingOtpTripsRequiringOtp.length > 1 ? "s" : ""} waiting
+              for OTP
+            </Text>
+            <Text
+              style={[
+                styles.offlineCardSubtitle,
+                { color: colors.textMuted, marginTop: 4 },
+              ]}
+            >
+              Enter the OTP from your dispatcher in the app to claim{" "}
+              {pendingOtpTripsRequiringOtp.length > 1 ? "them" : "it"}.
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.goOnlineBtn,
+                { backgroundColor: colors.emerald, marginTop: 16 },
+              ]}
+              onPress={() => openOtpClaim(pendingOtpTripsRequiringOtp[0])}
+              activeOpacity={0.8}
+            >
+              <FontAwesome
+                name="key"
+                size={16}
+                color={Theme.textOnPrimary}
+                style={styles.goOnlineBtnIcon}
+              />
+              <Text style={styles.goOnlineBtnText}>Enter OTP to claim</Text>
+              <FontAwesome
+                name="chevron-right"
+                size={14}
+                color={Theme.textOnPrimary}
+              />
+            </TouchableOpacity>
+          </View>
+        )}
+      {!shouldShowMap &&
+        pendingOtpTripsRequiringOtp.length > 0 &&
+        !(
+          effectiveFirstIncoming &&
+          pendingOtpTripsRequiringOtp[0]?.id === effectiveFirstIncoming.id
+        ) && (
+          <View style={styles.centerCardConstraint}>
+            {pendingOtpTripsRequiringOtp.map((trip) => (
+              <View
+                key={trip.id}
                 style={[
-                  styles.offlineCardTitle,
-                  { color: colors.text },
+                  styles.centerCardWrap,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    marginBottom: 12,
+                  },
                 ]}
               >
-                {tripsService.getTripDisplayNumber(trip)}
-              </Text>
-              {otpClaimTripId != null &&
-              String(otpClaimTripId).toLowerCase() ===
-                String(trip.id).toLowerCase() ? (
-                assignmentFeedback === "accepted" ? (
-                  <View style={styles.feedbackBlock}>
-                    <View
+                <Text style={[styles.offlineCardTitle, { color: colors.text }]}>
+                  {tripsService.getTripDisplayNumber(trip)}
+                </Text>
+                {otpClaimTripId != null &&
+                String(otpClaimTripId).toLowerCase() ===
+                  String(trip.id).toLowerCase() ? (
+                  assignmentFeedback === "accepted" ? (
+                    <View style={styles.feedbackBlock}>
+                      <View
+                        style={[
+                          styles.feedbackIconWrap,
+                          styles.feedbackIconWrapSuccess,
+                          { backgroundColor: colors.emeraldMuted },
+                        ]}
+                      >
+                        <FontAwesome
+                          name="check-circle"
+                          size={36}
+                          color={colors.emerald}
+                        />
+                      </View>
+                      <Text
+                        style={[styles.feedbackTitle, { color: colors.text }]}
+                      >
+                        Trip booked
+                      </Text>
+                      <Text
+                        style={[
+                          styles.feedbackSubtitle,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        Head to pickup. Continue below.
+                      </Text>
+                    </View>
+                  ) : (
+                    renderOtpClaimCard(trip, { showCancel: true })
+                  )
+                ) : (
+                  <>
+                    <Text
                       style={[
-                        styles.feedbackIconWrap,
-                        styles.feedbackIconWrapSuccess,
-                        { backgroundColor: colors.emeraldMuted },
+                        styles.offlineCardSubtitle,
+                        { color: colors.textMuted, marginTop: 2 },
                       ]}
+                    >
+                      {trip.pickup_area?.trim() || "Pickup"} →{" "}
+                      {trip.drop_location?.trim() || "Drop-off"}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.offlineCardSubtitle,
+                        { color: colors.textMuted, marginTop: 4 },
+                      ]}
+                    >
+                      Aggregate trip reassigned by phone — accept and enter OTP
+                      to claim.
+                    </Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.goOnlineBtn,
+                        {
+                          backgroundColor: colors.emerald,
+                          marginTop: 12,
+                        },
+                      ]}
+                      onPress={() => openOtpClaim(trip)}
+                      activeOpacity={0.8}
                     >
                       <FontAwesome
-                        name="check-circle"
-                        size={36}
-                        color={colors.emerald}
+                        name="check"
+                        size={14}
+                        color={Theme.textOnPrimary}
+                        style={styles.goOnlineBtnIcon}
                       />
-                    </View>
-                    <Text
-                      style={[
-                        styles.feedbackTitle,
-                        { color: colors.text },
-                      ]}
-                    >
-                      Trip booked
-                    </Text>
-                    <Text
-                      style={[
-                        styles.feedbackSubtitle,
-                        { color: colors.textMuted },
-                      ]}
-                    >
-                      Head to pickup. Continue below.
-                    </Text>
-                  </View>
-                ) : (
-                  renderOtpClaimCard(trip, { showCancel: true })
-                )
-              ) : (
-                <>
-                  <Text
-                    style={[
-                      styles.offlineCardSubtitle,
-                      { color: colors.textMuted, marginTop: 2 },
-                    ]}
-                  >
-                    {trip.pickup_area?.trim() || "Pickup"} →{" "}
-                    {trip.drop_location?.trim() || "Drop-off"}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.offlineCardSubtitle,
-                      { color: colors.textMuted, marginTop: 4 },
-                    ]}
-                  >
-                    Aggregate trip reassigned by phone — accept and
-                    enter OTP to claim.
-                  </Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.goOnlineBtn,
-                      {
-                        backgroundColor: colors.emerald,
-                        marginTop: 12,
-                      },
-                    ]}
-                    onPress={() => openOtpClaim(trip)}
-                    activeOpacity={0.8}
-                  >
-                    <FontAwesome
-                      name="check"
-                      size={14}
-                      color={Theme.textOnPrimary}
-                      style={styles.goOnlineBtnIcon}
-                    />
-                    <Text style={styles.goOnlineBtnText}>
-                      Accept and enter OTP
-                    </Text>
-                    <FontAwesome
-                      name="chevron-right"
-                      size={14}
-                      color={Theme.textOnPrimary}
-                    />
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-          ))}
-        </View>
-      )}
-    {!driver && (
+                      <Text style={styles.goOnlineBtnText}>
+                        Accept and enter OTP
+                      </Text>
+                      <FontAwesome
+                        name="chevron-right"
+                        size={14}
+                        color={Theme.textOnPrimary}
+                      />
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
+      {!driver && (
         <View
           style={[
             styles.centerCardWrap,
@@ -2950,298 +3050,334 @@ export default function DriverRadarScreen() {
               color={colors.textMuted}
             />
           </View>
-          <Text
-            style={[
-              styles.offlineCardTitle,
-              { color: colors.text },
-            ]}
-          >
+          <Text style={[styles.offlineCardTitle, { color: colors.text }]}>
             No organisation linked
           </Text>
           <Text
-            style={[
-              styles.offlineCardSubtitle,
-              { color: colors.textMuted },
-            ]}
+            style={[styles.offlineCardSubtitle, { color: colors.textMuted }]}
           >
-            Request an invitation from your organisation. Once
-            accepted, your assigned trips will appear here.
+            Request an invitation from your organisation. Once accepted, your
+            assigned trips will appear here.
           </Text>
         </View>
       )}
-    {driver ? (
-      activeMission ? (
-        <DriverTripFlowCard
-          trip={activeMission}
-          commissionAmount={activeMissionCommission}
-          onRefresh={fetch}
-          onTripCompleted={() => setJustCompletedTrip(true)}
-          onBackToDashboard={async () => {
-            await AsyncStorage.removeItem(
-              DRIVER_ACCEPTED_TRIP_ID_KEY,
-            );
-            setAcceptedTripId(null);
-            setAssignmentFeedback(null);
-            setJustCompletedTrip(false);
-            justClaimedTripIdRef.current = null;
-            justClaimedOldTripIdRef.current = null;
-            fetch();
-          }}
-          {...(mapSheet
-            ? {
-                edgeToEdge: true,
-                variant: "page" as const,
-                onOperationActiveChange:
-                  handleTripFlowOperationActiveChange,
-              }
-            : {})}
-        />
-      ) : assignmentFeedback === "accepted" ? (
-        <View style={styles.feedbackBlock}>
-          <View
-            style={[
-              styles.feedbackIconWrap,
-              styles.feedbackIconWrapSuccess,
-              { backgroundColor: colors.emeraldMuted },
-            ]}
-          >
-            <FontAwesome
-              name="check-circle"
-              size={36}
-              color={colors.emerald}
-            />
+      {driver ? (
+        activeMission ? (
+          <DriverTripFlowCard
+            trip={activeMission}
+            commissionAmount={activeMissionCommission}
+            onRefresh={fetch}
+            onTripCompleted={() => setJustCompletedTrip(true)}
+            onBackToDashboard={async () => {
+              await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
+              setAcceptedTripId(null);
+              setAssignmentFeedback(null);
+              setJustCompletedTrip(false);
+              justClaimedTripIdRef.current = null;
+              justClaimedOldTripIdRef.current = null;
+              fetch();
+            }}
+            {...(mapSheet
+              ? {
+                  edgeToEdge: true,
+                  variant: "page" as const,
+                  onOperationActiveChange: handleTripFlowOperationActiveChange,
+                }
+              : {})}
+          />
+        ) : assignmentFeedback === "accepted" ? (
+          <View style={styles.feedbackBlock}>
+            <View
+              style={[
+                styles.feedbackIconWrap,
+                styles.feedbackIconWrapSuccess,
+                { backgroundColor: colors.emeraldMuted },
+              ]}
+            >
+              <FontAwesome
+                name="check-circle"
+                size={36}
+                color={colors.emerald}
+              />
+            </View>
+            <Text style={[styles.feedbackTitle, { color: colors.text }]}>
+              Trip booked
+            </Text>
+            <Text
+              style={[styles.feedbackSubtitle, { color: colors.textMuted }]}
+            >
+              Head to pickup. Continue below.
+            </Text>
           </View>
-          <Text
-            style={[styles.feedbackTitle, { color: colors.text }]}
-          >
-            Trip booked
-          </Text>
-          <Text
-            style={[
-              styles.feedbackSubtitle,
-              { color: colors.textMuted },
-            ]}
-          >
-            Head to pickup. Continue below.
-          </Text>
-        </View>
-      ) : assignmentFeedback === "declined" ? (
-        <View style={styles.feedbackBlock}>
-          <View
-            style={[
-              styles.feedbackIconWrap,
-              styles.feedbackIconWrapSkipped,
-              { backgroundColor: colors.whiteMuted },
-            ]}
-          >
-            <FontAwesome
-              name="times-circle"
-              size={36}
-              color={colors.textMuted}
-            />
+        ) : assignmentFeedback === "declined" ? (
+          <View style={styles.feedbackBlock}>
+            <View
+              style={[
+                styles.feedbackIconWrap,
+                styles.feedbackIconWrapSkipped,
+                { backgroundColor: colors.whiteMuted },
+              ]}
+            >
+              <FontAwesome
+                name="times-circle"
+                size={36}
+                color={colors.textMuted}
+              />
+            </View>
+            <Text style={[styles.feedbackTitle, { color: colors.text }]}>
+              Skipped
+            </Text>
+            <Text
+              style={[styles.feedbackSubtitle, { color: colors.textMuted }]}
+            >
+              Looking for your next trip.
+            </Text>
           </View>
-          <Text
-            style={[styles.feedbackTitle, { color: colors.text }]}
-          >
-            Skipped
-          </Text>
-          <Text
-            style={[
-              styles.feedbackSubtitle,
-              { color: colors.textMuted },
-            ]}
-          >
-            Looking for your next trip.
-          </Text>
-        </View>
-      ) : !isOnline && !effectiveFirstIncoming ? (
-      <View style={[styles.centerCardWrap, styles.offlineCardContent]}>
-        <Text style={[styles.offlineCardTitle, { color: colors.text }]}>You are currently offline</Text>
-        <Text style={[styles.offlineCardSubtitle, { color: colors.textMuted }]}>Go online to view and accept trip assignments.</Text>
-        <TouchableOpacity
-          style={[styles.searchOfflineBtn, { marginTop: 12, backgroundColor: colors.surface, borderColor: colors.border }]}
-          onPress={() => {
-            setIsOnline(true);
-            triggerSuccess("You are online now.");
-            fetch();
-            setLocationStatus("loading");
-            fetchLocation();
-            if (driver?.organization_id && driver?.id) {
-               void driversService.updateDriver(driver.organization_id, driver.id, { status: 'online' }).catch(() => {});
-            }
-          }}
-          activeOpacity={0.8}
-        >
-          <FontAwesome name="wifi" size={16} color={colors.text} />
-          <Text style={[styles.searchOfflineBtnText, { color: colors.text }]}>Go online</Text>
-        </TouchableOpacity>
-      </View>
-      ) : effectiveFirstIncoming &&
-        String(acceptedTripId ?? "").toLowerCase() ===
-          String(effectiveFirstIncoming.id).toLowerCase() ? (
-        <DriverTripFlowCard
-          trip={effectiveFirstIncoming}
-          commissionAmount={newAssignmentCommission}
-          onRefresh={fetch}
-          onTripCompleted={() => setJustCompletedTrip(true)}
-          onBackToDashboard={async () => {
-            await AsyncStorage.removeItem(
-              DRIVER_ACCEPTED_TRIP_ID_KEY,
-            );
-            setAcceptedTripId(null);
-            setAssignmentFeedback(null);
-            setJustCompletedTrip(false);
-            justClaimedTripIdRef.current = null;
-            justClaimedOldTripIdRef.current = null;
-            fetch();
-          }}
-          {...(mapSheet
-            ? {
-                edgeToEdge: true,
-                variant: "page" as const,
-                onOperationActiveChange:
-                  handleTripFlowOperationActiveChange,
-              }
-            : {})}
-        />
-      ) : showNewAssignmentCard &&
-        effectiveFirstIncoming &&
-        !shouldShowIncomingOtpPopup &&
-        !assignmentFeedback ? (
-        <JobRequestCard
-          pickup={effectiveFirstIncoming.pickup_area?.trim() || "—"}
-          dropoff={
-            effectiveFirstIncoming.drop_location?.trim() || "—"
-          }
-          distance={
-            (() => {
+        ) : !isOnline && !effectiveFirstIncoming ? (
+          <View style={[styles.centerCardWrap, styles.offlineCardContent]}>
+            <Text style={[styles.offlineCardTitle, { color: colors.text }]}>
+              You are currently offline
+            </Text>
+            <Text
+              style={[styles.offlineCardSubtitle, { color: colors.textMuted }]}
+            >
+              Go online to view and accept trip assignments.
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.searchOfflineBtn,
+                {
+                  marginTop: 12,
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+              ]}
+              onPress={() => {
+                setIsOnline(true);
+                triggerSuccess("You are online now.");
+                fetch();
+                setLocationStatus("loading");
+                fetchLocation();
+                if (driver?.organization_id && driver?.id) {
+                  void driversService
+                    .updateDriver(driver.organization_id, driver.id, {
+                      status: "online",
+                    })
+                    .catch(() => {});
+                }
+              }}
+              activeOpacity={0.8}
+            >
+              <FontAwesome name="wifi" size={16} color={colors.text} />
+              <Text
+                style={[styles.searchOfflineBtnText, { color: colors.text }]}
+              >
+                Go online
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : effectiveFirstIncoming &&
+          String(acceptedTripId ?? "").toLowerCase() ===
+            String(effectiveFirstIncoming.id).toLowerCase() ? (
+          <DriverTripFlowCard
+            trip={effectiveFirstIncoming}
+            commissionAmount={newAssignmentCommission}
+            onRefresh={fetch}
+            onTripCompleted={() => setJustCompletedTrip(true)}
+            onBackToDashboard={async () => {
+              await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
+              setAcceptedTripId(null);
+              setAssignmentFeedback(null);
+              setJustCompletedTrip(false);
+              justClaimedTripIdRef.current = null;
+              justClaimedOldTripIdRef.current = null;
+              fetch();
+            }}
+            {...(mapSheet
+              ? {
+                  edgeToEdge: true,
+                  variant: "page" as const,
+                  onOperationActiveChange: handleTripFlowOperationActiveChange,
+                }
+              : {})}
+          />
+        ) : showNewAssignmentCard &&
+          effectiveFirstIncoming &&
+          !shouldShowIncomingOtpPopup &&
+          !assignmentFeedback ? (
+          <JobRequestCard
+            pickup={effectiveFirstIncoming.pickup_area?.trim() || "—"}
+            dropoff={effectiveFirstIncoming.drop_location?.trim() || "—"}
+            distance={(() => {
               const d = effectiveFirstIncoming.distance;
-              const dNum = d != null ? parseFloat(String(d).replace(/[^0-9.]/g, "")) : NaN;
+              const dNum =
+                d != null ? parseFloat(String(d).replace(/[^0-9.]/g, "")) : NaN;
               if (!Number.isNaN(dNum) && dNum > 0) return formatTripDistance(d);
               if (optimalRouteLoading) return "...";
-              if (optimalRoute && 'distance' in optimalRoute) return formatTripDistance(optimalRoute.distance / 1000);
+              if (optimalRoute && "distance" in optimalRoute)
+                return formatTripDistance(optimalRoute.distance / 1000);
               return "—";
-            })()
-          }
-          eta={
-            (() => {
+            })()}
+            eta={(() => {
               const e = effectiveFirstIncoming.estimated_duration;
-              if (e != null && String(e).trim() !== "" && !String(e).includes("00:00:00")) return formatEstimatedDuration(e);
+              if (
+                e != null &&
+                String(e).trim() !== "" &&
+                !String(e).includes("00:00:00")
+              )
+                return formatEstimatedDuration(e);
               if (optimalRouteLoading) return "...";
-              if (optimalRoute && 'duration' in optimalRoute) {
+              if (optimalRoute && "duration" in optimalRoute) {
                 const dur = optimalRoute.duration;
                 return formatEstimatedDuration(
-                  dur >= 3600 
+                  dur >= 3600
                     ? `${Math.floor(dur / 3600)}H ${Math.round((dur % 3600) / 60)}M`
-                    : `${Math.round(dur / 60)}M`
+                    : `${Math.round(dur / 60)}M`,
                 );
               }
               return "—";
-            })()
-          }
-          earnings={
-            newAssignmentCommission > 0
-              ? formatINR(newAssignmentCommission)
-              : "SALARY"
-          }
-          onAccept={() =>
-            handleAcceptMission(effectiveFirstIncoming)
-          }
-          onDecline={() =>
-            handleDeclineAssignment(effectiveFirstIncoming.id)
-          }
-          requireOtp={firstIncomingRequiresOtp}
-          disabled={acceptLoading || declineLoading}
-          earningsAmountColor={jobRequestSheetPrimary}
-          primaryTextColor={jobRequestSheetPrimary}
-          mutedTextColor={jobRequestSheetMuted}
-          holdTrackColor={jobRequestHoldTrack}
-          accentColor={colors.emerald}
-          errorMessage={acceptError}
-          otpMode={
-            otpClaimTripId != null &&
-            String(otpClaimTripId).toLowerCase() ===
-              String(effectiveFirstIncoming.id).toLowerCase()
-          }
-          otpValue={otpValue}
-          onOtpChange={(value) => {
-            setOtpValue(value);
-            setOtpError(null);
-          }}
-          onOtpSubmit={handleSubmitOtpClaim}
-          otpSubmitting={otpSubmitting}
-          otpError={otpError}
-          onOtpCancel={closeOtpClaim}
-          edgeToEdge={mapSheet}
-          variant={mapSheet ? "page" : "card"}
-        />
-      ) : showSearchingOverlay ? (
-        <View style={styles.driverSearchingEmptyWrap}>
-          <View style={styles.driverSearchingEmptyContent}>
-            <View style={styles.driverSearchingVisualWrap}>
-              <Animated.View
-                style={[
-                  styles.driverSearchingRingOuter,
-                  {
-                    backgroundColor: colors.emerald,
-                    opacity: searchPulseAnim.interpolate({
-                      inputRange: [0, 0.5, 1],
-                      outputRange: [0.05, 0.15, 0.05],
-                    }),
-                  },
-                ]}
-              />
-              <Animated.View
-                style={[
-                  styles.driverSearchingRingMid,
-                  {
-                    backgroundColor: colors.emerald,
-                    opacity: searchPulseAnim.interpolate({
-                      inputRange: [0, 0.5, 1],
-                      outputRange: [0.1, 0.25, 0.1],
-                    }),
-                  },
-                ]}
-              />
-              <Animated.View
-                style={[
-                  styles.driverSearchingRingInner,
-                  {
-                    backgroundColor: colors.emerald,
-                    opacity: searchPulseAnim.interpolate({
-                      inputRange: [0, 0.6, 1],
-                      outputRange: [0.2, 0.5, 0.2],
-                    }),
-                  },
-                ]}
-              />
-              <View style={[styles.driverSearchingVisualInner, { backgroundColor: colors.emerald }]}>
-                <FontAwesome name="truck" size={40} color={colors.surface} />
-                <View style={styles.driverSearchingDots}>
-                  <View style={[styles.driverSearchingDot, { backgroundColor: colors.surface }]} />
-                  <View style={[styles.driverSearchingDot, { backgroundColor: colors.surface, opacity: 0.7 }]} />
-                  <View style={[styles.driverSearchingDot, { backgroundColor: colors.surface, opacity: 0.4 }]} />
+            })()}
+            earnings={
+              newAssignmentCommission > 0
+                ? formatINR(newAssignmentCommission)
+                : "SALARY"
+            }
+            onAccept={() => handleAcceptMission(effectiveFirstIncoming)}
+            onDecline={() => handleDeclineAssignment(effectiveFirstIncoming.id)}
+            requireOtp={firstIncomingRequiresOtp}
+            disabled={acceptLoading || declineLoading}
+            earningsAmountColor={jobRequestSheetPrimary}
+            primaryTextColor={jobRequestSheetPrimary}
+            mutedTextColor={jobRequestSheetMuted}
+            holdTrackColor={jobRequestHoldTrack}
+            accentColor={colors.emerald}
+            errorMessage={acceptError}
+            otpMode={
+              otpClaimTripId != null &&
+              String(otpClaimTripId).toLowerCase() ===
+                String(effectiveFirstIncoming.id).toLowerCase()
+            }
+            otpValue={otpValue}
+            onOtpChange={(value) => {
+              setOtpValue(value);
+              setOtpError(null);
+            }}
+            onOtpSubmit={handleSubmitOtpClaim}
+            otpSubmitting={otpSubmitting}
+            otpError={otpError}
+            onOtpCancel={closeOtpClaim}
+            edgeToEdge={mapSheet}
+            variant={mapSheet ? "page" : "card"}
+          />
+        ) : showSearchingOverlay ? (
+          <View style={styles.driverSearchingEmptyWrap}>
+            <View style={styles.driverSearchingEmptyContent}>
+              <View style={styles.driverSearchingVisualWrap}>
+                <Animated.View
+                  style={[
+                    styles.driverSearchingRingOuter,
+                    {
+                      backgroundColor: colors.emerald,
+                      opacity: searchPulseAnim.interpolate({
+                        inputRange: [0, 0.5, 1],
+                        outputRange: [0.05, 0.15, 0.05],
+                      }),
+                    },
+                  ]}
+                />
+                <Animated.View
+                  style={[
+                    styles.driverSearchingRingMid,
+                    {
+                      backgroundColor: colors.emerald,
+                      opacity: searchPulseAnim.interpolate({
+                        inputRange: [0, 0.5, 1],
+                        outputRange: [0.1, 0.25, 0.1],
+                      }),
+                    },
+                  ]}
+                />
+                <Animated.View
+                  style={[
+                    styles.driverSearchingRingInner,
+                    {
+                      backgroundColor: colors.emerald,
+                      opacity: searchPulseAnim.interpolate({
+                        inputRange: [0, 0.6, 1],
+                        outputRange: [0.2, 0.5, 0.2],
+                      }),
+                    },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.driverSearchingVisualInner,
+                    { backgroundColor: colors.emerald },
+                  ]}
+                >
+                  <FontAwesome name="truck" size={40} color={colors.surface} />
+                  <View style={styles.driverSearchingDots}>
+                    <View
+                      style={[
+                        styles.driverSearchingDot,
+                        { backgroundColor: colors.surface },
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.driverSearchingDot,
+                        { backgroundColor: colors.surface, opacity: 0.7 },
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.driverSearchingDot,
+                        { backgroundColor: colors.surface, opacity: 0.4 },
+                      ]}
+                    />
+                  </View>
                 </View>
               </View>
+
+              <Text
+                style={[styles.driverSearchingTitle, { color: colors.text }]}
+              >
+                No trips available
+              </Text>
+              <Text
+                style={[
+                  styles.driverSearchingSubtitle,
+                  { color: colors.textMuted, marginTop: 8 },
+                ]}
+              >
+                We’re looking for trips in your area.
+              </Text>
+
+              <TouchableOpacity
+                style={[
+                  styles.searchOfflineBtn,
+                  {
+                    marginTop: 18,
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+                onPress={handleSetOffline}
+                activeOpacity={0.8}
+              >
+                <FontAwesome name="power-off" size={16} color={colors.text} />
+                <Text
+                  style={[styles.searchOfflineBtnText, { color: colors.text }]}
+                >
+                  Go offline
+                </Text>
+              </TouchableOpacity>
             </View>
-
-            <Text style={[styles.driverSearchingTitle, { color: colors.text }]}>No trips available</Text>
-            <Text style={[styles.driverSearchingSubtitle, { color: colors.textMuted, marginTop: 8 }]}>We’re looking for trips in your area.</Text>
-
-            <TouchableOpacity
-              style={[styles.searchOfflineBtn, { marginTop: 18, backgroundColor: colors.surface, borderColor: colors.border }]}
-              onPress={handleSetOffline}
-              activeOpacity={0.8}
-            >
-              <FontAwesome name="power-off" size={16} color={colors.text} />
-              <Text style={[styles.searchOfflineBtnText, { color: colors.text }]}>Go offline</Text>
-            </TouchableOpacity>
           </View>
-        </View>
-      ) : (
-        <View style={{ paddingTop: 10 }} />
-      )
-    ) : null}
+        ) : (
+          <View style={{ paddingTop: 10 }} />
+        )
+      ) : null}
     </>
   );
 
@@ -3297,11 +3433,11 @@ export default function DriverRadarScreen() {
       {/* Ola-style persistent Operations Panel (bottom sheet) */}
       {shouldShowMap ? (
         <GestureHandlerRootView style={styles.olaDriverRoot}>
-            <KeyboardAvoidingView
-              style={styles.olaDriverKeyboardAvoid}
-              behavior={Platform.OS === "ios" ? "padding" : undefined}
-              keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 12 : 0}
-            >
+          <KeyboardAvoidingView
+            style={styles.olaDriverKeyboardAvoid}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 12 : 0}
+          >
             {/* Common Header for Map Mode */}
             {(showNewAssignmentCard ||
               activeMission ||
@@ -3368,16 +3504,12 @@ export default function DriverRadarScreen() {
                 sheetSnapPoints.length === 1
                   ? 0
                   : shouldUseStaticMapSheetCard
-                  ? 0
-                  : 1
+                    ? 0
+                    : 1
               }
               enablePanDownToClose={false}
-              enableHandlePanningGesture={
-                !shouldUseStaticMapSheetCard
-              }
-              enableContentPanningGesture={
-                !shouldUseStaticMapSheetCard
-              }
+              enableHandlePanningGesture={!shouldUseStaticMapSheetCard}
+              enableContentPanningGesture={!shouldUseStaticMapSheetCard}
               enableOverDrag={!shouldUseStaticMapSheetCard}
               enableDynamicSizing={shouldUseStaticMapSheetCard}
               ref={bottomSheetRef}
@@ -3386,10 +3518,7 @@ export default function DriverRadarScreen() {
               android_keyboardInputMode="adjustResize"
               onChange={(index) => {
                 // Only dismiss keyboard if we're snapping to a very low point or closing
-                if (
-                  index <= 0 &&
-                  !shouldUseStaticMapSheetCard
-                ) {
+                if (index <= 0 && !shouldUseStaticMapSheetCard) {
                   Keyboard.dismiss();
                 }
               }}
@@ -3401,10 +3530,9 @@ export default function DriverRadarScreen() {
                 overflow: "hidden",
               }}
               handleIndicatorStyle={{
-                backgroundColor:
-                  shouldUseStaticMapSheetCard
-                    ? "transparent"
-                    : colors.border,
+                backgroundColor: shouldUseStaticMapSheetCard
+                  ? "transparent"
+                  : colors.border,
                 width: 50,
                 height: 4,
                 borderRadius: 999,
@@ -3421,9 +3549,7 @@ export default function DriverRadarScreen() {
                     },
                   ]}
                 >
-                  <View
-                    style={[styles.assignedSheetContent, { flexGrow: 0 }]}
-                  >
+                  <View style={[styles.assignedSheetContent, { flexGrow: 0 }]}>
                     {showNotification && pendingInvite && (
                       <DriverInviteCard
                         invite={pendingInvite}
@@ -3531,7 +3657,6 @@ export default function DriverRadarScreen() {
         </GestureHandlerRootView>
       ) : null}
 
-
       <Modal
         visible={isFullMapVisible}
         animationType="slide"
@@ -3596,18 +3721,15 @@ export default function DriverRadarScreen() {
                   />
                 ) : (
                   <FontAwesome
-                    name={firstIncomingIsAggregate ? "briefcase" : "user-circle-o"}
+                    name={
+                      firstIncomingIsAggregate ? "briefcase" : "user-circle-o"
+                    }
                     size={18}
                     color={colors.textPrimary}
                   />
                 )}
               </View>
               <View style={styles.incomingOtpPopupHeroText}>
-                <Text
-                  style={[styles.incomingOtpPopupEyebrow, { color: colors.textMuted }]}
-                >
-                  {firstIncomingCounterpartyLabel.toUpperCase()}
-                </Text>
                 <Text
                   style={[styles.incomingOtpPopupTitle, { color: colors.text }]}
                 >
@@ -3648,7 +3770,10 @@ export default function DriverRadarScreen() {
                   />
                 </View>
                 <Text
-                  style={[styles.incomingOtpPopupRouteValue, { color: colors.text }]}
+                  style={[
+                    styles.incomingOtpPopupRouteValue,
+                    { color: colors.text },
+                  ]}
                   numberOfLines={2}
                 >
                   {incomingOtpPopupPickup}
@@ -3677,7 +3802,10 @@ export default function DriverRadarScreen() {
                   />
                 </View>
                 <Text
-                  style={[styles.incomingOtpPopupRouteValue, { color: colors.text }]}
+                  style={[
+                    styles.incomingOtpPopupRouteValue,
+                    { color: colors.text },
+                  ]}
                   numberOfLines={2}
                 >
                   {incomingOtpPopupDrop}
@@ -3743,9 +3871,13 @@ export default function DriverRadarScreen() {
             </View>
 
             <Text
-              style={[styles.incomingOtpPopupCaption, { color: colors.textMuted }]}
+              style={[
+                styles.incomingOtpPopupCaption,
+                { color: colors.textMuted },
+              ]}
             >
-              Review the assignment details and continue to OTP claim when you are ready.
+              Review the assignment details and continue to OTP claim when you
+              are ready.
             </Text>
             <TouchableOpacity
               style={[
@@ -3856,7 +3988,9 @@ export default function DriverRadarScreen() {
                   }}
                   onAccept={async () => {
                     setInviteActionId(pendingInvite.id);
-                    const { error } = await driversService.acceptDriverInvite(pendingInvite.id);
+                    const { error } = await driversService.acceptDriverInvite(
+                      pendingInvite.id,
+                    );
                     setInviteActionId(null);
                     if (!error) {
                       setInvitationAccepted(true);
@@ -3893,8 +4027,7 @@ export default function DriverRadarScreen() {
                   shouldShowMap &&
                     activeMission &&
                     styles.tripsScrollContentBottom,
-                  !driver &&
-                    styles.tripsScrollContentCentered,
+                  !driver && styles.tripsScrollContentCentered,
                   driver &&
                     (!isOnline || showSearchingOverlay) &&
                     styles.tripsScrollContentCentered,
@@ -3924,30 +4057,30 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.driverBackground,
   },
   driverSearchingEmptyWrap: {
-    width: '100%',
+    width: "100%",
     paddingHorizontal: 20,
     paddingTop: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     flexGrow: 1,
   },
   driverSearchingEmptyContent: {
-    width: '100%',
+    width: "100%",
     maxWidth: 420,
-    alignItems: 'center',
+    alignItems: "center",
   },
   driverSearchingVisualWrap: {
     width: 280,
     height: 280,
     borderRadius: 140,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 24,
-    overflow: 'visible',
-    position: 'relative',
+    overflow: "visible",
+    position: "relative",
   },
   driverSearchingRingOuter: {
-    position: 'absolute',
+    position: "absolute",
     width: 280,
     height: 280,
     borderRadius: 140,
@@ -3955,7 +4088,7 @@ const styles = StyleSheet.create({
     top: 0,
   },
   driverSearchingRingMid: {
-    position: 'absolute',
+    position: "absolute",
     width: 200,
     height: 200,
     borderRadius: 100,
@@ -3963,7 +4096,7 @@ const styles = StyleSheet.create({
     top: (280 - 200) / 2,
   },
   driverSearchingRingInner: {
-    position: 'absolute',
+    position: "absolute",
     width: 140,
     height: 140,
     borderRadius: 70,
@@ -3974,12 +4107,12 @@ const styles = StyleSheet.create({
     width: 110,
     height: 110,
     borderRadius: 55,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     zIndex: 2,
   },
   driverSearchingDots: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 6,
     marginTop: 10,
   },
@@ -3990,13 +4123,13 @@ const styles = StyleSheet.create({
   },
   driverSearchingTitle: {
     fontSize: 18,
-    fontWeight: '700',
-    textAlign: 'center',
+    fontWeight: "700",
+    textAlign: "center",
   },
   driverSearchingSubtitle: {
     fontSize: 13,
     lineHeight: 18,
-    textAlign: 'center',
+    textAlign: "center",
   },
   // Ola-style layout: full-screen map + persistent bottom sheet.
   olaDriverRoot: {
@@ -4175,132 +4308,143 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   inviteCard: {
-    width: '100%',
+    width: "100%",
     borderWidth: 1,
     borderRadius: 24,
     padding: 16,
     marginBottom: 12,
   },
   inviteCloseBtn: {
-      position: 'absolute',
-      top: 12,
-      right: 12,
-      width: 24,
-      height: 24,
-      borderRadius: 12,
-      backgroundColor: 'rgba(255,255,255,0.1)',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 10,
+    position: "absolute",
+    top: 12,
+    right: 12,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
   },
   inviteCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 12,
     gap: 12,
   },
   inviteAvatarWrap: {
-      width: 48,
-      height: 48,
-      borderRadius: 16,
-      backgroundColor: 'rgba(255,255,255,0.05)',
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.1)',
-      overflow: 'hidden',
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    overflow: "hidden",
   },
   inviteAvatarImg: {
-      width: '100%',
-      height: '100%',
+    width: "100%",
+    height: "100%",
   },
   inviteOrgInfo: {
-      flex: 1,
+    flex: 1,
   },
   inviteOrgNameRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   inviteOrgName: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: -0.2,
   },
   inviteVerifiedBadge: {
-      backgroundColor: '#E6F4EA',
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: 4,
+    backgroundColor: "#E6F4EA",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   inviteVerifiedText: {
-      color: '#137333',
-      fontSize: 10,
-      fontWeight: '800',
-      letterSpacing: 0.5,
+    color: "#137333",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.5,
   },
   inviteOrgStats: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginTop: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
   },
   inviteOrgStatsText: {
-      fontSize: 12,
-      fontWeight: '600',
+    fontSize: 12,
+    fontWeight: "600",
   },
   inviteOrgStatsDot: {
-      width: 4,
-      height: 4,
-      borderRadius: 2,
-      backgroundColor: Theme.textMuted,
-      marginHorizontal: 6,
-      opacity: 0.5,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Theme.textMuted,
+    marginHorizontal: 6,
+    opacity: 0.5,
   },
   inviteOffer: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
     marginBottom: 16,
   },
   inviteActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
   },
   inviteOfferBadge: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 12,
-      borderWidth: 1,
-      gap: 6,
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 6,
   },
   inviteOfferText: {
-      fontSize: 12,
-      fontWeight: '700',
+    fontSize: 12,
+    fontWeight: "700",
   },
   inviteActionBtns: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   inviteRejectBtn: {
     paddingVertical: 10,
     paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
-  inviteRejectBtnText: { fontSize: 13, fontWeight: '700' },
+  inviteRejectBtnText: { fontSize: 13, fontWeight: "700" },
   inviteAcceptBtn: {
     paddingVertical: 10,
     paddingHorizontal: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     borderRadius: 12,
-    ...(Platform.OS === 'ios' ? { shadowColor: '#3B82F6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8 } : { elevation: 4 })
+    ...(Platform.OS === "ios"
+      ? {
+          shadowColor: "#3B82F6",
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.2,
+          shadowRadius: 8,
+        }
+      : { elevation: 4 }),
   },
-  inviteAcceptBtnText: { fontSize: 13, fontWeight: '700', color: Theme.textOnPrimary },
+  inviteAcceptBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textOnPrimary,
+  },
   inviteBtnDisabled: { opacity: 0.6 },
   activeMissionWrap: {
     alignSelf: "stretch",
@@ -6295,8 +6439,8 @@ const styles = StyleSheet.create({
     borderRadius: 15,
   },
   compactInviteCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
     paddingVertical: 14,
     paddingHorizontal: 16,
@@ -6307,11 +6451,11 @@ const styles = StyleSheet.create({
   compactInviteText: {
     flex: 1,
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   notificationCard: {
-    width: '92%',
-    alignSelf: 'center',
+    width: "92%",
+    alignSelf: "center",
     marginVertical: 16,
     borderRadius: 20,
     borderWidth: 1,
@@ -6322,8 +6466,8 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   notificationContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     padding: 16,
     gap: 12,
   },
@@ -6336,14 +6480,14 @@ const styles = StyleSheet.create({
   },
   notificationTitle: {
     fontSize: 10,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
+    fontWeight: "bold",
+    textTransform: "uppercase",
     letterSpacing: 0.8,
     marginBottom: 2,
   },
   notificationOrgName: {
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     lineHeight: 18,
   },
   notificationSubtitle: {
@@ -6352,7 +6496,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   notificationRightWrap: {
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
     gap: 12,
   },
   notificationCloseBtn: {

@@ -359,7 +359,7 @@ export function TripExpandableCard({
                   displayAsAsset ? styles.sourcePillTextAsset : styles.sourcePillTextAggregate,
                 ]}
               >
-                {displayAsAsset ? t("asset") : t("aggregate")}
+                {displayAsAsset ? "TRIP TYPE" : "SUPPLY SOURCE"}
               </Text>
             </View>
             <View
@@ -374,7 +374,13 @@ export function TripExpandableCard({
                   isAggregate ? styles.sourcePillTextLoadBased : styles.sourcePillTextOwn,
                 ]}
               >
-                {isAggregate ? "Integrated" : "Manual"}
+                {displayAsAsset
+                  ? trip.driver_id
+                    ? "Asset aggregate with driver"
+                    : "Asset aggregate"
+                  : isAggregate
+                    ? "Partner Load"
+                    : "Own"}
               </Text>
             </View>
             {isActive && (
