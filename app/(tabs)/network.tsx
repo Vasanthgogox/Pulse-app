@@ -26,6 +26,7 @@ import {
   useDriverInvitesSentQuery,
   useDriversQuery,
   useInvalidateNetwork,
+  useRealtimeNetworkInvalidation,
   useSuppliersQuery,
 } from "@/lib/queries";
 import { getInitials } from "@/lib/stringUtils";
@@ -463,6 +464,7 @@ export default function NetworkScreen() {
   const { t } = useLanguage();
    const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
+  useRealtimeNetworkInvalidation(orgId);
 
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const screenTopPad =
