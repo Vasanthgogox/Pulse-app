@@ -1213,16 +1213,6 @@ export default function NetworkScreen() {
 
         {manageView === "INVITATIONS" && showInvitationSearch ? (
           <View style={styles.invitationSearchRow}>
-            <TouchableOpacity
-              style={styles.invitationSearchBackBtn}
-              onPress={() => {
-                setShowInvitationSearch(false);
-                setSearchQuery("");
-              }}
-              activeOpacity={0.8}
-            >
-              <FontAwesome name="arrow-left" size={13} color={Theme.textOnDark} />
-            </TouchableOpacity>
             <View style={styles.searchWrapDark}>
               <FontAwesome
                 name="search"
@@ -1238,6 +1228,31 @@ export default function NetworkScreen() {
                 onChangeText={setSearchQuery}
                 autoCapitalize="none"
                 autoFocus
+              />
+            </View>
+          </View>
+        ) : null}
+
+        {manageView === "INVITATIONS" && !showInvitationSearch ? (
+          <View style={styles.invitationSegmentSearchRow}>
+            <View style={styles.searchWrapDark}>
+              <FontAwesome
+                name="search"
+                size={14}
+                color={Theme.textOnDarkMuted}
+                style={styles.searchIconDark}
+              />
+              <TextInput
+                style={styles.searchInputDark}
+                placeholder={
+                  invitationSegment === "RECEIVED"
+                    ? "Search received invitations..."
+                    : "Search sent invitations..."
+                }
+                placeholderTextColor={Theme.textOnDarkMuted}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoCapitalize="none"
               />
             </View>
           </View>
@@ -2551,6 +2566,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    paddingTop: 6,
+  },
+  invitationSegmentSearchRow: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingTop: 6,
   },
   invitationSearchBackBtn: {
