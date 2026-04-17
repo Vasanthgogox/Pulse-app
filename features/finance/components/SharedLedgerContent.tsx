@@ -480,6 +480,7 @@ export function SharedLedgerContent({
   const [inviteeRetryKey, setInviteeRetryKey] = useState(0);
 
   const insets = useSafeAreaInsets();
+  const isWebDesktop = Platform.OS === "web";
 
   const refetchDisputes = useCallback(() => {
     if (!organizationId || !partnerOrgId) return;
@@ -1568,28 +1569,42 @@ export function SharedLedgerContent({
           {viewMode === "trip" ? (
           <View style={styles.tableWrap}>
             <Text style={styles.sectionTitle}>COMPARE BY MISSION</Text>
-            <View style={styles.table}>
-              <View style={styles.tableHeader}>
-                <Text style={[styles.th, styles.thMission]}>MISSION</Text>
-                <Text style={[styles.th, styles.thGroup]}>
-                  {entityType === "CLIENT" ? "SALES COMP" : "COST COMP"}
+            <View style={[styles.table, isWebDesktop && styles.tableWebDesktop]}>
+              <View style={[styles.tableHeader, isWebDesktop && styles.tableHeaderWebDesktop]}>
+                <Text style={[styles.th, styles.thMission, isWebDesktop && styles.thMissionWebDesktop]}>
+                  MISSION
                 </Text>
-                <Text style={[styles.th, styles.thGroup]}>PAID COMP</Text>
+                <View style={[styles.thGroupWrap, isWebDesktop && styles.thGroupWrapWebDesktop]}>
+                  <Text style={[styles.th, styles.thGroup]}>
+                    {entityType === "CLIENT" ? "SALES COMP" : "COST COMP"}
+                  </Text>
+                </View>
+                <View style={[styles.thGroupWrap, isWebDesktop && styles.thGroupWrapWebDesktop]}>
+                  <Text style={[styles.th, styles.thGroup]}>PAID COMP</Text>
+                </View>
               </View>
-              <View style={styles.tableSubHeader}>
-                <View style={styles.thMission} />
-                <Text style={[styles.thSub, styles.thRight]} numberOfLines={1}>
-                  {myBookLabel}
-                </Text>
-                <Text style={[styles.thSub, styles.thRight]} numberOfLines={1}>
-                  {partnerLabel}
-                </Text>
-                <Text style={[styles.thSub, styles.thRight]} numberOfLines={1}>
-                  {myBookLabel}
-                </Text>
-                <Text style={[styles.thSub, styles.thRight]} numberOfLines={1}>
-                  {partnerLabel}
-                </Text>
+              <View style={[styles.tableSubHeader, isWebDesktop && styles.tableSubHeaderWebDesktop]}>
+                <View style={[styles.thMission, isWebDesktop && styles.thMissionWebDesktop]} />
+                <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                  <Text style={[styles.thSub, styles.thRight]} numberOfLines={1}>
+                    {myBookLabel}
+                  </Text>
+                </View>
+                <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                  <Text style={[styles.thSub, styles.thRight]} numberOfLines={1}>
+                    {partnerLabel}
+                  </Text>
+                </View>
+                <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                  <Text style={[styles.thSub, styles.thRight]} numberOfLines={1}>
+                    {myBookLabel}
+                  </Text>
+                </View>
+                <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                  <Text style={[styles.thSub, styles.thRight]} numberOfLines={1}>
+                    {partnerLabel}
+                  </Text>
+                </View>
               </View>
 
               <ScrollView
@@ -1655,7 +1670,7 @@ export function SharedLedgerContent({
                           }
                           activeOpacity={0.7}
                         >
-                          <View style={styles.cellMission}>
+                          <View style={[styles.cellMission, isWebDesktop && styles.cellMissionWebDesktop]}>
                             <FontAwesome
                               name={isExpanded ? "chevron-up" : "chevron-down"}
                               size={10}
@@ -1687,50 +1702,60 @@ export function SharedLedgerContent({
                               </Text>
                             )}
                           </View>
-                          <Text
-                            style={[styles.cellAmount, styles.cellSales]}
-                            numberOfLines={1}
-                          >
-                            {row.internal ? formatINR(row.intSales) : "—"}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.cellAmount,
-                              styles.cellSales,
-                              (isSalesMismatch || isGhost) &&
-                                styles.cellMismatch,
-                              isPending && styles.cellPending,
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {isPending
-                              ? "Wait"
-                              : row.external
-                                ? formatINR(row.extSales)
-                                : "—"}
-                          </Text>
-                          <Text
-                            style={[styles.cellAmount, styles.cellPaid]}
-                            numberOfLines={1}
-                          >
-                            {row.internal ? formatINR(intPaidDisplay) : "—"}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.cellAmount,
-                              styles.cellPaid,
-                              (isPaidMismatchDisplay || isGhost) &&
-                                styles.cellMismatch,
-                              isPending && styles.cellPending,
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {isPending
-                              ? "Wait"
-                              : row.external
-                                ? formatINR(row.extPaid)
-                                : "—"}
-                          </Text>
+                          <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                            <Text
+                              style={[styles.cellAmount, styles.cellSales, isWebDesktop && styles.cellAmountWebDesktop]}
+                              numberOfLines={1}
+                            >
+                              {row.internal ? formatINR(row.intSales) : "—"}
+                            </Text>
+                          </View>
+                          <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                            <Text
+                              style={[
+                                styles.cellAmount,
+                                styles.cellSales,
+                                isWebDesktop && styles.cellAmountWebDesktop,
+                                (isSalesMismatch || isGhost) &&
+                                  styles.cellMismatch,
+                                isPending && styles.cellPending,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {isPending
+                                ? "Wait"
+                                : row.external
+                                  ? formatINR(row.extSales)
+                                  : "—"}
+                            </Text>
+                          </View>
+                          <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                            <Text
+                              style={[styles.cellAmount, styles.cellPaid, isWebDesktop && styles.cellAmountWebDesktop]}
+                              numberOfLines={1}
+                            >
+                              {row.internal ? formatINR(intPaidDisplay) : "—"}
+                            </Text>
+                          </View>
+                          <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                            <Text
+                              style={[
+                                styles.cellAmount,
+                                styles.cellPaid,
+                                isWebDesktop && styles.cellAmountWebDesktop,
+                                (isPaidMismatchDisplay || isGhost) &&
+                                  styles.cellMismatch,
+                                isPending && styles.cellPending,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {isPending
+                                ? "Wait"
+                                : row.external
+                                  ? formatINR(row.extPaid)
+                                  : "—"}
+                            </Text>
+                          </View>
                         </TouchableOpacity>
 
                         {isExpanded && (
@@ -2363,6 +2388,16 @@ const styles = StyleSheet.create({
   table: {
     backgroundColor: Theme.screenBackground,
   },
+  tableWebDesktop: {
+    maxWidth: 1120,
+    width: "100%",
+    alignSelf: "center",
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    borderRadius: 10,
+    overflow: "hidden",
+    backgroundColor: Theme.surface,
+  },
   tableHeader: {
     flexDirection: "row",
     backgroundColor: Theme.screenBackground,
@@ -2371,6 +2406,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
+  tableHeaderWebDesktop: {
+    paddingVertical: 11,
+    paddingHorizontal: 20,
+    backgroundColor: Theme.surface,
+    borderBottomColor: Theme.borderMedium,
+  },
   tableSubHeader: {
     flexDirection: "row",
     backgroundColor: Theme.screenBackground,
@@ -2378,6 +2419,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
+  },
+  tableSubHeaderWebDesktop: {
+    paddingVertical: 9,
+    paddingHorizontal: 20,
+    borderBottomColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
   },
   th: {
     fontSize: 10,
@@ -2388,6 +2435,9 @@ const styles = StyleSheet.create({
   },
   thMission: { width: "32%" },
   thGroup: { flex: 1, textAlign: "center" as const },
+  thGroupWrap: { flex: 1, alignItems: "center" },
+  thMissionWebDesktop: { width: "44%" },
+  thGroupWrapWebDesktop: { width: "28%", flex: 0, alignItems: "center" },
   thSub: {
     fontSize: 9,
     fontWeight: "700",
@@ -2415,6 +2465,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     flexWrap: "wrap",
+  },
+  cellMissionWebDesktop: {
+    width: "44%",
+    paddingRight: 8,
+  },
+  amountCol: {
+    flex: 1,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  amountColWebDesktop: {
+    width: "14%",
+    flex: 0,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 10,
   },
   missionId: {
     fontSize: 12,
@@ -2506,6 +2572,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     textAlign: "right" as const,
+  },
+  cellAmountWebDesktop: {
+    width: "100%",
+    flex: 0,
+    fontSize: 11,
+    fontWeight: "600",
   },
   cellSales: { color: Theme.textPrimaryDark },
   cellPaid: { color: Theme.darkGreen },

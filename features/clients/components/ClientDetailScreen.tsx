@@ -36,6 +36,7 @@ import {
   Alert,
   Image,
   Modal,
+  Platform,
   RefreshControl,
   ScrollView,
   Share,
@@ -105,6 +106,7 @@ export default function ClientDetailScreen({
   const [successTitle, setSuccessTitle] = useState("NODE_SYNCED");
   const [isLinked, setIsLinked] = useState(false);
   const insets = useSafeAreaInsets();
+  const isWebDesktop = Platform.OS === "web";
   const [profileEditMode, setProfileEditMode] = useState(false);
   const [editOrgName, setEditOrgName] = useState("");
   const [editContactPerson, setEditContactPerson] = useState("");
@@ -613,6 +615,39 @@ export default function ClientDetailScreen({
       };
     });
   }, [trips, paidByTripId, tripIdToDue, client?.linked_organization_id, client?.is_integrated]);
+  const tripTransactionMetaById = useMemo(() => {
+    const byTrip: Record<string, { count: number; lastTxnDate: string | null }> = {};
+    for (const tx of transactions) {
+      if (!tx.trip_id) continue;
+      const key = String(tx.trip_id).trim().toLowerCase();
+      if (!key) continue;
+      const candidateDate = tx.transaction_date ?? tx.created_at ?? null;
+      const current = byTrip[key];
+      if (!current) {
+        byTrip[key] = { count: 1, lastTxnDate: candidateDate };
+        continue;
+      }
+      current.count += 1;
+      if (candidateDate && (!current.lastTxnDate || candidateDate > current.lastTxnDate)) {
+        current.lastTxnDate = candidateDate;
+      }
+    }
+    return byTrip;
+  }, [transactions]);
+  const tripExpenseById = useMemo(() => {
+    const byTrip: Record<string, number> = {};
+    for (const tx of transactions) {
+      if (!tx.trip_id) continue;
+      const key = String(tx.trip_id).trim().toLowerCase();
+      if (!key) continue;
+      const out = Number(tx.amount_out ?? 0);
+      if (out <= 0) continue;
+      // For client table cost context, keep non-supplier outflows as captured trip expenses.
+      if (tx.contact_type === "supplier") continue;
+      byTrip[key] = (byTrip[key] ?? 0) + out;
+    }
+    return byTrip;
+  }, [transactions]);
 
   const sortedTx = useMemo(
     () =>
@@ -654,6 +689,63 @@ export default function ClientDetailScreen({
     () => (detailSubTab === "trips" ? tripReportTransactions : sortedTx),
     [detailSubTab, sortedTx, tripReportTransactions],
   );
+  const tripTableReport = useMemo(() => {
+    if (detailSubTab !== "trips") return undefined;
+    const isUuidLike = (value: string | null | undefined): boolean =>
+      !!value &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        value.trim(),
+      );
+    const rows = missionRows.map((row) => {
+      const key = String(row.trip.id).trim().toLowerCase();
+      const meta = tripTransactionMetaById[key] ?? { count: 0, lastTxnDate: null };
+      const expenseCaptured = tripExpenseById[key] ?? 0;
+      const supplierRate = Number(row.trip.supplier_rate ?? 0);
+      const hasSupplierRef =
+        !!row.trip.supplier_id ||
+        (!!row.trip.supplier_name && !isUuidLike(row.trip.supplier_name));
+      const isAggregateTrip = hasSupplierRef || isLoadBasedTrip(row.trip);
+      const supplierName = isAggregateTrip
+        ? row.trip.supplier_name && !isUuidLike(row.trip.supplier_name)
+          ? row.trip.supplier_name
+          : "Aggregate Supplier"
+        : "Asset / Own Vehicle";
+      const cost = supplierRate > 0 ? supplierRate : expenseCaptured;
+      const pnl = row.sales - cost;
+      const margin = row.sales > 0 ? `${((pnl / row.sales) * 100).toFixed(1)}%` : "0.0%";
+      return {
+        trip: row.missionId,
+        route: row.route,
+        model: isAggregateTrip ? "Aggregate" : "Asset",
+        supplier: supplierName,
+        sales: formatINR(row.sales),
+        cost: formatINR(cost),
+        pnl: formatINR(pnl),
+        margin,
+        received: formatINR(row.paid),
+        due: formatINR(row.due),
+        txns: meta.count,
+        lastTxn: meta.lastTxnDate ? formatLedgerDate(meta.lastTxnDate) : "—",
+      };
+    });
+    return {
+      columns: [
+        { key: "trip", label: "Trip" },
+        { key: "route", label: "Route" },
+        { key: "model", label: "Model" },
+        { key: "supplier", label: "Supplier" },
+        { key: "sales", label: "Sales", align: "right" as const },
+        { key: "cost", label: "Cost", align: "right" as const },
+        { key: "pnl", label: "P&L", align: "right" as const },
+        { key: "margin", label: "Margin %", align: "right" as const },
+        { key: "received", label: "Received", align: "right" as const },
+        { key: "due", label: "Due", align: "right" as const },
+        { key: "txns", label: "Txns", align: "right" as const },
+        { key: "lastTxn", label: "Last Txn", align: "right" as const },
+      ],
+      rows,
+    };
+  }, [detailSubTab, missionRows, tripTransactionMetaById, tripExpenseById]);
 
   if (loading) {
     return (
@@ -810,18 +902,72 @@ export default function ClientDetailScreen({
 
         {/* Tab: Trips — Sales, Received, Due; tap row to open trip detail */}
         {detailSubTab === "trips" && (
-          <View style={styles.tableCard}>
-            <View style={styles.tableHeader}>
-              <Text style={[styles.th, styles.thMission]}>Trip</Text>
-              <Text style={[styles.th, styles.thSales]}>Sales</Text>
-              <Text style={[styles.th, styles.thRight]}>Received</Text>
-              <Text style={[styles.th, styles.thRight]}>Due</Text>
+          <View style={[styles.tableCard, isWebDesktop && styles.tableCardWebDesktop]}>
+            <View style={[styles.tableHeader, isWebDesktop && styles.tableHeaderWebDesktop]}>
+              <Text
+                style={[
+                  styles.th,
+                  styles.thMission,
+                  isWebDesktop && styles.thWebDesktop,
+                  isWebDesktop && styles.thMissionWebDesktop,
+                ]}
+              >
+                Trip
+              </Text>
+              {isWebDesktop ? (
+                <View style={styles.partyColWebDesktop}>
+                  <Text style={[styles.th, styles.thWebDesktop]}>Supplier</Text>
+                </View>
+              ) : null}
+              <View style={[styles.headerAmountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                <Text style={[styles.th, styles.thSales, isWebDesktop && styles.thWebDesktop]}>
+                  Sales
+                </Text>
+              </View>
+              {isWebDesktop ? (
+                <View style={[styles.headerAmountCol, styles.amountColWebDesktop]}>
+                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop]}>
+                    Cost
+                  </Text>
+                </View>
+              ) : null}
+              {isWebDesktop ? (
+                <View style={[styles.headerAmountCol, styles.amountColWebDesktop]}>
+                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop]}>
+                    P&L
+                  </Text>
+                </View>
+              ) : null}
+              <View style={[styles.headerAmountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                <Text style={[styles.th, styles.thRight, isWebDesktop && styles.thWebDesktop]}>
+                  Received
+                </Text>
+              </View>
+              <View style={[styles.headerAmountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                <Text style={[styles.th, styles.thRight, isWebDesktop && styles.thWebDesktop]}>
+                  Due
+                </Text>
+              </View>
+              {isWebDesktop ? (
+                <View style={[styles.headerAmountCol, styles.amountColWebDesktop]}>
+                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop]}>
+                    Txns
+                  </Text>
+                </View>
+              ) : null}
+              {isWebDesktop ? (
+                <View style={[styles.headerAmountCol, styles.amountColWebDesktop]}>
+                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop]}>
+                    Last Txn
+                  </Text>
+                </View>
+              ) : null}
             </View>
             {missionRows.length > 0 ? (
             missionRows.map((row) => (
                 <TouchableOpacity
                 key={row.trip.id}
-                style={styles.tableRow}
+                style={[styles.tableRow, isWebDesktop && styles.tableRowWebDesktop]}
                 onPress={() => {
                   const q = new URLSearchParams();
                   q.set("entryContext", "client");
@@ -834,21 +980,137 @@ export default function ClientDetailScreen({
                 }}
                 activeOpacity={0.7}
                 >
-                  <View style={styles.tdMission}>
+                  {(() => {
+                    const meta = tripTransactionMetaById[String(row.trip.id).trim().toLowerCase()] ?? {
+                      count: 0,
+                      lastTxnDate: null,
+                    };
+                    const isUuidLike = (value: string | null | undefined): boolean =>
+                      !!value &&
+                      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+                        value.trim(),
+                      );
+                    const supplierNameRaw = row.trip.supplier_name?.trim() ?? "";
+                    const hasSupplierRef =
+                      !!row.trip.supplier_id || (!!supplierNameRaw && !isUuidLike(supplierNameRaw));
+                    const isAggregateTrip = hasSupplierRef || isLoadBasedTrip(row.trip);
+                    const supplierName = isAggregateTrip
+                      ? supplierNameRaw && !isUuidLike(supplierNameRaw)
+                        ? supplierNameRaw
+                        : "Aggregate Supplier"
+                      : "Asset / Own Vehicle";
+                    const expenseCaptured =
+                      tripExpenseById[String(row.trip.id).trim().toLowerCase()] ?? 0;
+                    const supplierRate = Number(row.trip.supplier_rate ?? 0);
+                    const tripCost = supplierRate > 0 ? supplierRate : expenseCaptured;
+                    const tripPnl = row.sales - tripCost;
+                    const marginPct = row.sales > 0 ? (tripPnl / row.sales) * 100 : 0;
+                    return (
+                      <>
+                  <View
+                    style={[
+                      styles.tdMission,
+                      isWebDesktop && styles.tdMissionWebDesktop,
+                    ]}
+                  >
                     <Text style={styles.tdMissionId}>{row.missionId}</Text>
                     <Text style={styles.tdRoute} numberOfLines={1}>
                       {row.route}
                     </Text>
                   </View>
-                  <Text style={[styles.td, styles.tdSales]}>
-                    {formatINR(row.sales)}
-                  </Text>
-                  <Text style={[styles.td, styles.tdRight, styles.tdGreen]}>
-                    {formatINR(row.paid)}
-                  </Text>
-                  <Text style={[styles.td, styles.tdRight, styles.tdRed]}>
-                    {formatINR(row.due)}
-                  </Text>
+                  {isWebDesktop ? (
+                    <View style={styles.partyColWebDesktop}>
+                      <Text style={styles.tdPartyWebDesktop} numberOfLines={1}>
+                        {supplierName}
+                      </Text>
+                      {isAggregateTrip ? (
+                        <Text style={styles.tdPartyHintWebDesktop} numberOfLines={1}>
+                          Aggregate · Margin {marginPct.toFixed(1)}%
+                        </Text>
+                      ) : supplierRate <= 0 && expenseCaptured > 0 ? (
+                        <Text style={styles.tdPartyHintWebDesktop} numberOfLines={1}>
+                          Asset · Expense captured: {formatINR(expenseCaptured)}
+                        </Text>
+                      ) : (
+                        <Text style={styles.tdPartyHintWebDesktop} numberOfLines={1}>
+                          Asset
+                        </Text>
+                      )}
+                    </View>
+                  ) : null}
+                  <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                    <Text
+                      style={[
+                        styles.td,
+                        styles.tdSales,
+                        isWebDesktop && styles.tdAmountWebDesktop,
+                      ]}
+                    >
+                      {formatINR(row.sales)}
+                    </Text>
+                  </View>
+                  {isWebDesktop ? (
+                    <View style={[styles.amountCol, styles.amountColWebDesktop]}>
+                      <Text style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
+                        {formatINR(tripCost)}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {isWebDesktop ? (
+                    <View style={[styles.amountCol, styles.amountColWebDesktop]}>
+                      <Text
+                        style={[
+                          styles.td,
+                          styles.tdRight,
+                          styles.tdAmountWebDesktop,
+                          tripPnl >= 0 ? styles.tdGreen : styles.tdRed,
+                        ]}
+                      >
+                        {formatINR(tripPnl)}
+                      </Text>
+                    </View>
+                  ) : null}
+                  <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                    <Text
+                      style={[
+                        styles.td,
+                        styles.tdRight,
+                        styles.tdGreen,
+                        isWebDesktop && styles.tdAmountWebDesktop,
+                      ]}
+                    >
+                      {formatINR(row.paid)}
+                    </Text>
+                  </View>
+                  <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                    <Text
+                      style={[
+                        styles.td,
+                        styles.tdRight,
+                        styles.tdRed,
+                        isWebDesktop && styles.tdAmountWebDesktop,
+                      ]}
+                    >
+                      {formatINR(row.due)}
+                    </Text>
+                  </View>
+                  {isWebDesktop ? (
+                    <View style={[styles.amountCol, styles.amountColWebDesktop]}>
+                      <Text style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
+                        {meta.count}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {isWebDesktop ? (
+                    <View style={[styles.amountCol, styles.amountColWebDesktop]}>
+                      <Text style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
+                        {meta.lastTxnDate ? formatLedgerDate(meta.lastTxnDate) : "—"}
+                      </Text>
+                    </View>
+                  ) : null}
+                      </>
+                    );
+                  })()}
                 </TouchableOpacity>
               ))
             ) : (
@@ -957,6 +1219,7 @@ export default function ClientDetailScreen({
         onClose={() => setShowReportModal(false)}
         transactions={reportTransactions}
         title={clientName ? `${t("ledgerFor")}${clientName}` : t("ledgerReport")}
+        customReport={tripTableReport}
       />
       <Modal
         visible={showProfileModal}
@@ -1588,6 +1851,15 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     overflow: "hidden",
   },
+  tableCardWebDesktop: {
+    borderRadius: 10,
+    borderColor: Theme.borderMedium,
+    maxWidth: 1440,
+    width: "100%",
+    alignSelf: "center",
+    backgroundColor: Theme.surface,
+    marginHorizontal: 4,
+  },
   tableHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -1597,12 +1869,51 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
+  tableHeaderWebDesktop: {
+    paddingVertical: 11,
+    paddingHorizontal: 10,
+    backgroundColor: Theme.surface,
+    borderBottomColor: Theme.borderMedium,
+  },
   th: {
     fontSize: 9,
     fontWeight: "700",
     color: Theme.textMuted,
     letterSpacing: 0.4,
     textTransform: "uppercase",
+  },
+  thWebDesktop: {
+    fontSize: 11,
+    letterSpacing: 0.1,
+    color: Theme.textSecondary,
+    fontWeight: "700",
+  },
+  thMissionWebDesktop: {
+    flex: 1,
+    minWidth: 0,
+    width: "28%",
+  },
+  partyColWebDesktop: {
+    width: "16%",
+    justifyContent: "center",
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 10,
+  },
+  headerAmountCol: {
+    width: 80,
+    alignItems: "flex-end",
+  },
+  amountCol: {
+    width: 80,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  amountColWebDesktop: {
+    width: "8%",
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 6,
   },
   thMission: { flex: 1.5, minWidth: 0 },
   thSales: { width: 80, textAlign: "right" as const },
@@ -1615,6 +1926,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
+  tableRowWebDesktop: {
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderBottomColor: Theme.borderLight,
+    minHeight: 58,
+    backgroundColor: Theme.surface,
+  },
   td: {
     fontSize: 10,
     fontWeight: "600",
@@ -1623,7 +1941,7 @@ const styles = StyleSheet.create({
   tdMission: { flex: 1.5, minWidth: 0 },
   tdMissionId: {
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
   },
@@ -1631,6 +1949,28 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: Theme.textMuted,
     marginTop: 4,
+  },
+  tdMissionWebDesktop: {
+    flex: 1,
+    minWidth: 0,
+    width: "28%",
+    paddingRight: 6,
+  },
+  tdPartyWebDesktop: {
+    fontSize: 11,
+    color: Theme.textPrimaryDark,
+    fontWeight: "500",
+  },
+  tdPartyHintWebDesktop: {
+    fontSize: 9,
+    color: Theme.textMuted,
+    marginTop: 2,
+  },
+  tdAmountWebDesktop: {
+    width: "100%",
+    textAlign: "right" as const,
+    fontSize: 11,
+    fontWeight: "600",
   },
   tdSales: { width: 80, textAlign: "right" as const },
   tdRight: { width: 72, textAlign: "right" as const },

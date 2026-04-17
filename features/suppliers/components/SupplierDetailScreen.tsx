@@ -38,6 +38,7 @@ import {
   Alert,
   Image,
   Modal,
+  Platform,
   RefreshControl,
   ScrollView,
   Share,
@@ -116,6 +117,7 @@ export default function SupplierDetailScreen({
   const [isInApp, setIsInApp] = useState(false);
   const [sendingInvitation, setSendingInvitation] = useState(false);
   const insets = useSafeAreaInsets();
+  const isWebDesktop = Platform.OS === "web";
   const initialLoadDoneRef = useRef(false);
 
   useEffect(() => {
@@ -525,6 +527,25 @@ export default function SupplierDetailScreen({
       };
     });
   }, [trips, paidByTripId, tripIdToDue]);
+  const tripTransactionMetaById = useMemo(() => {
+    const byTrip: Record<string, { count: number; lastTxnDate: string | null }> = {};
+    for (const tx of transactions) {
+      if (!tx.trip_id) continue;
+      const key = String(tx.trip_id).trim().toLowerCase();
+      if (!key) continue;
+      const candidateDate = tx.transaction_date ?? tx.created_at ?? null;
+      const current = byTrip[key];
+      if (!current) {
+        byTrip[key] = { count: 1, lastTxnDate: candidateDate };
+        continue;
+      }
+      current.count += 1;
+      if (candidateDate && (!current.lastTxnDate || candidateDate > current.lastTxnDate)) {
+        current.lastTxnDate = candidateDate;
+      }
+    }
+    return byTrip;
+  }, [transactions]);
 
   const supplierTripDetailsMap = useMemo(() => {
     const m: Record<
@@ -675,6 +696,45 @@ export default function SupplierDetailScreen({
     () => (detailSubTab === "trips" ? tripReportTransactions : sortedTx),
     [detailSubTab, sortedTx, tripReportTransactions],
   );
+  const tripTableReport = useMemo(() => {
+    if (detailSubTab !== "trips") return undefined;
+    const rows = missionRows.map((row) => {
+      const key = String(row.trip.id).trim().toLowerCase();
+      const meta = tripTransactionMetaById[key] ?? { count: 0, lastTxnDate: null };
+      const clientRevenue = Number(row.trip.client_price ?? 0);
+      const pnl = clientRevenue - row.sales;
+      const margin = clientRevenue > 0 ? `${((pnl / clientRevenue) * 100).toFixed(1)}%` : "0.0%";
+      return {
+        trip: row.missionId,
+        route: row.route,
+        client: row.trip.client_name?.trim() || row.trip.client_id?.trim() || "—",
+        contract: formatINR(row.sales),
+        clientRevenue: formatINR(clientRevenue),
+        pnl: formatINR(pnl),
+        margin,
+        paid: formatINR(row.paid),
+        due: formatINR(row.due),
+        txns: meta.count,
+        lastTxn: meta.lastTxnDate ? formatLedgerDate(meta.lastTxnDate) : "—",
+      };
+    });
+    return {
+      columns: [
+        { key: "trip", label: "Trip" },
+        { key: "route", label: "Route" },
+        { key: "client", label: "Client" },
+        { key: "contract", label: "Contract", align: "right" as const },
+        { key: "clientRevenue", label: "Client Rev", align: "right" as const },
+        { key: "pnl", label: "P&L", align: "right" as const },
+        { key: "margin", label: "Margin %", align: "right" as const },
+        { key: "paid", label: "Paid", align: "right" as const },
+        { key: "due", label: "Due", align: "right" as const },
+        { key: "txns", label: "Txns", align: "right" as const },
+        { key: "lastTxn", label: "Last Txn", align: "right" as const },
+      ],
+      rows,
+    };
+  }, [detailSubTab, missionRows, tripTransactionMetaById]);
 
   if (loading) {
     return (
@@ -834,34 +894,179 @@ export default function SupplierDetailScreen({
         </View>
 
         {detailSubTab === "trips" && (
-          <View style={styles.tableCard}>
-            <View style={styles.tableHeader}>
-              <Text style={[styles.th, styles.thMission]}>Trip</Text>
-              <Text style={[styles.th, styles.thSales]}>Contract</Text>
-              <Text style={[styles.th, styles.thRight]}>Paid</Text>
-              <Text style={[styles.th, styles.thRight]}>Due</Text>
+          <View style={[styles.tableCard, isWebDesktop && styles.tableCardWebDesktop]}>
+            <View style={[styles.tableHeader, isWebDesktop && styles.tableHeaderWebDesktop]}>
+              <Text
+                style={[
+                  styles.th,
+                  styles.thMission,
+                  isWebDesktop && styles.thWebDesktop,
+                  isWebDesktop && styles.thMissionWebDesktop,
+                ]}
+              >
+                Trip
+              </Text>
+              {isWebDesktop ? (
+                <View style={styles.partyColWebDesktop}>
+                  <Text style={[styles.th, styles.thWebDesktop]}>Client</Text>
+                </View>
+              ) : null}
+              {isWebDesktop ? (
+                <View style={[styles.headerAmountCol, styles.amountColWebDesktop]}>
+                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop]}>
+                    Client Rev
+                  </Text>
+                </View>
+              ) : null}
+              <View style={[styles.headerAmountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                <Text style={[styles.th, styles.thSales, isWebDesktop && styles.thWebDesktop]}>
+                  Contract
+                </Text>
+              </View>
+              {isWebDesktop ? (
+                <View style={[styles.headerAmountCol, styles.amountColWebDesktop]}>
+                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop]}>
+                    P&L
+                  </Text>
+                </View>
+              ) : null}
+              <View style={[styles.headerAmountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                <Text style={[styles.th, styles.thRight, isWebDesktop && styles.thWebDesktop]}>
+                  Paid
+                </Text>
+              </View>
+              <View style={[styles.headerAmountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                <Text style={[styles.th, styles.thRight, isWebDesktop && styles.thWebDesktop]}>
+                  Due
+                </Text>
+              </View>
+              {isWebDesktop ? (
+                <View style={[styles.headerAmountCol, styles.amountColWebDesktop]}>
+                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop]}>
+                    Txns
+                  </Text>
+                </View>
+              ) : null}
+              {isWebDesktop ? (
+                <View style={[styles.headerAmountCol, styles.amountColWebDesktop]}>
+                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop]}>
+                    Last Txn
+                  </Text>
+                </View>
+              ) : null}
             </View>
             {missionRows.length > 0 ? (
               missionRows.map((row) => (
                 <TouchableOpacity
                   key={row.trip.id}
-                  style={styles.tableRow}
+                  style={[styles.tableRow, isWebDesktop && styles.tableRowWebDesktop]}
                   onPress={() => router.push(`/trip/${row.trip.id}?entryContext=supplier`)}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.tdMission}>
+                  {(() => {
+                    const meta = tripTransactionMetaById[String(row.trip.id).trim().toLowerCase()] ?? {
+                      count: 0,
+                      lastTxnDate: null,
+                    };
+                    const clientName =
+                      row.trip.client_name?.trim() ||
+                      row.trip.client_id?.trim() ||
+                      "—";
+                    const clientRevenue = Number(row.trip.client_price ?? 0);
+                    const tripPnl = clientRevenue - row.sales;
+                    return (
+                      <>
+                  <View
+                    style={[
+                      styles.tdMission,
+                      isWebDesktop && styles.tdMissionWebDesktop,
+                    ]}
+                  >
                     <Text style={styles.tdMissionId}>{row.missionId}</Text>
                     <Text style={styles.tdRoute} numberOfLines={1}>
                       {row.route}
                     </Text>
                   </View>
-                  <Text style={[styles.td, styles.tdSales]}>{formatINR(row.sales)}</Text>
-                  <Text style={[styles.td, styles.tdRight, styles.tdGreen]}>
-                    {formatINR(row.paid)}
-                  </Text>
-                  <Text style={[styles.td, styles.tdRight, styles.tdRed]}>
-                    {formatINR(row.due)}
-                  </Text>
+                  {isWebDesktop ? (
+                    <View style={styles.partyColWebDesktop}>
+                      <Text style={styles.tdPartyWebDesktop} numberOfLines={1}>
+                        {clientName}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {isWebDesktop ? (
+                    <View style={[styles.amountCol, styles.amountColWebDesktop]}>
+                      <Text style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
+                        {formatINR(clientRevenue)}
+                      </Text>
+                    </View>
+                  ) : null}
+                  <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                    <Text
+                      style={[
+                        styles.td,
+                        styles.tdSales,
+                        isWebDesktop && styles.tdAmountWebDesktop,
+                      ]}
+                    >
+                      {formatINR(row.sales)}
+                    </Text>
+                  </View>
+                  {isWebDesktop ? (
+                    <View style={[styles.amountCol, styles.amountColWebDesktop]}>
+                      <Text
+                        style={[
+                          styles.td,
+                          styles.tdRight,
+                          styles.tdAmountWebDesktop,
+                          tripPnl >= 0 ? styles.tdGreen : styles.tdRed,
+                        ]}
+                      >
+                        {formatINR(tripPnl)}
+                      </Text>
+                    </View>
+                  ) : null}
+                  <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                    <Text
+                      style={[
+                        styles.td,
+                        styles.tdRight,
+                        styles.tdGreen,
+                        isWebDesktop && styles.tdAmountWebDesktop,
+                      ]}
+                    >
+                      {formatINR(row.paid)}
+                    </Text>
+                  </View>
+                  <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                    <Text
+                      style={[
+                        styles.td,
+                        styles.tdRight,
+                        styles.tdRed,
+                        isWebDesktop && styles.tdAmountWebDesktop,
+                      ]}
+                    >
+                      {formatINR(row.due)}
+                    </Text>
+                  </View>
+                  {isWebDesktop ? (
+                    <View style={[styles.amountCol, styles.amountColWebDesktop]}>
+                      <Text style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
+                        {meta.count}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {isWebDesktop ? (
+                    <View style={[styles.amountCol, styles.amountColWebDesktop]}>
+                      <Text style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
+                        {meta.lastTxnDate ? formatLedgerDate(meta.lastTxnDate) : "—"}
+                      </Text>
+                    </View>
+                  ) : null}
+                      </>
+                    );
+                  })()}
                 </TouchableOpacity>
               ))
             ) : (
@@ -964,6 +1169,7 @@ export default function SupplierDetailScreen({
         onClose={() => setShowReportModal(false)}
         transactions={reportTransactions}
         title={supplierName ? `${t("ledgerFor")}${supplierName}` : t("ledgerReport")}
+        customReport={tripTableReport}
       />
       <Modal
         visible={showProfileModal}
@@ -1633,6 +1839,15 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     overflow: "hidden",
   },
+  tableCardWebDesktop: {
+    borderRadius: 10,
+    borderColor: Theme.borderMedium,
+    maxWidth: 1440,
+    width: "100%",
+    alignSelf: "center",
+    backgroundColor: Theme.surface,
+    marginHorizontal: 4,
+  },
   tableHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -1642,12 +1857,51 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
+  tableHeaderWebDesktop: {
+    paddingVertical: 11,
+    paddingHorizontal: 10,
+    backgroundColor: Theme.surface,
+    borderBottomColor: Theme.borderMedium,
+  },
   th: {
     fontSize: 9,
     fontWeight: "700",
     color: Theme.textMuted,
     letterSpacing: 0.4,
     textTransform: "uppercase",
+  },
+  thWebDesktop: {
+    fontSize: 11,
+    letterSpacing: 0.1,
+    color: Theme.textSecondary,
+    fontWeight: "700",
+  },
+  thMissionWebDesktop: {
+    flex: 1,
+    minWidth: 0,
+    width: "24%",
+  },
+  partyColWebDesktop: {
+    width: "16%",
+    justifyContent: "center",
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 10,
+  },
+  headerAmountCol: {
+    width: 80,
+    alignItems: "flex-end",
+  },
+  amountCol: {
+    width: 80,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  amountColWebDesktop: {
+    width: "8.57%",
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 6,
   },
   thMission: { flex: 1.5, minWidth: 0 },
   thSales: { width: 80, textAlign: "right" as const },
@@ -1660,6 +1914,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
+  tableRowWebDesktop: {
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderBottomColor: Theme.borderLight,
+    minHeight: 58,
+    backgroundColor: Theme.surface,
+  },
   td: {
     fontSize: 10,
     fontWeight: "600",
@@ -1668,7 +1929,7 @@ const styles = StyleSheet.create({
   tdMission: { flex: 1.5, minWidth: 0 },
   tdMissionId: {
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
   },
@@ -1676,6 +1937,23 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: Theme.textMuted,
     marginTop: 4,
+  },
+  tdMissionWebDesktop: {
+    flex: 1,
+    minWidth: 0,
+    width: "24%",
+    paddingRight: 6,
+  },
+  tdPartyWebDesktop: {
+    fontSize: 11,
+    color: Theme.textPrimaryDark,
+    fontWeight: "500",
+  },
+  tdAmountWebDesktop: {
+    width: "100%",
+    textAlign: "right" as const,
+    fontSize: 11,
+    fontWeight: "600",
   },
   tdSales: { width: 80, textAlign: "right" as const },
   tdRight: { width: 72, textAlign: "right" as const },
