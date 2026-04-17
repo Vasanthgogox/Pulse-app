@@ -569,10 +569,7 @@ export default function TripsScreen() {
                 styles.tripsSupplyChipsScroll,
                 isLargeScreen && styles.tripsSupplyChipsScrollRow,
               ]}
-              contentContainerStyle={[
-                styles.tripsSupplyChipsScrollInner,
-                { flexGrow: isLargeScreen ? 0 : 1 },
-              ]}
+              contentContainerStyle={styles.tripsSupplyChipsScrollInner}
             >
               <View style={styles.tripsSupplyChipsRail}>
                 {(
@@ -1133,7 +1130,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    flexShrink: 0,
+    flex: 1,
+    minWidth: 0,
   },
   tripsSearchWrap: {
     flexDirection: "row",
@@ -1199,8 +1197,10 @@ const styles = StyleSheet.create({
   tripsDateChipsContent: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "flex-start",
     gap: 6,
     paddingRight: 4,
+    paddingLeft: 0,
   },
   tripsDateChip: {
     paddingHorizontal: 10,
@@ -1388,17 +1388,19 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   tripsSupplyChipsScroll: {
-    flexGrow: 0,
+    flex: 1,
+    minWidth: 0,
     flexShrink: 1,
   },
   tripsSupplyChipsScrollRow: {
     flexGrow: 0,
     flexShrink: 0,
-    alignSelf: "center",
+    alignSelf: "auto",
   },
   tripsSupplyChipsScrollInner: {
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
+    paddingRight: 2,
   },
   tripsSupplyChipsRail: {
     flexDirection: "row",
