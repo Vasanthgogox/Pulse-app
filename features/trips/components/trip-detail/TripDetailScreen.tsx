@@ -254,6 +254,7 @@ export default function TripDetailScreen({
   const [showFullScreenMap, setShowFullScreenMap] = useState(false);
   const [showDriverRejectedModal, setShowDriverRejectedModal] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<TripDocItem | null>(null);
+  const [activeTab, setActiveTab] = useState<"tracking" | "finance">("tracking");
   /** True when assigned driver has linked their account (user_id set); false when unlinked (e.g. OTP not claimed). */
   const [driverLinked, setDriverLinked] = useState(false);
   /** Latest driver location for Live Tracking map (from driver_locations). */
@@ -1493,6 +1494,179 @@ export default function TripDetailScreen({
     [trip?.id, loadAdjustments],
   );
 
+  const trackingTabContent = !trip ? null : (
+    <>
+      {isDriverOffline ? (
+        <View
+          style={[
+            styles.driverOfflineRoot,
+            { paddingBottom: 24 + insets.bottom },
+          ]}
+        >
+          <View style={styles.driverOfflineContent}>
+            <View style={styles.driverOfflineIconWrap}>
+              <FontAwesome
+                name="user-times"
+                size={48}
+                color={Theme.negative}
+              />
+            </View>
+            <Text style={styles.driverOfflineTitle}>Driver is Offline</Text>
+            <Text style={styles.driverOfflineMessage}>
+              Assigned driver node is currently disconnected. Please ask the
+              driver to{" "}
+              <Text style={styles.driverOfflineMessageBold}>login</Text> and{" "}
+              <Text style={styles.driverOfflineMessageBold}>
+                accept the trip
+              </Text>{" "}
+              to activate journey tracking.
+            </Text>
+          </View>
+        </View>
+      ) : (
+        <>
+      <TrackingMapBlock
+        mapHeight={Math.min(Dimensions.get("window").height * 0.38, 300)}
+        vehicleLabel={vehicleLabel}
+        locationLabels={trackingMapLocationLabels}
+        originCoordinate={trackingMapOriginCoordinate}
+        destinationCoordinate={trackingMapDestinationCoordinate}
+        latestLocation={driverLocation}
+        driverLocationLoading={driverLocationLoading}
+        tripLocationPoints={tripLocationPoints}
+        locationAddress={driverLocationAddress}
+      />
+
+      <VehicleTrackingCard
+        vehicleLabel={vehicleLabel}
+        cardStatusText={
+          driverLocationLoading
+            ? "Fetching from DB..."
+            : driverLocation
+              ? "LIVE"
+              : "No location in DB yet"
+        }
+        cardSubtext={
+          driverLocation
+            ? (driverLocationAddress
+                ? `${driverLocationAddress} · ${formatLocationUpdatedAt(driverLocation.recorded_at)}`
+                : `Current location (from DB): ${driverLocation.latitude.toFixed(5)}°, ${driverLocation.longitude.toFixed(5)}° · ${formatLocationUpdatedAt(driverLocation.recorded_at)}`)
+            : "Open map to see driver position"
+        }
+      />
+
+      <View style={styles.trackingPageTimelineWrap}>
+        <View style={styles.trackingPageTimelineHeader}>
+          <FontAwesome
+            name="list-alt"
+            size={14}
+            color={Theme.primary}
+          />
+          <Text style={styles.trackingPageTimelineTitle}>
+            Driver's Activity Timeline
+          </Text>
+          <View style={styles.trackingPageLiveBadge}>
+            <Text style={styles.trackingPageLiveBadgeText}>
+              Live Updates
+            </Text>
+          </View>
+        </View>
+        {(() => {
+          const { step, label } = trackingStepAndLabel(trip?.status ?? "draft");
+          return (
+            <View style={styles.trackingPageCurrentStepWrap}>
+              <Text style={styles.trackingPageCurrentStepLabel}>
+                Current step
+              </Text>
+              <Text style={styles.trackingPageCurrentStepValue}>
+                Step {step} of 4 — {label}
+              </Text>
+            </View>
+          );
+        })()}
+
+        {statusChangeRowsOnly.length > 0 && (
+          <View style={styles.trackingPageStatusChangesWrap}>
+            <Text style={styles.trackingPageStatusChangesTitle}>
+              Status changes
+            </Text>
+            {statusChangeRowsOnly.map((row, idx) => (
+              <View
+                key={row.id}
+                style={[
+                  styles.trackingPageStatusChangeRow,
+                  idx === statusChangeRowsOnly.length - 1 &&
+                    styles.trackingPageStatusChangeRowLast,
+                ]}
+              >
+                <Text style={styles.trackingPageStatusChangeLabel}>
+                  {row.status_label}
+                </Text>
+                <Text style={styles.trackingPageStatusChangeTime}>
+                  {formatAssignmentDate(row.changed_at)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+        </>
+      )}
+      <TripDetailFinanceView
+        mode="tracking-only"
+        trip={trip}
+        tripLedgerEntries={tripLedgerEntries}
+        adjustments={adjustments}
+        viewerOrgId={currentOrganization?.id ?? null}
+        viewerOrganizationName={currentOrganization?.name ?? null}
+        clientName={displayClientName}
+        subcontractRate={subcontractRate}
+        assignmentAuditRows={assignmentAuditRows}
+        assignmentDriverNames={assignmentDriverNames}
+        assignmentVehicleLabels={assignmentVehicleLabels}
+        tripOtp={tripOtp}
+        partnerName={partnerName}
+        driverName={driverName}
+        driverRating={driverRatingAvg}
+        vehicleLabel={
+          isAggregate
+            ? ((displayVehicleFromInput.trim() || vehicleLabel) ?? null)
+            : vehicleLabel
+        }
+        currentUserId={currentUserId}
+        isDriverOffline={isDriverOffline}
+        onOpenTracking={() => setActiveTab("tracking")}
+        tripDocs={computedTripDocs}
+        onOpenDoc={(doc) => setSelectedDoc(doc)}
+        assignmentBlock={
+          trip.organization_id ? (
+            <TripAssignmentBlock
+              trip={trip}
+              organizationId={trip.organization_id}
+              canAssign={canAssign}
+              onUpdated={handleRefresh}
+              driverName={driverName}
+              vehicleLabel={
+                isAggregate
+                  ? ((displayVehicleFromInput.trim() || vehicleLabel) ?? null)
+                  : vehicleLabel
+              }
+              partnerName={isAggregate ? partnerName : undefined}
+              assignmentSource={assignmentSource}
+              currentUserId={currentUserId}
+              showAssignByPhone={showAssignByPhone}
+              onVehicleDisplayChange={setDisplayVehicleFromInput}
+              previousDriverName={previousDriverName}
+              latestReassignmentSummary={latestReassignmentSummary}
+              viewOnly={isClientIndentView}
+              driverAssignOrgId={showAssignByPhone ? currentOrganization?.id ?? undefined : undefined}
+            />
+          ) : null
+        }
+      />
+    </>
+  );
+
   if (loading && !trip) {
     return <CenteredLoadingView message={t("loadingTrip")} />;
   }
@@ -1604,6 +1778,43 @@ export default function TripDetailScreen({
         </TouchableOpacity>
       </View>
 
+      <View style={styles.tabContainer}>
+        <TouchableOpacity
+          onPress={() => setActiveTab("tracking")}
+          style={[
+            styles.tabButton,
+            activeTab === "tracking" && styles.tabButtonActive,
+          ]}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={[
+              styles.tabLabel,
+              activeTab === "tracking" && styles.tabLabelActive,
+            ]}
+          >
+            Tracking
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setActiveTab("finance")}
+          style={[
+            styles.tabButton,
+            activeTab === "finance" && styles.tabButtonActive,
+          ]}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={[
+              styles.tabLabel,
+              activeTab === "finance" && styles.tabLabelActive,
+            ]}
+          >
+            Finance
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       <ScrollView
         style={[styles.scroll, { backgroundColor: "#F9FAFB" }]}
         contentContainerStyle={[
@@ -1620,69 +1831,48 @@ export default function TripDetailScreen({
           />
         }
       >
-          <TripDetailFinanceView
-            trip={trip}
-            tripLedgerEntries={tripLedgerEntries}
-            adjustments={adjustments}
-            viewerOrgId={currentOrganization?.id ?? null}
-            viewerOrganizationName={currentOrganization?.name ?? null}
-            clientName={displayClientName}
-            subcontractRate={subcontractRate}
-            assignmentAuditRows={assignmentAuditRows}
-            assignmentDriverNames={assignmentDriverNames}
-            assignmentVehicleLabels={assignmentVehicleLabels}
-            tripOtp={tripOtp}
-            partnerName={partnerName}
-            driverName={driverName}
-            driverRating={driverRatingAvg}
-            vehicleLabel={
-              isAggregate
-                ? ((displayVehicleFromInput.trim() || vehicleLabel) ?? null)
-                : vehicleLabel
-            }
-            onAddAdjustment={handleAddAdjustment}
-            onRemoveAdjustment={handleRemoveAdjustment}
-            currentUserId={currentUserId}
-            isDriverOffline={isDriverOffline}
-            onOpenTracking={() => setShowTrackingModal(true)}
-          tripDocs={computedTripDocs}
-          onOpenDoc={(doc) => setSelectedDoc(doc)}
-          clientName={displayClientName}
-          assignmentBlock={
-            trip.organization_id ? (
-              <TripAssignmentBlock
+        {activeTab === "tracking" ? (
+          trackingTabContent
+        ) : (
+          <>
+            <TripDetailFinanceView
+              mode="finance-only"
+              trip={trip}
+              tripLedgerEntries={tripLedgerEntries}
+              adjustments={adjustments}
+              viewerOrgId={currentOrganization?.id ?? null}
+              viewerOrganizationName={currentOrganization?.name ?? null}
+              clientName={displayClientName}
+              subcontractRate={subcontractRate}
+              assignmentAuditRows={assignmentAuditRows}
+              assignmentDriverNames={assignmentDriverNames}
+              assignmentVehicleLabels={assignmentVehicleLabels}
+              tripOtp={tripOtp}
+              partnerName={partnerName}
+              driverName={driverName}
+              driverRating={driverRatingAvg}
+              vehicleLabel={
+                isAggregate
+                  ? ((displayVehicleFromInput.trim() || vehicleLabel) ?? null)
+                  : vehicleLabel
+              }
+              onAddAdjustment={handleAddAdjustment}
+              onRemoveAdjustment={handleRemoveAdjustment}
+              currentUserId={currentUserId}
+              isDriverOffline={isDriverOffline}
+              onOpenTracking={() => setActiveTab("tracking")}
+            />
+            {tripCompleted && trip && currentOrganization?.id && (
+              <TripRatingsBlock
                 trip={trip}
-                organizationId={trip.organization_id}
-                canAssign={canAssign}
-                onUpdated={handleRefresh}
+                organizationId={currentOrganization.id}
+                partnerName={partnerName}
                 driverName={driverName}
-                vehicleLabel={
-                  isAggregate
-                    ? ((displayVehicleFromInput.trim() || vehicleLabel) ?? null)
-                    : vehicleLabel
-                }
-                partnerName={isAggregate ? partnerName : undefined}
-                assignmentSource={assignmentSource}
-                currentUserId={currentUserId}
-                showAssignByPhone={showAssignByPhone}
-                onVehicleDisplayChange={setDisplayVehicleFromInput}
-                previousDriverName={previousDriverName}
-                latestReassignmentSummary={latestReassignmentSummary}
-                viewOnly={isClientIndentView}
-                driverAssignOrgId={showAssignByPhone ? currentOrganization?.id ?? undefined : undefined}
+                driverAvatarUri={driverAvatarUri}
+                onRatingsLoaded={handleRatingsLoaded}
               />
-            ) : null
-          }
-        />
-        {tripCompleted && trip && currentOrganization?.id && (
-          <TripRatingsBlock
-            trip={trip}
-            organizationId={currentOrganization.id}
-            partnerName={partnerName}
-            driverName={driverName}
-            driverAvatarUri={driverAvatarUri}
-            onRatingsLoaded={handleRatingsLoaded}
-          />
+            )}
+          </>
         )}
       </ScrollView>
 
@@ -2566,6 +2756,35 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.darkBackground,
+  },
+  tabContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 12,
+    backgroundColor: "rgba(255,255,255,0.6)",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0,0,0,0.05)",
+  },
+  tabButton: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: Theme.surfaceGray,
+  },
+  tabButtonActive: {
+    backgroundColor: Theme.primary,
+  },
+  tabLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textMuted,
+  },
+  tabLabelActive: {
+    color: Theme.textOnPrimary,
   },
   scroll: { flex: 1 },
   scrollContent: {

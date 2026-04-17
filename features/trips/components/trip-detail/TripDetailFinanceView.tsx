@@ -97,6 +97,8 @@ export interface TripDetailFinanceViewProps {
   subcontractRate?: number | null;
   /** Current org display name; used when the supplier viewer cannot resolve the linked supplier row (e.g. indent / RLS). */
   viewerOrganizationName?: string | null;
+  /** Controls whether to render tracking sections, finance sections, or both. */
+  mode?: "full" | "tracking-only" | "finance-only";
 }
 
 export type DocCategory = "vehicle" | "trip" | "driver";
@@ -235,6 +237,7 @@ export function TripDetailFinanceView({
   clientName,
   subcontractRate,
   viewerOrganizationName = null,
+  mode = "full",
 }: TripDetailFinanceViewProps) {
   const { t } = useLanguage();
   const routeStr = `${trip.pickup_area ?? "—"} → ${trip.drop_location ?? "—"}`.trim() || "—";
@@ -344,6 +347,8 @@ export function TripDetailFinanceView({
       ? "Unassigned"
       : (trip.status ?? "Active").replace(/_/g, " ");
   const trackingLocation = routeStr !== "—" ? routeStr : "Unmapped";
+  const showTrackingSections = mode !== "finance-only";
+  const showFinanceSections = mode !== "tracking-only";
 
   const handleTrackingCardPress = () => {
     onOpenTracking?.();
@@ -351,83 +356,88 @@ export function TripDetailFinanceView({
 
   return (
     <View style={styles.content}>
-      {/* Active Grid Sync — tappable to open tracking view */}
-      <TouchableOpacity
-        style={styles.trackingCard}
-        onPress={handleTrackingCardPress}
-        activeOpacity={0.92}
-        accessible
-        accessibilityLabel={isDriverOffline ? "Driver offline - Open tracking" : "Open tracking"}
-        accessibilityRole="button"
-      >
-        <View style={styles.trackingHeader}>
-          <View style={styles.trackingHeaderLeft}>
-            <View
-              style={[
-                styles.trackingStatusDot,
-                isDriverOffline && styles.trackingStatusDotOffline,
-              ]}
-            />
-            <Text
-              style={[
-                styles.trackingLabel,
-                isDriverOffline && styles.trackingLabelOffline,
-              ]}
-            >
-              {isDriverOffline ? "Driver Offline" : "Journey Progress"}
-            </Text>
-          </View>
-          {onOpenTracking ? (
-            <View style={styles.trackingLiveMapBadge}>
-              <FontAwesome name="location-arrow" size={10} color={Theme.primary} />
-              <Text style={styles.trackingLiveMapText}>OPEN MAPS</Text>
+      {showTrackingSections ? (
+        <>
+          {/* Active Grid Sync — tappable to open tracking view */}
+          <TouchableOpacity
+            style={styles.trackingCard}
+            onPress={handleTrackingCardPress}
+            activeOpacity={0.92}
+            accessible
+            accessibilityLabel={isDriverOffline ? "Driver offline - Open tracking" : "Open tracking"}
+            accessibilityRole="button"
+          >
+            <View style={styles.trackingHeader}>
+              <View style={styles.trackingHeaderLeft}>
+                <View
+                  style={[
+                    styles.trackingStatusDot,
+                    isDriverOffline && styles.trackingStatusDotOffline,
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.trackingLabel,
+                    isDriverOffline && styles.trackingLabelOffline,
+                  ]}
+                >
+                  {isDriverOffline ? "Driver Offline" : "Journey Progress"}
+                </Text>
+              </View>
+              {onOpenTracking ? (
+                <View style={styles.trackingLiveMapBadge}>
+                  <FontAwesome name="location-arrow" size={10} color={Theme.primary} />
+                  <Text style={styles.trackingLiveMapText}>OPEN MAPS</Text>
+                </View>
+              ) : null}
             </View>
-          ) : null}
-        </View>
-        <View style={styles.progressRow}>
-          {[1, 2, 3, 4].map((step) => (
-            <View key={step} style={[styles.progressSegment, step <= trackingStep && styles.progressSegmentActive]} />
-          ))}
-        </View>
-        <View style={styles.trackingFooter}>
-          <View style={styles.trackingFooterLeft}>
-            <FontAwesome
-              name="location-arrow"
-              size={10}
-              color={isDriverOffline ? Theme.negative : Theme.positive}
-              style={styles.clockIcon}
-            />
-            <Text
-              style={[
-                styles.trackingFooterValue,
-                isDriverOffline && styles.trackingFooterValueOffline,
-              ]}
-            >
-              {statusLabel}
-            </Text>
-          </View>
-          <View style={styles.trackingFooterRight}>
-            <Text
-              style={[
-                styles.trackingFooterValueAccent,
-                isDriverOffline && styles.trackingFooterValueAccentOffline,
-              ]}
-              numberOfLines={1}
-            >
-              {driverRating != null && driverRating > 0
-                ? `${driverName ?? "Driver"} · ${driverRating.toFixed(1)} ★`
-                : trackingLocation}
-            </Text>
-          </View>
-        </View>
-      </TouchableOpacity>
+            <View style={styles.progressRow}>
+              {[1, 2, 3, 4].map((step) => (
+                <View key={step} style={[styles.progressSegment, step <= trackingStep && styles.progressSegmentActive]} />
+              ))}
+            </View>
+            <View style={styles.trackingFooter}>
+              <View style={styles.trackingFooterLeft}>
+                <FontAwesome
+                  name="location-arrow"
+                  size={10}
+                  color={isDriverOffline ? Theme.negative : Theme.positive}
+                  style={styles.clockIcon}
+                />
+                <Text
+                  style={[
+                    styles.trackingFooterValue,
+                    isDriverOffline && styles.trackingFooterValueOffline,
+                  ]}
+                >
+                  {statusLabel}
+                </Text>
+              </View>
+              <View style={styles.trackingFooterRight}>
+                <Text
+                  style={[
+                    styles.trackingFooterValueAccent,
+                    isDriverOffline && styles.trackingFooterValueAccentOffline,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {driverRating != null && driverRating > 0
+                    ? `${driverName ?? "Driver"} · ${driverRating.toFixed(1)} ★`
+                    : trackingLocation}
+                </Text>
+              </View>
+            </View>
+          </TouchableOpacity>
 
-      {/* Documents */}
-      {tripDocs.length > 0 && (
-        <TripDocsGrid tripDocs={tripDocs} onOpenDoc={onOpenDoc} />
-      )}
+          {/* Documents */}
+          {tripDocs.length > 0 && (
+            <TripDocsGrid tripDocs={tripDocs} onOpenDoc={onOpenDoc} />
+          )}
+        </>
+      ) : null}
 
       {/* Unified Trip Finances Card */}
+      {showFinanceSections ? (
       <View style={styles.financeCard}>
         <View style={styles.financeHeader}>
           <View>
@@ -572,50 +582,57 @@ export function TripDetailFinanceView({
           )}
         </View>
       </View>
+      ) : null}
 
-      {/* Transaction list */}
-      <Text style={styles.handshakesLabel}>Transaction list</Text>
-      <View style={styles.handshakesWrap}>
-        {tripLedgerEntries.length === 0 ? (
-          <Text style={styles.handshakesEmpty}>No transactions linked to this corridor</Text>
-        ) : (
-          <View style={styles.txList}>
-            {tripLedgerEntries.map((row) => {
-              const dateStr = formatLedgerDateShort(row.transaction_date ?? row.created_at);
-              const typeLabel = getDoubleEntryDisplayLabel(row) ?? row.description ?? row.party_name ?? "—";
-              const party = row.party_name?.trim() || "—";
-              const inAmt = Number(row.amount_in ?? 0);
-              const outAmt = Number(row.amount_out ?? 0);
-              const isIn = inAmt > 0;
-              const amount = isIn ? inAmt : outAmt;
-              return (
-                <View key={row.id} style={styles.txCard}>
-                  <View style={[styles.txCardIcon, isIn ? styles.txCardIconIn : styles.txCardIconOut]}>
-                    <FontAwesome name={isIn ? "arrow-down" : "arrow-up"} size={14} color={isIn ? Theme.darkGreen : Theme.teslaRed} />
-                  </View>
-                  <View style={styles.txCardBody}>
-                    <Text style={styles.txCardTitle} numberOfLines={1}>{typeLabel}</Text>
-                    <Text style={styles.txCardSubtitle} numberOfLines={1}>{dateStr} · {party}</Text>
-                  </View>
-                  <Text style={[styles.txCardAmount, isIn ? styles.txCardAmountIn : styles.txCardAmountOut]}>
-                    {isIn ? "+" : "−"}{formatINR(amount)}
-                  </Text>
-                </View>
-              );
-            })}
+      {showFinanceSections ? (
+        <>
+          {/* Transaction list */}
+          <Text style={styles.handshakesLabel}>Transaction list</Text>
+          <View style={styles.handshakesWrap}>
+            {tripLedgerEntries.length === 0 ? (
+              <Text style={styles.handshakesEmpty}>No transactions linked to this corridor</Text>
+            ) : (
+              <View style={styles.txList}>
+                {tripLedgerEntries.map((row) => {
+                  const dateStr = formatLedgerDateShort(row.transaction_date ?? row.created_at);
+                  const typeLabel = getDoubleEntryDisplayLabel(row) ?? row.description ?? row.party_name ?? "—";
+                  const party = row.party_name?.trim() || "—";
+                  const inAmt = Number(row.amount_in ?? 0);
+                  const outAmt = Number(row.amount_out ?? 0);
+                  const isIn = inAmt > 0;
+                  const amount = isIn ? inAmt : outAmt;
+                  return (
+                    <View key={row.id} style={styles.txCard}>
+                      <View style={[styles.txCardIcon, isIn ? styles.txCardIconIn : styles.txCardIconOut]}>
+                        <FontAwesome name={isIn ? "arrow-down" : "arrow-up"} size={14} color={isIn ? Theme.darkGreen : Theme.teslaRed} />
+                      </View>
+                      <View style={styles.txCardBody}>
+                        <Text style={styles.txCardTitle} numberOfLines={1}>{typeLabel}</Text>
+                        <Text style={styles.txCardSubtitle} numberOfLines={1}>{dateStr} · {party}</Text>
+                      </View>
+                      <Text style={[styles.txCardAmount, isIn ? styles.txCardAmountIn : styles.txCardAmountOut]}>
+                        {isIn ? "+" : "−"}{formatINR(amount)}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
           </View>
-        )}
-      </View>
+        </>
+      ) : null}
 
       {/* Assignments Registry (Current Node card + Activity Log; aggregate partner/OTP live inside the block) */}
-      <Text style={styles.handshakesLabel}>Assignments Registry</Text>
-      <View style={styles.handshakesWrap}>
-        {assignmentBlock ? (
-          <View style={styles.assignmentBlockWrap}>
-            {assignmentBlock}
-          </View>
-        ) : null}
-        <View style={styles.activityWrap}>
+      {showTrackingSections ? (
+        <>
+        <Text style={styles.handshakesLabel}>Assignments Registry</Text>
+        <View style={styles.handshakesWrap}>
+          {assignmentBlock ? (
+            <View style={styles.assignmentBlockWrap}>
+              {assignmentBlock}
+            </View>
+          ) : null}
+          <View style={styles.activityWrap}>
           <View style={styles.activitySectionHeader}>
             <FontAwesome name="refresh" size={10} color={Theme.textMuted} />
             <Text style={styles.handshakesLabel}>Activity Log</Text>
@@ -739,8 +756,10 @@ export function TripDetailFinanceView({
               </View>
             );
           })()}
+          </View>
         </View>
-      </View>
+        </>
+      ) : null}
     </View>
   );
 }
