@@ -1612,58 +1612,6 @@ export default function TripDetailScreen({
       </View>
         </>
       )}
-      <TripDetailFinanceView
-        mode="tracking-only"
-        trip={trip}
-        tripLedgerEntries={tripLedgerEntries}
-        adjustments={adjustments}
-        viewerOrgId={currentOrganization?.id ?? null}
-        viewerOrganizationName={currentOrganization?.name ?? null}
-        clientName={displayClientName}
-        subcontractRate={subcontractRate}
-        assignmentAuditRows={assignmentAuditRows}
-        assignmentDriverNames={assignmentDriverNames}
-        assignmentVehicleLabels={assignmentVehicleLabels}
-        tripOtp={tripOtp}
-        partnerName={partnerName}
-        driverName={driverName}
-        driverRating={driverRatingAvg}
-        vehicleLabel={
-          isAggregate
-            ? ((displayVehicleFromInput.trim() || vehicleLabel) ?? null)
-            : vehicleLabel
-        }
-        currentUserId={currentUserId}
-        isDriverOffline={isDriverOffline}
-        onOpenTracking={() => setActiveTab("tracking")}
-        tripDocs={computedTripDocs}
-        onOpenDoc={(doc) => setSelectedDoc(doc)}
-        assignmentBlock={
-          trip.organization_id ? (
-            <TripAssignmentBlock
-              trip={trip}
-              organizationId={trip.organization_id}
-              canAssign={canAssign}
-              onUpdated={handleRefresh}
-              driverName={driverName}
-              vehicleLabel={
-                isAggregate
-                  ? ((displayVehicleFromInput.trim() || vehicleLabel) ?? null)
-                  : vehicleLabel
-              }
-              partnerName={isAggregate ? partnerName : undefined}
-              assignmentSource={assignmentSource}
-              currentUserId={currentUserId}
-              showAssignByPhone={showAssignByPhone}
-              onVehicleDisplayChange={setDisplayVehicleFromInput}
-              previousDriverName={previousDriverName}
-              latestReassignmentSummary={latestReassignmentSummary}
-              viewOnly={isClientIndentView}
-              driverAssignOrgId={showAssignByPhone ? currentOrganization?.id ?? undefined : undefined}
-            />
-          ) : null
-        }
-      />
     </>
   );
 
@@ -1836,7 +1784,6 @@ export default function TripDetailScreen({
         ) : (
           <>
             <TripDetailFinanceView
-              mode="finance-only"
               trip={trip}
               tripLedgerEntries={tripLedgerEntries}
               adjustments={adjustments}
