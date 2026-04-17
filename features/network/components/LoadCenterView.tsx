@@ -1972,24 +1972,19 @@ export function LoadCenterView({
                     {filteredClaimedLoads.length}
                   </Text>
                 </View>
-                <FlashList
-                  data={filteredClaimedLoads}
-                  renderItem={({ item: load }) => (
+                <View style={useGridLayout ? styles.gridList : undefined}>
+                  {filteredClaimedLoads.map((load) => (
                     <View
                       key={`claimed-${load.id}`}
                       style={[
                         useGridLayout ? styles.gridCardWrap : undefined,
-                        useGridLayout ? styles.gridList : undefined,
                         highlightedIndentId === load.id && styles.highlightedIndentCard,
                       ]}
                     >
                       {renderClaimedLoadCard(load, false)}
                     </View>
-                  )}
-                  estimatedItemSize={200} // Estimate item size for FlashList performance
-                  keyExtractor={(item) => item.id}
-                  ref={scrollRef}
-                />
+                  ))}
+                </View>
               </View>
             ))}
         </ScrollView>

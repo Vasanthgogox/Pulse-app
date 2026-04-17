@@ -919,6 +919,7 @@ export default function NetworkScreen() {
     const q = searchQuery.trim().toLowerCase();
     return nodes.filter((n) => {
       if (manageView === "CONNECTIONS" && !n.isIntegrated) return false;
+      if (manageView === "CONNECTIONS" && !isNodeOnApp(n)) return false;
       if (manageView === "INVITATIONS" && showInvitationSearch && n.isIntegrated)
         return false;
       if (manageView === "INVITATIONS" && showInvitationSearch) {
@@ -939,6 +940,7 @@ export default function NetworkScreen() {
     });
   }, [
     invitationSegment,
+    isNodeOnApp,
     manageView,
     nodeKind,
     nodes,
