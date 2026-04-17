@@ -66,3 +66,79 @@ export function useRealtimeTransactionsInvalidation(organizationId: string | nul
     };
   }, [organizationId, qc]);
 }
+
+/** Subscribe to network-related tables; invalidate network queries on any change. */
+export function useRealtimeNetworkInvalidation(organizationId: string | null) {
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    if (!organizationId) return;
+
+    const invalidateNetwork = () => {
+      qc.invalidateQueries({ queryKey: queryKeys.clients.all(organizationId) });
+      qc.invalidateQueries({ queryKey: queryKeys.suppliers.all(organizationId) });
+      qc.invalidateQueries({ queryKey: queryKeys.drivers.all(organizationId) });
+      qc.invalidateQueries({ queryKey: queryKeys.connectionRequests.received(organizationId) });
+      qc.invalidateQueries({ queryKey: queryKeys.connectionRequests.sent(organizationId) });
+      qc.invalidateQueries({ queryKey: queryKeys.driverInvites.sent(organizationId) });
+    };
+
+    const channel = supabase()
+      .channel(uniqueTopic(`network:${organizationId}`))
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'clients',
+          filter: `organization_id=eq.${organizationId}`,
+        },
+        invalidateNetwork
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'suppliers',
+          filter: `organization_id=eq.${organizationId}`,
+        },
+        invalidateNetwork
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'drivers',
+          filter: `organization_id=eq.${organizationId}`,
+        },
+        invalidateNetwork
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'connection_requests',
+          filter: `or(from_organization_id.eq.${organizationId},to_organization_id.eq.${organizationId})`,
+        },
+        invalidateNetwork
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'driver_invites',
+          filter: `from_organization_id=eq.${organizationId}`,
+        },
+        invalidateNetwork
+      )
+      .subscribe();
+
+    return () => {
+      supabase().removeChannel(channel);
+    };
+  }, [organizationId, qc]);
+}

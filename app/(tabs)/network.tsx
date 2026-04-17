@@ -26,6 +26,7 @@ import {
   useDriverInvitesSentQuery,
   useDriversQuery,
   useInvalidateNetwork,
+  useRealtimeNetworkInvalidation,
   useSuppliersQuery,
 } from "@/lib/queries";
 import { getInitials } from "@/lib/stringUtils";
@@ -463,6 +464,7 @@ export default function NetworkScreen() {
   const { t } = useLanguage();
    const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
+  useRealtimeNetworkInvalidation(orgId);
 
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const screenTopPad =
@@ -1345,11 +1347,20 @@ export default function NetworkScreen() {
                       activeOpacity={0.85}
                       onPress={() => {
                         if (node.type === "CLIENT")
-                          router.push(`/client/${node.id}`);
+                          router.push({
+                            pathname: "/client/[id]",
+                            params: { id: node.id },
+                          });
                         else if (node.type === "SUPPLIER")
-                          router.push(`/supplier/${node.id}`);
+                          router.push({
+                            pathname: "/supplier/[id]",
+                            params: { id: node.id },
+                          });
                         else if (node.type === "DRIVER")
-                          router.push(`/driver/${node.id}`);
+                          router.push({
+                            pathname: "/driver/[id]",
+                            params: { id: node.id },
+                          });
                       }}
                     >
                       <NetworkAvatar
@@ -1937,11 +1948,20 @@ export default function NetworkScreen() {
                         activeOpacity={0.7}
                         onPress={() => {
                           if (node.type === "CLIENT")
-                            router.push(`/client/${node.id}`);
+                            router.push({
+                              pathname: "/client/[id]",
+                              params: { id: node.id },
+                            });
                           else if (node.type === "SUPPLIER")
-                            router.push(`/supplier/${node.id}`);
+                            router.push({
+                              pathname: "/supplier/[id]",
+                              params: { id: node.id },
+                            });
                           else if (node.type === "DRIVER")
-                            router.push(`/driver/${node.id}`);
+                            router.push({
+                              pathname: "/driver/[id]",
+                              params: { id: node.id },
+                            });
                         }}
                       >
                         <View style={styles.networkCardTop}>

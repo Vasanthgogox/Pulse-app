@@ -867,7 +867,7 @@ export default function TripDetailScreen({
       const res = await getDriverById(orgId, id);
       return {
         id,
-        name: res.driver ? res.driver.name || res.driver.phone || id : id,
+        name: res.driver ? (res.driver.name || res.driver.phone || "").trim() : "",
       };
     });
     const vehiclePromises = Array.from(vehicleIds).map(async (id) => {
@@ -884,7 +884,9 @@ export default function TripDetailScreen({
         if (cancelled) return;
         const drivers: Record<string, string> = {};
         const vehicles: Record<string, string> = {};
-        for (const r of driverResults) drivers[r.id] = r.name;
+        for (const r of driverResults) {
+          if (r.name) drivers[r.id] = r.name;
+        }
         for (const r of vehicleResults) vehicles[r.id] = r.label;
         setAssignmentDriverNames(drivers);
         setAssignmentVehicleLabels(vehicles);
@@ -2171,11 +2173,11 @@ export default function TripDetailScreen({
                           const isFallback = row.id === "fallback";
                           const driverPrev =
                             !isFallback && row.driver_id_prev
-                              ? (assignmentDriverNames[row.driver_id_prev] ?? row.driver_id_prev)
+                              ? (assignmentDriverNames[row.driver_id_prev] ?? null)
                               : null;
                           const driverNew = row.driver_id_new
                             ? (assignmentDriverNames[row.driver_id_new] ??
-                               (isFallback ? driverName ?? null : row.driver_id_new))
+                               (isFallback ? driverName ?? null : null))
                             : null;
                           const vehiclePrev =
                             !isFallback && row.vehicle_id_prev
