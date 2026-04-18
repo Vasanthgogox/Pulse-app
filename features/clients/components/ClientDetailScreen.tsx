@@ -1,4 +1,7 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { DatePresetPillBar } from "@/components/DatePresetPillBar";
+import { DateRangePickerModal } from "@/components/DateRangePickerModal";
+import { PartyAvatar } from "@/components/PartyAvatar";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -12,6 +15,8 @@ import {
   type LedgerEntry,
   type LedgerRow,
 } from "@/features/finance";
+import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPeriod";
+import type { FinancePeriodFilter } from "@/features/finance/types";
 import { LedgerTransactionListView } from "@/features/finance/components/LedgerTransactionListView";
 import { TreasuryDetailLayout } from "@/features/finance/components/TreasuryDetailLayout";
 import { allocateAmountsToLargestDueTrips } from "@/features/finance/utils/allocateToLargestDue";
@@ -27,6 +32,7 @@ import {
   getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
 import { formatINR, formatLedgerDate } from "@/lib/format";
+import { tripDayIso } from "@/lib/dateRangePresets";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
 import { useFocusEffect } from "@react-navigation/native";
@@ -57,6 +63,91 @@ import {
   type ClientRow,
   type UpdateClientData,
 } from "../services/clients.service";
+import {
+  getSuppliersByOrganization,
+  type SupplierRow,
+} from "@/features/suppliers";
+import {
+  getDriversByOrganization,
+  type DriverRow,
+} from "@/features/drivers";
+import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
+
+/** UUID-shaped strings are not valid human supplier names (avoid showing raw ids). */
+function isUuidLikeString(value: string | null | undefined): boolean {
+  return (
+    !!value &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value.trim(),
+    )
+  );
+}
+
+/**
+ * When the same trip exists as org-owned row and as supplier-RPC row, we previously kept only the owner
+ * copy — `get_trips_where_org_is_supplier` often carries supplier_name / supplier_id the owner row lacks.
+ */
+function mergeTripOwnerWithSupplierCopy(
+  owner: TripRow,
+  supplierCopy: TripRow,
+): TripRow {
+  const ownerSid = (owner.supplier_id ?? "").trim();
+  const altSid = (supplierCopy.supplier_id ?? "").trim();
+  const supplier_id =
+    ownerSid || altSid ? ownerSid || altSid : owner.supplier_id ?? supplierCopy.supplier_id ?? null;
+
+  const ownerSn = (owner.supplier_name ?? "").trim();
+  const altSn = (supplierCopy.supplier_name ?? "").trim();
+  let supplier_name = owner.supplier_name ?? supplierCopy.supplier_name;
+  if (ownerSn && !isUuidLikeString(ownerSn)) supplier_name = owner.supplier_name;
+  else if (altSn && !isUuidLikeString(altSn)) supplier_name = supplierCopy.supplier_name;
+
+  return { ...owner, supplier_id, supplier_name };
+}
+
+const TRIP_TABLE_AVATAR = 24;
+
+type PartnerOrgBranding = { avatarUrl?: string; avatarSeed?: string };
+
+function supplierPartyAvatarProps(
+  trip: TripRow,
+  displayName: string,
+  supplierById: Map<string, SupplierRow>,
+  linkedOrgBySupplierOrgId: Record<string, { avatarUrl?: string; avatarSeed?: string }>,
+  partnerOrgBrandingByTripOwnerOrgId: Record<string, PartnerOrgBranding>,
+): {
+  name: string;
+  organizationImageUrl?: string | null;
+  organizationAvatarSeed?: string | null;
+  avatarUrl?: string | null;
+  avatarSeed?: string | null;
+} {
+  const sid = (trip.supplier_id ?? "").trim().toLowerCase();
+  if (sid) {
+    const s = supplierById.get(sid);
+    if (s) {
+      const oid = (s.linked_organization_id ?? "").trim();
+      const org = oid ? linkedOrgBySupplierOrgId[oid] : undefined;
+      return {
+        name: displayName,
+        organizationImageUrl: org?.avatarUrl ?? null,
+        organizationAvatarSeed: org?.avatarSeed ?? null,
+        avatarUrl: (s.avatar_url ?? "").trim() || null,
+        avatarSeed: (s.avatar_seed ?? "").trim() || null,
+      };
+    }
+  }
+  const oid = (trip.organization_id ?? "").trim();
+  if (oid && partnerOrgBrandingByTripOwnerOrgId[oid]) {
+    const b = partnerOrgBrandingByTripOwnerOrgId[oid];
+    return {
+      name: displayName,
+      organizationImageUrl: b.avatarUrl ?? null,
+      organizationAvatarSeed: b.avatarSeed ?? null,
+    };
+  }
+  return { name: displayName };
+}
 
 /** Treat linked-org placeholder (linked-<uuid>) as empty for display. */
 function isPlaceholderPhone(value: string | null | undefined): boolean {
@@ -109,6 +200,18 @@ export default function ClientDetailScreen({
   const canAddTransaction = canAccessFinance(capabilities);
   const [client, setClient] = useState<ClientRow | null>(null);
   const [trips, setTrips] = useState<TripRow[]>([]);
+  /** Supplier rows for resolving aggregate `supplier_id` → display name in trip table. */
+  const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
+  const [drivers, setDrivers] = useState<DriverRow[]>([]);
+  /** Load-based partner org (trip.organization_id) → name from `get_connection_partner_display`. */
+  const [partnerOrgNamesByOrgId, setPartnerOrgNamesByOrgId] = useState<
+    Record<string, string>
+  >({});
+  /** Partner trip-owner org → avatar fields for aggregate / cross-org supplier column. */
+  const [partnerOrgBrandingByOrgId, setPartnerOrgBrandingByOrgId] = useState<
+    Record<string, PartnerOrgBranding>
+  >({});
+  const fetchedPartnerOrgIdsRef = useRef<Set<string>>(new Set());
   const [transactions, setTransactions] = useState<LedgerRow[]>([]);
   const [orgTrips, setOrgTrips] = useState<TripRow[]>([]);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -120,6 +223,10 @@ export default function ClientDetailScreen({
   const isRefreshingRef = useRef(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash" | "shared">("trips");
+  const [tripDatePeriod, setTripDatePeriod] = useState<FinancePeriodFilter>("RANGE");
+  const [tripCustomFrom, setTripCustomFrom] = useState<string | null>(null);
+  const [tripCustomTo, setTripCustomTo] = useState<string | null>(null);
+  const [tripDateModalVisible, setTripDateModalVisible] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successTitle, setSuccessTitle] = useState("NODE_SYNCED");
   const [isLinked, setIsLinked] = useState(false);
@@ -167,8 +274,19 @@ export default function ClientDetailScreen({
       getTripsWhereOrgIsSupplier(orgId),
       getClientsByOrganization(orgId),
       getTransactionsByOrganization(orgId),
+      getSuppliersByOrganization(orgId),
+      getDriversByOrganization(orgId),
     ])
-      .then(([clientRes, tripsRes, supplierTripsRes, clientsRes, txRes]) => {
+      .then(
+        ([
+          clientRes,
+          tripsRes,
+          supplierTripsRes,
+          clientsRes,
+          txRes,
+          suppliersRes,
+          driversRes,
+        ]) => {
         if (clientRes.error) {
           setError(clientRes.error.message);
           setClient(null);
@@ -181,7 +299,14 @@ export default function ClientDetailScreen({
           : (supplierTripsRes.trips ?? []);
         const byId = new Map<string, TripRow>();
         for (const t of ownerTrips) byId.set(t.id, t);
-        for (const t of supplierTrips) if (!byId.has(t.id)) byId.set(t.id, t);
+        for (const t of supplierTrips) {
+          const existing = byId.get(t.id);
+          if (existing) {
+            byId.set(t.id, mergeTripOwnerWithSupplierCopy(existing, t));
+          } else {
+            byId.set(t.id, t);
+          }
+        }
         const allTrips = Array.from(byId.values());
         setOrgTrips(allTrips);
         const clientDisplayName = (
@@ -226,6 +351,8 @@ export default function ClientDetailScreen({
           return matchesDirect || matchesTx || matchesLinkedOrg;
         });
         setTrips(forClient);
+        setSuppliers(suppliersRes.error ? [] : (suppliersRes.suppliers ?? []));
+        setDrivers(driversRes.error ? [] : (driversRes.drivers ?? []));
         const tripIds = new Set(forClient.map((t) => normId(t.id)));
         const forClientTx = allTx.filter((tx) => {
           const linkedToClient =
@@ -248,6 +375,139 @@ export default function ClientDetailScreen({
         setRefreshing(false);
       });
   }, [clientId, currentOrganization?.id]);
+
+  useEffect(() => {
+    fetchedPartnerOrgIdsRef.current = new Set();
+    setPartnerOrgNamesByOrgId({});
+    setPartnerOrgBrandingByOrgId({});
+  }, [clientId]);
+
+  const supplierDisplayById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of suppliers) {
+      const label = (
+        s.name ||
+        s.company_name ||
+        s.contact_person ||
+        ""
+      ).trim();
+      if (!label) continue;
+      m.set(String(s.id).trim().toLowerCase(), label);
+    }
+    return m;
+  }, [suppliers]);
+
+  const supplierById = useMemo(() => {
+    const m = new Map<string, SupplierRow>();
+    for (const s of suppliers) {
+      m.set(String(s.id).trim().toLowerCase(), s);
+    }
+    return m;
+  }, [suppliers]);
+
+  const driverById = useMemo(() => {
+    const m = new Map<string, DriverRow>();
+    for (const d of drivers) {
+      m.set(String(d.id).trim().toLowerCase(), d);
+    }
+    return m;
+  }, [drivers]);
+
+  const linkedOrgDisplayMap = useLinkedOrgProfileMap(
+    client ? [client] : [],
+    suppliers,
+  );
+
+  /** Supplier-typed ledger rows often carry the human supplier name when the trip row omits it. */
+  const supplierPartyNameByTripId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const tx of transactions) {
+      if (tx.contact_type !== "supplier") continue;
+      const tid = (tx.trip_id ?? "").trim().toLowerCase();
+      if (!tid) continue;
+      const pn = (tx.party_name ?? "").trim();
+      if (!pn || isUuidLikeString(pn)) continue;
+      if (!m.has(tid)) m.set(tid, pn);
+    }
+    return m;
+  }, [transactions]);
+
+  useEffect(() => {
+    if (!currentOrganization?.id) return;
+    const myOrgId = currentOrganization.id;
+    const toResolve = new Set<string>();
+    for (const t of trips) {
+      if (!t.organization_id || t.organization_id === myOrgId) continue;
+      if (!isLoadBasedTrip(t)) continue;
+      const raw = (t.supplier_name ?? "").trim();
+      if (raw && !isUuidLikeString(raw)) continue;
+      const sid = (t.supplier_id ?? "").trim().toLowerCase();
+      if (sid && supplierDisplayById.has(sid)) continue;
+      if (!fetchedPartnerOrgIdsRef.current.has(t.organization_id)) {
+        toResolve.add(t.organization_id);
+      }
+    }
+    if (toResolve.size === 0) return;
+    let cancelled = false;
+    void (async () => {
+      const updates: Record<string, string> = {};
+      const branding: Record<string, PartnerOrgBranding> = {};
+      for (const oid of toResolve) {
+        if (cancelled) return;
+        fetchedPartnerOrgIdsRef.current.add(oid);
+        const { profile } = await getLinkedOrgProfile(oid);
+        const name = profile?.organizationName?.trim();
+        if (name) updates[oid] = name;
+        if (profile) {
+          branding[oid] = {
+            avatarUrl: (profile.avatarUrl ?? "").trim() || undefined,
+            avatarSeed: (profile.avatarSeed ?? "").trim() || undefined,
+          };
+        }
+      }
+      if (!cancelled && Object.keys(updates).length > 0) {
+        setPartnerOrgNamesByOrgId((prev) => ({ ...prev, ...updates }));
+      }
+      if (!cancelled && Object.keys(branding).length > 0) {
+        setPartnerOrgBrandingByOrgId((prev) => ({ ...prev, ...branding }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [trips, supplierDisplayById, currentOrganization?.id]);
+
+  const aggregateSupplierLabel = useCallback(
+    (trip: TripRow): string => {
+      const raw = (trip.supplier_name ?? "").trim();
+      if (raw && !isUuidLikeString(raw)) return raw;
+      const sid = (trip.supplier_id ?? "").trim().toLowerCase();
+      if (sid) {
+        const fromRow = supplierDisplayById.get(sid);
+        if (fromRow) return fromRow;
+      }
+      const tid = String(trip.id).trim().toLowerCase();
+      const fromLedger = supplierPartyNameByTripId.get(tid);
+      if (fromLedger) return fromLedger;
+      const oid = trip.organization_id;
+      if (
+        oid &&
+        currentOrganization?.id &&
+        oid !== currentOrganization.id &&
+        isLoadBasedTrip(trip) &&
+        partnerOrgNamesByOrgId[oid]
+      ) {
+        return partnerOrgNamesByOrgId[oid];
+      }
+      return "Aggregate Supplier";
+    },
+    [
+      supplierDisplayById,
+      supplierPartyNameByTripId,
+      partnerOrgNamesByOrgId,
+      currentOrganization?.id,
+    ],
+  );
 
   useEffect(() => load(), [load]);
   useFocusEffect(
@@ -611,11 +871,23 @@ export default function ClientDetailScreen({
     };
   }, [trips, transactions, clientId]);
 
+  const tripDateOpts = useMemo(
+    () => ({ customFrom: tripCustomFrom, customTo: tripCustomTo }),
+    [tripCustomFrom, tripCustomTo],
+  );
+  const tripsForMissionTable = useMemo(
+    () =>
+      trips.filter((t) =>
+        ledgerDayMatchesPeriod(tripDayIso(t), tripDatePeriod, tripDateOpts),
+      ),
+    [trips, tripDatePeriod, tripDateOpts],
+  );
+
   const missionRows = useMemo(() => {
     const norm = (id: string | null | undefined) =>
       id == null ? "" : String(id).trim().toLowerCase();
     const linkedOrgId = client?.linked_organization_id ?? null;
-    return trips.map((t) => {
+    return tripsForMissionTable.map((t) => {
       const isIntegratedShipperClient =
         client?.is_integrated === true &&
         linkedOrgId != null &&
@@ -634,7 +906,13 @@ export default function ClientDetailScreen({
         due: tripIdToDue[t.id] ?? 0,
       };
     });
-  }, [trips, paidByTripId, tripIdToDue, client?.linked_organization_id, client?.is_integrated]);
+  }, [
+    tripsForMissionTable,
+    paidByTripId,
+    tripIdToDue,
+    client?.linked_organization_id,
+    client?.is_integrated,
+  ]);
   const tripTransactionMetaById = useMemo(() => {
     const byTrip: Record<string, { count: number; lastTxnDate: string | null }> = {};
     for (const tx of transactions) {
@@ -711,11 +989,6 @@ export default function ClientDetailScreen({
   );
   const tripTableReport = useMemo(() => {
     if (detailSubTab !== "trips") return undefined;
-    const isUuidLike = (value: string | null | undefined): boolean =>
-      !!value &&
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-        value.trim(),
-      );
     const rows = missionRows.map((row) => {
       const key = String(row.trip.id).trim().toLowerCase();
       const meta = tripTransactionMetaById[key] ?? { count: 0, lastTxnDate: null };
@@ -723,12 +996,11 @@ export default function ClientDetailScreen({
       const supplierRate = Number(row.trip.supplier_rate ?? 0);
       const hasSupplierRef =
         !!row.trip.supplier_id ||
-        (!!row.trip.supplier_name && !isUuidLike(row.trip.supplier_name));
+        (!!row.trip.supplier_name &&
+          !isUuidLikeString(row.trip.supplier_name));
       const isAggregateTrip = hasSupplierRef || isLoadBasedTrip(row.trip);
       const supplierName = isAggregateTrip
-        ? row.trip.supplier_name && !isUuidLike(row.trip.supplier_name)
-          ? row.trip.supplier_name
-          : "Aggregate Supplier"
+        ? aggregateSupplierLabel(row.trip)
         : "Asset / Own Vehicle";
       const cost = supplierRate > 0 ? supplierRate : expenseCaptured;
       const pnl = row.sales - cost;
@@ -765,7 +1037,13 @@ export default function ClientDetailScreen({
       ],
       rows,
     };
-  }, [detailSubTab, missionRows, tripTransactionMetaById, tripExpenseById]);
+  }, [
+    aggregateSupplierLabel,
+    detailSubTab,
+    missionRows,
+    tripTransactionMetaById,
+    tripExpenseById,
+  ]);
 
   if (loading) {
     return (
@@ -931,16 +1209,40 @@ export default function ClientDetailScreen({
           ))}
         </View>
 
+        {detailSubTab === "trips" && (
+          <View style={styles.tripDatePillWrap}>
+            <DatePresetPillBar
+              variant="onLight"
+              period={tripDatePeriod}
+              onPeriodChange={(p) => {
+                setTripDatePeriod(p);
+                if (p !== "CUSTOM") {
+                  setTripCustomFrom(null);
+                  setTripCustomTo(null);
+                }
+              }}
+              onCustomRangePress={() => setTripDateModalVisible(true)}
+              customFrom={tripCustomFrom}
+              customTo={tripCustomTo}
+            />
+          </View>
+        )}
+
         {/* Tab: Trips — Sales, Received, Due; tap row to open trip detail */}
         {detailSubTab === "trips" && (
           <View style={[styles.tableCard, isWebDesktop && styles.tableCardWebDesktop]}>
             <View style={[styles.tableHeader, isWebDesktop && styles.tableHeaderWebDesktop]}>
+              {isWebDesktop ? (
+                <View style={styles.clientColWebDesktop}>
+                  <Text style={[styles.th, styles.thWebDesktop]}>Client</Text>
+                </View>
+              ) : null}
               <Text
                 style={[
                   styles.th,
                   styles.thMission,
                   isWebDesktop && styles.thWebDesktop,
-                  isWebDesktop && styles.thMissionWebDesktop,
+                  isWebDesktop && styles.tripColWebDesktop,
                 ]}
               >
                 Trip
@@ -948,6 +1250,11 @@ export default function ClientDetailScreen({
               {isWebDesktop ? (
                 <View style={styles.partyColWebDesktop}>
                   <Text style={[styles.th, styles.thWebDesktop]}>Supplier</Text>
+                </View>
+              ) : null}
+              {isWebDesktop ? (
+                <View style={styles.driverColWebDesktop}>
+                  <Text style={[styles.th, styles.thWebDesktop]}>Driver</Text>
                 </View>
               ) : null}
               <View style={[styles.headerAmountCol, isWebDesktop && styles.amountColWebDesktop]}>
@@ -1016,19 +1323,15 @@ export default function ClientDetailScreen({
                       count: 0,
                       lastTxnDate: null,
                     };
-                    const isUuidLike = (value: string | null | undefined): boolean =>
-                      !!value &&
-                      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-                        value.trim(),
-                      );
                     const supplierNameRaw = row.trip.supplier_name?.trim() ?? "";
                     const hasSupplierRef =
-                      !!row.trip.supplier_id || (!!supplierNameRaw && !isUuidLike(supplierNameRaw));
-                    const isAggregateTrip = hasSupplierRef || isLoadBasedTrip(row.trip);
+                      !!row.trip.supplier_id ||
+                      (!!supplierNameRaw &&
+                        !isUuidLikeString(supplierNameRaw));
+                    const isAggregateTrip =
+                      hasSupplierRef || isLoadBasedTrip(row.trip);
                     const supplierName = isAggregateTrip
-                      ? supplierNameRaw && !isUuidLike(supplierNameRaw)
-                        ? supplierNameRaw
-                        : "Aggregate Supplier"
+                      ? aggregateSupplierLabel(row.trip)
                       : "Asset / Own Vehicle";
                     const expenseCaptured =
                       tripExpenseById[String(row.trip.id).trim().toLowerCase()] ?? 0;
@@ -1037,12 +1340,58 @@ export default function ClientDetailScreen({
                     const tripPnl = row.sales - tripCost;
                     const marginPct = row.sales > 0 ? (tripPnl / row.sales) * 100 : 0;
                     const tripDateIso = row.trip.pickup_date ?? row.trip.created_at;
+                    const supplierAv = supplierPartyAvatarProps(
+                      row.trip,
+                      supplierName,
+                      supplierById,
+                      linkedOrgDisplayMap,
+                      partnerOrgBrandingByOrgId,
+                    );
+                    const driverIdKey = (row.trip.driver_id ?? "").trim().toLowerCase();
+                    const driverRow = driverIdKey ? driverById.get(driverIdKey) : undefined;
+                    const driverName =
+                      (row.trip.driver_display_name ?? "").trim() ||
+                      (driverRow?.name ?? "").trim() ||
+                      "—";
                     return (
                       <>
+                  {isWebDesktop && client ? (
+                    <View style={styles.clientColWebDesktop}>
+                      <View style={styles.tdPartyAvatarRow}>
+                        <PartyAvatar
+                          name={clientName}
+                          organizationImageUrl={
+                            client.linked_organization_id
+                              ? linkedOrgDisplayMap[client.linked_organization_id]
+                                  ?.avatarUrl
+                              : undefined
+                          }
+                          organizationAvatarSeed={
+                            client.linked_organization_id
+                              ? linkedOrgDisplayMap[client.linked_organization_id]
+                                  ?.avatarSeed
+                              : undefined
+                          }
+                          avatarUrl={client.avatar_url}
+                          avatarSeed={client.avatar_seed}
+                          entityType="client"
+                          size={TRIP_TABLE_AVATAR}
+                        />
+                        <View style={styles.tdPartyTextStack}>
+                          <Text style={styles.tdPartyWebDesktop} numberOfLines={1}>
+                            {clientName}
+                          </Text>
+                          <Text style={styles.tdPartyHintWebDesktop} numberOfLines={1}>
+                            {(client.contact_person ?? "").trim() || "—"}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  ) : null}
                   <View
                     style={[
                       styles.tdMission,
-                      isWebDesktop && styles.tdMissionWebDesktop,
+                      isWebDesktop && styles.tdTripColWebDesktop,
                     ]}
                   >
                     <Text
@@ -1059,7 +1408,7 @@ export default function ClientDetailScreen({
                         styles.tdRoute,
                         isWebDesktop && styles.tdRouteWebDesktop,
                       ]}
-                      numberOfLines={isWebDesktop ? 2 : 1}
+                      numberOfLines={isWebDesktop ? 3 : 1}
                     >
                       {row.route}
                     </Text>
@@ -1071,22 +1420,59 @@ export default function ClientDetailScreen({
                   </View>
                   {isWebDesktop ? (
                     <View style={styles.partyColWebDesktop}>
-                      <Text style={styles.tdPartyWebDesktop} numberOfLines={1}>
-                        {supplierName}
-                      </Text>
-                      {isAggregateTrip ? (
-                        <Text style={styles.tdPartyHintWebDesktop} numberOfLines={1}>
-                          Aggregate · Margin {marginPct.toFixed(1)}%
-                        </Text>
-                      ) : supplierRate <= 0 && expenseCaptured > 0 ? (
-                        <Text style={styles.tdPartyHintWebDesktop} numberOfLines={1}>
-                          Asset · Expense captured: {formatINR(expenseCaptured)}
-                        </Text>
-                      ) : (
-                        <Text style={styles.tdPartyHintWebDesktop} numberOfLines={1}>
-                          Asset
-                        </Text>
-                      )}
+                      <View style={styles.tdPartyAvatarRow}>
+                        <PartyAvatar
+                          name={supplierAv.name}
+                          organizationImageUrl={supplierAv.organizationImageUrl}
+                          organizationAvatarSeed={supplierAv.organizationAvatarSeed}
+                          avatarUrl={supplierAv.avatarUrl}
+                          avatarSeed={supplierAv.avatarSeed}
+                          entityType="supplier"
+                          size={TRIP_TABLE_AVATAR}
+                        />
+                        <View style={styles.tdPartyTextStack}>
+                          <Text style={styles.tdPartyWebDesktop} numberOfLines={1}>
+                            {supplierName}
+                          </Text>
+                          {isAggregateTrip ? (
+                            <Text style={styles.tdPartyHintWebDesktop} numberOfLines={1}>
+                              {isLoadBasedTrip(row.trip) ? "Partner" : "Aggregate"} · Margin{" "}
+                              {marginPct.toFixed(1)}%
+                            </Text>
+                          ) : supplierRate <= 0 && expenseCaptured > 0 ? (
+                            <Text style={styles.tdPartyHintWebDesktop} numberOfLines={1}>
+                              Asset · Expense captured: {formatINR(expenseCaptured)}
+                            </Text>
+                          ) : (
+                            <Text style={styles.tdPartyHintWebDesktop} numberOfLines={1}>
+                              Asset
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    </View>
+                  ) : null}
+                  {isWebDesktop ? (
+                    <View style={styles.driverColWebDesktop}>
+                      <View style={styles.tdPartyAvatarRow}>
+                        <PartyAvatar
+                          name={driverName}
+                          avatarUrl={(driverRow?.avatar_url ?? "").trim() || null}
+                          avatarSeed={(driverRow?.avatar_seed ?? "").trim() || null}
+                          entityType="driver"
+                          size={TRIP_TABLE_AVATAR}
+                        />
+                        <View style={styles.tdPartyTextStack}>
+                          <Text style={styles.tdPartyWebDesktop} numberOfLines={2}>
+                            {driverName}
+                          </Text>
+                          {(row.trip.vehicle_display_number ?? "").trim() ? (
+                            <Text style={styles.tdPartyHintWebDesktop} numberOfLines={1}>
+                              {(row.trip.vehicle_display_number ?? "").trim()}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </View>
                     </View>
                   ) : null}
                   <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
@@ -1197,6 +1583,7 @@ export default function ClientDetailScreen({
               showHistoryHeader={false}
               showGridFooter={false}
               embedInParentScroll={true}
+              driverRows={drivers}
             />
           </View>
         )}
@@ -1214,6 +1601,7 @@ export default function ClientDetailScreen({
                 id: client.id,
                 name: clientName,
                 linked_organization_id: client.linked_organization_id ?? undefined,
+                avatar_url: client.avatar_url ?? undefined,
               }}
               entityType="CLIENT"
               trips={trips}
@@ -1277,6 +1665,19 @@ export default function ClientDetailScreen({
           />
         </View>
       )}
+
+      <DateRangePickerModal
+        visible={tripDateModalVisible}
+        initialFrom={tripCustomFrom ?? undefined}
+        initialTo={tripCustomTo ?? undefined}
+        onDismiss={() => setTripDateModalVisible(false)}
+        onApply={(from, to) => {
+          setTripCustomFrom(from);
+          setTripCustomTo(to);
+          setTripDatePeriod("CUSTOM");
+          setTripDateModalVisible(false);
+        }}
+      />
 
       <LedgerReportModal
         visible={showReportModal}
@@ -1883,6 +2284,11 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     gap: 4,
   },
+  tripDatePillWrap: {
+    paddingHorizontal: 4,
+    marginBottom: 12,
+    marginTop: -8,
+  },
   tabItem: {
     flex: 1,
     paddingVertical: 10,
@@ -1954,17 +2360,52 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontStyle: "normal",
   },
-  thMissionWebDesktop: {
-    flex: 1,
-    minWidth: 0,
+  clientColWebDesktop: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "11%",
+    minWidth: 108,
+    justifyContent: "center",
+    paddingRight: 6,
+  },
+  tripColWebDesktop: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flex: 0,
     width: "28%",
+    minWidth: 248,
+    maxWidth: 520,
   },
   partyColWebDesktop: {
-    width: "16%",
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "12%",
+    minWidth: 100,
     justifyContent: "center",
     borderLeftWidth: 1,
     borderLeftColor: Theme.borderLight,
     paddingLeft: 10,
+  },
+  driverColWebDesktop: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "9%",
+    minWidth: 92,
+    justifyContent: "center",
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 8,
+  },
+  tdPartyAvatarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 0,
+    width: "100%",
+  },
+  tdPartyTextStack: {
+    flex: 1,
+    minWidth: 0,
   },
   headerAmountCol: {
     width: 80,
@@ -1980,7 +2421,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   amountColWebDesktop: {
-    width: "8%",
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "5.65%",
+    minWidth: 58,
+    maxWidth: 108,
     borderLeftWidth: 1,
     borderLeftColor: Theme.borderLight,
     paddingLeft: 6,
@@ -2046,11 +2491,14 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     marginTop: 4,
   },
-  tdMissionWebDesktop: {
-    flex: 1,
-    minWidth: 0,
+  tdTripColWebDesktop: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flex: 0,
     width: "28%",
-    paddingRight: 6,
+    minWidth: 248,
+    maxWidth: 520,
+    paddingRight: 8,
   },
   tdPartyWebDesktop: {
     fontSize: 11,

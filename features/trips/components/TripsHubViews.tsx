@@ -2,9 +2,17 @@
  * Trips hub — compact card grid and audit-style table for the main Trips tab.
  * Styling aligns with fleet hub / reference; data bindings mirror TripExpandableCard.
  */
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
+import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
+import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import { isAggregateTrip } from "@/lib/driverUtils";
+import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
+import {
+  isBlankOrPlaceholderPartyName,
+  resolvePartyDisplayUri,
+} from "@/lib/partyAvatarDisplay";
 import {
   formatINR,
   formatLedgerDate,
@@ -13,6 +21,7 @@ import {
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useEffect, useState, type ReactNode } from "react";
 import {
+  Image,
   LayoutAnimation,
   Modal,
   Platform,
@@ -36,6 +45,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { getTripDisplayNumber, type TripRow } from "../services/trips.service";
+import type { TripHubPartyMeta } from "../utils/tripHubPartyMeta";
 
 if (
   Platform.OS === "android" &&
@@ -319,10 +329,86 @@ export function summarizeTripLedgerForHub(entries: LedgerRow[]): {
   return { receivedTotal, count: entries.length, lastAtIso };
 }
 
+const HUB_TABLE_PARTY_AVATAR = 22;
+
+/** Hub card: storage/http URL + seed via `resolvePartyDisplayUri`, else DiceBear from `fallbackSeed`. */
+function HubPartyAvatar({
+  avatarUrl,
+  avatarSeed,
+  fallbackSeed,
+  entityType = "client",
+  partyLabel,
+}: {
+  avatarUrl: string | null | undefined;
+  avatarSeed: string | null | undefined;
+  fallbackSeed: string;
+  entityType?: "client" | "supplier";
+  /** When empty or placeholder-only, no synthetic DiceBear avatar is shown. */
+  partyLabel: string;
+}) {
+  const resolved =
+    resolvePartyDisplayUri({
+      avatarUrl,
+      avatarSeed,
+      entityType,
+    }) ?? null;
+  if (resolved) {
+    return (
+      <View style={styles.hubPartyAvatarRing}>
+        <Image
+          source={{ uri: resolved }}
+          style={styles.hubPartyAvatarImg}
+          resizeMode="cover"
+          accessibilityIgnoresInvertColors
+        />
+      </View>
+    );
+  }
+  if (isBlankOrPlaceholderPartyName(partyLabel)) {
+    return null;
+  }
+  const displayUri = getUser2DAvatarUriForSeed(
+    (fallbackSeed ?? "").trim() || partyLabel.trim() || "party",
+  );
+  return (
+    <View style={styles.hubPartyAvatarRing}>
+      <Image
+        source={{ uri: displayUri }}
+        style={styles.hubPartyAvatarImg}
+        resizeMode="cover"
+        accessibilityIgnoresInvertColors
+      />
+    </View>
+  );
+}
+
+function linkedOrgAvatarFields(
+  linkedOrgId: string | null | undefined,
+  linkedMap: Record<string, LinkedOrgDisplay> | undefined,
+): { organizationImageUrl?: string | null; organizationAvatarSeed?: string | null } {
+  const id = (linkedOrgId ?? "").trim();
+  if (!id || !linkedMap) return {};
+  const o = linkedMap[id];
+  if (!o) return {};
+  return {
+    organizationImageUrl: o.avatarUrl ?? null,
+    organizationAvatarSeed: o.avatarSeed ?? null,
+  };
+}
+
 export type TripsHubTripCardProps = {
   trip: TripRow;
   currentOrganizationId: string | null | undefined;
   displayClientName: string;
+  /** Resolved supplier / partner label (may be empty until sync). */
+  displaySupplierName?: string;
+  /** When set and starts with http(s), shown as client photo; else seed / fallback. */
+  clientAvatarUrl?: string | null;
+  clientAvatarSeed?: string | null;
+  clientAvatarFallbackSeed?: string;
+  supplierAvatarUrl?: string | null;
+  supplierAvatarSeed?: string | null;
+  supplierAvatarFallbackSeed?: string;
   cardDate: string;
   stageLabel: string;
   onPress: () => void;
@@ -338,6 +424,13 @@ export function TripsHubTripCard({
   trip,
   currentOrganizationId,
   displayClientName,
+  displaySupplierName = "",
+  clientAvatarUrl,
+  clientAvatarSeed,
+  clientAvatarFallbackSeed,
+  supplierAvatarUrl,
+  supplierAvatarSeed,
+  supplierAvatarFallbackSeed,
   cardDate: _cardDate,
   stageLabel,
   onPress,
@@ -349,7 +442,8 @@ export function TripsHubTripCard({
 }: TripsHubTripCardProps) {
   const aggregate = isAggregateTrip(trip);
   const rosterHub = rosterFromLoadHub(trip);
-  const typeLabel = !aggregate || rosterHub ? tr("tripAsset") : tr("tripAggregate");
+  const showAssetTripIcon = !aggregate || rosterHub;
+  const typeLabel = showAssetTripIcon ? tr("tripAsset") : tr("tripAggregate");
   const subTypeLabel = aggregate ? tr("integrated") : tr("manual");
   const revenue = tripHubRevenue(trip, currentOrganizationId);
   const cost = tripHubCost(trip, currentOrganizationId);
@@ -362,6 +456,24 @@ export function TripsHubTripCard({
   const dest = trip.drop_location ?? "—";
   const tripNo = getTripDisplayNumber(trip);
   const aging = agingLine(trip, tr);
+
+  const supplierNameResolved = (displaySupplierName ?? "").trim();
+  const showSupplierParty =
+    !!supplierNameResolved ||
+    aggregate ||
+    isLoadBasedTrip(trip);
+  const supplierLine =
+    supplierNameResolved || (showSupplierParty ? tr("tripsHubAwaitingData") : "");
+  const clientFb =
+    (clientAvatarFallbackSeed ?? "").trim() ||
+    (trip.client_id ? `client-entity:${String(trip.client_id).trim()}` : `client-trip:${trip.id}`);
+  const supplierFb =
+    (supplierAvatarFallbackSeed ?? "").trim() ||
+    (trip.supplier_id
+      ? `supplier-entity:${String(trip.supplier_id).trim()}`
+      : supplierNameResolved
+        ? `supplier-name:${trip.id}:${supplierNameResolved}`
+        : `supplier-trip:${trip.id}`);
 
   const missionTone = stageUpper.includes("UNASSIGNED")
     ? "unassigned"
@@ -393,7 +505,9 @@ export function TripsHubTripCard({
       style={[styles.fleetCardOuter, rowWebStyle]}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${tripNo} ${displayClientName}`}
+      accessibilityLabel={`${tripNo} ${displayClientName}${
+        showSupplierParty ? `, ${tr("tripsHubSupplierShort")} ${supplierLine}` : ""
+      }`}
     >
       <View style={styles.fleetCard}>
         <View style={styles.fleetOrb} pointerEvents="none" />
@@ -401,7 +515,15 @@ export function TripsHubTripCard({
           <View style={styles.fleetHeadLeft}>
             <View style={styles.fleetTruckWrap}>
               <HubIconPulse>
-                <FontAwesome name="truck" size={18} color={Theme.textPrimaryDark} />
+                <FontAwesome
+                  name={showAssetTripIcon ? "truck" : "link"}
+                  size={18}
+                  color={
+                    showAssetTripIcon
+                      ? Theme.textPrimaryDark
+                      : Theme.aggregatePillText
+                  }
+                />
               </HubIconPulse>
             </View>
             <View style={styles.fleetHeadText}>
@@ -456,33 +578,73 @@ export function TripsHubTripCard({
         </View>
 
         <View style={styles.fleetPartyBlock}>
-          {(trip.supplier_name ?? "").trim().length > 0 ? (
+          {showSupplierParty ? (
             <View style={styles.fleetPartyRow}>
-              <View style={styles.fleetPartyCol}>
+              <View style={[styles.fleetPartyCol, styles.fleetPartyColWithAvatar]}>
+                <View style={styles.fleetPartyAvatarRow}>
+                  <HubPartyAvatar
+                    avatarUrl={clientAvatarUrl}
+                    avatarSeed={clientAvatarSeed}
+                    fallbackSeed={clientFb}
+                    partyLabel={displayClientName}
+                  />
+                  <View style={styles.fleetPartyTextStack}>
+                    <Text style={styles.fleetPartyLabel}>{tr("tripsHubColClient")}</Text>
+                    <Text style={styles.fleetPartyName} numberOfLines={1}>
+                      {displayClientName}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              <View
+                style={[
+                  styles.fleetPartyCol,
+                  styles.fleetPartyColEnd,
+                  styles.fleetPartyColWithAvatar,
+                ]}
+              >
+                <View style={[styles.fleetPartyAvatarRow, styles.fleetPartyAvatarRowEnd]}>
+                  <HubPartyAvatar
+                    avatarUrl={supplierAvatarUrl}
+                    avatarSeed={supplierAvatarSeed}
+                    fallbackSeed={supplierFb}
+                    entityType="supplier"
+                    partyLabel={supplierNameResolved}
+                  />
+                  <View style={styles.fleetPartyTextStackEnd}>
+                    <Text style={[styles.fleetPartyLabel, styles.fleetPartyLabelAlignEnd]}>
+                      {tr("tripsHubSupplierShort")}
+                    </Text>
+                    <Text
+                      style={[
+                        supplierNameResolved
+                          ? styles.fleetPartyName
+                          : styles.fleetPartySub,
+                        styles.fleetPartySubAlignEnd,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {supplierLine}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.fleetPartyAvatarRow}>
+              <HubPartyAvatar
+                avatarUrl={clientAvatarUrl}
+                avatarSeed={clientAvatarSeed}
+                fallbackSeed={clientFb}
+                partyLabel={displayClientName}
+              />
+              <View style={styles.fleetPartyTextStack}>
                 <Text style={styles.fleetPartyLabel}>{tr("tripsHubColClient")}</Text>
                 <Text style={styles.fleetPartyName} numberOfLines={1}>
                   {displayClientName}
                 </Text>
               </View>
-              <View style={[styles.fleetPartyCol, styles.fleetPartyColEnd]}>
-                <Text style={[styles.fleetPartyLabel, styles.fleetPartyLabelAlignEnd]}>
-                  {tr("tripsHubSupplierShort")}
-                </Text>
-                <Text
-                  style={[styles.fleetPartySub, styles.fleetPartySubAlignEnd]}
-                  numberOfLines={1}
-                >
-                  {trip.supplier_name}
-                </Text>
-              </View>
             </View>
-          ) : (
-            <>
-              <Text style={styles.fleetPartyLabel}>{tr("tripsHubColClient")}</Text>
-              <Text style={styles.fleetPartyName} numberOfLines={1}>
-                {displayClientName}
-              </Text>
-            </>
           )}
         </View>
 
@@ -546,6 +708,10 @@ export type TripsHubTableViewProps = {
   /** Optional: e.g. open Finance / export flow. */
   onExportLedger?: () => void;
   tr: (key: string) => string;
+  /** From `useLinkedOrgProfileMap(clients, suppliers)` — org logo before contact avatar in Partner column. */
+  linkedOrgByOrganizationId?: Record<string, LinkedOrgDisplay>;
+  /** Per-trip client/supplier/driver avatar fields (see `buildTripHubPartyMetaByTripId`). */
+  partyMetaByTripId?: Map<string, TripHubPartyMeta>;
 };
 
 function txnFlowLabel(row: LedgerRow, tr: (k: string) => string): string {
@@ -609,6 +775,8 @@ export function TripsHubTableView({
   onOpenTripDetails,
   onExportLedger,
   tr,
+  linkedOrgByOrganizationId,
+  partyMetaByTripId,
 }: TripsHubTableViewProps) {
   const insets = useSafeAreaInsets();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
@@ -690,7 +858,8 @@ export function TripsHubTableView({
         const hasSalesConflict = hasLedgerMismatch;
         const aggregate = isAggregateTrip(t);
         const rosterHub = rosterFromLoadHub(t);
-        const typeLabel = !aggregate || rosterHub ? tr("tripAsset") : tr("tripAggregate");
+        const showAssetTripIcon = !aggregate || rosterHub;
+        const typeLabel = showAssetTripIcon ? tr("tripAsset") : tr("tripAggregate");
         const subTypeLabel = aggregate ? tr("integrated") : tr("manual");
         const stageUpper = getStageLabel(t).toUpperCase();
         const isDelayed =
@@ -736,10 +905,14 @@ export function TripsHubTableView({
                 >
                   <HubIconPulse>
                     <FontAwesome
-                      name="truck"
+                      name={showAssetTripIcon ? "truck" : "link"}
                       size={18}
                       color={
-                        hasSalesConflict ? Theme.teslaRed : Theme.textPrimaryDark
+                        hasSalesConflict
+                          ? Theme.teslaRed
+                          : showAssetTripIcon
+                            ? Theme.textPrimaryDark
+                            : Theme.aggregatePillText
                       }
                     />
                   </HubIconPulse>
@@ -787,30 +960,88 @@ export function TripsHubTableView({
 
               {HUB_COLUMN_ORDER.filter((id) => visibleCols[id]).map((id) => {
                 if (id === "party") {
+                  const meta = partyMetaByTripId?.get(t.id);
+                  const clientLine = (t.client_name ?? "").trim();
+                  const supplierLine =
+                    (meta?.displaySupplierName ?? "").trim() ||
+                    (t.supplier_name ?? "").trim();
+                  const clientOrg = linkedOrgAvatarFields(
+                    meta?.clientLinkedOrgId,
+                    linkedOrgByOrganizationId,
+                  );
+                  const supplierOrg = linkedOrgAvatarFields(
+                    meta?.supplierLinkedOrgId,
+                    linkedOrgByOrganizationId,
+                  );
                   return (
                     <View
                       key={id}
                       style={[styles.auditTd, styles.auditTdParty, HUB_COL_STYLES[id]]}
                     >
-                      <Text style={styles.auditPartyLine1} numberOfLines={1}>
-                        {t.client_name?.trim() || "—"}
-                      </Text>
-                      <Text style={styles.auditPartyLine2} numberOfLines={1}>
-                        {t.supplier_name?.trim() || "—"}
-                      </Text>
+                      <View style={styles.auditPartyLineRow}>
+                        {meta ? (
+                          <PartyAvatar
+                            name={clientLine}
+                            {...clientOrg}
+                            avatarUrl={meta.clientAvatarUrl}
+                            avatarSeed={meta.clientAvatarSeed}
+                            entityType="client"
+                            size={HUB_TABLE_PARTY_AVATAR}
+                          />
+                        ) : null}
+                        <Text
+                          style={[styles.auditPartyLine1, styles.auditPartyLineText]}
+                          numberOfLines={1}
+                        >
+                          {clientLine}
+                        </Text>
+                      </View>
+                      <View style={[styles.auditPartyLineRow, styles.auditPartyLineRowSecond]}>
+                        {meta ? (
+                          <PartyAvatar
+                            name={supplierLine}
+                            {...supplierOrg}
+                            avatarUrl={meta.supplierAvatarUrl}
+                            avatarSeed={meta.supplierAvatarSeed}
+                            entityType="supplier"
+                            size={HUB_TABLE_PARTY_AVATAR}
+                          />
+                        ) : null}
+                        <Text
+                          style={[styles.auditPartyLine2, styles.auditPartyLineText]}
+                          numberOfLines={1}
+                        >
+                          {supplierLine}
+                        </Text>
+                      </View>
                     </View>
                   );
                 }
                 if (id === "driver") {
+                  const meta = partyMetaByTripId?.get(t.id);
                   const name = (t.driver_display_name ?? "").trim();
                   return (
                     <View
                       key={id}
                       style={[styles.auditTd, styles.auditTdHubStack, HUB_COL_STYLES[id]]}
                     >
-                      <Text style={styles.hubStackValue} numberOfLines={2}>
-                        {name || "—"}
-                      </Text>
+                      <View style={styles.auditPartyLineRow}>
+                        {meta ? (
+                          <PartyAvatar
+                            name={name}
+                            avatarUrl={meta.driverAvatarUrl}
+                            avatarSeed={meta.driverAvatarSeed}
+                            entityType="driver"
+                            size={HUB_TABLE_PARTY_AVATAR}
+                          />
+                        ) : null}
+                        <Text
+                          style={[styles.hubStackValue, styles.auditPartyLineText]}
+                          numberOfLines={2}
+                        >
+                          {name}
+                        </Text>
+                      </View>
                     </View>
                   );
                 }
@@ -1447,6 +1678,41 @@ const styles = StyleSheet.create({
   },
   fleetPartySubAlignEnd: { textAlign: "right", alignSelf: "stretch" },
   fleetPartyLabelAlignEnd: { textAlign: "right", alignSelf: "stretch" },
+  hubPartyAvatarRing: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    overflow: "hidden",
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1.5,
+    borderColor: Theme.borderLight,
+  },
+  hubPartyAvatarImg: {
+    width: 34,
+    height: 34,
+  },
+  fleetPartyAvatarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
+  },
+  fleetPartyAvatarRowEnd: {
+    justifyContent: "flex-end",
+  },
+  fleetPartyTextStack: {
+    flex: 1,
+    minWidth: 0,
+  },
+  fleetPartyTextStackEnd: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "flex-end",
+  },
+  fleetPartyColWithAvatar: {
+    minWidth: 0,
+  },
   fleetMetricsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1571,9 +1837,23 @@ const styles = StyleSheet.create({
     borderLeftColor: Theme.borderOnDark,
     paddingLeft: 8,
   },
+  auditPartyLineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minWidth: 0,
+    width: "100%",
+  },
+  auditPartyLineRowSecond: {
+    marginTop: 4,
+  },
+  auditPartyLineText: {
+    flex: 1,
+    minWidth: 0,
+  },
   auditColParty: {
     flex: 0.95,
-    minWidth: 108,
+    minWidth: 132,
     borderLeftWidth: 1,
     borderLeftColor: Theme.borderOnDark,
     paddingLeft: 8,

@@ -4,6 +4,7 @@
  */
 import { ALL_LEDGER_CATEGORY_VALUES } from "@/components/AddTransactionModal";
 import { FinanceFAB } from "@/components/FinanceFAB";
+import { PartyAvatar } from "@/components/PartyAvatar";
 import { TeslaHeader } from "@/components/TeslaHeader";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -19,6 +20,8 @@ import {
     getExpenseLinesForTripPnL,
 } from "@/features/vehicles/pnl";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
+import type { ClientRow } from "@/features/clients/services/clients.service";
+import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import {
     formatINR,
@@ -36,6 +39,7 @@ import {
     Alert,
     FlatList,
     Modal,
+    Platform,
     Pressable,
     ScrollView,
     Share,
@@ -55,6 +59,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
+import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import type { DriverOfferForAggregation } from "../aggregation";
 import {
     buildMonthlyDriverStatement,
@@ -105,6 +110,113 @@ function SummaryPulseIcon({
       <FontAwesome name={name} size={size} color={color} />
     </Animated.View>
   );
+}
+
+/** Normalized party name for matching trip `client_name` to entity display name (see aggregation helpers). */
+function toNameKey(name: string): string {
+  return (name || "").toLowerCase().trim();
+}
+
+const TRIP_TABLE_AVATAR = 24;
+
+type PartnerOrgBranding = { avatarUrl?: string; avatarSeed?: string };
+
+function isUuidLikeString(value: string | null | undefined): boolean {
+  return (
+    !!value &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value.trim(),
+    )
+  );
+}
+
+function financeAggregateSupplierLabel(
+  trip: TripRow,
+  supplierById: Map<string, SupplierRow>,
+): string {
+  const raw = (trip.supplier_name ?? "").trim();
+  if (raw && !isUuidLikeString(raw)) return raw;
+  const sid = (trip.supplier_id ?? "").trim().toLowerCase();
+  if (sid) {
+    const s = supplierById.get(sid);
+    const label = (
+      s?.name ||
+      s?.company_name ||
+      s?.contact_person ||
+      ""
+    ).trim();
+    if (label) return label;
+  }
+  return "Aggregate Supplier";
+}
+
+function supplierPartyAvatarPropsFinance(
+  trip: TripRow,
+  displayName: string,
+  supplierById: Map<string, SupplierRow>,
+  linkedOrgBySupplierOrgId: Record<string, { avatarUrl?: string; avatarSeed?: string }>,
+  partnerOrgBrandingByTripOwnerOrgId: Record<string, PartnerOrgBranding>,
+): {
+  name: string;
+  organizationImageUrl?: string | null;
+  organizationAvatarSeed?: string | null;
+  avatarUrl?: string | null;
+  avatarSeed?: string | null;
+} {
+  const sid = (trip.supplier_id ?? "").trim().toLowerCase();
+  if (sid) {
+    const s = supplierById.get(sid);
+    if (s) {
+      const oid = (s.linked_organization_id ?? "").trim();
+      const org = oid ? linkedOrgBySupplierOrgId[oid] : undefined;
+      return {
+        name: displayName,
+        organizationImageUrl: org?.avatarUrl ?? null,
+        organizationAvatarSeed: org?.avatarSeed ?? null,
+        avatarUrl: (s.avatar_url ?? "").trim() || null,
+        avatarSeed: (s.avatar_seed ?? "").trim() || null,
+      };
+    }
+  }
+  const oid = (trip.organization_id ?? "").trim();
+  if (oid && partnerOrgBrandingByTripOwnerOrgId[oid]) {
+    const b = partnerOrgBrandingByTripOwnerOrgId[oid];
+    return {
+      name: displayName,
+      organizationImageUrl: b.avatarUrl ?? null,
+      organizationAvatarSeed: b.avatarSeed ?? null,
+    };
+  }
+  return { name: displayName };
+}
+
+/** Trip column date line — e.g. "6 APR 2026" (aligned with Client detail trips). */
+function formatTripTableDateFinance(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    const day = d.getDate();
+    const month = d.toLocaleString("en-IN", { month: "short" }).toUpperCase();
+    const year = d.getFullYear();
+    return `${day} ${month} ${year}`;
+  } catch {
+    return "—";
+  }
+}
+
+/** Last txn chip — e.g. "13 APR". */
+function formatLastTxnDayMonth(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    const day = d.getDate();
+    const month = d.toLocaleString("en-IN", { month: "short" }).toUpperCase();
+    return `${day} ${month}`;
+  } catch {
+    return "—";
+  }
 }
 
 export type EntityType = "CLIENT" | "SUPPLIER" | "VEHICLE" | "DRIVER";
@@ -205,6 +317,12 @@ export interface EntityDetailOverlayProps {
   drivers?: DriverRow[];
   /** When entityType is VEHICLE, called when user assigns or clears driver; caller updates driver's assigned_vehicle_id and refreshes. */
   onAssignDriver?: (vehicleId: string, driverId: string | null) => void | Promise<void>;
+  /** Org clients — SUPPLIER finance trip grid (web): client avatar column. */
+  financeClientRows?: ClientRow[];
+  /** Org suppliers — supplier column resolution on trips. */
+  financeSupplierRows?: SupplierRow[];
+  /** Org drivers — driver column on trips. */
+  financePartyDrivers?: DriverRow[];
 }
 
 /** Same labels as DriverDetailScreen and finance DRIVERS for consistency. */
@@ -559,6 +677,9 @@ export function EntityDetailOverlay({
   onAssignVehicle,
   drivers = [],
   onAssignDriver,
+  financeClientRows = [],
+  financeSupplierRows = [],
+  financePartyDrivers = [],
 }: EntityDetailOverlayProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -1010,6 +1131,86 @@ export function EntityDetailOverlay({
     return null;
   }, [entity, entityType, trips, transactions]);
 
+  /** Merge vehicle picker drivers + current driver profile for cash-list PartyAvatar lookups. */
+  const ledgerDriverRowsForAvatars = useMemo(() => {
+    const m = new Map<string, DriverRow>();
+    for (const d of drivers) {
+      m.set(d.id, d);
+    }
+    if (driverProfile) {
+      m.set(driverProfile.id, driverProfile);
+    }
+    return Array.from(m.values());
+  }, [drivers, driverProfile]);
+
+  /** Trip-linked expenses excluding supplier payouts (cost fallback when supplier_rate is 0). Mirrors Client detail trips. */
+  const financeTripExpenseByTripId = useMemo(() => {
+    const byTrip: Record<string, number> = {};
+    for (const tx of transactions ?? []) {
+      if (!tx.trip_id) continue;
+      const key = String(tx.trip_id).trim().toLowerCase();
+      const out = Number(tx.amount_out ?? 0);
+      if (out <= 0) continue;
+      if (tx.contact_type === "supplier") continue;
+      byTrip[key] = (byTrip[key] ?? 0) + out;
+    }
+    return byTrip;
+  }, [transactions]);
+
+  const financeTripTxnMetaByTripId = useMemo(() => {
+    const byTrip: Record<
+      string,
+      { count: number; lastTxnDate: string | null }
+    > = {};
+    for (const tx of transactions ?? []) {
+      if (!tx.trip_id) continue;
+      const key = String(tx.trip_id).trim().toLowerCase();
+      const candidateDate = tx.transaction_date ?? tx.created_at ?? null;
+      const cur = byTrip[key];
+      if (!cur) {
+        byTrip[key] = { count: 1, lastTxnDate: candidateDate };
+        continue;
+      }
+      cur.count += 1;
+      if (
+        candidateDate &&
+        (!cur.lastTxnDate || candidateDate > cur.lastTxnDate)
+      ) {
+        cur.lastTxnDate = candidateDate;
+      }
+    }
+    return byTrip;
+  }, [transactions]);
+
+  const financeClientById = useMemo(() => {
+    const m = new Map<string, ClientRow>();
+    for (const c of financeClientRows) {
+      m.set(String(c.id).trim().toLowerCase(), c);
+    }
+    return m;
+  }, [financeClientRows]);
+
+  const financeSupplierById = useMemo(() => {
+    const m = new Map<string, SupplierRow>();
+    for (const s of financeSupplierRows) {
+      m.set(String(s.id).trim().toLowerCase(), s);
+    }
+    return m;
+  }, [financeSupplierRows]);
+
+  const financeDriverById = useMemo(() => {
+    const m = new Map<string, DriverRow>();
+    for (const d of financePartyDrivers) {
+      m.set(String(d.id).trim().toLowerCase(), d);
+    }
+    return m;
+  }, [financePartyDrivers]);
+
+  const financeLinkedOrgDisplayMap = useLinkedOrgProfileMap(
+    financeClientRows,
+    financeSupplierRows,
+  );
+
   /** Header summary (black block): totals and labels for main vs ledger tab. */
   const headerSummary = useMemo(() => {
     if (detailTab === "ledger" && selectedEntityTransactions != null) {
@@ -1142,6 +1343,7 @@ export function EntityDetailOverlay({
         : entityType;
 
   const { width: screenWidth } = useWindowDimensions();
+  const isWebDesktop = Platform.OS === "web" && screenWidth >= 1024;
   const detailTabsContent = isCustomerOrSupplier ? (
     <ScrollView
       horizontal
@@ -1453,6 +1655,7 @@ export function EntityDetailOverlay({
                 transactions={selectedEntityTransactions}
                 highlightId={expandedEntityLedgerRowId}
                 showTitle={false}
+                driverRows={ledgerDriverRowsForAvatars}
               />
             ) : (
               <View style={styles.ledgerEmptyRow}>
@@ -1667,6 +1870,7 @@ export function EntityDetailOverlay({
               name: entity.name ?? "—",
               linked_organization_id:
                 entity.linked_organization_id ?? undefined,
+              avatar_url: entity.profileImageUrl ?? undefined,
             }}
             entityType={entityType}
             trips={trips}
@@ -2852,27 +3056,96 @@ export function EntityDetailOverlay({
                     : "From trip details: supplier cost, paid, amount due to pay."}
                 </Text>
               )}
-              <View style={styles.table}>
-                <View style={styles.tableHeader}>
-                  <Text style={[styles.th, styles.thMission]} numberOfLines={1}>
-                    TRIP ID
-                  </Text>
-                  <Text style={[styles.th, styles.thRight]} numberOfLines={1}>
-                    {isVehicle ? "SALES" : colLabels[0]}
-                  </Text>
-                  <Text style={[styles.th, styles.thRight]} numberOfLines={1}>
-                    {isVehicle ? "EXPENSES" : colLabels[1]}
-                  </Text>
-                  <Text
-                    style={[styles.th, styles.thRightLast]}
-                    numberOfLines={1}
-                  >
-                    {isVehicle ? "PROFIT" : colLabels[2]}
-                  </Text>
-                  {(entityType === "CLIENT" || entityType === "SUPPLIER") && (
+              <View
+                style={[
+                  styles.table,
+                  entityType === "SUPPLIER" &&
+                    isWebDesktop &&
+                    !isVehicle &&
+                    styles.spWebTable,
+                ]}
+              >
+                {entityType === "SUPPLIER" && isWebDesktop && !isVehicle ? (
+                  <View style={styles.spWebTableHeaderRow}>
+                    <View style={styles.spWebThClient}>
+                      <Text style={styles.spWebTh} numberOfLines={1}>
+                        Client
+                      </Text>
+                    </View>
+                    <View style={styles.spWebThTrip}>
+                      <Text style={styles.spWebTh} numberOfLines={1}>
+                        Trip
+                      </Text>
+                    </View>
+                    <View style={styles.spWebThParty}>
+                      <Text style={styles.spWebTh} numberOfLines={1}>
+                        Supplier
+                      </Text>
+                    </View>
+                    <View style={styles.spWebThDriver}>
+                      <Text style={styles.spWebTh} numberOfLines={1}>
+                        Driver
+                      </Text>
+                    </View>
+                    <View style={styles.spWebThAmt}>
+                      <Text style={styles.spWebTh} numberOfLines={1}>
+                        Sales
+                      </Text>
+                    </View>
+                    <View style={styles.spWebThAmt}>
+                      <Text style={styles.spWebTh} numberOfLines={1}>
+                        Cost
+                      </Text>
+                    </View>
+                    <View style={styles.spWebThAmt}>
+                      <Text style={styles.spWebTh} numberOfLines={1}>
+                        P&L
+                      </Text>
+                    </View>
+                    <View style={styles.spWebThAmt}>
+                      <Text style={[styles.spWebTh, styles.spWebThRight]} numberOfLines={1}>
+                        Paid
+                      </Text>
+                    </View>
+                    <View style={styles.spWebThAmt}>
+                      <Text style={[styles.spWebTh, styles.spWebThRight]} numberOfLines={1}>
+                        Due
+                      </Text>
+                    </View>
+                    <View style={styles.spWebThTxn}>
+                      <Text style={[styles.spWebTh, styles.spWebThRight]} numberOfLines={1}>
+                        Txns
+                      </Text>
+                    </View>
+                    <View style={styles.spWebThLastTxn}>
+                      <Text style={[styles.spWebTh, styles.spWebThRight]} numberOfLines={1}>
+                        Last Txn
+                      </Text>
+                    </View>
                     <View style={styles.entityLedgerChevronTh} />
-                  )}
-                </View>
+                  </View>
+                ) : (
+                  <View style={styles.tableHeader}>
+                    <Text style={[styles.th, styles.thMission]} numberOfLines={1}>
+                      TRIP ID
+                    </Text>
+                    <Text style={[styles.th, styles.thRight]} numberOfLines={1}>
+                      {isVehicle ? "SALES" : colLabels[0]}
+                    </Text>
+                    <Text style={[styles.th, styles.thRight]} numberOfLines={1}>
+                      {isVehicle ? "EXPENSES" : colLabels[1]}
+                    </Text>
+                    <Text
+                      style={[styles.th, styles.thRightLast]}
+                      numberOfLines={1}
+                    >
+                      {isVehicle ? "PROFIT" : colLabels[2]}
+                    </Text>
+                    {(entityType === "CLIENT" || entityType === "SUPPLIER") && (
+                      <View style={styles.entityLedgerChevronTh} />
+                    )}
+                  </View>
+                )}
                 {rows.map((r) => {
                   const rv = r as typeof r & {
                     sales?: number;
@@ -2935,96 +3208,556 @@ export function EntityDetailOverlay({
                           activeOpacity: r.id === "none" ? 1 : 0.7,
                           disabled: r.id === "none",
                         };
+                  const showSupplierWebGrid =
+                    entityType === "SUPPLIER" && isWebDesktop && !isVehicleRow;
                   return (
                     <View key={r.id}>
                       <RowWrapper
                         style={[
                           styles.tableRow,
+                          showSupplierWebGrid && styles.spWebTableRow,
                           isPartyLedger && expanded && styles.ledgerRowPressed,
                         ]}
                         {...rowPressProps}
                       >
-                        <View style={styles.tdMission}>
-                          <Text style={styles.tdMissionId} numberOfLines={1}>
-                            {r.missionId}
-                          </Text>
-                          <Text style={styles.tdDest} numberOfLines={1}>
-                            {isVehicleRow ? (rv.clientName ?? r.dest) : r.dest}
-                          </Text>
-                          {hasTripDetail && (
-                            <Text style={styles.tdTripMeta} numberOfLines={2}>
-                              {[rv.tripDate, rv.agingLabel]
-                                .filter(Boolean)
-                                .join(" · ")}
-                              {rv.route ? ` · ${rv.route}` : ""}
-                            </Text>
-                          )}
-                        </View>
-                        <Text
-                          style={[styles.td, styles.tdRight]}
-                          numberOfLines={1}
-                        >
-                          {isVehicleRow
-                            ? formatINR(rv.sales ?? 0)
-                            : formatINR(r.col1)}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.td,
-                            styles.tdRight,
-                            isVehicleRow ? undefined : styles.tdGreen,
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {isVehicleRow
-                            ? formatINR(rv.expense ?? 0)
-                            : formatINR(r.col2)}
-                        </Text>
-                        {isVehicleRow ? (
-                          <View style={[styles.tdRightLast, styles.tdNetWrap]}>
-                            <Text
-                              style={[
-                                styles.td,
-                                (rv.net ?? 0) > 0
-                                  ? styles.tdGreen
-                                  : (rv.net ?? 0) < 0
-                                    ? styles.tdRed
-                                    : undefined,
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {formatINR(rv.net ?? 0)}
-                            </Text>
-                            {rv.margin != null &&
-                              (rv.margin !== 0 || (rv.net ?? 0) !== 0) && (
+                        {showSupplierWebGrid && tripForRow
+                          ? (() => {
+                              const t = tripForRow;
+                              const tid = String(r.id).trim().toLowerCase();
+                              const cidKey = (t.client_id ?? "")
+                                .trim()
+                                .toLowerCase();
+                              const clientRow = cidKey
+                                ? financeClientById.get(cidKey)
+                                : undefined;
+                              const rawTripClientName = (
+                                t.client_name ?? ""
+                              ).trim();
+                              const clientDisplayName =
+                                (clientRow?.name ?? "").trim() ||
+                                (rawTripClientName &&
+                                !isUuidLikeString(t.client_name)
+                                  ? rawTripClientName
+                                  : "");
+                              const clientNameForUi =
+                                clientDisplayName || "—";
+                              const supplierNameRaw =
+                                t.supplier_name?.trim() ?? "";
+                              const hasSupplierRef =
+                                !!t.supplier_id ||
+                                (!!supplierNameRaw &&
+                                  !isUuidLikeString(supplierNameRaw));
+                              const isAggregateTrip =
+                                hasSupplierRef || isLoadBasedTrip(t);
+                              const supplierNameLabel = isAggregateTrip
+                                ? financeAggregateSupplierLabel(
+                                    t,
+                                    financeSupplierById,
+                                  )
+                                : "Asset / Own Vehicle";
+                              const supplierAv =
+                                supplierPartyAvatarPropsFinance(
+                                  t,
+                                  supplierNameLabel,
+                                  financeSupplierById,
+                                  financeLinkedOrgDisplayMap,
+                                  {},
+                                );
+                              const expenseCaptured =
+                                financeTripExpenseByTripId[tid] ?? 0;
+                              const supplierRate = Number(
+                                t.supplier_rate ?? 0,
+                              );
+                              const tripCost =
+                                supplierRate > 0
+                                  ? supplierRate
+                                  : expenseCaptured;
+                              const sales = Number(t.client_price ?? 0);
+                              const tripPnl = sales - tripCost;
+                              const marginPct =
+                                sales > 0 ? (tripPnl / sales) * 100 : 0;
+                              const driverIdKey = (t.driver_id ?? "")
+                                .trim()
+                                .toLowerCase();
+                              const driverRow = driverIdKey
+                                ? financeDriverById.get(driverIdKey)
+                                : undefined;
+                              const driverName =
+                                (t.driver_display_name ?? "").trim() ||
+                                (driverRow?.name ?? "").trim() ||
+                                "—";
+                              const meta =
+                                financeTripTxnMetaByTripId[tid] ?? {
+                                  count: 0,
+                                  lastTxnDate: null,
+                                };
+                              const paidOut = Number(r.col2 ?? 0);
+                              const dueAmt = Number(r.col3 ?? 0);
+                              const routeLine =
+                                [
+                                  t.pickup_area,
+                                  t.drop_location,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" → ") || "—";
+                              const tripDateIso =
+                                t.pickup_date ?? t.created_at ?? null;
+                              return (
+                                <>
+                                  <View style={styles.spWebTdClient}>
+                                    <View style={styles.spWebTdPartyAvatarRow}>
+                                      <PartyAvatar
+                                        name={clientNameForUi}
+                                        organizationImageUrl={
+                                          clientRow?.linked_organization_id
+                                            ? financeLinkedOrgDisplayMap[
+                                                clientRow.linked_organization_id
+                                              ]?.avatarUrl
+                                            : undefined
+                                        }
+                                        organizationAvatarSeed={
+                                          clientRow?.linked_organization_id
+                                            ? financeLinkedOrgDisplayMap[
+                                                clientRow.linked_organization_id
+                                              ]?.avatarSeed
+                                            : undefined
+                                        }
+                                        avatarUrl={
+                                          clientRow?.avatar_url ?? null
+                                        }
+                                        avatarSeed={
+                                          clientRow?.avatar_seed ?? null
+                                        }
+                                        entityType="client"
+                                        size={TRIP_TABLE_AVATAR}
+                                      />
+                                      <View
+                                        style={styles.spWebTdPartyTextStack}
+                                      >
+                                        <Text
+                                          style={styles.spWebTdPartyTitle}
+                                          numberOfLines={1}
+                                        >
+                                          {clientNameForUi}
+                                        </Text>
+                                        <Text
+                                          style={styles.spWebTdPartyHint}
+                                          numberOfLines={1}
+                                        >
+                                          {(clientRow?.contact_person ?? "")
+                                            .trim() || "—"}
+                                        </Text>
+                                      </View>
+                                    </View>
+                                  </View>
+                                  <View style={styles.spWebTdTrip}>
+                                    <Text
+                                      style={styles.spWebTdMissionId}
+                                      numberOfLines={1}
+                                    >
+                                      {r.missionId}
+                                    </Text>
+                                    <Text
+                                      style={styles.spWebTdRoute}
+                                      numberOfLines={3}
+                                    >
+                                      {routeLine}
+                                    </Text>
+                                    <Text
+                                      style={styles.spWebTdTripDate}
+                                      numberOfLines={1}
+                                    >
+                                      {formatTripTableDateFinance(tripDateIso)}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.spWebTdParty}>
+                                    <View style={styles.spWebTdPartyAvatarRow}>
+                                      <PartyAvatar
+                                        name={supplierNameLabel || "—"}
+                                        organizationImageUrl={
+                                          supplierAv.organizationImageUrl ??
+                                          undefined
+                                        }
+                                        organizationAvatarSeed={
+                                          supplierAv.organizationAvatarSeed ??
+                                          undefined
+                                        }
+                                        avatarUrl={
+                                          supplierAv.avatarUrl ?? null
+                                        }
+                                        avatarSeed={
+                                          supplierAv.avatarSeed ?? null
+                                        }
+                                        entityType="supplier"
+                                        size={TRIP_TABLE_AVATAR}
+                                      />
+                                      <View
+                                        style={styles.spWebTdPartyTextStack}
+                                      >
+                                        <Text
+                                          style={styles.spWebTdPartyTitle}
+                                          numberOfLines={1}
+                                        >
+                                          {supplierNameLabel}
+                                        </Text>
+                                        {isAggregateTrip ? (
+                                          <Text
+                                            style={styles.spWebTdPartyHint}
+                                            numberOfLines={1}
+                                          >
+                                            Partner · Margin{" "}
+                                            {marginPct.toFixed(1)}%
+                                          </Text>
+                                        ) : supplierRate <= 0 &&
+                                          expenseCaptured > 0 ? (
+                                          <Text
+                                            style={styles.spWebTdPartyHint}
+                                            numberOfLines={1}
+                                          >
+                                            Asset · Expense captured:{" "}
+                                            {formatINR(expenseCaptured)}
+                                          </Text>
+                                        ) : (
+                                          <Text
+                                            style={styles.spWebTdPartyHint}
+                                            numberOfLines={1}
+                                          >
+                                            Asset
+                                          </Text>
+                                        )}
+                                      </View>
+                                    </View>
+                                  </View>
+                                  <View style={styles.spWebTdDriverCol}>
+                                    <View style={styles.spWebTdPartyAvatarRow}>
+                                      <PartyAvatar
+                                        name={driverName || "—"}
+                                        avatarUrl={
+                                          (driverRow?.avatar_url ?? "").trim() ||
+                                          null
+                                        }
+                                        avatarSeed={
+                                          (driverRow?.avatar_seed ?? "").trim() ||
+                                          null
+                                        }
+                                        entityType="driver"
+                                        size={TRIP_TABLE_AVATAR}
+                                      />
+                                      <View
+                                        style={styles.spWebTdPartyTextStack}
+                                      >
+                                        <Text
+                                          style={styles.spWebTdPartyTitle}
+                                          numberOfLines={2}
+                                        >
+                                          {driverName}
+                                        </Text>
+                                        {(t.vehicle_display_number ?? "").trim() ? (
+                                          <Text
+                                            style={styles.spWebTdPartyHint}
+                                            numberOfLines={1}
+                                          >
+                                            {formatIndianVehicleNumber(
+                                              (
+                                                t.vehicle_display_number ?? ""
+                                              ).trim(),
+                                            )}
+                                          </Text>
+                                        ) : null}
+                                      </View>
+                                    </View>
+                                  </View>
+                                  <View style={styles.spWebTdAmt}>
+                                    <Text
+                                      style={styles.spWebTdAmtText}
+                                      numberOfLines={1}
+                                    >
+                                      {formatINR(sales)}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.spWebTdAmt}>
+                                    <Text
+                                      style={styles.spWebTdAmtText}
+                                      numberOfLines={1}
+                                    >
+                                      {formatINR(tripCost)}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.spWebTdAmt}>
+                                    <Text
+                                      style={[
+                                        styles.spWebTdAmtText,
+                                        tripPnl >= 0
+                                          ? styles.tdGreen
+                                          : styles.tdRed,
+                                      ]}
+                                      numberOfLines={1}
+                                    >
+                                      {formatINR(tripPnl)}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.spWebTdAmt}>
+                                    <Text
+                                      style={[
+                                        styles.spWebTdAmtText,
+                                        styles.spWebTdAmtRight,
+                                        styles.tdGreen,
+                                      ]}
+                                      numberOfLines={1}
+                                    >
+                                      {formatINR(paidOut)}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.spWebTdAmt}>
+                                    <Text
+                                      style={[
+                                        styles.spWebTdAmtText,
+                                        styles.spWebTdAmtRight,
+                                        dueAmt > 0
+                                          ? styles.tdRed
+                                          : styles.spWebTdDueZero,
+                                      ]}
+                                      numberOfLines={1}
+                                    >
+                                      {formatINR(dueAmt)}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.spWebTdTxn}>
+                                    <Text
+                                      style={[
+                                        styles.spWebTdAmtText,
+                                        styles.spWebTdAmtRight,
+                                      ]}
+                                      numberOfLines={1}
+                                    >
+                                      {meta.count}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.spWebTdLastTxn}>
+                                    <Text
+                                      style={[
+                                        styles.spWebTdLastTxnText,
+                                        styles.spWebTdAmtRight,
+                                      ]}
+                                      numberOfLines={1}
+                                    >
+                                      {meta.lastTxnDate
+                                        ? formatLastTxnDayMonth(
+                                            meta.lastTxnDate,
+                                          )
+                                        : "—"}
+                                    </Text>
+                                  </View>
+                                </>
+                              );
+                            })()
+                          : showSupplierWebGrid && !tripForRow ? (
+                              <>
+                                <View style={styles.spWebTdClient}>
+                                  <Text
+                                    style={styles.spWebTdPartyHint}
+                                    numberOfLines={1}
+                                  >
+                                    —
+                                  </Text>
+                                </View>
+                                <View style={styles.spWebTdTrip}>
+                                  <Text
+                                    style={styles.spWebTdMissionId}
+                                    numberOfLines={1}
+                                  >
+                                    {r.missionId}
+                                  </Text>
+                                  <Text
+                                    style={styles.spWebTdRoute}
+                                    numberOfLines={2}
+                                  >
+                                    {r.dest}
+                                  </Text>
+                                </View>
+                                <View style={styles.spWebTdParty}>
+                                  <Text
+                                    style={styles.spWebTdPartyHint}
+                                    numberOfLines={1}
+                                  >
+                                    —
+                                  </Text>
+                                </View>
+                                <View style={styles.spWebTdDriverCol}>
+                                  <Text
+                                    style={styles.spWebTdPartyHint}
+                                    numberOfLines={1}
+                                  >
+                                    —
+                                  </Text>
+                                </View>
+                                <View style={styles.spWebTdAmt}>
+                                  <Text
+                                    style={styles.spWebTdAmtText}
+                                    numberOfLines={1}
+                                  >
+                                    {formatINR(r.col1)}
+                                  </Text>
+                                </View>
+                                <View style={styles.spWebTdAmt}>
+                                  <Text
+                                    style={styles.spWebTdAmtText}
+                                    numberOfLines={1}
+                                  >
+                                    —
+                                  </Text>
+                                </View>
+                                <View style={styles.spWebTdAmt}>
+                                  <Text
+                                    style={styles.spWebTdAmtText}
+                                    numberOfLines={1}
+                                  >
+                                    —
+                                  </Text>
+                                </View>
+                                <View style={styles.spWebTdAmt}>
+                                  <Text
+                                    style={[
+                                      styles.spWebTdAmtText,
+                                      styles.spWebTdAmtRight,
+                                      styles.tdGreen,
+                                    ]}
+                                    numberOfLines={1}
+                                  >
+                                    {formatINR(r.col2)}
+                                  </Text>
+                                </View>
+                                <View style={styles.spWebTdAmt}>
+                                  <Text
+                                    style={[
+                                      styles.spWebTdAmtText,
+                                      styles.spWebTdAmtRight,
+                                      styles.tdRed,
+                                    ]}
+                                    numberOfLines={1}
+                                  >
+                                    {formatINR(r.col3)}
+                                  </Text>
+                                </View>
+                                <View style={styles.spWebTdTxn}>
+                                  <Text
+                                    style={[
+                                      styles.spWebTdAmtText,
+                                      styles.spWebTdAmtRight,
+                                    ]}
+                                    numberOfLines={1}
+                                  >
+                                    0
+                                  </Text>
+                                </View>
+                                <View style={styles.spWebTdLastTxn}>
+                                  <Text
+                                    style={[
+                                      styles.spWebTdLastTxnText,
+                                      styles.spWebTdAmtRight,
+                                    ]}
+                                    numberOfLines={1}
+                                  >
+                                    —
+                                  </Text>
+                                </View>
+                              </>
+                            ) : (
+                              <>
+                                <View style={styles.tdMission}>
+                                  <Text
+                                    style={styles.tdMissionId}
+                                    numberOfLines={1}
+                                  >
+                                    {r.missionId}
+                                  </Text>
+                                  <Text style={styles.tdDest} numberOfLines={1}>
+                                    {isVehicleRow
+                                      ? (rv.clientName ?? r.dest)
+                                      : r.dest}
+                                  </Text>
+                                  {hasTripDetail && (
+                                    <Text
+                                      style={styles.tdTripMeta}
+                                      numberOfLines={2}
+                                    >
+                                      {[rv.tripDate, rv.agingLabel]
+                                        .filter(Boolean)
+                                        .join(" · ")}
+                                      {rv.route ? ` · ${rv.route}` : ""}
+                                    </Text>
+                                  )}
+                                </View>
+                                <Text
+                                  style={[styles.td, styles.tdRight]}
+                                  numberOfLines={1}
+                                >
+                                  {isVehicleRow
+                                    ? formatINR(rv.sales ?? 0)
+                                    : formatINR(r.col1)}
+                                </Text>
                                 <Text
                                   style={[
-                                    styles.tdMargin,
-                                    rv.margin > 0
-                                      ? styles.tdGreen
-                                      : rv.margin < 0
-                                        ? styles.tdRed
-                                        : undefined,
+                                    styles.td,
+                                    styles.tdRight,
+                                    isVehicleRow ? undefined : styles.tdGreen,
                                   ]}
                                   numberOfLines={1}
                                 >
-                                  {rv.margin > 0 ? "+" : ""}
-                                  {rv.margin.toFixed(0)}%
+                                  {isVehicleRow
+                                    ? formatINR(rv.expense ?? 0)
+                                    : formatINR(r.col2)}
                                 </Text>
-                              )}
-                          </View>
-                        ) : (
-                          <Text
-                            style={[
-                              styles.td,
-                              styles.tdRightLast,
-                              styles.tdRed,
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {formatINR(r.col3)}
-                          </Text>
-                        )}
+                                {isVehicleRow ? (
+                                  <View
+                                    style={[styles.tdRightLast, styles.tdNetWrap]}
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.td,
+                                        (rv.net ?? 0) > 0
+                                          ? styles.tdGreen
+                                          : (rv.net ?? 0) < 0
+                                            ? styles.tdRed
+                                            : undefined,
+                                      ]}
+                                      numberOfLines={1}
+                                    >
+                                      {formatINR(rv.net ?? 0)}
+                                    </Text>
+                                    {rv.margin != null &&
+                                      (rv.margin !== 0 ||
+                                        (rv.net ?? 0) !== 0) && (
+                                        <Text
+                                          style={[
+                                            styles.tdMargin,
+                                            rv.margin > 0
+                                              ? styles.tdGreen
+                                              : rv.margin < 0
+                                                ? styles.tdRed
+                                                : undefined,
+                                          ]}
+                                          numberOfLines={1}
+                                        >
+                                          {rv.margin > 0 ? "+" : ""}
+                                          {rv.margin.toFixed(0)}%
+                                        </Text>
+                                      )}
+                                  </View>
+                                ) : (
+                                  <Text
+                                    style={[
+                                      styles.td,
+                                      styles.tdRightLast,
+                                      styles.tdRed,
+                                    ]}
+                                    numberOfLines={1}
+                                  >
+                                    {formatINR(r.col3)}
+                                  </Text>
+                                )}
+                              </>
+                            )}
                         {isPartyLedger && (
                           <View style={styles.entityLedgerChevronTd}>
                             <FontAwesome
@@ -4447,6 +5180,239 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     borderRadius: 2,
     overflow: "hidden",
+  },
+  spWebTable: {
+    borderRadius: 10,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.surface,
+  },
+  spWebTableHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 11,
+    paddingHorizontal: 10,
+    backgroundColor: Theme.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderMedium,
+  },
+  spWebThClient: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "11%",
+    minWidth: 108,
+    justifyContent: "center",
+    paddingRight: 6,
+  },
+  spWebThTrip: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flex: 0,
+    width: "28%",
+    minWidth: 248,
+    maxWidth: 520,
+  },
+  spWebThParty: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "12%",
+    minWidth: 100,
+    justifyContent: "center",
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 10,
+  },
+  spWebThDriver: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "9%",
+    minWidth: 92,
+    justifyContent: "center",
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 8,
+  },
+  spWebThAmt: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "5.65%",
+    minWidth: 58,
+    maxWidth: 108,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 6,
+    justifyContent: "center",
+  },
+  spWebThTxn: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "5%",
+    minWidth: 52,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 6,
+    justifyContent: "center",
+  },
+  spWebThLastTxn: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "6%",
+    minWidth: 72,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 6,
+    justifyContent: "center",
+  },
+  spWebTh: {
+    fontSize: 11,
+    letterSpacing: 0.08,
+    fontWeight: "600",
+    fontStyle: "normal",
+    color: Theme.textSecondary,
+    textTransform: "uppercase" as const,
+  },
+  spWebThRight: {
+    width: "100%",
+    textAlign: "right" as const,
+  },
+  spWebTableRow: {
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderBottomColor: Theme.borderLight,
+    minHeight: 58,
+    backgroundColor: Theme.surface,
+    alignItems: "center",
+  },
+  spWebTdClient: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "11%",
+    minWidth: 108,
+    justifyContent: "center",
+    paddingRight: 6,
+  },
+  spWebTdTrip: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flex: 0,
+    width: "28%",
+    minWidth: 248,
+    maxWidth: 520,
+    paddingRight: 8,
+  },
+  spWebTdParty: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "12%",
+    minWidth: 100,
+    justifyContent: "center",
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 10,
+  },
+  spWebTdDriverCol: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "9%",
+    minWidth: 92,
+    justifyContent: "center",
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 8,
+  },
+  spWebTdPartyAvatarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 0,
+    width: "100%",
+  },
+  spWebTdPartyTextStack: {
+    flex: 1,
+    minWidth: 0,
+  },
+  spWebTdPartyTitle: {
+    fontSize: 11,
+    color: Theme.textPrimaryDark,
+    fontWeight: "500",
+    fontStyle: "italic",
+  },
+  spWebTdPartyHint: {
+    fontSize: 9,
+    color: Theme.textMuted,
+    marginTop: 2,
+    fontWeight: "500",
+    fontStyle: "italic",
+  },
+  spWebTdMissionId: {
+    fontSize: 11,
+    fontWeight: "600",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+  },
+  spWebTdRoute: {
+    fontSize: 10,
+    fontWeight: "400",
+    fontStyle: "italic",
+    color: Theme.textMuted,
+    marginTop: 4,
+  },
+  spWebTdTripDate: {
+    fontSize: 9,
+    color: Theme.textSecondary,
+    marginTop: 4,
+    fontWeight: "500",
+  },
+  spWebTdAmt: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "5.65%",
+    minWidth: 58,
+    maxWidth: 108,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 6,
+    justifyContent: "center",
+  },
+  spWebTdAmtText: {
+    fontSize: 11,
+    fontWeight: "600",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+  },
+  spWebTdAmtRight: {
+    width: "100%",
+    textAlign: "right" as const,
+  },
+  spWebTdDueZero: {
+    color: Theme.textMuted,
+  },
+  spWebTdTxn: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "5%",
+    minWidth: 52,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 6,
+    justifyContent: "center",
+  },
+  spWebTdLastTxn: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "6%",
+    minWidth: 72,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 6,
+    justifyContent: "center",
+  },
+  spWebTdLastTxnText: {
+    fontSize: 11,
+    fontWeight: "700",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
   },
   tableHeader: {
     flexDirection: "row",

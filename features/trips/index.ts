@@ -24,6 +24,11 @@ export {
   type TripsHubTableViewProps,
   type TripsHubTableColumnId,
 } from './components/TripsHubViews';
+export {
+  buildTripHubPartyMetaByTripId,
+  isUuidLikeString,
+  type TripHubPartyMeta,
+} from './utils/tripHubPartyMeta';
 export { useRealtimeTrips, useRealtimeTrip } from './hooks/useRealtimeTrips';
 export {
   getTripsByOrganization,

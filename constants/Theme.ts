@@ -118,6 +118,8 @@ export const Theme = {
   aggregatePillBg: "rgba(99,102,241,0.12)",
   aggregatePillBorder: "rgba(99,102,241,0.35)",
   aggregatePillText: "#4338ca",
+  /** Partner column label on dark mirror cells (shared ledger hub). */
+  ledgerPartnerLabelOnDark: "#A5B4FC",
 
   /** Finance table: integrated party icon (link) — green = synced */
   integratedIcon: "#15803D",
@@ -239,6 +241,15 @@ export const Theme = {
   cinematicDivider: "rgba(15,23,42,0.06)",
   /** Soft red glow for cinematic depth */
   cinematicGlowRed: "rgba(232,33,39,0.45)",
+
+  // ---- Trip feedback modal (Pulse-style: driver / supplier / client) ----
+  feedbackModalHeaderDriver: "#0F172A",
+  feedbackModalHeaderSupplier: "#064E3B",
+  feedbackModalHeaderClient: "#4C1D95",
+  /** Filled star + avatar badge accent */
+  feedbackModalStarActive: "#FBBF24",
+  feedbackModalBackdrop: "rgba(0, 0, 0, 0.6)",
+  feedbackModalBadgeRing: "#F59E0B",
 } as const;
 
 export type ThemeColors = typeof Theme;

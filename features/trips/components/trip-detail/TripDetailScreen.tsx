@@ -78,6 +78,7 @@ import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import {
   TripDetailFinanceView,
   type ReconciliationPartyInfo,
+  type TripDetailTab,
   type TripDocItem,
 } from "./TripDetailFinanceView";
 import { TrackingMapBlock, VehicleTrackingCard } from "./TrackingMapBlock";
@@ -299,6 +300,7 @@ export default function TripDetailScreen({
   } | null>(null);
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
   const [showTrackingModal, setShowTrackingModal] = useState(false);
+  const [tripDetailTab, setTripDetailTab] = useState<TripDetailTab>("finance");
   const [expandedTimelineEntryIds, setExpandedTimelineEntryIds] = useState<Record<string, boolean>>({});
   const [showFullScreenMap, setShowFullScreenMap] = useState(false);
   const [showDriverRejectedModal, setShowDriverRejectedModal] = useState(false);
@@ -1675,6 +1677,356 @@ export default function TripDetailScreen({
     setExpandedTimelineEntryIds({});
   }, [trip?.id, showTrackingModal]);
 
+  const liveTrackingMapAndLog =
+    trip && !isDriverOffline ? (
+      <>
+        <TrackingMapBlock
+          mapHeight={Math.min(Dimensions.get("window").height * 0.38, 300)}
+          vehicleLabel={vehicleLabel}
+          locationLabels={trackingMapLocationLabels}
+          originCoordinate={trackingMapOriginCoordinate}
+          destinationCoordinate={trackingMapDestinationCoordinate}
+          latestLocation={driverLocation}
+          driverLocationLoading={driverLocationLoading}
+          tripLocationPoints={tripLocationPoints}
+          locationAddress={driverLocationAddress}
+        />
+
+        {/* Vehicle card — below map, above Driver's Activity Timeline */}
+        <VehicleTrackingCard
+          vehicleLabel={vehicleLabel}
+          cardStatusText={
+            driverLocationLoading
+              ? "Fetching from DB..."
+              : driverLocation
+                ? "LIVE"
+                : "No location in DB yet"
+          }
+          cardSubtext={
+            driverLocation
+              ? (driverLocationAddress
+                  ? `${driverLocationAddress} · ${formatLocationUpdatedAt(driverLocation.recorded_at)}`
+                  : `Current location (from DB): ${driverLocation.latitude.toFixed(5)}°, ${driverLocation.longitude.toFixed(5)}° · ${formatLocationUpdatedAt(driverLocation.recorded_at)}`)
+              : "Open map to see driver position"
+          }
+        />
+
+        {/* Driver's Activity Timeline — current step + log of assignment and status changes */}
+        <View style={styles.trackingPageTimelineWrap}>
+          <View style={styles.trackingPageTimelineHeader}>
+            <FontAwesome
+              name="list-alt"
+              size={14}
+              color={Theme.primary}
+            />
+            <Text style={styles.trackingPageTimelineTitle}>
+              Driver's Activity Timeline
+            </Text>
+            <View style={styles.trackingPageLiveBadge}>
+              <Text style={styles.trackingPageLiveBadgeText}>
+                Live Updates
+              </Text>
+            </View>
+          </View>
+          {(() => {
+            const { step, label } = trackingStepAndLabel(trip.status);
+            return (
+              <View style={styles.trackingPageCurrentStepWrap}>
+                <Text style={styles.trackingPageCurrentStepLabel}>
+                  Current step
+                </Text>
+                <Text style={styles.trackingPageCurrentStepValue}>
+                  Step {step} of 4 — {label}
+                </Text>
+              </View>
+            );
+          })()}
+
+          {statusChangeRowsOnly.length > 0 && (
+            <View style={styles.trackingPageStatusChangesWrap}>
+              <Text style={styles.trackingPageStatusChangesTitle}>
+                Status changes
+              </Text>
+              {statusChangeRowsOnly.map((row, idx) => (
+                <View
+                  key={row.id}
+                  style={[
+                    styles.trackingPageStatusChangeRow,
+                    idx === statusChangeRowsOnly.length - 1 &&
+                      styles.trackingPageStatusChangeRowLast,
+                  ]}
+                >
+                  <Text style={styles.trackingPageStatusChangeLabel}>
+                    {row.status_label}
+                  </Text>
+                  <Text style={styles.trackingPageStatusChangeTime}>
+                    {formatAssignmentDate(row.changed_at)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <View style={styles.trackingPageTimelineList}>
+            {driverActivityTimelineRows.length === 0 ? (
+              <View style={styles.trackingPageTimelineEmpty}>
+                <FontAwesome
+                  name="bolt"
+                  size={32}
+                  color={Theme.textMuted}
+                />
+                <Text style={styles.trackingActivityEmpty}>
+                  No log data recorded
+                </Text>
+              </View>
+            ) : (
+              <>
+                <View style={styles.trackingPageTimelineLine} />
+                {driverActivityTimelineRows.map((item, idx) => {
+                  const itemId = timelineItemId(item);
+                  const isExpanded = !!expandedTimelineEntryIds[itemId];
+                  if (item.kind === "status") {
+                    const dateStr = formatAssignmentDate(item.changed_at);
+                    const statusEventLabel =
+                      item.status_context === "completed"
+                        ? "Delivery completed"
+                        : item.status_context === "in_transit"
+                          ? "Movement update"
+                          : "Driver status change";
+                    return (
+                      <View key={item.id} style={styles.trackingPageTimelineItem}>
+                        <View
+                          style={[
+                            styles.trackingPageTimelineDot,
+                            idx === 0 && styles.trackingPageTimelineDotActive,
+                          ]}
+                        >
+                          {idx === 0 ? (
+                            <View style={styles.trackingPageTimelineDotInner} />
+                          ) : null}
+                        </View>
+                        <View
+                          style={[
+                            styles.trackingPageTimelineItemBody,
+                            idx < driverActivityTimelineRows.length - 1 && styles.trackingPageTimelineItemBorder,
+                          ]}
+                        >
+                          <TouchableOpacity
+                            style={styles.trackingPageTimelineItemRow}
+                            activeOpacity={0.85}
+                            onPress={() => toggleTimelineItemExpanded(itemId)}
+                          >
+                            <View style={styles.trackingPageTimelineItemLeft}>
+                              <Text
+                                style={[
+                                  styles.trackingPageTimelineLocation,
+                                  idx === 0 && styles.trackingPageTimelineLocationActive,
+                                ]}
+                                numberOfLines={2}
+                              >
+                                {item.status_label}
+                              </Text>
+                              <Text style={styles.trackingPageTimelineCoords}>{statusEventLabel}</Text>
+                            </View>
+                            <View style={styles.trackingPageTimelineTimeBadge}>
+                              <Text style={styles.trackingPageTimelineTimeText}>{dateStr}</Text>
+                            </View>
+                          </TouchableOpacity>
+                          <View style={styles.trackingPageTimelineStatusRow}>
+                            <View
+                              style={[
+                                styles.trackingPageTimelineStatusBadge,
+                                idx === 0 && styles.trackingPageTimelineStatusBadgeActive,
+                              ]}
+                            >
+                              <View
+                                style={[
+                                  styles.trackingPageTimelineStatusDot,
+                                  idx === 0 && styles.trackingPageTimelineStatusDotActive,
+                                ]}
+                              />
+                              <Text
+                                style={[
+                                  styles.trackingPageTimelineStatusText,
+                                  idx === 0 && styles.trackingPageTimelineStatusTextActive,
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {item.status_label}
+                              </Text>
+                            </View>
+                            <Text style={styles.trackingPageTimelineNode} numberOfLines={1}>
+                              {dateStr}
+                            </Text>
+                          </View>
+                          {isExpanded ? (
+                            <View style={styles.trackingPageTimelineExpandedPanel}>
+                              <Text style={styles.trackingPageTimelineExpandedTitle}>
+                                Activity details
+                              </Text>
+                              <Text style={styles.trackingPageTimelineExpandedLine}>
+                                Event: {item.status_label}
+                              </Text>
+                              <Text style={styles.trackingPageTimelineExpandedLine}>
+                                Context: {item.detail_line}
+                              </Text>
+                              <Text style={styles.trackingPageTimelineExpandedLine}>
+                                Recorded at: {dateStr}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+                      </View>
+                    );
+                  }
+                  const row = item.row;
+                  const eventLabel = row.event_type === "reassignment" ? "Reassignment" : "Assignment";
+                  const dateStr = formatAssignmentDate(row.changed_at);
+                  const byLabel =
+                    row.changed_by != null
+                      ? row.changed_by === currentUserId
+                        ? " • BY YOU"
+                        : " • BY DISPATCHER"
+                      : "";
+                  const isFallback = row.id === "fallback";
+                  const driverPrev =
+                    !isFallback && row.driver_id_prev
+                      ? (assignmentDriverNames[row.driver_id_prev] ?? row.driver_id_prev)
+                      : null;
+                  const driverNew = row.driver_id_new
+                    ? (assignmentDriverNames[row.driver_id_new] ??
+                       (isFallback ? driverName ?? null : row.driver_id_new))
+                    : null;
+                  const vehiclePrev =
+                    !isFallback && row.vehicle_id_prev
+                      ? (assignmentVehicleLabels[row.vehicle_id_prev] ?? row.vehicle_id_prev)
+                      : null;
+                  const vehicleNew = row.vehicle_id_new
+                    ? (assignmentVehicleLabels[row.vehicle_id_new] ??
+                       (isFallback ? vehicleLabel ?? null : row.vehicle_id_new))
+                    : isFallback && (trip.vehicle_display_number ?? "").trim()
+                      ? (trip.vehicle_display_number ?? "").trim()
+                      : null;
+                  const driverLine =
+                    driverPrev != null && driverNew != null
+                      ? `Driver: ${driverPrev} → ${driverNew}`
+                      : driverNew != null
+                        ? `Driver: ${driverNew}`
+                        : driverPrev != null
+                          ? `Driver: ${driverPrev} (removed)`
+                          : null;
+                  const vehicleLine =
+                    vehiclePrev != null && vehicleNew != null
+                      ? `Vehicle: ${vehiclePrev} → ${vehicleNew}`
+                      : vehicleNew != null
+                        ? `Vehicle: ${vehicleNew}`
+                        : vehiclePrev != null
+                          ? `Vehicle: ${vehiclePrev} (removed)`
+                          : null;
+                  const detail = [driverLine, vehicleLine].filter(Boolean).join("  ·  ");
+                  const locationLabel = detail || eventLabel;
+                  return (
+                    <View key={row.id} style={styles.trackingPageTimelineItem}>
+                      <View
+                        style={[
+                          styles.trackingPageTimelineDot,
+                          idx === 0 && styles.trackingPageTimelineDotActive,
+                        ]}
+                      >
+                        {idx === 0 ? (
+                          <View style={styles.trackingPageTimelineDotInner} />
+                        ) : null}
+                      </View>
+                      <View
+                        style={[
+                          styles.trackingPageTimelineItemBody,
+                          idx < driverActivityTimelineRows.length - 1 && styles.trackingPageTimelineItemBorder,
+                        ]}
+                      >
+                        <TouchableOpacity
+                          style={styles.trackingPageTimelineItemRow}
+                          activeOpacity={0.85}
+                          onPress={() => toggleTimelineItemExpanded(itemId)}
+                        >
+                          <View style={styles.trackingPageTimelineItemLeft}>
+                            <Text
+                              style={[
+                                styles.trackingPageTimelineLocation,
+                                idx === 0 && styles.trackingPageTimelineLocationActive,
+                              ]}
+                              numberOfLines={2}
+                            >
+                              {locationLabel}
+                            </Text>
+                            <Text style={styles.trackingPageTimelineCoords}>{eventLabel} @ node</Text>
+                          </View>
+                          <View style={styles.trackingPageTimelineTimeBadge}>
+                            <Text style={styles.trackingPageTimelineTimeText}>{dateStr}</Text>
+                          </View>
+                        </TouchableOpacity>
+                        <View style={styles.trackingPageTimelineStatusRow}>
+                          <View
+                            style={[
+                              styles.trackingPageTimelineStatusBadge,
+                              idx === 0 &&
+                                styles.trackingPageTimelineStatusBadgeActive,
+                            ]}
+                          >
+                            <View
+                              style={[
+                                styles.trackingPageTimelineStatusDot,
+                                idx === 0 &&
+                                  styles.trackingPageTimelineStatusDotActive,
+                              ]}
+                            />
+                            <Text
+                              style={[
+                                styles.trackingPageTimelineStatusText,
+                                idx === 0 &&
+                                  styles.trackingPageTimelineStatusTextActive,
+                              ]}
+                            >
+                              {eventLabel} confirmed
+                            </Text>
+                          </View>
+                          <Text style={styles.trackingPageTimelineNode}>
+                            {dateStr}
+                            {byLabel}
+                          </Text>
+                        </View>
+                        {isExpanded ? (
+                          <View style={styles.trackingPageTimelineExpandedPanel}>
+                            <Text style={styles.trackingPageTimelineExpandedTitle}>
+                              Activity details
+                            </Text>
+                            <Text style={styles.trackingPageTimelineExpandedLine}>
+                              Event type: {eventLabel}
+                            </Text>
+                            <Text style={styles.trackingPageTimelineExpandedLine}>
+                              Driver update: {driverLine ?? "No driver change recorded"}
+                            </Text>
+                            <Text style={styles.trackingPageTimelineExpandedLine}>
+                              Vehicle update: {vehicleLine ?? "No vehicle change recorded"}
+                            </Text>
+                            <Text style={styles.trackingPageTimelineExpandedLine}>
+                              Updated by: {byLabel ? byLabel.replace(" • ", "") : "System"}
+                            </Text>
+                            <Text style={styles.trackingPageTimelineExpandedLine}>
+                              Recorded at: {dateStr}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    </View>
+                  );
+                })}
+              </>
+            )}
+          </View>
+        </View>
+      </>
+    ) : null;
+
   const openAddEntry = useCallback(() => {
     if (!trip?.id) return;
     const hasSupplier =
@@ -2367,6 +2719,30 @@ export default function TripDetailScreen({
       >
           <TripDetailFinanceView
             trip={trip}
+            tripDetailTab={tripDetailTab}
+            onTripDetailTabChange={setTripDetailTab}
+            trackingTabExtras={
+              isDriverOffline ? (
+                <TouchableOpacity
+                  style={styles.trackingTabOfflineCard}
+                  onPress={() => setShowTrackingModal(true)}
+                  activeOpacity={0.88}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open live tracking"
+                >
+                  <Text style={styles.trackingTabOfflineTitle}>
+                    Driver offline or not linked
+                  </Text>
+                  <Text style={styles.trackingTabOfflineSub}>
+                    Open Live Tracking for reminders, re-assign options, and the
+                    full activity timeline when the driver connects.
+                  </Text>
+                  <Text style={styles.trackingTabOfflineCta}>Open Live Tracking →</Text>
+                </TouchableOpacity>
+              ) : (
+                liveTrackingMapAndLog
+              )
+            }
             tripLedgerEntries={tripLedgerEntries}
             adjustments={adjustments}
             viewerOrgId={currentOrganization?.id ?? null}
@@ -2444,6 +2820,10 @@ export default function TripDetailScreen({
             partnerName={partnerName}
             driverName={driverName}
             driverAvatarUri={driverAvatarUri}
+            clientName={displayClientName ?? trip.client_name ?? null}
+            paymentCaptured={tripLedgerEntries.some(
+              (row) => row.contact_type === "client" && Number(row.amount_in ?? 0) > 0,
+            )}
             onRatingsLoaded={handleRatingsLoaded}
           />
         )}
@@ -2585,351 +2965,7 @@ export default function TripDetailScreen({
                 ]}
                 showsVerticalScrollIndicator={false}
               >
-                {/* Map area — constrained height so card sits above timeline without overlap */}
-                <TrackingMapBlock
-                  mapHeight={Math.min(Dimensions.get("window").height * 0.38, 300)}
-                  vehicleLabel={vehicleLabel}
-                  locationLabels={trackingMapLocationLabels}
-                  originCoordinate={trackingMapOriginCoordinate}
-                  destinationCoordinate={trackingMapDestinationCoordinate}
-                  latestLocation={driverLocation}
-                  driverLocationLoading={driverLocationLoading}
-                  tripLocationPoints={tripLocationPoints}
-                  locationAddress={driverLocationAddress}
-                />
-
-                {/* Vehicle card — below map, above Driver's Activity Timeline */}
-                <VehicleTrackingCard
-                  vehicleLabel={vehicleLabel}
-                  cardStatusText={
-                    driverLocationLoading
-                      ? "Fetching from DB..."
-                      : driverLocation
-                        ? "LIVE"
-                        : "No location in DB yet"
-                  }
-                  cardSubtext={
-                    driverLocation
-                      ? (driverLocationAddress
-                          ? `${driverLocationAddress} · ${formatLocationUpdatedAt(driverLocation.recorded_at)}`
-                          : `Current location (from DB): ${driverLocation.latitude.toFixed(5)}°, ${driverLocation.longitude.toFixed(5)}° · ${formatLocationUpdatedAt(driverLocation.recorded_at)}`)
-                      : "Open map to see driver position"
-                  }
-                />
-
-                {/* Driver's Activity Timeline — current step + log of assignment and status changes */}
-                <View style={styles.trackingPageTimelineWrap}>
-                  <View style={styles.trackingPageTimelineHeader}>
-                    <FontAwesome
-                      name="list-alt"
-                      size={14}
-                      color={Theme.primary}
-                    />
-                    <Text style={styles.trackingPageTimelineTitle}>
-                      Driver's Activity Timeline
-                    </Text>
-                    <View style={styles.trackingPageLiveBadge}>
-                      <Text style={styles.trackingPageLiveBadgeText}>
-                        Live Updates
-                      </Text>
-                    </View>
-                  </View>
-                  {(() => {
-                    const { step, label } = trackingStepAndLabel(trip.status);
-                    return (
-                      <View style={styles.trackingPageCurrentStepWrap}>
-                        <Text style={styles.trackingPageCurrentStepLabel}>
-                          Current step
-                        </Text>
-                        <Text style={styles.trackingPageCurrentStepValue}>
-                          Step {step} of 4 — {label}
-                        </Text>
-                      </View>
-                    );
-                  })()}
-
-                  {statusChangeRowsOnly.length > 0 && (
-                    <View style={styles.trackingPageStatusChangesWrap}>
-                      <Text style={styles.trackingPageStatusChangesTitle}>
-                        Status changes
-                      </Text>
-                      {statusChangeRowsOnly.map((row, idx) => (
-                        <View
-                          key={row.id}
-                          style={[
-                            styles.trackingPageStatusChangeRow,
-                            idx === statusChangeRowsOnly.length - 1 &&
-                              styles.trackingPageStatusChangeRowLast,
-                          ]}
-                        >
-                          <Text style={styles.trackingPageStatusChangeLabel}>
-                            {row.status_label}
-                          </Text>
-                          <Text style={styles.trackingPageStatusChangeTime}>
-                            {formatAssignmentDate(row.changed_at)}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  <View style={styles.trackingPageTimelineList}>
-                    {driverActivityTimelineRows.length === 0 ? (
-                      <View style={styles.trackingPageTimelineEmpty}>
-                        <FontAwesome
-                          name="bolt"
-                          size={32}
-                          color={Theme.textMuted}
-                        />
-                        <Text style={styles.trackingActivityEmpty}>
-                          No log data recorded
-                        </Text>
-                      </View>
-                    ) : (
-                      <>
-                        <View style={styles.trackingPageTimelineLine} />
-                        {driverActivityTimelineRows.map((item, idx) => {
-                          const itemId = timelineItemId(item);
-                          const isExpanded = !!expandedTimelineEntryIds[itemId];
-                          if (item.kind === "status") {
-                            const dateStr = formatAssignmentDate(item.changed_at);
-                            const statusEventLabel =
-                              item.status_context === "completed"
-                                ? "Delivery completed"
-                                : item.status_context === "in_transit"
-                                  ? "Movement update"
-                                  : "Driver status change";
-                            return (
-                              <View key={item.id} style={styles.trackingPageTimelineItem}>
-                                <View
-                                  style={[
-                                    styles.trackingPageTimelineDot,
-                                    idx === 0 && styles.trackingPageTimelineDotActive,
-                                  ]}
-                                >
-                                  {idx === 0 ? (
-                                    <View style={styles.trackingPageTimelineDotInner} />
-                                  ) : null}
-                                </View>
-                                <View
-                                  style={[
-                                    styles.trackingPageTimelineItemBody,
-                                    idx < driverActivityTimelineRows.length - 1 && styles.trackingPageTimelineItemBorder,
-                                  ]}
-                                >
-                                  <TouchableOpacity
-                                    style={styles.trackingPageTimelineItemRow}
-                                    activeOpacity={0.85}
-                                    onPress={() => toggleTimelineItemExpanded(itemId)}
-                                  >
-                                    <View style={styles.trackingPageTimelineItemLeft}>
-                                      <Text
-                                        style={[
-                                          styles.trackingPageTimelineLocation,
-                                          idx === 0 && styles.trackingPageTimelineLocationActive,
-                                        ]}
-                                        numberOfLines={2}
-                                      >
-                                        {item.status_label}
-                                      </Text>
-                                      <Text style={styles.trackingPageTimelineCoords}>{statusEventLabel}</Text>
-                                    </View>
-                                    <View style={styles.trackingPageTimelineTimeBadge}>
-                                      <Text style={styles.trackingPageTimelineTimeText}>{dateStr}</Text>
-                                    </View>
-                                  </TouchableOpacity>
-                                  <View style={styles.trackingPageTimelineStatusRow}>
-                                    <View
-                                      style={[
-                                        styles.trackingPageTimelineStatusBadge,
-                                        idx === 0 && styles.trackingPageTimelineStatusBadgeActive,
-                                      ]}
-                                    >
-                                      <View
-                                        style={[
-                                          styles.trackingPageTimelineStatusDot,
-                                          idx === 0 && styles.trackingPageTimelineStatusDotActive,
-                                        ]}
-                                      />
-                                      <Text
-                                        style={[
-                                          styles.trackingPageTimelineStatusText,
-                                          idx === 0 && styles.trackingPageTimelineStatusTextActive,
-                                        ]}
-                                        numberOfLines={1}
-                                      >
-                                        {item.status_label}
-                                      </Text>
-                                    </View>
-                                    <Text style={styles.trackingPageTimelineNode} numberOfLines={1}>
-                                      {dateStr}
-                                    </Text>
-                                  </View>
-                                  {isExpanded ? (
-                                    <View style={styles.trackingPageTimelineExpandedPanel}>
-                                      <Text style={styles.trackingPageTimelineExpandedTitle}>
-                                        Activity details
-                                      </Text>
-                                      <Text style={styles.trackingPageTimelineExpandedLine}>
-                                        Event: {item.status_label}
-                                      </Text>
-                                      <Text style={styles.trackingPageTimelineExpandedLine}>
-                                        Context: {item.detail_line}
-                                      </Text>
-                                      <Text style={styles.trackingPageTimelineExpandedLine}>
-                                        Recorded at: {dateStr}
-                                      </Text>
-                                    </View>
-                                  ) : null}
-                                </View>
-                              </View>
-                            );
-                          }
-                          const row = item.row;
-                          const eventLabel = row.event_type === "reassignment" ? "Reassignment" : "Assignment";
-                          const dateStr = formatAssignmentDate(row.changed_at);
-                          const byLabel =
-                            row.changed_by != null
-                              ? row.changed_by === currentUserId
-                                ? " • BY YOU"
-                                : " • BY DISPATCHER"
-                              : "";
-                          const isFallback = row.id === "fallback";
-                          const driverPrev =
-                            !isFallback && row.driver_id_prev
-                              ? (assignmentDriverNames[row.driver_id_prev] ?? row.driver_id_prev)
-                              : null;
-                          const driverNew = row.driver_id_new
-                            ? (assignmentDriverNames[row.driver_id_new] ??
-                               (isFallback ? driverName ?? null : row.driver_id_new))
-                            : null;
-                          const vehiclePrev =
-                            !isFallback && row.vehicle_id_prev
-                              ? (assignmentVehicleLabels[row.vehicle_id_prev] ?? row.vehicle_id_prev)
-                              : null;
-                          const vehicleNew = row.vehicle_id_new
-                            ? (assignmentVehicleLabels[row.vehicle_id_new] ??
-                               (isFallback ? vehicleLabel ?? null : row.vehicle_id_new))
-                            : isFallback && (trip.vehicle_display_number ?? "").trim()
-                              ? (trip.vehicle_display_number ?? "").trim()
-                              : null;
-                          const driverLine =
-                            driverPrev != null && driverNew != null
-                              ? `Driver: ${driverPrev} → ${driverNew}`
-                              : driverNew != null
-                                ? `Driver: ${driverNew}`
-                                : driverPrev != null
-                                  ? `Driver: ${driverPrev} (removed)`
-                                  : null;
-                          const vehicleLine =
-                            vehiclePrev != null && vehicleNew != null
-                              ? `Vehicle: ${vehiclePrev} → ${vehicleNew}`
-                              : vehicleNew != null
-                                ? `Vehicle: ${vehicleNew}`
-                                : vehiclePrev != null
-                                  ? `Vehicle: ${vehiclePrev} (removed)`
-                                  : null;
-                          const detail = [driverLine, vehicleLine].filter(Boolean).join("  ·  ");
-                          const locationLabel = detail || eventLabel;
-                          return (
-                            <View key={row.id} style={styles.trackingPageTimelineItem}>
-                              <View
-                                style={[
-                                  styles.trackingPageTimelineDot,
-                                  idx === 0 && styles.trackingPageTimelineDotActive,
-                                ]}
-                              >
-                                {idx === 0 ? (
-                                  <View style={styles.trackingPageTimelineDotInner} />
-                                ) : null}
-                              </View>
-                              <View
-                                style={[
-                                  styles.trackingPageTimelineItemBody,
-                                  idx < driverActivityTimelineRows.length - 1 && styles.trackingPageTimelineItemBorder,
-                                ]}
-                              >
-                                <TouchableOpacity
-                                  style={styles.trackingPageTimelineItemRow}
-                                  activeOpacity={0.85}
-                                  onPress={() => toggleTimelineItemExpanded(itemId)}
-                                >
-                                  <View style={styles.trackingPageTimelineItemLeft}>
-                                    <Text
-                                      style={[
-                                        styles.trackingPageTimelineLocation,
-                                        idx === 0 && styles.trackingPageTimelineLocationActive,
-                                      ]}
-                                      numberOfLines={2}
-                                    >
-                                      {locationLabel}
-                                    </Text>
-                                    <Text style={styles.trackingPageTimelineCoords}>{eventLabel} @ node</Text>
-                                  </View>
-                                  <View style={styles.trackingPageTimelineTimeBadge}>
-                                    <Text style={styles.trackingPageTimelineTimeText}>{dateStr}</Text>
-                                  </View>
-                                </TouchableOpacity>
-                                <View style={styles.trackingPageTimelineStatusRow}>
-                                  <View
-                                    style={[
-                                      styles.trackingPageTimelineStatusBadge,
-                                      idx === 0 &&
-                                        styles.trackingPageTimelineStatusBadgeActive,
-                                    ]}
-                                  >
-                                    <View
-                                      style={[
-                                        styles.trackingPageTimelineStatusDot,
-                                        idx === 0 &&
-                                          styles.trackingPageTimelineStatusDotActive,
-                                      ]}
-                                    />
-                                    <Text
-                                      style={[
-                                        styles.trackingPageTimelineStatusText,
-                                        idx === 0 &&
-                                          styles.trackingPageTimelineStatusTextActive,
-                                      ]}
-                                    >
-                                      {eventLabel} confirmed
-                                    </Text>
-                                  </View>
-                                  <Text style={styles.trackingPageTimelineNode}>
-                                    {dateStr}
-                                    {byLabel}
-                                  </Text>
-                                </View>
-                                {isExpanded ? (
-                                  <View style={styles.trackingPageTimelineExpandedPanel}>
-                                    <Text style={styles.trackingPageTimelineExpandedTitle}>
-                                      Activity details
-                                    </Text>
-                                    <Text style={styles.trackingPageTimelineExpandedLine}>
-                                      Event type: {eventLabel}
-                                    </Text>
-                                    <Text style={styles.trackingPageTimelineExpandedLine}>
-                                      Driver update: {driverLine ?? "No driver change recorded"}
-                                    </Text>
-                                    <Text style={styles.trackingPageTimelineExpandedLine}>
-                                      Vehicle update: {vehicleLine ?? "No vehicle change recorded"}
-                                    </Text>
-                                    <Text style={styles.trackingPageTimelineExpandedLine}>
-                                      Updated by: {byLabel ? byLabel.replace(" • ", "") : "System"}
-                                    </Text>
-                                    <Text style={styles.trackingPageTimelineExpandedLine}>
-                                      Recorded at: {dateStr}
-                                    </Text>
-                                  </View>
-                                ) : null}
-                              </View>
-                            </View>
-                          );
-                        })}
-                      </>
-                    )}
-                  </View>
-                </View>
+                {liveTrackingMapAndLog}
               </ScrollView>
             </>
           )}
@@ -3239,6 +3275,32 @@ function formatAssignmentDate(iso: string | null | undefined): string {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Theme.screenBackground },
+  trackingTabOfflineCard: {
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    marginBottom: 4,
+  },
+  trackingTabOfflineTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  trackingTabOfflineSub: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+    lineHeight: 17,
+  },
+  trackingTabOfflineCta: {
+    marginTop: 12,
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.primary,
+  },
   assignmentBlockWrap: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingBottom: 16,

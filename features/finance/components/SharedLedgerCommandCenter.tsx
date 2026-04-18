@@ -6,15 +6,16 @@
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import {
+  Activity,
   AlertCircle,
   ArrowLeft,
   Check,
   CheckCircle2,
   ChevronRight,
-  Clock,
   CloudDownload,
   Inbox,
   LayoutGrid,
+  Layers,
   Link2,
   List,
   Loader2,
@@ -26,9 +27,16 @@ import {
   Zap,
 } from "lucide-react-native";
 import { getTripAdjustments, type TripAdjustment } from "@/features/trips/services/tripAdjustments";
+import {
+  isBlankOrPlaceholderPartyName,
+  partyAvatarBackgroundColor,
+  partyAvatarInitialsTextColor,
+  partyInitialsFromName,
+} from "@/lib/partyAvatarDisplay";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Alert,
+  Image,
   Modal,
   Platform,
   ScrollView,
@@ -40,6 +48,7 @@ import {
 } from "react-native";
 import Animated, {
   Easing,
+  interpolate,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -95,6 +104,25 @@ function formatINR(n: number): string {
   return `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 0, minimumFractionDigits: 0 })}`;
 }
 
+/**
+ * Typography parity with `TripsHubTripCard` (`features/trips/components/TripsHubViews.tsx`)
+ * so shared-ledger trip cards read as the same family as the main Trips hub.
+ */
+const SLG_FS_CAPTION = 8;
+const SLG_FS_LABEL = 9;
+const SLG_FS_BODY = 10;
+const SLG_FS_AMOUNT = 12;
+const SLG_FS_AMOUNT_LABEL = 7;
+const SLG_FS_ROUTE_HERO = 11;
+
+/** Gaps between my / bridge / partner in sale-value mirror (must match `mirrorColumnsRow` gap). */
+const SLG_MIRROR_GAP = 6;
+/** Bridge column width — must match `styles.bridge.width`; `bridgeTrackSpacer` uses gap + bridge + gap. */
+const SLG_BRIDGE_WIDTH = 34;
+const SLG_MIRROR_BRIDGE_TRACK = SLG_MIRROR_GAP + SLG_BRIDGE_WIDTH + SLG_MIRROR_GAP;
+/** Watermark icon size (trip truck / payment link); scales slightly in animation. */
+const SLG_WATERMARK_ICON_SIZE = 118;
+
 /** Soft pulse on hub icons (shared ledger trip cards). */
 function SlgIconPulse({ children }: { children: ReactNode }) {
   const opacity = useSharedValue(1);
@@ -116,6 +144,66 @@ function SlgIconPulse({ children }: { children: ReactNode }) {
   }, []);
   const pulseStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
   return <Animated.View style={pulseStyle}>{children}</Animated.View>;
+}
+
+/** Large background truck / link icon with gentle breathe + drift (trip vs payment cards). */
+function SlgCardWatermark({ kind }: { kind: "trip" | "payment" }) {
+  const breathe = useSharedValue(0.07);
+  const drift = useSharedValue(0);
+  useEffect(() => {
+    breathe.value = withRepeat(
+      withSequence(
+        withTiming(0.14, {
+          duration: 2600,
+          easing: Easing.inOut(Easing.ease),
+        }),
+        withTiming(0.055, {
+          duration: 2600,
+          easing: Easing.inOut(Easing.ease),
+        }),
+      ),
+      -1,
+      true,
+    );
+  }, [breathe]);
+  useEffect(() => {
+    drift.value = withRepeat(
+      withSequence(
+        withTiming(1, {
+          duration: 4800,
+          easing: Easing.inOut(Easing.ease),
+        }),
+        withTiming(0, {
+          duration: 4800,
+          easing: Easing.inOut(Easing.ease),
+        }),
+      ),
+      -1,
+      true,
+    );
+  }, [drift]);
+  const wmStyle = useAnimatedStyle(() => ({
+    opacity: breathe.value,
+    transform: [
+      { translateX: interpolate(drift.value, [0, 1], [0, 10]) },
+      { translateY: interpolate(drift.value, [0, 1], [0, -8]) },
+      { scale: interpolate(drift.value, [0, 1], [1, 1.05]) },
+    ],
+  }));
+  const color = Theme.textPrimaryDark;
+  const size = SLG_WATERMARK_ICON_SIZE;
+  const stroke = 1.35;
+  return (
+    <View style={styles.missionCardWatermarkShell} pointerEvents="none">
+      <Animated.View style={[styles.missionCardWatermarkInner, wmStyle]}>
+        {kind === "trip" ? (
+          <Truck size={size} color={color} strokeWidth={stroke} />
+        ) : (
+          <Link2 size={size} color={color} strokeWidth={stroke} />
+        )}
+      </Animated.View>
+    </View>
+  );
 }
 
 function norm(s: string | null | undefined): string {
@@ -256,8 +344,77 @@ function txnBadgeVariant(txn: CommandTxnRow) {
   }
 }
 
+/** Partner row: public HTTP(S) avatar URL, or null → initials (cash tab style). */
+function SlgPartnerAvatar({
+  partyName,
+  profileImageUrl,
+  size,
+}: {
+  partyName: string;
+  profileImageUrl: string | null | undefined;
+  size: number;
+}) {
+  const uri = (profileImageUrl ?? "").trim();
+  const hasHttp = uri.startsWith("http://") || uri.startsWith("https://");
+  const r = size / 2;
+  const initialsFont = Math.max(10, Math.round(size * 0.32));
+  if (hasHttp) {
+    return (
+      <View
+        style={[
+          styles.slgPartyAvatarBorder,
+          { width: size, height: size, borderRadius: r },
+        ]}
+      >
+        <Image
+          source={{ uri }}
+          style={{ width: size, height: size, borderRadius: r }}
+          resizeMode="cover"
+          accessibilityIgnoresInvertColors
+        />
+      </View>
+    );
+  }
+  if (isBlankOrPlaceholderPartyName(partyName)) {
+    return null;
+  }
+  const initials = partyInitialsFromName(partyName);
+  const bg = partyAvatarBackgroundColor((partyName || "—").trim() || "—");
+  return (
+    <View
+      style={[
+        styles.slgPartyAvatarBorder,
+        {
+          width: size,
+          height: size,
+          borderRadius: r,
+          backgroundColor: bg,
+          alignItems: "center",
+          justifyContent: "center",
+        },
+      ]}
+      accessibilityRole="image"
+      accessibilityLabel={`${partyName} avatar`}
+    >
+      <Text
+        style={[
+          styles.slgPartyAvatarInitialsTxt,
+          {
+            fontSize: initialsFont,
+            color: partyAvatarInitialsTextColor(bg),
+          },
+        ]}
+      >
+        {initials}
+      </Text>
+    </View>
+  );
+}
+
 export interface SharedLedgerCommandCenterProps {
   entityName: string;
+  /** Resolved public avatar URL for the partner (client/supplier); initials when null. */
+  partnerProfileImageUrl?: string | null;
   entityType: "CLIENT" | "SUPPLIER";
   embeddedInOverlay: boolean;
   myBookLabel: string;
@@ -346,7 +503,7 @@ const webDesktopStyles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   missionCard: {
-    borderRadius: 22,
+    borderRadius: 32,
     marginBottom: 10,
   },
   missionCardGrid: {
@@ -374,9 +531,8 @@ const webDesktopStyles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingBottom: 8,
   },
-  missionIcon: { width: 44, height: 44, borderRadius: 14, marginTop: 0 },
   missionId: {
-    fontSize: 14,
+    fontSize: SLG_FS_AMOUNT,
   },
   subTitle: { fontSize: 14 },
   subSub: { fontSize: 9 },
@@ -396,6 +552,7 @@ const webDesktopStyles = StyleSheet.create({
 
 export function SharedLedgerCommandCenter({
   entityName,
+  partnerProfileImageUrl = null,
   entityType,
   embeddedInOverlay,
   myBookLabel,
@@ -425,6 +582,22 @@ export function SharedLedgerCommandCenter({
     Platform.OS === "web" && windowWidth >= 1024;
   /** Stack pending inbox cards on phones / narrow web. */
   const pendingCardsFullWidth = windowWidth < 560;
+  /**
+   * Trip + payment hub cards: column count by width so “Sale value” mirror row stays readable.
+   * Web ≥1024 keeps three-up desktop cells; native / narrow web steps 1 → 2 → 3 columns.
+   */
+  const tripHubGridCellStyle = useMemo(() => {
+    if (Platform.OS === "web" && windowWidth >= 1024) {
+      return styles.tripGridCell;
+    }
+    if (windowWidth < 520) {
+      return styles.tripGridCellFull;
+    }
+    if (windowWidth < 820) {
+      return styles.tripGridCellHalf;
+    }
+    return styles.tripGridCellThird;
+  }, [windowWidth]);
   /**
    * Trips fleet table: width tracks viewport so flex columns absorb space (no dead strip after Sync).
    * Below min width, horizontal scroll applies.
@@ -546,6 +719,21 @@ export function SharedLedgerCommandCenter({
     if (r.status === "PENDING") return styles.badgeNeutral;
     if (r.status === "MISMATCH") return styles.badgeRed;
     return styles.badgeGray;
+  };
+
+  /** Reference: top strip — rose (variance), amber (awaiting), emerald (aligned). */
+  const hubTripAccentStyle = (r: ReconciledRow) => {
+    if (r.status === "MISMATCH") return styles.hubCardAccentRose;
+    if (r.status === "PENDING") return styles.hubCardAccentWarn;
+    if (r.status === "VERIFIED") return styles.hubCardAccentGood;
+    return styles.hubCardAccentSlate;
+  };
+
+  const hubTxnAccentStyle = (txn: CommandTxnRow) => {
+    if (txn.status === "conflict") return styles.hubCardAccentRose;
+    if (txn.status === "pending") return styles.hubCardAccentWarn;
+    if (txn.status === "matched") return styles.hubCardAccentGood;
+    return styles.hubCardAccentSlate;
   };
 
   const openTripDetail = (row: ReconciledRow) => {
@@ -682,12 +870,19 @@ export function SharedLedgerCommandCenter({
                         <View style={styles.pendingCardGlow} />
                         <View style={styles.pendingCardTop}>
                           <View style={styles.pendingCardHeaderRow}>
-                            <Text
-                              style={styles.pendingPartyName}
-                              numberOfLines={1}
-                            >
-                              {entityName}
-                            </Text>
+                            <SlgPartnerAvatar
+                              partyName={entityName}
+                              profileImageUrl={partnerProfileImageUrl}
+                              size={34}
+                            />
+                            <View style={styles.pendingPartyNameWrap}>
+                              <Text
+                                style={styles.pendingPartyName}
+                                numberOfLines={1}
+                              >
+                                {entityName}
+                              </Text>
+                            </View>
                             <View style={styles.pendingRefPill}>
                               <Text
                                 style={styles.pendingRefPillTxt}
@@ -1077,14 +1272,23 @@ export function SharedLedgerCommandCenter({
                               </Text>
                             </View>
                             <View style={styles.fleetCellPartner}>
-                              <Text style={styles.fleetPartnerName} numberOfLines={2}>
-                                {entityName}
-                              </Text>
-                              <Text style={styles.fleetPartnerSub} numberOfLines={1}>
-                                {partnerSales != null
-                                  ? "In partner book"
-                                  : SHARED_LEDGER_AWAITING_PARTNER_UPDATE}
-                              </Text>
+                              <View style={styles.fleetPartnerRow}>
+                                <SlgPartnerAvatar
+                                  partyName={entityName}
+                                  profileImageUrl={partnerProfileImageUrl}
+                                  size={28}
+                                />
+                                <View style={styles.fleetPartnerTextCol}>
+                                  <Text style={styles.fleetPartnerName} numberOfLines={2}>
+                                    {entityName}
+                                  </Text>
+                                  <Text style={styles.fleetPartnerSub} numberOfLines={1}>
+                                    {partnerSales != null
+                                      ? "In partner book"
+                                      : SHARED_LEDGER_AWAITING_PARTNER_UPDATE}
+                                  </Text>
+                                </View>
+                              </View>
                             </View>
                             <View style={styles.fleetCellMoney}>
                               <View style={styles.fleetMoneyCol}>
@@ -1223,7 +1427,8 @@ export function SharedLedgerCommandCenter({
                     onPress={() => openTripDetail(row)}
                     activeOpacity={0.88}
                   >
-                    <View style={styles.missionCardOrb} pointerEvents="none" />
+                    <SlgCardWatermark kind="trip" />
+                    <View style={[styles.hubCardAccentBar, hubTripAccentStyle(row)]} />
                     <View
                       style={[
                         styles.missionHead,
@@ -1231,26 +1436,26 @@ export function SharedLedgerCommandCenter({
                       ]}
                     >
                       <View style={styles.missionHeadLeft}>
-                        <View
-                          style={[
-                            styles.missionIcon,
-                            isWebDesktop && webDesktopStyles.missionIcon,
-                          ]}
-                        >
-                          <SlgIconPulse>
-                            <Truck
-                              size={20}
-                              color={Theme.textPrimaryDark}
-                              strokeWidth={2.25}
-                            />
-                          </SlgIconPulse>
-                        </View>
+                        <SlgPartnerAvatar
+                          partyName={entityName}
+                          profileImageUrl={partnerProfileImageUrl}
+                          size={44}
+                        />
                         <View style={styles.missionTitleBlock}>
+                          <View style={styles.missionEntityRow}>
+                            <Text
+                              style={styles.missionPartnerLineInline}
+                              numberOfLines={1}
+                            >
+                              {entityName}
+                            </Text>
+                          </View>
                           <View style={styles.missionIdRow}>
                             <Text
                               style={[
                                 styles.missionId,
                                 isWebDesktop && webDesktopStyles.missionId,
+                                styles.missionIdHero,
                               ]}
                               numberOfLines={1}
                             >
@@ -1262,12 +1467,14 @@ export function SharedLedgerCommandCenter({
                               </Text>
                             ) : null}
                           </View>
-                          <Text
-                            style={styles.missionRouteLine}
-                            numberOfLines={2}
-                          >
-                            {tripRouteForTripRef?.(row.tripId) ?? "Route pending"}
-                          </Text>
+                          <View style={styles.missionRouteManifest}>
+                            <Text
+                              style={styles.missionRouteLine}
+                              numberOfLines={2}
+                            >
+                              {tripRouteForTripRef?.(row.tripId) ?? "Route pending"}
+                            </Text>
+                          </View>
                           <Text
                             style={[
                               styles.missionCardSummary,
@@ -1276,9 +1483,6 @@ export function SharedLedgerCommandCenter({
                             numberOfLines={2}
                           >
                             {missionCardSummaryLine(row)}
-                          </Text>
-                          <Text style={styles.missionPartnerLine} numberOfLines={1}>
-                            {entityName}
                           </Text>
                           <View style={styles.missionBadges}>
                             <Text
@@ -1296,7 +1500,7 @@ export function SharedLedgerCommandCenter({
                       <View style={styles.missionChevronWrap}>
                         <SlgIconPulse>
                           <ChevronRight
-                            size={18}
+                            size={24}
                             color={Theme.textMuted}
                             strokeWidth={2.25}
                           />
@@ -1309,84 +1513,93 @@ export function SharedLedgerCommandCenter({
                         isWebDesktop && webDesktopStyles.tripGridMirrorBlock,
                       ]}
                     >
-                      <View style={styles.mirrorSectionHeader}>
-                        <Text
-                          style={[
-                            styles.mirrorSaleCaption,
-                            styles.mirrorSaleCaptionIndent,
-                            isWebDesktop && webDesktopStyles.mirrorSaleCaptionDesktop,
-                          ]}
-                        >
-                          Sale value
-                        </Text>
-                      </View>
+                      <Text
+                        style={[
+                          styles.mirrorSaleCaption,
+                          isWebDesktop &&
+                            webDesktopStyles.mirrorSaleCaptionDesktop,
+                        ]}
+                      >
+                        Sale value
+                      </Text>
                       <View
                         style={[
-                          styles.mirrorWrap,
-                          styles.mirrorWrapIndent,
+                          styles.mirrorColumnsRow,
                           isWebDesktop && webDesktopStyles.tripGridMirrorInner,
                         ]}
                       >
-                        <View style={styles.mirrorMy}>
-                          <Text style={styles.mirrorLbl}>{myBookLabel}</Text>
-                          <Text style={styles.mirrorAmt}>
-                            {row.internal ? formatINR(row.intSales) : "—"}
-                          </Text>
-                        </View>
-                        <View style={styles.bridge}>
-                          <View style={styles.bridgeInner}>
-                            <SlgIconPulse>
-                              {row.status === "MISMATCH" ? (
-                                <Zap
-                                  size={14}
-                                  color={Theme.teslaRed}
-                                  fill={Theme.teslaRed}
-                                  strokeWidth={2}
-                                />
-                              ) : row.status === "PENDING" ? (
-                                <Clock
-                                  size={14}
-                                  color={Theme.textSecondary}
-                                  strokeWidth={2.25}
-                                />
-                              ) : (
-                                <Link2
-                                  size={14}
-                                  color={Theme.textSecondary}
-                                  strokeWidth={2.25}
-                                />
-                              )}
-                            </SlgIconPulse>
+                          <View style={[styles.mirrorMy, styles.mirrorMyHub]}>
+                            <Text style={[styles.mirrorLbl, styles.mirrorLblHub]}>
+                              {myBookLabel}
+                            </Text>
+                            <Text style={[styles.mirrorAmt, styles.mirrorAmtHub]}>
+                              {row.internal ? formatINR(row.intSales) : "—"}
+                            </Text>
                           </View>
-                        </View>
-                        <View
-                          style={[
-                            styles.mirrorPartner,
-                            !row.external && styles.mirrorPartnerWait,
-                          ]}
-                        >
-                          <Text style={[styles.mirrorLbl, styles.mirrorLblPartner]}>
-                            {partnerLabel}
-                          </Text>
-                          <Text
+                          <View style={styles.bridge}>
+                            <View style={styles.bridgeInner}>
+                              <SlgIconPulse>
+                                {row.status === "MISMATCH" ? (
+                                  <Zap
+                                    size={14}
+                                    color={Theme.teslaRed}
+                                    fill={Theme.teslaRed}
+                                    strokeWidth={2}
+                                  />
+                                ) : (
+                                  <Activity
+                                    size={14}
+                                    color={
+                                      row.status === "VERIFIED"
+                                        ? Theme.darkGreen
+                                        : Theme.primary
+                                    }
+                                    strokeWidth={2.25}
+                                  />
+                                )}
+                              </SlgIconPulse>
+                            </View>
+                          </View>
+                          <View
                             style={[
-                              styles.mirrorAmt,
-                              styles.mirrorAmtPartner,
-                              partnerSales == null && row.status === "PENDING"
-                                ? styles.waitTxt
-                                : partnerSales == null
-                                  ? styles.waitTxt
-                                  : null,
-                              partnerSales == null ? styles.waitTxtPartner : null,
+                              styles.mirrorPartner,
+                              !row.external && styles.mirrorPartnerWait,
+                              !!row.external && styles.mirrorPartnerHubDark,
                             ]}
                           >
-                            {row.status === "PENDING" && !row.external
-                              ? SHARED_LEDGER_PARTNER_PENDING_LABEL
-                              : partnerSales != null
-                                ? formatINR(partnerSales)
-                                : "—"}
-                          </Text>
-                        </View>
+                            <Text
+                              style={[
+                                styles.mirrorLbl,
+                                styles.mirrorLblPartner,
+                                styles.mirrorLblHub,
+                                !!row.external && styles.hubMirrorLblOnDark,
+                              ]}
+                            >
+                              {partnerLabel}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.mirrorAmt,
+                                styles.mirrorAmtPartner,
+                                styles.mirrorAmtHub,
+                                partnerSales == null && row.status === "PENDING"
+                                  ? styles.waitTxt
+                                  : partnerSales == null
+                                    ? styles.waitTxt
+                                    : null,
+                                partnerSales == null ? styles.waitTxtPartner : null,
+                                !!row.external &&
+                                  partnerSales != null &&
+                                  styles.auditAmtOnDark,
+                              ]}
+                            >
+                              {row.status === "PENDING" && !row.external
+                                ? SHARED_LEDGER_PARTNER_PENDING_LABEL
+                                : partnerSales != null
+                                  ? formatINR(partnerSales)
+                                  : "—"}
+                            </Text>
+                          </View>
                       </View>
                     </View>
                     <View
@@ -1395,33 +1608,34 @@ export function SharedLedgerCommandCenter({
                         isWebDesktop && webDesktopStyles.tripGridPaid,
                       ]}
                     >
-                      <View style={[styles.paidCell, styles.paidCellMirrorAlign]}>
-                        <Text style={styles.paidLbl}>Paid · {myBookLabel}</Text>
-                        <Text style={styles.paidAmt}>
-                          {row.internal ? formatINR(intPaid) : "—"}
-                        </Text>
-                      </View>
-                      <View style={styles.bridgePaidSpacer} />
-                      <View style={[styles.paidCell, styles.paidCellRight]}>
-                        <Text style={[styles.paidLbl, styles.paidTxtRight]}>
-                          Paid · {partnerLabel}
-                        </Text>
-                        <Text style={[styles.paidAmt, styles.paidTxtRight]}>
-                          {row.status === "PENDING" && !row.external
-                            ? SHARED_LEDGER_PARTNER_PENDING_LABEL
-                            : row.external
-                              ? formatINR(row.extPaid)
-                              : "—"}
-                        </Text>
+                      <View style={styles.paidColumnsRow}>
+                        <View style={styles.paidCell}>
+                          <Text style={styles.paidLbl}>
+                            Paid · {myBookLabel}
+                          </Text>
+                          <Text style={styles.paidAmt}>
+                            {row.internal ? formatINR(intPaid) : "—"}
+                          </Text>
+                        </View>
+                        <View style={styles.bridgeTrackSpacer} />
+                        <View style={[styles.paidCell, styles.paidCellRight]}>
+                          <Text style={[styles.paidLbl, styles.paidTxtRight]}>
+                            Paid · {partnerLabel}
+                          </Text>
+                          <Text style={[styles.paidAmt, styles.paidTxtRight]}>
+                            {row.status === "PENDING" && !row.external
+                              ? SHARED_LEDGER_PARTNER_PENDING_LABEL
+                              : row.external
+                                ? formatINR(row.extPaid)
+                                : "—"}
+                          </Text>
+                        </View>
                       </View>
                     </View>
                   </TouchableOpacity>
                 );
                 return (
-                  <View
-                    key={row.tripId}
-                    style={isWebDesktop ? styles.tripGridCell : styles.tripGridCellMobile}
-                  >
+                  <View key={row.tripId} style={tripHubGridCellStyle}>
                     {card}
                   </View>
                 );
@@ -1599,14 +1813,7 @@ export function SharedLedgerCommandCenter({
                       : null;
                   const bridgeOk = paymentBridgeCheckAligned(txn);
                   return (
-                    <View
-                      key={txn.id}
-                      style={
-                        isWebDesktop
-                          ? styles.tripGridCell
-                          : styles.tripGridCellMobile
-                      }
-                    >
+                    <View key={txn.id} style={tripHubGridCellStyle}>
                       <TouchableOpacity
                         style={[
                           styles.missionCard,
@@ -1617,6 +1824,8 @@ export function SharedLedgerCommandCenter({
                         onPress={() => openTxnForensic(txn)}
                         activeOpacity={0.88}
                       >
+                        <SlgCardWatermark kind="payment" />
+                        <View style={[styles.hubCardAccentBar, hubTxnAccentStyle(txn)]} />
                         <View
                           style={[
                             styles.missionHead,
@@ -1624,26 +1833,26 @@ export function SharedLedgerCommandCenter({
                           ]}
                         >
                           <View style={styles.missionHeadLeft}>
-                            <View
-                              style={[
-                                styles.missionIcon,
-                                isWebDesktop && webDesktopStyles.missionIcon,
-                              ]}
-                            >
-                              <SlgIconPulse>
-                                <Link2
-                                  size={18}
-                                  color={Theme.textPrimaryDark}
-                                  strokeWidth={2.25}
-                                />
-                              </SlgIconPulse>
-                            </View>
+                            <SlgPartnerAvatar
+                              partyName={entityName}
+                              profileImageUrl={partnerProfileImageUrl}
+                              size={40}
+                            />
                             <View style={styles.missionTitleBlock}>
+                              <View style={styles.missionEntityRow}>
+                                <Text
+                                  style={styles.missionPartnerLineInline}
+                                  numberOfLines={1}
+                                >
+                                  {entityName}
+                                </Text>
+                              </View>
                               <View style={styles.missionIdRow}>
                                 <Text
                                   style={[
                                     styles.missionId,
                                     isWebDesktop && webDesktopStyles.missionId,
+                                    styles.missionIdHero,
                                   ]}
                                   numberOfLines={1}
                                 >
@@ -1687,7 +1896,7 @@ export function SharedLedgerCommandCenter({
                           <View style={styles.missionChevronWrap}>
                             <SlgIconPulse>
                               <ChevronRight
-                                size={18}
+                                size={24}
                                 color={Theme.textMuted}
                                 strokeWidth={2.25}
                               />
@@ -1700,86 +1909,94 @@ export function SharedLedgerCommandCenter({
                             isWebDesktop && webDesktopStyles.tripGridMirrorBlock,
                           ]}
                         >
-                          <View style={styles.mirrorSectionHeader}>
-                            <Text
-                              style={[
-                                styles.mirrorSaleCaption,
-                                isWebDesktop &&
-                                  webDesktopStyles.mirrorSaleCaptionDesktop,
-                              ]}
-                            >
-                              Payment
-                            </Text>
-                          </View>
+                          <Text
+                            style={[
+                              styles.mirrorSaleCaption,
+                              isWebDesktop &&
+                                webDesktopStyles.mirrorSaleCaptionDesktop,
+                            ]}
+                          >
+                            Payment
+                          </Text>
                           <View
                             style={[
-                              styles.mirrorWrap,
+                              styles.mirrorColumnsRow,
                               isWebDesktop &&
                                 webDesktopStyles.tripGridMirrorInner,
                             ]}
                           >
-                            <View style={styles.mirrorMy}>
-                              <Text style={styles.mirrorLbl}>{myBookLabel}</Text>
-                              <Text style={styles.mirrorAmt}>
-                                {formatINR(localAmt)}
-                              </Text>
-                            </View>
-                            <View style={styles.bridge}>
-                              <View style={styles.bridgeInner}>
-                                <SlgIconPulse>
-                                  {txn.status === "conflict" && !bridgeOk ? (
-                                    <Zap
-                                      size={14}
-                                      color={Theme.teslaRed}
-                                      fill={Theme.teslaRed}
-                                      strokeWidth={2}
-                                    />
-                                  ) : txn.status === "pending" ? (
-                                    <Clock
-                                      size={14}
-                                      color={Theme.textSecondary}
-                                      strokeWidth={2.25}
-                                    />
-                                  ) : (
-                                    <Link2
-                                      size={14}
-                                      color={Theme.textSecondary}
-                                      strokeWidth={2.25}
-                                    />
-                                  )}
-                                </SlgIconPulse>
+                              <View style={[styles.mirrorMy, styles.mirrorMyHub]}>
+                                <Text style={[styles.mirrorLbl, styles.mirrorLblHub]}>
+                                  {myBookLabel}
+                                </Text>
+                                <Text style={[styles.mirrorAmt, styles.mirrorAmtHub]}>
+                                  {formatINR(localAmt)}
+                                </Text>
                               </View>
-                            </View>
-                            <View
-                              style={[
-                                styles.mirrorPartner,
-                                pAmt == null &&
-                                  txn.status === "pending" &&
-                                  styles.mirrorPartnerWait,
-                              ]}
-                            >
-                              <Text style={[styles.mirrorLbl, styles.mirrorLblPartner]}>
-                                {partnerLabel}
-                              </Text>
-                              <Text
+                              <View style={styles.bridge}>
+                                <View style={styles.bridgeInner}>
+                                  <SlgIconPulse>
+                                    {txn.status === "conflict" && !bridgeOk ? (
+                                      <Zap
+                                        size={14}
+                                        color={Theme.teslaRed}
+                                        fill={Theme.teslaRed}
+                                        strokeWidth={2}
+                                      />
+                                    ) : (
+                                      <Activity
+                                        size={14}
+                                        color={
+                                          txn.status === "matched" || bridgeOk
+                                            ? Theme.darkGreen
+                                            : Theme.primary
+                                        }
+                                        strokeWidth={2.25}
+                                      />
+                                    )}
+                                  </SlgIconPulse>
+                                </View>
+                              </View>
+                              <View
                                 style={[
-                                  styles.mirrorAmt,
-                                  styles.mirrorAmtPartner,
-                                  pAmt == null && txn.status === "pending"
-                                    ? styles.waitTxt
-                                    : pAmt == null
-                                      ? styles.waitTxt
-                                      : null,
-                                  pAmt == null ? styles.waitTxtPartner : null,
+                                  styles.mirrorPartner,
+                                  pAmt == null &&
+                                    txn.status === "pending" &&
+                                    styles.mirrorPartnerWait,
+                                  pAmt != null && styles.mirrorPartnerHubDark,
                                 ]}
                               >
-                                {txn.status === "pending" && pAmt == null
-                                  ? SHARED_LEDGER_PARTNER_PENDING_LABEL
-                                  : pAmt != null
-                                    ? formatINR(pAmt)
-                                    : "—"}
-                              </Text>
-                            </View>
+                                <Text
+                                  style={[
+                                    styles.mirrorLbl,
+                                    styles.mirrorLblPartner,
+                                    styles.mirrorLblHub,
+                                    pAmt != null && styles.hubMirrorLblOnDark,
+                                  ]}
+                                >
+                                  {partnerLabel}
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.mirrorAmt,
+                                    styles.mirrorAmtPartner,
+                                    styles.mirrorAmtHub,
+                                    pAmt == null && txn.status === "pending"
+                                      ? styles.waitTxt
+                                      : pAmt == null
+                                        ? styles.waitTxt
+                                        : null,
+                                    pAmt == null ? styles.waitTxtPartner : null,
+                                    pAmt != null && styles.auditAmtOnDark,
+                                  ]}
+                                >
+                                  {txn.status === "pending" && pAmt == null
+                                    ? SHARED_LEDGER_PARTNER_PENDING_LABEL
+                                    : pAmt != null
+                                      ? formatINR(pAmt)
+                                      : "—"}
+                                </Text>
+                              </View>
                           </View>
                         </View>
                       </TouchableOpacity>
@@ -1798,23 +2015,32 @@ export function SharedLedgerCommandCenter({
         <View style={styles.heroHeader}>
           <View style={styles.heroHeaderSpacer} />
           <View style={styles.heroHeaderCenter}>
-            <Text
-              style={[
-                styles.heroEntityTitle,
-                isWebDesktop && webDesktopStyles.heroEntityTitle,
-              ]}
-              numberOfLines={1}
-            >
-              {entityName}
-            </Text>
-            <Text
-              style={[
-                styles.heroEntitySub,
-                isWebDesktop && webDesktopStyles.heroEntitySub,
-              ]}
-            >
-              Compare books with your partner
-            </Text>
+            <View style={styles.heroEntityRow}>
+              <SlgPartnerAvatar
+                partyName={entityName}
+                profileImageUrl={partnerProfileImageUrl}
+                size={40}
+              />
+              <View style={styles.heroEntityTextCol}>
+                <Text
+                  style={[
+                    styles.heroEntityTitle,
+                    isWebDesktop && webDesktopStyles.heroEntityTitle,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {entityName}
+                </Text>
+                <Text
+                  style={[
+                    styles.heroEntitySub,
+                    isWebDesktop && webDesktopStyles.heroEntitySub,
+                  ]}
+                >
+                  Compare books with your partner
+                </Text>
+              </View>
+            </View>
           </View>
           {onPressDownload ? (
             <TouchableOpacity
@@ -1966,6 +2192,16 @@ export function SharedLedgerCommandCenter({
                   {r.status === "MISMATCH" ? "Needs review" : tripStatusLabel(r)}
                 </Text>
               </View>
+            </View>
+            <View style={styles.tripDashPartnerStrip}>
+              <SlgPartnerAvatar
+                partyName={entityName}
+                profileImageUrl={partnerProfileImageUrl}
+                size={36}
+              />
+              <Text style={styles.tripDashPartnerStripName} numberOfLines={1}>
+                {entityName}
+              </Text>
             </View>
             <View style={styles.tripDashBlock}>
               <View style={styles.tripDashBlockHdr}>
@@ -2572,7 +2808,14 @@ export function SharedLedgerCommandCenter({
                   >
                     {formatINR(mergePreview.partnerAmount ?? mergePreview.amountAbs)}
                   </Text>
-                  <Text style={styles.mergeParty}>{entityName}</Text>
+                  <View style={styles.mergePartyRow}>
+                    <SlgPartnerAvatar
+                      partyName={entityName}
+                      profileImageUrl={partnerProfileImageUrl}
+                      size={44}
+                    />
+                    <Text style={styles.mergeParty}>{entityName}</Text>
+                  </View>
                   {tripRouteForTripRef?.(mergePreview.tripRef) ? (
                     <Text style={styles.mergeRoute}>
                       {tripRouteForTripRef(mergePreview.tripRef)}
@@ -2747,7 +2990,21 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   heroHeaderSpacer: { width: 44 },
-  heroHeaderCenter: { flex: 1, alignItems: "center" },
+  heroHeaderCenter: { flex: 1, alignItems: "center", minWidth: 0 },
+  heroEntityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    width: "100%",
+    maxWidth: "100%",
+    paddingHorizontal: 4,
+  },
+  heroEntityTextCol: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "center",
+  },
   heroEntityTitle: {
     fontSize: 18,
     fontWeight: "800",
@@ -2902,8 +3159,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 6,
+    gap: 8,
     width: "100%",
+    minWidth: 0,
+  },
+  pendingPartyNameWrap: {
+    flex: 1,
     minWidth: 0,
   },
   pendingRefPill: {
@@ -3160,27 +3421,57 @@ const styles = StyleSheet.create({
   },
   missionCard: {
     position: "relative" as const,
-    backgroundColor: Theme.surface,
-    borderRadius: 22,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 32,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     marginBottom: 16,
     overflow: "hidden",
-    shadowColor: Theme.shadow,
-    shadowOpacity: 0.07,
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 16,
-    elevation: 3,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 14 },
+    shadowRadius: 28,
+    elevation: 5,
   },
-  missionCardOrb: {
+  /** Web reference: thin status strip at top of hub trip / payment cards. */
+  hubCardAccentBar: {
+    width: "100%",
+    height: 5,
+    zIndex: 4,
+  },
+  hubCardAccentRose: { backgroundColor: Theme.teslaRed },
+  hubCardAccentWarn: { backgroundColor: Theme.warning },
+  hubCardAccentGood: { backgroundColor: Theme.darkGreen },
+  hubCardAccentSlate: { backgroundColor: Theme.textSection },
+  hubCardIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: Theme.surfaceLight,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+    marginTop: 2,
+    flexShrink: 0,
+  },
+  hubTxnIconWrap: {
+    backgroundColor: Theme.aggregatePillBg,
+    borderColor: Theme.aggregatePillBorder,
+  },
+  /** Animated truck / link watermark — sits under header + mirror (see `SlgCardWatermark`). */
+  missionCardWatermarkShell: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
+    overflow: "hidden",
+  },
+  missionCardWatermarkInner: {
     position: "absolute",
-    top: -80,
-    right: -60,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: Theme.textPrimaryDark,
-    opacity: 0.04,
+    right: -28,
+    top: "14%",
+    alignItems: "center",
+    justifyContent: "center",
   },
   tripGridWrap: {
     flexDirection: "row",
@@ -3200,13 +3491,29 @@ const styles = StyleSheet.create({
     width: "32%",
     minWidth: 0,
   },
-  /** Three cards per row on phone (same rhythm as web trip grid). */
-  tripGridCellMobile: {
+  /** Narrow phone / web: one card per row so mirror columns stay legible. */
+  tripGridCellFull: {
+    width: "100%",
+    flexBasis: "100%",
+    maxWidth: "100%",
+    minWidth: 0,
+    alignSelf: "stretch",
+  },
+  /** Small tablet / large phone: two-up grid (`flexBasis: 0` + `gap` avoids row overflow). */
+  tripGridCellHalf: {
     flexGrow: 1,
     flexShrink: 1,
-    flexBasis: "31%",
-    minWidth: 0,
-    maxWidth: "33.4%",
+    flexBasis: 0,
+    minWidth: "42%",
+    maxWidth: "50%",
+  },
+  /** Wide handheld / small tablet: three-up (tight). */
+  tripGridCellThird: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: "28%",
+    maxWidth: "34%",
   },
   /** “Smart audit” table (reference: dark header, partner column, icon audit). */
   auditTableCard: {
@@ -3805,6 +4112,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "stretch",
   },
+  fleetPartnerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    width: "100%",
+    minWidth: 0,
+  },
+  fleetPartnerTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
   fleetPartnerName: {
     fontSize: 11,
     fontWeight: "300",
@@ -4004,7 +4322,29 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 12,
+  },
+  tripDashPartnerStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  tripDashPartnerStripName: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 12,
+    fontWeight: "800",
+    fontStyle: "italic",
+    color: Theme.textOnDarkMuted,
+    textTransform: "uppercase",
+    letterSpacing: 1,
   },
   tripDashHeroTag: { flexDirection: "row", alignItems: "center", gap: 8 },
   tripDashTagTxt: {
@@ -4251,35 +4591,38 @@ const styles = StyleSheet.create({
   missionTitleBlock: {
     flex: 1,
     minWidth: 0,
-    gap: 5,
+    gap: 4,
   },
   missionCardSummary: {
     marginTop: 0,
-    fontSize: 10,
+    fontSize: SLG_FS_LABEL,
     fontWeight: "500",
     fontStyle: "normal",
     color: Theme.textSecondary,
-    lineHeight: 14,
+    lineHeight: 13,
   },
   missionCardSummaryDesktop: {
-    fontSize: 9,
-    lineHeight: 13,
+    fontSize: SLG_FS_CAPTION,
+    lineHeight: 12,
+  },
+  /** Same shell as Trips hub `fleetManifest` — route reads as the card “hero”. */
+  missionRouteManifest: {
+    marginTop: 6,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
   },
   missionRouteLine: {
     marginTop: 0,
-    fontSize: 13,
+    fontSize: SLG_FS_ROUTE_HERO,
     fontWeight: "700",
     fontStyle: "normal",
     color: Theme.textPrimaryDark,
-    lineHeight: 16,
-  },
-  missionPartnerLine: {
-    marginTop: 0,
-    fontSize: 9,
-    fontWeight: "600",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: -0.2,
+    lineHeight: 15,
   },
   missionStatusBadge: {
     textTransform: "none",
@@ -4289,8 +4632,8 @@ const styles = StyleSheet.create({
   },
   /** Payment grid card date line (matches trip card `tripRowTripDate`). */
   txnGridDateLine: {
-    marginTop: 0,
-    fontSize: 10,
+    marginTop: 2,
+    fontSize: SLG_FS_LABEL,
     fontWeight: "500",
     fontStyle: "normal",
     color: Theme.textSecondary,
@@ -4305,26 +4648,35 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     paddingHorizontal: 12,
     paddingTop: 12,
-    paddingBottom: 10,
-    zIndex: 1,
+    paddingBottom: 8,
+    zIndex: 2,
   },
   missionHeadLeft: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 8,
     flex: 1,
     minWidth: 0,
+    gap: 10,
   },
-  missionIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
+  missionEntityRow: {
+    width: "100%",
+    marginBottom: 2,
+  },
+  missionPartnerLineInline: {
+    fontSize: SLG_FS_CAPTION,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  slgPartyAvatarBorder: {
+    borderWidth: 1.5,
     borderColor: Theme.borderLight,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 1,
+    overflow: "hidden",
+  },
+  slgPartyAvatarInitialsTxt: {
+    fontWeight: "700",
+    letterSpacing: 0.2,
   },
   missionIdRow: {
     flexDirection: "row",
@@ -4334,24 +4686,32 @@ const styles = StyleSheet.create({
     rowGap: 4,
   },
   missionId: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: SLG_FS_AMOUNT,
+    fontWeight: "600",
     fontStyle: "normal",
     color: Theme.textPrimaryDark,
-    letterSpacing: 0.35,
+    letterSpacing: 0.15,
     textTransform: "uppercase",
+  },
+  /** Command hub grid: bolder mission / trip title (reference “2xl black italic”). */
+  missionIdHero: {
+    fontSize: 17,
+    fontWeight: "900",
+    fontStyle: "italic",
+    letterSpacing: -0.35,
   },
   missionChevronWrap: {
     marginLeft: 4,
-    paddingTop: 12,
+    paddingTop: 2,
     paddingLeft: 4,
-    justifyContent: "center",
+    justifyContent: "flex-start",
+    alignSelf: "flex-start",
   },
   missionBadges: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 0,
+    marginTop: 4,
     flexWrap: "wrap",
   },
   badge: {
@@ -4374,71 +4734,84 @@ const styles = StyleSheet.create({
   },
   badgeGray: { color: Theme.textSecondary, backgroundColor: Theme.surfaceLight, borderWidth: 1, borderColor: Theme.borderMedium },
   deltaTxtInline: {
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: SLG_FS_LABEL,
+    fontWeight: "600",
     fontStyle: "normal",
     color: Theme.teslaRed,
   },
   mirrorBlock: {
     marginHorizontal: 12,
-    marginTop: 10,
-    marginBottom: 6,
+    marginTop: 8,
+    marginBottom: 4,
     width: "100%",
     maxWidth: "100%",
     alignSelf: "stretch",
-    zIndex: 1,
-  },
-  mirrorSectionHeader: {
-    marginBottom: 8,
+    alignItems: "center",
+    zIndex: 2,
   },
   /** Billed trip amount per book (vs “Paid” row below). */
   mirrorSaleCaption: {
     textAlign: "left",
-    fontSize: 9,
-    fontWeight: "600",
+    fontSize: SLG_FS_AMOUNT_LABEL,
+    fontWeight: "700",
     color: Theme.textMuted,
     letterSpacing: 0.4,
     textTransform: "uppercase",
-  },
-  /** Aligns sale block with trip title column (Trips hub: 44px icon + 8 gap). */
-  mirrorSaleCaptionIndent: {
-    marginLeft: 52,
-  },
-  mirrorWrap: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    gap: 6,
-    minHeight: 0,
+    marginBottom: 6,
+    alignSelf: "stretch",
     width: "100%",
   },
-  mirrorWrapIndent: {
-    marginLeft: 52,
+  mirrorColumnsRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: SLG_MIRROR_GAP,
+    minWidth: 0,
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: 288,
   },
   mirrorMy: {
     flex: 1,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     alignItems: "flex-start",
     justifyContent: "center",
     minWidth: 0,
-    minHeight: 68,
+    minHeight: 52,
+  },
+  mirrorMyHub: {
+    backgroundColor: Theme.surface,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    minHeight: 54,
+    alignItems: "center",
   },
   mirrorPartner: {
     flex: 1,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
     alignItems: "flex-end",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: Theme.borderLight,
     minWidth: 0,
-    minHeight: 68,
+    minHeight: 52,
+  },
+  mirrorPartnerHubDark: {
+    backgroundColor: Theme.textPrimaryDark,
+    borderColor: "rgba(255,255,255,0.08)",
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    minHeight: 54,
+    alignItems: "center",
   },
   mirrorPartnerWait: {
     backgroundColor: Theme.surfaceLight,
@@ -4446,51 +4819,66 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
     borderColor: Theme.borderMedium,
   },
+  hubMirrorLblOnDark: {
+    color: Theme.ledgerPartnerLabelOnDark,
+  },
   mirrorLbl: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: Theme.textSecondary,
+    fontSize: SLG_FS_AMOUNT_LABEL,
+    fontWeight: "700",
+    color: Theme.textMuted,
     textTransform: "uppercase",
-    marginBottom: 3,
-    letterSpacing: 0.35,
+    marginBottom: 2,
+    letterSpacing: 0.4,
     width: "100%",
   },
   mirrorLblPartner: {
     textAlign: "right",
   },
+  mirrorLblHub: {
+    textAlign: "center",
+    width: "100%",
+  },
   mirrorAmt: {
-    fontSize: 17,
-    fontWeight: "800",
+    fontSize: SLG_FS_BODY,
+    fontWeight: "300",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
-    fontStyle: "normal",
-    letterSpacing: 0,
+    letterSpacing: -0.25,
     textAlign: "left",
     width: "100%",
   },
   mirrorAmtPartner: {
     textAlign: "right",
   },
+  mirrorAmtHub: {
+    textAlign: "center",
+    fontSize: 13,
+    fontWeight: "900",
+    fontStyle: "italic",
+    letterSpacing: -0.35,
+    width: "100%",
+  },
   waitTxt: {
     color: Theme.textMuted,
     fontStyle: "normal",
     fontWeight: "600",
-    fontSize: 11,
+    fontSize: SLG_FS_LABEL,
     textAlign: "left",
   },
   waitTxtPartner: {
     textAlign: "right",
   },
   bridge: {
-    width: 40,
+    width: SLG_BRIDGE_WIDTH,
     alignItems: "center",
     justifyContent: "center",
-    alignSelf: "stretch",
-    paddingVertical: 4,
+    alignSelf: "center",
+    paddingVertical: 2,
   },
   bridgeInner: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: Theme.surface,
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -4504,41 +4892,53 @@ const styles = StyleSheet.create({
   },
   paidRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "stretch",
     paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 14,
+    paddingTop: 8,
+    paddingBottom: 12,
     gap: 0,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
-    marginTop: 2,
+    marginTop: 0,
     width: "100%",
     alignSelf: "stretch",
-    zIndex: 1,
+    zIndex: 2,
   },
-  paidCell: { flex: 1, minWidth: 0, alignItems: "flex-start" },
-  /** Left “Paid · my book” aligns with mirror “My book” column (same indent as sale caption). */
-  paidCellMirrorAlign: {
-    marginLeft: 52,
+  paidColumnsRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    minWidth: 0,
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: 288,
   },
-  /** Matches mirror row: gap 6 + bridge 40 + gap 6 between amount columns. */
-  bridgePaidSpacer: { width: 52 },
+  /** Same width as `mirrorColumnsRow` middle (gaps + bridge) so Paid lines up under sale boxes. */
+  bridgeTrackSpacer: {
+    width: SLG_MIRROR_BRIDGE_TRACK,
+    flexShrink: 0,
+  },
+  paidCell: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "flex-start",
+    justifyContent: "center",
+  },
   paidCellRight: { alignItems: "flex-end" },
   paidLbl: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: Theme.textSecondary,
+    fontSize: SLG_FS_AMOUNT_LABEL,
+    fontWeight: "700",
+    color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.35,
+    letterSpacing: 0.4,
     width: "100%",
   },
   paidAmt: {
-    fontSize: 15,
-    fontWeight: "800",
-    fontStyle: "normal",
+    fontSize: SLG_FS_BODY,
+    fontWeight: "300",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
-    marginTop: 4,
-    letterSpacing: 0,
+    marginTop: 2,
+    letterSpacing: -0.25,
     width: "100%",
   },
   paidTxtRight: {
@@ -5374,8 +5774,17 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontStyle: "italic",
   },
-  mergeParty: {
+  mergePartyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
     marginTop: 8,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    width: "100%",
+  },
+  mergeParty: {
+    flexShrink: 1,
     fontSize: 12,
     fontWeight: "800",
     fontStyle: "italic",
@@ -5383,7 +5792,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     textTransform: "uppercase",
     letterSpacing: 2,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
   },
   mergeRoute: {
     marginTop: 8,

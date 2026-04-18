@@ -13,25 +13,38 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import {
+  buildTripHubPartyMetaByTripId,
   summarizeTripLedgerForHub,
   TripsHubTableView,
   TripsHubTripCard,
   type TripRow,
 } from "@/features/trips";
+import {
+  TRIP_METRIC_ORDER,
+  type TripMetricId,
+  classifyTripMetric,
+  countTripsByMetric,
+  isTripCancelledForHub,
+} from "@/features/trips/utils/tripHubMetrics";
 import { canAccessTrips, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { usePaginatedScroll } from "@/lib/usePaginatedScroll";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatLedgerDate } from "@/lib/format";
 import {
   useAssignmentAuditQuery,
+  useClientsQuery,
+  useDriversQuery,
   useRealtimeTransactionsInvalidation,
   useRealtimeTripsInvalidation,
   useShipperDisplayNamesQuery,
+  useSuppliersQuery,
   useTransactionsQuery,
   useTripsQuery,
 } from "@/lib/queries";
+import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import {
     Modal,
@@ -51,8 +64,8 @@ import {
     type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { supabase } from "@/lib/supabase";
 
-type ActiveStatusTab = "unassigned" | "assigned" | "in_transit";
 type SupplyFilter = "all" | "asset" | "aggregated";
 type SortBy =
   | "date_desc"
@@ -92,8 +105,9 @@ export default function TripsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [tripFilter, setTripFilter] = useState<"Active" | "History">("Active");
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeStatusTab, setActiveStatusTab] =
-    useState<ActiveStatusTab>("unassigned");
+  const queryClient = useQueryClient();
+  const [activeMetricTab, setActiveMetricTab] =
+    useState<TripMetricId>("unassigned");
   const [supplyFilter, setSupplyFilter] = useState<SupplyFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("date_desc");
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
@@ -127,6 +141,10 @@ export default function TripsScreen() {
   const { data: shipperNameByTripId = {} } = useShipperDisplayNamesQuery(orgId);
   const { data: transactions = [], refetch: refetchTransactions } =
     useTransactionsQuery(orgId);
+  const { data: clients = [] } = useClientsQuery(orgId);
+  const { data: suppliers = [] } = useSuppliersQuery(orgId);
+  const { data: drivers = [] } = useDriversQuery(orgId);
+  const linkedOrgByOrganizationId = useLinkedOrgProfileMap(clients, suppliers);
   const tripIds = useMemo(() => trips.map((t) => t.id), [trips]);
   const { refetch: refetchAssignment } = useAssignmentAuditQuery(tripIds);
 
@@ -141,9 +159,12 @@ export default function TripsScreen() {
       refetchTrips(),
       refetchTransactions(),
       refetchAssignment(),
+      queryClient.invalidateQueries({
+        queryKey: ["q", "trips", "doc-trip-ids", orgId ?? ""],
+      }),
     ]);
     setRefreshing(false);
-  }, [refetchTrips, refetchTransactions, refetchAssignment]);
+  }, [refetchTrips, refetchTransactions, refetchAssignment, queryClient, orgId]);
 
   const isCompletedStatus = (s: string) => {
     const v = (s || "").toLowerCase();
@@ -173,34 +194,58 @@ export default function TripsScreen() {
       showCompletedList
         ? // History tab: show completed trips only.
           trips.filter((t) => isCompletedStatus(t.status))
-        : trips.filter((t) => !isCompletedStatus(t.status)),
+        : trips.filter(
+            (t) =>
+              !isCompletedStatus(t.status) &&
+              !isTripCancelledForHub(t.status),
+          ),
     [showCompletedList, trips],
   );
 
-  // Apply trip-type and text filters for both tabs; status tabs apply only on Active.
-  const filtered = useMemo(() => {
-    const isInTransitStatus = (s: string | null | undefined) => {
-      const v = (s ?? "").toLowerCase();
-      return (
-        v === "in_progress" ||
-        v === "in_transit" ||
-        v === "dispatched" ||
-        v === "picked_up" ||
-        v === "pickup"
-      );
-    };
+  /** Active ops trips only — used to resolve which trips have any uploaded document (POD split). */
+  const activeOpsTripIdsSorted = useMemo(() => {
+    if (showCompletedList) return "";
+    const ids = tripsByStatus.map((t) => t.id).sort();
+    return ids.join(",");
+  }, [showCompletedList, tripsByStatus]);
 
+  const { data: tripIdsWithDocuments = new Set<string>() } = useQuery({
+    queryKey: ["q", "trips", "doc-trip-ids", orgId ?? "", activeOpsTripIdsSorted],
+    enabled: !!orgId && activeOpsTripIdsSorted.length > 0,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const ids = activeOpsTripIdsSorted.split(",").filter(Boolean);
+      if (ids.length === 0) return new Set<string>();
+      const next = new Set<string>();
+      const chunkSize = 200;
+      for (let i = 0; i < ids.length; i += chunkSize) {
+        const slice = ids.slice(i, i + chunkSize);
+        const { data, error } = await supabase()
+          .from("trip_documents")
+          .select("trip_id")
+          .in("trip_id", slice);
+        if (error) throw error;
+        for (const row of data ?? []) {
+          const tid = (row as { trip_id?: string }).trip_id;
+          if (tid) next.add(tid);
+        }
+      }
+      return next;
+    },
+  });
+
+  const metricCounts = useMemo(
+    () => countTripsByMetric(tripsByStatus, tripIdsWithDocuments),
+    [tripsByStatus, tripIdsWithDocuments],
+  );
+
+  // Apply trip-type and text filters for both tabs; metric bucket applies only on Active.
+  const filtered = useMemo(() => {
     let list = tripsByStatus;
     if (!showCompletedList) {
-      list = list.filter((t) => {
-        const completed = isCompletedStatus(t.status);
-        const inTransitLike = isInTransitStatus(t.status);
-        const hasDriver = t.driver_id != null;
-        if (activeStatusTab === "unassigned") return !hasDriver;
-        if (activeStatusTab === "assigned")
-          return hasDriver && !completed && !inTransitLike;
-        return inTransitLike;
-      });
+      list = list.filter(
+        (t) => classifyTripMetric(t, tripIdsWithDocuments) === activeMetricTab,
+      );
     }
     if (supplyFilter !== "all") {
       list = list.filter((t) => {
@@ -327,7 +372,8 @@ export default function TripsScreen() {
     return sorted;
   }, [
     tripsByStatus,
-    activeStatusTab,
+    activeMetricTab,
+    tripIdsWithDocuments,
     supplyFilter,
     searchQuery,
     shipperNameByTripId,
@@ -347,7 +393,8 @@ export default function TripsScreen() {
         filtered.length,
         searchQuery,
         tripFilter,
-        activeStatusTab,
+        activeMetricTab,
+        activeOpsTripIdsSorted.slice(0, 120),
         supplyFilter,
         sortBy,
         paymentFilter,
@@ -361,7 +408,8 @@ export default function TripsScreen() {
       filtered.length,
       searchQuery,
       tripFilter,
-      activeStatusTab,
+      activeMetricTab,
+      activeOpsTripIdsSorted,
       supplyFilter,
       sortBy,
       paymentFilter,
@@ -411,6 +459,18 @@ export default function TripsScreen() {
     return map;
   }, [transactions]);
 
+  const tripHubPartyMetaByTripId = useMemo(
+    () =>
+      buildTripHubPartyMetaByTripId(
+        trips,
+        clients,
+        suppliers,
+        drivers,
+        transactions,
+      ),
+    [trips, clients, suppliers, drivers, transactions],
+  );
+
   const mainTabs = useMemo(
     () => [
       {
@@ -429,34 +489,34 @@ export default function TripsScreen() {
     [tr, tripFilter],
   );
 
-  const activeStatusTabs = useMemo(
-    () => [
-      {
-        id: "unassigned" as const,
-        label: tr("unassigned"),
-        isActive: activeStatusTab === "unassigned",
-        onPress: () => {
-          setActiveStatusTab("unassigned");
+  const tripMetricCopy = useMemo(
+    () =>
+      ({
+        unassigned: {
+          title: tr("tripMetricUnassigned"),
+          hint: tr("tripMetricHintUnassigned"),
         },
-      },
-      {
-        id: "assigned" as const,
-        label: tr("tripAssigned"),
-        isActive: activeStatusTab === "assigned",
-        onPress: () => {
-          setActiveStatusTab("assigned");
+        loading: {
+          title: tr("tripMetricLoading"),
+          hint: tr("tripMetricHintLoading"),
         },
-      },
-      {
-        id: "in_transit" as const,
-        label: tr("tripInTransit"),
-        isActive: activeStatusTab === "in_transit",
-        onPress: () => {
-          setActiveStatusTab("in_transit");
+        in_transit: {
+          title: tr("tripMetricInTransit"),
+          hint: tr("tripMetricHintInTransit"),
         },
-      },
-    ],
-    [tr, activeStatusTab],
+        unloading: {
+          title: tr("tripMetricUnloading"),
+          hint: tr("tripMetricHintUnloading"),
+        },
+        pod_pending: {
+          title: tr("tripMetricPodPending"),
+          hint: tr("tripMetricHintPodPending"),
+        },
+      }) satisfies Record<
+        TripMetricId,
+        { title: string; hint: string }
+      >,
+    [tr],
   );
 
   const sortOptions = useMemo(
@@ -955,64 +1015,54 @@ export default function TripsScreen() {
         >
           <View style={styles.tripsBodyFiltersBleed}>
             {tripFilter === "Active" ? (
-              Platform.OS === "web" ? (
-                <View style={styles.tripsBodyStatusRowWeb}>
-                  {activeStatusTabs.map((tab) => (
+              <View
+                style={[
+                  styles.tripMetricsGrid,
+                  isLargeScreen && styles.tripMetricsGridWeb,
+                ]}
+              >
+                {TRIP_METRIC_ORDER.map((metricId) => {
+                  const count = metricCounts[metricId];
+                  const active = activeMetricTab === metricId;
+                  const copy = tripMetricCopy[metricId];
+                  return (
                     <TouchableOpacity
-                      key={tab.id}
+                      key={metricId}
                       style={[
-                        styles.tripsBodyStatusTabWeb,
-                        tab.isActive && styles.tripsBodyStatusTabActive,
+                        styles.tripMetricTile,
+                        isLargeScreen && styles.tripMetricTileWeb,
+                        active && styles.tripMetricTileActive,
                       ]}
-                      onPress={tab.onPress}
-                      activeOpacity={0.7}
+                      onPress={() => setActiveMetricTab(metricId)}
+                      activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      accessibilityLabel={`${copy.title}, ${count} trips`}
                     >
                       <Text
                         style={[
-                          styles.tripsBodyStatusTabText,
-                          tab.isActive && styles.tripsBodyStatusTabTextActive,
+                          styles.tripMetricCount,
+                          active && styles.tripMetricCountActive,
                         ]}
                       >
-                        {tab.label}
+                        {count}
                       </Text>
-                      {tab.isActive ? (
-                        <View style={styles.tripsBodyStatusUnderline} />
-                      ) : null}
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              ) : (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.tripsBodyStatusScrollContent}
-                  style={styles.tripsBodyStatusScroll}
-                >
-                  {activeStatusTabs.map((tab) => (
-                    <TouchableOpacity
-                      key={tab.id}
-                      style={[
-                        styles.tripsBodyStatusTab,
-                        tab.isActive && styles.tripsBodyStatusTabActive,
-                      ]}
-                      onPress={tab.onPress}
-                      activeOpacity={0.7}
-                    >
                       <Text
                         style={[
-                          styles.tripsBodyStatusTabText,
-                          tab.isActive && styles.tripsBodyStatusTabTextActive,
+                          styles.tripMetricTitle,
+                          active && styles.tripMetricTitleActive,
                         ]}
+                        numberOfLines={2}
                       >
-                        {tab.label}
+                        {copy.title}
                       </Text>
-                      {tab.isActive ? (
-                        <View style={styles.tripsBodyStatusUnderline} />
-                      ) : null}
+                      <Text style={styles.tripMetricHint} numberOfLines={2}>
+                        {copy.hint}
+                      </Text>
                     </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              )
+                  );
+                })}
+              </View>
             ) : null}
 
             <View style={styles.tripsBodyDateFilterRow}>
@@ -1152,6 +1202,8 @@ export default function TripsScreen() {
                     router.push(`/trip/${trip.id}` as const)
                   }
                   tr={tr}
+                  linkedOrgByOrganizationId={linkedOrgByOrganizationId}
+                  partyMetaByTripId={tripHubPartyMetaByTripId}
                 />
               </View>
             </ScrollView>
@@ -1164,6 +1216,7 @@ export default function TripsScreen() {
                 const hubLedger = summarizeTripLedgerForHub(
                   transactionsByTripId.get(t.id) ?? [],
                 );
+                const party = tripHubPartyMetaByTripId.get(t.id);
                 return (
                   <View
                     key={t.id}
@@ -1173,6 +1226,13 @@ export default function TripsScreen() {
                       trip={t}
                       currentOrganizationId={currentOrganization?.id ?? null}
                       displayClientName={displayClientName}
+                      displaySupplierName={party?.displaySupplierName ?? ""}
+                      clientAvatarUrl={party?.clientAvatarUrl ?? null}
+                      clientAvatarSeed={party?.clientAvatarSeed ?? null}
+                      clientAvatarFallbackSeed={party?.clientFallbackSeed}
+                      supplierAvatarUrl={party?.supplierAvatarUrl ?? null}
+                      supplierAvatarSeed={party?.supplierAvatarSeed ?? null}
+                      supplierAvatarFallbackSeed={party?.supplierFallbackSeed}
                       cardDate={getTripCardDate(t)}
                       stageLabel={stage}
                       onPress={() => router.push(`/trip/${t.id}` as const)}
@@ -1679,6 +1739,75 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
+  },
+  tripMetricsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingBottom: 10,
+    marginBottom: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+  },
+  tripMetricsGridWeb: {
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  tripMetricTile: {
+    flexBasis: "31%",
+    flexGrow: 1,
+    minWidth: "31%",
+    maxWidth: "48%",
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+  },
+  tripMetricTileWeb: {
+    flexBasis: "18%",
+    minWidth: "16%",
+    maxWidth: "20%",
+    flexGrow: 1,
+  },
+  tripMetricTileActive: {
+    borderColor: Theme.primary,
+    backgroundColor: Theme.screenBackground,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  tripMetricCount: {
+    fontSize: 22,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.5,
+    marginBottom: 4,
+  },
+  tripMetricCountActive: {
+    color: Theme.primary,
+  },
+  tripMetricTitle: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    color: Theme.textMuted,
+    lineHeight: 13,
+  },
+  tripMetricTitleActive: {
+    color: Theme.textPrimaryDark,
+  },
+  tripMetricHint: {
+    marginTop: 4,
+    fontSize: 9,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    lineHeight: 12,
   },
   tripsBodyStatusRowWeb: {
     flexDirection: "row",

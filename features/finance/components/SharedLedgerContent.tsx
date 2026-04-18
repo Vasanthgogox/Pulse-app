@@ -49,6 +49,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { createLedgerEntry, type LedgerRow } from "../services/finance.service";
+import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
 import {
   SHARED_LEDGER_AWAITING_PARTNER_UPDATE,
   SHARED_LEDGER_PARTNER_PENDING_LABEL,
@@ -70,7 +71,13 @@ export interface SharedTripData {
 }
 
 export interface EntityCompareVerifyViewProps {
-  entity: { id: string; name: string; linked_organization_id?: string | null };
+  entity: {
+    id: string;
+    name: string;
+    linked_organization_id?: string | null;
+    /** Optional; when set, shared-ledger hub shows partner photo (public URL) or initials. */
+    avatar_url?: string | null;
+  };
   entityType: "CLIENT" | "SUPPLIER";
   trips: TripRow[];
   transactions: LedgerRow[] | null | undefined;
@@ -499,6 +506,11 @@ export function SharedLedgerContent({
   const [pendingAcceptDispute, setPendingAcceptDispute] =
     useState<DisputeRow | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const partnerProfileImageUrl = useMemo(
+    () => resolveAvatarPublicUrl(entity.avatar_url),
+    [entity.avatar_url],
+  );
 
   /**
    * Party-level shared-ledger view has two modes:
@@ -1692,6 +1704,7 @@ export function SharedLedgerContent({
         <>
           <SharedLedgerCommandCenter
             entityName={entity.name ?? "—"}
+            partnerProfileImageUrl={partnerProfileImageUrl}
             entityType={entityType}
             embeddedInOverlay={embeddedInOverlay}
             myBookLabel={myBookLabel}

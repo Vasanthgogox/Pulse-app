@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
+import type { FinancePeriodFilter } from '../types';
 
 export type EntityListFilter = 'all' | 'has_due' | 'no_due';
 
@@ -18,8 +19,8 @@ export interface TreasuryToolbarProps {
   onEntityFilterChange?: (f: EntityListFilter) => void;
   /** Ledger period filter shown only when showPeriodFilter true (ledger tab). */
   showPeriodFilter?: boolean;
-  periodFilter?: 'TODAY' | 'MONTH' | 'RANGE';
-  onPeriodFilterChange?: (p: 'TODAY' | 'MONTH' | 'RANGE') => void;
+  periodFilter?: FinancePeriodFilter;
+  onPeriodFilterChange?: (p: FinancePeriodFilter) => void;
   onReportPress: () => void;
 }
 
@@ -49,7 +50,17 @@ export function TreasuryToolbar({
       : showPeriodFilter && onPeriodFilterChange
         ? periodFilter === 'MONTH'
           ? 'This month'
-          : periodFilter
+          : periodFilter === 'TODAY'
+            ? 'Today'
+            : periodFilter === 'YESTERDAY'
+              ? 'Yesterday'
+              : periodFilter === 'WEEK'
+                ? 'This week'
+                : periodFilter === 'RANGE'
+                  ? 'All time'
+                  : periodFilter === 'CUSTOM'
+                    ? 'Custom'
+                    : String(periodFilter)
         : null;
 
   const showFilterDropdownOpen =

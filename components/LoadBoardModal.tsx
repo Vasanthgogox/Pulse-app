@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,11 @@ import { TeslaHeader } from '@/components/TeslaHeader';
 import { formatINR } from '@/lib/format';
 import { type IndentRow } from '@/features/indents';
 import { useIndentsQuery } from '@/lib/queries';
+import { DatePresetPillBar } from '@/components/DatePresetPillBar';
+import { DateRangePickerModal } from '@/components/DateRangePickerModal';
+import { ledgerDayMatchesPeriod } from '@/features/finance/lib/filterLedgerByPeriod';
+import type { FinancePeriodFilter } from '@/features/finance/types';
+import { indentDayIso } from '@/lib/dateRangePresets';
 
 export interface LoadBoardModalProps {
   visible: boolean;
@@ -48,10 +53,28 @@ export function LoadBoardModal({
 }: LoadBoardModalProps) {
   const insets = useSafeAreaInsets();
   const [marketMode, setMarketMode] = useState<MarketMode>('GIVE');
+  const [loadDatePeriod, setLoadDatePeriod] = useState<FinancePeriodFilter>('RANGE');
+  const [loadCustomFrom, setLoadCustomFrom] = useState<string | null>(null);
+  const [loadCustomTo, setLoadCustomTo] = useState<string | null>(null);
+  const [loadDateModalVisible, setLoadDateModalVisible] = useState(false);
   const orgId = (visible || asScreen) ? organizationId : null;
   const { data: indents = [], isLoading: loading, refetch } = useIndentsQuery(orgId);
 
-  const displayIndents = indents;
+  const loadDateOpts = useMemo(
+    () => ({ customFrom: loadCustomFrom, customTo: loadCustomTo }),
+    [loadCustomFrom, loadCustomTo],
+  );
+
+  const indentMatchesPeriod = useCallback(
+    (row: IndentRow) =>
+      ledgerDayMatchesPeriod(indentDayIso(row), loadDatePeriod, loadDateOpts),
+    [loadDatePeriod, loadDateOpts],
+  );
+
+  const displayIndents = useMemo(
+    () => indents.filter(indentMatchesPeriod),
+    [indents, indentMatchesPeriod],
+  );
   const showNetworkExpansionEmpty = marketMode === 'GIVE' && !loading && displayIndents.length === 0;
 
   const content = (
@@ -84,6 +107,34 @@ export function LoadBoardModal({
             </Text>
           </TouchableOpacity>
         </View>
+        <View style={styles.datePillWrap}>
+          <DatePresetPillBar
+            variant="onLight"
+            period={loadDatePeriod}
+            onPeriodChange={(p) => {
+              setLoadDatePeriod(p);
+              if (p !== 'CUSTOM') {
+                setLoadCustomFrom(null);
+                setLoadCustomTo(null);
+              }
+            }}
+            onCustomRangePress={() => setLoadDateModalVisible(true)}
+            customFrom={loadCustomFrom}
+            customTo={loadCustomTo}
+          />
+        </View>
+        <DateRangePickerModal
+          visible={loadDateModalVisible}
+          initialFrom={loadCustomFrom ?? undefined}
+          initialTo={loadCustomTo ?? undefined}
+          onDismiss={() => setLoadDateModalVisible(false)}
+          onApply={(from, to) => {
+            setLoadCustomFrom(from);
+            setLoadCustomTo(to);
+            setLoadDatePeriod('CUSTOM');
+            setLoadDateModalVisible(false);
+          }}
+        />
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={[
@@ -264,6 +315,11 @@ const styles = StyleSheet.create({
   },
   toggleTextActive: {
     color: Theme.textOnDark,
+  },
+  datePillWrap: {
+    paddingHorizontal: 12,
+    paddingTop: 4,
+    paddingBottom: 2,
   },
 
   scroll: { flex: 1 },

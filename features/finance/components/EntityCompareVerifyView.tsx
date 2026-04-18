@@ -55,7 +55,12 @@ export interface SharedTripData {
 }
 
 export interface EntityCompareVerifyViewProps {
-  entity: { id: string; name: string; linked_organization_id?: string | null };
+  entity: {
+    id: string;
+    name: string;
+    linked_organization_id?: string | null;
+    avatar_url?: string | null;
+  };
   entityType: "CLIENT" | "SUPPLIER";
   trips: TripRow[];
   transactions: LedgerRow[] | null | undefined;

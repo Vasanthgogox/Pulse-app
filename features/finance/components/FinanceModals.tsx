@@ -124,6 +124,9 @@ export interface FinanceModalsProps {
   selectedDriverLedgerEntries: DriverLedgerRow[] | null;
   vehicleRows: VehicleRow[];
   driverRows: DriverRow[];
+  /** Full org lists for SUPPLIER finance trip grid (web desktop). */
+  entityOverlayClientRows: ClientRow[];
+  entityOverlaySupplierRows: SupplierRow[];
   pendingDriverSalaryRequests: SalaryRequestWithDriverRow[];
   onPayDriverRequestFromOverlay: (req: SalaryRequestWithDriverRow) => void;
   onRejectDriverRequestFromOverlay: (requestId: string) => void;
@@ -219,6 +222,8 @@ export function FinanceModals(props: FinanceModalsProps) {
     selectedDriverLedgerEntries,
     vehicleRows,
     driverRows,
+    entityOverlayClientRows,
+    entityOverlaySupplierRows,
     pendingDriverSalaryRequests,
     onPayDriverRequestFromOverlay,
     onRejectDriverRequestFromOverlay,
@@ -414,6 +419,9 @@ export function FinanceModals(props: FinanceModalsProps) {
                 }
               : undefined
           }
+          financeClientRows={entityOverlayClientRows}
+          financeSupplierRows={entityOverlaySupplierRows}
+          financePartyDrivers={driverRows}
         />
       )}
 

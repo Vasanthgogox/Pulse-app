@@ -126,6 +126,10 @@ export interface DriverLike {
   id: string;
   name?: string | null;
   status?: string | null;
+  /** Profile photo storage path or public URL; same as drivers row / PartyAvatar. */
+  avatar_url?: string | null;
+  /** Preset avatar seed when no photo. */
+  avatar_seed?: string | null;
   /** When set, driver is linked to app user (integrated); otherwise non-integrated. */
   user_id?: string | null;
   /** When set, driver has left this fleet; show as disconnected with date. */
@@ -165,6 +169,10 @@ export interface FinancialRowData {
   contactPerson?: string | null;
   /** Drivers: when set, driver has left the fleet; show as "Disconnected · Left on {date}". */
   left_at?: string | null;
+  /** Drivers: profile image path/URL for FinancialRow / PartyAvatar (optional signed URL from parent). */
+  profileImageUrl?: string | null;
+  /** Drivers: seed preset when no profileImageUrl. */
+  avatarSeed?: string | null;
 }
 
 export interface AggregationTotals {
