@@ -1,9 +1,11 @@
 /**
- * Network tab: two sub-tabs — My Network (reference UI) and Load (Load Board).
+ * Network tab: My Network (connections / invitations) and Load Board, toggled in-app
+ * (Load header has My Network icon; manage header has Load icon). Deep links: ?tab=load.
  */
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import Typography from "@/constants/Typography";
 import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -990,31 +992,9 @@ export default function NetworkScreen() {
           { paddingTop: screenTopPad },
         ]}
       >
-        <View
-          style={[styles.blackBlock, styles.blackBlockLoad, { paddingTop: 4 }]}
-        >
-          <View style={styles.mainTabRow}>
-            <TouchableOpacity
-              style={styles.mainTab}
-              onPress={() => setSubTab("manage")}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.mainTabText}>My Network</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.mainTab, styles.mainTabActive]}
-              onPress={() => setSubTab("load")}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.mainTabText, styles.mainTabTextActive]}>
-                Load
-              </Text>
-              <View style={styles.mainTabUnderline} />
-            </TouchableOpacity>
-          </View>
-        </View>
         <LoadCenterView
           contentTopPadding={0}
+          onMyNetworkPress={() => setSubTab("manage")}
           onCreateIndentPress={() =>
             router.push("/create-indent" as import("expo-router").Href)
           }
@@ -1055,29 +1035,9 @@ export default function NetworkScreen() {
       )}
 
       <View style={[styles.blackBlock, { paddingTop: 4 }]}>
-        {/* My Network | Load — black tabs (body), Load-style */}
-        <View style={styles.mainTabRow}>
-          <TouchableOpacity
-            style={[styles.mainTab, styles.mainTabActive]}
-            onPress={() => setSubTab("manage")}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.mainTabText, styles.mainTabTextActive]}>
-              My Network
-            </Text>
-            <View style={styles.mainTabUnderline} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.mainTab}
-            onPress={() => setSubTab("load")}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.mainTabText}>Load</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* LinkedIn-style section switcher: Connections | Invitations */}
+        {/* Connections | Invitations (+ add). Load board opens via truck icon. */}
         <View style={styles.manageSwitchRow}>
+          <View style={styles.manageSwitchTabsCluster}>
           <TouchableOpacity
             style={styles.manageSwitchTab}
             onPress={() => setManageView("CONNECTIONS")}
@@ -1150,6 +1110,17 @@ export default function NetworkScreen() {
               />
             </TouchableOpacity>
           ) : null}
+          </View>
+          <TouchableOpacity
+            style={styles.manageLoadBoardBtn}
+            onPress={() => setSubTab("load")}
+            activeOpacity={0.85}
+            accessibilityLabel="Load board"
+            hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+          >
+            <FontAwesome name="truck" size={14} color={Theme.textOnDark} />
+            <Text style={styles.manageLoadBoardBtnLabel}>Load</Text>
+          </TouchableOpacity>
         </View>
 
         {manageView === "INVITATIONS" ? (
@@ -2391,9 +2362,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.separatorDark,
   },
-  blackBlockLoad: {
-    paddingBottom: 0,
-  },
   manageContentWrap: {
     flex: 1,
     backgroundColor: MANAGE_CONTENT_BG,
@@ -2466,9 +2434,40 @@ const styles = StyleSheet.create({
   },
   manageSwitchRow: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 10,
     paddingTop: 4,
+  },
+  manageSwitchTabsCluster: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 14,
+    flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
+    paddingBottom: 2,
+  },
+  manageLoadBoardBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    minHeight: 34,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: "rgba(248,250,252,0.25)",
+    flexShrink: 0,
+    marginBottom: 2,
+  },
+  manageLoadBoardBtnLabel: {
+    ...Typography.networkDarkHeaderNav,
+    color: Theme.textOnDark,
+    ...Platform.select({
+      android: { includeFontPadding: false as const },
+      default: {},
+    }),
   },
   manageSwitchTab: {
     position: "relative" as const,
@@ -2481,11 +2480,12 @@ const styles = StyleSheet.create({
   },
   filterTabLabelRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   filterTabText: {
-    fontSize: 9,
-    fontWeight: "600",
+    ...Typography.networkDarkHeaderNav,
     color: Theme.textOnDarkMuted,
-    textTransform: "uppercase",
-    letterSpacing: 1.5,
+    ...Platform.select({
+      android: { includeFontPadding: false as const },
+      default: {},
+    }),
   },
   filterTabTextActive: { color: Theme.textOnDark },
   filterTabBadge: {
@@ -2544,33 +2544,6 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
-  },
-  mainTabRow: {
-    flexDirection: "row",
-    gap: 16,
-    marginTop: 2,
-    marginBottom: 6,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.separatorDark,
-  },
-  mainTab: { position: "relative" as const, paddingVertical: 8 },
-  mainTabActive: {},
-  mainTabText: {
-    fontSize: 8,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 2,
-    color: Theme.textOnDarkMuted,
-  },
-  mainTabTextActive: { color: Theme.textOnDark },
-  mainTabUnderline: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 1.5,
-    backgroundColor: Theme.teslaRed,
   },
   searchRowDark: {
     flexDirection: "row",

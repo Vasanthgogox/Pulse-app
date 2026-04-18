@@ -30,6 +30,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -422,24 +423,34 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
             )}
           </View>
           <View style={styles.indentSummarySpecsPanel}>
-            <View style={styles.indentSummarySpecsRow}>
-              <View style={styles.indentSummarySpecItem}>
-                <Text style={styles.indentSummarySpecLabel}>Vehicle</Text>
-                <Text style={styles.indentSummarySpecValue} numberOfLines={2}>
-                  {vehicleType}
-                </Text>
+            <View style={styles.indentSummarySpecsGrid}>
+              <View style={styles.indentSummarySpecsLabelsRow}>
+                <View style={styles.indentSummarySpecCell}>
+                  <Text style={styles.indentSummarySpecLabel}>Vehicle</Text>
+                </View>
+                <View style={[styles.indentSummarySpecCell, styles.indentSummarySpecDivider]}>
+                  <Text style={styles.indentSummarySpecLabel}>Weight</Text>
+                </View>
+                <View style={[styles.indentSummarySpecCell, styles.indentSummarySpecDivider]}>
+                  <Text style={styles.indentSummarySpecLabel}>Load</Text>
+                </View>
               </View>
-              <View style={[styles.indentSummarySpecItem, styles.indentSummarySpecDivider]}>
-                <Text style={styles.indentSummarySpecLabel}>Weight</Text>
-                <Text style={styles.indentSummarySpecValue} numberOfLines={2}>
-                  {weightKg}
-                </Text>
-              </View>
-              <View style={[styles.indentSummarySpecItem, styles.indentSummarySpecDivider]}>
-                <Text style={styles.indentSummarySpecLabel}>Load</Text>
-                <Text style={styles.indentSummarySpecValue} numberOfLines={2}>
-                  {material}
-                </Text>
+              <View style={styles.indentSummarySpecsValuesRow}>
+                <View style={styles.indentSummarySpecCell}>
+                  <Text style={styles.indentSummarySpecValue} numberOfLines={2}>
+                    {vehicleType}
+                  </Text>
+                </View>
+                <View style={[styles.indentSummarySpecCell, styles.indentSummarySpecDivider]}>
+                  <Text style={styles.indentSummarySpecValue} numberOfLines={2}>
+                    {weightKg}
+                  </Text>
+                </View>
+                <View style={[styles.indentSummarySpecCell, styles.indentSummarySpecDivider]}>
+                  <Text style={styles.indentSummarySpecValue} numberOfLines={2}>
+                    {material}
+                  </Text>
+                </View>
               </View>
             </View>
           </View>
@@ -975,13 +986,22 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     zIndex: 1,
   },
-  indentSummarySpecsRow: {
+  indentSummarySpecsGrid: {
+    gap: 6,
+  },
+  indentSummarySpecsLabelsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  indentSummarySpecsValuesRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 8,
   },
-  indentSummarySpecItem: {
+  indentSummarySpecCell: {
     flex: 1,
     minWidth: 0,
   },
@@ -993,17 +1013,20 @@ const styles = StyleSheet.create({
   },
   indentSummarySpecLabel: {
     fontSize: 8,
-    fontWeight: '700',
+    fontWeight: '600',
     color: Theme.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 2,
   },
   indentSummarySpecValue: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: Theme.textPrimaryDark,
-    textTransform: 'uppercase',
+    fontSize: 8,
+    fontWeight: '500',
+    color: Theme.textSecondary,
+    lineHeight: 12,
+    ...Platform.select({
+      android: { includeFontPadding: false as const },
+      default: {},
+    }),
   },
 
   // Freight card (compact dark card)

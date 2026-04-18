@@ -1019,7 +1019,7 @@ export function TripsHubTableView({
                     <HubIconPulse>
                       <FontAwesome
                         name={hasSalesConflict ? "bolt" : "check"}
-                        size={15}
+                        size={10}
                         color={Theme.textOnDark}
                       />
                     </HubIconPulse>
@@ -1040,11 +1040,11 @@ export function TripsHubTableView({
                         ? tr("tripsHubHideTransactions")
                         : tr("tripsHubShowTransactions")
                     }
-                    hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
+                    hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                   >
                     <FontAwesome
                       name="list-ul"
-                      size={14}
+                      size={9}
                       color={Theme.textOnDark}
                     />
                   </Pressable>
@@ -1057,11 +1057,11 @@ export function TripsHubTableView({
                     onPress={() => onOpenTripDetails(t)}
                     accessibilityRole="button"
                     accessibilityLabel={tr("tripsHubAuditViewTripDetail")}
-                    hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
+                    hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                   >
                     <FontAwesome
                       name="external-link"
-                      size={13}
+                      size={9}
                       color={Theme.textPrimaryDark}
                     />
                   </Pressable>
@@ -1754,14 +1754,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 4,
     width: "100%",
     paddingVertical: 2,
   },
   auditIconAction: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -1998,9 +1998,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   auditOrb: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,

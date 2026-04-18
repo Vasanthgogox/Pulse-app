@@ -9,6 +9,7 @@ import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
 import { StyleSheet } from "react-native";
 import Theme from "@/constants/Theme";
+import Typography from "@/constants/Typography";
 import { formatMobileNumber } from "@/lib/format";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { upsertTripSubcontract } from "@/features/finance/services/tripSubcontracts.service";
@@ -60,6 +61,7 @@ import {
   Building2,
   Package,
   Share2,
+  Users,
   X,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
@@ -173,6 +175,8 @@ function formatIndentCardDate(iso: string | null | undefined): string {
 interface LoadCenterViewProps {
   /** Top padding (e.g. from parent sub-tab row + safe area). */
   contentTopPadding?: number;
+  /** Opens Network → My Network (connections / invitations). */
+  onMyNetworkPress?: () => void;
   onCreateIndentPress: () => void;
   onIndentPress: (indent: IndentRow) => void;
   highlightedIndentId?: string | null;
@@ -182,6 +186,7 @@ const TESLA_BLACK = "#171A20";
 
 export function LoadCenterView({
   contentTopPadding = 0,
+  onMyNetworkPress,
   onCreateIndentPress,
   onIndentPress,
   highlightedIndentId,
@@ -1306,6 +1311,47 @@ export function LoadCenterView({
       : STATUS_TABS;
   }, [isClaimedTab]);
 
+  /** Vehicle / weight / load: one header row, one detail row (lighter type). */
+  const renderLoadCardSpecsColumns = useCallback(
+    (
+      vehicleDetail: string,
+      weightDetail: string,
+      loadTypeDetail: string,
+    ) => (
+      <View style={styles.loadCardSpecsGrid}>
+        <View style={styles.loadCardSpecsLabelsRow}>
+          <View style={styles.loadCardSpecCell}>
+            <Text style={styles.loadCardSpecLabel}>Vehicle</Text>
+          </View>
+          <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
+            <Text style={styles.loadCardSpecLabel}>Weight</Text>
+          </View>
+          <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
+            <Text style={styles.loadCardSpecLabel}>Load</Text>
+          </View>
+        </View>
+        <View style={styles.loadCardSpecsValuesRow}>
+          <View style={styles.loadCardSpecCell}>
+            <Text style={styles.loadCardSpecValue} numberOfLines={2}>
+              {vehicleDetail}
+            </Text>
+          </View>
+          <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
+            <Text style={styles.loadCardSpecValue} numberOfLines={2}>
+              {weightDetail}
+            </Text>
+          </View>
+          <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
+            <Text style={styles.loadCardSpecValue} numberOfLines={2}>
+              {loadTypeDetail}
+            </Text>
+          </View>
+        </View>
+      </View>
+    ),
+    [],
+  );
+
   const renderClaimedLoadCard = (
     load: IndentRow,
     isDone: boolean,
@@ -1370,30 +1416,11 @@ export function LoadCenterView({
           {getIndentDisplayNumber(load)}
         </Text>
         <View style={styles.loadCardSpecsPanel}>
-          <View style={styles.loadCardSpecsRow}>
-            <View style={styles.loadCardSpecItem}>
-              <Text style={styles.loadCardSpecLabel}>Vehicle</Text>
-              <Text style={styles.loadCardSpecValue} numberOfLines={2}>
-                {vehicleDetail}
-              </Text>
-            </View>
-            <View
-              style={[styles.loadCardSpecItem, styles.loadCardSpecDivider]}
-            >
-              <Text style={styles.loadCardSpecLabel}>Weight</Text>
-              <Text style={styles.loadCardSpecValue} numberOfLines={2}>
-                {weightDetail}
-              </Text>
-            </View>
-            <View
-              style={[styles.loadCardSpecItem, styles.loadCardSpecDivider]}
-            >
-              <Text style={styles.loadCardSpecLabel}>Load</Text>
-              <Text style={styles.loadCardSpecValue} numberOfLines={2}>
-                {loadTypeDetail}
-              </Text>
-            </View>
-          </View>
+          {renderLoadCardSpecsColumns(
+            vehicleDetail,
+            weightDetail,
+            loadTypeDetail,
+          )}
           <View style={styles.loadCardQuoteHint}>
             <Text style={styles.loadCardQuoteHintText}>
               Agreed rate {formatINR(supplierRate)}
@@ -1483,25 +1510,47 @@ export function LoadCenterView({
       >
         {/* Sub-tabs: GIVE LOAD | GET LOAD | CLAIMED */}
         <View style={styles.loadFilterHeaderRow}>
-          <SubTabs<LoadSubTab>
-            variant="dark"
-            horizontalPadding={0}
-            value={loadSubTab}
-            onChange={setLoadSubTab}
-            items={[
-              {
-                key: "GIVE_LOAD",
-                label: "GIVE LOAD",
-                badgeCount: hirePartnerLoads.length,
-              },
-              { key: "GET_LOAD", label: "GET LOAD", badgeCount: findWorkLoads.length },
-              {
-                key: "AWARDED",
-                label: "CLAIMED",
-                badgeCount: awardedLoads.length,
-              },
-            ]}
-          />
+          <View style={styles.loadSubTabsWrap}>
+            <SubTabs<LoadSubTab>
+              variant="dark"
+              horizontalPadding={0}
+              value={loadSubTab}
+              onChange={setLoadSubTab}
+              items={[
+                {
+                  key: "GIVE_LOAD",
+                  label: "GIVE LOAD",
+                  badgeCount: hirePartnerLoads.length,
+                },
+                {
+                  key: "GET_LOAD",
+                  label: "GET LOAD",
+                  badgeCount: findWorkLoads.length,
+                },
+                {
+                  key: "AWARDED",
+                  label: "CLAIMED",
+                  badgeCount: awardedLoads.length,
+                },
+              ]}
+            />
+          </View>
+          {onMyNetworkPress ? (
+            <TouchableOpacity
+              style={styles.loadMyNetworkBtn}
+              onPress={onMyNetworkPress}
+              activeOpacity={0.85}
+              accessibilityLabel="My network"
+              hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+            >
+              <Users
+                size={18}
+                color={Theme.textOnDark}
+                strokeWidth={2.1}
+              />
+              <Text style={styles.loadMyNetworkBtnLabel}>Network</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
         {/* Search + Status filters (same layout as Manage Network: search + filter chips) */}
         <View
@@ -1702,30 +1751,11 @@ export function LoadCenterView({
                           {getIndentDisplayNumber(load)}
                         </Text>
                         <View style={styles.loadCardSpecsPanel}>
-                          <View style={styles.loadCardSpecsRow}>
-                            <View style={styles.loadCardSpecItem}>
-                              <Text style={styles.loadCardSpecLabel}>Vehicle</Text>
-                              <Text style={styles.loadCardSpecValue} numberOfLines={2}>
-                                {vehicleDetail}
-                              </Text>
-                            </View>
-                            <View
-                              style={[styles.loadCardSpecItem, styles.loadCardSpecDivider]}
-                            >
-                              <Text style={styles.loadCardSpecLabel}>Weight</Text>
-                              <Text style={styles.loadCardSpecValue} numberOfLines={2}>
-                                {weightDetail}
-                              </Text>
-                            </View>
-                            <View
-                              style={[styles.loadCardSpecItem, styles.loadCardSpecDivider]}
-                            >
-                              <Text style={styles.loadCardSpecLabel}>Load</Text>
-                              <Text style={styles.loadCardSpecValue} numberOfLines={2}>
-                                {loadTypeDetail}
-                              </Text>
-                            </View>
-                          </View>
+                          {renderLoadCardSpecsColumns(
+                            vehicleDetail,
+                            weightDetail,
+                            loadTypeDetail,
+                          )}
                         </View>
                         <View
                           style={[
@@ -2069,30 +2099,11 @@ export function LoadCenterView({
                       {getIndentDisplayNumber(load)}
                     </Text>
                     <View style={styles.loadCardSpecsPanel}>
-                      <View style={styles.loadCardSpecsRow}>
-                        <View style={styles.loadCardSpecItem}>
-                          <Text style={styles.loadCardSpecLabel}>Vehicle</Text>
-                          <Text style={styles.loadCardSpecValue} numberOfLines={2}>
-                            {vehicleDetail}
-                          </Text>
-                        </View>
-                        <View
-                          style={[styles.loadCardSpecItem, styles.loadCardSpecDivider]}
-                        >
-                          <Text style={styles.loadCardSpecLabel}>Weight</Text>
-                          <Text style={styles.loadCardSpecValue} numberOfLines={2}>
-                            {weightDetail}
-                          </Text>
-                        </View>
-                        <View
-                          style={[styles.loadCardSpecItem, styles.loadCardSpecDivider]}
-                        >
-                          <Text style={styles.loadCardSpecLabel}>Load</Text>
-                          <Text style={styles.loadCardSpecValue} numberOfLines={2}>
-                            {loadTypeDetail}
-                          </Text>
-                        </View>
-                      </View>
+                      {renderLoadCardSpecsColumns(
+                        vehicleDetail,
+                        weightDetail,
+                        loadTypeDetail,
+                      )}
                       <View style={styles.loadCardQuoteHint}>
                         <Text style={styles.loadCardQuoteHintText}>
                           Target{" "}
@@ -3536,9 +3547,38 @@ const styles = StyleSheet.create({
   },
   loadFilterHeaderRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
     paddingTop: 8,
+    gap: 10,
+  },
+  loadSubTabsWrap: {
+    flex: 1,
+    minWidth: 0,
+    paddingBottom: 2,
+  },
+  loadMyNetworkBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minHeight: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
+    backgroundColor: Theme.darkSurface,
+    flexShrink: 0,
+    marginBottom: 2,
+  },
+  loadMyNetworkBtnLabel: {
+    ...Typography.networkDarkHeaderNav,
+    color: Theme.textOnDark,
+    ...Platform.select({
+      android: { includeFontPadding: false as const },
+      default: {},
+    }),
   },
   hirePartnerFabWrap: {
     position: "absolute",
@@ -4235,29 +4275,41 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 6,
   },
-  loadCardSpecsRow: {
+  loadCardSpecsGrid: {
+    gap: 6,
+  },
+  loadCardSpecsLabelsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  loadCardSpecsValuesRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 8,
   },
-  loadCardSpecItem: {
+  loadCardSpecCell: {
     flex: 1,
     minWidth: 0,
   },
   loadCardSpecLabel: {
     fontSize: 8,
-    fontWeight: "700",
+    fontWeight: "600",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: 2,
   },
   loadCardSpecValue: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
+    fontSize: 8,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+    lineHeight: 12,
+    ...Platform.select({
+      android: { includeFontPadding: false as const },
+      default: {},
+    }),
   },
   quoteBtn: {
     flexDirection: "row",

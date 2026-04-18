@@ -664,11 +664,11 @@ const styles = StyleSheet.create({
     gap: 6,
     minWidth: 0,
   },
-  /** Amount — large, medium-strong, italic; green / red from amountIn / amountOut. */
+  /** Amount — compact, regular weight; green / red from amountIn / amountOut. */
   amount: {
-    fontSize: 15,
-    fontWeight: "600",
-    fontStyle: "italic",
+    fontSize: 12,
+    fontWeight: "400",
+    fontStyle: "normal",
   },
   amountIn: {
     color: Theme.darkGreen,
