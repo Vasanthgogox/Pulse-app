@@ -43,6 +43,7 @@ import {
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SHARED_LEDGER_PARTNER_PENDING_LABEL } from "./sharedLedgerTypes";
 import { formatINR } from "@/lib/format";
 import type { LedgerRow } from "../services/finance.service";
 import { TreasurySummaryCard } from "./TreasurySummaryCard";
@@ -960,7 +961,7 @@ export function EntityCompareVerifyView({
             </View>
             <View style={[styles.valueCardColValueContainer, styles.valueCardColRight]}>
               <Text style={[styles.valueCardVar, !isPending && salesVar !== 0 && styles.varianceRed]}>
-                {isPending ? "Wait" : salesVar === 0 ? "—" : `${salesVar > 0 ? "+" : ""}${formatINR(salesVar)}`}
+                {isPending ? "—" : salesVar === 0 ? "—" : `${salesVar > 0 ? "+" : ""}${formatINR(salesVar)}`}
               </Text>
             </View>
           </View>
@@ -986,7 +987,7 @@ export function EntityCompareVerifyView({
             </View>
             <View style={[styles.valueCardColValueContainer, styles.valueCardColRight]}>
               <Text style={[styles.valueCardVar, !isPending && paidVar !== 0 && styles.varianceRed]}>
-                {isPending ? "Wait" : paidVar === 0 ? "—" : `${paidVar > 0 ? "+" : ""}${formatINR(paidVar)}`}
+                {isPending ? "—" : paidVar === 0 ? "—" : `${paidVar > 0 ? "+" : ""}${formatINR(paidVar)}`}
               </Text>
             </View>
           </View>
@@ -1000,7 +1001,7 @@ export function EntityCompareVerifyView({
               netInt < 0 ? styles.netDueValueNegative : styles.netDueValueNonNegative,
             ]}
           >
-            {isPending ? "Wait" : row.internal ? formatINR(netInt) : "—"}
+            {isPending ? SHARED_LEDGER_PARTNER_PENDING_LABEL : row.internal ? formatINR(netInt) : "—"}
           </Text>
         </View>
       </View>
@@ -1408,7 +1409,7 @@ export function EntityCompareVerifyView({
                               numberOfLines={1}
                             >
                               {isPending
-                                ? "Wait"
+                                ? SHARED_LEDGER_PARTNER_PENDING_LABEL
                                 : row.external
                                   ? formatINR(row.extSales)
                                   : "—"}
@@ -1425,7 +1426,7 @@ export function EntityCompareVerifyView({
                               numberOfLines={1}
                             >
                               {isPending
-                                ? "Wait"
+                                ? SHARED_LEDGER_PARTNER_PENDING_LABEL
                                 : row.external
                                   ? formatINR(row.extPaid)
                                   : "—"}
@@ -1466,7 +1467,7 @@ export function EntityCompareVerifyView({
                                     </View>
                                     <View style={[styles.valueCardColValueContainer, styles.valueCardColRight]}>
                                       <Text style={[styles.valueCardVar, !isPending && salesVar !== 0 && styles.varianceRed]}>
-                                        {isPending ? "Wait" : salesVar === 0 ? "—" : `${salesVar > 0 ? "+" : ""}${formatINR(salesVar)}`}
+                                        {isPending ? "—" : salesVar === 0 ? "—" : `${salesVar > 0 ? "+" : ""}${formatINR(salesVar)}`}
                                       </Text>
                                     </View>
                                   </View>
@@ -1492,7 +1493,7 @@ export function EntityCompareVerifyView({
                                     </View>
                                     <View style={[styles.valueCardColValueContainer, styles.valueCardColRight]}>
                                       <Text style={[styles.valueCardVar, !isPending && paidVar !== 0 && styles.varianceRed]}>
-                                        {isPending ? "Wait" : paidVar === 0 ? "—" : `${paidVar > 0 ? "+" : ""}${formatINR(paidVar)}`}
+                                        {isPending ? "—" : paidVar === 0 ? "—" : `${paidVar > 0 ? "+" : ""}${formatINR(paidVar)}`}
                                       </Text>
                                     </View>
                                   </View>
@@ -1508,7 +1509,7 @@ export function EntityCompareVerifyView({
                                         : styles.netDueValueNonNegative,
                                     ]}
                                   >
-                                    {isPending ? "Wait" : row.internal ? formatINR(netInt) : "—"}
+                                    {isPending ? SHARED_LEDGER_PARTNER_PENDING_LABEL : row.internal ? formatINR(netInt) : "—"}
                                   </Text>
                                 </View>
                               </View>
@@ -1755,7 +1756,7 @@ export function EntityCompareVerifyView({
                               numberOfLines={1}
                             >
                               {isPending
-                                ? "Wait"
+                                ? SHARED_LEDGER_PARTNER_PENDING_LABEL
                                 : row.external
                                   ? formatINR(row.extSales)
                                   : "—"}
@@ -1778,7 +1779,7 @@ export function EntityCompareVerifyView({
                               numberOfLines={1}
                             >
                               {isPending
-                                ? "Wait"
+                                ? SHARED_LEDGER_PARTNER_PENDING_LABEL
                                 : row.external
                                   ? formatINR(row.extPaid)
                                   : "—"}
@@ -2160,6 +2161,7 @@ const styles = StyleSheet.create({
   th: {
     fontSize: 11,
     fontWeight: "500",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
     letterSpacing: 0.3,
   },
@@ -2267,6 +2269,7 @@ const styles = StyleSheet.create({
   valueCardValueV2: {
     fontSize: 15,
     fontWeight: "500",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
   },
   valueCardDateV2: {
@@ -2277,6 +2280,7 @@ const styles = StyleSheet.create({
   valueCardVarV2: {
     fontSize: 15,
     fontWeight: "500",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
   },
   netDueCardV2: {
@@ -2299,6 +2303,7 @@ const styles = StyleSheet.create({
   netDueValueV2: {
     fontSize: 15,
     fontWeight: "600",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
   },
   netDueValueNegativeV2: {
@@ -2411,6 +2416,7 @@ const styles = StyleSheet.create({
   missionId: {
     fontSize: 11,
     fontWeight: "500",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
     letterSpacing: 0.1,
     textTransform: "uppercase",
@@ -2500,6 +2506,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     fontSize: 11,
     fontWeight: "500",
+    fontStyle: "italic",
     letterSpacing: 0.1,
     textAlign: "right" as const,
     color: Theme.textPrimaryDark,
@@ -2598,16 +2605,19 @@ const styles = StyleSheet.create({
   valueCardValue: {
     fontSize: 15,
     fontWeight: "500",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
   },
   valueCardDate: {
     fontSize: 10,
+    fontStyle: "normal",
     color: Theme.textMuted,
     marginTop: 4,
   },
   valueCardVar: {
     fontSize: 15,
     fontWeight: "500",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
   },
   netDueCard: {
@@ -2630,6 +2640,7 @@ const styles = StyleSheet.create({
   netDueValue: {
     fontSize: 15,
     fontWeight: "600",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
   },
   netDueValueNegative: {

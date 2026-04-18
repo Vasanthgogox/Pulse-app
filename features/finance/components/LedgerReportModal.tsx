@@ -153,6 +153,8 @@ export interface LedgerReportModalProps {
   transactions: LedgerRow[];
   /** Optional title override */
   title?: string;
+  /** When true, hides Cash In / Cash Out summary (e.g. custom shared-ledger export). */
+  hideCashSummary?: boolean;
   customReport?: {
     columns: Array<{
       key: string;
@@ -168,6 +170,7 @@ export function LedgerReportModal({
   onClose,
   transactions,
   title,
+  hideCashSummary = false,
   customReport,
 }: LedgerReportModalProps) {
   const { t } = useLanguage();
@@ -240,6 +243,23 @@ export function LedgerReportModal({
       case 'model': return 90;
       case 'supplier': return 160;
       case 'client': return 140;
+      case 'mission': return 88;
+      case 'status': return 96;
+      case 'partnerNote': return 120;
+      case 'mySales':
+      case 'themSales':
+      case 'myReceived':
+      case 'themReceived':
+      case 'due':
+        return 86;
+      case 'txns': return 44;
+      case 'lastTxn': return 72;
+      case 'sync': return 52;
+      case 'you':
+      case 'partner':
+        return 80;
+      case 'refs': return 140;
+      case 'date': return 88;
       default: return 90;
     }
   };
@@ -247,6 +267,7 @@ export function LedgerReportModal({
   const getCustomValueColor = (key: string, value: string): string | undefined => {
     const v = value.trim();
     const isDashOrZero = v === '—' || v === '₹0' || v === '0' || v === '0.0%';
+    if (key === 'sync') return v === 'Fix' ? Theme.teslaRed : Theme.darkGreen;
     if (key === 'due') return isDashOrZero ? Theme.textPrimary : Theme.teslaRed;
     if (key === 'pnl' || key === 'margin' || key === 'received' || key === 'paid') {
       return v.startsWith('-') ? Theme.teslaRed : Theme.darkGreen;
@@ -431,16 +452,18 @@ export function LedgerReportModal({
               <FontAwesome name="times" size={18} color={Theme.textPrimary} />
             </TouchableOpacity>
           </View>
-          <View style={styles.summaryRow}>
-            <View style={styles.summaryCell}>
-              <Text style={styles.summaryLabel}>{t("cashIn")}</Text>
-              <Text style={[styles.summaryValue, styles.positive]}>{formatAmount(totalIn)}</Text>
+          {!hideCashSummary ? (
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryCell}>
+                <Text style={styles.summaryLabel}>{t("cashIn")}</Text>
+                <Text style={[styles.summaryValue, styles.positive]}>{formatAmount(totalIn)}</Text>
+              </View>
+              <View style={styles.summaryCell}>
+                <Text style={styles.summaryLabel}>{t("cashOut")}</Text>
+                <Text style={[styles.summaryValue, styles.negative]}>{formatAmount(totalOut)}</Text>
+              </View>
             </View>
-            <View style={styles.summaryCell}>
-              <Text style={styles.summaryLabel}>{t("cashOut")}</Text>
-              <Text style={[styles.summaryValue, styles.negative]}>{formatAmount(totalOut)}</Text>
-            </View>
-          </View>
+          ) : null}
 
           <View style={styles.tableHeader}>
             {isCustomReport ? (

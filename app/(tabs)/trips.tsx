@@ -11,17 +11,23 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { TripExpandableCard, type TripRow } from "@/features/trips";
+import type { LedgerRow } from "@/features/finance/services/finance.service";
+import {
+  summarizeTripLedgerForHub,
+  TripsHubTableView,
+  TripsHubTripCard,
+  type TripRow,
+} from "@/features/trips";
 import { canAccessTrips, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatLedgerDate } from "@/lib/format";
 import {
-    useAssignmentAuditQuery,
-    useRealtimeTransactionsInvalidation,
-    useRealtimeTripsInvalidation,
-    useShipperDisplayNamesQuery,
-    useTransactionsQuery,
-    useTripsQuery,
+  useAssignmentAuditQuery,
+  useRealtimeTransactionsInvalidation,
+  useRealtimeTripsInvalidation,
+  useShipperDisplayNamesQuery,
+  useTransactionsQuery,
+  useTripsQuery,
 } from "@/lib/queries";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
@@ -62,6 +68,8 @@ type DateFilter =
   | "this_month"
   | "custom";
 
+type TripsListLayout = "cards" | "table";
+
 const TRIPS_PAGE_BG = "#f4f5f7";
 
 export default function TripsScreen() {
@@ -93,6 +101,7 @@ export default function TripsScreen() {
   const [showDateRangePicker, setShowDateRangePicker] = useState(false);
   const [showSortModal, setShowSortModal] = useState(false);
   const [sortAnchorY, setSortAnchorY] = useState(0);
+  const [listLayout, setListLayout] = useState<TripsListLayout>("cards");
 
   const capabilities = getCapabilitiesFromProfile(
     profile
@@ -144,6 +153,14 @@ export default function TripsScreen() {
       t.pickup_date ?? t.started_at ?? t.completed_at ?? t.created_at ?? "";
     return raw ? formatLedgerDate(raw) : "—";
   };
+
+  const getStageLabelForTrip = useCallback(
+    (t: TripRow) =>
+      t.driver_id == null
+        ? tr("unassigned").toUpperCase()
+        : (t.status || "ACTIVE").toUpperCase(),
+    [tr],
+  );
 
   /** Show completed/done trips only on the History tab. */
   const showCompletedList = tripFilter === "History";
@@ -329,15 +346,12 @@ export default function TripsScreen() {
   }, [trips]);
 
   const transactionsByTripId = useMemo(() => {
-    const map = new Map<string, typeof transactions>();
+    const map = new Map<string, LedgerRow[]>();
     for (const tx of transactions) {
       if (!tx.trip_id) continue;
       const list = map.get(tx.trip_id);
-      if (list) {
-        list.push(tx);
-      } else {
-        map.set(tx.trip_id, [tx]);
-      }
+      if (list) list.push(tx);
+      else map.set(tx.trip_id, [tx]);
     }
     return map;
   }, [transactions]);
@@ -530,6 +544,50 @@ export default function TripsScreen() {
         ) : null}
 
         <View style={styles.tripsToolbar}>
+          <View style={styles.tripsLayoutToggle} accessibilityRole="tablist">
+            <TouchableOpacity
+              style={[
+                styles.tripsLayoutToggleBtn,
+                listLayout === "cards" && styles.tripsLayoutToggleBtnActive,
+              ]}
+              onPress={() => setListLayout("cards")}
+              activeOpacity={0.85}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: listLayout === "cards" }}
+              accessibilityLabel={tr("tripsViewCards")}
+            >
+              <FontAwesome
+                name="th-large"
+                size={14}
+                color={
+                  listLayout === "cards"
+                    ? Theme.textPrimaryDark
+                    : Theme.textOnDarkMuted
+                }
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.tripsLayoutToggleBtn,
+                listLayout === "table" && styles.tripsLayoutToggleBtnActive,
+              ]}
+              onPress={() => setListLayout("table")}
+              activeOpacity={0.85}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: listLayout === "table" }}
+              accessibilityLabel={tr("tripsViewTable")}
+            >
+              <FontAwesome
+                name="list"
+                size={14}
+                color={
+                  listLayout === "table"
+                    ? Theme.textPrimaryDark
+                    : Theme.textOnDarkMuted
+                }
+              />
+            </TouchableOpacity>
+          </View>
           <View
             style={[
               styles.tripsSearchWrap,
@@ -972,31 +1030,71 @@ export default function TripsScreen() {
             <Text style={styles.empty}>
               {showCompletedList ? tr("noCompletedTrips") : tr("noTripsYet")}
             </Text>
+          ) : listLayout === "table" ? (
+            <ScrollView
+              horizontal
+              nestedScrollEnabled
+              showsHorizontalScrollIndicator
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.tripsTableHScrollContent}
+            >
+              <View
+                style={[
+                  styles.tripsTableMinWidth,
+                  {
+                    minWidth: Math.max(
+                      width - Layout.screenPaddingHorizontal * 2,
+                      isMobile ? 1020 : 1280,
+                    ),
+                  },
+                ]}
+              >
+                <TripsHubTableView
+                  trips={filtered}
+                  currentOrganizationId={currentOrganization?.id ?? null}
+                  getStageLabel={getStageLabelForTrip}
+                  transactionsByTripId={transactionsByTripId}
+                  onOpenTripDetails={(trip) =>
+                    router.push(`/trip/${trip.id}` as const)
+                  }
+                  tr={tr}
+                />
+              </View>
+            </ScrollView>
           ) : (
             <View style={isLargeScreen ? styles.gridContainer : undefined}>
               {filtered.map((t) => {
-                const stage =
-                  t.driver_id == null
-                    ? tr("unassigned").toUpperCase()
-                    : (t.status || "ACTIVE").toUpperCase();
-                const isAggregate = isAggregateTrip(t);
-                const tripLedgerEntries = transactionsByTripId.get(t.id) ?? [];
+                const stage = getStageLabelForTrip(t);
                 const displayClientName =
-                  shipperNameByTripId[t.id] ?? t.client_name ?? undefined;
+                  shipperNameByTripId[t.id] ?? t.client_name ?? "—";
+                const hubLedger = summarizeTripLedgerForHub(
+                  transactionsByTripId.get(t.id) ?? [],
+                );
                 return (
                   <View
                     key={t.id}
                     style={isLargeScreen ? styles.gridItem : undefined}
                   >
-                    <TripExpandableCard
+                    <TripsHubTripCard
                       trip={t}
-                      tripLedgerEntries={tripLedgerEntries}
-                      cardDate={getTripCardDate(t)}
-                      stage={stage}
-                      isAggregate={isAggregate}
+                      currentOrganizationId={currentOrganization?.id ?? null}
                       displayClientName={displayClientName}
-                      onAssignmentUpdated={onRefresh}
+                      cardDate={getTripCardDate(t)}
+                      stageLabel={stage}
                       onPress={() => router.push(`/trip/${t.id}` as const)}
+                      tr={tr}
+                      ledgerReceivedTotal={hubLedger.receivedTotal}
+                      ledgerTxnCount={hubLedger.count}
+                      lastLedgerDateLabel={
+                        hubLedger.lastAtIso
+                          ? formatLedgerDate(hubLedger.lastAtIso)
+                          : undefined
+                      }
+                      rowWebStyle={
+                        Platform.OS === "web"
+                          ? ({ cursor: "pointer" } as ViewStyle)
+                          : undefined
+                      }
                     />
                   </View>
                 );
@@ -1125,6 +1223,26 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.separatorDark,
     gap: 16,
+  },
+  tripsLayoutToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Theme.darkSurface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
+    padding: 3,
+    gap: 2,
+  },
+  tripsLayoutToggleBtn: {
+    width: 36,
+    height: 32,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tripsLayoutToggleBtnActive: {
+    backgroundColor: Theme.textOnDark,
   },
   tripsToolbarActions: {
     flexDirection: "row",
@@ -1442,6 +1560,13 @@ const styles = StyleSheet.create({
   gridItem: {
     width: "33.333%",
     paddingHorizontal: 8,
+  },
+  tripsTableHScrollContent: {
+    paddingBottom: 8,
+    flexGrow: 1,
+  },
+  tripsTableMinWidth: {
+    flexGrow: 1,
   },
   scroll: { flex: 1, backgroundColor: TRIPS_PAGE_BG },
   scrollContent: {

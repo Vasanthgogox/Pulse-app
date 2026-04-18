@@ -1346,7 +1346,8 @@ export function EntityDetailOverlay({
         {(isCustomerOrSupplier || isVehicle || isDriver) && (
           <View style={styles.darkBlockTabRow}>{detailTabsContent}</View>
         )}
-        {(isCustomerOrSupplier || isVehicle) && (
+        {/* In / out summary — same strip for ledger and shared ledger (aligned with Trips/Cash scorecard). */}
+        {(isCustomerOrSupplier || isVehicle) ? (
           <View style={styles.darkBlockSummaryRow}>
             <View style={styles.darkBlockSummaryCell}>
               <View style={styles.darkBlockSummaryLabelRow}>
@@ -1397,7 +1398,7 @@ export function EntityDetailOverlay({
               </Text>
             </View>
           </View>
-        )}
+        ) : null}
       </View>
 
       {(isCustomerOrSupplier || isVehicle) && detailTab === "ledger" ? (

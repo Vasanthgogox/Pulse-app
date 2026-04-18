@@ -44,6 +44,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -64,6 +65,21 @@ function isPlaceholderPhone(value: string | null | undefined): boolean {
   if (/^linked-/i.test(s)) return true;
   if (s.toLowerCase().includes("linked-")) return true;
   return false;
+}
+
+/** Full trip row date e.g. "17 APR 2026" (desktop trip column). */
+function formatTripTableDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "—";
+    const day = d.getDate();
+    const month = d.toLocaleString("en-IN", { month: "short" }).toUpperCase();
+    const year = d.getFullYear();
+    return `${day} ${month} ${year}`;
+  } catch {
+    return "—";
+  }
 }
 
 export interface ClientDetailScreenProps {
@@ -96,6 +112,8 @@ export default function ClientDetailScreen({
   const [transactions, setTransactions] = useState<LedgerRow[]>([]);
   const [orgTrips, setOrgTrips] = useState<TripRow[]>([]);
   const [showReportModal, setShowReportModal] = useState(false);
+  /** Bumps SharedLedgerContent to open PDF/Excel (Shared tab) from header download. */
+  const [sharedLedgerDownloadSignal, setSharedLedgerDownloadSignal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -106,7 +124,9 @@ export default function ClientDetailScreen({
   const [successTitle, setSuccessTitle] = useState("NODE_SYNCED");
   const [isLinked, setIsLinked] = useState(false);
   const insets = useSafeAreaInsets();
-  const isWebDesktop = Platform.OS === "web";
+  const { width: windowWidth } = useWindowDimensions();
+  /** Full trip grid only on wide web; narrow web uses the compact column set (matches finance shared ledger). */
+  const isWebDesktop = Platform.OS === "web" && windowWidth >= 1024;
   const [profileEditMode, setProfileEditMode] = useState(false);
   const [editOrgName, setEditOrgName] = useState("");
   const [editContactPerson, setEditContactPerson] = useState("");
@@ -816,8 +836,19 @@ export default function ClientDetailScreen({
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.downloadBtn}
-            onPress={() => setShowReportModal(true)}
+            onPress={() => {
+              if (detailSubTab === "shared") {
+                setSharedLedgerDownloadSignal((n) => n + 1);
+              } else {
+                setShowReportModal(true);
+              }
+            }}
             activeOpacity={0.8}
+            accessibilityLabel={
+              detailSubTab === "shared"
+                ? "Download shared ledger report"
+                : "Download report"
+            }
           >
             <FontAwesome name="cloud-download" size={18} color={Theme.textOnPrimary} />
           </TouchableOpacity>
@@ -847,7 +878,7 @@ export default function ClientDetailScreen({
           />
         }
       >
-        {/* Scorecard */}
+        {/* Scorecard — same metrics row as Trips / Cash Flow (above tab content). */}
         <View style={styles.scorecard}>
           <View style={styles.scorecardTop}>
             <View style={styles.scorecardLeft}>
@@ -1005,6 +1036,7 @@ export default function ClientDetailScreen({
                     const tripCost = supplierRate > 0 ? supplierRate : expenseCaptured;
                     const tripPnl = row.sales - tripCost;
                     const marginPct = row.sales > 0 ? (tripPnl / row.sales) * 100 : 0;
+                    const tripDateIso = row.trip.pickup_date ?? row.trip.created_at;
                     return (
                       <>
                   <View
@@ -1013,10 +1045,29 @@ export default function ClientDetailScreen({
                       isWebDesktop && styles.tdMissionWebDesktop,
                     ]}
                   >
-                    <Text style={styles.tdMissionId}>{row.missionId}</Text>
-                    <Text style={styles.tdRoute} numberOfLines={1}>
+                    <Text
+                      style={[
+                        styles.tdMissionId,
+                        isWebDesktop && styles.tdMissionIdWebDesktop,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {row.missionId}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.tdRoute,
+                        isWebDesktop && styles.tdRouteWebDesktop,
+                      ]}
+                      numberOfLines={isWebDesktop ? 2 : 1}
+                    >
                       {row.route}
                     </Text>
+                    {isWebDesktop ? (
+                      <Text style={styles.tdMissionDateWeb} numberOfLines={1}>
+                        {formatTripTableDate(tripDateIso)}
+                      </Text>
+                    ) : null}
                   </View>
                   {isWebDesktop ? (
                     <View style={styles.partyColWebDesktop}>
@@ -1040,6 +1091,7 @@ export default function ClientDetailScreen({
                   ) : null}
                   <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
                     <Text
+                      numberOfLines={1}
                       style={[
                         styles.td,
                         styles.tdSales,
@@ -1051,7 +1103,10 @@ export default function ClientDetailScreen({
                   </View>
                   {isWebDesktop ? (
                     <View style={[styles.amountCol, styles.amountColWebDesktop]}>
-                      <Text style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
+                      <Text
+                        numberOfLines={1}
+                        style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}
+                      >
                         {formatINR(tripCost)}
                       </Text>
                     </View>
@@ -1059,6 +1114,7 @@ export default function ClientDetailScreen({
                   {isWebDesktop ? (
                     <View style={[styles.amountCol, styles.amountColWebDesktop]}>
                       <Text
+                        numberOfLines={1}
                         style={[
                           styles.td,
                           styles.tdRight,
@@ -1072,6 +1128,7 @@ export default function ClientDetailScreen({
                   ) : null}
                   <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
                     <Text
+                      numberOfLines={1}
                       style={[
                         styles.td,
                         styles.tdRight,
@@ -1084,10 +1141,11 @@ export default function ClientDetailScreen({
                   </View>
                   <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
                     <Text
+                      numberOfLines={1}
                       style={[
                         styles.td,
                         styles.tdRight,
-                        styles.tdRed,
+                        row.due > 0 ? styles.tdRed : styles.tdAmountMuted,
                         isWebDesktop && styles.tdAmountWebDesktop,
                       ]}
                     >
@@ -1096,14 +1154,14 @@ export default function ClientDetailScreen({
                   </View>
                   {isWebDesktop ? (
                     <View style={[styles.amountCol, styles.amountColWebDesktop]}>
-                      <Text style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
+                      <Text numberOfLines={1} style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
                         {meta.count}
                       </Text>
                     </View>
                   ) : null}
                   {isWebDesktop ? (
                     <View style={[styles.amountCol, styles.amountColWebDesktop]}>
-                      <Text style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
+                      <Text numberOfLines={1} style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
                         {meta.lastTxnDate ? formatLedgerDate(meta.lastTxnDate) : "—"}
                       </Text>
                     </View>
@@ -1145,7 +1203,12 @@ export default function ClientDetailScreen({
 
         {/* Tab: Shared */}
         {detailSubTab === "shared" && client && (
-          <View style={styles.sharedSection}>
+          <View
+            style={[
+              styles.sharedSection,
+              Platform.OS === "web" && styles.sharedSectionWeb,
+            ]}
+          >
             <SharedLedgerContent
               entity={{
                 id: client.id,
@@ -1158,6 +1221,7 @@ export default function ClientDetailScreen({
               organizationId={currentOrganization?.id ?? null}
               integrated={Boolean(client.is_integrated || client.linked_organization_id)}
               embeddedInOverlay={true}
+              externalDownloadRequest={sharedLedgerDownloadSignal}
               onRefresh={load}
               onRequestConnection={() => {
                 setIsLinked(true);
@@ -1877,16 +1941,18 @@ const styles = StyleSheet.create({
   },
   th: {
     fontSize: 9,
-    fontWeight: "700",
+    fontWeight: "600",
+    fontStyle: "normal",
     color: Theme.textMuted,
     letterSpacing: 0.4,
     textTransform: "uppercase",
   },
   thWebDesktop: {
     fontSize: 11,
-    letterSpacing: 0.1,
+    letterSpacing: 0.08,
     color: Theme.textSecondary,
-    fontWeight: "700",
+    fontWeight: "600",
+    fontStyle: "normal",
   },
   thMissionWebDesktop: {
     flex: 1,
@@ -1902,10 +1968,14 @@ const styles = StyleSheet.create({
   },
   headerAmountCol: {
     width: 80,
+    minWidth: 72,
+    flexShrink: 0,
     alignItems: "flex-end",
   },
   amountCol: {
     width: 80,
+    minWidth: 72,
+    flexShrink: 0,
     alignItems: "flex-end",
     justifyContent: "center",
   },
@@ -1921,7 +1991,7 @@ const styles = StyleSheet.create({
   tableRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 16,
+    paddingVertical: 14,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
@@ -1936,18 +2006,44 @@ const styles = StyleSheet.create({
   td: {
     fontSize: 10,
     fontWeight: "600",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
   },
   tdMission: { flex: 1.5, minWidth: 0 },
   tdMissionId: {
     fontSize: 11,
     fontWeight: "600",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
   },
+  tdMissionIdWebDesktop: {
+    fontSize: 11,
+    fontWeight: "500",
+    fontStyle: "italic",
+  },
+  tdMissionDateWeb: {
+    marginTop: 4,
+    fontSize: 9,
+    fontWeight: "500",
+    fontStyle: "normal",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
   tdRoute: {
     fontSize: 10,
+    fontWeight: "400",
+    fontStyle: "italic",
     color: Theme.textMuted,
+    marginTop: 4,
+  },
+  tdRouteWebDesktop: {
+    fontSize: 10,
+    fontWeight: "400",
+    fontStyle: "italic",
+    color: Theme.textMuted,
+    lineHeight: 14,
     marginTop: 4,
   },
   tdMissionWebDesktop: {
@@ -1960,17 +2056,25 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Theme.textPrimaryDark,
     fontWeight: "500",
+    fontStyle: "italic",
   },
   tdPartyHintWebDesktop: {
     fontSize: 9,
     color: Theme.textMuted,
     marginTop: 2,
+    fontWeight: "500",
+    fontStyle: "italic",
   },
   tdAmountWebDesktop: {
     width: "100%",
     textAlign: "right" as const,
     fontSize: 11,
     fontWeight: "600",
+    fontStyle: "italic",
+  },
+  tdAmountMuted: {
+    fontWeight: "600",
+    color: Theme.textMuted,
   },
   tdSales: { width: 80, textAlign: "right" as const },
   tdRight: { width: 72, textAlign: "right" as const },
@@ -1980,6 +2084,7 @@ const styles = StyleSheet.create({
   emptyRowText: {
     fontSize: 11,
     fontWeight: "600",
+    fontStyle: "italic",
     color: Theme.textMuted,
   },
   cashSection: { marginBottom: 24 },
@@ -2015,11 +2120,13 @@ const styles = StyleSheet.create({
   cashCardWhy: {
     fontSize: 11,
     fontWeight: "700",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
   },
   cashCardMeta: {
     fontSize: 9,
     fontWeight: "600",
+    fontStyle: "normal",
     color: Theme.textMuted,
     marginTop: 2,
   },
@@ -2030,6 +2137,7 @@ const styles = StyleSheet.create({
     color: Theme.darkGreen,
   },
   sharedSection: { marginBottom: 24 },
+  sharedSectionWeb: { width: "100%", alignSelf: "stretch" },
   sharedCard: {
     backgroundColor: Theme.surface,
     borderWidth: 1,

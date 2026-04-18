@@ -45,6 +45,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -105,6 +106,7 @@ export default function SupplierDetailScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [sharedLedgerDownloadSignal, setSharedLedgerDownloadSignal] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -117,7 +119,8 @@ export default function SupplierDetailScreen({
   const [isInApp, setIsInApp] = useState(false);
   const [sendingInvitation, setSendingInvitation] = useState(false);
   const insets = useSafeAreaInsets();
-  const isWebDesktop = Platform.OS === "web";
+  const { width: windowWidth } = useWindowDimensions();
+  const isWebDesktop = Platform.OS === "web" && windowWidth >= 1024;
   const initialLoadDoneRef = useRef(false);
 
   useEffect(() => {
@@ -813,8 +816,19 @@ export default function SupplierDetailScreen({
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.downloadBtn}
-            onPress={() => setShowReportModal(true)}
+            onPress={() => {
+              if (detailSubTab === "shared") {
+                setSharedLedgerDownloadSignal((n) => n + 1);
+              } else {
+                setShowReportModal(true);
+              }
+            }}
             activeOpacity={0.8}
+            accessibilityLabel={
+              detailSubTab === "shared"
+                ? "Download shared ledger report"
+                : "Download report"
+            }
           >
             <FontAwesome name="cloud-download" size={18} color={Theme.textOnPrimary} />
           </TouchableOpacity>
@@ -996,13 +1010,17 @@ export default function SupplierDetailScreen({
                   ) : null}
                   {isWebDesktop ? (
                     <View style={[styles.amountCol, styles.amountColWebDesktop]}>
-                      <Text style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
+                      <Text
+                        numberOfLines={1}
+                        style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}
+                      >
                         {formatINR(clientRevenue)}
                       </Text>
                     </View>
                   ) : null}
                   <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
                     <Text
+                      numberOfLines={1}
                       style={[
                         styles.td,
                         styles.tdSales,
@@ -1015,6 +1033,7 @@ export default function SupplierDetailScreen({
                   {isWebDesktop ? (
                     <View style={[styles.amountCol, styles.amountColWebDesktop]}>
                       <Text
+                        numberOfLines={1}
                         style={[
                           styles.td,
                           styles.tdRight,
@@ -1028,6 +1047,7 @@ export default function SupplierDetailScreen({
                   ) : null}
                   <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
                     <Text
+                      numberOfLines={1}
                       style={[
                         styles.td,
                         styles.tdRight,
@@ -1040,6 +1060,7 @@ export default function SupplierDetailScreen({
                   </View>
                   <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
                     <Text
+                      numberOfLines={1}
                       style={[
                         styles.td,
                         styles.tdRight,
@@ -1052,14 +1073,14 @@ export default function SupplierDetailScreen({
                   </View>
                   {isWebDesktop ? (
                     <View style={[styles.amountCol, styles.amountColWebDesktop]}>
-                      <Text style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
+                      <Text numberOfLines={1} style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
                         {meta.count}
                       </Text>
                     </View>
                   ) : null}
                   {isWebDesktop ? (
                     <View style={[styles.amountCol, styles.amountColWebDesktop]}>
-                      <Text style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
+                      <Text numberOfLines={1} style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
                         {meta.lastTxnDate ? formatLedgerDate(meta.lastTxnDate) : "—"}
                       </Text>
                     </View>
@@ -1099,7 +1120,12 @@ export default function SupplierDetailScreen({
         )}
 
         {detailSubTab === "shared" && supplier && (
-          <View style={styles.sharedSection}>
+          <View
+            style={[
+              styles.sharedSection,
+              Platform.OS === "web" && styles.sharedSectionWeb,
+            ]}
+          >
             <SharedLedgerContent
               entity={{ id: supplier.id, name: supplierName, linked_organization_id: supplier.linked_organization_id }}
               entityType="SUPPLIER"
@@ -1108,6 +1134,7 @@ export default function SupplierDetailScreen({
               organizationId={currentOrganization?.id ?? null}
               integrated={Boolean(supplier.supplier_type === "integrated" || supplier.linked_organization_id)}
               embeddedInOverlay={true}
+              externalDownloadRequest={sharedLedgerDownloadSignal}
               onRefresh={load}
               onRequestConnection={() => {
                 setIsLinked(true);
@@ -1866,6 +1893,7 @@ const styles = StyleSheet.create({
   th: {
     fontSize: 9,
     fontWeight: "700",
+    fontStyle: "italic",
     color: Theme.textMuted,
     letterSpacing: 0.4,
     textTransform: "uppercase",
@@ -1875,6 +1903,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
     color: Theme.textSecondary,
     fontWeight: "700",
+    fontStyle: "italic",
   },
   thMissionWebDesktop: {
     flex: 1,
@@ -1890,10 +1919,14 @@ const styles = StyleSheet.create({
   },
   headerAmountCol: {
     width: 80,
+    minWidth: 72,
+    flexShrink: 0,
     alignItems: "flex-end",
   },
   amountCol: {
     width: 80,
+    minWidth: 72,
+    flexShrink: 0,
     alignItems: "flex-end",
     justifyContent: "center",
   },
@@ -1924,17 +1957,21 @@ const styles = StyleSheet.create({
   td: {
     fontSize: 10,
     fontWeight: "600",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
   },
   tdMission: { flex: 1.5, minWidth: 0 },
   tdMissionId: {
     fontSize: 11,
     fontWeight: "600",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
   },
   tdRoute: {
     fontSize: 10,
+    fontWeight: "400",
+    fontStyle: "italic",
     color: Theme.textMuted,
     marginTop: 4,
   },
@@ -1948,12 +1985,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Theme.textPrimaryDark,
     fontWeight: "500",
+    fontStyle: "italic",
   },
   tdAmountWebDesktop: {
     width: "100%",
     textAlign: "right" as const,
     fontSize: 11,
     fontWeight: "600",
+    fontStyle: "italic",
   },
   tdSales: { width: 80, textAlign: "right" as const },
   tdRight: { width: 72, textAlign: "right" as const },
@@ -1963,10 +2002,12 @@ const styles = StyleSheet.create({
   emptyRowText: {
     fontSize: 11,
     fontWeight: "600",
+    fontStyle: "italic",
     color: Theme.textMuted,
   },
   cashSection: { marginBottom: 24 },
   sharedSection: { marginBottom: 24 },
+  sharedSectionWeb: { width: "100%", alignSelf: "stretch" },
   sharedCard: {
     backgroundColor: Theme.surface,
     borderWidth: 1,
