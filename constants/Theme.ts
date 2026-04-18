@@ -157,6 +157,8 @@ export const Theme = {
   separatorDark: "rgba(255,255,255,0.1)",
   /** Active tab underline (demo: red) */
   tabUnderline: "#E82127",
+  /** Trips hub: unassigned pill — soft slate wash, black border (Tesla-like, not amber) */
+  tripHubUnassignedPillBg: "rgba(15, 23, 42, 0.06)",
   /** Treasury/Fiscal bottom nav active pill background (light indigo) */
   fiscalTabActiveBg: "#e8eaf6",
 

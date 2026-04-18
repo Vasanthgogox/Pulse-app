@@ -5,9 +5,13 @@
 import Theme from "@/constants/Theme";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { isAggregateTrip } from "@/lib/driverUtils";
-import { formatINR, formatLedgerDate, formatLedgerDateTime } from "@/lib/format";
+import {
+  formatINR,
+  formatLedgerDate,
+  formatLedgerDateTime,
+} from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   LayoutAnimation,
   Modal,
@@ -64,9 +68,32 @@ function FleetManifestRouteArrow() {
   }));
   return (
     <Animated.View style={[animatedStyle, { paddingHorizontal: 4 }]}>
-      <FontAwesome name="long-arrow-right" size={13} color={Theme.primary} />
+      <FontAwesome name="long-arrow-right" size={13} color={Theme.textPrimaryDark} />
     </Animated.View>
   );
+}
+
+/** Soft opacity pulse on hub icons (Tesla-like restraint, no purple). */
+function HubIconPulse({ children }: { children: ReactNode }) {
+  const opacity = useSharedValue(1);
+  useEffect(() => {
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(0.68, {
+          duration: 1200,
+          easing: Easing.inOut(Easing.ease),
+        }),
+        withTiming(1, {
+          duration: 1200,
+          easing: Easing.inOut(Easing.ease),
+        }),
+      ),
+      -1,
+      true,
+    );
+  }, [opacity]);
+  const pulseStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return <Animated.View style={pulseStyle}>{children}</Animated.View>;
 }
 
 /** Ledger cash / table typography parity (`LedgerTransactionListView` tableView*). */
@@ -176,8 +203,80 @@ function sortedTripLedger(entries: LedgerRow[]): LedgerRow[] {
   });
 }
 
+/** Short pickup / schedule label for hub table. */
+function formatTripPickupCell(iso: string | null | undefined): string {
+  if (iso == null || String(iso).trim() === "") return "—";
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    return formatLedgerDate(iso);
+  } catch {
+    return "—";
+  }
+}
+
+/** Distance from trip row (km). */
+function formatTripDistanceKm(
+  raw: string | number | null | undefined,
+): string {
+  if (raw == null || raw === "") return "—";
+  const n =
+    typeof raw === "string"
+      ? parseFloat(String(raw).replace(/,/g, ""))
+      : Number(raw);
+  if (Number.isNaN(n) || n < 0) return "—";
+  const rounded = n >= 100 ? Math.round(n) : Math.round(n * 10) / 10;
+  return `${rounded} km`;
+}
+
+function formatLoadTypeCell(raw: string | null | undefined): string {
+  const s = (raw ?? "").trim();
+  if (!s) return "—";
+  return s
+    .split(/[\s_]+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
+type HubPaymentTone = "paid" | "partial" | "pending" | "neutral";
+
+function hubPaymentTone(status: string | null | undefined): HubPaymentTone {
+  const s = (status ?? "").trim().toLowerCase();
+  if (!s) return "neutral";
+  if (s.includes("partial")) return "partial";
+  if (s.includes("paid") && !s.includes("unpaid")) return "paid";
+  if (
+    s.includes("pending") ||
+    s.includes("unpaid") ||
+    s.includes("due") ||
+    s === "unpaid"
+  ) {
+    return "pending";
+  }
+  return "neutral";
+}
+
+function formatPaymentStatusLabel(
+  status: string | null | undefined,
+  tr: (k: string) => string,
+): string {
+  const raw = (status ?? "").trim();
+  if (!raw) return "—";
+  const s = raw.toLowerCase();
+  if (s === "paid" || s === "fully_paid") return tr("tripsHubPayPaid");
+  if (s === "pending" || s === "unpaid") return tr("tripsHubPayPending");
+  if (s === "partial" || s.includes("partial")) return tr("tripsHubPayPartial");
+  return raw.replace(/_/g, " ").toUpperCase();
+}
+
 export type TripsHubTableColumnId =
   | "party"
+  | "driver"
+  | "vehicle"
+  | "pickupDate"
+  | "distance"
+  | "loadType"
+  | "payment"
   | "billed"
   | "cost"
   | "received"
@@ -188,6 +287,12 @@ export type TripsHubTableColumnId =
 export const DEFAULT_TRIPS_HUB_TABLE_COLUMNS: Record<TripsHubTableColumnId, boolean> =
   {
     party: true,
+    driver: true,
+    vehicle: true,
+    pickupDate: true,
+    distance: false,
+    loadType: false,
+    payment: false,
     billed: true,
     cost: true,
     received: true,
@@ -259,7 +364,7 @@ export function TripsHubTripCard({
   const aging = agingLine(trip, tr);
 
   const missionTone = stageUpper.includes("UNASSIGNED")
-    ? "amber"
+    ? "unassigned"
     : stageUpper.includes("COMPLET") ||
         stageUpper.includes("DELIVER") ||
         stageUpper.includes("DONE")
@@ -271,14 +376,14 @@ export function TripsHubTripCard({
         : "emerald";
 
   const missionPillStyle =
-    missionTone === "amber"
-      ? styles.fleetMissionPillAmber
+    missionTone === "unassigned"
+      ? styles.fleetMissionPillUnassigned
       : missionTone === "rose"
         ? styles.fleetMissionPillRose
         : styles.fleetMissionPillEmerald;
   const missionPillTextStyle =
-    missionTone === "amber"
-      ? styles.fleetMissionPillTextAmber
+    missionTone === "unassigned"
+      ? styles.fleetMissionPillTextUnassigned
       : missionTone === "rose"
         ? styles.fleetMissionPillTextRose
         : styles.fleetMissionPillTextEmerald;
@@ -295,7 +400,9 @@ export function TripsHubTripCard({
         <View style={styles.fleetHead}>
           <View style={styles.fleetHeadLeft}>
             <View style={styles.fleetTruckWrap}>
-              <FontAwesome name="truck" size={18} color={Theme.primary} />
+              <HubIconPulse>
+                <FontAwesome name="truck" size={18} color={Theme.textPrimaryDark} />
+              </HubIconPulse>
             </View>
             <View style={styles.fleetHeadText}>
               <View style={styles.fleetBadgeRow}>
@@ -411,7 +518,9 @@ export function TripsHubTripCard({
         <View style={styles.fleetFooter}>
           <View style={styles.fleetFooterLeft}>
             <View style={styles.fleetTrendWrap}>
-              <FontAwesome name="line-chart" size={12} color={Theme.positive} />
+              <HubIconPulse>
+                <FontAwesome name="line-chart" size={12} color={Theme.teslaRed} />
+              </HubIconPulse>
             </View>
             <View>
               <Text style={styles.fleetRevSnapLabel}>
@@ -453,6 +562,12 @@ function txnAmount(row: LedgerRow): number {
 
 const HUB_COLUMN_ORDER: TripsHubTableColumnId[] = [
   "party",
+  "driver",
+  "vehicle",
+  "pickupDate",
+  "distance",
+  "loadType",
+  "payment",
   "billed",
   "cost",
   "received",
@@ -463,6 +578,12 @@ const HUB_COLUMN_ORDER: TripsHubTableColumnId[] = [
 
 const HUB_COLUMN_LABEL: Record<TripsHubTableColumnId, string> = {
   party: "tripsHubColPartner",
+  driver: "tripsHubColDriver",
+  vehicle: "tripsHubColVehicle",
+  pickupDate: "tripsHubColPickupDate",
+  distance: "tripsHubColDistance",
+  loadType: "tripsHubColLoadType",
+  payment: "tripsHubColPayment",
   billed: "tripsHubColBilledCompare",
   cost: "tripsHubColCost",
   received: "tripsHubColReceived",
@@ -470,6 +591,15 @@ const HUB_COLUMN_LABEL: Record<TripsHubTableColumnId, string> = {
   margin: "tripsHubColMargin",
   ledgerMeta: "tripsHubColLedgerShort",
 };
+
+/** Table header text alignment matches body column alignment. */
+const HUB_TH_LEFT = new Set<TripsHubTableColumnId>([
+  "party",
+  "driver",
+  "vehicle",
+  "pickupDate",
+  "loadType",
+]);
 
 export function TripsHubTableView({
   trips,
@@ -530,7 +660,13 @@ export function TripsHubTableView({
         </View>
         {HUB_COLUMN_ORDER.filter((id) => visibleCols[id]).map((id) => (
           <View key={id} style={[styles.auditThCell, HUB_COL_STYLES[id]]}>
-            <Text style={[styles.auditTh, styles.auditThCenter]} numberOfLines={2}>
+            <Text
+              style={[
+                styles.auditTh,
+                HUB_TH_LEFT.has(id) ? styles.auditThLeft : styles.auditThCenter,
+              ]}
+              numberOfLines={2}
+            >
               {tr(HUB_COLUMN_LABEL[id])}
             </Text>
           </View>
@@ -570,7 +706,7 @@ export function TripsHubTableView({
           : "—";
 
         const statusPillStyle = isUnassigned
-          ? styles.tableStatusPillAmber
+          ? styles.tableStatusPillUnassigned
           : isDelayed
             ? styles.tableStatusPillRose
             : styles.tableStatusPillEmerald;
@@ -598,11 +734,15 @@ export function TripsHubTableView({
                       : styles.auditTruckWrapOk,
                   ]}
                 >
-                  <FontAwesome
-                    name="truck"
-                    size={18}
-                    color={hasSalesConflict ? Theme.teslaRed : Theme.aggregatePillText}
-                  />
+                  <HubIconPulse>
+                    <FontAwesome
+                      name="truck"
+                      size={18}
+                      color={
+                        hasSalesConflict ? Theme.teslaRed : Theme.textPrimaryDark
+                      }
+                    />
+                  </HubIconPulse>
                 </View>
                 <View style={styles.auditIdentityText}>
                   <Text style={styles.auditTripId} numberOfLines={1}>
@@ -625,7 +765,7 @@ export function TripsHubTableView({
                   <Text
                     style={[
                       styles.tableStatusPillText,
-                      isUnassigned && { color: Theme.warning },
+                      isUnassigned && styles.tableStatusPillTextUnassigned,
                       isDelayed &&
                         !isUnassigned && { color: Theme.teslaRed },
                       !isUnassigned &&
@@ -658,6 +798,106 @@ export function TripsHubTableView({
                       <Text style={styles.auditPartyLine2} numberOfLines={1}>
                         {t.supplier_name?.trim() || "—"}
                       </Text>
+                    </View>
+                  );
+                }
+                if (id === "driver") {
+                  const name = (t.driver_display_name ?? "").trim();
+                  return (
+                    <View
+                      key={id}
+                      style={[styles.auditTd, styles.auditTdHubStack, HUB_COL_STYLES[id]]}
+                    >
+                      <Text style={styles.hubStackValue} numberOfLines={2}>
+                        {name || "—"}
+                      </Text>
+                    </View>
+                  );
+                }
+                if (id === "vehicle") {
+                  const reg = (t.vehicle_display_number ?? "").trim();
+                  return (
+                    <View
+                      key={id}
+                      style={[styles.auditTd, styles.auditTdHubStack, HUB_COL_STYLES[id]]}
+                    >
+                      <Text style={styles.hubStackValueMono} numberOfLines={1}>
+                        {reg || "—"}
+                      </Text>
+                    </View>
+                  );
+                }
+                if (id === "pickupDate") {
+                  return (
+                    <View
+                      key={id}
+                      style={[styles.auditTd, styles.auditTdHubStack, HUB_COL_STYLES[id]]}
+                    >
+                      <Text style={styles.hubStackValue} numberOfLines={2}>
+                        {formatTripPickupCell(t.pickup_date)}
+                      </Text>
+                      {t.started_at ? (
+                        <Text style={styles.hubStackSub} numberOfLines={1}>
+                          {tr("tripsHubStartedShort")}:{" "}
+                          {formatTripPickupCell(t.started_at)}
+                        </Text>
+                      ) : null}
+                    </View>
+                  );
+                }
+                if (id === "distance") {
+                  return (
+                    <View
+                      key={id}
+                      style={[styles.auditTd, styles.auditTdHubCenter, HUB_COL_STYLES[id]]}
+                    >
+                      <Text style={styles.hubMetricSingle} numberOfLines={1}>
+                        {formatTripDistanceKm(t.distance)}
+                      </Text>
+                    </View>
+                  );
+                }
+                if (id === "loadType") {
+                  return (
+                    <View
+                      key={id}
+                      style={[styles.auditTd, styles.auditTdHubStack, HUB_COL_STYLES[id]]}
+                    >
+                      <Text style={styles.hubStackValue} numberOfLines={2}>
+                        {formatLoadTypeCell(t.load_type)}
+                      </Text>
+                    </View>
+                  );
+                }
+                if (id === "payment") {
+                  const tone = hubPaymentTone(t.payment_status);
+                  return (
+                    <View
+                      key={id}
+                      style={[styles.auditTd, styles.auditTdHubCenter, HUB_COL_STYLES[id]]}
+                    >
+                      <View
+                        style={[
+                          styles.hubPayPill,
+                          tone === "paid" && styles.hubPayPillPaid,
+                          tone === "partial" && styles.hubPayPillPartial,
+                          tone === "pending" && styles.hubPayPillPending,
+                          tone === "neutral" && styles.hubPayPillNeutral,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.hubPayPillText,
+                            tone === "paid" && styles.hubPayPillTextPaid,
+                            tone === "partial" && styles.hubPayPillTextPartial,
+                            tone === "pending" && styles.hubPayPillTextPending,
+                            tone === "neutral" && styles.hubPayPillTextNeutral,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {formatPaymentStatusLabel(t.payment_status, tr)}
+                        </Text>
+                      </View>
                     </View>
                   );
                 }
@@ -763,30 +1003,69 @@ export function TripsHubTableView({
               })}
 
               <View style={[styles.auditTd, styles.auditColAudit]}>
-                <View
-                  style={[
-                    styles.auditOrb,
-                    hasSalesConflict ? styles.auditOrbWarn : styles.auditOrbOk,
-                  ]}
-                >
-                  <FontAwesome
-                    name={hasSalesConflict ? "bolt" : "check"}
-                    size={14}
-                    color={hasSalesConflict ? Theme.textOnPrimary : Theme.darkGreen}
-                  />
+                <View style={styles.auditCellIconRow}>
+                  <View
+                    accessible
+                    accessibilityLabel={
+                      hasSalesConflict
+                        ? tr("tripsHubFixGap")
+                        : tr("tripsHubSafeAudit")
+                    }
+                    style={[
+                      styles.auditOrb,
+                      hasSalesConflict ? styles.auditOrbWarn : styles.auditOrbOk,
+                    ]}
+                  >
+                    <HubIconPulse>
+                      <FontAwesome
+                        name={hasSalesConflict ? "bolt" : "check"}
+                        size={15}
+                        color={Theme.textOnDark}
+                      />
+                    </HubIconPulse>
+                  </View>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.auditIconAction,
+                      expanded
+                        ? styles.auditIconActionTxnExpanded
+                        : styles.auditIconActionTxn,
+                      pressed && styles.auditCtaPressed,
+                    ]}
+                    onPress={() => toggleExpanded(t.id)}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded }}
+                    accessibilityLabel={
+                      expanded
+                        ? tr("tripsHubHideTransactions")
+                        : tr("tripsHubShowTransactions")
+                    }
+                    hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
+                  >
+                    <FontAwesome
+                      name="list-ul"
+                      size={14}
+                      color={Theme.textOnDark}
+                    />
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.auditIconAction,
+                      styles.auditIconActionTrip,
+                      pressed && styles.auditCtaPressed,
+                    ]}
+                    onPress={() => onOpenTripDetails(t)}
+                    accessibilityRole="button"
+                    accessibilityLabel={tr("tripsHubAuditViewTripDetail")}
+                    hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
+                  >
+                    <FontAwesome
+                      name="external-link"
+                      size={13}
+                      color={Theme.textPrimaryDark}
+                    />
+                  </Pressable>
                 </View>
-                <Text
-                  style={[
-                    styles.auditOrbLabel,
-                    hasSalesConflict
-                      ? styles.auditOrbLabelWarn
-                      : styles.auditOrbLabelOk,
-                  ]}
-                >
-                  {hasSalesConflict
-                    ? tr("tripsHubFixGap")
-                    : tr("tripsHubSafeAudit")}
-                </Text>
               </View>
             </Pressable>
 
@@ -814,18 +1093,6 @@ export function TripsHubTableView({
                     );
                   })
                 )}
-                <TouchableOpacity
-                  onPress={() => onOpenTripDetails(t)}
-                  style={styles.viewTripBtn}
-                  activeOpacity={0.85}
-                  accessibilityRole="button"
-                  accessibilityLabel={tr("tripsHubViewTripDetails")}
-                >
-                  <Text style={styles.viewTripBtnText}>
-                    {tr("tripsHubViewTripDetails")}
-                  </Text>
-                  <FontAwesome name="arrow-right" size={10} color={Theme.primary} />
-                </TouchableOpacity>
               </View>
             ) : null}
           </View>
@@ -890,10 +1157,10 @@ export function TripsHubTableView({
                     onValueChange={(v) => setCol(id, v)}
                     trackColor={{
                       false: Theme.borderMedium,
-                      true: Theme.primaryLight,
+                      true: Theme.textPrimaryDark,
                     }}
                     thumbColor={
-                      visibleCols[id] ? Theme.primary : Theme.surface
+                      visibleCols[id] ? Theme.screenBackground : Theme.surface
                     }
                   />
                 </View>
@@ -937,8 +1204,8 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     borderRadius: 100,
-    backgroundColor: Theme.primary,
-    opacity: 0.07,
+    backgroundColor: Theme.textPrimaryDark,
+    opacity: 0.04,
   },
   fleetHead: {
     flexDirection: "row",
@@ -964,14 +1231,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
-    backgroundColor: Theme.aggregatePillBg,
+    backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
-    borderColor: Theme.aggregatePillBorder,
+    borderColor: Theme.borderMedium,
   },
   fleetBadgeBlueText: {
     fontSize: FS_CAPTION,
-    fontWeight: "700",
-    color: Theme.aggregatePillText,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
@@ -979,23 +1246,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.screenBackground,
     borderWidth: 1,
-    borderColor: Theme.borderMedium,
+    borderColor: Theme.borderLight,
   },
   fleetBadgeVioletText: {
     fontSize: FS_CAPTION,
-    fontWeight: "700",
-    color: Theme.primary,
+    fontWeight: "600",
+    color: Theme.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
   fleetTripId: {
     fontSize: FS_AMOUNT,
-    fontWeight: "300",
-    fontStyle: "italic",
+    fontWeight: "600",
+    fontStyle: "normal",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.4,
+    letterSpacing: 0.15,
     textTransform: "uppercase",
   },
   fleetHeadRight: { alignItems: "flex-end", gap: 4 },
@@ -1005,9 +1272,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
   },
-  fleetMissionPillAmber: {
-    backgroundColor: Theme.warningMuted,
-    borderColor: Theme.warning,
+  fleetMissionPillUnassigned: {
+    backgroundColor: Theme.tripHubUnassignedPillBg,
+    borderColor: Theme.textPrimaryDark,
   },
   fleetMissionPillRose: {
     backgroundColor: Theme.warningMuted,
@@ -1023,7 +1290,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     textTransform: "uppercase",
   },
-  fleetMissionPillTextAmber: { color: Theme.warning },
+  fleetMissionPillTextUnassigned: {
+    color: Theme.textPrimaryDark,
+    fontWeight: "600",
+    letterSpacing: 0.55,
+  },
   fleetMissionPillTextRose: { color: Theme.teslaRed },
   fleetMissionPillTextEmerald: { color: Theme.darkGreen },
   fleetAging: {
@@ -1084,8 +1355,8 @@ const styles = StyleSheet.create({
   },
   fleetProgHeadIndigo: {
     fontSize: FS_CAPTION,
-    fontWeight: "700",
-    color: Theme.primary,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
     letterSpacing: 0.6,
     textTransform: "uppercase",
   },
@@ -1098,7 +1369,7 @@ const styles = StyleSheet.create({
   fleetProgFill: {
     height: "100%",
     borderRadius: 999,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.textPrimaryDark,
   },
   fleetFooter: {
     flexDirection: "row",
@@ -1132,10 +1403,10 @@ const styles = StyleSheet.create({
   fleetRevSnapVal: {
     marginTop: 0,
     fontSize: FS_AMOUNT,
-    fontWeight: "300",
-    fontStyle: "italic",
+    fontWeight: "600",
+    fontStyle: "normal",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.35,
+    letterSpacing: 0,
   },
   fleetPartyBlock: {
     backgroundColor: Theme.screenBackground,
@@ -1213,7 +1484,7 @@ const styles = StyleSheet.create({
     marginTop: 1,
     fontSize: FS_CAPTION,
     fontWeight: "600",
-    color: Theme.primary,
+    color: Theme.textSecondary,
   },
   fleetMetricMeta: {
     marginTop: 2,
@@ -1265,9 +1536,9 @@ const styles = StyleSheet.create({
   },
   auditHeaderRow: {
     flexDirection: "row",
-    alignItems: "stretch",
+    alignItems: "center",
     backgroundColor: Theme.textPrimaryDark,
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: 12,
     gap: 8,
   },
@@ -1279,6 +1550,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   auditThCenter: { textAlign: "center", width: "100%" },
+  auditThLeft: { textAlign: "left", width: "100%", alignSelf: "stretch" },
   auditThCell: {
     minWidth: 0,
     justifyContent: "center",
@@ -1293,8 +1565,8 @@ const styles = StyleSheet.create({
     flex: 0.85,
     minWidth: 128,
     alignItems: "center",
-    justifyContent: "flex-start",
-    gap: 8,
+    justifyContent: "center",
+    gap: 6,
     borderLeftWidth: 1,
     borderLeftColor: Theme.borderOnDark,
     paddingLeft: 8,
@@ -1306,6 +1578,124 @@ const styles = StyleSheet.create({
     borderLeftColor: Theme.borderOnDark,
     paddingLeft: 8,
   },
+  auditColDriver: {
+    flex: 0.72,
+    minWidth: 100,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderOnDark,
+    paddingLeft: 8,
+  },
+  auditColVehicle: {
+    flex: 0.55,
+    minWidth: 86,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderOnDark,
+    paddingLeft: 8,
+  },
+  auditColPickupDate: {
+    flex: 0.58,
+    minWidth: 88,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderOnDark,
+    paddingLeft: 8,
+  },
+  auditColDistance: {
+    flex: 0.42,
+    minWidth: 72,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderOnDark,
+    paddingLeft: 8,
+  },
+  auditColLoadType: {
+    flex: 0.58,
+    minWidth: 92,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderOnDark,
+    paddingLeft: 8,
+  },
+  auditColPayment: {
+    flex: 0.62,
+    minWidth: 96,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderOnDark,
+    paddingLeft: 8,
+  },
+  auditTdHubStack: {
+    alignItems: "stretch",
+    justifyContent: "center",
+    paddingTop: 0,
+    minWidth: 0,
+    width: "100%",
+  },
+  auditTdHubCenter: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 0,
+    minWidth: 0,
+    width: "100%",
+  },
+  hubStackValue: {
+    fontSize: FS_LABEL,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    width: "100%",
+  },
+  hubStackValueMono: {
+    fontSize: FS_LABEL,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.5,
+    width: "100%",
+  },
+  hubStackSub: {
+    marginTop: 4,
+    fontSize: FS_AMOUNT_LABEL,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    width: "100%",
+  },
+  hubMetricSingle: {
+    fontSize: FS_BODY,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    textAlign: "center",
+    width: "100%",
+  },
+  hubPayPill: {
+    alignSelf: "center",
+    maxWidth: "100%",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  hubPayPillPaid: {
+    backgroundColor: Theme.positiveMuted,
+    borderColor: Theme.darkGreen,
+  },
+  hubPayPillPartial: {
+    backgroundColor: Theme.tripHubUnassignedPillBg,
+    borderColor: Theme.textPrimaryDark,
+  },
+  hubPayPillPending: {
+    backgroundColor: Theme.negativeMuted,
+    borderColor: Theme.teslaRed,
+  },
+  hubPayPillNeutral: {
+    backgroundColor: Theme.surfaceGray,
+    borderColor: Theme.borderMedium,
+  },
+  hubPayPillText: {
+    fontSize: FS_AMOUNT_LABEL,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
+    textAlign: "center",
+  },
+  hubPayPillTextPaid: { color: Theme.darkGreen },
+  hubPayPillTextPartial: { color: Theme.textPrimaryDark },
+  hubPayPillTextPending: { color: Theme.teslaRed },
+  hubPayPillTextNeutral: { color: Theme.textSecondary },
   auditColBilled: {
     flex: 1,
     minWidth: 132,
@@ -1349,15 +1739,45 @@ const styles = StyleSheet.create({
     paddingLeft: 8,
   },
   auditColAudit: {
-    flex: 0.55,
-    minWidth: 88,
+    flex: 0.58,
+    minWidth: 120,
     flexDirection: "column",
     alignItems: "center",
-    justifyContent: "flex-start",
-    gap: 6,
+    justifyContent: "center",
     borderLeftWidth: 1,
     borderLeftColor: Theme.borderOnDark,
     paddingLeft: 8,
+    paddingRight: 6,
+    paddingVertical: 4,
+  },
+  auditCellIconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    width: "100%",
+    paddingVertical: 2,
+  },
+  auditIconAction: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  auditIconActionTxn: {
+    backgroundColor: Theme.teslaRed,
+    borderColor: Theme.teslaRed,
+  },
+  auditIconActionTxnExpanded: {
+    backgroundColor: Theme.textPrimaryDark,
+    borderColor: Theme.textPrimaryDark,
+  },
+  auditIconActionTrip: {
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1.5,
+    borderColor: Theme.textPrimaryDark,
   },
   auditRowGroup: {
     borderBottomWidth: 1,
@@ -1366,8 +1786,8 @@ const styles = StyleSheet.create({
   auditTr: {
     position: "relative" as const,
     flexDirection: "row",
-    alignItems: "flex-start",
-    paddingVertical: 12,
+    alignItems: "center",
+    paddingVertical: 8,
     paddingHorizontal: 12,
     gap: 8,
     overflow: "hidden",
@@ -1376,25 +1796,25 @@ const styles = StyleSheet.create({
   mismatchStripe: {
     position: "absolute",
     left: 0,
-    top: 12,
-    bottom: 12,
+    top: 6,
+    bottom: 6,
     width: 4,
     borderTopRightRadius: 4,
     borderBottomRightRadius: 4,
     backgroundColor: Theme.teslaRed,
   },
   auditTd: {
-    justifyContent: "flex-start",
+    justifyContent: "center",
     alignItems: "flex-start",
   },
   auditTdCenter: {
     alignItems: "center",
-    justifyContent: "flex-start",
+    justifyContent: "center",
   },
   auditTdParty: {
     alignItems: "flex-start",
-    justifyContent: "flex-start",
-    paddingTop: 2,
+    justifyContent: "center",
+    paddingTop: 0,
   },
   auditPartyLine1: {
     fontSize: FS_LABEL,
@@ -1430,8 +1850,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   auditTruckWrapOk: {
-    backgroundColor: Theme.aggregatePillBg,
-    borderColor: Theme.aggregatePillBorder,
+    backgroundColor: Theme.surfaceGray,
+    borderColor: Theme.borderMedium,
   },
   auditTruckWrapWarn: {
     backgroundColor: Theme.negativeMuted,
@@ -1460,9 +1880,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
   },
-  tableStatusPillAmber: {
-    backgroundColor: Theme.warningMuted,
-    borderColor: Theme.warning,
+  tableStatusPillUnassigned: {
+    backgroundColor: Theme.tripHubUnassignedPillBg,
+    borderColor: Theme.textPrimaryDark,
   },
   tableStatusPillRose: {
     backgroundColor: Theme.warningMuted,
@@ -1479,19 +1899,24 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     textAlign: "center",
   },
+  tableStatusPillTextUnassigned: {
+    color: Theme.textPrimaryDark,
+    fontWeight: "600",
+    letterSpacing: 0.45,
+  },
   tableBadgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 4, justifyContent: "center" },
   tableBadgeBlue: {
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
-    backgroundColor: Theme.aggregatePillBg,
+    backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
-    borderColor: Theme.aggregatePillBorder,
+    borderColor: Theme.borderMedium,
   },
   tableBadgeBlueText: {
     fontSize: 6,
-    fontWeight: "700",
-    color: Theme.aggregatePillText,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
     textTransform: "uppercase",
     letterSpacing: 0.3,
   },
@@ -1499,23 +1924,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.screenBackground,
     borderWidth: 1,
-    borderColor: Theme.borderMedium,
+    borderColor: Theme.borderLight,
   },
   tableBadgeVioletText: {
     fontSize: 6,
-    fontWeight: "700",
-    color: Theme.primary,
+    fontWeight: "600",
+    color: Theme.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.3,
   },
   auditBilledCell: {
-    alignSelf: "stretch",
-    borderRadius: 12,
-    paddingVertical: 6,
+    alignSelf: "center",
+    borderRadius: 10,
+    paddingVertical: 4,
     paddingHorizontal: 8,
     backgroundColor: Theme.surface,
+    maxWidth: "100%",
   },
   auditBilledCellWarn: { backgroundColor: Theme.warningMuted },
   auditYouLine: {
@@ -1527,14 +1953,16 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   auditThemPill: {
-    marginTop: 6,
+    marginTop: 4,
     alignSelf: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     borderRadius: 8,
   },
   auditThemPillOk: {
-    backgroundColor: Theme.aggregatePillBg,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
   },
   auditThemPillWarn: {
     backgroundColor: Theme.warningMuted,
@@ -1543,9 +1971,9 @@ const styles = StyleSheet.create({
   },
   auditThemPillText: {
     fontSize: FS_AMOUNT_LABEL,
-    fontWeight: "700",
-    fontStyle: "italic",
-    color: Theme.aggregatePillText,
+    fontWeight: "600",
+    fontStyle: "normal",
+    color: Theme.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
@@ -1570,30 +1998,25 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   auditOrb: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
   },
   auditOrbOk: {
-    backgroundColor: Theme.positiveMuted,
-    borderColor: Theme.darkGreen,
+    backgroundColor: Theme.textPrimaryDark,
+    borderColor: Theme.textPrimaryDark,
   },
   auditOrbWarn: {
     backgroundColor: Theme.teslaRed,
     borderColor: Theme.teslaRed,
   },
-  auditOrbLabel: {
-    fontSize: FS_AMOUNT_LABEL,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-    textAlign: "center",
+  auditCtaPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.98 }],
   },
-  auditOrbLabelOk: { color: Theme.textSecondary },
-  auditOrbLabelWarn: { color: Theme.teslaRed, fontStyle: "italic" },
   auditFooter: {
     flexDirection: "row",
     alignItems: "center",
@@ -1691,27 +2114,6 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     letterSpacing: -0.35,
   },
-  viewTripBtn: {
-    marginTop: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    alignSelf: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
-    backgroundColor: Theme.screenBackground,
-  },
-  viewTripBtnText: {
-    fontSize: FS_CAPTION,
-    fontWeight: "700",
-    color: Theme.primary,
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-  },
   colPickerBackdrop: {
     flex: 1,
     backgroundColor: "rgba(15,23,42,0.45)",
@@ -1775,6 +2177,12 @@ const styles = StyleSheet.create({
 
 const HUB_COL_STYLES: Record<TripsHubTableColumnId, ViewStyle> = {
   party: styles.auditColParty,
+  driver: styles.auditColDriver,
+  vehicle: styles.auditColVehicle,
+  pickupDate: styles.auditColPickupDate,
+  distance: styles.auditColDistance,
+  loadType: styles.auditColLoadType,
+  payment: styles.auditColPayment,
   billed: styles.auditColBilled,
   cost: styles.auditColCost,
   received: styles.auditColReceived,
