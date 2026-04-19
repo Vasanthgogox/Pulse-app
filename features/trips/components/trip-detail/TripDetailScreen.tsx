@@ -1,82 +1,80 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { SemanticAddIcon } from "@/components/SemanticAddIcon";
 import { TeslaHeader } from "@/components/TeslaHeader";
+import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useOrganization } from "@/contexts/OrganizationContext";
 import { getDriverById, getDriverProfileDisplay } from "@/features/drivers/services/drivers.service";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
+import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
+import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
+import { averageScore, getRatingsForTrip } from "@/features/ratings/services/ratings.service";
 import {
   getSupplierById,
   getSupplierDetails,
 } from "@/features/suppliers/services/suppliers.service";
-import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
 import { getVehicleDocumentViewUrl } from "@/features/vehicles/services/vehicleDocuments.service";
+import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
 import type { VehicleDocuments } from "@/features/vehicles/utils/vehicleDocuments.util";
-import { DOCUMENT_LABELS, DOCUMENT_EXPIRY_ORDER } from "@/features/vehicles/utils/vehicleDocuments.util";
-import { useOrganization } from "@/contexts/OrganizationContext";
-import { canAssignTrip, getCapabilitiesFromProfile } from "@/lib/capabilities";
+import { DOCUMENT_EXPIRY_ORDER, DOCUMENT_LABELS } from "@/features/vehicles/utils/vehicleDocuments.util";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
+import { canAssignTrip, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import { useShipperDisplayNamesQuery, useTransactionsQuery, useTripSubcontractsQuery } from "@/lib/queries";
+import * as driverLocationService from "@/services/driverLocationService";
+import * as tripDocumentsService from "@/services/tripDocumentsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
+import type * as ExpoLocationTypes from "expo-location";
 import { useRouter } from "expo-router";
 import { ReceiptText } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Animated,
-    Dimensions,
-    Image,
-    Modal,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  Modal,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
 import { useRealtimeTrip } from "../../hooks/useRealtimeTrips";
+import {
+  clearInitialTripForDetail,
+  getInitialTripForDetail,
+} from "../../initialTripForDetail";
 import type { TripAssignmentAuditRow } from "../../services/trip-assignment-audit.service";
 import { getTripAssignmentAuditHistory } from "../../services/trip-assignment-audit.service";
 import type { TripAdjustment } from "../../services/tripAdjustments";
-import * as tripDocumentsService from "@/services/tripDocumentsService";
-import * as driverLocationService from "@/services/driverLocationService";
 import {
-    addTripAdjustment,
-    getTripAdjustments,
-    removeTripAdjustment,
+  addTripAdjustment,
+  getTripAdjustments,
+  removeTripAdjustment,
 } from "../../services/tripAdjustments";
 import { getTripOtpForDisplay } from "../../services/tripOtp.service";
 import {
-    getTripById,
-    getTripDisplayNumber,
-    getTripsWhereOrgIsSupplier,
-    isTripCompleted,
-    type TripRow,
+  getTripById,
+  getTripDisplayNumber,
+  getTripsWhereOrgIsSupplier,
+  isTripCompleted,
+  type TripRow,
 } from "../../services/trips.service";
 import {
-    clearInitialTripForDetail,
-    getInitialTripForDetail,
-} from "../../initialTripForDetail";
-import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
-import { averageScore, getRatingsForTrip } from "@/features/ratings/services/ratings.service";
-import {
-    TripAssignmentBlock,
-    type AssignmentSource,
+  type AssignmentSource
 } from "../TripAssignmentBlock";
+import { TrackingMapBlock, VehicleTrackingCard } from "./TrackingMapBlock";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import { TripDetailFinanceView, type TripDocItem } from "./TripDetailFinanceView";
-import { TrackingMapBlock, VehicleTrackingCard } from "./TrackingMapBlock";
-import { ThemedAlertModal } from "@/components/ThemedAlertModal";
-import type * as ExpoLocationTypes from "expo-location";
 
 let ExpoLocationModule: typeof ExpoLocationTypes | null = null;
 
@@ -867,7 +865,7 @@ export default function TripDetailScreen({
       const res = await getDriverById(orgId, id);
       return {
         id,
-        name: res.driver ? (res.driver.name || res.driver.phone || "").trim() : "",
+        name: res.driver ? res.driver.name || res.driver.phone || id : id,
       };
     });
     const vehiclePromises = Array.from(vehicleIds).map(async (id) => {
@@ -884,9 +882,7 @@ export default function TripDetailScreen({
         if (cancelled) return;
         const drivers: Record<string, string> = {};
         const vehicles: Record<string, string> = {};
-        for (const r of driverResults) {
-          if (r.name) drivers[r.id] = r.name;
-        }
+        for (const r of driverResults) drivers[r.id] = r.name;
         for (const r of vehicleResults) vehicles[r.id] = r.label;
         setAssignmentDriverNames(drivers);
         setAssignmentVehicleLabels(vehicles);
@@ -2173,11 +2169,11 @@ export default function TripDetailScreen({
                           const isFallback = row.id === "fallback";
                           const driverPrev =
                             !isFallback && row.driver_id_prev
-                              ? (assignmentDriverNames[row.driver_id_prev] ?? null)
+                              ? (assignmentDriverNames[row.driver_id_prev] ?? row.driver_id_prev)
                               : null;
                           const driverNew = row.driver_id_new
                             ? (assignmentDriverNames[row.driver_id_new] ??
-                               (isFallback ? driverName ?? null : null))
+                               (isFallback ? driverName ?? null : row.driver_id_new))
                             : null;
                           const vehiclePrev =
                             !isFallback && row.vehicle_id_prev
