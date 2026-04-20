@@ -482,6 +482,7 @@ export function LoadCenterView({
       const route =
         `${(load.pickup_area || "").toLowerCase()} ${(load.drop_location || "").toLowerCase()}`.trim();
       const indentId = (getIndentDisplayNumber(load) || "").toLowerCase();
+      const tripId = (load.trip_number || "").toLowerCase();
       const client = (load.client_name || "").toLowerCase();
       const creator = (
         (load as { creator_organization_name?: string })
@@ -490,6 +491,7 @@ export function LoadCenterView({
       return (
         route.includes(trimmed) ||
         indentId.includes(trimmed) ||
+        tripId.includes(trimmed) ||
         client.includes(trimmed) ||
         creator.includes(trimmed)
       );
@@ -1280,7 +1282,10 @@ export function LoadCenterView({
               </Text>
             </View>
           </View>
-          <Text style={styles.awardedId}>{getIndentDisplayNumber(load)}</Text>
+          <Text style={styles.awardedId}>
+            {getIndentDisplayNumber(load)}
+            {load.trip_number ? ` · ${load.trip_number}` : ""}
+          </Text>
         </View>
         <Text style={styles.loadCardRouteGet} numberOfLines={2}>
           {(load.pickup_area || "—").toUpperCase()} TO{" "}

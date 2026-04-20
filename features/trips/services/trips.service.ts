@@ -4,7 +4,7 @@
 import {
     DEFAULT_PAGE_SIZE,
     DRIVER_TRIPS_PAGE_SIZE,
-    type PageOpts
+    type PageOpts,
 } from "@/lib/pagination";
 import { supabase } from "@/lib/supabase";
 
@@ -58,12 +58,17 @@ export interface TripRow {
   updated_at: string;
   /** Trip creator (auth.uid) when available. May be null for legacy rows. */
   created_by?: string | null;
+  /** Sequential ID owner (auth.uid). Next TRP001 is per this user. */
+  owner_user_id?: string | null;
+  /** User who created this row. */
+  created_by_user_id?: string | null;
   /** Optimistic revision for status/progress updates (monotonic). */
   status_revision?: number | null;
   /** Last actor who advanced status (auth.uid). */
   status_updated_by?: string | null;
   /** Last actor role who advanced status. */
   status_updated_role?: "driver" | "creator" | "system" | null;
+  indent_number?: string | null;
 }
 
 export async function getTripsByOrganization(
@@ -72,9 +77,16 @@ export async function getTripsByOrganization(
 ): Promise<{ error: Error | null; trips: TripRow[]; hasMore?: boolean }> {
   const q = supabase()
     .from("trips")
-    .select("*")
+    .select("*, indents(indent_number)")
     .eq("organization_id", orgId)
     .order("created_at", { ascending: false });
+
+  const processData = (data: any[] | null) => {
+    return (data ?? []).map((row: any) => ({
+      ...row,
+      indent_number: row.indents?.indent_number ?? null,
+    })) as TripRow[];
+  };
 
   if (opts != null) {
     const limit = opts.limit ?? DEFAULT_PAGE_SIZE;
@@ -83,15 +95,15 @@ export async function getTripsByOrganization(
     const to = offset + limit;
     const { data, error } = await q.range(from, to);
     if (error) return { error: new Error(error.message), trips: [] };
-    const raw = (data ?? []) as TripRow[];
-    const hasMore = raw.length > limit;
-    const trips = hasMore ? raw.slice(0, limit) : raw;
-    return { error: null, trips, hasMore };
+    const trips = processData(data);
+    const hasMore = trips.length > limit;
+    const resultTrips = hasMore ? trips.slice(0, limit) : trips;
+    return { error: null, trips: resultTrips, hasMore };
   }
 
   const { data, error } = await q;
   if (error) return { error: new Error(error.message), trips: [] };
-  return { error: null, trips: (data ?? []) as TripRow[] };
+  return { error: null, trips: processData(data) };
 }
 
 /**
@@ -135,7 +147,9 @@ export async function getTripsWhereOrgIsSupplier(orgId: string): Promise<{
  * For Trips Control when org is the supplier: map trip_id -> shipper (trip owner) display name.
  * So the supplier sees their client (e.g. Mukunt) as "Client", not the end customer (Mukunt's client).
  */
-export async function getShipperDisplayNamesForSupplierTrips(orgId: string): Promise<{
+export async function getShipperDisplayNamesForSupplierTrips(
+  orgId: string,
+): Promise<{
   error: Error | null;
   shipperNameByTripId: Record<string, string>;
 }> {
@@ -143,11 +157,17 @@ export async function getShipperDisplayNamesForSupplierTrips(orgId: string): Pro
     "get_shipper_display_names_for_supplier_trips",
     { p_org_id: orgId },
   );
-  if (error) return { error: new Error(error.message), shipperNameByTripId: {} };
-  const rows = (data ?? []) as { trip_id: string; shipper_display_name: string | null }[];
+  if (error)
+    return { error: new Error(error.message), shipperNameByTripId: {} };
+  const rows = (data ?? []) as {
+    trip_id: string;
+    shipper_display_name: string | null;
+  }[];
   const shipperNameByTripId: Record<string, string> = {};
   for (const r of rows) {
-    if (r?.trip_id) shipperNameByTripId[r.trip_id] = (r.shipper_display_name ?? "").trim() || "Client";
+    if (r?.trip_id)
+      shipperNameByTripId[r.trip_id] =
+        (r.shipper_display_name ?? "").trim() || "Client";
   }
   return { error: null, shipperNameByTripId };
 }
@@ -162,11 +182,18 @@ export async function getTripById(
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
   const { data, error } = await supabase()
     .from("trips")
-    .select("*")
+    .select("*, indents(indent_number)")
     .eq("id", tripId)
     .maybeSingle();
   if (error) return { error: new Error(error.message), trip: null };
-  return { error: null, trip: data as TripRow | null };
+  const raw = data as any;
+  const trip: TripRow | null = raw
+    ? {
+        ...raw,
+        indent_number: raw.indents?.indent_number ?? null,
+      }
+    : null;
+  return { error: null, trip };
 }
 
 /**
@@ -263,9 +290,18 @@ export interface CreateTripData {
   vehicle_id?: string | null;
   /** Ad-hoc vehicle number for aggregate trips (when vehicle_id is null). */
   vehicle_display_number?: string | null;
+  /** Sequential ID owner (auth.uid). Next TRP001 is per this user. */
+  owner_user_id?: string | null;
+  /** User who created this row. */
+  created_by_user_id?: string | null;
 }
 
-const ONGOING_TRIP_TERMINAL_STATUSES = ["completed", "cancelled", "done", "delivered"] as const;
+const ONGOING_TRIP_TERMINAL_STATUSES = [
+  "completed",
+  "cancelled",
+  "done",
+  "delivered",
+] as const;
 
 async function getDriverOngoingTrip(
   driverId: string,
@@ -288,7 +324,10 @@ async function getDriverOngoingTrip(
   if (error) return { error: new Error(error.message), trip: null };
   return {
     error: null,
-    trip: (data ?? null) as Pick<TripRow, "id" | "trip_number" | "display_trip_id"> | null,
+    trip: (data ?? null) as Pick<
+      TripRow,
+      "id" | "trip_number" | "display_trip_id"
+    > | null,
   };
 }
 
@@ -345,7 +384,9 @@ export async function getDriverAvailabilityByPhone(
     };
   }
 
-  const match = ((orgDrivers ?? []) as { id: string; phone: string | null }[]).find((d) => {
+  const match = (
+    (orgDrivers ?? []) as { id: string; phone: string | null }[]
+  ).find((d) => {
     const p = (d.phone ?? "").replace(/\s+/g, "");
     if (!p) return false;
     if (p === normalized) return true;
@@ -395,9 +436,8 @@ export async function createTrip(
   data: CreateTripData,
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
   if (data.driver_id != null) {
-    const { error: conflictCheckError, trip: ongoingTrip } = await getDriverOngoingTrip(
-      data.driver_id,
-    );
+    const { error: conflictCheckError, trip: ongoingTrip } =
+      await getDriverOngoingTrip(data.driver_id);
     if (conflictCheckError) return { error: conflictCheckError, trip: null };
     if (ongoingTrip != null) {
       return {
@@ -413,16 +453,34 @@ export async function createTrip(
   const supplierRate = Number(data.supplier_rate) || 0;
   const insertData = {
     organization_id: orgId,
+    owner_user_id: data.owner_user_id ?? null,
+    created_by_user_id: data.created_by_user_id ?? null,
     trip_number: null as string | null,
     source: "manual",
     pickup_area: (data.pickup_area ?? "").trim(),
     drop_location: (data.drop_location ?? "").trim(),
-    pickup_lat: data.pickup_lat != null && Number.isFinite(data.pickup_lat) ? data.pickup_lat : null,
-    pickup_lon: data.pickup_lon != null && Number.isFinite(data.pickup_lon) ? data.pickup_lon : null,
-    drop_lat: data.drop_lat != null && Number.isFinite(data.drop_lat) ? data.drop_lat : null,
-    drop_lon: data.drop_lon != null && Number.isFinite(data.drop_lon) ? data.drop_lon : null,
-    distance: data.distance != null && Number.isFinite(data.distance) ? data.distance : null,
-    estimated_duration: data.estimated_duration != null ? data.estimated_duration : null,
+    pickup_lat:
+      data.pickup_lat != null && Number.isFinite(data.pickup_lat)
+        ? data.pickup_lat
+        : null,
+    pickup_lon:
+      data.pickup_lon != null && Number.isFinite(data.pickup_lon)
+        ? data.pickup_lon
+        : null,
+    drop_lat:
+      data.drop_lat != null && Number.isFinite(data.drop_lat)
+        ? data.drop_lat
+        : null,
+    drop_lon:
+      data.drop_lon != null && Number.isFinite(data.drop_lon)
+        ? data.drop_lon
+        : null,
+    distance:
+      data.distance != null && Number.isFinite(data.distance)
+        ? data.distance
+        : null,
+    estimated_duration:
+      data.estimated_duration != null ? data.estimated_duration : null,
     client_name: (data.client_name ?? "").trim() || "—",
     client_id: data.client_id ?? null,
     client_price: clientPrice,
@@ -461,19 +519,26 @@ export interface TripOtpInfo {
  */
 export async function createTripWithOtp(
   orgId: string,
-  data: CreateTripData
+  data: CreateTripData,
 ): Promise<{
   error: Error | null;
   trip: TripRow | null;
   otp: TripOtpInfo | null;
 }> {
   const { error, trip } = await createTrip(orgId, data);
-  if (error || !trip) return { error: error ?? new Error('No trip returned'), trip: null, otp: null };
+  if (error || !trip)
+    return {
+      error: error ?? new Error("No trip returned"),
+      trip: null,
+      otp: null,
+    };
   const isAggregate = !!data.supplier_id;
-  const hasAssignment = !!data.driver_id || !!data.vehicle_id || !!data.vehicle_display_number;
+  const hasAssignment =
+    !!data.driver_id || !!data.vehicle_id || !!data.vehicle_display_number;
   if (!isAggregate || !hasAssignment) return { error: null, trip, otp: null };
 
-  const { generateTripOtp } = await import('@/features/trips/services/tripOtp.service');
+  const { generateTripOtp } =
+    await import("@/features/trips/services/tripOtp.service");
   const { error: otpError, code, expires_at } = await generateTripOtp(trip.id);
   if (otpError || !code || !expires_at) {
     return { error: null, trip, otp: null };
@@ -514,10 +579,8 @@ export async function updateTripAssignment(
   options?: UpdateTripAssignmentOptions,
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
   if (data.driver_id != null) {
-    const { error: conflictCheckError, trip: ongoingTrip } = await getDriverOngoingTrip(
-      data.driver_id,
-      tripId,
-    );
+    const { error: conflictCheckError, trip: ongoingTrip } =
+      await getDriverOngoingTrip(data.driver_id, tripId);
     if (conflictCheckError) return { error: conflictCheckError, trip: null };
     if (ongoingTrip != null) {
       return {
@@ -825,9 +888,16 @@ export async function claimTripCreator(
     p_trip_id: tripId,
   });
   if (error) return { error: new Error(error.message), createdBy: null };
-  const obj = data as { ok?: boolean; error?: string; created_by?: string } | null;
+  const obj = data as {
+    ok?: boolean;
+    error?: string;
+    created_by?: string;
+  } | null;
   if (!obj || obj.ok !== true) {
-    return { error: new Error(obj?.error ?? "Could not claim creator"), createdBy: null };
+    return {
+      error: new Error(obj?.error ?? "Could not claim creator"),
+      createdBy: null,
+    };
   }
   return { error: null, createdBy: obj.created_by ?? null };
 }

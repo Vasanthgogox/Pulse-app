@@ -346,7 +346,7 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
           <View style={styles.headerSubtitleRow}>
             <View style={styles.headerStatusDot} />
             <Text style={styles.headerSubtitle}>
-              Review Hub • {status === 'OPEN' ? 'Active' : status} Indent
+              Review Hub • {status === 'OPEN' ? 'Active' : status} Indent {indent.trip_number ? `· ${indent.trip_number}` : ""}
             </Text>
           </View>
         </View>

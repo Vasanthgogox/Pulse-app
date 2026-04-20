@@ -6,6 +6,7 @@ import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { createLedgerEntry } from '@/features/finance';
 import { AddTripModal, assignTripDriverByPhone, type AddTripFormData, createTrip, createTripWithOtp } from '@/features/trips';
 import { useSafeBack } from '@/lib/useSafeBack';
@@ -15,6 +16,7 @@ export default function AddTripPage() {
   const router = useRouter();
   const safeBack = useSafeBack();
   const { currentOrganization } = useOrganization();
+  const { profile } = useAuth();
   const invalidateTrips = useInvalidateTrips();
 
   const closeAndGoBack = () => {
@@ -42,6 +44,8 @@ export default function AddTripPage() {
         supplier_id: data.supplier_id ?? undefined,
         notes: data.notes ?? undefined,
         vehicle_display_number: data.vehicle_display_number?.trim() || undefined,
+        owner_user_id: profile?.id ?? undefined,
+        created_by_user_id: profile?.id ?? undefined,
       });
       if (error) throw error;
       const advancePaidAgg = Number(data.advance_paid ?? 0);
@@ -86,6 +90,8 @@ export default function AddTripPage() {
       notes: data.notes ?? undefined,
       driver_id: data.driver_id ?? undefined,
       vehicle_id: data.vehicle_id ?? undefined,
+      owner_user_id: profile?.id ?? undefined,
+      created_by_user_id: profile?.id ?? undefined,
     });
     if (error) throw error;
     if (trip && options?.supplySource === 'aggregate' && options?.driverPhone?.trim()) {

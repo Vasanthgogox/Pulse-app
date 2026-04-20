@@ -496,6 +496,8 @@ export default function CreateIndentScreen() {
       weight: (parseFloat((form.weight ?? "").replace(/,/g, "")) || 0) * 1000,
       pickup_date: form.pickup_date.trim() || null,
       circulation_target: "integrated_supplier",
+      owner_user_id: profile?.id ?? undefined,
+      created_by_user_id: profile?.id ?? undefined,
     };
     if (form.client_id) payload.client_id = form.client_id;
     return payload;
