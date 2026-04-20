@@ -278,6 +278,7 @@ function isUuidString(value: string): boolean {
 
 export async function createTrip(
   orgId: string,
+  userId: string,
   data: CreateTripData,
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
   const clientPrice = Number(data.client_price) || 0;
@@ -335,13 +336,14 @@ export interface TripOtpInfo {
  */
 export async function createTripWithOtp(
   orgId: string,
+  userId: string,
   data: CreateTripData
 ): Promise<{
   error: Error | null;
   trip: TripRow | null;
   otp: TripOtpInfo | null;
 }> {
-  const { error, trip } = await createTrip(orgId, data);
+  const { error, trip } = await createTrip(orgId, userId, data);
   if (error || !trip) return { error: error ?? new Error('No trip returned'), trip: null, otp: null };
   const isAggregate = !!data.supplier_id;
   const hasAssignment = !!data.driver_id || !!data.vehicle_id || !!data.vehicle_display_number;

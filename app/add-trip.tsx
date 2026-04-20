@@ -6,6 +6,7 @@ import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { createLedgerEntry } from '@/features/finance';
 import { AddTripModal, assignTripDriverByPhone, type AddTripFormData, createTrip, createTripWithOtp } from '@/features/trips';
 import { useSafeBack } from '@/lib/useSafeBack';
@@ -15,6 +16,7 @@ export default function AddTripPage() {
   const router = useRouter();
   const safeBack = useSafeBack();
   const { currentOrganization } = useOrganization();
+  const { user } = useAuth();
   const invalidateTrips = useInvalidateTrips();
 
   const closeAndGoBack = () => {
@@ -23,10 +25,9 @@ export default function AddTripPage() {
   };
 
   const handleComplete = async (data: AddTripFormData, options?: { supplySource: string; driverPhone?: string }) => {
-    if (!currentOrganization?.id) return;
-    const isAggregate = options?.supplySource === 'aggregate' && !!data.supplier_id;
+    if (!currentOrganization?.id || !user?.id) return;    const isAggregate = options?.supplySource === 'aggregate' && !!data.supplier_id;
     if (isAggregate) {
-      const { error, trip, otp } = await createTripWithOtp(currentOrganization.id, {
+      const { error, trip, otp } = await createTripWithOtp(currentOrganization.id, user.id, {
         pickup_area: data.pickup_area,
         drop_location: data.drop_location,
         pickup_lat: data.pickup_lat ?? undefined,
@@ -69,7 +70,7 @@ export default function AddTripPage() {
       closeAndGoBack();
       return;
     }
-    const { error, trip } = await createTrip(currentOrganization.id, {
+    const { error, trip } = await createTrip(currentOrganization.id, user.id, {
       pickup_area: data.pickup_area,
       drop_location: data.drop_location,
       pickup_lat: data.pickup_lat ?? undefined,
