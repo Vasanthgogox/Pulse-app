@@ -527,6 +527,10 @@ export default function TripsScreen() {
           title: tr("tripMetricUnassigned"),
           hint: tr("tripMetricHintUnassigned"),
         },
+        assigned: {
+          title: tr("tripAssigned"),
+          hint: tr("tripMetricHintLoading"),
+        },
         loading: {
           title: tr("tripMetricLoading"),
           hint: tr("tripMetricHintLoading"),
@@ -1809,9 +1813,9 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surface,
   },
   tripMetricTileWeb: {
-    flexBasis: "18%",
-    minWidth: "16%",
-    maxWidth: "20%",
+    flexBasis: "15.5%",
+    minWidth: "15%",
+    maxWidth: "16.5%",
     flexGrow: 1,
   },
   tripMetricTileActive: {

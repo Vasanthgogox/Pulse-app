@@ -13,6 +13,8 @@ import {
   useDemoTabBarScroll,
 } from '@/contexts/DemoTabBarScrollContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { saveLastTabRoute } from '@/lib/lastRoute';
+import { ROUTES } from '@/lib/routes';
 
 function DemoCustomTabBar(props: BottomTabBarProps) {
   const router = useRouter();
@@ -24,7 +26,7 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
     routeName === 'finance' ? 'finance'
     : routeName === 'trips' ? 'trips'
     : routeName === 'network' ? 'network'
-    : 'finance';
+    : 'trips';
 
   const onTabChange = (tab: DemoTabId) => {
     navigation.navigate(tab);
@@ -43,6 +45,13 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
   };
 
   useEffect(() => {
+    // Persist the active tab so cold-start can restore it via getLastTabRoute().
+    const tabRoute =
+      routeName === 'finance' ? ROUTES.TABS.FINANCE
+      : routeName === 'trips'   ? ROUTES.TABS.TRIPS
+      : routeName === 'network' ? ROUTES.TABS.NETWORK
+      : null;
+    if (tabRoute) saveLastTabRoute(tabRoute);
     resetBarVisible();
   }, [routeName, resetBarVisible]);
 

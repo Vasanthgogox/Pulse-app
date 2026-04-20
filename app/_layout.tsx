@@ -1,6 +1,7 @@
 import { FloatingOpsAgentButton } from '@/components/FloatingOpsAgentButton';
 import { DemoTabBar, type DemoTabId } from '@/components/demo';
 import Theme from '@/constants/Theme';
+import { ROUTES } from '@/lib/routes';
 import {
   DemoTabBarAutoHideShell,
   DemoTabBarScrollProvider,
@@ -270,6 +271,7 @@ function RootOverlayTabBar() {
 
   if (!showOnRootScreens) return null;
 
+  // These screens are reached from the Finance tab, so Finance stays active in the dock.
   const activeTab: DemoTabId = 'finance';
   const isWeb = Platform.OS === 'web';
 
@@ -291,11 +293,11 @@ function RootOverlayTabBar() {
         activeTab={activeTab}
         onTabChange={(tab) =>
           router.push(
-            tab === 'finance'
-              ? '/(tabs)/finance'
+            (tab === 'finance'
+              ? ROUTES.TABS.FINANCE
               : tab === 'trips'
-                ? '/(tabs)/trips'
-                : '/(tabs)/network'
+                ? ROUTES.TABS.TRIPS
+                : ROUTES.TABS.NETWORK) as '/'
           )
         }
         onLoadBoardPress={() => router.push('/load-board')}
