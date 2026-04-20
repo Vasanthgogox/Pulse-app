@@ -7,6 +7,7 @@ import type { TripRow } from "@/features/trips/services/trips.service";
  */
 export type TripMetricId =
   | "unassigned"
+  | "assigned"
   | "loading"
   | "in_transit"
   | "unloading"
@@ -14,6 +15,7 @@ export type TripMetricId =
 
 export const TRIP_METRIC_ORDER: TripMetricId[] = [
   "unassigned",
+  "assigned",
   "loading",
   "in_transit",
   "unloading",
@@ -55,10 +57,13 @@ export function classifyTripMetric(
   if (
     s === "picked_up" ||
     s === "pickup" ||
-    s === "assigned" ||
     (s === "in_progress" && !hasStarted)
   ) {
     return "loading";
+  }
+
+  if (s === "assigned") {
+    return "assigned";
   }
 
   if (s === "in_progress" && hasStarted) {
@@ -76,6 +81,7 @@ export function countTripsByMetric(
 ): Record<TripMetricId, number> {
   const counts: Record<TripMetricId, number> = {
     unassigned: 0,
+    assigned: 0,
     loading: 0,
     in_transit: 0,
     unloading: 0,

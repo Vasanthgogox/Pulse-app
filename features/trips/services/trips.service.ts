@@ -440,6 +440,109 @@ function isUuidString(value: string): boolean {
   );
 }
 
+function shouldRetryCreateWithFallbackTripNumber(
+  errorMessage: string,
+  errorCode?: string | null,
+): boolean {
+  const msg = (errorMessage ?? "").toLowerCase();
+  const code = (errorCode ?? "").trim();
+  const mentionsTripIdentity =
+    msg.includes("trip_number") ||
+    msg.includes("display_trip_id") ||
+    msg.includes("sequence_number");
+  const isIdentityGenerationFailure =
+    msg.includes("null value") ||
+    msg.includes("not-null") ||
+    msg.includes("violates not-null constraint");
+  const isIdentityConflict =
+    msg.includes("duplicate key") ||
+    msg.includes("unique constraint") ||
+    msg.includes("already exists") ||
+    msg.includes("conflict");
+  const isPgUniqueViolation = code === "23505";
+  return (
+    isPgUniqueViolation ||
+    (mentionsTripIdentity && (isIdentityGenerationFailure || isIdentityConflict))
+  );
+}
+
+function isTripIdentityUniqueConflict(
+  errorMessage: string,
+  errorCode?: string | null,
+): boolean {
+  const msg = (errorMessage ?? "").toLowerCase();
+  const code = (errorCode ?? "").trim();
+  const mentionsTripIdentity =
+    msg.includes("trip_number") ||
+    msg.includes("display_trip_id") ||
+    msg.includes("sequence_number");
+  const isIdentityConflict =
+    msg.includes("duplicate key") ||
+    msg.includes("unique constraint") ||
+    msg.includes("already exists") ||
+    msg.includes("conflict");
+  return code === "23505" || (mentionsTripIdentity && isIdentityConflict);
+}
+
+function buildFallbackTripNumber(): string {
+  const stamp = Date.now().toString().slice(-10);
+  const rand = Math.floor(Math.random() * 900000 + 100000).toString();
+  return `TRP${stamp}${rand}`;
+}
+
+function parseTripNumberSequence(value: string | null | undefined): number | null {
+  const raw = String(value ?? "").trim().toUpperCase();
+  const m = /^TRP(\d+)$/.exec(raw);
+  if (!m) return null;
+  // Ignore legacy/random fallback ids like TRP66831046490792; keep only canonical sequence widths.
+  if (m[1].length < 3 || m[1].length > 6) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function formatTripNumberFromSequence(seq: number): string {
+  const safe = Math.max(1, Math.floor(seq));
+  const digits = String(safe);
+  return `TRP${digits.padStart(Math.max(3, digits.length), "0")}`;
+}
+
+function incrementTripNumber(value: string): string {
+  const seq = parseTripNumberSequence(value) ?? 0;
+  return formatTripNumberFromSequence(seq + 1);
+}
+
+async function getNextOrgTripSequence(orgId: string): Promise<number> {
+  const seqRes = await supabase()
+    .from("trips")
+    .select("sequence_number")
+    .eq("organization_id", orgId)
+    .not("sequence_number", "is", null)
+    .order("sequence_number", { ascending: false })
+    .limit(1);
+
+  const seqRow = (seqRes.data?.[0] as { sequence_number?: number | null } | undefined) ?? null;
+  const seq = Number(seqRow?.sequence_number ?? 0);
+  if (Number.isFinite(seq) && seq > 0) {
+    return Math.floor(seq) + 1;
+  }
+
+  const tripRes = await supabase()
+    .from("trips")
+    .select("trip_number, display_trip_id")
+    .eq("organization_id", orgId)
+    .order("created_at", { ascending: false })
+    .limit(500);
+  let maxSeq = 0;
+  for (const row of tripRes.data ?? []) {
+    const r = row as { trip_number?: string | null; display_trip_id?: string | null };
+    const fromDisplay = parseTripNumberSequence(r.display_trip_id);
+    const fromTrip = parseTripNumberSequence(r.trip_number);
+    const s = fromDisplay ?? fromTrip;
+    if (s != null && s > maxSeq) maxSeq = s;
+  }
+  return maxSeq + 1;
+}
+
 export async function createTrip(
   orgId: string,
   userId: string,
@@ -515,7 +618,80 @@ export async function createTrip(
     .insert(insertData as Record<string, unknown>)
     .select()
     .single();
-  if (error) return { error: new Error(error.message), trip: null };
+  if (error) {
+    if (isTripIdentityUniqueConflict(error.message, error.code)) {
+      // Keep sequential IDs DB-generated: retry with trip_number=NULL and let trigger assign next sequence.
+      let lastError: Error | null = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const { data: retryRow, error: retryError } = await supabase()
+          .from("trips")
+          .insert(insertData as Record<string, unknown>)
+          .select()
+          .single();
+        if (!retryError) return { error: null, trip: retryRow as TripRow };
+        lastError = new Error(retryError.message);
+        if (!isTripIdentityUniqueConflict(retryError.message, retryError.code)) {
+          return { error: lastError, trip: null };
+        }
+      }
+      // Fallback for environments where trigger uses a per-user counter while uniqueness is per-org.
+      let candidateSeq = await getNextOrgTripSequence(orgId);
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const candidate = formatTripNumberFromSequence(candidateSeq);
+        const explicitInsertData = {
+          ...insertData,
+          trip_number: candidate,
+          sequence_number: candidateSeq,
+          display_trip_id: candidate,
+        };
+        const { data: explicitRow, error: explicitError } = await supabase()
+          .from("trips")
+          .insert(explicitInsertData as Record<string, unknown>)
+          .select()
+          .single();
+        if (!explicitError) return { error: null, trip: explicitRow as TripRow };
+        lastError = new Error(explicitError.message);
+        if (!isTripIdentityUniqueConflict(explicitError.message, explicitError.code)) {
+          return { error: lastError, trip: null };
+        }
+        candidateSeq += 1;
+      }
+      return {
+        error:
+          lastError ??
+          new Error("Trip number sequence conflict. Please try again."),
+        trip: null,
+      };
+    }
+
+    if (!shouldRetryCreateWithFallbackTripNumber(error.message, error.code)) {
+      return { error: new Error(error.message), trip: null };
+    }
+
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const fallbackInsertData = {
+        ...insertData,
+        trip_number: buildFallbackTripNumber(),
+      };
+      const { data: retryRow, error: retryError } = await supabase()
+        .from("trips")
+        .insert(fallbackInsertData as Record<string, unknown>)
+        .select()
+        .single();
+      if (!retryError) return { error: null, trip: retryRow as TripRow };
+      lastError = new Error(retryError.message);
+      if (!shouldRetryCreateWithFallbackTripNumber(retryError.message, retryError.code)) {
+        return { error: lastError, trip: null };
+      }
+    }
+    return {
+      error:
+        lastError ??
+        new Error("Trip creation conflict. Please retry in a moment."),
+      trip: null,
+    };
+  }
   return { error: null, trip: row as TripRow };
 }
 
