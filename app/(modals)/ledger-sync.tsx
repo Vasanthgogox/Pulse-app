@@ -38,6 +38,7 @@ import { updateSalaryRequestStatus } from "@/services/salaryRequestsService";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatLedgerDate } from "@/lib/format";
 import { useSafeBack } from "@/lib/useSafeBack";
+import { ROUTES } from "@/lib/routes";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -423,7 +424,7 @@ export default function LedgerSyncScreen() {
       if (params.entityType === "VEHICLE" && vehicleId) {
         router.replace(`/vehicle/${vehicleId}`);
       } else {
-        router.replace("/(tabs)/finance");
+        router.replace(ROUTES.TABS.FINANCE as '/');
       }
     },
     [orgId, router, params.entityType, params.entityId]
@@ -511,8 +512,8 @@ export default function LedgerSyncScreen() {
           // For integrated trips we don't own, the client_id on the record belongs to the other org.
           // We need to resolve our own local client ID that is linked to the trip owner.
           const fromTripClientId =
-            linkedTrip && linkedTrip.organization_id !== orgId
-              ? uniqueLinkedClientIdByOrgId.get(linkedTrip.organization_id)
+            linkedTrip && linkedTrip.organization_id && linkedTrip.organization_id !== orgId
+              ? uniqueLinkedClientIdByOrgId.get(linkedTrip.organization_id) ?? null
               : linkedTrip?.client_id ?? null;
 
           const fromEntityClientId =
@@ -548,8 +549,8 @@ export default function LedgerSyncScreen() {
         // If it's a driver payment, we keep it as is. But if it's a generic OUT or we're looking for a supplier:
         if (!resolvedContactId || resolvedContactType !== "driver") {
           const fromTripSupplierId =
-            linkedTrip && linkedTrip.organization_id !== orgId
-              ? uniqueLinkedSupplierIdByOrgId.get(linkedTrip.organization_id)
+            linkedTrip && linkedTrip.organization_id && linkedTrip.organization_id !== orgId
+              ? uniqueLinkedSupplierIdByOrgId.get(linkedTrip.organization_id) ?? null
               : linkedTrip?.supplier_id ?? null;
           const fromEntitySupplierId =
             params.entityType === "SUPPLIER" ? (params.entityId ?? null) : null;
@@ -674,7 +675,7 @@ export default function LedgerSyncScreen() {
             router.replace(`/vehicle/${params.entityId}`);
             break;
           default:
-            router.replace("/(tabs)/finance");
+            router.replace(ROUTES.TABS.FINANCE as '/');
         }
       } else {
         // No context (e.g. opened from table view or generic add): go to the detail page where the entry is visible (trip or entity).
@@ -699,7 +700,7 @@ export default function LedgerSyncScreen() {
             return;
           }
         }
-        router.replace("/(tabs)/finance");
+        router.replace(ROUTES.TABS.FINANCE as '/');
       }
     },
     [orgId, editingEntry?.transaction_date, profile?.uid, router, params.tripId, params.entityType, params.entityId, params.returnTo, params.partyName]

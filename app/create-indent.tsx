@@ -7,6 +7,7 @@ import { ThemedConfirmModal } from "@/components/ThemedConfirmModal";
 import { TeslaHeader } from "@/components/TeslaHeader";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { ROUTES } from "@/lib/routes";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
@@ -533,7 +534,7 @@ export default function CreateIndentScreen() {
           if (indent?.id) {
             router.replace(
               {
-                pathname: "/(tabs)/network",
+                pathname: ROUTES.TABS.NETWORK,
                 params: { tab: "load", indentId: indent.id },
               } as import("expo-router").Href,
             );
@@ -561,7 +562,7 @@ export default function CreateIndentScreen() {
       if (indent) {
         setDraftIndentId(indent.id);
         await AsyncStorage.setItem(`indent_draft_id_${orgId}`, indent.id);
-        router.replace({ pathname: "/(tabs)/network", params: { tab: "load", indentId: indent.id } } as import("expo-router").Href);
+        router.replace({ pathname: ROUTES.TABS.NETWORK, params: { tab: "load", indentId: indent.id } } as import("expo-router").Href);
         return;
       }
       setLastSavedForm(form);
@@ -623,7 +624,7 @@ export default function CreateIndentScreen() {
           await AsyncStorage.removeItem(`indent_draft_${orgId}`);
           await AsyncStorage.removeItem(`indent_draft_id_${orgId}`);
           invalidateIndents(orgId);
-          router.replace({ pathname: "/(tabs)/network", params: { tab: "load", indentId: indent.id } } as import("expo-router").Href);
+          router.replace({ pathname: ROUTES.TABS.NETWORK, params: { tab: "load", indentId: indent.id } } as import("expo-router").Href);
         }
         return;
       }
@@ -638,7 +639,7 @@ export default function CreateIndentScreen() {
         await AsyncStorage.removeItem(`indent_draft_${orgId}`);
         await AsyncStorage.removeItem(`indent_draft_id_${orgId}`);
         invalidateIndents(orgId);
-        router.replace({ pathname: "/(tabs)/network", params: { tab: "load", indentId: indent.id } } as import("expo-router").Href);
+        router.replace({ pathname: ROUTES.TABS.NETWORK, params: { tab: "load", indentId: indent.id } } as import("expo-router").Href);
       }
     } finally {
       setSubmitting(false);
