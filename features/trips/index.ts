@@ -30,6 +30,7 @@ export {
   updateTripSupplier,
   assignTripDriverByPhone,
   assignAggregateTripDriverByPhone,
+  getDriverAvailabilityByPhone,
   updateTripStatus,
   updateTripPayment,
   isTripCompleted,

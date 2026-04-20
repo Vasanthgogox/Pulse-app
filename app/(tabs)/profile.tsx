@@ -19,7 +19,7 @@ import {
     Alert,
     Image,
     Linking,
-    Platform,
+    Modal,
     Pressable,
     RefreshControl,
     ScrollView,
@@ -155,33 +155,35 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleSignOut = async () => {
-    if (Platform.OS === "web") {
-      if (typeof window !== "undefined" && window.confirm) {
-        if (!window.confirm("Are you sure you want to sign out?")) return;
-      }
-    } else {
-      const confirmed = await new Promise((resolve) => {
-        Alert.alert("Sign out", "Are you sure you want to sign out?", [
-          { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
-          {
-            text: "Sign out",
-            style: "destructive",
-            onPress: () => resolve(true),
-          },
-        ]);
-      });
-      if (!confirmed) return;
-    }
-    await signOut();
-    router.replace("/sign-in");
-  };
-
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
+  const [signOutLoading, setSignOutLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const handleEditProfile = () => {
     setShowEditProfileModal(true);
+  };
+
+  const openSignOutConfirm = () => {
+    if (signOutLoading) return;
+    setShowSignOutConfirm(true);
+  };
+
+  const closeSignOutConfirm = () => {
+    if (signOutLoading) return;
+    setShowSignOutConfirm(false);
+  };
+
+  const confirmSignOut = async () => {
+    if (signOutLoading) return;
+    setSignOutLoading(true);
+    try {
+      await signOut();
+      setShowSignOutConfirm(false);
+      router.replace("/sign-in");
+    } finally {
+      setSignOutLoading(false);
+    }
   };
 
   const displayName =
@@ -431,7 +433,7 @@ export default function ProfileScreen() {
           </View>
 
           <Pressable
-            onPress={handleSignOut}
+            onPress={openSignOutConfirm}
             style={({ pressed }) => [
               styles.signOutBtn,
               pressed && styles.signOutBtnPressed,
@@ -464,6 +466,49 @@ export default function ProfileScreen() {
           setAvatarSeed(seed);
         }}
       />
+      <Modal
+        visible={showSignOutConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={closeSignOutConfirm}
+      >
+        <View style={styles.signOutConfirmBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeSignOutConfirm} />
+          <View style={styles.signOutConfirmCard}>
+            <Text style={styles.signOutConfirmTitle}>Sign out</Text>
+            <Text style={styles.signOutConfirmBody}>
+              Are you sure you want to sign out?
+            </Text>
+            <View style={styles.signOutConfirmActions}>
+              <Pressable
+                onPress={closeSignOutConfirm}
+                style={({ pressed }) => [
+                  styles.signOutConfirmCancelBtn,
+                  pressed && styles.signOutConfirmCancelBtnPressed,
+                ]}
+                accessibilityRole="button"
+                disabled={signOutLoading}
+              >
+                <Text style={styles.signOutConfirmCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => void confirmSignOut()}
+                style={({ pressed }) => [
+                  styles.signOutConfirmCtaBtn,
+                  pressed && styles.signOutConfirmCtaBtnPressed,
+                  signOutLoading && styles.signOutConfirmCtaBtnDisabled,
+                ]}
+                accessibilityRole="button"
+                disabled={signOutLoading}
+              >
+                <Text style={styles.signOutConfirmCtaText}>
+                  {signOutLoading ? "Signing out..." : "Sign out"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -694,5 +739,83 @@ const styles = StyleSheet.create({
     color: Theme.textOnDark,
     textTransform: "uppercase",
     letterSpacing: 2.4,
+  },
+  signOutConfirmBackdrop: {
+    flex: 1,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    justifyContent: "center",
+    backgroundColor: Theme.overlayBackdrop,
+  },
+  signOutConfirmCard: {
+    backgroundColor: Theme.surface,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 16,
+    maxWidth: 420,
+    width: "100%",
+    alignSelf: "center",
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  signOutConfirmTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    marginBottom: 6,
+  },
+  signOutConfirmBody: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: Theme.textSecondary,
+    marginBottom: 14,
+  },
+  signOutConfirmActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 10,
+  },
+  signOutConfirmCancelBtn: {
+    minHeight: Layout.minTouchTargetSize,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: Theme.backgroundInput,
+    borderWidth: 1,
+    borderColor: Theme.border,
+  },
+  signOutConfirmCancelBtnPressed: {
+    backgroundColor: Theme.surfaceGray,
+  },
+  signOutConfirmCancelText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  signOutConfirmCtaBtn: {
+    minHeight: Layout.minTouchTargetSize,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: Theme.teslaRed,
+  },
+  signOutConfirmCtaBtnPressed: {
+    opacity: 0.9,
+  },
+  signOutConfirmCtaBtnDisabled: {
+    opacity: 0.7,
+  },
+  signOutConfirmCtaText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textOnDark,
   },
 });

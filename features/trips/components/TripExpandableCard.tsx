@@ -18,7 +18,6 @@ import { canAssignTrip, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { formatINR } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
-import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Pressable,
@@ -166,7 +165,7 @@ export function TripExpandableCard({
     let cancelled = false;
     const driverPromises = Array.from(driverIds).map(async (id) => {
       const res = await getDriverById(trip.organization_id!, id);
-      return { id, name: res.driver ? (res.driver.name || res.driver.phone || id) : id };
+      return { id, name: res.driver ? (res.driver.name || res.driver.phone || "").trim() : "" };
     });
     const vehiclePromises = Array.from(vehicleIds).map(async (id) => {
       const res = await getVehicleById(trip.organization_id!, id);
@@ -180,7 +179,9 @@ export function TripExpandableCard({
         if (cancelled) return;
         const drivers: Record<string, string> = {};
         const vehicles: Record<string, string> = {};
-        for (const r of driverResults) drivers[r.id] = r.name;
+        for (const r of driverResults) {
+          if (r.name) drivers[r.id] = r.name;
+        }
         for (const r of vehicleResults) vehicles[r.id] = r.label;
         setAssignmentDriverNames(drivers);
         setAssignmentVehicleLabels(vehicles);
@@ -341,7 +342,6 @@ export function TripExpandableCard({
         }
         accessibilityRole="button"
       >
-        <View style={styles.cardBlurOrb} />
         <View style={styles.cardTop}>
           <View style={styles.cardTopLeft}>
             <View style={styles.cardIdPill}>
@@ -359,7 +359,7 @@ export function TripExpandableCard({
                   displayAsAsset ? styles.sourcePillTextAsset : styles.sourcePillTextAggregate,
                 ]}
               >
-                {displayAsAsset ? t("asset") : t("aggregate")}
+                {displayAsAsset ? "TRIP TYPE" : "SUPPLY SOURCE"}
               </Text>
             </View>
             <View
@@ -374,7 +374,13 @@ export function TripExpandableCard({
                   isAggregate ? styles.sourcePillTextLoadBased : styles.sourcePillTextOwn,
                 ]}
               >
-                {isAggregate ? "Integrated" : "Manual"}
+                {displayAsAsset
+                  ? trip.driver_id
+                    ? "Asset aggregate with driver"
+                    : "Asset aggregate"
+                  : isAggregate
+                    ? "Partner Load"
+                    : "Own"}
               </Text>
             </View>
             {isActive && (
@@ -389,10 +395,7 @@ export function TripExpandableCard({
           </View>
           <View style={styles.cardTopRight}>
             <View style={styles.cardTopRightCol}>
-              <View style={[
-                styles.stagePill,
-                trip.driver_id != null ? styles.stagePillAssigned : styles.stagePillUnassigned,
-              ]}>
+              <View style={styles.stagePill}>
                 <Text style={styles.stagePillText}>{stage}</Text>
               </View>
               <Text style={styles.cardRef}>Ref: {cardDate}</Text>
@@ -432,12 +435,7 @@ export function TripExpandableCard({
             </View>
             <View style={styles.cardProgressTrack}>
               <View style={styles.cardProgressFillWrap}>
-                <LinearGradient
-                  colors={[Theme.primary, Theme.teslaRed]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={[styles.cardProgressFill, { width: `${deployPercent}%` }]}
-                />
+                <View style={[styles.cardProgressFill, { width: `${deployPercent}%` }]} />
               </View>
             </View>
           </View>
@@ -501,7 +499,7 @@ const styles = StyleSheet.create({
   wrap: { marginBottom: 12 },
   card: {
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.surfaceBorder,
     borderRadius: 20,
     padding: 16,
     backgroundColor: Theme.screenBackground,
@@ -511,16 +509,6 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
     overflow: "hidden",
-  },
-  cardBlurOrb: {
-    position: "absolute",
-    right: -20,
-    bottom: -20,
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: Theme.primary,
-    opacity: 0.08,
   },
   cardTop: {
     flexDirection: "row",
@@ -543,7 +531,7 @@ const styles = StyleSheet.create({
   },
   cardIdPillText: {
     fontSize: 7,
-    fontWeight: "800",
+    fontWeight: "600",
     color: Theme.screenBackground,
     letterSpacing: 0.5,
   },
@@ -554,20 +542,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   sourcePillAsset: {
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: Theme.primarySoft,
     borderColor: Theme.primary,
   },
   sourcePillAggregate: {
-    backgroundColor: Theme.surfaceGray,
-    borderColor: Theme.darkGreen,
+    backgroundColor: Theme.primarySoft,
+    borderColor: Theme.primary,
   },
   sourcePillText: {
     fontSize: 6,
-    fontWeight: "800",
+    fontWeight: "600",
     letterSpacing: 0.3,
   },
   sourcePillTextAsset: { color: Theme.primary },
-  sourcePillTextAggregate: { color: Theme.darkGreen },
+  sourcePillTextAggregate: { color: Theme.primary },
   sourcePillOwn: {
     backgroundColor: Theme.surfaceGray,
     borderColor: Theme.primary,
@@ -603,7 +591,7 @@ const styles = StyleSheet.create({
   },
   cardClient: {
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: "600",
     color: TESLA_BLACK,
     flex: 1,
     minWidth: 0,
@@ -621,22 +609,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-  },
-  stagePillAssigned: {
-    backgroundColor: Theme.positive,
-  },
-  stagePillUnassigned: {
-    backgroundColor: Theme.negative,
+    backgroundColor: Theme.primary,
   },
   stagePillText: {
     fontSize: 7,
-    fontWeight: "800",
-    color: Theme.screenBackground,
+    fontWeight: "600",
+    color: Theme.textOnPrimary,
     letterSpacing: 0.5,
   },
   cardRef: {
     fontSize: 6,
-    fontWeight: "700",
+    fontWeight: "500",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -646,11 +629,11 @@ const styles = StyleSheet.create({
   },
   chevronWrap: { marginLeft: 4 },
   cardRouteBlock: {
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: Theme.screenBackground,
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
+    borderColor: Theme.borderLight,
     marginBottom: 0,
   },
   cardRouteRow: {
@@ -680,7 +663,7 @@ const styles = StyleSheet.create({
   cardRouteLabels: { flex: 1, minWidth: 0 },
   cardRouteLabel: {
     fontSize: 6,
-    fontWeight: "700",
+    fontWeight: "500",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -693,7 +676,7 @@ const styles = StyleSheet.create({
   },
   cardRouteValue: {
     fontSize: 10,
-    fontWeight: "800",
+    fontWeight: "600",
     color: TESLA_BLACK,
     flex: 1,
     minWidth: 0,
@@ -703,7 +686,7 @@ const styles = StyleSheet.create({
   cardRevenueWrap: { alignItems: "flex-end" },
   cardRevenueLabel: {
     fontSize: 6,
-    fontWeight: "700",
+    fontWeight: "500",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -711,7 +694,7 @@ const styles = StyleSheet.create({
   },
   cardRevenueValue: {
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "600",
     color: TESLA_BLACK,
   },
   cardProgressWrap: { marginTop: 6 },
@@ -724,15 +707,15 @@ const styles = StyleSheet.create({
   },
   cardProgressLabel: {
     fontSize: 6,
-    fontWeight: "800",
+    fontWeight: "600",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 1,
   },
   cardProgressPercent: {
     fontSize: 7,
-    fontWeight: "800",
-    color: Theme.teslaRed,
+    fontWeight: "600",
+    color: Theme.primary,
     letterSpacing: 0.3,
   },
   cardProgressTrack: {
@@ -749,6 +732,7 @@ const styles = StyleSheet.create({
   cardProgressFill: {
     height: "100%",
     borderRadius: 999,
+    backgroundColor: Theme.primary,
   },
   expandedContent: {
     marginTop: -4,

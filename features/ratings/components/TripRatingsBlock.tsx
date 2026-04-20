@@ -594,7 +594,7 @@ export function TripRatingsBlock({
                   <View style={styles.heroGlowTwo} />
                   <View style={styles.heroTopRow}>
                     <View style={styles.avatarWrap}>
-                      {flow?.type === 'supplier_driver' && driverAvatarUri ? (
+                      {driverAvatarUri ? (
                         <Image
                           source={{ uri: driverAvatarUri }}
                           style={styles.avatarImage}
@@ -605,13 +605,6 @@ export function TripRatingsBlock({
                           {(activeSubjectName || activeRoleLabel).slice(0, 1).toUpperCase()}
                         </Text>
                       )}
-                      <View style={styles.avatarBadge}>
-                        <Feather
-                          name={flow?.type === 'client_supplier' ? 'briefcase' : 'truck'}
-                          size={12}
-                          color={Theme.textPrimaryDark}
-                        />
-                      </View>
                     </View>
                     <View style={styles.heroTextWrap}>
                       <Text style={styles.heroEyebrow}>Trip feedback</Text>
