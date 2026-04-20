@@ -19,7 +19,7 @@ import {
   formatLedgerDateTime,
 } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Image,
   LayoutAnimation,
@@ -30,6 +30,7 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   TouchableOpacity,
   UIManager,
   View,
@@ -708,6 +709,8 @@ export type TripsHubTableViewProps = {
   /** Optional: e.g. open Finance / export flow. */
   onExportLedger?: () => void;
   tr: (key: string) => string;
+  /** Optional client-name override by trip id (used when supplier should see shipper as client). */
+  clientNameByTripId?: Record<string, string>;
   /** From `useLinkedOrgProfileMap(clients, suppliers)` — org logo before contact avatar in Partner column. */
   linkedOrgByOrganizationId?: Record<string, LinkedOrgDisplay>;
   /** Per-trip client/supplier/driver avatar fields (see `buildTripHubPartyMetaByTripId`). */
@@ -775,6 +778,7 @@ export function TripsHubTableView({
   onOpenTripDetails,
   onExportLedger,
   tr,
+  clientNameByTripId,
   linkedOrgByOrganizationId,
   partyMetaByTripId,
 }: TripsHubTableViewProps) {
@@ -784,6 +788,21 @@ export function TripsHubTableView({
     Record<TripsHubTableColumnId, boolean>
   >(() => ({ ...DEFAULT_TRIPS_HUB_TABLE_COLUMNS }));
   const [columnPickerOpen, setColumnPickerOpen] = useState(false);
+  const [tableQuery, setTableQuery] = useState("");
+  const [sortKey, setSortKey] = useState<"recent" | "due_desc" | "sales_desc">(
+    "recent",
+  );
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "verified" | "pending" | "attention"
+  >("all");
+  const [showColSettings, setShowColSettings] = useState(false);
+  const [cols, setCols] = useState({
+    telemetry: true,
+    earnings: true,
+    supplier: true,
+    driver: true,
+    audit: true,
+  });
 
   const toggleExpanded = (tripId: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -802,49 +821,256 @@ export function TripsHubTableView({
   const rowWebCursor =
     Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : undefined;
 
+  const displayedTrips = useMemo(() => {
+    const q = tableQuery.trim().toLowerCase();
+    let rows = trips;
+    if (q) {
+      rows = rows.filter((t) => {
+        const meta = partyMetaByTripId?.get(t.id);
+        const clientName = (clientNameByTripId?.[t.id] ?? t.client_name ?? "")
+          .trim()
+          .toLowerCase();
+        const supplierName = (
+          meta?.displaySupplierName ??
+          t.supplier_name ??
+          ""
+        )
+          .trim()
+          .toLowerCase();
+        const driverName = (t.driver_display_name ?? "").trim().toLowerCase();
+        const route = `${t.pickup_area ?? ""} ${t.drop_location ?? ""}`
+          .trim()
+          .toLowerCase();
+        const tripNo = getTripDisplayNumber(t).toLowerCase();
+        return (
+          tripNo.includes(q) ||
+          clientName.includes(q) ||
+          supplierName.includes(q) ||
+          driverName.includes(q) ||
+          route.includes(q)
+        );
+      });
+    }
+    const sorted = [...rows];
+    sorted.sort((a, b) => {
+      if (sortKey === "due_desc") {
+        return (
+          tripHubDue(b, currentOrganizationId) - tripHubDue(a, currentOrganizationId)
+        );
+      }
+      if (sortKey === "sales_desc") {
+        return (
+          tripHubRevenue(b, currentOrganizationId) -
+          tripHubRevenue(a, currentOrganizationId)
+        );
+      }
+      return (b.created_at || "").localeCompare(a.created_at || "");
+    });
+    return sorted;
+  }, [
+    trips,
+    tableQuery,
+    sortKey,
+    partyMetaByTripId,
+    clientNameByTripId,
+    currentOrganizationId,
+  ]);
+
+  const sortLabel =
+    sortKey === "recent"
+      ? "Sort: Recent"
+      : sortKey === "due_desc"
+        ? "Sort: Due"
+        : "Sort: Sales";
+
+  const cycleSortKey = () => {
+    setSortKey((prev) =>
+      prev === "recent" ? "due_desc" : prev === "due_desc" ? "sales_desc" : "recent",
+    );
+  };
+
+  const classifyTripFilter = (trip: TripRow): "verified" | "pending" | "attention" => {
+    const entries = transactionsByTripId.get(trip.id) ?? [];
+    const hasMismatch = entries.some((r) => r.reconciliation_status === "mismatch");
+    if (hasMismatch) return "attention";
+    const stageUpper = getStageLabel(trip).toUpperCase();
+    if (
+      stageUpper.includes("COMPLET") ||
+      stageUpper.includes("DELIVER") ||
+      stageUpper.includes("DONE")
+    ) {
+      return "verified";
+    }
+    return "pending";
+  };
+
+  const templateTrips = useMemo(() => {
+    if (statusFilter === "all") return displayedTrips;
+    return displayedTrips.filter((trip) => classifyTripFilter(trip) === statusFilter);
+  }, [displayedTrips, statusFilter]);
+
+  const toggleTemplateCol = (key: keyof typeof cols) => {
+    setCols((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
   return (
     <View style={styles.auditTableWrap}>
       <View style={styles.auditToolbar}>
+        <Text style={styles.auditToolbarCount}>
+          Showing {templateTrips.length} of {trips.length} trips
+        </Text>
+        <View style={styles.auditToolbarControls}>
+          <View style={styles.auditSearchWrap}>
+            <FontAwesome name="search" size={12} color={Theme.textSecondary} />
+            <TextInput
+              value={tableQuery}
+              onChangeText={setTableQuery}
+              placeholder="Search trip / client / supplier"
+              placeholderTextColor={Theme.textMuted}
+              style={styles.auditSearchInput}
+            />
+            {tableQuery ? (
+              <Pressable
+                onPress={() => setTableQuery("")}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Clear table search"
+              >
+                <FontAwesome name="times-circle" size={14} color={Theme.textMuted} />
+              </Pressable>
+            ) : null}
+          </View>
+          <TouchableOpacity
+            style={styles.auditToolbarBtn}
+            onPress={cycleSortKey}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Cycle table sort"
+          >
+            <FontAwesome name="sort" size={13} color={Theme.textSecondary} />
+            <Text style={styles.auditToolbarText}>{sortLabel}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.auditToolbarBtn}
+            onPress={() => setShowColSettings((v) => !v)}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Toggle table column settings"
+          >
+            <FontAwesome name="sliders" size={13} color={Theme.textSecondary} />
+            <Text style={styles.auditToolbarText}>Filters</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.manifestFilterRow}>
         <TouchableOpacity
-          style={styles.auditToolbarBtn}
-          onPress={() => setColumnPickerOpen(true)}
+          style={[styles.manifestFilterPill, statusFilter === "all" && styles.manifestFilterPillOn]}
+          onPress={() => setStatusFilter("all")}
           activeOpacity={0.85}
-          accessibilityRole="button"
-          accessibilityLabel={tr("tripsHubTableColumns")}
         >
-          <FontAwesome name="cog" size={14} color={Theme.textSecondary} />
-          <Text style={styles.auditToolbarText}>{tr("tripsHubTableColumns")}</Text>
+          <Text style={[styles.manifestFilterPillText, statusFilter === "all" && styles.manifestFilterPillTextOn]}>
+            All
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.manifestFilterPill, statusFilter === "verified" && styles.manifestFilterPillOn]}
+          onPress={() => setStatusFilter("verified")}
+          activeOpacity={0.85}
+        >
+          <Text
+            style={[
+              styles.manifestFilterPillText,
+              statusFilter === "verified" && styles.manifestFilterPillTextOn,
+            ]}
+          >
+            Verified
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.manifestFilterPill, statusFilter === "pending" && styles.manifestFilterPillOn]}
+          onPress={() => setStatusFilter("pending")}
+          activeOpacity={0.85}
+        >
+          <Text
+            style={[
+              styles.manifestFilterPillText,
+              statusFilter === "pending" && styles.manifestFilterPillTextOn,
+            ]}
+          >
+            Pending
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.manifestFilterPill, statusFilter === "attention" && styles.manifestFilterPillOn]}
+          onPress={() => setStatusFilter("attention")}
+          activeOpacity={0.85}
+        >
+          <Text
+            style={[
+              styles.manifestFilterPillText,
+              statusFilter === "attention" && styles.manifestFilterPillTextOn,
+            ]}
+          >
+            Needs Review
+          </Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.auditHeaderRow}>
-        <View
-          style={[styles.auditThCell, styles.auditThCellStart, styles.auditColIdentity]}
-        >
-          <Text style={styles.auditTh}>{tr("tripsHubColTripIdentity")}</Text>
-        </View>
-        <View style={[styles.auditThCell, styles.auditColStatusType]}>
-          <Text style={styles.auditTh}>{tr("tripsHubColStatusType")}</Text>
-        </View>
-        {HUB_COLUMN_ORDER.filter((id) => visibleCols[id]).map((id) => (
-          <View key={id} style={[styles.auditThCell, HUB_COL_STYLES[id]]}>
-            <Text
-              style={[
-                styles.auditTh,
-                HUB_TH_LEFT.has(id) ? styles.auditThLeft : styles.auditThCenter,
-              ]}
-              numberOfLines={2}
+      {showColSettings ? (
+        <View style={styles.manifestColPanel}>
+          {(Object.keys(cols) as Array<keyof typeof cols>).map((key) => (
+            <TouchableOpacity
+              key={key}
+              style={[styles.manifestColChip, cols[key] && styles.manifestColChipOn]}
+              onPress={() => toggleTemplateCol(key)}
+              activeOpacity={0.85}
             >
-              {tr(HUB_COLUMN_LABEL[id])}
+              <Text style={[styles.manifestColChipText, cols[key] && styles.manifestColChipTextOn]}>
+                {key.toUpperCase()}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
+
+      <View style={styles.manifestHeaderRow}>
+        <View style={[styles.manifestTh, styles.manifestColIdentity]}>
+          <Text style={styles.manifestThText}>Voyage Identity</Text>
+        </View>
+        {cols.telemetry ? (
+          <View style={[styles.manifestTh, styles.manifestColTelemetry]}>
+            <Text style={styles.manifestThText}>Telemetry</Text>
+          </View>
+        ) : null}
+        {cols.earnings ? (
+          <View style={[styles.manifestTh, styles.manifestColEarnings]}>
+            <Text style={[styles.manifestThText, styles.manifestThTextRight]}>
+              Audit Analysis
             </Text>
           </View>
-        ))}
-        <View style={[styles.auditThCell, styles.auditColAudit]}>
-          <Text style={styles.auditTh}>{tr("tripsHubColAudit")}</Text>
+        ) : null}
+        {cols.supplier ? (
+          <View style={[styles.manifestTh, styles.manifestColSupplier]}>
+            <Text style={styles.manifestThText}>Provider</Text>
+          </View>
+        ) : null}
+        {cols.driver ? (
+          <View style={[styles.manifestTh, styles.manifestColDriver]}>
+            <Text style={styles.manifestThText}>Driver</Text>
+          </View>
+        ) : null}
+        {cols.audit ? (
+          <View style={[styles.manifestTh, styles.manifestColAudit]}>
+            <Text style={styles.manifestThText}>Audit</Text>
+          </View>
+        ) : null}
+        <View style={[styles.manifestTh, styles.manifestColActions]}>
+          <Text style={[styles.manifestThText, styles.manifestThTextCenter]}>Actions</Text>
         </View>
       </View>
 
-      {trips.map((t) => {
+      {templateTrips.map((t) => {
         const entries = transactionsByTripId.get(t.id) ?? [];
         const mySales = tripHubRevenue(t, currentOrganizationId);
         const cost = tripHubCost(t, currentOrganizationId);
@@ -873,12 +1099,23 @@ export function TripsHubTableView({
         const lastTxnShort = ledgerRoll.lastAtIso
           ? formatLedgerDate(ledgerRoll.lastAtIso)
           : "—";
+        const filterKind = classifyTripFilter(t);
+        const meta = partyMetaByTripId?.get(t.id);
+        const supplierLine = (meta?.displaySupplierName ?? "").trim() || "—";
+        const progressPct = deployPercentForTrip(t, stageUpper);
+        const auditLabel =
+          filterKind === "verified"
+            ? "VERIFIED"
+            : filterKind === "attention"
+              ? "NEEDS REVIEW"
+              : "PENDING";
 
-        const statusPillStyle = isUnassigned
-          ? styles.tableStatusPillUnassigned
-          : isDelayed
+        const statusPillStyle =
+          filterKind === "attention"
             ? styles.tableStatusPillRose
-            : styles.tableStatusPillEmerald;
+            : filterKind === "verified"
+              ? styles.tableStatusPillEmerald
+              : styles.tableStatusPillUnassigned;
 
         return (
           <View key={t.id} style={styles.auditRowGroup}>
@@ -894,367 +1131,114 @@ export function TripsHubTableView({
               accessibilityLabel={`${getTripDisplayNumber(t)} ${expanded ? tr("tripsHubCollapseRow") : tr("tripsHubExpandRow")}`}
             >
               {hasSalesConflict ? <View style={styles.mismatchStripe} /> : null}
-              <View style={[styles.auditTd, styles.auditColIdentity]}>
-                <View
-                  style={[
-                    styles.auditTruckWrap,
-                    hasSalesConflict
-                      ? styles.auditTruckWrapWarn
-                      : styles.auditTruckWrapOk,
-                  ]}
-                >
-                  <HubIconPulse>
-                    <FontAwesome
-                      name={showAssetTripIcon ? "truck" : "link"}
-                      size={18}
-                      color={
-                        hasSalesConflict
-                          ? Theme.teslaRed
-                          : showAssetTripIcon
-                            ? Theme.textPrimaryDark
-                            : Theme.aggregatePillText
-                      }
-                    />
-                  </HubIconPulse>
-                </View>
-                <View style={styles.auditIdentityText}>
-                  <Text style={styles.auditTripId} numberOfLines={1}>
-                    {getTripDisplayNumber(t)}
-                  </Text>
-                  <Text style={styles.auditRouteHint} numberOfLines={2}>
-                    {routeShort}
-                  </Text>
-                </View>
-                <FontAwesome
-                  name={expanded ? "chevron-down" : "chevron-right"}
-                  size={10}
-                  color={Theme.textSecondary}
-                  style={styles.auditRowChevron}
-                />
-              </View>
-
-              <View style={[styles.auditTd, styles.auditColStatusType]}>
-                <View style={[styles.tableStatusPill, statusPillStyle]}>
-                  <Text
-                    style={[
-                      styles.tableStatusPillText,
-                      isUnassigned && styles.tableStatusPillTextUnassigned,
-                      isDelayed &&
-                        !isUnassigned && { color: Theme.teslaRed },
-                      !isUnassigned &&
-                        !isDelayed && { color: Theme.darkGreen },
-                    ]}
-                  >
-                    {stageUpper}
-                  </Text>
-                </View>
-                <View style={styles.tableBadgeRow}>
-                  <View style={styles.tableBadgeBlue}>
-                    <Text style={styles.tableBadgeBlueText}>{typeLabel}</Text>
-                  </View>
-                  <View style={styles.tableBadgeViolet}>
-                    <Text style={styles.tableBadgeVioletText}>{subTypeLabel}</Text>
-                  </View>
-                </View>
-              </View>
-
-              {HUB_COLUMN_ORDER.filter((id) => visibleCols[id]).map((id) => {
-                if (id === "party") {
-                  const meta = partyMetaByTripId?.get(t.id);
-                  const clientLine = (t.client_name ?? "").trim();
-                  const supplierLine =
-                    (meta?.displaySupplierName ?? "").trim() ||
-                    (t.supplier_name ?? "").trim();
-                  const clientOrg = linkedOrgAvatarFields(
-                    meta?.clientLinkedOrgId,
-                    linkedOrgByOrganizationId,
-                  );
-                  const supplierOrg = linkedOrgAvatarFields(
-                    meta?.supplierLinkedOrgId,
-                    linkedOrgByOrganizationId,
-                  );
-                  return (
-                    <View
-                      key={id}
-                      style={[styles.auditTd, styles.auditTdParty, HUB_COL_STYLES[id]]}
-                    >
-                      <View style={styles.auditPartyLineRow}>
-                        {meta ? (
-                          <PartyAvatar
-                            name={clientLine}
-                            {...clientOrg}
-                            avatarUrl={meta.clientAvatarUrl}
-                            avatarSeed={meta.clientAvatarSeed}
-                            entityType="client"
-                            size={HUB_TABLE_PARTY_AVATAR}
-                          />
-                        ) : null}
-                        <Text
-                          style={[styles.auditPartyLine1, styles.auditPartyLineText]}
-                          numberOfLines={1}
-                        >
-                          {clientLine}
-                        </Text>
-                      </View>
-                      <View style={[styles.auditPartyLineRow, styles.auditPartyLineRowSecond]}>
-                        {meta ? (
-                          <PartyAvatar
-                            name={supplierLine}
-                            {...supplierOrg}
-                            avatarUrl={meta.supplierAvatarUrl}
-                            avatarSeed={meta.supplierAvatarSeed}
-                            entityType="supplier"
-                            size={HUB_TABLE_PARTY_AVATAR}
-                          />
-                        ) : null}
-                        <Text
-                          style={[styles.auditPartyLine2, styles.auditPartyLineText]}
-                          numberOfLines={1}
-                        >
-                          {supplierLine}
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                }
-                if (id === "driver") {
-                  const meta = partyMetaByTripId?.get(t.id);
-                  const name = (t.driver_display_name ?? "").trim();
-                  return (
-                    <View
-                      key={id}
-                      style={[styles.auditTd, styles.auditTdHubStack, HUB_COL_STYLES[id]]}
-                    >
-                      <View style={styles.auditPartyLineRow}>
-                        {meta ? (
-                          <PartyAvatar
-                            name={name}
-                            avatarUrl={meta.driverAvatarUrl}
-                            avatarSeed={meta.driverAvatarSeed}
-                            entityType="driver"
-                            size={HUB_TABLE_PARTY_AVATAR}
-                          />
-                        ) : null}
-                        <Text
-                          style={[styles.hubStackValue, styles.auditPartyLineText]}
-                          numberOfLines={2}
-                        >
-                          {name}
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                }
-                if (id === "vehicle") {
-                  const reg = (t.vehicle_display_number ?? "").trim();
-                  return (
-                    <View
-                      key={id}
-                      style={[styles.auditTd, styles.auditTdHubStack, HUB_COL_STYLES[id]]}
-                    >
-                      <Text style={styles.hubStackValueMono} numberOfLines={1}>
-                        {reg || "—"}
-                      </Text>
-                    </View>
-                  );
-                }
-                if (id === "pickupDate") {
-                  return (
-                    <View
-                      key={id}
-                      style={[styles.auditTd, styles.auditTdHubStack, HUB_COL_STYLES[id]]}
-                    >
-                      <Text style={styles.hubStackValue} numberOfLines={2}>
-                        {formatTripPickupCell(t.pickup_date)}
-                      </Text>
-                      {t.started_at ? (
-                        <Text style={styles.hubStackSub} numberOfLines={1}>
-                          {tr("tripsHubStartedShort")}:{" "}
-                          {formatTripPickupCell(t.started_at)}
-                        </Text>
-                      ) : null}
-                    </View>
-                  );
-                }
-                if (id === "distance") {
-                  return (
-                    <View
-                      key={id}
-                      style={[styles.auditTd, styles.auditTdHubCenter, HUB_COL_STYLES[id]]}
-                    >
-                      <Text style={styles.hubMetricSingle} numberOfLines={1}>
-                        {formatTripDistanceKm(t.distance)}
-                      </Text>
-                    </View>
-                  );
-                }
-                if (id === "loadType") {
-                  return (
-                    <View
-                      key={id}
-                      style={[styles.auditTd, styles.auditTdHubStack, HUB_COL_STYLES[id]]}
-                    >
-                      <Text style={styles.hubStackValue} numberOfLines={2}>
-                        {formatLoadTypeCell(t.load_type)}
-                      </Text>
-                    </View>
-                  );
-                }
-                if (id === "payment") {
-                  const tone = hubPaymentTone(t.payment_status);
-                  return (
-                    <View
-                      key={id}
-                      style={[styles.auditTd, styles.auditTdHubCenter, HUB_COL_STYLES[id]]}
-                    >
-                      <View
-                        style={[
-                          styles.hubPayPill,
-                          tone === "paid" && styles.hubPayPillPaid,
-                          tone === "partial" && styles.hubPayPillPartial,
-                          tone === "pending" && styles.hubPayPillPending,
-                          tone === "neutral" && styles.hubPayPillNeutral,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.hubPayPillText,
-                            tone === "paid" && styles.hubPayPillTextPaid,
-                            tone === "partial" && styles.hubPayPillTextPartial,
-                            tone === "pending" && styles.hubPayPillTextPending,
-                            tone === "neutral" && styles.hubPayPillTextNeutral,
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {formatPaymentStatusLabel(t.payment_status, tr)}
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                }
-                if (id === "billed") {
-                  return (
-                    <View
-                      key={id}
-                      style={[styles.auditTd, styles.auditTdCenter, HUB_COL_STYLES[id]]}
-                    >
-                      <View
-                        style={[
-                          styles.auditBilledCell,
-                          hasSalesConflict && styles.auditBilledCellWarn,
-                        ]}
-                      >
-                        <Text style={styles.auditYouLine}>
-                          {tr("tripsHubYou")}: {formatINR(mySales)}
-                        </Text>
-                        <View
-                          style={[
-                            styles.auditThemPill,
-                            hasSalesConflict
-                              ? styles.auditThemPillWarn
-                              : styles.auditThemPillOk,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.auditThemPillText,
-                              hasSalesConflict && styles.auditThemPillTextWarn,
-                            ]}
-                          >
-                            {tr("tripsHubAwaitingData")}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  );
-                }
-                if (id === "cost") {
-                  return (
-                    <View
-                      key={id}
-                      style={[styles.auditTd, styles.auditTdCenter, HUB_COL_STYLES[id]]}
-                    >
-                      <Text style={styles.auditMarginVal}>{formatINR(cost)}</Text>
-                    </View>
-                  );
-                }
-                if (id === "received") {
-                  return (
-                    <View
-                      key={id}
-                      style={[styles.auditTd, styles.auditTdCenter, HUB_COL_STYLES[id]]}
-                    >
-                      <Text style={styles.auditMarginVal}>
-                        {formatINR(ledgerRoll.receivedTotal)}
-                      </Text>
-                      <Text style={styles.auditLedgerSub}>
-                        {tr("tripsHubAmountPaidBook")}:{" "}
-                        {formatINR(Number(t.amount_paid ?? 0))}
-                      </Text>
-                    </View>
-                  );
-                }
-                if (id === "due") {
-                  return (
-                    <View
-                      key={id}
-                      style={[styles.auditTd, styles.auditTdCenter, HUB_COL_STYLES[id]]}
-                    >
-                      <Text style={styles.auditMarginVal}>{formatINR(due)}</Text>
-                    </View>
-                  );
-                }
-                if (id === "margin") {
-                  return (
-                    <View
-                      key={id}
-                      style={[styles.auditTd, styles.auditTdCenter, HUB_COL_STYLES[id]]}
-                    >
-                      <Text style={styles.auditMarginVal}>{formatINR(pnl)}</Text>
-                      <Text style={styles.auditMarginPct}>
-                        {marginPct} {tr("tripsHubMarginSuffix")}
-                      </Text>
-                    </View>
-                  );
-                }
-                if (id === "ledgerMeta") {
-                  return (
-                    <View
-                      key={id}
-                      style={[styles.auditTd, styles.auditTdCenter, HUB_COL_STYLES[id]]}
-                    >
-                      <Text style={styles.auditLedgerCount}>{ledgerRoll.count}</Text>
-                      <Text style={styles.auditLedgerSub} numberOfLines={1}>
-                        {lastTxnShort}
-                      </Text>
-                    </View>
-                  );
-                }
-                return null;
-              })}
-
-              <View style={[styles.auditTd, styles.auditColAudit]}>
-                <View style={styles.auditCellIconRow}>
+              <View style={[styles.manifestTd, styles.manifestColIdentity]}>
+                <View style={styles.manifestIdentityRow}>
                   <View
-                    accessible
-                    accessibilityLabel={
-                      hasSalesConflict
-                        ? tr("tripsHubFixGap")
-                        : tr("tripsHubSafeAudit")
-                    }
                     style={[
-                      styles.auditOrb,
-                      hasSalesConflict ? styles.auditOrbWarn : styles.auditOrbOk,
+                      styles.auditTruckWrap,
+                      hasSalesConflict ? styles.auditTruckWrapWarn : styles.auditTruckWrapOk,
                     ]}
                   >
                     <HubIconPulse>
                       <FontAwesome
-                        name={hasSalesConflict ? "bolt" : "check"}
-                        size={10}
-                        color={Theme.textOnDark}
+                        name={showAssetTripIcon ? "truck" : "link"}
+                        size={16}
+                        color={
+                          hasSalesConflict
+                            ? Theme.teslaRed
+                            : showAssetTripIcon
+                              ? Theme.textPrimaryDark
+                              : Theme.aggregatePillText
+                        }
                       />
                     </HubIconPulse>
                   </View>
+                  <View style={styles.auditIdentityText}>
+                    <Text style={styles.auditTripId} numberOfLines={1}>
+                      {getTripDisplayNumber(t)}
+                    </Text>
+                    <Text style={styles.manifestDateMeta} numberOfLines={1}>
+                      {formatTripPickupCell(t.pickup_date)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {cols.telemetry ? (
+                <View style={[styles.manifestTd, styles.manifestColTelemetry]}>
+                  <Text style={styles.auditRouteHint} numberOfLines={1}>
+                    {routeShort}
+                  </Text>
+                  <View style={styles.manifestProgressTrack}>
+                    <View style={[styles.manifestProgressFill, { width: `${progressPct}%` }]} />
+                  </View>
+                </View>
+              ) : null}
+
+              {cols.earnings ? (
+                <View style={[styles.manifestTd, styles.manifestColEarnings, styles.manifestTdRight]}>
+                  <Text style={styles.manifestMoneyMain}>{formatINR(mySales)}</Text>
+                  <Text style={[styles.manifestMoneySub, pnl >= 0 ? styles.manifestMoneyGood : styles.manifestMoneyBad]}>
+                    PnL: {formatINR(pnl)}
+                  </Text>
+                </View>
+              ) : null}
+
+              {cols.supplier ? (
+                <View style={[styles.manifestTd, styles.manifestColSupplier]}>
+                  <Text
+                    style={[
+                      styles.manifestProviderName,
+                      supplierLine === "—" && styles.manifestProviderNamePending,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {supplierLine === "—" ? "Supplier pending" : supplierLine}
+                  </Text>
+                  <View style={styles.tableBadgeRow}>
+                    <View style={styles.tableBadgeBlue}>
+                      <Text style={styles.tableBadgeBlueText}>{typeLabel}</Text>
+                    </View>
+                    <View style={styles.tableBadgeViolet}>
+                      <Text style={styles.tableBadgeVioletText}>{subTypeLabel}</Text>
+                    </View>
+                  </View>
+                </View>
+              ) : null}
+
+              {cols.driver ? (
+                <View style={[styles.manifestTd, styles.manifestColDriver]}>
+                  <Text style={styles.manifestProviderName} numberOfLines={1}>
+                    {(t.driver_display_name ?? "—").trim() || "—"}
+                  </Text>
+                  <Text style={styles.manifestDateMeta} numberOfLines={1}>
+                    {(t.vehicle_display_number ?? "—").trim() || "—"}
+                  </Text>
+                </View>
+              ) : null}
+
+              {cols.audit ? (
+                <View style={[styles.manifestTd, styles.manifestColAudit, styles.manifestTdCenter]}>
+                  <View style={[styles.tableStatusPill, statusPillStyle]}>
+                    <Text
+                      style={[
+                        styles.tableStatusPillText,
+                        filterKind === "pending" && styles.tableStatusPillTextUnassigned,
+                        filterKind === "attention" && { color: Theme.teslaRed },
+                        filterKind === "verified" && { color: Theme.darkGreen },
+                      ]}
+                    >
+                      {auditLabel}
+                    </Text>
+                  </View>
+                  <Text style={styles.manifestDateMeta} numberOfLines={1}>
+                    {ledgerRoll.count} txn · {lastTxnShort}
+                  </Text>
+                </View>
+              ) : null}
+
+              <View style={[styles.manifestTd, styles.manifestColActions]}>
+                <View style={styles.auditCellIconRow}>
                   <Pressable
                     style={({ pressed }) => [
                       styles.auditIconAction,
@@ -1761,59 +1745,300 @@ const styles = StyleSheet.create({
   },
   auditTableWrap: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 28,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     overflow: "hidden",
     marginBottom: 16,
     shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.06,
-    shadowRadius: 40,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 2,
   },
   auditToolbar: {
     flexDirection: "row",
-    justifyContent: "flex-end",
+    justifyContent: "space-between",
     alignItems: "center",
+    flexWrap: "wrap",
+    rowGap: 6,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.screenBackground,
     borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
+    borderBottomColor: Theme.surfaceBorder,
+  },
+  auditToolbarCount: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.1,
+  },
+  auditToolbarControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  auditSearchWrap: {
+    height: 30,
+    minWidth: 220,
+    maxWidth: 320,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+    backgroundColor: Theme.surface,
+  },
+  auditSearchInput: {
+    flex: 1,
+    minWidth: 100,
+    paddingVertical: 0,
+    color: Theme.textPrimaryDark,
+    fontSize: 8,
+    fontWeight: "600",
   },
   auditToolbarBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
     paddingVertical: 6,
     paddingHorizontal: 10,
-    borderRadius: 12,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.surfaceBorder,
+    backgroundColor: Theme.surface,
   },
   auditToolbarText: {
-    fontSize: FS_CAPTION,
+    fontSize: 8,
     fontWeight: "700",
     color: Theme.textSecondary,
+    letterSpacing: 0.1,
+  },
+  manifestFilterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 6,
+    backgroundColor: Theme.screenBackground,
+  },
+  manifestFilterPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+    backgroundColor: Theme.surface,
+  },
+  manifestFilterPillOn: {
+    backgroundColor: Theme.textPrimaryDark,
+    borderColor: Theme.textPrimaryDark,
+  },
+  manifestFilterPillText: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+  },
+  manifestFilterPillTextOn: {
+    color: Theme.textOnDark,
+  },
+  manifestColPanel: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+    backgroundColor: Theme.screenBackground,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.surfaceBorder,
+  },
+  manifestColChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+    backgroundColor: Theme.surface,
+  },
+  manifestColChipOn: {
+    backgroundColor: Theme.fiscalTabActiveBg,
+    borderColor: Theme.borderMedium,
+  },
+  manifestColChipText: {
+    fontSize: 7,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+    letterSpacing: 0.3,
+  },
+  manifestColChipTextOn: {
+    color: Theme.primary,
+  },
+  manifestHeaderRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    backgroundColor: Theme.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.surfaceBorder,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 6,
+  },
+  manifestTh: {
+    minWidth: 0,
+    justifyContent: "center",
+  },
+  manifestThText: {
+    fontSize: 7,
+    fontWeight: "800",
+    color: Theme.textSecondary,
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 0.45,
+  },
+  manifestThTextCenter: {
+    textAlign: "center",
+  },
+  manifestThTextRight: {
+    textAlign: "right",
+  },
+  manifestTd: {
+    minWidth: 0,
+    justifyContent: "center",
+    alignItems: "flex-start",
+  },
+  manifestTdCenter: {
+    alignItems: "center",
+  },
+  manifestTdRight: {
+    alignItems: "flex-end",
+  },
+  manifestColIdentity: {
+    width: 200,
+    minWidth: 200,
+    maxWidth: 200,
+  },
+  manifestColTelemetry: {
+    flex: 0.7,
+    minWidth: 154,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.surfaceBorder,
+    paddingLeft: 6,
+  },
+  manifestColEarnings: {
+    width: 132,
+    minWidth: 132,
+    maxWidth: 132,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.surfaceBorder,
+    paddingLeft: 6,
+  },
+  manifestColSupplier: {
+    width: 176,
+    minWidth: 176,
+    maxWidth: 176,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.surfaceBorder,
+    paddingLeft: 6,
+  },
+  manifestColDriver: {
+    width: 136,
+    minWidth: 136,
+    maxWidth: 136,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.surfaceBorder,
+    paddingLeft: 6,
+  },
+  manifestColAudit: {
+    width: 136,
+    minWidth: 136,
+    maxWidth: 136,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.surfaceBorder,
+    paddingLeft: 6,
+  },
+  manifestColActions: {
+    width: 82,
+    minWidth: 82,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.surfaceBorder,
+    alignItems: "center",
+    paddingLeft: 6,
+  },
+  manifestIdentityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  manifestDateMeta: {
+    marginTop: 1,
+    fontSize: 8,
+    fontWeight: "600",
+    color: Theme.textMuted,
+  },
+  manifestProgressTrack: {
+    marginTop: 4,
+    width: "100%",
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: Theme.surfaceBorder,
+    overflow: "hidden",
+  },
+  manifestProgressFill: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: Theme.primary,
+  },
+  manifestMoneyMain: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    textAlign: "right",
+    width: "100%",
+  },
+  manifestMoneySub: {
+    marginTop: 1,
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textAlign: "right",
+    width: "100%",
+  },
+  manifestMoneyGood: {
+    color: Theme.darkGreen,
+  },
+  manifestMoneyBad: {
+    color: Theme.teslaRed,
+  },
+  manifestProviderName: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    width: "100%",
+  },
+  manifestProviderNamePending: {
+    color: Theme.textMuted,
+    fontWeight: "600",
   },
   auditHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Theme.textPrimaryDark,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    backgroundColor: Theme.screenBackground,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.surfaceBorder,
   },
   auditTh: {
     fontSize: FS_CAPTION,
-    fontWeight: "700",
-    color: Theme.textOnDarkMuted,
+    fontWeight: "800",
+    color: Theme.textSecondary,
     textTransform: "uppercase",
-    letterSpacing: 0.6,
+    letterSpacing: 0.7,
   },
   auditThCenter: { textAlign: "center", width: "100%" },
   auditThLeft: { textAlign: "left", width: "100%", alignSelf: "stretch" },
@@ -1834,7 +2059,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     borderLeftWidth: 1,
-    borderLeftColor: Theme.borderOnDark,
+    borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 8,
   },
   auditPartyLineRow: {
@@ -1855,49 +2080,49 @@ const styles = StyleSheet.create({
     flex: 0.95,
     minWidth: 132,
     borderLeftWidth: 1,
-    borderLeftColor: Theme.borderOnDark,
+    borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 8,
   },
   auditColDriver: {
     flex: 0.72,
     minWidth: 100,
     borderLeftWidth: 1,
-    borderLeftColor: Theme.borderOnDark,
+    borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 8,
   },
   auditColVehicle: {
     flex: 0.55,
     minWidth: 86,
     borderLeftWidth: 1,
-    borderLeftColor: Theme.borderOnDark,
+    borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 8,
   },
   auditColPickupDate: {
     flex: 0.58,
     minWidth: 88,
     borderLeftWidth: 1,
-    borderLeftColor: Theme.borderOnDark,
+    borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 8,
   },
   auditColDistance: {
     flex: 0.42,
     minWidth: 72,
     borderLeftWidth: 1,
-    borderLeftColor: Theme.borderOnDark,
+    borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 8,
   },
   auditColLoadType: {
     flex: 0.58,
     minWidth: 92,
     borderLeftWidth: 1,
-    borderLeftColor: Theme.borderOnDark,
+    borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 8,
   },
   auditColPayment: {
     flex: 0.62,
     minWidth: 96,
     borderLeftWidth: 1,
-    borderLeftColor: Theme.borderOnDark,
+    borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 8,
   },
   auditTdHubStack: {
@@ -1980,42 +2205,42 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 132,
     borderLeftWidth: 1,
-    borderLeftColor: Theme.borderOnDark,
+    borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 8,
   },
   auditColCost: {
     flex: 0.5,
     minWidth: 84,
     borderLeftWidth: 1,
-    borderLeftColor: Theme.borderOnDark,
+    borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 8,
   },
   auditColReceived: {
     flex: 0.58,
     minWidth: 96,
     borderLeftWidth: 1,
-    borderLeftColor: Theme.borderOnDark,
+    borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 8,
   },
   auditColDue: {
     flex: 0.48,
     minWidth: 78,
     borderLeftWidth: 1,
-    borderLeftColor: Theme.borderOnDark,
+    borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 8,
   },
   auditColMargin: {
     flex: 0.62,
     minWidth: 96,
     borderLeftWidth: 1,
-    borderLeftColor: Theme.borderOnDark,
+    borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 8,
   },
   auditColLedgerMeta: {
     flex: 0.52,
     minWidth: 88,
     borderLeftWidth: 1,
-    borderLeftColor: Theme.borderOnDark,
+    borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 8,
   },
   auditColAudit: {
@@ -2025,7 +2250,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderLeftWidth: 1,
-    borderLeftColor: Theme.borderOnDark,
+    borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 8,
     paddingRight: 6,
     paddingVertical: 4,
@@ -2062,6 +2287,7 @@ const styles = StyleSheet.create({
   auditRowGroup: {
     borderBottomWidth: 1,
     borderBottomColor: Theme.surfaceBorder,
+    backgroundColor: Theme.screenBackground,
   },
   auditTr: {
     position: "relative" as const,
@@ -2069,7 +2295,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 8,
     paddingHorizontal: 12,
-    gap: 8,
+    gap: 6,
     overflow: "hidden",
   },
   auditTrPressed: { backgroundColor: Theme.surface },
@@ -2122,9 +2348,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   auditTruckWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -2139,17 +2365,15 @@ const styles = StyleSheet.create({
   },
   auditIdentityText: { flex: 1, minWidth: 0 },
   auditTripId: {
-    fontSize: FS_LABEL,
-    fontWeight: "600",
-    fontStyle: "italic",
+    fontSize: 9,
+    fontWeight: "800",
     color: Theme.textPrimaryDark,
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
   },
   auditRouteHint: {
-    marginTop: 2,
-    fontSize: FS_CAPTION,
+    marginTop: 1,
+    fontSize: 9,
     fontWeight: "600",
-    fontStyle: "italic",
     color: Theme.textMuted,
     letterSpacing: 0.2,
   },
@@ -2157,8 +2381,10 @@ const styles = StyleSheet.create({
   tableStatusPill: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: 999,
     borderWidth: 1,
+    minWidth: 96,
+    alignItems: "center",
   },
   tableStatusPillUnassigned: {
     backgroundColor: Theme.tripHubUnassignedPillBg,
@@ -2173,9 +2399,9 @@ const styles = StyleSheet.create({
     borderColor: Theme.darkGreen,
   },
   tableStatusPillText: {
-    fontSize: FS_AMOUNT_LABEL,
-    fontWeight: "700",
-    letterSpacing: 0.5,
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.3,
     textTransform: "uppercase",
     textAlign: "center",
   },
@@ -2188,29 +2414,29 @@ const styles = StyleSheet.create({
   tableBadgeBlue: {
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
-    backgroundColor: Theme.surfaceGray,
+    borderRadius: 999,
+    backgroundColor: Theme.fiscalTabActiveBg,
     borderWidth: 1,
     borderColor: Theme.borderMedium,
   },
   tableBadgeBlueText: {
-    fontSize: 6,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
+    fontSize: 7,
+    fontWeight: "700",
+    color: Theme.primary,
     textTransform: "uppercase",
     letterSpacing: 0.3,
   },
   tableBadgeViolet: {
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: 999,
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.surfaceBorder,
   },
   tableBadgeVioletText: {
-    fontSize: 6,
-    fontWeight: "600",
+    fontSize: 7,
+    fontWeight: "700",
     color: Theme.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.3,

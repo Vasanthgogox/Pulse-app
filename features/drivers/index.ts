@@ -45,3 +45,6 @@ export {
     createDriverFormDataFromExistingDriver, handleDriverInvitation, resetDriverInvitation
 } from './utils/invitationUtils';
 
+// Driver screens
+export { default as DriverDetailScreen } from './components/DriverDetailScreen';
+
