@@ -1,6 +1,6 @@
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ export default function Index() {
   const insets = useSafeAreaInsets();
   const { user, profile, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (loading) return;
@@ -16,18 +17,17 @@ export default function Index() {
       router.replace('/sign-in');
       return;
     }
-    if (Platform.OS === 'web') {
-      // For web, if user is logged in, let Expo Router handle the current URL naturally.
-      // Do not force a redirect to a specific default route.
-      return;
-    }
     if (!profile) return;
+    if (Platform.OS === 'web') {
+      // Preserve deep links on web, but avoid an infinite spinner when landing on root ("/").
+      if (pathname !== '/') return;
+    }
     if (profile.role === 'driver') {
       router.replace('/(driver)');
-    } else {
-      router.replace('/(tabs)/finance');
+      return;
     }
-  }, [user, profile, loading, router]);
+    router.replace('/(tabs)/finance');
+  }, [user, profile, loading, pathname, router]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
