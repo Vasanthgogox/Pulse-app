@@ -26,6 +26,7 @@ import {
 } from "@/lib/capabilities";
 import { formatIndianVehicleNumber, formatLedgerDate } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
+import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import {
   updateSalaryRequestStatus
 } from "@/services/salaryRequestsService";
@@ -47,6 +48,9 @@ import { useFinanceTransactionSubmit } from "../hooks/useFinanceTransactionSubmi
 import type { LedgerRow } from "../services/finance.service";
 import { getProfileImage, updateLedgerEntry } from "../services/finance.service";
 import type { FinanceSubTab } from "../types";
+import { DateRangePickerModal } from "@/components/DateRangePickerModal";
+import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPeriod";
+import { tripDayIso } from "@/lib/dateRangePresets";
 import type { TripEntryContext } from "./EntityDetailOverlay";
 import { EntityListCategoryModal } from "./EntityListCategoryModal";
 import { FinanceModals } from "./FinanceModals";
@@ -157,6 +161,9 @@ export function FinanceScreen() {
     acceptedDirectQuotes,
     setPendingDriverSalaryRequests,
   } = entities;
+
+  const linkedOrgDisplayMap = useLinkedOrgProfileMap(clientRows, supplierRows);
+
   const {
     ledgerTransactions,
     ledgerLoading,
@@ -166,6 +173,9 @@ export function FinanceScreen() {
     refetchLedger,
     financePeriodFilter,
     setFinancePeriodFilter,
+    financeCustomRangeFrom,
+    financeCustomRangeTo,
+    setFinanceCustomRange,
     sourceSupplyFilter,
     setSourceSupplyFilter,
     selectedLedgerCategory,
@@ -185,7 +195,48 @@ export function FinanceScreen() {
     isAnyFilterActive: ledgerAnyFilterActive,
   } = ledger;
 
+  const financeDateOpts = useMemo(
+    () => ({
+      customFrom: financeCustomRangeFrom,
+      customTo: financeCustomRangeTo,
+    }),
+    [financeCustomRangeFrom, financeCustomRangeTo],
+  );
+
+  const tripMatchesFinanceDate = useCallback(
+    (t: TripRow) =>
+      ledgerDayMatchesPeriod(tripDayIso(t), financePeriodFilter, financeDateOpts),
+    [financePeriodFilter, financeDateOpts],
+  );
+
+  const financeFilteredTripRows = useMemo(
+    () => tripRows.filter(tripMatchesFinanceDate),
+    [tripRows, tripMatchesFinanceDate],
+  );
+  const financeFilteredTripsWhereOrgIsClient = useMemo(
+    () => tripsWhereOrgIsClient.filter(tripMatchesFinanceDate),
+    [tripsWhereOrgIsClient, tripMatchesFinanceDate],
+  );
+  const financeFilteredTripsWhereOrgIsSupplier = useMemo(
+    () => tripsWhereOrgIsSupplier.filter(tripMatchesFinanceDate),
+    [tripsWhereOrgIsSupplier, tripMatchesFinanceDate],
+  );
+  const financeFilteredAllTripsForLedger = useMemo(
+    () => allTripsForLedger.filter(tripMatchesFinanceDate),
+    [allTripsForLedger, tripMatchesFinanceDate],
+  );
+
+  const financeTripOptionIds = useMemo(
+    () => new Set(financeFilteredAllTripsForLedger.map((t) => t.id)),
+    [financeFilteredAllTripsForLedger],
+  );
+  const filteredTripOptionsForFinance = useMemo(
+    () => trips.filter((o) => financeTripOptionIds.has(o.id)),
+    [trips, financeTripOptionIds],
+  );
+
   const [entityFilter, setEntityFilter] = useState<EntityListFilter>("all");
+  const [financeDateModalVisible, setFinanceDateModalVisible] = useState(false);
   const [financeSubTab, setFinanceSubTab] = useState<FinanceSubTab>("cash");
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showAddClientModal, setShowAddClientModal] = useState(false);
@@ -795,7 +846,6 @@ export function FinanceScreen() {
   ]);
   const bannerTotals =
     financeSubTab === "cash" ? ledgerTotalsData : tabTotals;
-  const showPeriodFilter = financeSubTab === "cash";
 
   const handleEntityRowSelect = useCallback(
     (
@@ -1191,9 +1241,16 @@ export function FinanceScreen() {
         onGarageViewTabChange={
           financeSubTab === "garage" ? setGarageViewTab : undefined
         }
-        showPeriodFilter={showPeriodFilter}
+        showPeriodFilter={false}
         periodFilter={financePeriodFilter}
         onPeriodFilterChange={setFinancePeriodFilter}
+        datePreset={{
+          period: financePeriodFilter,
+          onPeriodChange: setFinancePeriodFilter,
+          onCustomRangePress: () => setFinanceDateModalVisible(true),
+          customFrom: financeCustomRangeFrom,
+          customTo: financeCustomRangeTo,
+        }}
         sourceFilter={
           financeSubTab === "cash" ? sourceSupplyFilter : undefined
         }
@@ -1220,14 +1277,14 @@ export function FinanceScreen() {
               onAddTransactionPress={() => router.push("/(modals)/ledger-sync" as const)}
               onLedgerRowSelect={handleLedgerRowSelect}
               getVehicleNumberForTripId={getVehicleNumberForTripId}
-              tripOptions={trips}
+              tripOptions={filteredTripOptionsForFinance}
               tripDetailsMap={tripDetailsMap}
               onLedgerMissionChange={handleLedgerMissionChange}
               clientRows={clientRows}
-              tripRows={allTripsForLedger}
+              tripRows={financeFilteredAllTripsForLedger}
               supplierRows={supplierRows}
-              tripsWhereOrgIsClient={tripsWhereOrgIsClient}
-              tripsWhereOrgIsSupplier={tripsWhereOrgIsSupplier}
+              tripsWhereOrgIsClient={financeFilteredTripsWhereOrgIsClient}
+              tripsWhereOrgIsSupplier={financeFilteredTripsWhereOrgIsSupplier}
               indentsForFinance={indentsForFinance}
               acceptedDirectQuotes={acceptedDirectQuotes}
               vehicleRows={vehicleRows}
@@ -1261,6 +1318,7 @@ export function FinanceScreen() {
                 40
               }
               profileImages={profileImages}
+              linkedOrgDisplayMap={linkedOrgDisplayMap}
             />
           </View>
         </View>
@@ -1324,6 +1382,17 @@ export function FinanceScreen() {
           </View>
         );
       })()}
+
+      <DateRangePickerModal
+        visible={financeDateModalVisible}
+        initialFrom={financeCustomRangeFrom ?? undefined}
+        initialTo={financeCustomRangeTo ?? undefined}
+        onDismiss={() => setFinanceDateModalVisible(false)}
+        onApply={(from, to) => {
+          setFinanceCustomRange(from, to);
+          setFinanceDateModalVisible(false);
+        }}
+      />
 
       <FinanceModals
         showTransactionModal={showTransactionModal}
@@ -1474,6 +1543,8 @@ export function FinanceScreen() {
         selectedDriverLedgerEntries={selectedDriverLedgerEntries}
         vehicleRows={vehicleRows}
         driverRows={driverRows}
+        entityOverlayClientRows={clientRows}
+        entityOverlaySupplierRows={supplierRows}
         pendingDriverSalaryRequests={pendingDriverSalaryRequests}
         onPayDriverRequestFromOverlay={(req) => {
           const isTripBased =

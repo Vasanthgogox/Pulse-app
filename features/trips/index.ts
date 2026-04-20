@@ -15,6 +15,20 @@ export { TripTrackingBlock, type TripTrackingBlockProps } from './components/Tri
 export { TripFinanceBlock, type TripFinanceBlockProps } from './components/TripFinanceBlock';
 export { TripAssignmentBlock, type TripAssignmentBlockProps, type AssignmentSource } from './components/TripAssignmentBlock';
 export { TripExpandableCard, type TripExpandableCardProps } from './components/TripExpandableCard';
+export {
+  TripsHubTripCard,
+  TripsHubTableView,
+  DEFAULT_TRIPS_HUB_TABLE_COLUMNS,
+  summarizeTripLedgerForHub,
+  type TripsHubTripCardProps,
+  type TripsHubTableViewProps,
+  type TripsHubTableColumnId,
+} from './components/TripsHubViews';
+export {
+  buildTripHubPartyMetaByTripId,
+  isUuidLikeString,
+  type TripHubPartyMeta,
+} from './utils/tripHubPartyMeta';
 export { useRealtimeTrips, useRealtimeTrip } from './hooks/useRealtimeTrips';
 export {
   getTripsByOrganization,

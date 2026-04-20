@@ -4,21 +4,27 @@
  * Card style matches the Timeline layout from Client Detail / Cash Flow.
  */
 import { ALL_LEDGER_CATEGORY_VALUES } from "@/components/AddTransactionModal";
+import { EntityIdentityAvatar } from "@/components/EntityIdentityAvatar";
 import Theme from '@/constants/Theme';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatIndianVehicleNumber, formatLedgerAmount } from '@/lib/format';
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
-import React, { useMemo, useState } from 'react';
+import type { DriverRow } from "@/features/drivers/services/drivers.service";
+import React, { useMemo, useState, type ReactNode } from 'react';
 import Animated, { FadeInUp, Layout } from 'react-native-reanimated';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
+import {
+  resolveLedgerRowPartyIdentity,
+} from "@/lib/entityIdentity";
+import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
 import type { LedgerRow } from '../services/finance.service';
 import { type FinancialRowData } from "./FinancialRow";
 import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
 
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
-import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
+import { partyAvatarInitialsTextColor } from "@/lib/partyAvatarDisplay";
 export interface FinanceKanbanTabProps {
   transactions: LedgerRow[];
   onRowSelect?: (data: any) => void;
@@ -43,6 +49,7 @@ export interface FinanceKanbanTabProps {
   >;
   clientRows?: ClientRow[];
   supplierRows?: SupplierRow[];
+  driverRows?: DriverRow[];
   tripPartyMap?: Record<
     string,
     {
@@ -52,6 +59,7 @@ export interface FinanceKanbanTabProps {
     }
   >;
   profileImages: Record<string, string>;
+  linkedOrgDisplayMap?: Record<string, LinkedOrgDisplay>;
 }
 
 const COLUMN_TYPES = ['customers', 'suppliers', 'garage', 'drivers'] as const;
@@ -110,7 +118,39 @@ function formatTxDate(iso: string | null | undefined): string {
   return `${day} ${MONTHS_SHORT[Number(m) - 1] ?? m} ${y}`;
 }
 
-function KanbanCard({ row, index, cat, openDetail, hasAmtIn, amount, dateStr, vehicleStr, partyName, routeWhyLine, rowData, tripIdOnly, onRowSelect, profileImageUrl }: any) {
+function KanbanCard({
+  row,
+  index,
+  cat,
+  openDetail,
+  hasAmtIn,
+  amount,
+  dateStr,
+  vehicleStr,
+  partyName,
+  routeWhyLine,
+  rowData,
+  tripIdOnly,
+  onRowSelect,
+  profileImageUrl,
+  partyAvatar,
+}: {
+  row: LedgerRow;
+  index: number;
+  cat: ColumnType | "other";
+  openDetail: (rowData: FinancialRowData) => void;
+  hasAmtIn: boolean;
+  amount: number;
+  dateStr: string;
+  vehicleStr: string | null;
+  partyName: string;
+  routeWhyLine: string | null;
+  rowData: FinancialRowData;
+  tripIdOnly: string | null;
+  onRowSelect?: (row: LedgerRow) => void;
+  profileImageUrl: string | null;
+  partyAvatar?: ReactNode;
+}) {
   const avatarBg = avatarColor(partyName);
   const initialText = initials(partyName);
 
@@ -127,7 +167,9 @@ function KanbanCard({ row, index, cat, openDetail, hasAmtIn, amount, dateStr, ve
         accessibilityRole="button"
         accessibilityLabel={`Open cash entry for ${partyName}`}
       >
-        {profileImageUrl ? (
+        {partyAvatar != null ? (
+          partyAvatar
+        ) : profileImageUrl ? (
           <Image source={{ uri: profileImageUrl }} style={styles.profileImage} />
         ) : (
           <View
@@ -137,7 +179,13 @@ function KanbanCard({ row, index, cat, openDetail, hasAmtIn, amount, dateStr, ve
               hasAmtIn ? styles.avatarWrapIn : styles.avatarWrapOut,
             ]}
           >
-            <Text style={styles.avatarText} numberOfLines={1}>
+            <Text
+              style={[
+                styles.avatarText,
+                { color: partyAvatarInitialsTextColor(avatarBg) },
+              ]}
+              numberOfLines={1}
+            >
               {initialText}
             </Text>
           </View>
@@ -254,14 +302,20 @@ export function FinanceKanbanTab({
   tripDetailsMap = {},
   clientRows = [],
   supplierRows = [],
+  driverRows = [],
   tripPartyMap = {},
   profileImages,
+  linkedOrgDisplayMap = {},
 }: FinanceKanbanTabProps) {
   const { t } = useLanguage();
   const router = useRouter();
 
   const clientById = useMemo(() => new Map(clientRows.map(c => [c.id, c])), [clientRows]);
   const supplierById = useMemo(() => new Map(supplierRows.map(s => [s.id, s])), [supplierRows]);
+  const driverById = useMemo(
+    () => new Map(driverRows.map((d) => [d.id, d])),
+    [driverRows],
+  );
 
   const getResolvedPartyName = (row: LedgerRow): string => {
     const contactType = row.contact_type;
@@ -457,18 +511,27 @@ export function FinanceKanbanTab({
     const rowData = buildFinancialRowData(row);
     const tripIdOnly = tripDetail?.trip_number || row.trip_number || (row.trip_id ? "TRIP" : null);
 
-    // Resolve profile image — clients/suppliers from already-fetched rows (sync), drivers from async state
     let profileImageUrl: string | null = null;
-    if (row.contact_id) {
-      if (row.contact_type === 'client') {
-        profileImageUrl = resolveAvatarPublicUrl(clientById.get(row.contact_id)?.avatar_url);
-      } else if (row.contact_type === 'supplier') {
-        profileImageUrl = resolveAvatarPublicUrl(supplierById.get(row.contact_id)?.avatar_url);
-      } else {
-        profileImageUrl = profileImages[row.contact_id] ?? null;
-      }
-    }
 
+    const identity = resolveLedgerRowPartyIdentity(row, {
+      clientById,
+      supplierById,
+      driverById,
+      linkedOrgDisplayMap,
+      profileImages,
+      driverProfileImageUrls: profileImages,
+      tripPartyMap,
+      partyDisplayName: partyName,
+    });
+
+    const partyAvatar =
+      identity != null ? (
+        <EntityIdentityAvatar identity={identity} size="md" showIntegrationBadge />
+      ) : undefined;
+
+    if (!partyAvatar && row.contact_id) {
+      profileImageUrl = profileImages[row.contact_id] ?? null;
+    }
 
     return (
       <KanbanCard
@@ -487,6 +550,7 @@ export function FinanceKanbanTab({
         tripIdOnly={tripIdOnly}
         onRowSelect={onRowSelect}
         profileImageUrl={profileImageUrl}
+        partyAvatar={partyAvatar}
       />
     );
   };
@@ -622,7 +686,6 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 11,
     fontWeight: "600",
-    color: Theme.textOnPrimary,
     letterSpacing: 0.2,
   },
   timelineCardBody: {
@@ -664,11 +727,11 @@ const styles = StyleSheet.create({
     gap: 6,
     minWidth: 0,
   },
-  /** Amount — large, medium-strong, italic; green / red from amountIn / amountOut. */
+  /** Amount — compact, regular weight; green / red from amountIn / amountOut. */
   amount: {
-    fontSize: 15,
-    fontWeight: "600",
-    fontStyle: "italic",
+    fontSize: 12,
+    fontWeight: "400",
+    fontStyle: "normal",
   },
   amountIn: {
     color: Theme.darkGreen,

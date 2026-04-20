@@ -11,11 +11,21 @@ import { DriverStatusDot } from "@/features/finance/components/FinancialRow";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { getTripDisplayNumber } from "@/features/trips/services/trips.service";
 import { formatIndianVehicleNumber } from "@/lib/format";
+import { usePaginatedScroll } from "@/lib/usePaginatedScroll";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
-import { useEffect, useMemo } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useCallback, useEffect, useMemo } from "react";
+import {
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
     buildTripPnLListForPeriod,
@@ -192,6 +202,27 @@ export function GarrageTab({
     return list;
   }, [vehiclesList, tripsList, viewTab, q, entityFilter, vehicles]);
 
+  const garrageTableResetKey = useMemo(
+    () =>
+      `${viewTab}|${period}|${q}|${entityFilter}|${filteredList.length}|${searchQuery}`,
+    [viewTab, period, q, entityFilter, filteredList.length, searchQuery],
+  );
+  const {
+    visible: visibleGarrageRows,
+    onScroll: onGarrageTablePaginatedScroll,
+  } = usePaginatedScroll(filteredList, { resetKey: garrageTableResetKey });
+
+  const handleGarrageTableScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const p = tabBarScrollProps as {
+        onScroll?: (ev?: NativeSyntheticEvent<NativeScrollEvent>) => void;
+      };
+      p.onScroll?.(e);
+      onGarrageTablePaginatedScroll(e);
+    },
+    [tabBarScrollProps, onGarrageTablePaginatedScroll],
+  );
+
   useEffect(() => {
     if (onTotals) onTotals({ totalIn: totalRevenue, totalOut: totalProfit });
   }, [onTotals, totalRevenue, totalProfit]);
@@ -200,7 +231,7 @@ export function GarrageTab({
     return <Text style={styles.loading}>Loading…</Text>;
   }
 
-  const handleRowPress = (row: (typeof filteredList)[0]) => {
+  const handleRowPress = (row: (typeof filteredList)[number]) => {
     if (!onRowSelect) return;
     const vehicleRow = row as VehiclePnLRow;
     const data: FinancialRowData = {
@@ -234,6 +265,8 @@ export function GarrageTab({
         ]}
         showsVerticalScrollIndicator={false}
         {...tabBarScrollProps}
+        onScroll={handleGarrageTableScroll}
+        scrollEventThrottle={tabBarScrollProps.scrollEventThrottle ?? 100}
         stickyHeaderIndices={[stickyHeaderIndex]}
         refreshControl={
           onRefresh ? (
@@ -285,7 +318,7 @@ export function GarrageTab({
                 <Text style={styles.emptyText}>No trips in this period.</Text>
               </View>
             ) : (
-              (filteredList as TripPnLRow[]).map((row) => (
+              (visibleGarrageRows as TripPnLRow[]).map((row) => (
                 <TouchableOpacity
                   key={row.id}
                   style={styles.listRow}
@@ -336,7 +369,7 @@ export function GarrageTab({
               </Text>
             </View>
           ) : (
-            (filteredList as typeof vehiclesList).map((row) => (
+            (visibleGarrageRows as typeof vehiclesList).map((row) => (
               <TouchableOpacity
                 key={row.id}
                 style={styles.listRow}

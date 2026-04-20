@@ -10,9 +10,13 @@
  * Drivers:    DRIVER 32% | TRIPS 12% | EARNINGS 18.5% | PAID 18.5% | DUE 19%
  */
 import Theme from "@/constants/Theme";
+import { EntityIdentityAvatar } from "@/components/EntityIdentityAvatar";
+import { PartyAvatar } from "@/components/PartyAvatar";
+import { resolveFinancialRowPartyIdentity } from "@/lib/entityIdentity";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { CUSTOMERS_SUPPLIERS, DRIVERS, LEDGER } from "@/features/finance/constants/tableColumns";
 import { formatIndianVehicleNumber } from "@/lib/format";
+import { partyAvatarInitialsTextColor } from "@/lib/partyAvatarDisplay";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
@@ -195,6 +199,11 @@ export interface FinancialRowTripDetail {
  */
 export interface FinancialRowData {
   profileImageUrl?: string | null;
+  /** Drivers: preset when no profileImageUrl (PartyAvatar / driver seed). */
+  avatarSeed?: string | null;
+  /** Ledger client/supplier: linked org logo / seed (before contact avatar). */
+  organizationImageUrl?: string | null;
+  organizationAvatarSeed?: string | null;
   id: string;
   name?: string;
   /** Ledger: category // desc; garage: model; drivers: status */
@@ -511,6 +520,8 @@ export function FinancialRow({
       : null;
   const nodeMain =
     driverNameLine != null ? driverNameLine : (data.name ?? data.id ?? "—");
+  /** Customers/suppliers initials pill (same hash palette as PartyAvatar). */
+  const custSupInitialsBg = avatarColor(nodeMain ?? "—");
   const nodeSub =
     type === "ledger"
       ? data.subline != null && data.subline !== ""
@@ -659,12 +670,21 @@ export function FinancialRow({
       : data.reconciliationStatus === "mismatch"
         ? styles.ledgerReconBadgeTextMismatch
         : styles.ledgerReconBadgeTextMatch;
+  const ledgerPartyIdentity =
+    type === "ledger" ? resolveFinancialRowPartyIdentity(data) : null;
+
   /** Ledger collapsed row: [icon] name, category (uppercase), date/time — same layout as entity tabs. */
   const ledgerEntityLines =
     type === "ledger" ? (
       <>
         <View style={styles.cellNodeMainRow}>
-          {showLedgerIntegrationIcon ? (
+          {ledgerPartyIdentity ? (
+            <EntityIdentityAvatar
+              identity={ledgerPartyIdentity}
+              size="sm"
+              showIntegrationBadge
+            />
+          ) : showLedgerIntegrationIcon ? (
             <View style={styles.cellNodeSubIntegrationIconWrap}>
               <FontAwesome
                 name={data.is_integrated ? 'link' : 'unlink'}
@@ -729,9 +749,14 @@ export function FinancialRow({
         ledgerEntityLines
       ) : type === "drivers" ? (
         <View style={styles.driverCellWithDot}>
-          {data.profileImageUrl ? (
-            <Image source={{ uri: data.profileImageUrl }} style={styles.profileImage} />
-          ) : (
+          <View style={styles.driverAvatarWithStatus}>
+            <PartyAvatar
+              name={(nodeMain ?? data.name ?? "—").trim() || "—"}
+              avatarUrl={(data.profileImageUrl ?? "").trim() || null}
+              avatarSeed={(data.avatarSeed ?? "").trim() || null}
+              entityType="driver"
+              size={24}
+            />
             <View
               style={[
                 styles.driverStatusDot,
@@ -739,7 +764,7 @@ export function FinancialRow({
               ]}
               accessibilityLabel={data.left_at ? "Disconnected" : (data.status ?? "OFFLINE")}
             />
-          )}
+          </View>
           <View style={styles.driverCellTextWrap}>
             <View style={styles.driverCellNameWrap}>
               <Text style={styles.cellNodeMainDriver} numberOfLines={1} ellipsizeMode="tail">
@@ -771,10 +796,15 @@ export function FinancialRow({
                 <View
                   style={[
                     styles.initialsAvatar,
-                    { backgroundColor: avatarColor(nodeMain ?? "—") },
+                    { backgroundColor: custSupInitialsBg },
                   ]}
                 >
-                  <Text style={styles.initialsText}>
+                  <Text
+                    style={[
+                      styles.initialsText,
+                      { color: partyAvatarInitialsTextColor(custSupInitialsBg) },
+                    ]}
+                  >
                     {initials(nodeMain ?? "—")}
                   </Text>
                 </View>
@@ -1138,6 +1168,12 @@ const styles = StyleSheet.create({
     gap: 8,
     minWidth: 0,
   },
+  driverAvatarWithStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    flexShrink: 0,
+  },
   driverStatusDot: {
     width: 4,
     height: 4,
@@ -1202,7 +1238,6 @@ const styles = StyleSheet.create({
   initialsText: {
     fontSize: 10,
     fontWeight: "600",
-    color: Theme.textOnPrimary,
   },
   cellNodeMain: {
     fontSize: 12,

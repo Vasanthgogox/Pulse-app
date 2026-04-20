@@ -26,6 +26,17 @@ export const Typography = {
     letterSpacing: 2,
     textTransform: "uppercase",
   } satisfies TextStyle,
+
+  /**
+   * Network tab dark header: Connections / Invitations row, Load / Network chips.
+   * Matches `app/(tabs)/network.tsx` filter tab row.
+   */
+  networkDarkHeaderNav: {
+    fontSize: 9,
+    fontWeight: "600",
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+  } satisfies TextStyle,
 } as const;
 
 export default Typography;

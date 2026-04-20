@@ -121,6 +121,8 @@ export function aggregateDrivers(
         : null;
     const displayName = d.name ?? (d as { full_name?: string | null }).full_name ?? undefined;
     const isDisconnected = leftAt != null && leftAt !== '';
+    const rawAvatar = (d.avatar_url ?? "").trim();
+    const rawSeed = (d.avatar_seed ?? "").trim();
     rows.push({
       id,
       name: displayName ?? undefined,
@@ -132,6 +134,8 @@ export function aggregateDrivers(
       due,
       is_integrated: isIntegrated,
       left_at: leftAt ?? undefined,
+      profileImageUrl: rawAvatar || undefined,
+      avatarSeed: rawSeed || undefined,
     });
   }
 

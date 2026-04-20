@@ -7,7 +7,9 @@
  *
  * Safe area respected on every device.
  */
+import { EntityIdentityAvatar } from "@/components/EntityIdentityAvatar";
 import Theme from "@/constants/Theme";
+import { resolveFinancialRowPartyIdentity } from "@/lib/entityIdentity";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import React, { useMemo } from "react";
 import {
@@ -101,6 +103,10 @@ export function FinanceEntryDetailScreen({
   const aging = relativeAging(data.transaction_date);
   const kind = useMemo(() => tripKind(data), [data]);
   const tripDisplay = data.tripDetail?.trip_number ?? data.msn ?? null;
+  const partyIdentity = useMemo(
+    () => resolveFinancialRowPartyIdentity(data),
+    [data],
+  );
 
   const directionColor =
     direction === "in"
@@ -170,10 +176,22 @@ export function FinanceEntryDetailScreen({
           </Text>
         </View>
 
-        {/* Subtitle: party */}
-        <Text style={styles.heroParty} numberOfLines={2}>
-          {partyName}
-        </Text>
+        {/* Party identity + name */}
+        <View style={styles.heroPartyRow}>
+          {partyIdentity ? (
+            <EntityIdentityAvatar
+              identity={partyIdentity}
+              size="lg"
+              showIntegrationBadge={false}
+            />
+          ) : null}
+          <Text
+            style={[styles.heroParty, partyIdentity ? styles.heroPartyBesideAvatar : null]}
+            numberOfLines={2}
+          >
+            {partyName}
+          </Text>
+        </View>
 
         {/* Amount + direction pill */}
         <View style={styles.heroAmountBlock}>
@@ -391,13 +409,24 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     textTransform: "uppercase",
   },
+  heroPartyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 14,
+    minWidth: 0,
+  },
   heroParty: {
     fontSize: 11,
     fontWeight: "700",
     color: Theme.textOnDarkMuted,
     letterSpacing: 1.6,
     textTransform: "uppercase",
-    marginTop: 14,
+    flex: 1,
+    minWidth: 0,
+  },
+  heroPartyBesideAvatar: {
+    marginTop: 0,
   },
   heroAmountBlock: {
     marginTop: 6,

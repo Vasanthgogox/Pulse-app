@@ -2,7 +2,13 @@
  * Finance tab and ledger UI types. Used by FinanceScreen and related components.
  */
 
-export type FinancePeriodFilter = "TODAY" | "MONTH" | "RANGE";
+export type FinancePeriodFilter =
+  | "TODAY"
+  | "YESTERDAY"
+  | "WEEK"
+  | "MONTH"
+  | "RANGE"
+  | "CUSTOM";
 
 export type FinanceSubTab =
   | "cash"
@@ -57,3 +63,10 @@ export const LEDGER_CATEGORIES: LedgerCategory[] = [
   "vehicle",
   "driver",
 ];
+
+export type LedgerSortKey =
+  | "date"
+  | "entity"
+  | "source"
+  | "cash_in"
+  | "cash_out";

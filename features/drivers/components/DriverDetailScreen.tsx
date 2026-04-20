@@ -1784,6 +1784,7 @@ export default function DriverDetailScreen({
               showHistoryHeader={false}
               showGridFooter={false}
               embedInParentScroll={true}
+              driverRows={driver ? [driver] : []}
             />
           </View>
         </ScrollView>

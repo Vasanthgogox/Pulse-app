@@ -1736,7 +1736,7 @@ const styles = StyleSheet.create({
     color: Theme.driverGold,
   },
   compareCountValueInfo: {
-    color: "#818CF8",
+    color: Theme.textOnDarkMuted,
   },
   compareCountLabel: {
     fontSize: 8,
@@ -1872,8 +1872,8 @@ const styles = StyleSheet.create({
     borderColor: "#FDE68A",
   },
   compareTxnPillInfo: {
-    backgroundColor: "#EEF2FF",
-    borderColor: "#C7D2FE",
+    backgroundColor: Theme.surfaceGray,
+    borderColor: Theme.borderMedium,
   },
   compareTxnPillText: {
     fontSize: 9,
@@ -1887,7 +1887,7 @@ const styles = StyleSheet.create({
     color: Theme.warning,
   },
   compareTxnPillTextInfo: {
-    color: "#4338CA",
+    color: Theme.textSecondary,
   },
   compareTxnVarianceLabel: {
     fontSize: 10,

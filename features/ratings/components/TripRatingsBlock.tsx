@@ -6,6 +6,7 @@
  */
 import Theme from '@/constants/Theme';
 import { VALIDATION } from '@/lib/validation';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -14,6 +15,7 @@ import {
   Easing,
   Image,
   Modal,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -43,27 +45,43 @@ export interface TripRatingsBlockProps {
   driverAvatarUri?: string | null;
   /** Called when trip ratings have been loaded (so parent can show driver rating in tracking block) */
   onRatingsLoaded?: (ratings: RatingRow[]) => void;
+  /** Resolved client display name for settlement feedback prompt. */
+  clientName?: string | null;
+  /** True when customer payment has been captured on this trip. */
+  paymentCaptured?: boolean;
 }
 
 type RateFlow = { type: 'client_supplier' } | { type: 'supplier_driver' } | null;
 type CommentPayload = { tags: string[]; note: string };
+type LocalClientFeedback = {
+  score: number;
+  tags: string[];
+  note: string;
+  created_at: string;
+};
 
 type QuickTag = { id: string; label: string };
 
 const DRIVER_RATING_TAGS: readonly QuickTag[] = [
-  { id: 'safe_driving', label: 'Safe driving' },
   { id: 'on_time', label: 'On time' },
   { id: 'professional', label: 'Professional' },
-  { id: 'good_communication', label: 'Good communication' },
+  { id: 'safe_driving', label: 'Safe driving' },
+  { id: 'good_communication', label: 'Helpful' },
   { id: 'well_maintained_vehicle', label: 'Well maintained vehicle' },
 ] as const;
 
 const SUPPLIER_RATING_TAGS: readonly QuickTag[] = [
-  { id: 'reliable_service', label: 'Reliable service' },
-  { id: 'on_time_assignment', label: 'On time assignment' },
-  { id: 'good_coordination', label: 'Good coordination' },
+  { id: 'reliable_service', label: 'Reliable' },
+  { id: 'on_time_assignment', label: 'Good pricing' },
+  { id: 'good_coordination', label: 'Accurate paperwork' },
   { id: 'quick_response', label: 'Quick response' },
   { id: 'professional', label: 'Professional' },
+] as const;
+const CLIENT_RATING_TAGS: readonly QuickTag[] = [
+  { id: 'prompt_payment', label: 'Prompt payment' },
+  { id: 'clear_docs', label: 'Clear docs' },
+  { id: 'smooth_coordination', label: 'Smooth coordination' },
+  { id: 'quick_approval', label: 'Quick approvals' },
 ] as const;
 
 const LEGACY_TAG_LABELS: Record<string, string> = {
@@ -124,23 +142,42 @@ function formatDate(s: string) {
   return `${day} ${months[Number(m) - 1]} ${y}`;
 }
 
-function getScoreLabel(value: number): string {
-  if (value <= 0) return 'Select rating';
-  if (value === 1) return 'Needs improvement';
-  if (value === 2) return 'Below expectations';
-  if (value === 3) return 'Good';
-  if (value === 4) return 'Very good';
-  return 'Excellent';
+/** Pulse-style modal variant: supplier = client→supplier rating; driver = supplier/org→driver. */
+type FeedbackPresentationKind = 'DRIVER' | 'SUPPLIER';
+
+function presentationKindFromFlow(flow: RateFlow): FeedbackPresentationKind {
+  if (!flow) return 'DRIVER';
+  return flow.type === 'client_supplier' ? 'SUPPLIER' : 'DRIVER';
 }
 
-function getScoreEmoji(value: number): string {
-  if (value <= 0) return '⭐';
-  if (value === 1) return '😕';
-  if (value === 2) return '🙁';
-  if (value === 3) return '🙂';
-  if (value === 4) return '😊';
-  return '🤩';
-}
+const FEEDBACK_PRESENTATION: Record<
+  FeedbackPresentationKind,
+  {
+    headerBg: string;
+    eyebrow: string;
+    promptWord: string;
+    badgeIcon: 'truck' | 'briefcase';
+    glowStrong: string;
+    glowSoft: string;
+  }
+> = {
+  DRIVER: {
+    headerBg: Theme.feedbackModalHeaderDriver,
+    eyebrow: 'Trip feedback',
+    promptWord: 'driver',
+    badgeIcon: 'truck',
+    glowStrong: 'rgba(99, 102, 241, 0.35)',
+    glowSoft: 'rgba(245, 158, 11, 0.18)',
+  },
+  SUPPLIER: {
+    headerBg: Theme.feedbackModalHeaderSupplier,
+    eyebrow: 'Partner audit',
+    promptWord: 'supplier',
+    badgeIcon: 'briefcase',
+    glowStrong: 'rgba(16, 185, 129, 0.38)',
+    glowSoft: 'rgba(255, 255, 255, 0.12)',
+  },
+};
 
 export function TripRatingsBlock({
   trip,
@@ -149,6 +186,8 @@ export function TripRatingsBlock({
   driverName,
   driverAvatarUri,
   onRatingsLoaded,
+  clientName,
+  paymentCaptured = false,
 }: TripRatingsBlockProps) {
   const insets = useSafeAreaInsets();
   const [ratings, setRatings] = useState<RatingRow[]>([]);
@@ -160,7 +199,14 @@ export function TripRatingsBlock({
   const [submitting, setSubmitting] = useState(false);
   const [showCommentBox, setShowCommentBox] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [showClientFeedbackModal, setShowClientFeedbackModal] = useState(false);
+  const [clientScore, setClientScore] = useState(0);
+  const [clientTags, setClientTags] = useState<string[]>([]);
+  const [clientComment, setClientComment] = useState('');
+  const [clientSubmitting, setClientSubmitting] = useState(false);
+  const [clientFeedback, setClientFeedback] = useState<LocalClientFeedback | null>(null);
   const hasAutoOpenedRef = useRef(false);
+  const hasAutoOpenedClientRef = useRef(false);
   const modalOpacity = useRef(new Animated.Value(0)).current;
   const modalTranslateY = useRef(new Animated.Value(24)).current;
   const composerOpacity = useRef(new Animated.Value(0)).current;
@@ -215,6 +261,13 @@ export function TripRatingsBlock({
     (!hasSupplier || !hasClient);
 
   const canRateDriver = canRateDriverAsClient || canRateDriverAsSupplier || canRateDriverAsOrg;
+  const canRateClient =
+    isCompleted &&
+    paymentCaptured &&
+    !!clientName &&
+    clientFeedback == null;
+
+  const clientFeedbackStorageKey = `trip_client_feedback:${trip.id}`;
 
   const loadRatings = useCallback(async () => {
     if (!trip.id) {
@@ -233,6 +286,28 @@ export function TripRatingsBlock({
   useEffect(() => {
     loadRatings();
   }, [loadRatings]);
+
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(clientFeedbackStorageKey)
+      .then((raw) => {
+        if (cancelled || !raw) return;
+        try {
+          const parsed = JSON.parse(raw) as LocalClientFeedback;
+          if (parsed && typeof parsed.score === 'number') {
+            setClientFeedback(parsed);
+          }
+        } catch {
+          // ignore bad local payload
+        }
+      })
+      .catch(() => {
+        // ignore local storage failures
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [clientFeedbackStorageKey]);
 
   useEffect(() => {
     if (!flow) {
@@ -345,6 +420,13 @@ export function TripRatingsBlock({
     }
   }, [loading, isCompleted, canRateSupplier, canRateDriver, hasRatedSupplier, hasRatedDriver]);
 
+  useEffect(() => {
+    if (loading || !isCompleted || hasAutoOpenedClientRef.current) return;
+    if (!canRateClient) return;
+    hasAutoOpenedClientRef.current = true;
+    setShowClientFeedbackModal(true);
+  }, [loading, isCompleted, canRateClient]);
+
   const resetComposer = (nextFlow: RateFlow) => {
     setFlow(nextFlow);
     setScore(0);
@@ -367,6 +449,11 @@ export function TripRatingsBlock({
   };
   const handleTagToggle = (tagId: string) => {
     setSelectedTags((prev) =>
+      prev.includes(tagId) ? prev.filter((item) => item !== tagId) : [...prev, tagId]
+    );
+  };
+  const handleClientTagToggle = (tagId: string) => {
+    setClientTags((prev) =>
       prev.includes(tagId) ? prev.filter((item) => item !== tagId) : [...prev, tagId]
     );
   };
@@ -440,16 +527,14 @@ export function TripRatingsBlock({
     ? (partnerName || 'Supplier')
     : (driverName || trip.driver_display_name || 'Driver');
   const activeSubjectMeta = flow?.type === 'client_supplier'
-    ? (trip.display_trip_id || trip.trip_number || 'Supplier rating')
-    : (trip.vehicle_display_number || trip.display_trip_id || trip.trip_number || 'Driver rating');
-  const activeRoleLabel = flow?.type === 'client_supplier' ? 'Supplier' : 'Driver';
-  const activePrompt = flow?.type === 'client_supplier' ? 'How was the supplier?' : 'How was your trip?';
+    ? (trip.display_trip_id || trip.trip_number || 'Trip')
+    : (trip.vehicle_display_number || trip.display_trip_id || trip.trip_number || 'Trip');
   const activeQuickTags = flow?.type === 'client_supplier' ? SUPPLIER_RATING_TAGS : DRIVER_RATING_TAGS;
-  const scoreLabel = getScoreLabel(score);
-  const scoreEmoji = getScoreEmoji(score);
+  const presentationKind = flow ? presentationKindFromFlow(flow) : 'DRIVER';
+  const pulseUi = FEEDBACK_PRESENTATION[presentationKind];
 
   if (!isCompleted) return null;
-  if (!canRateSupplier && !canRateDriver && ratings.length === 0) {
+  if (!canRateSupplier && !canRateDriver && !canRateClient && ratings.length === 0 && !clientFeedback) {
     return null;
   }
 
@@ -484,6 +569,12 @@ export function TripRatingsBlock({
                   <View style={styles.summaryPill}>
                     <Feather name="truck" size={12} color={Theme.textPrimaryDark} />
                     <Text style={styles.summaryText}>Driver {driverAvg.toFixed(1)} ★</Text>
+                  </View>
+                )}
+                {clientFeedback != null && (
+                  <View style={styles.summaryPill}>
+                    <Feather name="user" size={12} color={Theme.textPrimaryDark} />
+                    <Text style={styles.summaryText}>Client {clientFeedback.score.toFixed(1)} ★</Text>
                   </View>
                 )}
               </View>
@@ -531,6 +622,33 @@ export function TripRatingsBlock({
                 ))}
               </View>
             )}
+            {clientFeedback != null && (
+              <View style={styles.list}>
+                <View style={styles.row}>
+                  <Text style={styles.rowLabel}>Supplier → {clientName || 'Client'}</Text>
+                  <Text style={styles.rowScore}>{clientFeedback.score} ★</Text>
+                  {clientFeedback.tags.length > 0 ? (
+                    <View style={styles.rowTags}>
+                      {clientFeedback.tags.map((tagId) => {
+                        const tagLabel =
+                          CLIENT_RATING_TAGS.find((t) => t.id === tagId)?.label || tagId;
+                        return (
+                          <View key={`client-${tagId}`} style={styles.rowTagChip}>
+                            <Text style={styles.rowTagText}>{tagLabel}</Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+                  {clientFeedback.note ? (
+                    <Text style={styles.rowComment} numberOfLines={2}>
+                      {clientFeedback.note}
+                    </Text>
+                  ) : null}
+                  <Text style={styles.rowDate}>{formatDate(clientFeedback.created_at)}</Text>
+                </View>
+              </View>
+            )}
             <View style={styles.actions}>
               {canRateSupplier && !hasRatedSupplier && (
                 <TouchableOpacity
@@ -552,16 +670,32 @@ export function TripRatingsBlock({
                   <Text style={styles.btnText}>Rate driver</Text>
                 </TouchableOpacity>
               )}
+              {canRateClient && (
+                <TouchableOpacity
+                  style={[styles.btn, styles.btnDriver]}
+                  onPress={() => setShowClientFeedbackModal(true)}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="user" size={14} color={Theme.textPrimaryDark} />
+                  <Text style={styles.btnText}>Rate client</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </>
         )}
       </View>
 
       <Modal visible={flow !== null} transparent animationType="fade" onRequestClose={closeModal}>
-        <View style={[styles.modalOverlay, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>
+        <View
+          style={[
+            styles.modalOverlay,
+            styles.modalOverlayPulse,
+            { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 },
+          ]}
+        >
           <Animated.View
             style={[
-              styles.modalCard,
+              styles.modalCardPulse,
               { opacity: modalOpacity, transform: [{ translateY: modalTranslateY }] },
             ]}
           >
@@ -589,95 +723,119 @@ export function TripRatingsBlock({
               </Animated.View>
             ) : (
               <>
-                <View style={styles.heroHeader}>
-                  <View style={styles.heroGlowOne} />
-                  <View style={styles.heroGlowTwo} />
-                  <View style={styles.heroTopRow}>
-                    <View style={styles.avatarWrap}>
+                <View style={[styles.heroHeaderPulse, { backgroundColor: pulseUi.headerBg }]}>
+                  <View style={[styles.heroGlowOnePulse, { backgroundColor: pulseUi.glowStrong }]} />
+                  <View style={[styles.heroGlowTwoPulse, { backgroundColor: pulseUi.glowSoft }]} />
+                  <View style={styles.heroTopRowPulse}>
+                    <View style={styles.avatarWrapPulse}>
                       {flow?.type === 'supplier_driver' && driverAvatarUri ? (
                         <Image
                           source={{ uri: driverAvatarUri }}
-                          style={styles.avatarImage}
+                          style={styles.avatarImagePulse}
                           resizeMode="cover"
                         />
                       ) : (
-                        <Text style={styles.avatarText}>
-                          {(activeSubjectName || activeRoleLabel).slice(0, 1).toUpperCase()}
+                        <Text style={styles.avatarTextPulse}>
+                          {(activeSubjectName || '—').slice(0, 1).toUpperCase()}
                         </Text>
                       )}
-                      <View style={styles.avatarBadge}>
+                      <View
+                        style={[
+                          styles.avatarBadgePulse,
+                          { borderColor: pulseUi.headerBg },
+                        ]}
+                      >
                         <Feather
-                          name={flow?.type === 'client_supplier' ? 'briefcase' : 'truck'}
+                          name={pulseUi.badgeIcon}
                           size={12}
-                          color={Theme.textPrimaryDark}
+                          color={Theme.textOnPrimary}
                         />
                       </View>
                     </View>
-                    <View style={styles.heroTextWrap}>
-                      <Text style={styles.heroEyebrow}>Trip feedback</Text>
-                      <Text style={styles.heroName}>{activeSubjectName}</Text>
-                      <Text style={styles.heroMeta}>{activeRoleLabel} • {activeSubjectMeta}</Text>
+                    <View style={styles.heroTextWrapPulse}>
+                      <Text style={styles.heroEyebrowPulse}>{pulseUi.eyebrow}</Text>
+                      <Text style={styles.heroNamePulse} numberOfLines={2}>
+                        {activeSubjectName}
+                      </Text>
+                      <Text style={styles.heroMetaPulse} numberOfLines={1}>
+                        {activeSubjectMeta}
+                      </Text>
                     </View>
                   </View>
 
                   <TouchableOpacity
-                    style={styles.closeButton}
+                    style={styles.closeButtonPulse}
                     onPress={closeModal}
                     activeOpacity={0.8}
                     hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                   >
-                    <Feather name="x" size={20} color={Theme.textOnDarkMuted} />
+                    <Feather name="x" size={20} color={Theme.textOnPrimary} />
                   </TouchableOpacity>
                 </View>
 
-                <View style={styles.modalBody}>
-                  <View style={styles.ratingIntro}>
-                    <Text style={styles.ratingPrompt}>{activePrompt}</Text>
-                    <View style={styles.scorePill}>
-                      <Text style={styles.scoreEmoji}>{scoreEmoji}</Text>
-                      <Text style={styles.scorePillText}>{scoreLabel}</Text>
-                    </View>
-                    <View style={styles.stars}>
-                      {[1, 2, 3, 4, 5].map((n) => (
-                        <TouchableOpacity
-                          key={n}
-                          onPress={() => setScore(n)}
-                          style={styles.starBtn}
-                          hitSlop={8}
-                          activeOpacity={0.85}
-                        >
-                          <FontAwesome
-                            name={n <= score ? 'star' : 'star-o'}
-                            size={34}
-                            color={n <= score ? Theme.driverGold : Theme.borderMedium}
-                          />
-                        </TouchableOpacity>
-                      ))}
-                    </View>
+                <View style={styles.modalBodyPulse}>
+                  <Text style={styles.ratingHeadlinePulse}>
+                    How was your{' '}
+                    <Text style={styles.ratingHeadlineAccent}>{pulseUi.promptWord}</Text>
+                    ?
+                  </Text>
+
+                  <View style={styles.starsPulse}>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <TouchableOpacity
+                        key={n}
+                        onPress={() => setScore(n)}
+                        style={[
+                          styles.starBtnPulse,
+                          { transform: [{ scale: n <= score ? 1.18 : 1 }] },
+                        ]}
+                        hitSlop={8}
+                        activeOpacity={0.85}
+                      >
+                        <FontAwesome
+                          name={n <= score ? 'star' : 'star-o'}
+                          size={36}
+                          color={
+                            n <= score
+                              ? Theme.feedbackModalStarActive
+                              : Theme.borderMedium
+                          }
+                        />
+                      </TouchableOpacity>
+                    ))}
                   </View>
 
                   {score > 0 ? (
                     <Animated.View
                       style={[
-                        styles.composerSection,
+                        styles.composerSectionPulse,
                         {
                           opacity: composerOpacity,
                           transform: [{ translateY: composerTranslateY }],
                         },
                       ]}
                     >
-                      <Text style={styles.tagsTitle}>What went well?</Text>
-                      <View style={styles.tagsWrap}>
+                      <View style={styles.tagsWrapPulse}>
                         {activeQuickTags.map((tag) => {
                           const selected = selectedTags.includes(tag.id);
                           return (
                             <TouchableOpacity
                               key={tag.id}
                               onPress={() => handleTagToggle(tag.id)}
-                              style={[styles.tagChip, selected ? styles.tagChipActive : styles.tagChipIdle]}
+                              style={[
+                                styles.tagChipPulse,
+                                selected ? styles.tagChipPulseActive : styles.tagChipPulseIdle,
+                              ]}
                               activeOpacity={0.85}
                             >
-                              <Text style={[styles.tagChipText, selected ? styles.tagChipTextActive : styles.tagChipTextIdle]}>
+                              <Text
+                                style={[
+                                  styles.tagChipTextPulse,
+                                  selected
+                                    ? styles.tagChipTextPulseActive
+                                    : styles.tagChipTextPulseIdle,
+                                ]}
+                              >
                                 {tag.label}
                               </Text>
                             </TouchableOpacity>
@@ -687,17 +845,19 @@ export function TripRatingsBlock({
 
                       {!showCommentBox ? (
                         <TouchableOpacity
-                          style={styles.noteToggle}
+                          style={styles.noteTogglePulse}
                           onPress={() => setShowCommentBox(true)}
                           activeOpacity={0.8}
                         >
                           <Feather name="message-square" size={15} color={Theme.textMuted} />
-                          <Text style={styles.noteToggleText}>Add a note (optional)</Text>
+                          <Text style={styles.noteToggleTextPulse}>
+                            Add a note (optional)
+                          </Text>
                         </TouchableOpacity>
                       ) : (
-                        <View style={styles.commentBoxWrap}>
+                        <View style={styles.commentBoxWrapPulse}>
                           <TextInput
-                            style={styles.commentInput}
+                            style={styles.commentInputPulse}
                             value={comment}
                             onChangeText={setComment}
                             placeholder="Tell us more about the experience..."
@@ -707,51 +867,154 @@ export function TripRatingsBlock({
                             maxLength={VALIDATION.NOTES_MAX_LENGTH}
                             textAlignVertical="top"
                           />
-                          <Text style={styles.commentCounter}>
+                          <Text style={styles.commentCounterPulse}>
                             {comment.length}/{VALIDATION.NOTES_MAX_LENGTH}
                           </Text>
                         </View>
                       )}
 
-                        <TouchableOpacity
-                          style={[
-                            styles.modalSubmit,
-                            (submitting || score === 0) ? styles.modalSubmitDisabled : null,
-                          ]}
-                          onPress={handleSubmit}
-                          disabled={submitting || score === 0}
-                          activeOpacity={0.85}
-                        >
-                          {submitting ? (
-                            <ActivityIndicator size="small" color={Theme.textMuted} />
-                          ) : (
-                            <>
-                              <Text style={[
-                                styles.modalSubmitText,
-                                (submitting || score === 0) ? { color: Theme.textMuted } : null
-                              ]}>
-                                Submit Rating
-                              </Text>
-                              <Feather 
-                                name="chevron-right" 
-                                size={20} 
-                                color={(submitting || score === 0) ? Theme.textMuted : Theme.textOnPrimary} 
-                              />
-                            </>
-                          )}
-                        </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.modalSubmitPulse}
+                        onPress={handleSubmit}
+                        disabled={submitting}
+                        activeOpacity={0.85}
+                      >
+                        {submitting ? (
+                          <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                        ) : (
+                          <>
+                            <Text style={styles.modalSubmitTextPulse}>Post review</Text>
+                            <FontAwesome
+                              name="thumbs-up"
+                              size={18}
+                              color={Theme.textOnPrimary}
+                            />
+                          </>
+                        )}
+                      </TouchableOpacity>
                     </Animated.View>
-                  ) : null}
-
-                  {score === 0 ? (
-                    <Text style={styles.helperText}>
+                  ) : (
+                    <Text style={styles.helperTextPulse}>
                       Select a star rating to continue.
                     </Text>
-                  ) : null}
+                  )}
                 </View>
               </>
             )}
           </Animated.View>
+        </View>
+      </Modal>
+      <Modal
+        visible={showClientFeedbackModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowClientFeedbackModal(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: Theme.feedbackModalBackdrop }]}>
+          <View style={styles.modalCardPulse}>
+            <View style={[styles.heroHeaderPulse, { backgroundColor: Theme.primary }]}>
+              <TouchableOpacity
+                style={styles.closeButtonPulse}
+                onPress={() => setShowClientFeedbackModal(false)}
+                activeOpacity={0.8}
+              >
+                <Feather name="x" size={20} color={Theme.textOnPrimary} />
+              </TouchableOpacity>
+              <Text style={styles.heroEyebrowPulse}>Settlement feedback</Text>
+              <Text style={styles.heroNamePulse}>{clientName || 'Client'}</Text>
+              <Text style={styles.heroMetaPulse}>Payment captured</Text>
+            </View>
+            <View style={styles.modalBodyPulse}>
+              <Text style={styles.ratingHeadlinePulse}>How was this client?</Text>
+              <View style={styles.starsPulse}>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <TouchableOpacity
+                    key={`client-rate-${n}`}
+                    onPress={() => setClientScore(n)}
+                    style={styles.starBtnPulse}
+                    activeOpacity={0.85}
+                  >
+                    <FontAwesome
+                      name={n <= clientScore ? 'star' : 'star-o'}
+                      size={34}
+                      color={n <= clientScore ? Theme.feedbackModalStarActive : Theme.borderMedium}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <View style={styles.tagsWrapPulse}>
+                {CLIENT_RATING_TAGS.map((tag) => {
+                  const selected = clientTags.includes(tag.id);
+                  return (
+                    <TouchableOpacity
+                      key={tag.id}
+                      onPress={() => handleClientTagToggle(tag.id)}
+                      style={[
+                        styles.tagChipPulse,
+                        selected ? styles.tagChipPulseActive : styles.tagChipPulseIdle,
+                      ]}
+                      activeOpacity={0.85}
+                    >
+                      <Text
+                        style={[
+                          styles.tagChipTextPulse,
+                          selected
+                            ? styles.tagChipTextPulseActive
+                            : styles.tagChipTextPulseIdle,
+                        ]}
+                      >
+                        {tag.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <View style={styles.commentBoxWrapPulse}>
+                <TextInput
+                  style={styles.commentInputPulse}
+                  value={clientComment}
+                  onChangeText={setClientComment}
+                  placeholder="Optional note"
+                  placeholderTextColor={Theme.textMuted}
+                  multiline
+                  numberOfLines={3}
+                  maxLength={VALIDATION.NOTES_MAX_LENGTH}
+                  textAlignVertical="top"
+                />
+              </View>
+              <TouchableOpacity
+                style={styles.modalSubmitPulse}
+                disabled={clientScore < 1 || clientSubmitting}
+                onPress={async () => {
+                  if (clientScore < 1) return;
+                  setClientSubmitting(true);
+                  const payload: LocalClientFeedback = {
+                    score: clientScore,
+                    tags: clientTags,
+                    note: clientComment.trim(),
+                    created_at: new Date().toISOString(),
+                  };
+                  await AsyncStorage.setItem(
+                    clientFeedbackStorageKey,
+                    JSON.stringify(payload),
+                  );
+                  setClientFeedback(payload);
+                  setClientSubmitting(false);
+                  setShowClientFeedbackModal(false);
+                }}
+                activeOpacity={0.85}
+              >
+                {clientSubmitting ? (
+                  <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                ) : (
+                  <>
+                    <Text style={styles.modalSubmitTextPulse}>Submit</Text>
+                    <FontAwesome name="check" size={16} color={Theme.textOnPrimary} />
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
     </View>
@@ -884,233 +1147,225 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: Theme.overlayBackdrop,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  modalCard: {
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 20,
-    width: '100%',
-    maxWidth: 420,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-  },
-  heroHeader: {
-    backgroundColor: Theme.textPrimaryDark,
     paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 20,
+  },
+  modalOverlayPulse: {
+    backgroundColor: Theme.feedbackModalBackdrop,
+  },
+  modalCardPulse: {
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 28,
+    width: '100%',
+    maxWidth: 400,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: Theme.shadow,
+        shadowOffset: { width: 0, height: 20 },
+        shadowOpacity: 0.22,
+        shadowRadius: 48,
+      },
+      android: { elevation: 22 },
+      default: {},
+    }),
+  },
+  heroHeaderPulse: {
+    paddingHorizontal: 28,
+    paddingTop: 36,
+    paddingBottom: 28,
     position: 'relative',
     overflow: 'hidden',
   },
-  heroGlowOne: {
+  heroGlowOnePulse: {
     position: 'absolute',
-    width: 170,
-    height: 170,
-    borderRadius: 85,
-    right: -78,
-    top: -70,
-    backgroundColor: Theme.primary + '33',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    right: -56,
+    top: -48,
   },
-  heroGlowTwo: {
+  heroGlowTwoPulse: {
     position: 'absolute',
-    width: 130,
-    height: 130,
-    borderRadius: 65,
-    left: -62,
-    top: 26,
-    backgroundColor: Theme.driverGold + '22',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    left: -40,
+    top: 40,
   },
-  closeButton: {
+  closeButtonPulse: {
     position: 'absolute',
-    top: 18,
-    right: 18,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    top: 20,
+    right: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    backgroundColor: Theme.driverWhiteMutedStrong,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
   },
-  heroTopRow: {
+  heroTopRowPulse: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingRight: 40,
+    alignItems: 'flex-start',
+    gap: 16,
+    paddingRight: 52,
   },
-  avatarWrap: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+  avatarWrapPulse: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: Theme.screenBackground,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 4,
+    borderColor: Theme.onPrimaryMuted,
   },
-  avatarText: {
-    fontSize: 22,
-    fontWeight: '800',
+  avatarTextPulse: {
+    fontSize: 24,
+    fontWeight: '900',
     color: Theme.textPrimaryDark,
   },
-  avatarImage: {
+  avatarImagePulse: {
     width: '100%',
     height: '100%',
-    borderRadius: 29,
+    borderRadius: 32,
   },
-  avatarBadge: {
+  avatarBadgePulse: {
     position: 'absolute',
-    right: -2,
-    bottom: -2,
+    right: -4,
+    bottom: -4,
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: Theme.driverGold,
+    backgroundColor: Theme.feedbackModalBadgeRing,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: Theme.textPrimaryDark,
+    borderWidth: 3,
   },
-  heroTextWrap: {
+  heroTextWrapPulse: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
+    gap: 4,
+    paddingTop: 2,
   },
-  heroEyebrow: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1.2,
+  heroEyebrowPulse: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 3,
     textTransform: 'uppercase',
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: Theme.textOnDarkMuted,
   },
-  heroName: {
-    fontSize: 18,
-    fontWeight: '800',
+  heroNamePulse: {
+    fontSize: 20,
+    fontWeight: '900',
+    fontStyle: 'italic',
     color: Theme.textOnPrimary,
-    letterSpacing: -0.5,
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  heroMeta: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: 'rgba(255, 255, 255, 0.8)',
-  },
-  modalBody: {
-    paddingTop: 24,
-    backgroundColor: Theme.screenBackground,
-  },
-  ratingIntro: {
-    alignItems: 'center',
-    marginBottom: 20,
-    paddingBottom: 20,
-    paddingHorizontal: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-  },
-  ratingPrompt: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: Theme.textPrimaryDark,
-    marginBottom: 12,
-  },
-  scorePill: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    marginBottom: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  scoreEmoji: {
-    fontSize: 14,
-    lineHeight: 18,
-  },
-  scorePillText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: Theme.textPrimaryDark,
-  },
-  stars: { flexDirection: 'row', justifyContent: 'center', gap: 12 },
-  starBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 6,
-  },
-  composerSection: {
-    overflow: 'hidden',
-    backgroundColor: Theme.surfaceGray,
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 24,
-    borderTopWidth: 1,
-    borderTopColor: Theme.borderLight,
-  },
-  tagsTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: Theme.textMutedDemo,
+    letterSpacing: -0.4,
     textTransform: 'uppercase',
-    letterSpacing: 1.2,
-    marginBottom: 16,
   },
-  tagsWrap: {
+  heroMetaPulse: {
+    marginTop: 2,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    color: 'rgba(248, 250, 252, 0.45)',
+  },
+  modalBodyPulse: {
+    paddingHorizontal: 36,
+    paddingTop: 32,
+    paddingBottom: 36,
+    backgroundColor: Theme.screenBackground,
+    alignItems: 'center',
+  },
+  ratingHeadlinePulse: {
+    fontSize: 22,
+    fontWeight: '900',
+    fontStyle: 'italic',
+    color: Theme.textPrimaryDark,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: -0.5,
+    marginBottom: 28,
+    lineHeight: 28,
+  },
+  ratingHeadlineAccent: {
+    color: Theme.primary,
+    fontWeight: '900',
+    fontStyle: 'italic',
+  },
+  starsPulse: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8,
+  },
+  starBtnPulse: {
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  composerSectionPulse: {
+    width: '100%',
+    marginTop: 8,
+    gap: 20,
+    alignItems: 'stretch',
+  },
+  tagsWrapPulse: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 20,
+    justifyContent: 'center',
+    gap: 10,
   },
-  tagChip: {
-    borderRadius: 999,
-    paddingHorizontal: 16,
+  tagChipPulse: {
+    borderRadius: 12,
+    paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: 1,
   },
-  tagChipIdle: {
-    backgroundColor: Theme.screenBackground,
+  tagChipPulseIdle: {
+    backgroundColor: Theme.surface,
     borderColor: Theme.borderLight,
   },
-  tagChipActive: {
-    backgroundColor: Theme.textPrimaryDark,
-    borderColor: Theme.textPrimaryDark,
+  tagChipPulseActive: {
+    backgroundColor: Theme.primary,
+    borderColor: Theme.primary,
   },
-  tagChipText: {
-    fontSize: 14,
-    fontWeight: '600',
+  tagChipTextPulse: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
   },
-  tagChipTextIdle: {
-    color: Theme.textPrimary,
+  tagChipTextPulseIdle: {
+    color: Theme.textSecondary,
   },
-  tagChipTextActive: {
+  tagChipTextPulseActive: {
     color: Theme.textOnPrimary,
   },
-  noteToggle: {
+  noteTogglePulse: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
-    marginBottom: 16,
+    marginBottom: 4,
   },
-  noteToggleText: {
+  noteToggleTextPulse: {
     fontSize: 13,
     fontWeight: '600',
     color: Theme.textMuted,
   },
-  commentBoxWrap: {
-    marginBottom: 16,
+  commentBoxWrapPulse: {
+    marginBottom: 4,
+    width: '100%',
   },
-  commentInput: {
+  commentInputPulse: {
     borderWidth: 1,
     borderColor: Theme.borderInput,
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 12,
+    backgroundColor: Theme.surface,
+    borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 14,
@@ -1118,35 +1373,38 @@ const styles = StyleSheet.create({
     minHeight: 96,
     marginBottom: 8,
   },
-  commentCounter: {
+  commentCounterPulse: {
     fontSize: 11,
     fontWeight: '500',
     color: Theme.textMuted,
     textAlign: 'right',
   },
-  modalSubmit: {
+  modalSubmitPulse: {
     backgroundColor: Theme.textPrimaryDark,
-    paddingVertical: 16,
-    paddingHorizontal: 18,
-    borderRadius: 18,
-    minWidth: 90,
+    paddingVertical: 22,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
   },
-  modalSubmitDisabled: {
-    backgroundColor: Theme.surfaceGray,
-    borderColor: Theme.borderInput,
-    borderWidth: 1,
+  modalSubmitTextPulse: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: Theme.textOnPrimary,
+    letterSpacing: 4,
+    textTransform: 'uppercase',
   },
-  modalSubmitText: { fontSize: 15, fontWeight: '800', color: Theme.textOnPrimary, textTransform: 'none' },
-  helperText: {
-    fontSize: 12,
+  helperTextPulse: {
+    fontSize: 11,
+    fontWeight: '700',
+    fontStyle: 'italic',
     color: Theme.textMuted,
     textAlign: 'center',
-    marginTop: 0,
-    marginBottom: 24,
+    marginTop: 16,
+    paddingHorizontal: 12,
   },
   successWrap: {
     paddingHorizontal: 24,
