@@ -484,6 +484,21 @@ function isTripIdentityUniqueConflict(
   return code === "23505" || (mentionsTripIdentity && isIdentityConflict);
 }
 
+function isMissingColumnError(
+  errorMessage: string,
+  errorCode?: string | null,
+): boolean {
+  const msg = (errorMessage ?? "").toLowerCase();
+  const code = (errorCode ?? "").trim();
+  // PostgREST/PG can surface missing columns with different codes/messages.
+  return (
+    code === "42703" ||
+    msg.includes("column") ||
+    msg.includes("does not exist") ||
+    msg.includes("schema cache")
+  );
+}
+
 function buildFallbackTripNumber(): string {
   const stamp = Date.now().toString().slice(-10);
   const rand = Math.floor(Math.random() * 900000 + 100000).toString();
@@ -520,21 +535,62 @@ async function getNextOrgTripSequence(orgId: string): Promise<number> {
     .order("sequence_number", { ascending: false })
     .limit(1);
 
-  const seqRow = (seqRes.data?.[0] as { sequence_number?: number | null } | undefined) ?? null;
-  const seq = Number(seqRow?.sequence_number ?? 0);
-  if (Number.isFinite(seq) && seq > 0) {
-    return Math.floor(seq) + 1;
+  if (
+    seqRes.error &&
+    !isMissingColumnError(seqRes.error.message, seqRes.error.code)
+  ) {
+    throw new Error(seqRes.error.message);
   }
 
-  const tripRes = await supabase()
+  if (!seqRes.error) {
+    const seqRow =
+      (seqRes.data?.[0] as { sequence_number?: number | null } | undefined) ??
+      null;
+    const seq = Number(seqRow?.sequence_number ?? 0);
+    if (Number.isFinite(seq) && seq > 0) {
+      return Math.floor(seq) + 1;
+    }
+  }
+
+  const tripResWithDisplay = await supabase()
     .from("trips")
     .select("trip_number, display_trip_id")
     .eq("organization_id", orgId)
     .order("created_at", { ascending: false })
     .limit(500);
+
+  let tripRows: { trip_number?: string | null; display_trip_id?: string | null }[] =
+    [];
+  if (tripResWithDisplay.error) {
+    if (
+      !isMissingColumnError(
+        tripResWithDisplay.error.message,
+        tripResWithDisplay.error.code,
+      )
+    ) {
+      throw new Error(tripResWithDisplay.error.message);
+    }
+    const tripRes = await supabase()
+      .from("trips")
+      .select("trip_number")
+      .eq("organization_id", orgId)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (tripRes.error) throw new Error(tripRes.error.message);
+    tripRows = (tripRes.data ?? []) as { trip_number?: string | null }[];
+  } else {
+    tripRows = (tripResWithDisplay.data ?? []) as {
+      trip_number?: string | null;
+      display_trip_id?: string | null;
+    }[];
+  }
+
   let maxSeq = 0;
-  for (const row of tripRes.data ?? []) {
-    const r = row as { trip_number?: string | null; display_trip_id?: string | null };
+  for (const row of tripRows) {
+    const r = row as {
+      trip_number?: string | null;
+      display_trip_id?: string | null;
+    };
     const fromDisplay = parseTripNumberSequence(r.display_trip_id);
     const fromTrip = parseTripNumberSequence(r.trip_number);
     const s = fromDisplay ?? fromTrip;
@@ -650,6 +706,26 @@ export async function createTrip(
           .select()
           .single();
         if (!explicitError) return { error: null, trip: explicitRow as TripRow };
+        if (isMissingColumnError(explicitError.message, explicitError.code)) {
+          const minimalInsertData = {
+            ...insertData,
+            trip_number: candidate,
+          };
+          const { data: minimalRow, error: minimalError } = await supabase()
+            .from("trips")
+            .insert(minimalInsertData as Record<string, unknown>)
+            .select()
+            .single();
+          if (!minimalError) return { error: null, trip: minimalRow as TripRow };
+          lastError = new Error(minimalError.message);
+          if (
+            !isTripIdentityUniqueConflict(minimalError.message, minimalError.code)
+          ) {
+            return { error: lastError, trip: null };
+          }
+          candidateSeq += 1;
+          continue;
+        }
         lastError = new Error(explicitError.message);
         if (!isTripIdentityUniqueConflict(explicitError.message, explicitError.code)) {
           return { error: lastError, trip: null };
