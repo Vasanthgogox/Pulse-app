@@ -69,6 +69,13 @@ export interface LedgerRow {
   vehicle_number?: string | null;
   driver_name?: string | null;
   trips?: { trip_number: string; display_trip_id?: string | null } | null;
+  primary_category?: string | null;
+  payment_mode?: string | null;
+  payment_reference?: string | null;
+  reconciliation_status?: 'match_found' | 'reconciled' | 'mismatch' | null;
+  reconciliation_label?: string | null;
+  reconciliation_action_label?: string | null;
+  reconciliation_helper_text?: string | null;
 }
 
 export interface CreateLedgerEntryData {
@@ -87,6 +94,116 @@ export interface CreateLedgerEntryData {
   indent_id?: string | null;
   vehicle_number?: string | null;
   driver_name?: string | null;
+}
+
+function normalizePrimaryCategory(raw: string | null | undefined): string {
+  const firstPart = String(raw ?? '')
+    .split('|')[0]
+    ?.trim();
+  return firstPart || 'ENTRY';
+}
+
+function parsePaymentMode(raw: string | null | undefined): string | null {
+  const match = String(raw ?? '').match(/(?:^|\|)\s*Mode:\s*([^|]+)/i);
+  return match?.[1]?.trim() || null;
+}
+
+function parsePaymentReference(raw: string | null | undefined): string | null {
+  const match = String(raw ?? '').match(/(?:^|\|)\s*UTR:\s*([^|]+)/i);
+  return match?.[1]?.trim() || null;
+}
+
+function deriveReconciliationMeta(row: {
+  description?: string | null;
+  trip_id?: string | null;
+  contact_id?: string | null;
+  contact_type?: LedgerRow['contact_type'];
+  amount_in?: number;
+  amount_out?: number;
+}): Pick<
+  LedgerRow,
+  | 'reconciliation_status'
+  | 'reconciliation_label'
+  | 'reconciliation_action_label'
+  | 'reconciliation_helper_text'
+> {
+  const description = String(row.description ?? '').toLowerCase();
+  if (description.includes('shared ledger sync')) {
+    return {
+      reconciliation_status: 'reconciled',
+      reconciliation_label: 'Reconciled',
+      reconciliation_action_label: 'View linked entry',
+      reconciliation_helper_text: 'Linked using shared ledger reconciliation.',
+    };
+  }
+
+  const hasCounterparty = !!row.contact_id && !!row.contact_type;
+  const hasTripAnchor = !!row.trip_id;
+  const hasMoney = Number(row.amount_in ?? 0) > 0 || Number(row.amount_out ?? 0) > 0;
+  if (hasCounterparty && hasTripAnchor && hasMoney) {
+    return {
+      reconciliation_status: 'match_found',
+      reconciliation_label: 'Match found',
+      reconciliation_action_label: Number(row.amount_out ?? 0) > 0 ? 'Edit & link' : 'Validate & link',
+      reconciliation_helper_text: 'Trip, party, and amount are ready for reconciliation.',
+    };
+  }
+
+  return {
+    reconciliation_status: null,
+    reconciliation_label: null,
+    reconciliation_action_label: null,
+    reconciliation_helper_text: null,
+  };
+}
+
+function toLedgerRow(row: {
+  id: string;
+  organization_id: string;
+  trip_id: string | null;
+  party_name: string | null;
+  description: string | null;
+  amount_in: number;
+  amount_out: number;
+  transaction_date: string;
+  created_at: string;
+  contact_id: string | null;
+  contact_type: string | null;
+  vehicle_number?: string | null;
+  driver_name?: string | null;
+  trips?: { trip_number: string } | null;
+}): LedgerRow {
+  const tripNumber = row.trips?.trip_number ?? null;
+  const description = row.description ?? 'ENTRY';
+  return {
+    id: row.id,
+    organization_id: row.organization_id,
+    trip_id: row.trip_id ?? null,
+    trip_number: tripNumber,
+    party_name: row.party_name ?? '—',
+    description,
+    amount_in: Number(row.amount_in ?? 0),
+    amount_out: Number(row.amount_out ?? 0),
+    transaction_date: row.transaction_date,
+    created_at: row.created_at,
+    contact_id: row.contact_id ?? null,
+    contact_type: (row.contact_type as LedgerRow['contact_type']) ?? null,
+    vehicle_number: row.vehicle_number ?? null,
+    driver_name: row.driver_name ?? null,
+    trips: row.trips ? { trip_number: row.trips.trip_number, display_trip_id: row.trips.trip_number } : null,
+    profileImageUrl: null,
+    primary_category: normalizePrimaryCategory(description),
+    payment_mode: parsePaymentMode(description),
+    payment_reference: parsePaymentReference(description),
+    ...deriveReconciliationMeta({
+      description,
+      trip_id: row.trip_id,
+      contact_id: row.contact_id,
+      contact_type: (row.contact_type as LedgerRow['contact_type']) ?? null,
+      amount_in: row.amount_in,
+      amount_out: row.amount_out,
+    }),
+  };
 }
 
 export async function getTransactionsByOrganization(
@@ -121,27 +238,7 @@ export async function getTransactionsByOrganization(
       driver_name?: string | null;
       trips?: { trip_number: string } | null;
     }>;
-    const transactions: LedgerRow[] = rows.slice(0, limit).map((row) => {
-      const tripNumber = row.trips?.trip_number ?? null;
-      return {
-        id: row.id,
-        organization_id: row.organization_id,
-        trip_id: row.trip_id ?? null,
-        trip_number: tripNumber,
-        party_name: row.party_name ?? '—',
-        description: row.description ?? 'ENTRY',
-        amount_in: Number(row.amount_in ?? 0),
-        amount_out: Number(row.amount_out ?? 0),
-        transaction_date: row.transaction_date,
-        created_at: row.created_at,
-        contact_id: row.contact_id ?? null,
-        contact_type: (row.contact_type as LedgerRow['contact_type']) ?? null,
-        vehicle_number: row.vehicle_number ?? null,
-        driver_name: row.driver_name ?? null,
-        trips: row.trips ? { trip_number: row.trips.trip_number, display_trip_id: row.trips.trip_number } : null,
-        profileImageUrl: null,
-      };
-    });
+    const transactions: LedgerRow[] = rows.slice(0, limit).map(toLedgerRow);
     return { error: null, transactions, hasMore: rows.length > limit };
   }
 
@@ -165,26 +262,7 @@ export async function getTransactionsByOrganization(
     trips?: { trip_number: string } | null;
   }>;
 
-  const transactions: LedgerRow[] = rows.map((row) => {
-    const tripNumber = row.trips?.trip_number ?? null;
-    return {
-      id: row.id,
-      organization_id: row.organization_id,
-      trip_id: row.trip_id ?? null,
-      trip_number: tripNumber,
-      party_name: row.party_name ?? '—',
-      description: row.description ?? 'ENTRY',
-      amount_in: Number(row.amount_in ?? 0),
-      amount_out: Number(row.amount_out ?? 0),
-      transaction_date: row.transaction_date,
-      created_at: row.created_at,
-      contact_id: row.contact_id ?? null,
-      contact_type: (row.contact_type as LedgerRow['contact_type']) ?? null,
-      vehicle_number: row.vehicle_number ?? null,
-      driver_name: row.driver_name ?? null,
-      trips: row.trips ? { trip_number: row.trips.trip_number, display_trip_id: row.trips.trip_number } : null,
-    };
-  });
+  const transactions: LedgerRow[] = rows.map(toLedgerRow);
 
   return { error: null, transactions };
 }
@@ -204,11 +282,8 @@ export async function getTransactionsByOrganizationAndParty(
     .order('created_at', { ascending: false });
 
   if (error) return { error: new Error(error.message), transactions: [] };
-  const rows = (data ?? []) as LedgerRow[];
-  for (const row of rows) {
-    if (row.trips?.trip_number) row.trip_number = row.trips.trip_number;
-  }
-  return { error: null, transactions: rows };
+  const rows = (data ?? []) as Array<Parameters<typeof toLedgerRow>[0]>;
+  return { error: null, transactions: rows.map(toLedgerRow) };
 }
 
 /** Fetch ledger transactions for a specific contact (client/supplier id). Used for dispute audit. */
@@ -226,11 +301,8 @@ export async function getTransactionsByOrganizationAndContactId(
     .order('created_at', { ascending: false });
 
   if (error) return { error: new Error(error.message), transactions: [] };
-  const rows = (data ?? []) as LedgerRow[];
-  for (const row of rows) {
-    if (row.trips?.trip_number) row.trip_number = row.trips.trip_number;
-  }
-  return { error: null, transactions: rows };
+  const rows = (data ?? []) as Array<Parameters<typeof toLedgerRow>[0]>;
+  return { error: null, transactions: rows.map(toLedgerRow) };
 }
 
 /** Fetch ledger transactions for a driver (contact_type=driver, contact_id=driverId). Used for driver LEDGER tab. */
@@ -265,26 +337,7 @@ export async function getTransactionsByOrganizationAndDriver(
     driver_name?: string | null;
     trips?: { trip_number: string } | null;
   }>;
-  const transactions: LedgerRow[] = rows.map((row) => {
-    const tripNumber = row.trips?.trip_number ?? null;
-    return {
-      id: row.id,
-      organization_id: row.organization_id,
-      trip_id: row.trip_id ?? null,
-      trip_number: tripNumber,
-      party_name: row.party_name ?? '—',
-      description: row.description ?? 'ENTRY',
-      amount_in: Number(row.amount_in ?? 0),
-      amount_out: Number(row.amount_out ?? 0),
-      transaction_date: row.transaction_date,
-      created_at: row.created_at,
-      contact_id: row.contact_id ?? null,
-      contact_type: (row.contact_type as LedgerRow['contact_type']) ?? null,
-      vehicle_number: row.vehicle_number ?? null,
-      driver_name: row.driver_name ?? null,
-      trips: row.trips ? { trip_number: row.trips.trip_number, display_trip_id: row.trips.trip_number } : null,
-    };
-  });
+  const transactions: LedgerRow[] = rows.map(toLedgerRow);
   return { error: null, transactions };
 }
 
@@ -339,26 +392,7 @@ export async function createLedgerEntry(
     trips?: { trip_number: string } | null;
   };
 
-  const tripNumber = row.trips?.trip_number ?? null;
-  const ledgerRow: LedgerRow = {
-    id: row.id,
-    organization_id: row.organization_id,
-    trip_id: row.trip_id ?? null,
-    trip_number: tripNumber,
-    party_name: row.party_name ?? '—',
-    description: row.description ?? 'ENTRY',
-    amount_in: Number(row.amount_in ?? 0),
-    amount_out: Number(row.amount_out ?? 0),
-    transaction_date: row.transaction_date,
-    created_at: row.created_at,
-    contact_id: row.contact_id ?? null,
-    contact_type: (row.contact_type as LedgerRow['contact_type']) ?? null,
-    vehicle_number: row.vehicle_number ?? null,
-    driver_name: row.driver_name ?? null,
-    trips: row.trips ? { trip_number: row.trips.trip_number, display_trip_id: row.trips.trip_number } : null,
-  };
-
-  return { error: null, row: ledgerRow };
+  return { error: null, row: toLedgerRow(row) };
 }
 
 export async function updateLedgerEntry(
@@ -413,24 +447,5 @@ export async function updateLedgerEntry(
     trips?: { trip_number: string } | null;
   };
 
-  const tripNumber = row.trips?.trip_number ?? null;
-  const ledgerRow: LedgerRow = {
-    id: row.id,
-    organization_id: row.organization_id,
-    trip_id: row.trip_id ?? null,
-    trip_number: tripNumber,
-    party_name: row.party_name ?? '—',
-    description: row.description ?? 'ENTRY',
-    amount_in: Number(row.amount_in ?? 0),
-    amount_out: Number(row.amount_out ?? 0),
-    transaction_date: row.transaction_date,
-    created_at: row.created_at,
-    contact_id: row.contact_id ?? null,
-    contact_type: (row.contact_type as LedgerRow['contact_type']) ?? null,
-    vehicle_number: row.vehicle_number ?? null,
-    driver_name: row.driver_name ?? null,
-    trips: row.trips ? { trip_number: row.trips.trip_number, display_trip_id: row.trips.trip_number } : null,
-  };
-
-  return { error: null, row: ledgerRow };
+  return { error: null, row: toLedgerRow(row) };
 }

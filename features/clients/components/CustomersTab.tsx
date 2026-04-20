@@ -22,10 +22,13 @@ import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/vis
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { formatLedgerDate } from "@/lib/format";
 import { useClientsQuery, useTripsQuery } from "@/lib/queries";
+import { usePaginatedScroll } from "@/lib/usePaginatedScroll";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+    NativeScrollEvent,
+    NativeSyntheticEvent,
     Platform,
     RefreshControl,
     ScrollView,
@@ -1877,6 +1880,26 @@ export function CustomersTab({
     return list;
   }, [rows, q, entityFilter]);
 
+  const customerTableResetKey = useMemo(
+    () => `${filteredRows.length}|${q}|${entityFilter}|${searchQuery}`,
+    [filteredRows.length, q, entityFilter, searchQuery],
+  );
+  const {
+    visible: visibleCustomerRows,
+    onScroll: onCustomerTablePaginatedScroll,
+  } = usePaginatedScroll(filteredRows, { resetKey: customerTableResetKey });
+
+  const handleCustomerTableScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const p = tabBarScrollProps as {
+        onScroll?: (ev?: NativeSyntheticEvent<NativeScrollEvent>) => void;
+      };
+      p.onScroll?.(e);
+      onCustomerTablePaginatedScroll(e);
+    },
+    [tabBarScrollProps, onCustomerTablePaginatedScroll],
+  );
+
   const filteredPendingInvites = useMemo(() => {
     if (!q) return pendingClientInvites;
     return pendingClientInvites.filter((r) =>
@@ -1943,6 +1966,8 @@ export function CustomersTab({
         ]}
         showsVerticalScrollIndicator={false}
         {...tabBarScrollProps}
+        onScroll={handleCustomerTableScroll}
+        scrollEventThrottle={tabBarScrollProps.scrollEventThrottle ?? 100}
         stickyHeaderIndices={[stickyHeaderIndex]}
         refreshControl={
           onRefresh ? (
@@ -2004,7 +2029,7 @@ export function CustomersTab({
           </View>
         </View>
         <View style={styles.customerTableCard}>
-          {filteredRows.map((data) => {
+          {visibleCustomerRows.map((data) => {
             const due = data.pending ?? 0;
             const sales = data.billed ?? 0;
             // For this list, "Received" maps to the cash collected from the customer.

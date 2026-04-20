@@ -2,15 +2,18 @@
  * Ledger entries in a compact transaction list: grouped by day/month,
  * with cumulative Paid/Received per section and tappable trip association.
  */
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { getDoubleEntryDisplayLabel } from "@/features/finance/accounting/accountingModel";
-import type { LedgerRow } from "@/features/finance/services/finance.service";
+import { partyAvatarInitialsTextColor } from "@/lib/partyAvatarDisplay";
+import { type LedgerRow } from "@/features/finance/services/finance.service";
 import { formatLedgerAmount } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import {
     ScrollView,
     StyleSheet,
@@ -44,6 +47,31 @@ const MONTHS_FULL =
   "January February March April May June July August September October November December".split(
     " ",
   );
+
+/** When no `renderPartyAvatar`, show driver photo / seed / initials from optional fleet rows + URL map. */
+function defaultDriverPartyAvatar(
+  row: LedgerRow,
+  driverById: Map<string, { avatar_url?: string | null; avatar_seed?: string | null }>,
+  driverProfileImageUrls: Record<string, string> | undefined,
+): ReactNode | null {
+  if (row.contact_type !== "driver" || !row.contact_id) return null;
+  const d = driverById.get(row.contact_id);
+  const name =
+    (row.party_name ?? "").trim() ||
+    (row.driver_name ?? "").trim() ||
+    "—";
+  const fromRow = (d?.avatar_url ?? "").trim();
+  const fromExtra = (driverProfileImageUrls?.[row.contact_id] ?? "").trim();
+  return (
+    <PartyAvatar
+      name={name}
+      avatarUrl={fromRow || fromExtra || null}
+      avatarSeed={(d?.avatar_seed ?? "").trim() || null}
+      entityType="driver"
+      size={40}
+    />
+  );
+}
 
 function formatTxDate(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -196,6 +224,7 @@ function TransactionRowDetail({ row }: { row: LedgerRow }) {
   const inAmt = Number(row.amount_in ?? 0);
   const outAmt = Number(row.amount_out ?? 0);
   const hasNote = note && note !== "GENERAL";
+  const hasReconciliation = !!row.reconciliation_label;
 
   return (
     <View style={styles.detailCard}>
@@ -231,6 +260,29 @@ function TransactionRowDetail({ row }: { row: LedgerRow }) {
           {party}
         </Text>
       </View>
+      {(row.payment_mode || row.payment_reference) && (
+        <View style={styles.detailRow}>
+          <Text style={styles.detailLabel}>Payment</Text>
+          <Text style={styles.detailValue} numberOfLines={2}>
+            {[row.payment_mode, row.payment_reference && `Ref ${row.payment_reference}`]
+              .filter(Boolean)
+              .join(" · ")}
+          </Text>
+        </View>
+      )}
+      {hasReconciliation && (
+        <View style={[styles.detailRow, !hasNote && styles.detailRowLast]}>
+          <Text style={styles.detailLabel}>Reconcile</Text>
+          <View style={styles.detailReconValueWrap}>
+            <Text style={styles.detailReconBadge}>{row.reconciliation_label}</Text>
+            {row.reconciliation_action_label ? (
+              <Text style={styles.detailReconAction}>
+                {row.reconciliation_action_label}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      )}
       {hasNote && (
         <View style={[styles.detailRow, styles.detailRowLast]}>
           <Text style={styles.detailLabel}>Note</Text>
@@ -479,6 +531,10 @@ export interface LedgerTransactionListViewProps {
   onExportPress?: (rowId?: string) => void;
   /** Optional: custom avatar renderer for party; when provided, used instead of initials circle (e.g. contact profile picture). */
   renderPartyAvatar?: (row: LedgerRow) => ReactNode;
+  /** Fleet drivers (avatar_url / avatar_seed) for default driver avatars when `renderPartyAvatar` is unset or returns null. */
+  driverRows?: DriverRow[];
+  /** Optional signed/public image URLs by driver id (e.g. FinanceScreen `getProfileImage`). */
+  driverProfileImageUrls?: Record<string, string>;
 }
 
 export function LedgerTransactionListView({
@@ -505,6 +561,8 @@ export function LedgerTransactionListView({
   fullWidth = false,
   onExportPress,
   renderPartyAvatar,
+  driverRows = [],
+  driverProfileImageUrls,
 }: LedgerTransactionListViewProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const { t } = useLanguage();
@@ -514,6 +572,27 @@ export function LedgerTransactionListView({
   >("card");
   const fiscalViewMode = fiscalViewModeProp ?? fiscalViewModeInternal;
   const setFiscalViewMode = onFiscalViewModeChange ?? setFiscalViewModeInternal;
+
+  const driverByIdForAvatar = useMemo(() => {
+    const m = new Map<
+      string,
+      { avatar_url?: string | null; avatar_seed?: string | null }
+    >();
+    for (const d of driverRows) {
+      m.set(d.id, {
+        avatar_url: d.avatar_url ?? null,
+        avatar_seed: d.avatar_seed ?? null,
+      });
+    }
+    return m;
+  }, [driverRows]);
+
+  const resolvePartyAvatarForRow = useCallback(
+    (row: LedgerRow) =>
+      renderPartyAvatar?.(row) ??
+      defaultDriverPartyAvatar(row, driverByIdForAvatar, driverProfileImageUrls),
+    [renderPartyAvatar, driverByIdForAvatar, driverProfileImageUrls],
+  );
 
   const { groups, cumulativeByKey } = useMemo(() => {
     const sorted = [...transactions].sort((a, b) => {
@@ -1475,7 +1554,7 @@ export function LedgerTransactionListView({
                                   row.transaction_date ?? row.created_at,
                                 );
                                 const avatarBg = avatarColor(partyName);
-                                const customAvatar = renderPartyAvatar?.(row);
+                                const customAvatar = resolvePartyAvatarForRow(row);
                                 const isLastRow =
                                   rowIndex === txRows.length - 1;
                                 return (
@@ -1512,9 +1591,15 @@ export function LedgerTransactionListView({
                                             ]}
                                           >
                                             <Text
-                                              style={
-                                                styles.fiscalCardAvatarText
-                                              }
+                                              style={[
+                                                styles.fiscalCardAvatarText,
+                                                {
+                                                  color:
+                                                    partyAvatarInitialsTextColor(
+                                                      avatarBg,
+                                                    ),
+                                                },
+                                              ]}
                                               numberOfLines={1}
                                             >
                                               {initials(partyName)}
@@ -1861,7 +1946,7 @@ export function LedgerTransactionListView({
                               .join(" · ") || dateStr;
                           const avatarBg = avatarColor(partyName);
                           const initialText = initials(partyName);
-                          const customAvatar = renderPartyAvatar?.(row);
+                          const customAvatar = resolvePartyAvatarForRow(row);
 
                           const routeWhyLine =
                             [routeStr, typeLabel].filter(Boolean).join(" • ") ||
@@ -1963,7 +2048,15 @@ export function LedgerTransactionListView({
                                   ]}
                                 >
                                   <Text
-                                    style={styles.avatarText}
+                                    style={[
+                                      styles.avatarText,
+                                      {
+                                        color:
+                                          partyAvatarInitialsTextColor(
+                                            avatarBg,
+                                          ),
+                                      },
+                                    ]}
                                     numberOfLines={1}
                                   >
                                     {initialText}
@@ -1998,22 +2091,43 @@ export function LedgerTransactionListView({
                             </>
                           ) : (
                             <>
-                              <View
-                                style={[
-                                  styles.avatarWrap,
-                                  { backgroundColor: avatarBg },
-                                  isIn
-                                    ? styles.avatarWrapIn
-                                    : styles.avatarWrapOut,
-                                ]}
-                              >
-                                <Text
-                                  style={styles.avatarText}
-                                  numberOfLines={1}
+                              {customAvatar ? (
+                                <View
+                                  style={[
+                                    styles.avatarWrap,
+                                    isIn
+                                      ? styles.avatarWrapIn
+                                      : styles.avatarWrapOut,
+                                  ]}
                                 >
-                                  {initialText}
-                                </Text>
-                              </View>
+                                  {customAvatar}
+                                </View>
+                              ) : (
+                                <View
+                                  style={[
+                                    styles.avatarWrap,
+                                    { backgroundColor: avatarBg },
+                                    isIn
+                                      ? styles.avatarWrapIn
+                                      : styles.avatarWrapOut,
+                                  ]}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.avatarText,
+                                      {
+                                        color:
+                                          partyAvatarInitialsTextColor(
+                                            avatarBg,
+                                          ),
+                                      },
+                                    ]}
+                                    numberOfLines={1}
+                                  >
+                                    {initialText}
+                                  </Text>
+                                </View>
+                              )}
                               <View style={styles.body}>
                                 <Text
                                   style={styles.rowTitle}
@@ -2874,7 +2988,6 @@ const styles = StyleSheet.create({
   fiscalCardAvatarText: {
     fontSize: 10,
     fontWeight: "600",
-    color: Theme.textOnPrimary,
   },
   fiscalCardBody: {
     flex: 1,
@@ -3865,13 +3978,11 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 11,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
     letterSpacing: 0.2,
   },
   avatarTextTimeline: {
     fontSize: 10,
     fontWeight: "500",
-    color: Theme.textOnPrimary,
     letterSpacing: 0.2,
   },
   body: {
@@ -4201,6 +4312,27 @@ const styles = StyleSheet.create({
   detailValueRed: {
     color: Theme.negative,
     fontWeight: "500",
+  },
+  detailReconValueWrap: {
+    flex: 1,
+    alignItems: "flex-end",
+    gap: 4,
+  },
+  detailReconBadge: {
+    color: Theme.primary,
+    backgroundColor: Theme.primary + "14",
+    borderRadius: 999,
+    overflow: "hidden",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  detailReconAction: {
+    fontSize: 9,
+    color: Theme.textSecondary,
+    fontWeight: "600",
+    textAlign: "right",
   },
   timelineExpandedWrap: {
     paddingHorizontal: 10,

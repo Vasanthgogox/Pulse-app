@@ -5,7 +5,7 @@
  */
 import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Animated, {
   Easing,
@@ -40,6 +40,11 @@ export interface LedgerExpandedCardProps {
   paymentOut: number;
   /** Note/description */
   note?: string | null;
+  paymentMode?: string | null;
+  paymentReference?: string | null;
+  reconciliationLabel?: string | null;
+  reconciliationActionLabel?: string | null;
+  reconciliationHelperText?: string | null;
   /** Whether to show the "Ledger details" block */
   hasMergedDetails: boolean;
   /** Trip number or "—" */
@@ -106,6 +111,14 @@ export interface LedgerExpandedCardProps {
   highlightTransactionId?: string | null;
   /** Optional: called when user taps "Download Trip Protocol". */
   onDownloadPress?: () => void;
+  /** Whether the counterparty (client/supplier) is integrated. When false, the reconciliation hero shows an offline empty state. */
+  counterpartyIntegrated?: boolean | null;
+  /** Optional: called when user taps "Bridge Variances" / "Open Compare & Verify". */
+  onOpenCompareVerify?: () => void;
+  /** When an open dispute exists for this trip+partner, shown as a status chip in the hero. */
+  disputeStatus?: "OPEN" | "RESOLVED" | null;
+  /** Who raised the dispute — affects chip wording. */
+  disputeDirection?: "RAISED_BY_US" | "RECEIVED" | null;
 }
 
 const defaultFormatNum = (n: number) =>
@@ -187,6 +200,11 @@ export function LedgerExpandedCard({
   paymentIn,
   paymentOut,
   note,
+  paymentMode,
+  paymentReference,
+  reconciliationLabel,
+  reconciliationActionLabel,
+  reconciliationHelperText,
   hasMergedDetails,
   tripNumber,
   tripDateStr,
@@ -222,6 +240,10 @@ export function LedgerExpandedCard({
   formatNumSignedFn = defaultFormatNumSigned,
   highlightTransactionId,
   onDownloadPress,
+  counterpartyIntegrated,
+  onOpenCompareVerify,
+  disputeStatus,
+  disputeDirection,
 }: LedgerExpandedCardProps) {
   const hasEntryDate = (transactionDate ?? "").trim().length > 0;
   const hasNote = (note ?? "").trim() !== "";
@@ -235,6 +257,29 @@ export function LedgerExpandedCard({
     tripSaleValue > 0 ? ((tripSaleValue - tripSupplierCost) / tripSaleValue) * 100 : 0;
   const showSummaryBar =
     showReceivablesRow || showPayablesRow || showDriverRow || showVehicleRow || hasSameTx;
+  const currentAmount = showAmountReceived ? paymentIn : showAmountPaid ? paymentOut : 0;
+  const currentDirection: "in" | "out" | null = showAmountReceived ? "in" : showAmountPaid ? "out" : null;
+  const matchedPreviewTx = useMemo(() => {
+    if (!sameTx.length) return null;
+    return (
+      sameTx.find((tx) => {
+        if (tx.id === highlightTransactionId) return false;
+        if (currentDirection === "in") return Number(tx.in ?? 0) > 0;
+        if (currentDirection === "out") return Number(tx.out ?? 0) > 0;
+        return Number(tx.in ?? 0) > 0 || Number(tx.out ?? 0) > 0;
+      }) ?? null
+    );
+  }, [sameTx, highlightTransactionId, currentDirection]);
+  const matchedPreviewAmount = matchedPreviewTx
+    ? currentDirection === "in"
+      ? Number(matchedPreviewTx.in ?? 0)
+      : currentDirection === "out"
+        ? Number(matchedPreviewTx.out ?? 0)
+        : Number(matchedPreviewTx.in ?? 0) || Number(matchedPreviewTx.out ?? 0)
+    : 0;
+  const reconciliationVariance = matchedPreviewTx
+    ? currentAmount - matchedPreviewAmount
+    : null;
 
   return (
     <View style={styles.detailOuter}>
@@ -278,6 +323,428 @@ export function LedgerExpandedCard({
                   )}
                 </View>
               </View>
+              {(paymentMode || paymentReference) && (
+                <View style={styles.detailGridRow}>
+                  <View style={styles.detailGridHalf}>
+                    <Text style={styles.detailLabel}>Payment mode</Text>
+                    <Text style={styles.detailValue}>{paymentMode ?? "—"}</Text>
+                  </View>
+                  <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
+                    <Text style={styles.detailLabel}>Reference</Text>
+                    <Text style={styles.detailValue} numberOfLines={1}>
+                      {paymentReference ?? "—"}
+                    </Text>
+                  </View>
+                </View>
+              )}
+              {reconciliationLabel ||
+              partyType === "client" ||
+              partyType === "supplier" ? (
+                <View style={styles.reconHeroWrap}>
+                  {(() => {
+                    const isCounterpartyEligible =
+                      partyType === "client" || partyType === "supplier";
+                    const isOffline =
+                      isCounterpartyEligible &&
+                      counterpartyIntegrated !== true;
+                    const partyLabel =
+                      (clientStr && clientStr.trim().length > 0
+                        ? clientStr
+                        : transactionTypeLabel ?? "Reconciliation")
+                        .toUpperCase();
+                    const costLabel =
+                      partyType === "client"
+                        ? "SALE"
+                        : partyType === "supplier"
+                          ? "SUPPLIER COST"
+                          : partyType === "driver"
+                            ? "COMMISSION"
+                            : "AMOUNT";
+                    const yourCost =
+                      partyType === "client"
+                        ? tripSaleValue
+                        : partyType === "supplier"
+                          ? tripSupplierCost
+                          : partyType === "driver"
+                            ? tripDriverCommission
+                            : currentAmount;
+                    const yourPaid =
+                      currentDirection === "in" ? receivedSum : paidSum;
+                    const yourDue = Math.max(0, yourCost - yourPaid);
+                    const hasMatch = matchedPreviewTx != null;
+                    const variance = reconciliationVariance ?? 0;
+                    const hasVariance = hasMatch && variance !== 0;
+                    const partnerPaid = hasMatch ? matchedPreviewAmount : 0;
+                    const partnerDue = hasMatch
+                      ? Math.max(0, yourCost - partnerPaid)
+                      : yourCost;
+                    const statusLabel = hasMatch
+                      ? hasVariance
+                        ? "ACTION REQ"
+                        : "MATCH SECURED"
+                      : "AWAITING SYNC";
+                    const statusTextStyle = hasMatch
+                      ? hasVariance
+                        ? styles.reconHeroStatusWarn
+                        : styles.reconHeroStatusGood
+                      : styles.reconHeroStatusNeutral;
+                    const statusDotStyle = hasMatch
+                      ? hasVariance
+                        ? styles.reconHeroDotWarn
+                        : styles.reconHeroDotGood
+                      : styles.reconHeroDotNeutral;
+                    const netVarianceAmount = hasMatch
+                      ? Math.abs(variance)
+                      : 0;
+                    const matchedCount = hasMatch && !hasVariance ? 1 : 0;
+                    const onlyYouCount = hasMatch && hasVariance ? 1 : hasMatch ? 0 : 1;
+                    const onlyPartnerCount = 0;
+                    return (
+                      <View style={styles.reconHero}>
+                        {/* Header */}
+                        <View style={styles.reconHeroHeader}>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <View style={styles.reconHeroKickerRow}>
+                              <FontAwesome
+                                name={isOffline ? "unlink" : "link"}
+                                size={9}
+                                color={Theme.textOnDarkMuted}
+                              />
+                              <Text style={styles.reconHeroKicker}>
+                                TRIP LEDGER
+                              </Text>
+                            </View>
+                            <Text
+                              style={styles.reconHeroParty}
+                              numberOfLines={1}
+                            >
+                              {partyLabel}
+                            </Text>
+                          </View>
+                          <View style={styles.reconHeroHeaderRight}>
+                            <Text style={styles.reconHeroNetLabel}>
+                              {isOffline
+                                ? "OFFLINE"
+                                : hasMatch && !hasVariance
+                                  ? "ALL MATCHED"
+                                  : "NET VARIANCE"}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.reconHeroNetValue,
+                                isOffline
+                                  ? styles.reconHeroNetValueOffline
+                                  : hasMatch && !hasVariance
+                                    ? styles.reconHeroNetValueMatch
+                                    : hasVariance
+                                      ? styles.reconHeroNetValueWarn
+                                      : styles.reconHeroNetValueNeutral,
+                              ]}
+                            >
+                              {isOffline
+                                ? "N/A"
+                                : hasMatch && !hasVariance
+                                  ? "₹0"
+                                  : netVarianceAmount > 0
+                                    ? `₹${formatNumFn(netVarianceAmount)}`
+                                    : "—"}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {disputeStatus === "OPEN" && !isOffline ? (
+                          <View style={styles.reconDisputeChip}>
+                            <FontAwesome
+                              name="exclamation-circle"
+                              size={11}
+                              color={"#FCA5A5"}
+                            />
+                            <Text style={styles.reconDisputeChipText}>
+                              {disputeDirection === "RECEIVED"
+                                ? "DISPUTE RECEIVED · PARTNER REQUESTS REVIEW"
+                                : "DISPUTE OPEN · PARTNER NOTIFIED"}
+                            </Text>
+                          </View>
+                        ) : disputeStatus === "RESOLVED" && !isOffline ? (
+                          <View
+                            style={[
+                              styles.reconDisputeChip,
+                              styles.reconDisputeChipResolved,
+                            ]}
+                          >
+                            <FontAwesome
+                              name="check-circle"
+                              size={11}
+                              color={Theme.driverEmerald}
+                            />
+                            <Text
+                              style={[
+                                styles.reconDisputeChipText,
+                                styles.reconDisputeChipTextResolved,
+                              ]}
+                            >
+                              DISPUTE RESOLVED
+                            </Text>
+                          </View>
+                        ) : null}
+
+                        {isOffline && (
+                          <View style={styles.reconOfflineBody}>
+                            <View style={styles.reconOfflineIcon}>
+                              <FontAwesome
+                                name="unlink"
+                                size={14}
+                                color={Theme.textOnDark}
+                              />
+                            </View>
+                            <Text style={styles.reconOfflineTitle}>
+                              No comparison available
+                            </Text>
+                            <Text style={styles.reconOfflineBody2}>
+                              This party is offline and is not connected on the network.
+                              Once they join and link their books, we will pair
+                              entries automatically and surface variances here.
+                            </Text>
+                          </View>
+                        )}
+
+                        {!isOffline && (
+                        <View style={styles.reconIntegratedStack}>
+                        {/* Financial Discrepancy Analysis */}
+                        <View style={styles.reconGlass}>
+                          <View style={styles.reconGlassHeader}>
+                            <Text style={styles.reconGlassKicker}>
+                              FINANCIAL DISCREPANCY ANALYSIS
+                            </Text>
+                            <View style={styles.reconGlassStatusRow}>
+                              <View
+                                style={[styles.reconHeroDot, statusDotStyle]}
+                              />
+                              <Text
+                                style={[
+                                  styles.reconGlassStatus,
+                                  statusTextStyle,
+                                ]}
+                              >
+                                {statusLabel}
+                              </Text>
+                            </View>
+                          </View>
+
+                          {/* Three comparison rows */}
+                          {[
+                            {
+                              key: "cost",
+                              label: costLabel,
+                              you: yourCost,
+                              them: hasMatch ? yourCost : 0,
+                              delta: 0,
+                              themShown: hasMatch,
+                            },
+                            {
+                              key: "paid",
+                              label:
+                                currentDirection === "in" ? "RECEIVED" : "PAID",
+                              you: yourPaid,
+                              them: partnerPaid,
+                              delta: hasMatch ? yourPaid - partnerPaid : 0,
+                              themShown: hasMatch,
+                            },
+                            {
+                              key: "due",
+                              label: "DUE",
+                              you: yourDue,
+                              them: partnerDue,
+                              delta: hasMatch ? yourDue - partnerDue : 0,
+                              themShown: hasMatch,
+                            },
+                          ].map((r) => {
+                            const variant = r.delta !== 0;
+                            return (
+                              <View key={r.key} style={styles.reconLineBlock}>
+                                <View style={styles.reconLineHeaderRow}>
+                                  <Text style={styles.reconLineLabel}>
+                                    {r.label}
+                                  </Text>
+                                  <Text
+                                    style={[
+                                      styles.reconLineStatus,
+                                      variant
+                                        ? styles.reconLineStatusWarn
+                                        : styles.reconLineStatusGood,
+                                    ]}
+                                  >
+                                    {variant
+                                      ? `₹${formatNumFn(Math.abs(r.delta))} variance`
+                                      : "Match secured"}
+                                  </Text>
+                                </View>
+                                <View style={styles.reconChipRow}>
+                                  <View style={styles.reconChip}>
+                                    <Text style={styles.reconChipTag}>YOU</Text>
+                                    <Text style={styles.reconChipValue}>
+                                      ₹{formatNumFn(r.you)}
+                                    </Text>
+                                  </View>
+                                  <View
+                                    style={[
+                                      styles.reconChip,
+                                      variant && styles.reconChipWarn,
+                                    ]}
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.reconChipTag,
+                                        variant && styles.reconChipTagWarn,
+                                      ]}
+                                    >
+                                      THEM
+                                    </Text>
+                                    <Text
+                                      style={[
+                                        styles.reconChipValue,
+                                        variant && styles.reconChipValueWarn,
+                                      ]}
+                                    >
+                                      {r.themShown
+                                        ? `₹${formatNumFn(r.them)}`
+                                        : "—"}
+                                    </Text>
+                                  </View>
+                                </View>
+                              </View>
+                            );
+                          })}
+
+                          {/* Counters */}
+                          <View style={styles.reconCounters}>
+                            <View style={styles.reconCounterItem}>
+                              <Text
+                                style={[
+                                  styles.reconCounterValue,
+                                  styles.reconCounterValueGood,
+                                ]}
+                              >
+                                {matchedCount}
+                              </Text>
+                              <Text style={styles.reconCounterLabel}>
+                                Matched
+                              </Text>
+                            </View>
+                            <View style={styles.reconCounterDivider} />
+                            <View style={styles.reconCounterItem}>
+                              <Text
+                                style={[
+                                  styles.reconCounterValue,
+                                  styles.reconCounterValueWarn,
+                                ]}
+                              >
+                                {onlyYouCount}
+                              </Text>
+                              <Text style={styles.reconCounterLabel}>
+                                Only you
+                              </Text>
+                            </View>
+                            <View style={styles.reconCounterDivider} />
+                            <View style={styles.reconCounterItem}>
+                              <Text
+                                style={[
+                                  styles.reconCounterValue,
+                                  styles.reconCounterValueMuted,
+                                ]}
+                              >
+                                {onlyPartnerCount}
+                              </Text>
+                              <Text style={styles.reconCounterLabel}>
+                                Only partner
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+
+                        {/* Helper / action hints */}
+                        {(reconciliationHelperText ||
+                          reconciliationActionLabel) && (
+                          <View style={styles.reconHintsCard}>
+                            {reconciliationHelperText ? (
+                              <Text style={styles.reconHintHelper}>
+                                {reconciliationHelperText}
+                              </Text>
+                            ) : null}
+                            {reconciliationActionLabel ? (
+                              <Text style={styles.reconHintAction}>
+                                Next: {reconciliationActionLabel}
+                              </Text>
+                            ) : null}
+                          </View>
+                        )}
+
+                        {/* Footer mini-cards */}
+                        <View style={styles.reconFooterRow}>
+                          <View style={styles.reconFooterCard}>
+                            <View style={styles.reconFooterIconRow}>
+                              <FontAwesome
+                                name="arrow-down"
+                                size={9}
+                                color={Theme.driverEmerald}
+                              />
+                              <Text style={styles.reconFooterLabel}>
+                                INVOICED
+                              </Text>
+                            </View>
+                            <Text style={styles.reconFooterValue}>
+                              ₹{formatNumFn(yourCost)}
+                            </Text>
+                          </View>
+                          <View style={styles.reconFooterCard}>
+                            <View style={styles.reconFooterIconRow}>
+                              <FontAwesome
+                                name="arrow-up"
+                                size={9}
+                                color={Theme.textOnDarkMuted}
+                              />
+                              <Text style={styles.reconFooterLabel}>
+                                OUTSTANDING
+                              </Text>
+                            </View>
+                            <Text
+                              style={[
+                                styles.reconFooterValue,
+                                yourDue === 0 &&
+                                  styles.reconFooterValueMuted,
+                              ]}
+                            >
+                              {yourDue === 0 ? "0.00" : `₹${formatNumFn(yourDue)}`}
+                            </Text>
+                          </View>
+                        </View>
+                        </View>
+                        )}
+
+                        {/* CTA — Bridge Variances / Open Compare & Verify */}
+                        {!isOffline && onOpenCompareVerify ? (
+                          <TouchableOpacity
+                            activeOpacity={0.9}
+                            onPress={onOpenCompareVerify}
+                            style={styles.reconCtaButton}
+                          >
+                            <Text style={styles.reconCtaButtonText}>
+                              {hasVariance
+                                ? "BRIDGE VARIANCES"
+                                : "OPEN COMPARE & VERIFY"}
+                            </Text>
+                            <FontAwesome
+                              name="chevron-right"
+                              size={11}
+                              color={Theme.textPrimaryDark}
+                            />
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                    );
+                  })()}
+                </View>
+              ) : null}
               {hasNote ? (
                 <View style={styles.detailNoteRow}>
                   <Text style={styles.detailLabel}>Note</Text>
@@ -583,6 +1050,369 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.borderLight,
     marginTop: 2,
   },
+  reconHeroWrap: {
+    marginTop: 10,
+    marginHorizontal: -4,
+  },
+  reconHero: {
+    backgroundColor: Theme.textPrimaryDark,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
+    elevation: 4,
+  },
+  reconHeroHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  reconHeroKickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  reconHeroKicker: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+  },
+  reconHeroParty: {
+    marginTop: 3,
+    fontSize: 15,
+    fontWeight: "900",
+    color: Theme.textOnDark,
+    letterSpacing: -0.3,
+  },
+  reconHeroHeaderRight: {
+    alignItems: "flex-end",
+    gap: 2,
+  },
+  reconHeroNetLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  reconHeroNetValue: {
+    fontSize: 16,
+    fontWeight: "900",
+    letterSpacing: -0.3,
+  },
+  reconHeroNetValueMatch: {
+    color: Theme.driverEmerald,
+  },
+  reconHeroNetValueWarn: {
+    color: "#FBBF24",
+  },
+  reconHeroNetValueNeutral: {
+    color: Theme.textOnDarkMuted,
+  },
+  reconHeroNetValueOffline: {
+    color: "#FCA5A5",
+  },
+  reconIntegratedStack: {
+    display: "flex",
+    gap: 12,
+  },
+  reconOfflineBody: {
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  reconOfflineIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: "rgba(239,68,68,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reconOfflineTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    letterSpacing: 0.2,
+  },
+  reconOfflineBody2: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textOnDarkMuted,
+    lineHeight: 16,
+  },
+  reconCtaButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: Theme.textOnDark,
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginTop: 2,
+  },
+  reconCtaButtonText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 1.3,
+  },
+  reconDisputeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(239,68,68,0.14)",
+    borderColor: "rgba(239,68,68,0.28)",
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  reconDisputeChipResolved: {
+    backgroundColor: "rgba(16,185,129,0.14)",
+    borderColor: "rgba(16,185,129,0.28)",
+  },
+  reconDisputeChipText: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#FCA5A5",
+    letterSpacing: 0.8,
+  },
+  reconDisputeChipTextResolved: {
+    color: Theme.driverEmerald,
+  },
+  reconHeroDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 999,
+  },
+  reconHeroDotGood: {
+    backgroundColor: Theme.driverEmerald,
+  },
+  reconHeroDotWarn: {
+    backgroundColor: "#F59E0B",
+  },
+  reconHeroDotNeutral: {
+    backgroundColor: "rgba(255,255,255,0.45)",
+  },
+  reconHeroStatusGood: {
+    color: Theme.driverEmerald,
+  },
+  reconHeroStatusWarn: {
+    color: "#FBBF24",
+  },
+  reconHeroStatusNeutral: {
+    color: Theme.textOnDarkMuted,
+  },
+  reconGlass: {
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  reconGlassHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  reconGlassKicker: {
+    flex: 1,
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 0.9,
+    textTransform: "uppercase",
+  },
+  reconGlassStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  reconGlassStatus: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+  },
+  reconLineBlock: {
+    gap: 6,
+  },
+  reconLineHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  reconLineLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 0.8,
+  },
+  reconLineStatus: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+  },
+  reconLineStatusGood: {
+    color: Theme.driverEmerald,
+  },
+  reconLineStatusWarn: {
+    color: "#FBBF24",
+  },
+  reconChipRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  reconChip: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  reconChipWarn: {
+    backgroundColor: "rgba(245,158,11,0.12)",
+    borderColor: "rgba(245,158,11,0.35)",
+  },
+  reconChipTag: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 0.9,
+  },
+  reconChipTagWarn: {
+    color: "#FBBF24",
+  },
+  reconChipValue: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: Theme.textOnDark,
+    letterSpacing: -0.2,
+  },
+  reconChipValueWarn: {
+    color: "#FBBF24",
+  },
+  reconCounters: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    marginTop: 2,
+  },
+  reconCounterItem: {
+    flex: 1,
+    alignItems: "center",
+    gap: 2,
+  },
+  reconCounterDivider: {
+    width: 1,
+    alignSelf: "stretch",
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  reconCounterValue: {
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: -0.2,
+  },
+  reconCounterValueGood: {
+    color: Theme.driverEmerald,
+  },
+  reconCounterValueWarn: {
+    color: "#FBBF24",
+  },
+  reconCounterValueMuted: {
+    color: Theme.textOnDarkMuted,
+  },
+  reconCounterLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+  },
+  reconHintsCard: {
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 4,
+  },
+  reconHintHelper: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textOnDarkMuted,
+    lineHeight: 15,
+  },
+  reconHintAction: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    letterSpacing: 0.2,
+  },
+  reconFooterRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  reconFooterCard: {
+    flex: 1,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 5,
+  },
+  reconFooterIconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  reconFooterLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    letterSpacing: 0.9,
+    textTransform: "uppercase",
+  },
+  reconFooterValue: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: Theme.textOnDark,
+    letterSpacing: -0.3,
+  },
+  reconFooterValueMuted: {
+    color: Theme.textOnDarkMuted,
+    fontStyle: "italic",
+  },
   detailNoteRow: {
     marginTop: 2,
   },
@@ -594,24 +1424,24 @@ const styles = StyleSheet.create({
   amountPillGreen: {
     alignSelf: "flex-end",
     backgroundColor: Theme.darkGreen,
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 4,
+    borderRadius: 5,
   },
   amountPillRed: {
     alignSelf: "flex-end",
     backgroundColor: Theme.teslaRed,
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 4,
+    borderRadius: 5,
   },
   amountPillText: {
     fontSize: 10,
-    fontWeight: "600",
+    fontWeight: "700",
     color: Theme.textOnPrimary,
   },
   detailMarginRow: {
-    marginTop: 2,
+    marginTop: 4,
     marginBottom: 0,
   },
   detailLabelItalic: {
@@ -619,7 +1449,7 @@ const styles = StyleSheet.create({
   },
   detailValueMargin: {
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   detailValueGreen: {
     color: Theme.darkGreen,
@@ -629,9 +1459,9 @@ const styles = StyleSheet.create({
   },
   summaryBar: {
     backgroundColor: SUMMARY_BAR_BG,
-    borderRadius: 12,
-    padding: 10,
-    marginTop: 4,
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 6,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.05)",
   },
@@ -648,24 +1478,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   summaryBarLabel: {
-    fontSize: 7,
-    fontWeight: "600",
+    fontSize: 8,
+    fontWeight: "700",
     color: "rgba(255,255,255,0.75)",
     textTransform: "uppercase",
-    letterSpacing: 0.6,
-    marginBottom: 2,
+    letterSpacing: 0.8,
+    marginBottom: 3,
   },
   summaryBarLabelReceived: {
-    fontSize: 7,
-    fontWeight: "600",
+    fontSize: 8,
+    fontWeight: "700",
     color: Theme.darkGreen,
     textTransform: "uppercase",
-    letterSpacing: 0.6,
-    marginBottom: 2,
+    letterSpacing: 0.8,
+    marginBottom: 3,
   },
   summaryBarValue: {
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "700",
     color: Theme.textOnDark,
   },
   summaryBarValueMuted: {
@@ -673,21 +1503,21 @@ const styles = StyleSheet.create({
   },
   summaryBarValueGreen: {
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "700",
     color: Theme.darkGreen,
   },
   summaryBarDivider: {
     height: 1,
     backgroundColor: "rgba(255,255,255,0.06)",
     width: "100%",
-    marginVertical: 8,
+    marginVertical: 12,
   },
   summaryBarTxTitle: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "700",
     color: Theme.textOnDark,
     textTransform: "uppercase",
-    letterSpacing: 0.8,
+    letterSpacing: 0.9,
     marginBottom: 6,
   },
   txHistoryList: {
@@ -696,9 +1526,9 @@ const styles = StyleSheet.create({
   txHistoryRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 9,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.05)",
     backgroundColor: "rgba(255,255,255,0.03)",
@@ -708,9 +1538,9 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   txHistoryIconWrap: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "transparent",
@@ -729,21 +1559,22 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   txHistoryTitle: {
-    fontSize: 9,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "700",
     color: Theme.textOnDark,
     marginBottom: 1,
   },
   txHistorySubtitle: {
-    fontSize: 7,
+    fontSize: 8,
     fontWeight: "500",
     color: Theme.textOnDarkMuted,
     fontStyle: "italic",
     textTransform: "uppercase",
+    letterSpacing: 0.3,
   },
   txHistoryAmount: {
-    fontSize: 9,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "800",
   },
   txHistoryAmountIn: {
     color: Theme.darkGreen,

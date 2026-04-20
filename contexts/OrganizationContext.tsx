@@ -16,6 +16,10 @@ interface OrganizationContextType {
 
 const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
 
+export function useOptionalOrganization() {
+  return useContext(OrganizationContext);
+}
+
 export function useOrganization() {
   const ctx = useContext(OrganizationContext);
   if (ctx === undefined) {

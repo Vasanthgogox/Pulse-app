@@ -1,4 +1,7 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { DatePresetPillBar } from "@/components/DatePresetPillBar";
+import { DateRangePickerModal } from "@/components/DateRangePickerModal";
+import { PartyAvatar } from "@/components/PartyAvatar";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,6 +14,9 @@ import {
   type LedgerEntry,
   type LedgerRow,
 } from "@/features/finance";
+import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPeriod";
+import type { FinancePeriodFilter } from "@/features/finance/types";
+import { getDriversByOrganization, type DriverRow } from "@/features/drivers";
 import { LedgerTransactionListView } from "@/features/finance/components/LedgerTransactionListView";
 import { allocateAmountsToLargestDueTrips } from "@/features/finance/utils/allocateToLargestDue";
 import { EditSupplierModal } from "@/features/suppliers/components/EditSupplierModal";
@@ -22,12 +28,18 @@ import {
     type TripRow,
 } from "@/features/trips";
 import { getTripSubcontracts } from "@/features/finance/services/tripSubcontracts.service";
+import {
+  getClientsByOrganization,
+  type ClientRow,
+} from "@/features/clients";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import {
     canAccessFinance,
     getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
 import { formatINR, formatLedgerDate } from "@/lib/format";
+import { tripDayIso } from "@/lib/dateRangePresets";
+import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
 import { useFocusEffect } from "@react-navigation/native";
@@ -38,12 +50,14 @@ import {
   Alert,
   Image,
   Modal,
+  Platform,
   RefreshControl,
   ScrollView,
   Share,
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -71,6 +85,18 @@ function normalizePhoneDisplay(value: string | null | undefined): string {
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) return '';
   if (/^[0-9a-f-]{36,}$/i.test(s)) return '';
   return s;
+}
+
+const TRIP_TABLE_AVATAR = 24;
+
+/** UUID-shaped strings are not valid human names (avoid showing raw ids). */
+function isUuidLikeString(value: string | null | undefined): boolean {
+  return (
+    !!value &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value.trim(),
+    )
+  );
 }
 
 export interface SupplierDetailScreenProps {
@@ -104,32 +130,51 @@ export default function SupplierDetailScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [sharedLedgerDownloadSignal, setSharedLedgerDownloadSignal] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash" | "shared">("trips");
+  const [tripDatePeriod, setTripDatePeriod] = useState<FinancePeriodFilter>("RANGE");
+  const [tripCustomFrom, setTripCustomFrom] = useState<string | null>(null);
+  const [tripCustomTo, setTripCustomTo] = useState<string | null>(null);
+  const [tripDateModalVisible, setTripDateModalVisible] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successTitle, setSuccessTitle] = useState("NODE_SYNCED");
   const [isLinked, setIsLinked] = useState(false);
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   const [isInApp, setIsInApp] = useState(false);
   const [sendingInvitation, setSendingInvitation] = useState(false);
+  const [orgDrivers, setOrgDrivers] = useState<DriverRow[]>([]);
+  const [clients, setClients] = useState<ClientRow[]>([]);
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const isWebDesktop = Platform.OS === "web" && windowWidth >= 1024;
   const initialLoadDoneRef = useRef(false);
+
+  const clientById = useMemo(() => {
+    const m = new Map<string, ClientRow>();
+    for (const c of clients) {
+      m.set(String(c.id).trim().toLowerCase(), c);
+    }
+    return m;
+  }, [clients]);
+
+  const linkedOrgDisplayMap = useLinkedOrgProfileMap(clients, []);
 
   useEffect(() => {
     if (autoOpenProfile) setShowProfileModal(true);
   }, [autoOpenProfile]);
 
   useEffect(() => {
-    if (supplier?.phone) {
-      import("@/services/connectionRequestsService").then(({ getConnectionInviteeByPhone }) => {
-        getConnectionInviteeByPhone(supplier.phone).then(({ invitee }) => {
-          if (invitee) setIsInApp(true);
-        });
+    const phone = supplier?.phone;
+    if (!phone) return;
+    import("@/services/connectionRequestsService").then(({ getConnectionInviteeByPhone }) => {
+      getConnectionInviteeByPhone(phone).then(({ invitee }) => {
+        if (invitee) setIsInApp(true);
       });
-    }
+    });
   }, [supplier?.phone]);
 
   const handleSendInvitation = useCallback(async () => {
@@ -205,8 +250,19 @@ export default function SupplierDetailScreen({
         return { sharedTrips, subcontracts: subRes.error ? [] : subRes.rows };
       });
     });
-    Promise.all([supplierPromise, tripsPromise, txPromise, asClientPromise, suppliersPromise, subcontractsPromise])
-      .then(([res, tripsRes, txRes, asClientTrips, suppliersRes, subRes]) => {
+    const driversPromise = getDriversByOrganization(orgId);
+    const clientsPromise = getClientsByOrganization(orgId);
+    Promise.all([
+      supplierPromise,
+      tripsPromise,
+      txPromise,
+      asClientPromise,
+      suppliersPromise,
+      subcontractsPromise,
+      driversPromise,
+      clientsPromise,
+    ])
+      .then(([res, tripsRes, txRes, asClientTrips, suppliersRes, subRes, driversRes, clientsRes]) => {
         if (res.error) {
           setError(res.error.message);
           setSupplier(null);
@@ -288,6 +344,8 @@ export default function SupplierDetailScreen({
           return linked || linkedToTrip || partyMatch;
         });
         setTransactions(forSupplierTx);
+        setOrgDrivers(driversRes?.error ? [] : (driversRes.drivers ?? []));
+        setClients(clientsRes.error ? [] : (clientsRes.clients ?? []));
       })
       .finally(() => {
         setLoading(false);
@@ -507,10 +565,22 @@ export default function SupplierDetailScreen({
     };
   }, [trips, transactions, supplierId, linkedOrgId]);
 
+  const tripDateOpts = useMemo(
+    () => ({ customFrom: tripCustomFrom, customTo: tripCustomTo }),
+    [tripCustomFrom, tripCustomTo],
+  );
+  const tripsForMissionTable = useMemo(
+    () =>
+      trips.filter((t) =>
+        ledgerDayMatchesPeriod(tripDayIso(t), tripDatePeriod, tripDateOpts),
+      ),
+    [trips, tripDatePeriod, tripDateOpts],
+  );
+
   const missionRows = useMemo(() => {
     const norm = (id: string | null | undefined) =>
       id == null ? "" : String(id).trim().toLowerCase();
-    return trips.map((t) => {
+    return tripsForMissionTable.map((t) => {
       const key = norm(t.id);
       const sales = Number(t.supplier_rate ?? t.client_price ?? 0);
       const paid = paidByTripId[key] ?? 0;
@@ -524,7 +594,26 @@ export default function SupplierDetailScreen({
         due,
       };
     });
-  }, [trips, paidByTripId, tripIdToDue]);
+  }, [tripsForMissionTable, paidByTripId, tripIdToDue]);
+  const tripTransactionMetaById = useMemo(() => {
+    const byTrip: Record<string, { count: number; lastTxnDate: string | null }> = {};
+    for (const tx of transactions) {
+      if (!tx.trip_id) continue;
+      const key = String(tx.trip_id).trim().toLowerCase();
+      if (!key) continue;
+      const candidateDate = tx.transaction_date ?? tx.created_at ?? null;
+      const current = byTrip[key];
+      if (!current) {
+        byTrip[key] = { count: 1, lastTxnDate: candidateDate };
+        continue;
+      }
+      current.count += 1;
+      if (candidateDate && (!current.lastTxnDate || candidateDate > current.lastTxnDate)) {
+        current.lastTxnDate = candidateDate;
+      }
+    }
+    return byTrip;
+  }, [transactions]);
 
   const supplierTripDetailsMap = useMemo(() => {
     const m: Record<
@@ -675,6 +764,45 @@ export default function SupplierDetailScreen({
     () => (detailSubTab === "trips" ? tripReportTransactions : sortedTx),
     [detailSubTab, sortedTx, tripReportTransactions],
   );
+  const tripTableReport = useMemo(() => {
+    if (detailSubTab !== "trips") return undefined;
+    const rows = missionRows.map((row) => {
+      const key = String(row.trip.id).trim().toLowerCase();
+      const meta = tripTransactionMetaById[key] ?? { count: 0, lastTxnDate: null };
+      const clientRevenue = Number(row.trip.client_price ?? 0);
+      const pnl = clientRevenue - row.sales;
+      const margin = clientRevenue > 0 ? `${((pnl / clientRevenue) * 100).toFixed(1)}%` : "0.0%";
+      return {
+        trip: row.missionId,
+        route: row.route,
+        client: row.trip.client_name?.trim() || row.trip.client_id?.trim() || "—",
+        contract: formatINR(row.sales),
+        clientRevenue: formatINR(clientRevenue),
+        pnl: formatINR(pnl),
+        margin,
+        paid: formatINR(row.paid),
+        due: formatINR(row.due),
+        txns: meta.count,
+        lastTxn: meta.lastTxnDate ? formatLedgerDate(meta.lastTxnDate) : "—",
+      };
+    });
+    return {
+      columns: [
+        { key: "trip", label: "Trip" },
+        { key: "route", label: "Route" },
+        { key: "client", label: "Client" },
+        { key: "contract", label: "Contract", align: "right" as const },
+        { key: "clientRevenue", label: "Client Rev", align: "right" as const },
+        { key: "pnl", label: "P&L", align: "right" as const },
+        { key: "margin", label: "Margin %", align: "right" as const },
+        { key: "paid", label: "Paid", align: "right" as const },
+        { key: "due", label: "Due", align: "right" as const },
+        { key: "txns", label: "Txns", align: "right" as const },
+        { key: "lastTxn", label: "Last Txn", align: "right" as const },
+      ],
+      rows,
+    };
+  }, [detailSubTab, missionRows, tripTransactionMetaById]);
 
   if (loading) {
     return (
@@ -732,6 +860,14 @@ export default function SupplierDetailScreen({
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity
+            style={styles.publicProfileBtn}
+            onPress={() => router.push(`/public-profile/supplier/${supplierId}`)}
+            activeOpacity={0.8}
+            accessibilityLabel="View public profile"
+          >
+            <FontAwesome name="id-card-o" size={15} color={Theme.textPrimaryDark} />
+          </TouchableOpacity>
+          <TouchableOpacity
             style={styles.profileBtn}
             onPress={() => setShowProfileModal(true)}
             activeOpacity={0.8}
@@ -745,8 +881,19 @@ export default function SupplierDetailScreen({
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.downloadBtn}
-            onPress={() => setShowReportModal(true)}
+            onPress={() => {
+              if (detailSubTab === "shared") {
+                setSharedLedgerDownloadSignal((n) => n + 1);
+              } else {
+                setShowReportModal(true);
+              }
+            }}
             activeOpacity={0.8}
+            accessibilityLabel={
+              detailSubTab === "shared"
+                ? "Download shared ledger report"
+                : "Download report"
+            }
           >
             <FontAwesome name="cloud-download" size={18} color={Theme.textOnPrimary} />
           </TouchableOpacity>
@@ -826,34 +973,236 @@ export default function SupplierDetailScreen({
         </View>
 
         {detailSubTab === "trips" && (
-          <View style={styles.tableCard}>
-            <View style={styles.tableHeader}>
-              <Text style={[styles.th, styles.thMission]}>Trip</Text>
-              <Text style={[styles.th, styles.thSales]}>Contract</Text>
-              <Text style={[styles.th, styles.thRight]}>Paid</Text>
-              <Text style={[styles.th, styles.thRight]}>Due</Text>
+          <View style={styles.tripDatePillWrap}>
+            <DatePresetPillBar
+              variant="onLight"
+              period={tripDatePeriod}
+              onPeriodChange={(p) => {
+                setTripDatePeriod(p);
+                if (p !== "CUSTOM") {
+                  setTripCustomFrom(null);
+                  setTripCustomTo(null);
+                }
+              }}
+              onCustomRangePress={() => setTripDateModalVisible(true)}
+              customFrom={tripCustomFrom}
+              customTo={tripCustomTo}
+            />
+          </View>
+        )}
+
+        {detailSubTab === "trips" && (
+          <View style={[styles.tableCard, isWebDesktop && styles.tableCardWebDesktop]}>
+            <View style={[styles.tableHeader, isWebDesktop && styles.tableHeaderWebDesktop]}>
+              <Text
+                style={[
+                  styles.th,
+                  styles.thMission,
+                  isWebDesktop && styles.thWebDesktop,
+                  isWebDesktop && styles.thMissionWebDesktop,
+                ]}
+              >
+                Trip
+              </Text>
+              {isWebDesktop ? (
+                <View style={styles.partyColWebDesktop}>
+                  <Text style={[styles.th, styles.thWebDesktop]}>Client</Text>
+                </View>
+              ) : null}
+              {isWebDesktop ? (
+                <View style={[styles.headerAmountCol, styles.amountColWebDesktop]}>
+                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop]}>
+                    Client Rev
+                  </Text>
+                </View>
+              ) : null}
+              <View style={[styles.headerAmountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                <Text style={[styles.th, styles.thSales, isWebDesktop && styles.thWebDesktop]}>
+                  Contract
+                </Text>
+              </View>
+              {isWebDesktop ? (
+                <View style={[styles.headerAmountCol, styles.amountColWebDesktop]}>
+                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop]}>
+                    P&L
+                  </Text>
+                </View>
+              ) : null}
+              <View style={[styles.headerAmountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                <Text style={[styles.th, styles.thRight, isWebDesktop && styles.thWebDesktop]}>
+                  Paid
+                </Text>
+              </View>
+              <View style={[styles.headerAmountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                <Text style={[styles.th, styles.thRight, isWebDesktop && styles.thWebDesktop]}>
+                  Due
+                </Text>
+              </View>
+              {isWebDesktop ? (
+                <View style={[styles.headerAmountCol, styles.amountColWebDesktop]}>
+                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop]}>
+                    Txns
+                  </Text>
+                </View>
+              ) : null}
+              {isWebDesktop ? (
+                <View style={[styles.headerAmountCol, styles.amountColWebDesktop]}>
+                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop]}>
+                    Last Txn
+                  </Text>
+                </View>
+              ) : null}
             </View>
             {missionRows.length > 0 ? (
               missionRows.map((row) => (
                 <TouchableOpacity
                   key={row.trip.id}
-                  style={styles.tableRow}
+                  style={[styles.tableRow, isWebDesktop && styles.tableRowWebDesktop]}
                   onPress={() => router.push(`/trip/${row.trip.id}?entryContext=supplier`)}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.tdMission}>
+                  {(() => {
+                    const meta = tripTransactionMetaById[String(row.trip.id).trim().toLowerCase()] ?? {
+                      count: 0,
+                      lastTxnDate: null,
+                    };
+                    const cidKey = (row.trip.client_id ?? "").trim().toLowerCase();
+                    const clientRow = cidKey ? clientById.get(cidKey) : undefined;
+                    const rawTripClientName = (row.trip.client_name ?? "").trim();
+                    const clientDisplayName =
+                      (clientRow?.name ?? "").trim() ||
+                      (rawTripClientName && !isUuidLikeString(row.trip.client_name)
+                        ? rawTripClientName
+                        : "");
+                    const clientNameForUi = clientDisplayName || "—";
+                    const clientRevenue = Number(row.trip.client_price ?? 0);
+                    const tripPnl = clientRevenue - row.sales;
+                    return (
+                      <>
+                  <View
+                    style={[
+                      styles.tdMission,
+                      isWebDesktop && styles.tdMissionWebDesktop,
+                    ]}
+                  >
                     <Text style={styles.tdMissionId}>{row.missionId}</Text>
-                    <Text style={styles.tdRoute} numberOfLines={1}>
+                    <Text style={styles.tdRoute} numberOfLines={isWebDesktop ? 3 : 1}>
                       {row.route}
                     </Text>
                   </View>
-                  <Text style={[styles.td, styles.tdSales]}>{formatINR(row.sales)}</Text>
-                  <Text style={[styles.td, styles.tdRight, styles.tdGreen]}>
-                    {formatINR(row.paid)}
-                  </Text>
-                  <Text style={[styles.td, styles.tdRight, styles.tdRed]}>
-                    {formatINR(row.due)}
-                  </Text>
+                  {isWebDesktop ? (
+                    <View style={styles.partyColWebDesktop}>
+                      <View style={styles.tdPartyAvatarRow}>
+                        <PartyAvatar
+                          name={clientNameForUi}
+                          organizationImageUrl={
+                            clientRow?.linked_organization_id
+                              ? linkedOrgDisplayMap[clientRow.linked_organization_id]
+                                  ?.avatarUrl
+                              : undefined
+                          }
+                          organizationAvatarSeed={
+                            clientRow?.linked_organization_id
+                              ? linkedOrgDisplayMap[clientRow.linked_organization_id]
+                                  ?.avatarSeed
+                              : undefined
+                          }
+                          avatarUrl={clientRow?.avatar_url ?? null}
+                          avatarSeed={clientRow?.avatar_seed ?? null}
+                          entityType="client"
+                          size={TRIP_TABLE_AVATAR}
+                        />
+                        <View style={styles.tdPartyTextStack}>
+                          <Text style={styles.tdPartyWebDesktop} numberOfLines={1}>
+                            {clientNameForUi}
+                          </Text>
+                          <Text style={styles.tdPartyHintWebDesktop} numberOfLines={1}>
+                            {(clientRow?.contact_person ?? "").trim() || "—"}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  ) : null}
+                  {isWebDesktop ? (
+                    <View style={[styles.amountCol, styles.amountColWebDesktop]}>
+                      <Text
+                        numberOfLines={1}
+                        style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}
+                      >
+                        {formatINR(clientRevenue)}
+                      </Text>
+                    </View>
+                  ) : null}
+                  <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.td,
+                        styles.tdSales,
+                        isWebDesktop && styles.tdAmountWebDesktop,
+                      ]}
+                    >
+                      {formatINR(row.sales)}
+                    </Text>
+                  </View>
+                  {isWebDesktop ? (
+                    <View style={[styles.amountCol, styles.amountColWebDesktop]}>
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          styles.td,
+                          styles.tdRight,
+                          styles.tdAmountWebDesktop,
+                          tripPnl >= 0 ? styles.tdGreen : styles.tdRed,
+                        ]}
+                      >
+                        {formatINR(tripPnl)}
+                      </Text>
+                    </View>
+                  ) : null}
+                  <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.td,
+                        styles.tdRight,
+                        styles.tdGreen,
+                        isWebDesktop && styles.tdAmountWebDesktop,
+                      ]}
+                    >
+                      {formatINR(row.paid)}
+                    </Text>
+                  </View>
+                  <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.td,
+                        styles.tdRight,
+                        styles.tdRed,
+                        isWebDesktop && styles.tdAmountWebDesktop,
+                      ]}
+                    >
+                      {formatINR(row.due)}
+                    </Text>
+                  </View>
+                  {isWebDesktop ? (
+                    <View style={[styles.amountCol, styles.amountColWebDesktop]}>
+                      <Text numberOfLines={1} style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
+                        {meta.count}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {isWebDesktop ? (
+                    <View style={[styles.amountCol, styles.amountColWebDesktop]}>
+                      <Text numberOfLines={1} style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
+                        {meta.lastTxnDate ? formatLedgerDate(meta.lastTxnDate) : "—"}
+                      </Text>
+                    </View>
+                  ) : null}
+                      </>
+                    );
+                  })()}
                 </TouchableOpacity>
               ))
             ) : (
@@ -881,20 +1230,32 @@ export default function SupplierDetailScreen({
               showHistoryHeader={false}
               showGridFooter={false}
               embedInParentScroll={true}
+              driverRows={orgDrivers}
             />
           </View>
         )}
 
         {detailSubTab === "shared" && supplier && (
-          <View style={styles.sharedSection}>
+          <View
+            style={[
+              styles.sharedSection,
+              Platform.OS === "web" && styles.sharedSectionWeb,
+            ]}
+          >
             <SharedLedgerContent
-              entity={{ id: supplier.id, name: supplierName, linked_organization_id: supplier.linked_organization_id }}
+              entity={{
+                id: supplier.id,
+                name: supplierName,
+                linked_organization_id: supplier.linked_organization_id,
+                avatar_url: supplier.avatar_url ?? undefined,
+              }}
               entityType="SUPPLIER"
               trips={trips}
               transactions={transactions}
               organizationId={currentOrganization?.id ?? null}
               integrated={Boolean(supplier.supplier_type === "integrated" || supplier.linked_organization_id)}
               embeddedInOverlay={true}
+              externalDownloadRequest={sharedLedgerDownloadSignal}
               onRefresh={load}
               onRequestConnection={() => {
                 setIsLinked(true);
@@ -951,11 +1312,25 @@ export default function SupplierDetailScreen({
         </View>
       )}
 
+      <DateRangePickerModal
+        visible={tripDateModalVisible}
+        initialFrom={tripCustomFrom ?? undefined}
+        initialTo={tripCustomTo ?? undefined}
+        onDismiss={() => setTripDateModalVisible(false)}
+        onApply={(from, to) => {
+          setTripCustomFrom(from);
+          setTripCustomTo(to);
+          setTripDatePeriod("CUSTOM");
+          setTripDateModalVisible(false);
+        }}
+      />
+
       <LedgerReportModal
         visible={showReportModal}
         onClose={() => setShowReportModal(false)}
         transactions={reportTransactions}
         title={supplierName ? `${t("ledgerFor")}${supplierName}` : t("ledgerReport")}
+        customReport={tripTableReport}
       />
       <Modal
         visible={showProfileModal}
@@ -1202,6 +1577,16 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 12,
     backgroundColor: Theme.screenBackground,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  publicProfileBtn: {
+    width: 36,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: Theme.surfaceLight,
+    borderWidth: 1,
+    borderColor: Theme.cinematicCardBorder,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1583,6 +1968,11 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     gap: 4,
   },
+  tripDatePillWrap: {
+    paddingHorizontal: 4,
+    marginBottom: 12,
+    marginTop: -8,
+  },
   tabItem: {
     flex: 1,
     paddingVertical: 10,
@@ -1615,6 +2005,15 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     overflow: "hidden",
   },
+  tableCardWebDesktop: {
+    borderRadius: 10,
+    borderColor: Theme.borderMedium,
+    maxWidth: 1440,
+    width: "100%",
+    alignSelf: "center",
+    backgroundColor: Theme.surface,
+    marginHorizontal: 4,
+  },
   tableHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -1624,12 +2023,78 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
+  tableHeaderWebDesktop: {
+    paddingVertical: 11,
+    paddingHorizontal: 10,
+    backgroundColor: Theme.surface,
+    borderBottomColor: Theme.borderMedium,
+  },
   th: {
     fontSize: 9,
     fontWeight: "700",
+    fontStyle: "italic",
     color: Theme.textMuted,
     letterSpacing: 0.4,
     textTransform: "uppercase",
+  },
+  thWebDesktop: {
+    fontSize: 11,
+    letterSpacing: 0.1,
+    color: Theme.textSecondary,
+    fontWeight: "700",
+    fontStyle: "italic",
+  },
+  thMissionWebDesktop: {
+    flex: 0,
+    flexGrow: 0,
+    flexShrink: 0,
+    minWidth: 220,
+    width: "30%",
+    maxWidth: 520,
+  },
+  partyColWebDesktop: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "12%",
+    minWidth: 100,
+    justifyContent: "center",
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 10,
+  },
+  tdPartyAvatarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 0,
+    width: "100%",
+  },
+  tdPartyTextStack: {
+    flex: 1,
+    minWidth: 0,
+  },
+  headerAmountCol: {
+    width: 80,
+    minWidth: 72,
+    flexShrink: 0,
+    alignItems: "flex-end",
+  },
+  amountCol: {
+    width: 80,
+    minWidth: 72,
+    flexShrink: 0,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  amountColWebDesktop: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "7.9%",
+    minWidth: 58,
+    maxWidth: 108,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 6,
   },
   thMission: { flex: 1.5, minWidth: 0 },
   thSales: { width: 80, textAlign: "right" as const },
@@ -1642,22 +2107,62 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
+  tableRowWebDesktop: {
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderBottomColor: Theme.borderLight,
+    minHeight: 58,
+    backgroundColor: Theme.surface,
+  },
   td: {
     fontSize: 10,
     fontWeight: "600",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
   },
   tdMission: { flex: 1.5, minWidth: 0 },
   tdMissionId: {
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "600",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
   },
   tdRoute: {
     fontSize: 10,
+    fontWeight: "400",
+    fontStyle: "italic",
     color: Theme.textMuted,
     marginTop: 4,
+  },
+  tdMissionWebDesktop: {
+    flex: 0,
+    flexGrow: 0,
+    flexShrink: 0,
+    minWidth: 220,
+    width: "30%",
+    maxWidth: 520,
+    paddingRight: 8,
+  },
+  tdPartyWebDesktop: {
+    fontSize: 11,
+    color: Theme.textPrimaryDark,
+    fontWeight: "500",
+    fontStyle: "italic",
+  },
+  tdPartyHintWebDesktop: {
+    fontSize: 9,
+    color: Theme.textMuted,
+    marginTop: 2,
+    fontWeight: "500",
+    fontStyle: "italic",
+  },
+  tdAmountWebDesktop: {
+    width: "100%",
+    textAlign: "right" as const,
+    fontSize: 11,
+    fontWeight: "600",
+    fontStyle: "italic",
   },
   tdSales: { width: 80, textAlign: "right" as const },
   tdRight: { width: 72, textAlign: "right" as const },
@@ -1667,10 +2172,12 @@ const styles = StyleSheet.create({
   emptyRowText: {
     fontSize: 11,
     fontWeight: "600",
+    fontStyle: "italic",
     color: Theme.textMuted,
   },
   cashSection: { marginBottom: 24 },
   sharedSection: { marginBottom: 24 },
+  sharedSectionWeb: { width: "100%", alignSelf: "stretch" },
   sharedCard: {
     backgroundColor: Theme.surface,
     borderWidth: 1,

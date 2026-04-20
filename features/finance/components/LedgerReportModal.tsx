@@ -153,6 +153,16 @@ export interface LedgerReportModalProps {
   transactions: LedgerRow[];
   /** Optional title override */
   title?: string;
+  /** When true, hides Cash In / Cash Out summary (e.g. custom shared-ledger export). */
+  hideCashSummary?: boolean;
+  customReport?: {
+    columns: Array<{
+      key: string;
+      label: string;
+      align?: 'left' | 'right' | 'center';
+    }>;
+    rows: Array<Record<string, string | number | null | undefined>>;
+  };
 }
 
 export function LedgerReportModal({
@@ -160,11 +170,14 @@ export function LedgerReportModal({
   onClose,
   transactions,
   title,
+  hideCashSummary = false,
+  customReport,
 }: LedgerReportModalProps) {
   const { t } = useLanguage();
   const insets = useSafeAreaInsets();
   const [downloadInProgress, setDownloadInProgress] = useState(false);
   const [formatPickerVisible, setFormatPickerVisible] = useState(false);
+  const [formatPickerMode, setFormatPickerMode] = useState<'download' | 'share'>('download');
   const displayTitle = title ?? t("ledgerReport");
   const sortedTransactions = useMemo(
     () => sortLedgerRowsByDate(transactions),
@@ -175,42 +188,130 @@ export function LedgerReportModal({
   const plainText = ledgerToPlainText(sortedTransactions, totalIn, totalOut);
   const csv = ledgerToCsv(sortedTransactions);
   const html = ledgerToHtml(sortedTransactions, totalIn, totalOut);
+  const isCustomReport = !!customReport;
+  const activePlainText = useMemo(() => {
+    if (!customReport) return plainText;
+    const header = customReport.columns.map((c) => c.label).join(' | ');
+    const lines = customReport.rows.map((row) =>
+      customReport.columns.map((c) => String(row[c.key] ?? '—').replace(/\|/g, ' ')).join(' | ')
+    );
+    return [displayTitle.toUpperCase(), '—', header, ...lines].join('\n');
+  }, [customReport, plainText, displayTitle]);
+  const activeCsv = useMemo(() => {
+    if (!customReport) return csv;
+    const escape = (v: unknown) => {
+      const s = String(v ?? '');
+      return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = customReport.columns.map((c) => escape(c.label)).join(',');
+    const rows = customReport.rows.map((row) =>
+      customReport.columns.map((c) => escape(row[c.key] ?? '')).join(',')
+    );
+    return [header, ...rows].join('\n');
+  }, [customReport, csv]);
+  const activeHtml = useMemo(() => {
+    if (!customReport) return html;
+    const isWide = customReport.columns.length > 8;
+    const columnClass = (key: string) => `col-${key.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+    const th = customReport.columns
+      .map((col) => `<th class="${columnClass(col.key)}" style="text-align:${col.align === 'right' ? 'right' : col.align === 'center' ? 'center' : 'left'};">${escapeHtml(col.label)}</th>`)
+      .join('');
+    const tr = customReport.rows
+      .map((row) => `<tr>${customReport.columns.map((col) => {
+        const align = col.align === 'right' ? 'right' : col.align === 'center' ? 'center' : 'left';
+        const value = row[col.key] == null ? '—' : String(row[col.key]);
+        return `<td class="${columnClass(col.key)}" style="text-align:${align};">${escapeHtml(value)}</td>`;
+      }).join('')}</tr>`)
+      .join('');
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(displayTitle)}</title><style>
+      @page { size: ${isWide ? 'A4 landscape' : 'A4 portrait'}; margin: 10mm; }
+      body{font-family:system-ui;padding:8px;font-size:10px;color:#0f172a;}
+      h2{margin:0 0 10px 0;font-size:14px;}
+      table{width:100%;border-collapse:collapse;table-layout:fixed;}
+      th,td{border:1px solid #dbe2ea;padding:6px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+      th{background:#0f172a;color:#fff;text-transform:uppercase;font-size:8px;letter-spacing:.4px;}
+      tr:nth-child(even) td{background:#f8fafc;}
+      .col-trip{width:90px}.col-route{width:170px}.col-model{width:90px}.col-supplier{width:150px}.col-client{width:130px}
+      .col-sales,.col-cost,.col-pnl,.col-margin,.col-received,.col-due,.col-txns,.col-lastTxn,.col-contract,.col-clientRevenue,.col-paid{width:80px}
+    </style></head><body><h2>${escapeHtml(displayTitle)}</h2><table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table></body></html>`;
+  }, [customReport, html, displayTitle]);
+
+  const getCustomColumnWidth = (key: string): number => {
+    switch (key) {
+      case 'trip': return 90;
+      case 'route': return 190;
+      case 'model': return 90;
+      case 'supplier': return 160;
+      case 'client': return 140;
+      case 'mission': return 88;
+      case 'status': return 96;
+      case 'partnerNote': return 120;
+      case 'mySales':
+      case 'themSales':
+      case 'myReceived':
+      case 'themReceived':
+      case 'due':
+        return 86;
+      case 'txns': return 44;
+      case 'lastTxn': return 72;
+      case 'sync': return 52;
+      case 'you':
+      case 'partner':
+        return 80;
+      case 'refs': return 140;
+      case 'date': return 88;
+      default: return 90;
+    }
+  };
+
+  const getCustomValueColor = (key: string, value: string): string | undefined => {
+    const v = value.trim();
+    const isDashOrZero = v === '—' || v === '₹0' || v === '0' || v === '0.0%';
+    if (key === 'sync') return v === 'Fix' ? Theme.teslaRed : Theme.darkGreen;
+    if (key === 'due') return isDashOrZero ? Theme.textPrimary : Theme.teslaRed;
+    if (key === 'pnl' || key === 'margin' || key === 'received' || key === 'paid') {
+      return v.startsWith('-') ? Theme.teslaRed : Theme.darkGreen;
+    }
+    return undefined;
+  };
 
   const handlePrint = async () => {
     try {
-      await Print.printAsync({ html });
+      await Print.printAsync({ html: activeHtml });
     } catch {
       Share.share({
-        message: plainText,
+        message: activePlainText,
         title: 'Ledger Report – Print or Save',
       }).catch(() => Alert.alert('Print', 'Use Share or Download to print from another app.'));
     }
   };
 
   const handleWhatsApp = () => {
-    const url = `whatsapp://send?text=${encodeURIComponent(plainText)}`;
+    const url = `whatsapp://send?text=${encodeURIComponent(activePlainText)}`;
     Linking.canOpenURL(url).then((supported) => {
       if (supported) Linking.openURL(url);
-      else Share.share({ message: plainText, title: 'Ledger Report' }).catch(() => {});
-    }).catch(() => Share.share({ message: plainText, title: 'Ledger Report' }).catch(() => {}));
+      else Share.share({ message: activePlainText, title: 'Ledger Report' }).catch(() => {});
+    }).catch(() => Share.share({ message: activePlainText, title: 'Ledger Report' }).catch(() => {}));
   };
 
   const handleShare = () => {
-    Share.share({
-      message: plainText,
-      title: 'Ledger Report',
-    }).catch(() => Alert.alert('Share', 'Sharing is not available.'));
+    if (downloadInProgress) return;
+    setFormatPickerMode('share');
+    setFormatPickerVisible(true);
   };
 
-  const handleDownloadPdf = async () => {
+  const handlePdfAction = async (mode: 'download' | 'share') => {
     if (downloadInProgress) return;
     setDownloadInProgress(true);
     try {
       if (Platform.OS === 'web') {
-        await Print.printAsync({ html });
+        await Print.printAsync({ html: activeHtml });
+        if (mode === 'share') {
+          Alert.alert('Share PDF', 'Use your browser print dialog to save/share the PDF.');
+        }
         return;
       }
-      const { uri } = await Print.printToFileAsync({ html });
+      const { uri } = await Print.printToFileAsync({ html: activeHtml });
       const sharingAvailable = await Sharing.isAvailableAsync();
       if (sharingAvailable) {
         await Sharing.shareAsync(uri, {
@@ -228,7 +329,7 @@ export function LedgerReportModal({
     } catch (e) {
       try {
         await Share.share({
-          message: csv,
+          message: activeCsv,
           title: 'Ledger Report',
         });
       } catch {
@@ -243,22 +344,45 @@ export function LedgerReportModal({
     }
   };
 
-  const handleDownloadExcel = async () => {
+  const handleExcelAction = async (mode: 'download' | 'share') => {
     if (downloadInProgress) return;
     setDownloadInProgress(true);
     try {
       if (Platform.OS === 'web') {
-        const workbook = buildLedgerWorkbook(sortedTransactions, totalIn, totalOut);
+        const workbook = isCustomReport
+          ? (() => {
+              const ws = XLSX.utils.aoa_to_sheet([
+                customReport!.columns.map((c) => c.label),
+                ...customReport!.rows.map((row) => customReport!.columns.map((c) => row[c.key] ?? '')),
+              ]);
+              const wb = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(wb, ws, 'Report');
+              return wb;
+            })()
+          : buildLedgerWorkbook(sortedTransactions, totalIn, totalOut);
         const arrayBuffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
         const blob = new Blob(
           [arrayBuffer],
           { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
         );
         triggerWebDownload(blob, `ledger-report-${Date.now()}.xlsx`);
+        if (mode === 'share') {
+          Alert.alert('Share Excel', 'Excel has been downloaded. Attach it in your email app.');
+        }
         return;
       }
       if (!FileSystem.cacheDirectory) throw new Error('No cache directory available');
-      const workbook = buildLedgerWorkbook(sortedTransactions, totalIn, totalOut);
+      const workbook = isCustomReport
+        ? (() => {
+            const ws = XLSX.utils.aoa_to_sheet([
+              customReport!.columns.map((c) => c.label),
+              ...customReport!.rows.map((row) => customReport!.columns.map((c) => row[c.key] ?? '')),
+            ]);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Report');
+            return wb;
+          })()
+        : buildLedgerWorkbook(sortedTransactions, totalIn, totalOut);
       const base64 = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' });
       const uri = `${FileSystem.cacheDirectory}ledger-report-${Date.now()}.xlsx`;
       await FileSystem.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
@@ -279,7 +403,7 @@ export function LedgerReportModal({
     } catch {
       try {
         await Share.share({
-          message: csv,
+          message: activeCsv,
           title: 'Ledger Report.csv',
         });
       } catch {
@@ -296,17 +420,18 @@ export function LedgerReportModal({
 
   const handleDownload = () => {
     if (downloadInProgress) return;
+    setFormatPickerMode('download');
     setFormatPickerVisible(true);
   };
 
   const handleSelectPdf = () => {
     setFormatPickerVisible(false);
-    void handleDownloadPdf();
+    void handlePdfAction(formatPickerMode);
   };
 
   const handleSelectExcel = () => {
     setFormatPickerVisible(false);
-    void handleDownloadExcel();
+    void handleExcelAction(formatPickerMode);
   };
 
   return (
@@ -327,36 +452,79 @@ export function LedgerReportModal({
               <FontAwesome name="times" size={18} color={Theme.textPrimary} />
             </TouchableOpacity>
           </View>
-          <View style={styles.summaryRow}>
-            <View style={styles.summaryCell}>
-              <Text style={styles.summaryLabel}>{t("cashIn")}</Text>
-              <Text style={[styles.summaryValue, styles.positive]}>{formatAmount(totalIn)}</Text>
+          {!hideCashSummary ? (
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryCell}>
+                <Text style={styles.summaryLabel}>{t("cashIn")}</Text>
+                <Text style={[styles.summaryValue, styles.positive]}>{formatAmount(totalIn)}</Text>
+              </View>
+              <View style={styles.summaryCell}>
+                <Text style={styles.summaryLabel}>{t("cashOut")}</Text>
+                <Text style={[styles.summaryValue, styles.negative]}>{formatAmount(totalOut)}</Text>
+              </View>
             </View>
-            <View style={styles.summaryCell}>
-              <Text style={styles.summaryLabel}>{t("cashOut")}</Text>
-              <Text style={[styles.summaryValue, styles.negative]}>{formatAmount(totalOut)}</Text>
-            </View>
-          </View>
+          ) : null}
 
           <View style={styles.tableHeader}>
-            <Text style={[styles.th, styles.thEntity]}>PARTY / DESC</Text>
-            <Text style={[styles.th, styles.thDate]}>DATE</Text>
-            <Text style={[styles.th, styles.thNum]}>{t("cashIn")}</Text>
-            <Text style={[styles.th, styles.thNum]}>{t("cashOut")}</Text>
+            {isCustomReport ? (
+              customReport!.columns.map((col) => (
+                <Text
+                  key={col.key}
+                  style={[
+                    styles.th,
+                    styles.thCustom,
+                    col.align === 'right' ? styles.thNum : undefined,
+                    { width: getCustomColumnWidth(col.key), textAlign: col.align === 'right' ? 'right' : col.align === 'center' ? 'center' : 'left' },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {col.label}
+                </Text>
+              ))
+            ) : (
+              <>
+                <Text style={[styles.th, styles.thEntity]}>PARTY / DESC</Text>
+                <Text style={[styles.th, styles.thDate]}>DATE</Text>
+                <Text style={[styles.th, styles.thNum]}>{t("cashIn")}</Text>
+                <Text style={[styles.th, styles.thNum]}>{t("cashOut")}</Text>
+              </>
+            )}
           </View>
 
           <ScrollView
             style={styles.list}
             contentContainerStyle={[
               styles.listContent,
-              sortedTransactions.length === 0 && styles.listContentEmpty,
+              (isCustomReport ? customReport!.rows.length === 0 : sortedTransactions.length === 0) && styles.listContentEmpty,
             ]}
             showsVerticalScrollIndicator={true}
           >
-            {sortedTransactions.length === 0 ? (
+            {(isCustomReport ? customReport!.rows.length === 0 : sortedTransactions.length === 0) ? (
               <Text style={styles.empty}>{t("noLedgerEntries")}</Text>
             ) : (
-              sortedTransactions.map((row) => (
+              isCustomReport
+                ? customReport!.rows.map((row, idx) => (
+                    <View key={`custom-row-${idx}`} style={styles.row}>
+                      {customReport!.columns.map((col) => (
+                        <Text
+                          key={`${idx}-${col.key}`}
+                          style={[
+                            styles.cellCustom,
+                            col.align === 'right' ? styles.cellNum : undefined,
+                            {
+                              width: getCustomColumnWidth(col.key),
+                              textAlign: col.align === 'right' ? 'right' : col.align === 'center' ? 'center' : 'left',
+                              color: getCustomValueColor(col.key, row[col.key] == null ? '—' : String(row[col.key])) ?? Theme.textPrimary,
+                            },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {row[col.key] == null ? '—' : String(row[col.key])}
+                        </Text>
+                      ))}
+                    </View>
+                  ))
+                : sortedTransactions.map((row) => (
                 <View key={row.id} style={styles.row}>
                   <View style={styles.cellEntity}>
                     <Text style={styles.entityName} numberOfLines={1}>{row.party_name}</Text>
@@ -416,13 +584,23 @@ export function LedgerReportModal({
           onPress={() => setFormatPickerVisible(false)}
         >
           <View style={styles.downloadModalCard}>
-            <Text style={styles.downloadModalTitle}>Download format</Text>
-            <Text style={styles.downloadModalSubtitle}>Choose your preferred report file type</Text>
+            <Text style={styles.downloadModalTitle}>
+              {formatPickerMode === 'share' ? 'Share format' : 'Download format'}
+            </Text>
+            <Text style={styles.downloadModalSubtitle}>
+              {formatPickerMode === 'share'
+                ? 'Choose file format to share'
+                : 'Choose your preferred report file type'}
+            </Text>
             <TouchableOpacity style={styles.downloadOption} onPress={handleSelectPdf} activeOpacity={0.8}>
-              <Text style={styles.downloadOptionText}>PDF</Text>
+              <Text style={styles.downloadOptionText}>
+                {formatPickerMode === 'share' ? 'Share as PDF' : 'Download PDF'}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.downloadOption} onPress={handleSelectExcel} activeOpacity={0.8}>
-              <Text style={styles.downloadOptionText}>Excel (.xlsx)</Text>
+              <Text style={styles.downloadOptionText}>
+                {formatPickerMode === 'share' ? 'Share as Excel (.xlsx)' : 'Download Excel (.xlsx)'}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.downloadOption, styles.downloadCancelOption]}
@@ -562,6 +740,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   thEntity: { flex: 1 },
+  thCustom: { flex: 1, fontSize: 8 },
   thDate: { width: 72 },
   thNum: { width: 64, textAlign: 'right' },
   list: {
@@ -606,6 +785,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     textAlign: 'right',
+  },
+  cellCustom: {
+    flex: 1,
+    fontSize: 10,
+    color: Theme.textPrimary,
+    paddingRight: 8,
   },
   empty: {
     padding: 24,
