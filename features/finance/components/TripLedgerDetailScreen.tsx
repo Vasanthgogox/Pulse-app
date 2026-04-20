@@ -640,7 +640,7 @@ export function TripLedgerDetailScreen({
                   <Text style={styles.entryCardRoute} numberOfLines={1}>
                     {trip.pickup_area ?? "—"} → {trip.drop_location ?? "—"}
                   </Text>
-                  <FontAwesome name="chevron-down" size={10} color={Theme.textMuted} style={styles.entryCardChevron} />
+ 
                 </View>
                 <View style={styles.entryCardRight}>
                   <Text
@@ -656,7 +656,7 @@ export function TripLedgerDetailScreen({
                         ? formatINR(focusedEntry.amount_in!)
                         : "—"}
                   </Text>
-                  <FontAwesome name="chevron-down" size={10} color={Theme.textMuted} />
+ 
                 </View>
               </View>
             </View>
@@ -1404,7 +1404,7 @@ const styles = StyleSheet.create({
   entryCardRight: { flex: 0.8, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 4 },
   entryCardMeta: { fontSize: 9, color: Theme.textMuted, textTransform: "uppercase" },
   entryCardRoute: { fontSize: 10, fontWeight: "600", color: Theme.textPrimaryDark },
-  entryCardChevron: { marginLeft: 2 },
+ 
   entryCardAmount: { fontSize: 11, fontWeight: "700", color: Theme.textPrimaryDark },
   entryCardAmountGreen: { color: Theme.darkGreen },
   entryCardAmountRed: { color: Theme.teslaRed },

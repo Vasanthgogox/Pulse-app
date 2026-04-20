@@ -393,7 +393,6 @@ export function TreasurySummaryCard({
               <Text style={styles.filterTriggerText} numberOfLines={1}>
                 {filterLabel}
               </Text>
-              <FontAwesome name="chevron-down" size={11} color={Theme.textOnDark} />
             </Animated.View>
           </TouchableOpacity>
           {showFilterDropdownOpen && (
@@ -716,7 +715,6 @@ export function TreasurySummaryCard({
               <Text style={styles.filterTriggerText} numberOfLines={1}>
                 {sourceFilterLabel}
               </Text>
-              <FontAwesome name="chevron-down" size={11} color={Theme.textOnDark} />
             </Animated.View>
           </TouchableOpacity>
         </View>

@@ -952,9 +952,6 @@ export function FinancialRow({
                   </Text>
                 )}
               </View>
-              <View style={styles.sourceDropdownChevronWrap} pointerEvents="none">
-                <FontAwesome name="chevron-down" size={8} color={Theme.textMutedDemo} />
-              </View>
             </TouchableOpacity>
             <TripPickerModal
               visible={showTripPicker}

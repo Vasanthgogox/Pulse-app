@@ -1318,7 +1318,7 @@ export default function ClientDetailScreen({
               ) : null}
               {isWebDesktop ? (
                 <View style={[styles.headerAmountCol, styles.amountColWebDesktop]}>
-                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop]}>
+                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop, { textAlign: "right" as const }]}>
                     P&L
                   </Text>
                 </View>
@@ -1553,6 +1553,7 @@ export default function ClientDetailScreen({
                           styles.tdRight,
                           styles.tdAmountWebDesktop,
                           tripPnl >= 0 ? styles.tdGreen : styles.tdRed,
+                          { textAlign: "right" as const },
                         ]}
                       >
                         {formatINR(tripPnl)}
@@ -2448,23 +2449,19 @@ const styles = StyleSheet.create({
     flexGrow: 0,
     flexShrink: 0,
     width: "11%",
-    minWidth: 108,
     justifyContent: "center",
     paddingRight: 6,
   },
   tripColWebDesktop: {
-    flexGrow: 0,
-    flexShrink: 0,
-    flex: 0,
-    width: "28%",
-    minWidth: 248,
+    flex: 1,
+    minWidth: 200,
+    width: "30%",
     maxWidth: 520,
   },
   partyColWebDesktop: {
     flexGrow: 0,
     flexShrink: 0,
     width: "12%",
-    minWidth: 100,
     justifyContent: "center",
     borderLeftWidth: 1,
     borderLeftColor: Theme.borderLight,
@@ -2474,7 +2471,6 @@ const styles = StyleSheet.create({
     flexGrow: 0,
     flexShrink: 0,
     width: "9%",
-    minWidth: 92,
     justifyContent: "center",
     borderLeftWidth: 1,
     borderLeftColor: Theme.borderLight,
@@ -2507,14 +2503,15 @@ const styles = StyleSheet.create({
   amountColWebDesktop: {
     flexGrow: 0,
     flexShrink: 0,
-    width: "5.65%",
-    minWidth: 58,
+    flex: 1,
+    width: "auto",
+    minWidth: 60,
     maxWidth: 108,
     borderLeftWidth: 1,
     borderLeftColor: Theme.borderLight,
     paddingLeft: 6,
   },
-  thMission: { flex: 1.5, minWidth: 0 },
+  thMission: { flex: 1, minWidth: 0 },
   thSales: { width: 80, textAlign: "right" as const },
   thRight: { width: 72, textAlign: "right" as const },
   tableRow: {
@@ -2538,7 +2535,7 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
   },
-  tdMission: { flex: 1.5, minWidth: 0 },
+  tdMission: { flex: 1, minWidth: 0 },
   tdMissionId: {
     fontSize: 11,
     fontWeight: "600",
@@ -2576,11 +2573,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   tdTripColWebDesktop: {
-    flexGrow: 0,
-    flexShrink: 0,
-    flex: 0,
-    width: "28%",
-    minWidth: 248,
+    flex: 1,
+    minWidth: 200,
+    width: "30%",
     maxWidth: 520,
     paddingRight: 8,
   },
