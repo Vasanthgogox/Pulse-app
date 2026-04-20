@@ -70,13 +70,13 @@ export default function DriverPassbookDetailScreen() {
   const params = useLocalSearchParams<{ orgId: string; orgName?: string; from?: string }>();
   const orgId = typeof params.orgId === 'string' ? params.orgId : params.orgId?.[0] ?? '';
   const orgName = (typeof params.orgName === 'string' ? params.orgName : params.orgName?.[0]) ?? 'Fleet';
-  const from = typeof params.from === 'string' ? params.from : params.from?.[0] ?? 'requests';
+  const from = typeof params.from === 'string' ? params.from : params.from?.[0] ?? 'dashboard';
 
   const handleBack = useCallback(() => {
     if (from === 'history') {
       router.navigate('/(driver)/passbook/history');
     } else {
-      router.navigate('/(driver)/requests');
+      router.navigate('/(driver)');
     }
   }, [router, from]);
 

@@ -2,14 +2,14 @@
  * Create Trip — full-screen page (pushed, not modal). Reuses AddTripModal content.
  * On close/complete we navigate to Trips tab so we don't fall back to Ops Agent (index).
  */
-import { View } from 'react-native';
-import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { createLedgerEntry } from '@/features/finance';
-import { AddTripModal, assignTripDriverByPhone, type AddTripFormData, createTrip, createTripWithOtp } from '@/features/trips';
-import { useSafeBack } from '@/lib/useSafeBack';
+import { AddTripModal, assignTripDriverByPhone, createTrip, createTripWithOtp, type AddTripFormData } from '@/features/trips';
 import { useInvalidateTrips } from '@/lib/queries';
+import { useSafeBack } from '@/lib/useSafeBack';
+import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { View } from 'react-native';
 
 export default function AddTripPage() {
   const router = useRouter();
