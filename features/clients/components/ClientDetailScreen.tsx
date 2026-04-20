@@ -234,6 +234,7 @@ export default function ClientDetailScreen({
   const { width: windowWidth } = useWindowDimensions();
   /** Full trip grid only on wide web; narrow web uses the compact column set (matches finance shared ledger). */
   const isWebDesktop = Platform.OS === "web" && windowWidth >= 1024;
+  const webContentGutter = Platform.OS === "web" ? (windowWidth >= 1600 ? 14 : windowWidth >= 1280 ? 16 : 18) : Layout.screenPaddingHorizontal;
   const [profileEditMode, setProfileEditMode] = useState(false);
   const [editOrgName, setEditOrgName] = useState("");
   const [editContactPerson, setEditContactPerson] = useState("");
@@ -1185,6 +1186,9 @@ export default function ClientDetailScreen({
         contentContainerStyle={[
           styles.scrollContent,
           {
+            paddingHorizontal: webContentGutter,
+          },
+          {
             paddingBottom: canAddTransaction && detailSubTab !== "shared"
               ? Layout.fabBottomOffset + Layout.fabSize + insets.bottom
               : Layout.fabBottomOffset + insets.bottom,
@@ -1917,8 +1921,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingVertical: 20,
-    paddingBottom: 16,
+    paddingVertical: 12,
+    paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(0,0,0,0.05)",
     backgroundColor: "rgba(255,255,255,0.6)",
@@ -2267,20 +2271,21 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 24,
+    paddingTop: 14,
   },
   scorecard: {
     backgroundColor: Theme.darkBackground,
-    borderRadius: 40,
-    padding: 32,
-    marginBottom: 24,
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    marginBottom: 14,
     overflow: "hidden",
   },
   scorecardTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 24,
+    marginBottom: 10,
   },
   scorecardLeft: { flex: 1 },
   scorecardLabel: {
@@ -2298,7 +2303,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   scorecardAmount: {
-    fontSize: 28,
+    fontSize: 34,
     fontWeight: "300",
     fontStyle: "italic",
     color: Theme.textOnDark,
@@ -2330,7 +2335,7 @@ const styles = StyleSheet.create({
   scorecardGrid: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingTop: 16,
+    paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.1)",
   },
@@ -2348,14 +2353,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   scorecardGridPaid: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "800",
     fontStyle: "italic",
     color: Theme.textOnDark,
     marginTop: 4,
   },
   scorecardGridDue: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "800",
     fontStyle: "italic",
     color: Theme.teslaRed,
@@ -2366,13 +2371,13 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
     padding: 4,
     borderRadius: 16,
-    marginBottom: 24,
+    marginBottom: 10,
     gap: 4,
   },
   tripDatePillWrap: {
     paddingHorizontal: 4,
-    marginBottom: 12,
-    marginTop: -8,
+    marginBottom: 8,
+    marginTop: -4,
   },
   tabItem: {
     flex: 1,
@@ -2407,13 +2412,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   tableCardWebDesktop: {
-    borderRadius: 10,
+    borderRadius: 12,
     borderColor: Theme.borderMedium,
-    maxWidth: 1440,
     width: "100%",
-    alignSelf: "center",
     backgroundColor: Theme.surface,
-    marginHorizontal: 4,
+    marginHorizontal: 0,
   },
   tableHeader: {
     flexDirection: "row",
@@ -2425,8 +2428,8 @@ const styles = StyleSheet.create({
     borderBottomColor: Theme.borderLight,
   },
   tableHeaderWebDesktop: {
-    paddingVertical: 11,
-    paddingHorizontal: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
     backgroundColor: Theme.surface,
     borderBottomColor: Theme.borderMedium,
   },
@@ -2448,33 +2451,32 @@ const styles = StyleSheet.create({
   clientColWebDesktop: {
     flexGrow: 0,
     flexShrink: 0,
-    width: "11%",
+    width: "10%",
     justifyContent: "center",
     paddingRight: 6,
   },
   tripColWebDesktop: {
     flex: 1,
-    minWidth: 200,
-    width: "30%",
-    maxWidth: 520,
+    minWidth: 220,
+    width: "31%",
   },
   partyColWebDesktop: {
     flexGrow: 0,
     flexShrink: 0,
-    width: "12%",
-    justifyContent: "center",
-    borderLeftWidth: 1,
-    borderLeftColor: Theme.borderLight,
-    paddingLeft: 10,
-  },
-  driverColWebDesktop: {
-    flexGrow: 0,
-    flexShrink: 0,
-    width: "9%",
+    width: "13%",
     justifyContent: "center",
     borderLeftWidth: 1,
     borderLeftColor: Theme.borderLight,
     paddingLeft: 8,
+  },
+  driverColWebDesktop: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "10%",
+    justifyContent: "center",
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 7,
   },
   tdPartyAvatarRow: {
     flexDirection: "row",
@@ -2505,11 +2507,11 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     flex: 1,
     width: "auto",
-    minWidth: 60,
-    maxWidth: 108,
+    minWidth: 68,
+    maxWidth: 112,
     borderLeftWidth: 1,
     borderLeftColor: Theme.borderLight,
-    paddingLeft: 6,
+    paddingLeft: 5,
   },
   thMission: { flex: 1, minWidth: 0 },
   thSales: { width: 80, textAlign: "right" as const },
@@ -2523,10 +2525,10 @@ const styles = StyleSheet.create({
     borderBottomColor: Theme.borderLight,
   },
   tableRowWebDesktop: {
-    paddingVertical: 12,
-    paddingHorizontal: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
     borderBottomColor: Theme.borderLight,
-    minHeight: 58,
+    minHeight: 50,
     backgroundColor: Theme.surface,
   },
   td: {
@@ -2544,13 +2546,13 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   tdMissionIdWebDesktop: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "500",
     fontStyle: "italic",
   },
   tdMissionDateWeb: {
-    marginTop: 4,
-    fontSize: 9,
+    marginTop: 2,
+    fontSize: 8,
     fontWeight: "500",
     fontStyle: "normal",
     color: Theme.textMuted,
@@ -2565,37 +2567,36 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   tdRouteWebDesktop: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "400",
     fontStyle: "italic",
     color: Theme.textMuted,
-    lineHeight: 14,
-    marginTop: 4,
+    lineHeight: 12,
+    marginTop: 2,
   },
   tdTripColWebDesktop: {
     flex: 1,
-    minWidth: 200,
-    width: "30%",
-    maxWidth: 520,
-    paddingRight: 8,
+    minWidth: 220,
+    width: "31%",
+    paddingRight: 6,
   },
   tdPartyWebDesktop: {
-    fontSize: 11,
+    fontSize: 10,
     color: Theme.textPrimaryDark,
     fontWeight: "500",
     fontStyle: "italic",
   },
   tdPartyHintWebDesktop: {
-    fontSize: 9,
+    fontSize: 8,
     color: Theme.textMuted,
-    marginTop: 2,
+    marginTop: 1,
     fontWeight: "500",
     fontStyle: "italic",
   },
   tdAmountWebDesktop: {
     width: "100%",
     textAlign: "right" as const,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
     fontStyle: "italic",
   },
