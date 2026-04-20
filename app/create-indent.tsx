@@ -203,6 +203,7 @@ export default function CreateIndentScreen() {
   const [dropDropdownOpen, setDropDropdownOpen] = useState(false);
   const [vehicleTypePickerOpen, setVehicleTypePickerOpen] = useState(false);
   const [vehicleTypeIsOther, setVehicleTypeIsOther] = useState(false);
+  const [currentStep, setCurrentStep] = useState(1);
 
   const capabilities = getCapabilitiesFromProfile(
     profile
@@ -696,6 +697,16 @@ export default function CreateIndentScreen() {
     parseFloat(String(form.client_price ?? "").replace(/,/g, "")) > 0 &&
     parseFloat(String(form.supplier_target ?? "").replace(/,/g, "")) >= 0;
   const stackActionButtons = windowWidth < 760;
+  const canProgressStep1 =
+    (form.pickup_area ?? "").trim().length > 0 &&
+    (form.drop_location ?? "").trim().length > 0 &&
+    (form.vehicle_type ?? "").trim().length > 0;
+  const canProgressStep2 =
+    canProgressStep1 &&
+    Boolean(form.client_id?.trim()) &&
+    parseFloat(String(form.client_price ?? "").replace(/,/g, "")) > 0 &&
+    parseFloat(String(form.supplier_target ?? "").replace(/,/g, "")) >= 0;
+  const canShareNow = currentStep >= 3 && canSubmit;
 
   return (
     <KeyboardAvoidingView
@@ -717,7 +728,7 @@ export default function CreateIndentScreen() {
           style={styles.scroll}
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingBottom: insets.bottom + 32 + 24 },
+            { paddingBottom: insets.bottom + 120 },
           ]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={
@@ -726,14 +737,48 @@ export default function CreateIndentScreen() {
           showsVerticalScrollIndicator={false}
           scrollEnabled={!pickupDropdownOpen && !dropDropdownOpen}
         >
-          {/* Sheet-style form — reference: handle + grid + target partners + budget */}
           <View style={styles.sheet}>
+            <View style={styles.designHeaderCard}>
+              <Text style={styles.designHeaderTitle}>Create Indent</Text>
+              <Text style={styles.designHeaderSubtitle}>Deploy New Load</Text>
+              <View style={styles.designHeaderProgressRow}>
+                <Text style={styles.designHeaderProgressText}>
+                  Step {currentStep} of 3
+                </Text>
+                <View style={styles.designHeaderDots}>
+                  {[1, 2, 3].map((step) => (
+                    <View
+                      key={step}
+                      style={[
+                        styles.designHeaderDot,
+                        currentStep === step && styles.designHeaderDotActive,
+                        currentStep > step && styles.designHeaderDotDone,
+                      ]}
+                    />
+                  ))}
+                </View>
+              </View>
+            </View>
+
+            <View
+              style={[
+                styles.stepCard,
+                currentStep !== 1 && styles.stepCardDimmed,
+              ]}
+              pointerEvents={currentStep === 1 ? "auto" : "none"}
+            >
+              <View style={styles.stepCardHead}>
+                <View style={styles.stepChip}>
+                  <Text style={styles.stepChipText}>01</Text>
+                </View>
+                <Text style={styles.stepCardTitle}>Route & Vehicle</Text>
+              </View>
             <View style={styles.sheetGrid}>
               <View style={styles.sheetField}>
                 <Text style={styles.sheetLabel}>Origin Node</Text>
                 <LocationSearchField
                   label=""
-                  placeholder="Source"
+                  placeholder="Enter origin node"
                   value={form.pickup_area}
                   onChangeText={(t) => {
                     update({ pickup_area: t });
@@ -760,7 +805,7 @@ export default function CreateIndentScreen() {
                 <Text style={styles.sheetLabel}>Destination Node</Text>
                 <LocationSearchField
                   label=""
-                  placeholder="Target"
+                  placeholder="Enter destination node"
                   value={form.drop_location}
                   onChangeText={(t) => {
                     update({ drop_location: t });
@@ -806,7 +851,32 @@ export default function CreateIndentScreen() {
                 </View>
               </View>
             ) : null}
+              <TouchableOpacity
+                style={[
+                  styles.nextStepBtn,
+                  !canProgressStep1 && styles.submitBtnDisabled,
+                ]}
+                disabled={!canProgressStep1}
+                onPress={() => setCurrentStep(2)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.nextStepBtnText}>Continue to Commercials</Text>
+              </TouchableOpacity>
+            </View>
 
+            <View
+              style={[
+                styles.stepCard,
+                currentStep < 2 && styles.stepCardDimmed,
+              ]}
+              pointerEvents={currentStep >= 2 ? "auto" : "none"}
+            >
+              <View style={styles.stepCardHead}>
+                <View style={styles.stepChip}>
+                  <Text style={styles.stepChipText}>02</Text>
+                </View>
+                <Text style={styles.stepCardTitle}>Commercial Details</Text>
+              </View>
             <View style={styles.sheetSection}>
               <Text style={styles.sheetLabel}>Client</Text>
               <View style={styles.clientSearchRow}>
@@ -940,7 +1010,7 @@ export default function CreateIndentScreen() {
               </Modal>
             ) : null}
 
-            <View style={styles.sheetSection}>
+            <View style={[styles.sheetSection, styles.commercialHighlight]}>
               <Text style={styles.sheetLabel}>Client Rate (₹)</Text>
               <TextInput
                 style={[
@@ -958,7 +1028,7 @@ export default function CreateIndentScreen() {
               ) : null}
             </View>
 
-            <View style={styles.sheetSection}>
+            <View style={[styles.sheetSection, styles.commercialHighlight]}>
               <Text style={styles.sheetLabel}>Supplier Target (₹)</Text>
               <TextInput
                 style={[
@@ -975,7 +1045,42 @@ export default function CreateIndentScreen() {
                 <Text style={styles.errorText}>{errors.supplier_target}</Text>
               ) : null}
             </View>
+              <View style={styles.stepButtonsRow}>
+                <TouchableOpacity
+                  style={styles.stepBackBtn}
+                  onPress={() => setCurrentStep(1)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.stepBackBtnText}>Back</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.nextStepBtn,
+                    styles.nextStepBtnFill,
+                    !canProgressStep2 && styles.submitBtnDisabled,
+                  ]}
+                  disabled={!canProgressStep2}
+                  onPress={() => setCurrentStep(3)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.nextStepBtnText}>Finalize Load Specs</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
 
+            <View
+              style={[
+                styles.stepCard,
+                currentStep < 3 && styles.stepCardDimmed,
+              ]}
+              pointerEvents={currentStep >= 3 ? "auto" : "none"}
+            >
+              <View style={styles.stepCardHead}>
+                <View style={styles.stepChip}>
+                  <Text style={styles.stepChipText}>03</Text>
+                </View>
+                <Text style={styles.stepCardTitle}>Load Specifics</Text>
+              </View>
             <View style={styles.sheetGrid}>
               <View style={styles.sheetField}>
                 <Text style={styles.sheetLabel}>Vehicle</Text>
@@ -1027,7 +1132,7 @@ export default function CreateIndentScreen() {
                 ) : null}
               </View>
               <View style={styles.sheetField}>
-                <Text style={styles.sheetLabel}>Load type</Text>
+                <Text style={styles.sheetLabel}>Load Type</Text>
                 <TextInput
                   style={[
                     styles.sheetInput,
@@ -1179,6 +1284,7 @@ export default function CreateIndentScreen() {
                     </TouchableOpacity>
                   </Modal>
                 ))}
+            </View>
             </View>
 
             {vehicleTypePickerOpen ? (
@@ -1335,6 +1441,14 @@ export default function CreateIndentScreen() {
 
             <View
               style={[
+                styles.actionFooterBar,
+                Platform.OS === "web"
+                  ? ({ backdropFilter: "blur(16px)" } as never)
+                  : null,
+              ]}
+            >
+            <View
+              style={[
                 styles.actionButtonsRow,
                 stackActionButtons && styles.actionButtonsRowStacked,
               ]}
@@ -1362,10 +1476,10 @@ export default function CreateIndentScreen() {
                 style={[
                   styles.submitBtn,
                   stackActionButtons && styles.actionBtnStacked,
-                  (!canSubmit || submitting) && styles.submitBtnDisabled,
+                  (!canShareNow || submitting) && styles.submitBtnDisabled,
                 ]}
                 onPress={handleSubmit}
-                disabled={!canSubmit || submitting}
+                disabled={!canShareNow || submitting}
                 activeOpacity={0.8}
               >
                 {submitting ? (
@@ -1377,6 +1491,7 @@ export default function CreateIndentScreen() {
                   <Text style={styles.submitBtnText}>Share to Network</Text>
                 )}
               </TouchableOpacity>
+            </View>
             </View>
           </View>
         </ScrollView>
@@ -1420,6 +1535,95 @@ const styles = StyleSheet.create({
   sheet: {
     gap: 10,
   },
+  designHeaderCard: {
+    backgroundColor: Theme.darkSurface,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Theme.separatorDark,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 4,
+  },
+  designHeaderTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  designHeaderSubtitle: {
+    marginTop: 2,
+    fontSize: 11,
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  designHeaderProgressRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  designHeaderProgressText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+  designHeaderDots: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  designHeaderDot: {
+    width: 18,
+    height: 4,
+    borderRadius: 6,
+    backgroundColor: Theme.separatorDark,
+  },
+  designHeaderDotActive: {
+    width: 28,
+    backgroundColor: Theme.primary,
+  },
+  designHeaderDotDone: {
+    backgroundColor: Theme.textOnDark,
+  },
+  stepCard: {
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 20,
+    padding: 12,
+  },
+  stepCardDimmed: {
+    opacity: 0.55,
+  },
+  stepCardHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 10,
+  },
+  stepChip: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: Theme.darkSurface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepChipText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    letterSpacing: 0.8,
+  },
+  stepCardTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
   sheetGrid: {
     flexDirection: "row",
     gap: 10,
@@ -1452,6 +1656,56 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.03,
     shadowRadius: 4,
     elevation: 1,
+  },
+  commercialHighlight: {
+    backgroundColor: Theme.surfaceLight,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 10,
+  },
+  nextStepBtn: {
+    marginTop: 8,
+    minHeight: 46,
+    borderRadius: 14,
+    backgroundColor: Theme.darkSurface,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+  nextStepBtnFill: {
+    flex: 1,
+    marginTop: 0,
+  },
+  nextStepBtnText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
+  },
+  stepButtonsRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  stepBackBtn: {
+    minHeight: 46,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    backgroundColor: Theme.surface,
+    paddingHorizontal: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepBackBtnText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
   },
   addClientBtn: {
     flexDirection: "row",
@@ -1714,6 +1968,15 @@ const styles = StyleSheet.create({
   actionButtonsRow: {
     flexDirection: "row",
     gap: 10,
+  },
+  actionFooterBar: {
+    marginTop: 10,
+    paddingTop: 8,
+    paddingHorizontal: 2,
+    paddingBottom: 2,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
   },
   actionButtonsRowStacked: {
     flexDirection: "column",

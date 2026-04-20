@@ -315,7 +315,7 @@ export function TripAssignmentBlock({
       setPhoneDriverBusy(true);
       setPhoneBusyTripLabel(conflictTripLabel);
       setPhoneError(
-        `Driver is already assigned to ${conflictTripLabel}. Complete or unassign that trip first.`,
+        `Driver is currently on ${conflictTripLabel}. Contact the driver first; if they are offline or unreachable, assign a different driver for this trip.`,
       );
       return;
     }
@@ -1161,9 +1161,16 @@ export function TripAssignmentBlock({
               </View>
             ) : null}
             {phoneDriverBusy ? (
-              <Text style={styles.phoneModalInTrip}>
-                Driver is on {phoneBusyTripLabel ?? "another ongoing trip"}
-              </Text>
+              <View style={styles.phoneModalBusyWrap}>
+                <Text style={styles.phoneModalInTrip}>
+                  Driver currently on {phoneBusyTripLabel ?? "another ongoing trip"}
+                </Text>
+                <Text style={styles.phoneModalBusyHint}>
+                  Reach out to {phoneName ?? "this driver"} on {phoneInput.trim() || "their phone"}
+                  {" "}to confirm availability. If they are offline/unreachable, plan with another
+                  {" "}driver and assign this trip there.
+                </Text>
+              </View>
             ) : null}
             {phoneError ? (
               <Text style={styles.phoneModalError}>{phoneError}</Text>
@@ -1211,7 +1218,7 @@ export function TripAssignmentBlock({
                     ? "Reassigning…"
                     : "Assigning…"
                   : phoneDriverBusy
-                    ? "On Trip"
+                    ? "Driver Busy"
                   : phoneModalIsReassign
                     ? "Reassign"
                     : "Assign"}
@@ -2116,12 +2123,19 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   phoneModalInTrip: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
     color: (Theme as any).warning ?? "#B45309",
+    marginBottom: 4,
+  },
+  phoneModalBusyWrap: {
     marginBottom: 8,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+  },
+  phoneModalBusyHint: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    lineHeight: 16,
   },
   phoneInput: {
     borderWidth: 1,
