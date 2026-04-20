@@ -1,0 +1,184 @@
+/**
+ * Party display: linked-org image first, then contact photo, then seeds (DiceBear),
+ * then initials (cash tab / FinancialRow rules).
+ */
+import { getAvatarUriForSeed } from "@/constants/DriverLevels";
+import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
+import Theme from "@/constants/Theme";
+import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
+
+export type PartyEntityType = "client" | "supplier" | "driver";
+
+function firstDisplayableUrl(raw: string | null | undefined): string | null {
+  const u = (raw ?? "").trim();
+  if (!u) return null;
+  if (u.startsWith("http://") || u.startsWith("https://")) return u;
+  return resolveAvatarPublicUrl(u);
+}
+
+/**
+ * Single URI for an Image, or null to show initials (caller uses `partyInitialsFromName` +
+ * `partyAvatarBackgroundColor`).
+ *
+ * Priority: **organization** (linked org profile photo → org seed preset) → **contact**
+ * (avatar_url → avatar_seed preset).
+ */
+export function resolvePartyDisplayUri(options: {
+  organizationImageUrl?: string | null;
+  organizationAvatarSeed?: string | null;
+  avatarUrl?: string | null;
+  avatarSeed?: string | null;
+  entityType?: PartyEntityType;
+}): string | null {
+  const orgPhoto = firstDisplayableUrl(options.organizationImageUrl);
+  if (orgPhoto) return orgPhoto;
+  const orgSeed = (options.organizationAvatarSeed ?? "").trim();
+  if (orgSeed) {
+    return (options.entityType ?? "client") === "driver"
+      ? getAvatarUriForSeed(orgSeed)
+      : getUser2DAvatarUriForSeed(orgSeed);
+  }
+  const contactPhoto = firstDisplayableUrl(options.avatarUrl);
+  if (contactPhoto) return contactPhoto;
+  const seed = (options.avatarSeed ?? "").trim();
+  if (!seed) return null;
+  return (options.entityType ?? "client") === "driver"
+    ? getAvatarUriForSeed(seed)
+    : getUser2DAvatarUriForSeed(seed);
+}
+
+const PARTY_AVATAR_COLORS = [
+  Theme.primary,
+  Theme.primaryLight,
+  Theme.aggregatePillText,
+  Theme.darkGreen,
+  Theme.teslaRed,
+  Theme.textPrimary,
+  Theme.buttonSecondary,
+  Theme.integratedIcon,
+  Theme.iconSlate,
+  Theme.primaryText,
+];
+
+/** True when we should not render initials / DiceBear fallback (blank, em dash, hyphen-only, etc.). */
+export function isBlankOrPlaceholderPartyName(name: string | null | undefined): boolean {
+  const t = (name ?? "").trim();
+  if (!t) return true;
+  if (/^[\s\u2014\u2013\-–]+$/.test(t)) return true;
+  const lower = t.toLowerCase();
+  return (
+    lower === "unknown" ||
+    lower === "n/a" ||
+    lower === "na" ||
+    lower === "none" ||
+    lower === "misc / unlinked" ||
+    lower.startsWith("misc /")
+  );
+}
+
+/**
+ * Whether `PartyAvatar` should render anything: image URI from branding/contact/seed,
+ * or non-placeholder initials fallback.
+ */
+export function partyAvatarHasRenderableOutput(options: {
+  name: string;
+  organizationImageUrl?: string | null;
+  organizationAvatarSeed?: string | null;
+  avatarUrl?: string | null;
+  avatarSeed?: string | null;
+  entityType?: PartyEntityType;
+}): boolean {
+  const uri = resolvePartyDisplayUri(options);
+  if (uri) return true;
+  return !isBlankOrPlaceholderPartyName(options.name);
+}
+
+/** Max 2 chars, uppercase — same rules as `FinancialRow` / `FinanceKanbanTab`. */
+export function partyInitialsFromName(name: string): string {
+  const t = (name ?? "").trim();
+  if (!t) return "—";
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    return (words[0][0] + words[words.length - 1][0]).toUpperCase().slice(0, 2);
+  }
+  return t.slice(0, 2).toUpperCase();
+}
+
+export function partyAvatarBackgroundColor(seed: string): string {
+  let n = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    n = (n * 31 + seed.charCodeAt(i)) >>> 0;
+  }
+  return PARTY_AVATAR_COLORS[n % PARTY_AVATAR_COLORS.length];
+}
+
+function parseCssColorToRgb(input: string): { r: number; g: number; b: number } | null {
+  const s = (input ?? "").trim();
+  if (!s) return null;
+  if (s.startsWith("#")) {
+    const hex = s.slice(1);
+    if (hex.length === 3) {
+      const r = parseInt(hex[0]! + hex[0]!, 16);
+      const g = parseInt(hex[1]! + hex[1]!, 16);
+      const b = parseInt(hex[2]! + hex[2]!, 16);
+      if ([r, g, b].every((n) => Number.isFinite(n))) return { r, g, b };
+    }
+    if (hex.length === 6) {
+      const r = parseInt(hex.slice(0, 2), 16);
+      const g = parseInt(hex.slice(2, 4), 16);
+      const b = parseInt(hex.slice(4, 6), 16);
+      if ([r, g, b].every((n) => Number.isFinite(n))) return { r, g, b };
+    }
+    return null;
+  }
+  const m = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i.exec(s);
+  if (m) {
+    const r = Math.round(Number(m[1]));
+    const g = Math.round(Number(m[2]));
+    const b = Math.round(Number(m[3]));
+    if ([r, g, b].every((v) => Number.isFinite(v) && v >= 0 && v <= 255)) {
+      return { r, g, b };
+    }
+  }
+  return null;
+}
+
+/** sRGB relative luminance (WCAG), inputs 0–255. */
+function relativeLuminance256(r: number, g: number, b: number): number {
+  const lin = (v: number) => {
+    const x = v / 255;
+    return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+  };
+  const R = lin(r);
+  const G = lin(g);
+  const B = lin(b);
+  return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+}
+
+function luminanceFromCssColor(css: string): number | null {
+  const rgb = parseCssColorToRgb(css);
+  if (!rgb) return null;
+  return relativeLuminance256(rgb.r, rgb.g, rgb.b);
+}
+
+/** WCAG contrast ratio for two relative luminances (0–1). */
+function contrastRatio(L1: number, L2: number): number {
+  const lighter = Math.max(L1, L2);
+  const darker = Math.min(L1, L2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/**
+ * Text color for initials on a solid avatar background (picks light vs dark for best contrast).
+ * Use with `partyAvatarBackgroundColor` / any hex or `rgb()` fill from Theme.
+ */
+export function partyAvatarInitialsTextColor(backgroundColor: string): string {
+  const Lbg = luminanceFromCssColor(backgroundColor);
+  if (Lbg == null) return Theme.textOnPrimary;
+  const Ldark = luminanceFromCssColor(Theme.primaryText);
+  const Llight = luminanceFromCssColor(Theme.textOnPrimary);
+  if (Ldark == null || Llight == null) return Theme.textOnPrimary;
+  const ratioDark = contrastRatio(Lbg, Ldark);
+  const ratioLight = contrastRatio(Lbg, Llight);
+  return ratioDark >= ratioLight ? Theme.primaryText : Theme.textOnPrimary;
+}
