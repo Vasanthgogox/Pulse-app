@@ -77,8 +77,10 @@ export interface TripAssignmentBlockProps {
   latestReassignmentSummary?: string | null;
   /** When true, show assignment as read-only (e.g. load creator / shipper can only monitor; no + Assign, Change, or Generate OTP). */
   viewOnly?: boolean;
-  /** For assign-by-phone: org to create driver row in (must be assigner's org so RLS allows INSERT). When set (e.g. aggregate trip), use instead of organizationId for assignTripDriverByPhone. */
+  /** For assign-by-phone: org to create driver row in (must be assigner\'s org so RLS allows INSERT). When set (e.g. aggregate trip), use instead of organizationId for assignTripDriverByPhone. */
   driverAssignOrgId?: string | null;
+  driverAvatarUri?: string | null;
+  onRatingsLoaded?: (ratings: { rated_type: string; score: number }[]) => void;
 }
 
 export function TripAssignmentBlock({
@@ -747,14 +749,14 @@ export function TripAssignmentBlock({
             </View>
             {effectiveCanAssign ? (
               <TouchableOpacity
-                style={[styles.actionBtn, hasVehicle ? styles.actionBtnSecondary : styles.actionBtnPrimary]}
-                onPress={openVehiclePicker}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.actionBtnText, hasVehicle ? styles.actionBtnTextSecondary : styles.actionBtnTextPrimary]}>
-                  {hasVehicle ? "Change" : "+ Assign"}
-                </Text>
-              </TouchableOpacity>
+                  style={[styles.actionBtn, hasVehicle ? styles.actionBtnSecondary : styles.actionBtnPrimary]}
+                  onPress={openVehiclePicker}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.actionBtnText, hasVehicle ? styles.actionBtnTextSecondary : styles.actionBtnTextPrimary]}>
+                    {hasVehicle ? "Change" : "+ Assign"}
+                  </Text>
+                </TouchableOpacity>
             ) : null}
           </View>
         </View>
@@ -1716,7 +1718,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: Theme.primary,
     alignItems: "center",
-  },
+    },
   assignAdhocVehicleBtnDisabled: {
     opacity: 0.5,
   },
