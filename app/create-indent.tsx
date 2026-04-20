@@ -437,9 +437,17 @@ export default function CreateIndentScreen() {
 
   const handleSelectClient = useCallback(
     (client: ClientRow) => {
+      const clientName = client.name ?? client.contact_person ?? "";
+      if (!clientName.trim()) {
+        showDialog(
+          "Invalid Client",
+          "Selected client has no name. Please select a client with a valid name or contact person.",
+        );
+        return;
+      }
       update({
         client_id: client.id,
-        client_name: client.name ?? client.contact_person ?? "",
+        client_name: clientName,
       });
     },
     [update],
@@ -541,7 +549,7 @@ export default function CreateIndentScreen() {
         await AsyncStorage.removeItem(`indent_draft_id_${orgId}`);
       }
 
-      const { error, indent } = await createIndent(orgId, payload, {
+      const { error, indent } = await createIndent(orgId, profile.uid, payload, {
         action: "draft",
       });
       if (error) {
@@ -617,7 +625,7 @@ export default function CreateIndentScreen() {
         }
         return;
       }
-      const { error, indent } = await createIndent(orgId, payload, {
+      const { error, indent } = await createIndent(orgId, profile.uid, payload, {
         action: "share",
       });
       if (error) {
@@ -908,9 +916,17 @@ export default function CreateIndentScreen() {
                       throw error;
                     }
                     if (client) {
+                      const clientName = client.name ?? client.contact_person ?? "";
+                      if (!clientName.trim()) {
+                        showDialog(
+                          "Invalid Client",
+                          "Added client has no name. Please ensure client has a valid name or contact person.",
+                        );
+                        return;
+                      }
                       update({
                         client_id: client.id,
-                        client_name: client.name ?? client.contact_person ?? "",
+                        client_name: clientName,
                       });
                       setClients((prev) => [...prev, client]);
                     }

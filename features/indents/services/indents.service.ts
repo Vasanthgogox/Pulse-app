@@ -2,17 +2,17 @@
  * Indents service — Supabase only (mobile). Same DB as Q-unified-base.
  * Service-layer validation: single pass over inputs before insert.
  */
-import { supabase } from '@/lib/supabase';
-import { DEFAULT_PAGE_SIZE, type PageOpts } from '@/lib/pagination';
 import { getClientById } from '@/features/clients/services/clients.service';
+import { DEFAULT_PAGE_SIZE, type PageOpts } from '@/lib/pagination';
+import { supabase } from '@/lib/supabase';
 import {
-  VALIDATION,
-  dateISO,
-  maxLength,
-  nonNegativeAmount,
-  positiveAmount,
-  required,
-  runValidators,
+    VALIDATION,
+    dateISO,
+    maxLength,
+    nonNegativeAmount,
+    positiveAmount,
+    required,
+    runValidators,
 } from '@/lib/validation';
 
 export type CirculationTarget = 'marketplace' | 'integrated_supplier' | 'offline' | 'both';
