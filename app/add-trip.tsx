@@ -3,6 +3,7 @@
  * On close/complete we navigate to Trips tab so we don't fall back to Ops Agent (index).
  */
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { createLedgerEntry } from '@/features/finance';
 import { AddTripModal, assignTripDriverByPhone, createTrip, createTripWithOtp, type AddTripFormData } from '@/features/trips';
 import { useInvalidateTrips } from '@/lib/queries';
@@ -15,6 +16,7 @@ export default function AddTripPage() {
   const router = useRouter();
   const safeBack = useSafeBack();
   const { currentOrganization } = useOrganization();
+  const { user, profile } = useAuth();
   const invalidateTrips = useInvalidateTrips();
 
   const closeAndGoBack = () => {
@@ -23,10 +25,9 @@ export default function AddTripPage() {
   };
 
   const handleComplete = async (data: AddTripFormData, options?: { supplySource: string; driverPhone?: string }) => {
-    if (!currentOrganization?.id) return;
-    const isAggregate = options?.supplySource === 'aggregate' && !!data.supplier_id;
+    if (!currentOrganization?.id || !user?.id) return;    const isAggregate = options?.supplySource === 'aggregate' && !!data.supplier_id;
     if (isAggregate) {
-      const { error, trip, otp } = await createTripWithOtp(currentOrganization.id, {
+      const { error, trip, otp } = await createTripWithOtp(currentOrganization.id, user.id, {
         pickup_area: data.pickup_area,
         drop_location: data.drop_location,
         pickup_lat: data.pickup_lat ?? undefined,
@@ -42,6 +43,8 @@ export default function AddTripPage() {
         supplier_id: data.supplier_id ?? undefined,
         notes: data.notes ?? undefined,
         vehicle_display_number: data.vehicle_display_number?.trim() || undefined,
+        owner_user_id: profile?.id ?? undefined,
+        created_by_user_id: profile?.id ?? undefined,
       });
       if (error) throw error;
       const advancePaidAgg = Number(data.advance_paid ?? 0);
@@ -69,7 +72,7 @@ export default function AddTripPage() {
       closeAndGoBack();
       return;
     }
-    const { error, trip } = await createTrip(currentOrganization.id, {
+    const { error, trip } = await createTrip(currentOrganization.id, user.id, {
       pickup_area: data.pickup_area,
       drop_location: data.drop_location,
       pickup_lat: data.pickup_lat ?? undefined,
@@ -86,6 +89,8 @@ export default function AddTripPage() {
       notes: data.notes ?? undefined,
       driver_id: data.driver_id ?? undefined,
       vehicle_id: data.vehicle_id ?? undefined,
+      owner_user_id: profile?.id ?? undefined,
+      created_by_user_id: profile?.id ?? undefined,
     });
     if (error) throw error;
     if (trip && options?.supplySource === 'aggregate' && options?.driverPhone?.trim()) {

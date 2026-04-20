@@ -44,6 +44,7 @@ export default function IndentsScreen() {
     ? indents.filter(
         (i) =>
           getIndentDisplayNumber(i).toLowerCase().includes(search.toLowerCase()) ||
+          (i.trip_number ?? '').toLowerCase().includes(search.toLowerCase()) ||
           i.client_name?.toLowerCase().includes(search.toLowerCase()) ||
           i.pickup_area?.toLowerCase().includes(search.toLowerCase()) ||
           i.drop_location?.toLowerCase().includes(search.toLowerCase())
@@ -96,7 +97,7 @@ export default function IndentsScreen() {
       listKeyExtractor={(i) => i.id}
       renderListItem={({ item: i }) => (
         <EntityRow
-          title={getIndentDisplayNumber(i)}
+          title={`${getIndentDisplayNumber(i)}${i.trip_number ? ` · ${i.trip_number}` : ''}`}
           subtitleLeft={i.pickup_area ?? '—'}
           subtitleRight={i.drop_location ?? '—'}
           subtitle={i.client_name ?? '—'}

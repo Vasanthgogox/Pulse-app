@@ -1,9 +1,9 @@
 /**
- * Indent detail — single indent view. UI matches reference design:
- * Route card with MapPin boxes, freight card with gradient, Shipment Profile,
- * Live Bids section, light footer, and Broadcast modal.
+ * Indent detail — single indent view. Hero card aligns with Load Center cards
+ * (pills, route row, indent id, specs slab); freight card, Live Bids, footer follow.
  */
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
+import { LoadCardRouteRow } from '@/components/LoadCardRouteRow';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useOrganization } from '@/contexts/OrganizationContext';
@@ -30,6 +30,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -301,9 +302,9 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
   const supplierRate = formatINR(Number(indent.supplier_target ?? 0));
   const vehicleType = indent.vehicle_type || '—';
   const material = indent.load_type || '—';
-  const weight =
-    indent.weight != null && indent.weight > 0
-      ? `${(indent.weight / 1000).toFixed(2)} tons`
+  const weightKg =
+    indent.weight != null && Number(indent.weight) > 0
+      ? `${Number(indent.weight)} KG`
       : '—';
   const dateLabel = formatIndentDate(indent.pickup_date ?? null, indent.created_at);
 
@@ -346,7 +347,7 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
           <View style={styles.headerSubtitleRow}>
             <View style={styles.headerStatusDot} />
             <Text style={styles.headerSubtitle}>
-              Review Hub • {status === 'OPEN' ? 'Active' : status} Indent
+              Review Hub • {status === 'OPEN' ? 'Active' : status} Indent {indent.trip_number ? `· ${indent.trip_number}` : ""}
             </Text>
           </View>
         </View>
@@ -386,47 +387,71 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
           </View>
         ) : null}
 
-        {/* Route Card */}
-        <View style={styles.routeCard}>
-          <View style={styles.routeCardHeader}>
-            <View style={styles.routePillsRow}>
-              <View style={styles.statusPill}>
-                <View style={styles.statusDot} />
-                <Text style={styles.statusText}>{status}</Text>
+        {/* Summary card — same structure as Load Center list cards */}
+        <View style={styles.indentSummaryCard}>
+          <View style={styles.indentSummaryOrb} pointerEvents="none" />
+          <View style={styles.indentSummaryHeroRow}>
+            <View style={styles.indentSummaryPillRow}>
+              <View style={styles.indentSummaryTypePill}>
+                <Text style={styles.indentSummaryTypePillText}>
+                  {isOwner ? 'GIVE LOAD' : 'LOAD'}
+                </Text>
               </View>
-              {isDirect && (
-                <View style={styles.directPill}>
-                  <Text style={styles.directPillText}>Direct</Text>
+              <View style={styles.indentSummaryStatePill}>
+                <Text style={styles.indentSummaryStatePillText}>{status}</Text>
+              </View>
+              {isDirect ? (
+                <View style={styles.indentSummaryDirectPill}>
+                  <Text style={styles.indentSummaryDirectPillText}>DIRECT</Text>
                 </View>
-              )}
+              ) : null}
             </View>
-            <View style={styles.dateRow}>
-              <FontAwesome name="clock-o" size={10} color={Theme.textSecondary} />
-              <Text style={styles.dateText}>{dateLabel}</Text>
-            </View>
+            <Text style={styles.indentSummaryDate}>{dateLabel}</Text>
           </View>
-
-          <View style={styles.routeEndpointsRow}>
-            <View style={styles.routeEndpoint}>
-              <View style={styles.mapPinBoxOrigin}>
-                <FontAwesome name="map-marker" size={16} color={Theme.teslaRed} />
+          <LoadCardRouteRow origin={origin} destination={destination} />
+          <Text style={styles.indentSummaryId} numberOfLines={1}>
+            {displayNumber}
+          </Text>
+          <View style={styles.indentSummarySpecsHeader}>
+            <Text style={styles.indentSummarySpecsTitle}>SHIPMENT PROFILE</Text>
+            {canEditLoad ? (
+              <TouchableOpacity onPress={handleEditAll} hitSlop={Layout.touchTargetHitSlop}>
+                <Text style={styles.editAllText}>Edit All</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.editAllTextDisabled}>Locked</Text>
+            )}
+          </View>
+          <View style={styles.indentSummarySpecsPanel}>
+            <View style={styles.indentSummarySpecsGrid}>
+              <View style={styles.indentSummarySpecsLabelsRow}>
+                <View style={styles.indentSummarySpecCell}>
+                  <Text style={styles.indentSummarySpecLabel}>Vehicle</Text>
+                </View>
+                <View style={[styles.indentSummarySpecCell, styles.indentSummarySpecDivider]}>
+                  <Text style={styles.indentSummarySpecLabel}>Weight</Text>
+                </View>
+                <View style={[styles.indentSummarySpecCell, styles.indentSummarySpecDivider]}>
+                  <Text style={styles.indentSummarySpecLabel}>Load</Text>
+                </View>
               </View>
-              <Text style={styles.routeEndpointName} numberOfLines={1}>
-                {origin}
-              </Text>
-              <Text style={styles.routeEndpointLabel}>Origin</Text>
-            </View>
-
-            <View style={styles.routeDashedLine} />
-
-            <View style={[styles.routeEndpoint, styles.routeEndpointRight]}>
-              <View style={styles.mapPinBoxDest}>
-                <FontAwesome name="map-marker" size={16} color={Theme.darkGreen} />
+              <View style={styles.indentSummarySpecsValuesRow}>
+                <View style={styles.indentSummarySpecCell}>
+                  <Text style={styles.indentSummarySpecValue} numberOfLines={2}>
+                    {vehicleType}
+                  </Text>
+                </View>
+                <View style={[styles.indentSummarySpecCell, styles.indentSummarySpecDivider]}>
+                  <Text style={styles.indentSummarySpecValue} numberOfLines={2}>
+                    {weightKg}
+                  </Text>
+                </View>
+                <View style={[styles.indentSummarySpecCell, styles.indentSummarySpecDivider]}>
+                  <Text style={styles.indentSummarySpecValue} numberOfLines={2}>
+                    {material}
+                  </Text>
+                </View>
               </View>
-              <Text style={styles.routeEndpointName} numberOfLines={1}>
-                {destination}
-              </Text>
-              <Text style={styles.routeEndpointLabel}>Destination</Text>
             </View>
           </View>
         </View>
@@ -474,41 +499,6 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
             </View>
           </View>
         </LinearGradient>
-
-        {/* Shipment Profile */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>SHIPMENT PROFILE</Text>
-          {canEditLoad ? (
-            <TouchableOpacity onPress={handleEditAll} hitSlop={Layout.touchTargetHitSlop}>
-              <Text style={styles.editAllText}>Edit All</Text>
-            </TouchableOpacity>
-          ) : (
-            <Text style={styles.editAllTextDisabled}>Locked</Text>
-          )}
-        </View>
-        <View style={styles.requirementsRow}>
-          <View style={styles.requirementCard}>
-            <FontAwesome name="truck" size={16} color={Theme.darkBackground} />
-            <Text style={styles.requirementLabel}>VEHICLE</Text>
-            <Text style={styles.requirementValue} numberOfLines={2}>
-              {vehicleType}
-            </Text>
-          </View>
-          <View style={styles.requirementCard}>
-            <FontAwesome name="archive" size={16} color={Theme.iconSlate} />
-            <Text style={styles.requirementLabel}>MATERIAL</Text>
-            <Text style={styles.requirementValue} numberOfLines={2}>
-              {material}
-            </Text>
-          </View>
-          <View style={styles.requirementCard}>
-            <FontAwesome name="anchor" size={16} color={Theme.textSecondary} />
-            <Text style={styles.requirementLabel}>WEIGHT</Text>
-            <Text style={styles.requirementValue} numberOfLines={2}>
-              {weight}
-            </Text>
-          </View>
-        </View>
 
         {/* Live Bids */}
         <View style={styles.sectionHeader}>
@@ -870,136 +860,173 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
-  // Route card (compact, matches DetailPageLayout section density)
-  routeCard: {
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
+  // Summary card (aligned with Load Center `loadCard`)
+  indentSummaryCard: {
+    position: 'relative' as const,
+    backgroundColor: Theme.cardWhite,
     borderWidth: 1,
     borderColor: Theme.borderLight,
+    borderRadius: 28,
+    padding: 18,
+    marginBottom: 12,
     shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.07,
+    shadowRadius: 16,
+    elevation: 3,
+    overflow: 'hidden',
   },
-  routeCardHeader: {
+  indentSummaryOrb: {
+    position: 'absolute',
+    top: -72,
+    right: -48,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: Theme.textPrimaryDark,
+    opacity: 0.04,
+  },
+  indentSummaryHeroRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 10,
+    zIndex: 1,
   },
-  routePillsRow: {
+  indentSummaryPillRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
+    flexShrink: 1,
+    flexWrap: 'wrap',
   },
-  statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  indentSummaryTypePill: {
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.surfaceGray,
+  },
+  indentSummaryTypePillText: {
+    fontSize: 7,
+    fontWeight: '800',
+    letterSpacing: 0.35,
+    color: Theme.textPrimaryDark,
+    textTransform: 'uppercase',
+  },
+  indentSummaryStatePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
     backgroundColor: Theme.positiveMuted,
     borderWidth: 1,
     borderColor: Theme.positiveMutedDarkBorder,
-    gap: 5,
   },
-  statusDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: Theme.positive,
-  },
-  statusText: {
-    fontSize: 9,
-    fontWeight: '700',
+  indentSummaryStatePillText: {
+    fontSize: 7,
+    fontWeight: '800',
+    letterSpacing: 0.45,
+    textTransform: 'uppercase',
     color: Theme.positive,
-    letterSpacing: 0.8,
   },
-  directPill: {
+  indentSummaryDirectPill: {
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
+    paddingVertical: 4,
+    borderRadius: 8,
     backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
     borderColor: Theme.borderMedium,
   },
-  directPillText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: Theme.darkBackground,
-    letterSpacing: 0.8,
+  indentSummaryDirectPillText: {
+    fontSize: 7,
+    fontWeight: '800',
+    letterSpacing: 0.45,
+    textTransform: 'uppercase',
+    color: Theme.textPrimaryDark,
   },
-  dateRow: {
+  indentSummaryDate: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    marginTop: 2,
+    zIndex: 1,
+  },
+  indentSummaryId: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Theme.textSecondary,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginBottom: 12,
+    zIndex: 1,
+  },
+  indentSummarySpecsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    zIndex: 1,
+  },
+  indentSummarySpecsTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+  },
+  indentSummarySpecsPanel: {
+    backgroundColor: Theme.surfaceGray,
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    zIndex: 1,
+  },
+  indentSummarySpecsGrid: {
+    gap: 6,
+  },
+  indentSummarySpecsLabelsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'space-between',
+    gap: 8,
   },
-  dateText: {
-    fontSize: 9,
-    fontWeight: '600',
-    color: Theme.textMutedDemo,
-  },
-  routeEndpointsRow: {
+  indentSummarySpecsValuesRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    position: 'relative',
+    gap: 8,
   },
-  routeEndpoint: {
+  indentSummarySpecCell: {
     flex: 1,
-    alignItems: 'flex-start',
-    zIndex: 1,
-    backgroundColor: Theme.screenBackground,
+    minWidth: 0,
   },
-  routeEndpointRight: {
-    alignItems: 'flex-end',
+  indentSummarySpecDivider: {
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderMedium,
+    paddingLeft: 10,
+    marginLeft: 4,
   },
-  mapPinBoxOrigin: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: Theme.screenBackground,
-    borderWidth: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  mapPinBoxDest: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: Theme.screenBackground,
-    borderWidth: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  routeEndpointName: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: Theme.textPrimaryDark,
-  },
-  routeEndpointLabel: {
+  indentSummarySpecLabel: {
     fontSize: 8,
-    fontWeight: '700',
-    color: Theme.textMutedDemo,
-    letterSpacing: 0.6,
+    fontWeight: '600',
+    color: Theme.textMuted,
     textTransform: 'uppercase',
-    marginTop: 2,
+    letterSpacing: 0.5,
   },
-  routeDashedLine: {
-    position: 'absolute',
-    left: '15%',
-    right: '15%',
-    top: 16,
-    height: 2,
-    borderStyle: 'dashed',
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
-    zIndex: 0,
+  indentSummarySpecValue: {
+    fontSize: 8,
+    fontWeight: '500',
+    color: Theme.textSecondary,
+    lineHeight: 12,
+    ...Platform.select({
+      android: { includeFontPadding: false as const },
+      default: {},
+    }),
   },
 
   // Freight card (compact dark card)
@@ -1104,7 +1131,6 @@ const styles = StyleSheet.create({
     color: Theme.positive,
   },
 
-  // Shipment Profile (matches DetailSection)
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1130,40 +1156,6 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     textTransform: 'uppercase',
   },
-  requirementsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-  },
-  requirementCard: {
-    flex: 1,
-    minWidth: 0,
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 10,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  requirementLabel: {
-    marginTop: 8,
-    fontSize: 8,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    color: Theme.textMutedDemo,
-    textTransform: 'uppercase',
-    marginBottom: 2,
-  },
-  requirementValue: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Theme.textBody,
-  },
-
   // Live Bids
   liveBidsTitleRow: {
     flexDirection: 'row',

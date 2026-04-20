@@ -2,12 +2,14 @@
  * Load Center — reference UI: Hire Partners | Find Work | Awarded.
  * Header "Load Center" / "Find or Hire Work", three sub-tabs, cards, modals.
  */
+import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
 import { SemanticAddIcon } from "@/components/SemanticAddIcon";
 import { SubTabs } from "@/components/SubTabs";
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
 import { StyleSheet } from "react-native";
 import Theme from "@/constants/Theme";
+import Typography from "@/constants/Typography";
 import { formatMobileNumber } from "@/lib/format";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { upsertTripSubcontract } from "@/features/finance/services/tripSubcontracts.service";
@@ -56,7 +58,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
-import { Package } from "lucide-react-native";
+import {
+  Building2,
+  Package,
+  Share2,
+  Users,
+  X,
+} from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
   ActivityIndicator,
@@ -104,9 +112,72 @@ function statusMatchesFilter(status: string, filter: StatusFilterTab): boolean {
   return tab?.statuses.includes(s) ?? false;
 }
 
+/** Status pill colors for Hire Partner cards (Tesla palette, no indigo). */
+function giveLoadStatusPillStyles(status: string): {
+  pill: object;
+  text: object;
+} {
+  const s = (status || "").toLowerCase();
+  if (s === "awarded") {
+    return {
+      pill: {
+        backgroundColor: Theme.positive,
+        borderWidth: 1,
+        borderColor: Theme.darkGreen,
+      },
+      text: { color: Theme.textOnPrimary },
+    };
+  }
+  if (
+    ["completed", "closed", "cancelled", "expired"].includes(s)
+  ) {
+    return {
+      pill: {
+        backgroundColor: Theme.surfaceGray,
+        borderWidth: 1,
+        borderColor: Theme.borderMedium,
+      },
+      text: { color: Theme.textSecondary },
+    };
+  }
+  if (s === "quoted") {
+    return {
+      pill: {
+        backgroundColor: Theme.screenBackground,
+        borderWidth: 1,
+        borderColor: Theme.textPrimaryDark,
+      },
+      text: { color: Theme.textPrimaryDark },
+    };
+  }
+  return {
+    pill: {
+      backgroundColor: Theme.tripHubUnassignedPillBg,
+      borderWidth: 1,
+      borderColor: Theme.textPrimaryDark,
+    },
+    text: { color: Theme.textPrimaryDark },
+  };
+}
+
+function formatIndentCardDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d
+      .toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+      .toUpperCase();
+  } catch {
+    return "—";
+  }
+}
+
 interface LoadCenterViewProps {
   /** Top padding (e.g. from parent sub-tab row + safe area). */
   contentTopPadding?: number;
+  /** Opens Network → My Network (connections / invitations). */
+  onMyNetworkPress?: () => void;
   onCreateIndentPress: () => void;
   onIndentPress: (indent: IndentRow) => void;
   highlightedIndentId?: string | null;
@@ -116,6 +187,7 @@ const TESLA_BLACK = "#171A20";
 
 export function LoadCenterView({
   contentTopPadding = 0,
+  onMyNetworkPress,
   onCreateIndentPress,
   onIndentPress,
   highlightedIndentId,
@@ -482,6 +554,7 @@ export function LoadCenterView({
       const route =
         `${(load.pickup_area || "").toLowerCase()} ${(load.drop_location || "").toLowerCase()}`.trim();
       const indentId = (getIndentDisplayNumber(load) || "").toLowerCase();
+      const tripId = (load.trip_number || "").toLowerCase();
       const client = (load.client_name || "").toLowerCase();
       const creator = (
         (load as { creator_organization_name?: string })
@@ -490,6 +563,7 @@ export function LoadCenterView({
       return (
         route.includes(trimmed) ||
         indentId.includes(trimmed) ||
+        tripId.includes(trimmed) ||
         client.includes(trimmed) ||
         creator.includes(trimmed)
       );
@@ -1240,7 +1314,52 @@ export function LoadCenterView({
       : STATUS_TABS;
   }, [isClaimedTab]);
 
-  const renderClaimedLoadCard = (load: IndentRow, isDone: boolean) => {
+  /** Vehicle / weight / load: one header row, one detail row (lighter type). */
+  const renderLoadCardSpecsColumns = useCallback(
+    (
+      vehicleDetail: string,
+      weightDetail: string,
+      loadTypeDetail: string,
+    ) => (
+      <View style={styles.loadCardSpecsGrid}>
+        <View style={styles.loadCardSpecsLabelsRow}>
+          <View style={styles.loadCardSpecCell}>
+            <Text style={styles.loadCardSpecLabel}>Vehicle</Text>
+          </View>
+          <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
+            <Text style={styles.loadCardSpecLabel}>Weight</Text>
+          </View>
+          <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
+            <Text style={styles.loadCardSpecLabel}>Load</Text>
+          </View>
+        </View>
+        <View style={styles.loadCardSpecsValuesRow}>
+          <View style={styles.loadCardSpecCell}>
+            <Text style={styles.loadCardSpecValue} numberOfLines={2}>
+              {vehicleDetail}
+            </Text>
+          </View>
+          <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
+            <Text style={styles.loadCardSpecValue} numberOfLines={2}>
+              {weightDetail}
+            </Text>
+          </View>
+          <View style={[styles.loadCardSpecCell, styles.loadCardSpecDivider]}>
+            <Text style={styles.loadCardSpecValue} numberOfLines={2}>
+              {loadTypeDetail}
+            </Text>
+          </View>
+        </View>
+      </View>
+    ),
+    [],
+  );
+
+  const renderClaimedLoadCard = (
+    load: IndentRow,
+    isDone: boolean,
+    stretchInGrid = false,
+  ) => {
     const acceptedQuote = myQuotes.find(
       (q) =>
         (q.status || "").toLowerCase() === "accepted" &&
@@ -1260,11 +1379,12 @@ export function LoadCenterView({
 
     return (
       <TouchableOpacity
-        style={styles.loadCard}
+        style={[styles.loadCard, stretchInGrid && styles.loadCardGrid]}
         onPress={() => onIndentPress(load)}
         activeOpacity={0.7}
       >
-        <View style={styles.awardedCardTop}>
+        <View style={styles.loadCardOrb} pointerEvents="none" />
+        <View style={styles.loadCardHeroRow}>
           <View style={styles.loadPillRow}>
             <View style={styles.loadTypePill}>
               <Text style={styles.loadTypePillText}>CLAIMED</Text>
@@ -1272,95 +1392,113 @@ export function LoadCenterView({
             <View
               style={[
                 styles.loadStatePill,
-                { backgroundColor: isDone ? Theme.positive : Theme.driverGold },
+                {
+                  backgroundColor: isDone ? Theme.positive : Theme.driverGold,
+                  borderWidth: 1,
+                  borderColor: isDone ? Theme.darkGreen : Theme.warning,
+                },
               ]}
             >
-              <Text style={styles.loadStatePillText}>
+              <Text
+                style={[styles.loadStatePillText, { color: Theme.textOnPrimary }]}
+              >
                 {isDone ? "DEPLOYED" : "AWARDED"}
               </Text>
             </View>
           </View>
-          <Text style={styles.awardedId}>{getIndentDisplayNumber(load)}</Text>
+          <Text style={styles.loadCardIdCompact} numberOfLines={1}>
+            {getIndentDisplayNumber(load)}
+            {load.trip_number ? ` · ${load.trip_number}` : ""}
+          </Text>
+          <Text style={styles.loadCardDateHero}>
+            {formatIndentCardDate(load.pickup_date)}
+          </Text>
         </View>
-        <Text style={styles.loadCardRouteGet} numberOfLines={2}>
-          {(load.pickup_area || "—").toUpperCase()} TO{" "}
-          {(load.drop_location || "—").toUpperCase()}
-        </Text>
-        <View style={styles.loadCardInner}>
-          <View style={styles.loadCardInnerTopRow}>
-            <Text style={styles.loadCardId} numberOfLines={1}>
-              ID: {getIndentDisplayNumber(load)}
+        <LoadCardRouteRow
+          origin={load.pickup_area || "—"}
+          destination={load.drop_location || "—"}
+          compact={stretchInGrid}
+        />
+        <View style={styles.loadCardSpecsPanel}>
+          {renderLoadCardSpecsColumns(
+            vehicleDetail,
+            weightDetail,
+            loadTypeDetail,
+          )}
+          <View style={styles.loadCardQuoteHint}>
+            <Text style={styles.loadCardQuoteHintText}>
+              Agreed rate {formatINR(supplierRate)}
             </Text>
-            <View style={styles.loadCardTopRight}>
-              <Text style={styles.getLoadTargetLabel}>Supplier rate</Text>
-              <Text style={styles.getLoadTargetValue}>{formatINR(supplierRate)}</Text>
-            </View>
-          </View>
-          <View style={styles.loadCardSpecsRow}>
-            <View style={styles.loadCardSpecItem}>
-              <Text style={styles.loadCardSpecLabel}>Vehicle</Text>
-              <Text style={styles.loadCardSpecValue} numberOfLines={1}>
-                {vehicleDetail}
-              </Text>
-            </View>
-            <View style={styles.loadCardSpecItem}>
-              <Text style={styles.loadCardSpecLabel}>Weight</Text>
-              <Text style={styles.loadCardSpecValue} numberOfLines={1}>
-                {weightDetail}
-              </Text>
-            </View>
-            <View style={styles.loadCardSpecItem}>
-              <Text style={styles.loadCardSpecLabel}>Load Type</Text>
-              <Text style={styles.loadCardSpecValue} numberOfLines={1}>
-                {loadTypeDetail}
-              </Text>
-            </View>
           </View>
         </View>
-        {isDone ? (
-          <TouchableOpacity
-            style={styles.handshakeBtn}
-            onPress={() => onIndentPress(load)}
-            activeOpacity={0.9}
-          >
-            <FontAwesome
-              name="eye"
-              size={16}
-              color={Theme.textOnPrimary}
-              style={{ marginRight: 8 }}
-            />
-            <Text style={styles.handshakeBtnText}>View Detail</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={styles.handshakeBtn}
-            onPress={() => {
-              setAssignDriverId(null);
-              setAssignVehicleId(undefined);
-              setAssignVehicleRegistration("");
-              setUseAdHocDriver(false);
-              setDeployOtpCode(null);
-              setDeployOtpExpiresAt(null);
-              setDeployTripIdForOtp(null);
-              setHandshakeStep("flow_choice");
-              setLoadAction({ type: "ASSIGN", load });
-            }}
-            activeOpacity={0.9}
-            disabled={assigningTripId === load.id}
-          >
-            <FontAwesome
-              name="user"
-              size={16}
-              color={Theme.textOnPrimary}
-              style={{ marginRight: 8 }}
-            />
-            <Text style={styles.handshakeBtnText}>
-              {assigningTripId === load.id
-                ? "Authorizing…"
-                : "Assign Staff & Deploy"}
-            </Text>
-          </TouchableOpacity>
-        )}
+        <View
+          style={[
+            styles.loadCardFooter,
+            stretchInGrid && styles.loadCardFooterGrid,
+          ]}
+        >
+          <View style={styles.loadCardMeta}>
+            <View style={styles.bidMetaWrap}>
+              <View
+                style={[
+                  styles.bidIconCircle,
+                  isDone ? styles.bidIconCircleActive : styles.bidIconCircleMuted,
+                ]}
+              >
+                <Package
+                  size={16}
+                  color={isDone ? Theme.darkGreen : Theme.textMuted}
+                  strokeWidth={2.2}
+                />
+              </View>
+              <Text style={styles.loadCardMetaText} numberOfLines={2}>
+                {isDone ? "Trip on books" : "Assign staff to deploy"}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.loadCardActions}>
+            <TouchableOpacity
+              style={styles.shareIndentIconBtn}
+              onPress={() => handleShareIndent(load)}
+              activeOpacity={0.88}
+              accessibilityLabel="Share load"
+            >
+              <Share2 size={18} color={Theme.textMuted} strokeWidth={2.2} />
+            </TouchableOpacity>
+            {isDone ? (
+              <TouchableOpacity
+                style={styles.reviewBidsBtn}
+                onPress={() => onIndentPress(load)}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.reviewBidsBtnText}>View detail</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.reviewBidsBtn}
+                onPress={() => {
+                  setAssignDriverId(null);
+                  setAssignVehicleId(undefined);
+                  setAssignVehicleRegistration("");
+                  setUseAdHocDriver(false);
+                  setDeployOtpCode(null);
+                  setDeployOtpExpiresAt(null);
+                  setDeployTripIdForOtp(null);
+                  setHandshakeStep("flow_choice");
+                  setLoadAction({ type: "ASSIGN", load });
+                }}
+                activeOpacity={0.9}
+                disabled={assigningTripId === load.id}
+              >
+                <Text style={styles.reviewBidsBtnText}>
+                  {assigningTripId === load.id
+                    ? "Authorizing…"
+                    : "Assign & deploy"}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
       </TouchableOpacity>
     );
   };
@@ -1376,25 +1514,47 @@ export function LoadCenterView({
       >
         {/* Sub-tabs: GIVE LOAD | GET LOAD | CLAIMED */}
         <View style={styles.loadFilterHeaderRow}>
-          <SubTabs<LoadSubTab>
-            variant="dark"
-            horizontalPadding={0}
-            value={loadSubTab}
-            onChange={setLoadSubTab}
-            items={[
-              {
-                key: "GIVE_LOAD",
-                label: "GIVE LOAD",
-                badgeCount: hirePartnerLoads.length,
-              },
-              { key: "GET_LOAD", label: "GET LOAD", badgeCount: findWorkLoads.length },
-              {
-                key: "AWARDED",
-                label: "CLAIMED",
-                badgeCount: awardedLoads.length,
-              },
-            ]}
-          />
+          <View style={styles.loadSubTabsWrap}>
+            <SubTabs<LoadSubTab>
+              variant="dark"
+              horizontalPadding={0}
+              value={loadSubTab}
+              onChange={setLoadSubTab}
+              items={[
+                {
+                  key: "GIVE_LOAD",
+                  label: "GIVE LOAD",
+                  badgeCount: hirePartnerLoads.length,
+                },
+                {
+                  key: "GET_LOAD",
+                  label: "GET LOAD",
+                  badgeCount: findWorkLoads.length,
+                },
+                {
+                  key: "AWARDED",
+                  label: "CLAIMED",
+                  badgeCount: awardedLoads.length,
+                },
+              ]}
+            />
+          </View>
+          {onMyNetworkPress ? (
+            <TouchableOpacity
+              style={styles.loadMyNetworkBtn}
+              onPress={onMyNetworkPress}
+              activeOpacity={0.85}
+              accessibilityLabel="My network"
+              hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+            >
+              <Users
+                size={18}
+                color={Theme.textOnDark}
+                strokeWidth={2.1}
+              />
+              <Text style={styles.loadMyNetworkBtnLabel}>Network</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
         {/* Search + Status filters (same layout as Manage Network: search + filter chips) */}
         <View
@@ -1527,6 +1687,14 @@ export function LoadCenterView({
                 </View>
               ) : (
                 <View style={useGridLayout ? styles.gridList : undefined}>
+                <View style={styles.loadSectionRow}>
+                  <Text style={styles.loadSectionTitle}>
+                    Your active indents
+                  </Text>
+                  <View style={styles.loadSectionPill}>
+                    <Text style={styles.loadSectionPillText}>Live</Text>
+                  </View>
+                </View>
                 {filteredHirePartnerLoads.map((load) => {
                   const status = (load.status || "").toLowerCase();
                   const isDraft = status === "draft";
@@ -1548,161 +1716,173 @@ export function LoadCenterView({
                   // "awarded" until supplier deploys.
                   const isAwaitingSupplierDeploy =
                     isAwardedPendingTrip || hasDirectSupplier;
+                  const statusPill = giveLoadStatusPillStyles(status);
+                  const bidCount = quoteCounts[load.id] ?? 0;
                   return (
                     <View key={load.id} style={useGridLayout ? styles.gridCardWrap : undefined}>
                       <TouchableOpacity
-                        style={styles.loadCard}
+                        style={[
+                          styles.loadCard,
+                          useGridLayout && styles.loadCardGrid,
+                        ]}
                         onPress={() => onIndentPress(load)}
                         activeOpacity={0.7}
                       >
-                      <View style={styles.loadCardTop}>
-                        <View style={styles.loadPillRow}>
-                          <View style={styles.loadTypePill}>
-                            <Text style={styles.loadTypePillText}>GIVE LOAD</Text>
-                          </View>
-                          <View style={styles.loadStatePill}>
-                            <Text style={styles.loadStatePillText}>
-                              {status.toUpperCase()}
-                            </Text>
-                          </View>
-                        </View>
-                      </View>
-                      <Text style={styles.loadCardRoute} numberOfLines={2}>
-                        {(load.pickup_area || "—").toUpperCase()} TO{" "}
-                        {(load.drop_location || "—").toUpperCase()}
-                      </Text>
-                      <View style={styles.loadCardInner}>
-                        <View style={styles.loadCardInnerTopRow}>
-                          <Text style={styles.loadCardId} numberOfLines={1}>
-                            ID: {getIndentDisplayNumber(load)}
-                          </Text>
-                          <View style={styles.loadCardDate}>
-                            <Text style={styles.loadCardDateText}>
-                              {load.pickup_date
-                                ? new Date(load.pickup_date).toLocaleDateString(
-                                    "en-IN",
-                                    { day: "numeric", month: "short" },
-                                  )
-                                : "—"}
-                            </Text>
-                          </View>
-                        </View>
-                        <View style={styles.loadCardSpecsRow}>
-                          <View style={styles.loadCardSpecItem}>
-                            <Text style={styles.loadCardSpecLabel}>Vehicle</Text>
-                            <Text style={styles.loadCardSpecValue} numberOfLines={1}>
-                              {vehicleDetail}
-                            </Text>
-                          </View>
-                          <View style={styles.loadCardSpecItem}>
-                            <Text style={styles.loadCardSpecLabel}>Weight</Text>
-                            <Text style={styles.loadCardSpecValue} numberOfLines={1}>
-                              {weightDetail}
-                            </Text>
-                          </View>
-                          <View style={styles.loadCardSpecItem}>
-                            <Text style={styles.loadCardSpecLabel}>Load Type</Text>
-                            <Text style={styles.loadCardSpecValue} numberOfLines={1}>
-                              {loadTypeDetail}
-                            </Text>
-                          </View>
-                        </View>
-                      </View>
-                      <View style={styles.loadCardFooter}>
-                        <View style={styles.loadCardMeta}>
-                          {isDone ? (
-                            <>
-                              <FontAwesome
-                                name="check-circle"
-                                size={14}
-                                color={
-                                  status === "cancelled"
-                                    ? Theme.textMuted
-                                    : Theme.positive
-                                }
-                              />
-                              <Text style={styles.loadCardMetaText}>
-                                {status === "cancelled"
-                                  ? "Cancelled"
-                                  : "Completed"}
-                              </Text>
-                            </>
-                          ) : isAwardedPendingTrip ? (
-                            <>
-                              <FontAwesome
-                                name="trophy"
-                                size={14}
-                                color={Theme.driverGold}
-                              />
-                              <Text style={styles.loadCardMetaText}>
-                                Supplier Claimed
-                              </Text>
-                            </>
-                          ) : (
-                            <>
-                              {(quoteCounts[load.id] ?? 0) > 0 ? (
-                                <BidReceivedHammer visible={true} size={14} />
-                              ) : (
-                                <FontAwesome
-                                  name="gavel"
-                                  size={14}
-                                  color={Theme.textMuted}
-                                />
-                              )}
-                              <Text style={styles.loadCardMetaText}>
-                                {quoteCounts[load.id] ?? 0} Bids Received
-                              </Text>
-                            </>
-                          )}
-                        </View>
-                        <View style={styles.loadCardActions}>
-                          <TouchableOpacity
-                            style={styles.shareIndentBtn}
-                            onPress={() =>
-                              isDone || isAwardedPendingTrip
-                                ? onIndentPress(load)
-                                : handleShareIndent(load)
-                            }
-                            activeOpacity={0.9}
-                          >
-                            <FontAwesome
-                              name="share-alt"
-                              size={12}
-                              color={Theme.textPrimaryDark}
-                              style={styles.shareIndentBtnIcon}
-                            />
-                            <Text style={styles.shareIndentBtnText}>
-                              {isDone || isAwardedPendingTrip
-                                ? "View Detail"
-                                : "Share"}
-                            </Text>
-                          </TouchableOpacity>
-                          {isDone ? null : isAwaitingSupplierDeploy ? (
-                            <View style={styles.deployPendingWrap}>
-                              <Text style={styles.deployPendingText}>
-                                Pending
+                        <View style={styles.loadCardOrb} pointerEvents="none" />
+                        <View style={styles.loadCardHeroRow}>
+                          <View style={styles.loadPillRow}>
+                            <View style={styles.loadTypePill}>
+                              <Text style={styles.loadTypePillText}>GIVE LOAD</Text>
+                            </View>
+                            <View style={[styles.loadStatePill, statusPill.pill]}>
+                              <Text
+                                style={[styles.loadStatePillText, statusPill.text]}
+                              >
+                                {status.toUpperCase()}
                               </Text>
                             </View>
-                          ) : (
-                            <TouchableOpacity
-                              style={styles.reviewBidsBtn}
-                              onPress={() => {
-                                if (isDraft) {
-                                  handleBroadcastDraft(load);
-                                  return;
-                                }
-                                setSelectedQuoteId(null);
-                                setLoadAction({ type: "AWARD", load });
-                              }}
-                              activeOpacity={0.9}
-                            >
-                              <Text style={styles.reviewBidsBtnText}>
-                                {isDraft ? "Broadcast" : "Review Hub"}
-                              </Text>
-                            </TouchableOpacity>
+                          </View>
+                          <Text style={styles.loadCardDateHero}>
+                            {formatIndentCardDate(load.pickup_date)}
+                          </Text>
+                        </View>
+                        <LoadCardRouteRow
+                          origin={load.pickup_area || "—"}
+                          destination={load.drop_location || "—"}
+                          compact={useGridLayout}
+                        />
+                        <Text style={styles.loadCardIdCompact} numberOfLines={1}>
+                          {getIndentDisplayNumber(load)}
+                        </Text>
+                        <View style={styles.loadCardSpecsPanel}>
+                          {renderLoadCardSpecsColumns(
+                            vehicleDetail,
+                            weightDetail,
+                            loadTypeDetail,
                           )}
                         </View>
-                      </View>
+                        <View
+                          style={[
+                            styles.loadCardFooter,
+                            useGridLayout && styles.loadCardFooterGrid,
+                          ]}
+                        >
+                          <View style={styles.loadCardMeta}>
+                            {isDone ? (
+                              <View style={styles.bidMetaWrap}>
+                                <View
+                                  style={[
+                                    styles.bidIconCircle,
+                                    styles.bidIconCircleMuted,
+                                  ]}
+                                >
+                                  <FontAwesome
+                                    name="check-circle"
+                                    size={16}
+                                    color={
+                                      status === "cancelled"
+                                        ? Theme.textMuted
+                                        : Theme.positive
+                                    }
+                                  />
+                                </View>
+                                <Text style={styles.loadCardMetaText}>
+                                  {status === "cancelled"
+                                    ? "Cancelled"
+                                    : "Completed"}
+                                </Text>
+                              </View>
+                            ) : isAwardedPendingTrip ? (
+                              <View style={styles.bidMetaWrap}>
+                                <View
+                                  style={[
+                                    styles.bidIconCircle,
+                                    styles.bidIconCircleActive,
+                                  ]}
+                                >
+                                  <FontAwesome
+                                    name="trophy"
+                                    size={16}
+                                    color={Theme.driverGold}
+                                  />
+                                </View>
+                                <Text style={styles.loadCardMetaText}>
+                                  Supplier claimed
+                                </Text>
+                              </View>
+                            ) : (
+                              <View style={styles.bidMetaWrap}>
+                                <View
+                                  style={[
+                                    styles.bidIconCircle,
+                                    bidCount > 0
+                                      ? styles.bidIconCircleActive
+                                      : styles.bidIconCircleMuted,
+                                  ]}
+                                >
+                                  {bidCount > 0 ? (
+                                    <BidReceivedHammer visible={true} size={16} />
+                                  ) : (
+                                    <FontAwesome
+                                      name="gavel"
+                                      size={16}
+                                      color={Theme.textMuted}
+                                    />
+                                  )}
+                                </View>
+                                <Text style={styles.loadCardMetaText}>
+                                  {bidCount} bids received
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                          <View style={styles.loadCardActions}>
+                            <TouchableOpacity
+                              style={styles.shareIndentIconBtn}
+                              onPress={() =>
+                                isDone || isAwardedPendingTrip
+                                  ? onIndentPress(load)
+                                  : handleShareIndent(load)
+                              }
+                              activeOpacity={0.88}
+                              accessibilityLabel={
+                                isDone || isAwardedPendingTrip
+                                  ? "View detail"
+                                  : "Share indent"
+                              }
+                            >
+                              <Share2
+                                size={18}
+                                color={Theme.textMuted}
+                                strokeWidth={2.2}
+                              />
+                            </TouchableOpacity>
+                            {isDone ? null : isAwaitingSupplierDeploy ? (
+                              <View style={styles.deployPendingWrap}>
+                                <Text style={styles.deployPendingText}>
+                                  Pending
+                                </Text>
+                              </View>
+                            ) : (
+                              <TouchableOpacity
+                                style={styles.reviewBidsBtn}
+                                onPress={() => {
+                                  if (isDraft) {
+                                    handleBroadcastDraft(load);
+                                    return;
+                                  }
+                                  setSelectedQuoteId(null);
+                                  setLoadAction({ type: "AWARD", load });
+                                }}
+                                activeOpacity={0.9}
+                              >
+                                <Text style={styles.reviewBidsBtnText}>
+                                  {isDraft ? "Broadcast" : "Review Hub"}
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        </View>
                       </TouchableOpacity>
                     </View>
                   );
@@ -1763,6 +1943,14 @@ export function LoadCenterView({
               </View>
             ) : (
               <View style={useGridLayout ? styles.gridList : undefined}>
+                <View style={styles.loadSectionRow}>
+                  <Text style={styles.loadSectionTitle}>
+                    Market opportunities
+                  </Text>
+                  <View style={styles.loadSectionPill}>
+                    <Text style={styles.loadSectionPillText}>Live</Text>
+                  </View>
+                </View>
                 {filteredFindWorkList.map((load) => {
                 const existingQuote = myQuoteByIndentId.get(load.id);
                 const quoteStatus = (existingQuote?.status ?? "").toLowerCase();
@@ -1782,166 +1970,209 @@ export function LoadCenterView({
                   );
                   setLoadAction({ type: "BID", load });
                 };
+                const clientLabel = (
+                  load.creator_organization_name ||
+                  load.client_name ||
+                  ""
+                ).trim();
+                const getStatePill = () => {
+                  if (isAccepted) {
+                    return {
+                      wrap: {
+                        backgroundColor: Theme.positive,
+                        borderWidth: 1,
+                        borderColor: Theme.darkGreen,
+                      },
+                      txt: { color: Theme.textOnPrimary },
+                      label: (existingQuote?.status || "AWARDED").toUpperCase(),
+                    };
+                  }
+                  if (isRejected) {
+                    return {
+                      wrap: {
+                        backgroundColor: Theme.negativeMuted,
+                        borderWidth: 1,
+                        borderColor: Theme.teslaRed,
+                      },
+                      txt: { color: Theme.teslaRed },
+                      label: "DECLINED",
+                    };
+                  }
+                  if (isPending) {
+                    return {
+                      wrap: {
+                        backgroundColor: Theme.tripHubUnassignedPillBg,
+                        borderWidth: 1,
+                        borderColor: Theme.textPrimaryDark,
+                      },
+                      txt: { color: Theme.textPrimaryDark },
+                      label: "QUOTED",
+                    };
+                  }
+                  return {
+                    wrap: {
+                      backgroundColor: Theme.surfaceGray,
+                      borderWidth: 1,
+                      borderColor: Theme.borderMedium,
+                    },
+                    txt: { color: Theme.textPrimaryDark },
+                    label: "OPEN",
+                  };
+                };
+                const sp = getStatePill();
+                const metaLine = isAccepted
+                  ? "Awarded — open Claimed to deploy"
+                  : isRejected
+                    ? "Quote declined — send a new price"
+                    : isPending
+                      ? `Your quote ${formatINR(Number(existingQuote?.amount ?? 0))}`
+                      : "No quote sent yet";
+                const ctaLabel = isAccepted
+                  ? "View claimed"
+                  : isPending
+                    ? "Update quote"
+                    : isRejected
+                      ? "New quote"
+                      : "Bid now";
                 return (
                   <View key={load.id} style={useGridLayout ? styles.gridCardWrap : undefined}>
                     <TouchableOpacity
-                      style={styles.loadCard}
+                      style={[
+                        styles.loadCard,
+                        useGridLayout && styles.loadCardGrid,
+                      ]}
                       onPress={() => onIndentPress(load)}
                       activeOpacity={0.7}
                     >
-                    <View style={styles.loadCardTop}>
+                    <View style={styles.loadCardOrb} pointerEvents="none" />
+                    <View style={styles.loadCardHeroRow}>
                       <View style={styles.loadPillRow}>
                         <View style={styles.loadTypePill}>
                           <Text style={styles.loadTypePillText}>GET LOAD</Text>
                         </View>
-                        <View style={styles.loadStatePill}>
-                          <Text style={styles.loadStatePillText}>
-                            {existingQuote
-                              ? (existingQuote.status || "quoted").toUpperCase()
-                              : "OPEN"}
+                        <View style={[styles.loadStatePill, sp.wrap]}>
+                          <Text style={[styles.loadStatePillText, sp.txt]}>
+                            {sp.label}
                           </Text>
                         </View>
+                      </View>
+                      <Text style={styles.loadCardDateHero}>
+                        {formatIndentCardDate(load.pickup_date)}
+                      </Text>
+                    </View>
+                    <LoadCardRouteRow
+                      origin={load.pickup_area || "—"}
+                      destination={load.drop_location || "—"}
+                      compact={useGridLayout}
+                    />
+                    {clientLabel ? (
+                      <View
+                        style={[
+                          styles.loadMarketClientRow,
+                          useGridLayout && styles.loadMarketClientRowGrid,
+                        ]}
+                      >
+                        <View style={styles.getLoadAvatarWrap}>
+                          {loadAvatarByIndentId[load.id] ? (
+                            <Image
+                              source={{ uri: loadAvatarByIndentId[load.id] }}
+                              style={styles.getLoadAvatarImage}
+                            />
+                          ) : (
+                            <Text style={styles.getLoadAvatarInitial}>
+                              {clientLabel.trim().charAt(0).toUpperCase()}
+                            </Text>
+                          )}
+                        </View>
+                        <Building2
+                          size={14}
+                          color={Theme.textSecondary}
+                          strokeWidth={2.2}
+                        />
+                        <Text
+                          style={styles.loadMarketClientText}
+                          numberOfLines={1}
+                        >
+                          {clientLabel.toUpperCase()}
+                        </Text>
+                      </View>
+                    ) : useGridLayout ? (
+                      <View style={styles.loadMarketClientRowGridReserve} />
+                    ) : null}
+                    <Text style={styles.loadCardIdCompact} numberOfLines={1}>
+                      {getIndentDisplayNumber(load)}
+                    </Text>
+                    <View style={styles.loadCardSpecsPanel}>
+                      {renderLoadCardSpecsColumns(
+                        vehicleDetail,
+                        weightDetail,
+                        loadTypeDetail,
+                      )}
+                      <View style={styles.loadCardQuoteHint}>
+                        <Text style={styles.loadCardQuoteHintText}>
+                          Target{" "}
+                          {formatINR(
+                            Number(load.supplier_target ?? load.client_price ?? 0),
+                          )}
+                        </Text>
                       </View>
                     </View>
-                    <Text style={styles.loadCardRouteGet} numberOfLines={2}>
-                      {(load.pickup_area || "—").toUpperCase()} TO{" "}
-                      {(load.drop_location || "—").toUpperCase()}
-                    </Text>
-                    <View style={styles.loadCardInner}>
-                      <View style={styles.loadCardInnerTopRow}>
-                        <View style={styles.getLoadCompanyWrap}>
-                          <View style={styles.getLoadAvatarWrap}>
-                            {loadAvatarByIndentId[load.id] ? (
-                              <Image
-                                source={{ uri: loadAvatarByIndentId[load.id] }}
-                                style={styles.getLoadAvatarImage}
-                              />
-                            ) : (
-                              <Text style={styles.getLoadAvatarInitial}>
-                                {(
-                                  load.creator_organization_name ||
-                                  load.client_name ||
-                                  "U"
-                                )
-                                  .trim()
-                                  .charAt(0)
-                                  .toUpperCase()}
-                              </Text>
-                            )}
+                    <View
+                      style={[
+                        styles.loadCardFooter,
+                        useGridLayout && styles.loadCardFooterGrid,
+                      ]}
+                    >
+                      <View style={styles.loadCardMeta}>
+                        <View style={styles.bidMetaWrap}>
+                          <View
+                            style={[
+                              styles.bidIconCircle,
+                              existingQuote
+                                ? styles.bidIconCircleActive
+                                : styles.bidIconCircleMuted,
+                            ]}
+                          >
+                            <Package
+                              size={16}
+                              color={
+                                existingQuote
+                                  ? Theme.textPrimaryDark
+                                  : Theme.textMuted
+                              }
+                              strokeWidth={2.2}
+                            />
                           </View>
-                          <Text style={styles.getLoadCompany} numberOfLines={1}>
-                            {(
-                              load.creator_organization_name ||
-                              load.client_name ||
-                              "—"
-                            ).toUpperCase()}
-                          </Text>
-                        </View>
-                        <View style={styles.loadCardTopRight}>
-                          <Text style={styles.getLoadTargetLabel}>Target rate</Text>
-                          <Text style={styles.getLoadTargetValue}>
-                            {formatINR(
-                              Number(
-                                load.supplier_target ?? load.client_price ?? 0,
-                              ),
-                            )}
+                          <Text style={styles.loadCardMetaText} numberOfLines={2}>
+                            {metaLine}
                           </Text>
                         </View>
                       </View>
-                      <View style={styles.loadCardSpecsRow}>
-                        <View style={styles.loadCardSpecItem}>
-                          <Text style={styles.loadCardSpecLabel}>Vehicle</Text>
-                          <Text style={styles.loadCardSpecValue} numberOfLines={1}>
-                            {vehicleDetail}
-                          </Text>
-                        </View>
-                        <View style={styles.loadCardSpecItem}>
-                          <Text style={styles.loadCardSpecLabel}>Weight</Text>
-                          <Text style={styles.loadCardSpecValue} numberOfLines={1}>
-                            {weightDetail}
-                          </Text>
-                        </View>
-                        <View style={styles.loadCardSpecItem}>
-                          <Text style={styles.loadCardSpecLabel}>Load Type</Text>
-                          <Text style={styles.loadCardSpecValue} numberOfLines={1}>
-                            {loadTypeDetail}
-                          </Text>
-                        </View>
-                      </View>
-                      {existingQuote ? (
-                        isAccepted ? (
-                          <View style={styles.quoteSentRow}>
-                            <View style={styles.quoteSentBadge}>
-                              <FontAwesome
-                                name="trophy"
-                                size={12}
-                                color={Theme.teslaRed}
-                                style={{ marginRight: 6 }}
-                              />
-                              <Text style={styles.quoteSentText}>
-                                Awarded — see Claimed
-                              </Text>
-                            </View>
-                          </View>
-                        ) : isRejected ? (
-                          <View style={styles.quoteSentRow}>
-                            <View style={styles.quoteSentBadge}>
-                              <Text style={styles.quoteDeclinedText}>
-                                Quote declined
-                              </Text>
-                            </View>
-                            <TouchableOpacity
-                              style={styles.updateQuoteBtn}
-                              onPress={openBidModal}
-                              activeOpacity={0.9}
-                            >
-                              <Text style={styles.updateQuoteBtnText}>
-                                Send new quote
-                              </Text>
-                            </TouchableOpacity>
-                          </View>
-                        ) : (
-                          <View style={styles.quoteSentRow}>
-                            <View style={styles.quoteSentBadge}>
-                              <FontAwesome
-                                name="check"
-                                size={12}
-                                color={Theme.textMuted}
-                                style={{ marginRight: 6 }}
-                              />
-                              <Text style={styles.quoteSentText}>
-                                Quote Sent{" "}
-                                {formatINR(Number(existingQuote.amount))}
-                              </Text>
-                            </View>
-                            <TouchableOpacity
-                              style={styles.updateQuoteBtn}
-                              onPress={openBidModal}
-                              activeOpacity={0.9}
-                            >
-                              <Text style={styles.updateQuoteBtnText}>
-                                Update quote
-                              </Text>
-                            </TouchableOpacity>
-                          </View>
-                        )
-                      ) : (
+                      <View style={styles.loadCardActions}>
                         <TouchableOpacity
-                          style={styles.quoteBtn}
-                          onPress={openBidModal}
+                          style={styles.shareIndentIconBtn}
+                          onPress={() => handleShareIndent(load)}
+                          activeOpacity={0.88}
+                          accessibilityLabel="Share load"
+                        >
+                          <Share2
+                            size={18}
+                            color={Theme.textMuted}
+                            strokeWidth={2.2}
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.reviewBidsBtn}
+                          onPress={
+                            isAccepted
+                              ? () => setLoadSubTab("AWARDED")
+                              : openBidModal
+                          }
                           activeOpacity={0.9}
                         >
-                          <FontAwesome
-                            name="arrow-up"
-                            size={14}
-                            color={Theme.teslaRed}
-                            style={{ marginRight: 8 }}
-                          />
-                          <Text style={styles.quoteBtnText}>
-                            Send Price Quote
-                          </Text>
+                          <Text style={styles.reviewBidsBtnText}>{ctaLabel}</Text>
                         </TouchableOpacity>
-                      )}
+                      </View>
                     </View>
                     </TouchableOpacity>
                   </View>
@@ -1967,14 +2198,17 @@ export function LoadCenterView({
               </View>
             ) : (
               <View style={styles.securedSection}>
-                <View style={styles.securedSectionHeader}>
-                  <Text style={styles.securedSectionTitle}>Ready to Deploy</Text>
-                  <Text style={styles.securedSectionCount}>
-                    {filteredClaimedLoads.length}
-                  </Text>
+                <View style={styles.loadSectionRow}>
+                  <Text style={styles.loadSectionTitle}>Ready to deploy</Text>
+                  <View style={styles.loadSectionPill}>
+                    <Text style={styles.loadSectionPillText}>
+                      {filteredClaimedLoads.length} live
+                    </Text>
+                  </View>
                 </View>
-                <View style={useGridLayout ? styles.gridList : undefined}>
-                  {filteredClaimedLoads.map((load) => (
+                <FlashList<IndentRow>
+                  data={filteredClaimedLoads}
+                  renderItem={({ item: load }: { item: IndentRow }) => (
                     <View
                       key={`claimed-${load.id}`}
                       style={[
@@ -1982,10 +2216,13 @@ export function LoadCenterView({
                         highlightedIndentId === load.id && styles.highlightedIndentCard,
                       ]}
                     >
-                      {renderClaimedLoadCard(load, false)}
+                      {renderClaimedLoadCard(load, false, useGridLayout)}
                     </View>
-                  ))}
-                </View>
+                  )}
+                  estimatedItemSize={168}
+                  keyExtractor={(item) => item.id}
+                  ref={scrollRef}
+                />
               </View>
             ))}
         </ScrollView>
@@ -2103,21 +2340,62 @@ export function LoadCenterView({
             style={[styles.modalSheet, { paddingBottom: 24 + insets.bottom }]}
           >
             <View style={styles.modalHandle} />
-            <View style={styles.modalHeader}>
-              <View style={styles.modalHeaderTitleWrap}>
-                <Text style={styles.modalTitle}>Offer Hub</Text>
-              </View>
+            <View style={styles.reviewHubModalHeader}>
               <TouchableOpacity
                 onPress={() => {
                   setLoadAction(null);
                   setSelectedQuoteId(null);
                 }}
                 hitSlop={12}
-                style={styles.modalHeaderClose}
+                style={styles.reviewHubModalBack}
               >
-                <FontAwesome name="times" size={24} color={Theme.textMuted} />
+                <X size={22} color={Theme.textPrimaryDark} strokeWidth={2.5} />
               </TouchableOpacity>
+              <View style={styles.modalHeaderTitleWrap}>
+                <Text style={[styles.modalTitle, styles.modalTitleCenter]}>
+                  Review Hub
+                </Text>
+                {loadAction?.type === "AWARD" ? (
+                  <Text style={styles.modalSubtitle}>
+                    Audit indent {getIndentDisplayNumber(loadAction.load)}
+                  </Text>
+                ) : null}
+              </View>
+              <View style={styles.reviewHubModalHeaderSpacer} />
             </View>
+            {loadAction?.type === "AWARD" ? (
+              <View style={styles.reviewHubHero}>
+                <View style={styles.reviewHubHeroGlow} pointerEvents="none" />
+                <Text style={styles.reviewHubHeroKicker}>Target route</Text>
+                <Text style={styles.reviewHubHeroRoute} numberOfLines={3}>
+                  {(loadAction.load.pickup_area || "—").toUpperCase()} →{" "}
+                  {(loadAction.load.drop_location || "—").toUpperCase()}
+                </Text>
+                <View style={styles.reviewHubHeroMeta}>
+                  <View>
+                    <Text style={styles.reviewHubHeroStatLabel}>Offers</Text>
+                    <Text style={styles.reviewHubHeroStatValue}>
+                      {awardModalQuotesLoading ? "—" : String(awardModalQuotes.length)}
+                    </Text>
+                  </View>
+                  {lowestPendingAmount != null && pendingOfferCount > 0 ? (
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text style={styles.reviewHubHeroStatLabel}>Lowest bid</Text>
+                      <Text style={styles.reviewHubHeroStatValue}>
+                        {formatINR(lowestPendingAmount)}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text style={styles.reviewHubHeroStatLabel}>Pending</Text>
+                      <Text style={styles.reviewHubHeroStatValue}>
+                        {String(pendingOfferCount)}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            ) : null}
             {awardModalQuotesLoading ? (
               <View style={styles.bidEmptyWrap}>
                 <ActivityIndicator size="small" color={Theme.primary} />
@@ -2138,21 +2416,10 @@ export function LoadCenterView({
               </View>
             ) : (
               <>
-                <View style={styles.offerHubSummary}>
-                  <Text style={styles.offerHubSummaryText}>
-                    {awardModalQuotes.length} offer
-                    {awardModalQuotes.length !== 1 ? "s" : ""}
-                  </Text>
-                  {lowestPendingAmount != null && pendingOfferCount > 0 && (
-                    <Text style={styles.offerHubSummaryLowest}>
-                      Lowest: {formatINR(lowestPendingAmount)}
-                    </Text>
-                  )}
-                </View>
-                <View style={styles.quoteHeaderRow}>
-                  <Text style={styles.quoteHeaderName}>Bidder</Text>
-                  <Text style={styles.quoteHeaderAmount}>Amount</Text>
-                  <Text style={styles.quoteHeaderStatus}>Status</Text>
+                <View style={styles.quoteHeaderRowDark}>
+                  <Text style={styles.quoteHeaderNameDark}>Bidder</Text>
+                  <Text style={styles.quoteHeaderAmountDark}>Amount</Text>
+                  <Text style={styles.quoteHeaderStatusDark}>Status</Text>
                 </View>
                 <ScrollView
                   style={{ maxHeight: 280 }}
@@ -2264,19 +2531,24 @@ export function LoadCenterView({
             ]}
           >
             <View style={styles.modalHandle} />
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, styles.bidModalTitle]}>
-                Submit Registry Bid
-              </Text>
+            <View style={styles.reviewHubModalHeader}>
               <TouchableOpacity
                 onPress={() => {
                   setLoadAction(null);
                   setQuoteAmount("");
                 }}
                 hitSlop={12}
+                style={styles.reviewHubModalBack}
               >
-                <FontAwesome name="times" size={24} color={Theme.textMuted} />
+                <X size={22} color={Theme.textPrimaryDark} strokeWidth={2.5} />
               </TouchableOpacity>
+              <View style={styles.modalHeaderTitleWrap}>
+                <Text style={[styles.modalTitle, styles.modalTitleCenter]}>
+                  Bid hub
+                </Text>
+                <Text style={styles.modalSubtitle}>Submit quotation</Text>
+              </View>
+              <View style={styles.reviewHubModalHeaderSpacer} />
             </View>
             <ScrollView
               style={styles.bidModalScroll}
@@ -2286,57 +2558,39 @@ export function LoadCenterView({
             >
               {loadAction?.type === "BID" ? (
                 <View style={styles.bidIndentDetailSection}>
-                  <View style={styles.bidIndentCard}>
-                    <View style={styles.bidIndentCardAccent} />
-                    <View style={styles.bidIndentCardHeaderRow}>
-                      <Package
-                        size={16}
-                        color={Theme.teslaRed}
-                        strokeWidth={2.2}
-                      />
-                      <Text style={styles.bidIndentCardHeaderLabel}>
-                        Load summary
-                      </Text>
-                    </View>
-                    <View style={styles.bidIndentCardTop}>
-                      <View style={styles.bidIndentCardTopLeft}>
-                        <Text style={styles.bidIndentCardOrg} numberOfLines={2}>
-                          {(
-                            loadAction.load.creator_organization_name ||
-                            loadAction.load.client_name ||
-                            "—"
-                          )
-                            .trim()
-                            .toUpperCase() || "—"}
-                        </Text>
-                        <Text
-                          style={styles.bidIndentCardRoute}
-                          numberOfLines={4}
-                        >
-                          {(loadAction.load.pickup_area || "—").trim()} →{" "}
-                          {(loadAction.load.drop_location || "—").trim()}
-                        </Text>
-                        <Text style={styles.bidIndentCardId} numberOfLines={1}>
-                          ID: {getIndentDisplayNumber(loadAction.load)}
-                        </Text>
-                      </View>
-                      <View style={styles.bidIndentCardTopRight}>
-                        <View style={styles.bidIndentDatePill}>
-                          <Text style={styles.bidIndentDatePillText}>
-                            {loadAction.load.pickup_date
-                              ? new Date(
-                                  loadAction.load.pickup_date,
-                                ).toLocaleDateString("en-IN", {
-                                  day: "numeric",
-                                  month: "short",
-                                })
-                              : "—"}
+                  <View style={styles.bidHubHero}>
+                    <View style={styles.bidHubHeroGlow} pointerEvents="none" />
+                    <Text style={styles.bidHubHeroKicker}>You are bidding on</Text>
+                    <Text style={styles.bidHubHeroRoute} numberOfLines={4}>
+                      {(loadAction.load.pickup_area || "—").trim()} →{" "}
+                      {(loadAction.load.drop_location || "—").trim()}
+                    </Text>
+                    <View style={styles.bidHubHeroChips}>
+                      {loadAction.load.load_type ? (
+                        <View style={styles.bidHubChip}>
+                          <Text style={styles.bidHubChipText} numberOfLines={1}>
+                            {String(loadAction.load.load_type).toUpperCase()}
                           </Text>
                         </View>
-                        <Text style={styles.bidIndentCardTargetLabel}>
-                          Target price
+                      ) : null}
+                      {loadAction.load.vehicle_type ? (
+                        <View style={styles.bidHubChip}>
+                          <Text style={styles.bidHubChipText} numberOfLines={1}>
+                            {loadAction.load.vehicle_type}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <View style={[styles.reviewHubHeroMeta, { marginTop: 14 }]}>
+                      <View>
+                        <Text style={styles.reviewHubHeroStatLabel}>Indent</Text>
+                        <Text style={styles.reviewHubHeroStatValue}>
+                          {getIndentDisplayNumber(loadAction.load)}
                         </Text>
-                        <Text style={styles.bidIndentCardTargetValue}>
+                      </View>
+                      <View style={{ alignItems: "flex-end" }}>
+                        <Text style={styles.reviewHubHeroStatLabel}>Target</Text>
+                        <Text style={styles.reviewHubHeroStatValue}>
                           {formatINR(
                             Number(
                               loadAction.load.supplier_target ??
@@ -2347,60 +2601,12 @@ export function LoadCenterView({
                         </Text>
                       </View>
                     </View>
-                    <View style={styles.bidIndentCardDivider} />
-                    {loadAction.load.vehicle_type ? (
-                      <View style={styles.bidIndentSpecRow}>
-                        <Text style={styles.bidIndentSpecLabel}>Vehicle</Text>
-                        <Text
-                          style={styles.bidIndentSpecValue}
-                          numberOfLines={2}
-                        >
-                          {loadAction.load.vehicle_type}
-                        </Text>
-                      </View>
-                    ) : null}
-                    {loadAction.load.load_type ? (
-                      <View style={styles.bidIndentSpecRow}>
-                        <Text style={styles.bidIndentSpecLabel}>Load type</Text>
-                        <Text
-                          style={styles.bidIndentSpecValue}
-                          numberOfLines={2}
-                        >
-                          {loadAction.load.load_type}
-                        </Text>
-                      </View>
-                    ) : null}
-                    {loadAction.load.weight != null &&
-                    Number(loadAction.load.weight) > 0 ? (
-                      <View style={styles.bidIndentSpecRow}>
-                        <Text style={styles.bidIndentSpecLabel}>Weight</Text>
-                        <Text style={styles.bidIndentSpecValue}>
-                          {String(loadAction.load.weight)} kg
-                        </Text>
-                      </View>
-                    ) : null}
-                    <View style={styles.bidIndentStatusRow}>
-                      <Text style={styles.bidIndentStatusLabel}>Status</Text>
-                      <View style={styles.bidIndentStatusPill}>
-                        <Text style={styles.bidIndentStatusPillText}>
-                          {(() => {
-                            const status = String(loadAction.load.status || "—")
-                              .trim()
-                              .toLowerCase();
-                            if (status === "draft") return "Draft (Editable)";
-                            if (status === "broadcast") return "Broadcast";
-                            return status
-                              .replace(/_/g, " ")
-                              .replace(/\b\w/g, (c) => c.toUpperCase());
-                          })()}
-                        </Text>
-                      </View>
-                    </View>
                   </View>
                 </View>
               ) : null}
               <View style={styles.bidInputBlock}>
-                <Text style={styles.quoteLabel}>Target Price (₹)</Text>
+                <Text style={styles.bidSectionTitle}>Financial proposal</Text>
+                <Text style={styles.quoteLabel}>Your price (₹)</Text>
                 <TextInput
                   style={styles.quoteInput}
                   keyboardType="numeric"
@@ -2547,7 +2753,7 @@ export function LoadCenterView({
                 disabled={submittingQuote}
               >
                 <Text style={styles.modalSubmitText}>
-                  {submittingQuote ? "Publishing…" : "Publish Bid Node"}
+                  {submittingQuote ? "Submitting…" : "Submit bid"}
                 </Text>
               </TouchableOpacity>
             </ScrollView>
@@ -3352,9 +3558,38 @@ const styles = StyleSheet.create({
   },
   loadFilterHeaderRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
     paddingTop: 8,
+    gap: 10,
+  },
+  loadSubTabsWrap: {
+    flex: 1,
+    minWidth: 0,
+    paddingBottom: 2,
+  },
+  loadMyNetworkBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minHeight: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
+    backgroundColor: Theme.darkSurface,
+    flexShrink: 0,
+    marginBottom: 2,
+  },
+  loadMyNetworkBtnLabel: {
+    ...Typography.networkDarkHeaderNav,
+    color: Theme.textOnDark,
+    ...Platform.select({
+      android: { includeFontPadding: false as const },
+      default: {},
+    }),
   },
   hirePartnerFabWrap: {
     position: "absolute",
@@ -3467,7 +3702,226 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 16,
+    paddingTop: 12,
+  },
+  loadSectionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+    paddingHorizontal: 2,
+    width: "100%",
+  },
+  loadSectionTitle: {
+    fontSize: 11,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+    flex: 1,
+    minWidth: 0,
+  },
+  loadSectionPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+  },
+  loadSectionPillText: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  loadMarketClientRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8,
+    zIndex: 1,
+  },
+  /** Fixed slot height so grid row mates align when org name is missing */
+  loadMarketClientRowGrid: {
+    minHeight: 28,
+  },
+  loadMarketClientRowGridReserve: {
+    minHeight: 28,
+    marginBottom: 8,
+  },
+  loadMarketClientText: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: "800",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    minWidth: 0,
+  },
+  loadCardQuoteHint: {
+    marginTop: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  loadCardQuoteHintText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+  },
+  reviewHubHero: {
+    borderRadius: 28,
+    backgroundColor: Theme.textPrimaryDark,
+    padding: 18,
+    marginBottom: 16,
+    overflow: "hidden",
+  },
+  reviewHubHeroGlow: {
+    position: "absolute",
+    top: -40,
+    right: -40,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: "rgba(255,255,255,0.07)",
+  },
+  reviewHubHeroKicker: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    textTransform: "uppercase",
+    letterSpacing: 1.4,
+    marginBottom: 8,
+    fontStyle: "italic",
+  },
+  reviewHubHeroRoute: {
+    fontSize: 18,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: Theme.textOnDark,
+    textTransform: "uppercase",
+    letterSpacing: -0.2,
+    lineHeight: 24,
+  },
+  reviewHubHeroMeta: {
+    flexDirection: "row",
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderOnDark,
+    justifyContent: "space-between",
+  },
+  reviewHubHeroStatLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    textTransform: "uppercase",
+    marginBottom: 4,
+  },
+  reviewHubHeroStatValue: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: Theme.textOnDark,
+  },
+  modalTitleCenter: {
+    textAlign: "center",
+    width: "100%",
+  },
+  modalSubtitle: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 1.6,
+    marginTop: 4,
+    textAlign: "center",
+  },
+  reviewHubModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  reviewHubModalBack: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    backgroundColor: Theme.surfaceLight,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  reviewHubModalHeaderSpacer: {
+    width: 44,
+    height: 44,
+  },
+  bidHubHero: {
+    borderRadius: 28,
+    backgroundColor: Theme.textPrimaryDark,
+    padding: 18,
+    marginBottom: 16,
+    overflow: "hidden",
+  },
+  bidHubHeroGlow: {
+    position: "absolute",
+    top: -36,
+    right: -36,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  bidHubHeroKicker: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+    marginBottom: 8,
+  },
+  bidHubHeroRoute: {
+    fontSize: 17,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: Theme.textOnDark,
+    textTransform: "uppercase",
+    lineHeight: 22,
+    marginBottom: 10,
+  },
+  bidHubHeroChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  bidHubChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
+  },
+  bidHubChipText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    textTransform: "uppercase",
+  },
+  bidSectionTitle: {
+    fontSize: 11,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 10,
   },
   scrollContentClaimed: {
     paddingTop: 12,
@@ -3476,28 +3930,65 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     marginHorizontal: -6,
-    alignItems: "flex-start",
+    alignItems: "stretch",
   },
   gridCardWrap: {
     width: "33.333%",
     paddingHorizontal: 6,
+    marginBottom: 12,
+    alignSelf: "stretch",
+  },
+  loadCardGrid: {
+    flex: 1,
+    width: "100%",
+    alignSelf: "stretch",
+    marginBottom: 0,
+  },
+  loadCardFooterGrid: {
+    marginTop: "auto",
   },
   loadingWrap: { paddingVertical: 32, alignItems: "center", gap: 12 },
   loadingText: { fontSize: 10, fontWeight: "700", color: Theme.textMuted },
   loadCard: {
-    backgroundColor: Theme.screenBackground,
+    position: "relative" as const,
+    backgroundColor: Theme.cardWhite,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 8,
+    borderRadius: 28,
+    padding: 18,
+    marginBottom: 12,
     shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.07,
+    shadowRadius: 16,
+    elevation: 3,
     overflow: "hidden",
-    minHeight: 132,
+    minHeight: 0,
+  },
+  loadCardOrb: {
+    position: "absolute",
+    top: -72,
+    right: -48,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: Theme.textPrimaryDark,
+    opacity: 0.04,
+  },
+  loadCardHeroRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 10,
+    zIndex: 1,
+  },
+  loadCardDateHero: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+    marginTop: 2,
   },
   loadCardTop: {
     marginBottom: 8,
@@ -3506,32 +3997,39 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    flexShrink: 1,
+    flexWrap: "wrap",
   },
   loadTypePill: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: Theme.primary,
+    borderColor: Theme.borderMedium,
     backgroundColor: Theme.surfaceGray,
   },
   loadTypePillText: {
-    fontSize: 6,
+    fontSize: 7,
     fontWeight: "800",
-    letterSpacing: 0.3,
-    color: Theme.primary,
+    letterSpacing: 0.35,
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
   },
   loadStatePill: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: Theme.positive,
+    borderRadius: 8,
   },
   loadStatePillText: {
     fontSize: 7,
     fontWeight: "800",
-    letterSpacing: 0.5,
-    color: Theme.textOnPrimary,
+    letterSpacing: 0.45,
+    textTransform: "uppercase",
+  },
+  loadStatePillGetLoadDefault: {
+    backgroundColor: Theme.positive,
+    borderWidth: 1,
+    borderColor: Theme.darkGreen,
   },
   loadCardTopLeft: {
     flex: 1,
@@ -3543,14 +4041,63 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     maxWidth: "40%",
   },
-  loadCardRoute: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: TESLA_BLACK,
+  loadCardIdCompact: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+    letterSpacing: 0.8,
     textTransform: "uppercase",
-    flexShrink: 1,
-    lineHeight: 15,
-    marginBottom: 6,
+    marginBottom: 12,
+    zIndex: 1,
+  },
+  loadCardSpecsPanel: {
+    backgroundColor: Theme.surfaceGray,
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    marginBottom: 4,
+    zIndex: 1,
+  },
+  loadCardSpecDivider: {
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderMedium,
+    paddingLeft: 10,
+    marginLeft: 4,
+  },
+  bidMetaWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+  },
+  bidIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  bidIconCircleActive: {
+    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.borderLight,
+  },
+  bidIconCircleMuted: {
+    backgroundColor: Theme.surfaceGray,
+    borderColor: Theme.borderLight,
+  },
+  shareIndentIconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    alignItems: "center",
+    justifyContent: "center",
   },
   loadCardId: {
     fontSize: 9,
@@ -3575,20 +4122,28 @@ const styles = StyleSheet.create({
   },
   loadCardFooter: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 0,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: Theme.surfaceBorder,
+    marginTop: 4,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+    zIndex: 1,
   },
-  loadCardMeta: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8 },
+  loadCardMeta: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   loadCardMetaText: {
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: "800",
     color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 1,
+    letterSpacing: 0.6,
+    flex: 1,
   },
   loadCardActions: {
     flexDirection: "row",
@@ -3625,16 +4180,19 @@ const styles = StyleSheet.create({
   },
   reviewBidsBtn: {
     backgroundColor: TESLA_BLACK,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    minHeight: 30,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 16,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
   },
   reviewBidsBtnText: {
-    fontSize: 9,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "800",
     color: Theme.textOnPrimary,
     textTransform: "uppercase",
+    letterSpacing: 1,
   },
   deployPendingWrap: {
     paddingHorizontal: 12,
@@ -3699,15 +4257,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.textSecondary,
   },
-  loadCardRouteGet: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: TESLA_BLACK,
-    marginBottom: 8,
-    textTransform: "uppercase",
-    flexShrink: 1,
-    lineHeight: 15,
-  },
   getLoadTargetLabel: {
     fontSize: 6,
     fontWeight: "700",
@@ -3723,11 +4272,12 @@ const styles = StyleSheet.create({
   },
   loadCardInner: {
     backgroundColor: Theme.surfaceGray,
-    borderRadius: 12,
-    padding: 8,
+    borderRadius: 20,
+    padding: 12,
     borderWidth: 1,
-    borderColor: Theme.surfaceBorder,
+    borderColor: Theme.borderLight,
     marginTop: 6,
+    zIndex: 1,
   },
   loadCardInnerTopRow: {
     flexDirection: "row",
@@ -3736,29 +4286,41 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 6,
   },
-  loadCardSpecsRow: {
+  loadCardSpecsGrid: {
+    gap: 6,
+  },
+  loadCardSpecsLabelsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  loadCardSpecsValuesRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 8,
   },
-  loadCardSpecItem: {
+  loadCardSpecCell: {
     flex: 1,
     minWidth: 0,
   },
   loadCardSpecLabel: {
     fontSize: 8,
-    fontWeight: "700",
+    fontWeight: "600",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: 2,
   },
   loadCardSpecValue: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
+    fontSize: 8,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+    lineHeight: 12,
+    ...Platform.select({
+      android: { includeFontPadding: false as const },
+      default: {},
+    }),
   },
   quoteBtn: {
     flexDirection: "row",
@@ -4793,6 +5355,43 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     textTransform: "uppercase",
   },
+  quoteHeaderRowDark: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: Theme.textPrimaryDark,
+    borderRadius: 14,
+    marginBottom: 8,
+  },
+  quoteHeaderNameDark: {
+    flex: 1,
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    textTransform: "uppercase",
+    marginRight: 8,
+    letterSpacing: 0.6,
+    fontStyle: "italic",
+  },
+  quoteHeaderAmountDark: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    textTransform: "uppercase",
+    marginRight: 8,
+    letterSpacing: 0.6,
+    fontStyle: "italic",
+  },
+  quoteHeaderStatusDark: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    fontStyle: "italic",
+  },
   bidEmptyWrap: { paddingVertical: 32, alignItems: "center" },
   bidEmptyText: {
     fontSize: 10,
@@ -4818,10 +5417,10 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   bidIndentDetailSection: {
-    marginTop: 28,
+    marginTop: 8,
     width: "100%",
     alignSelf: "stretch",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   bidIndentCard: {
     backgroundColor: Theme.screenBackground,

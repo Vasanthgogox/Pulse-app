@@ -7,8 +7,15 @@ import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import { useTransactionsQuery } from "@/lib/queries";
+import { EntityIdentityAvatar } from "@/components/EntityIdentityAvatar";
+import {
+  type LedgerIdentityContext,
+  resolveLedgerRowPartyIdentity,
+} from "@/lib/entityIdentity";
+import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
+import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
 import * as financeService from "../services/finance.service";
 import { getProfileImage } from "../services/finance.service";
@@ -16,7 +23,12 @@ import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
 import { FinancialRow, type FinancialRowData } from "./FinancialRow";
 import { LedgerTransactionListView } from "./LedgerTransactionListView";
 import type { ClientRow } from "@/features/clients/services/clients.service";
+import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
+import {
+  getDisputesForPartner,
+  getDisputesReceived,
+} from "@/services/sharedLedgerService";
 
 
 export type LedgerViewMode = "table" | "transaction";
@@ -89,6 +101,12 @@ export interface LedgerTabProps {
       driver_id?: string | null;
     }
   >;
+  /** Fleet drivers for cash tab avatars (storage path / seed + optional signed URLs). */
+  driverRows?: DriverRow[];
+  /** Resolved driver image URLs by id (e.g. from FinanceScreen); merged with in-tab fetch. */
+  driverProfileImageUrls?: Record<string, string>;
+  /** Linked-org branding (`logo`/seed) by connected partner org id. */
+  linkedOrgDisplayMap?: Record<string, LinkedOrgDisplay>;
 }
 
 export function LedgerTab({
@@ -107,8 +125,12 @@ export function LedgerTab({
   clientRows = [],
   supplierRows = [],
   tripPartyMap = {},
+  driverRows = [],
+  driverProfileImageUrls = {},
+  linkedOrgDisplayMap = {},
 }: LedgerTabProps) {
   const { t } = useLanguage();
+  const router = useRouter();
   const isViewOnly = onAddTransactionPress === undefined;
   const isControlled = transactionsProp !== undefined;
   const [expandedLedgerRowId, setExpandedLedgerRowId] = useState<string | null>(null);
@@ -117,6 +139,68 @@ export function LedgerTab({
 
   const clientById = new Map(clientRows.map(c => [c.id, c]));
   const supplierById = new Map(supplierRows.map(s => [s.id, s]));
+  const driverById = useMemo(
+    () => new Map(driverRows.map((d) => [d.id, d])),
+    [driverRows],
+  );
+
+  /**
+   * Stable serialized key of connected partner org ids (both sides).
+   * Prevents re-fetch on every render when parent creates new array refs.
+   */
+  const partnerOrgIdsKey = useMemo(() => {
+    const set = new Set<string>();
+    clientRows.forEach((c) => {
+      if (c.linked_organization_id) set.add(c.linked_organization_id);
+    });
+    supplierRows.forEach((s) => {
+      if (s.linked_organization_id) set.add(s.linked_organization_id);
+    });
+    return Array.from(set).sort().join("|");
+  }, [clientRows, supplierRows]);
+
+  /** Disputes keyed by trip_id. Fetched in bulk for all connected partners this user has. */
+  const [disputesByTripId, setDisputesByTripId] = useState<
+    Record<string, { status: "OPEN" | "RESOLVED"; direction: "RAISED_BY_US" | "RECEIVED" }>
+  >({});
+  useEffect(() => {
+    if (!organizationId) {
+      setDisputesByTripId({});
+      return;
+    }
+    const partnerOrgIds = partnerOrgIdsKey ? partnerOrgIdsKey.split("|") : [];
+    let cancelled = false;
+    void (async () => {
+      const map: Record<
+        string,
+        { status: "OPEN" | "RESOLVED"; direction: "RAISED_BY_US" | "RECEIVED" }
+      > = {};
+      try {
+        const raisedResults = await Promise.all(
+          partnerOrgIds.map((pid) =>
+            getDisputesForPartner(organizationId, pid).then((r) => r.disputes ?? []),
+          ),
+        );
+        raisedResults.flat().forEach((d) => {
+          if (d.status === "OPEN" && d.transaction_id) {
+            map[d.transaction_id] = { status: "OPEN", direction: "RAISED_BY_US" };
+          }
+        });
+        const { disputes: received } = await getDisputesReceived(organizationId);
+        (received ?? []).forEach((d) => {
+          if (d.status === "OPEN" && d.transaction_id && !map[d.transaction_id]) {
+            map[d.transaction_id] = { status: "OPEN", direction: "RECEIVED" };
+          }
+        });
+      } catch {
+        // Best-effort: dispute chips simply won't appear if fetch fails.
+      }
+      if (!cancelled) setDisputesByTripId(map);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [organizationId, partnerOrgIdsKey, refreshKey]);
 
   const getResolvedPartyName = (row: financeService.LedgerRow): string => {
     const contactType = row.contact_type;
@@ -198,7 +282,7 @@ export function LedgerTab({
       const newProfileImages: Record<string, string> = {};
       for (const row of rows) {
         const contactId = row.contact_id;
-        if (contactId && row.contact_type === 'driver' && !profileImages[contactId]) {
+        if (contactId && row.contact_type === 'driver' && !profileImages[contactId] && !driverProfileImageUrls[contactId]) {
           const imageUrl = await getProfileImage(contactId, 'driver');
           if (imageUrl) {
             newProfileImages[contactId] = imageUrl;
@@ -210,7 +294,7 @@ export function LedgerTab({
       }
     };
     fetchDriverProfileImages();
-  }, [rows]);
+  }, [rows, driverProfileImageUrls]);
 
   // Truck-related expense: contact_id/contact_type NULL; entity = vehicle_number (from row or trip) or party_name; LINK = route + vehicle badge only when trip.vehicle_id set. See docs/LEDGER_TRUCK_EXPENSE_AND_TRIP_DISPLAY.md for NULL handling (trip_id null, trip not in map, vehicle_id null).
 
@@ -404,8 +488,6 @@ export function LedgerTab({
       if (row.amount_out && pm.supplier_id) derivedPartyType = 'supplier';
     }
 
-    const profileImageUrl = row.contact_id ? profileImages[row.contact_id] : null;
-
     const ledgerPartyType =
       derivedPartyType === "client"
         ? "client"
@@ -414,9 +496,86 @@ export function LedgerTab({
           : isDriverPayment
             ? "driver"
             : "vehicle";
-    const desc = row.description ?? "";
-    const categoryLabel = ALL_LEDGER_CATEGORY_VALUES.includes(desc)
-      ? desc
+
+    let profileImageUrl: string | null = null;
+    let avatarSeedForRow: string | null | undefined = undefined;
+    let organizationImageUrl: string | null = null;
+    let organizationAvatarSeed: string | null = null;
+
+    let counterpartyIntegrated: boolean | null = null;
+    let counterpartyId: string | null = null;
+
+    if (ledgerPartyType === "client") {
+      counterpartyId =
+        row.contact_id ??
+        (row.trip_id ? tripPartyMap[row.trip_id]?.client_id ?? null : null);
+      const client = counterpartyId ? clientById.get(counterpartyId) ?? null : null;
+      counterpartyIntegrated = client
+        ? Boolean(client.is_integrated || client.linked_organization_id)
+        : false;
+      if (client) {
+        const oid = (client.linked_organization_id ?? "").trim();
+        if (oid && linkedOrgDisplayMap[oid]) {
+          organizationImageUrl =
+            (linkedOrgDisplayMap[oid].avatarUrl ?? "").trim() || null;
+          organizationAvatarSeed =
+            (linkedOrgDisplayMap[oid].avatarSeed ?? "").trim() || null;
+        }
+        const cid = (row.contact_id ?? "").trim();
+        profileImageUrl =
+          resolveAvatarPublicUrl(client.avatar_url) ??
+          (cid ? profileImages[cid] ?? null : null);
+        const s = (client.avatar_seed ?? "").trim();
+        avatarSeedForRow = s || undefined;
+      } else if (row.contact_id) {
+        profileImageUrl = profileImages[row.contact_id] ?? null;
+      }
+    } else if (ledgerPartyType === "supplier") {
+      counterpartyId =
+        row.contact_id ??
+        (row.trip_id ? tripPartyMap[row.trip_id]?.supplier_id ?? null : null);
+      const supplier = counterpartyId ? supplierById.get(counterpartyId) ?? null : null;
+      counterpartyIntegrated = supplier
+        ? Boolean(
+            supplier.linked_organization_id ||
+              (supplier as { supplier_type?: string | null })
+                .supplier_type === "integrated",
+          )
+        : false;
+      if (supplier) {
+        const oid = (supplier.linked_organization_id ?? "").trim();
+        if (oid && linkedOrgDisplayMap[oid]) {
+          organizationImageUrl =
+            (linkedOrgDisplayMap[oid].avatarUrl ?? "").trim() || null;
+          organizationAvatarSeed =
+            (linkedOrgDisplayMap[oid].avatarSeed ?? "").trim() || null;
+        }
+        const cid = (row.contact_id ?? "").trim();
+        profileImageUrl =
+          resolveAvatarPublicUrl(supplier.avatar_url) ??
+          (cid ? profileImages[cid] ?? null : null);
+        const s = (supplier.avatar_seed ?? "").trim();
+        avatarSeedForRow = s || undefined;
+      } else if (row.contact_id) {
+        profileImageUrl = profileImages[row.contact_id] ?? null;
+      }
+    } else if (ledgerPartyType === "driver") {
+      if (row.contact_id) {
+        const drv = driverById.get(row.contact_id);
+        profileImageUrl =
+          (drv?.avatar_url ?? "").trim() ||
+          driverProfileImageUrls[row.contact_id] ||
+          profileImages[row.contact_id] ||
+          null;
+        const s = (drv?.avatar_seed ?? "").trim();
+        avatarSeedForRow = s || undefined;
+      }
+    } else if (row.contact_id) {
+      profileImageUrl = profileImages[row.contact_id] ?? null;
+    }
+    const categoryBase = row.primary_category ?? row.description ?? "";
+    const categoryLabel = ALL_LEDGER_CATEGORY_VALUES.includes(categoryBase)
+      ? categoryBase
       : "GENERAL";
     return {
       id: row.id,
@@ -438,7 +597,33 @@ export function LedgerTab({
       tripPaymentSummary: tripPaymentSummary ?? undefined,
       sameTripTransactions: sameTripTransactions ?? undefined,
       profileImageUrl: profileImageUrl,
+      avatarSeed: avatarSeedForRow,
+      organizationImageUrl,
+      organizationAvatarSeed,
+      paymentMode: row.payment_mode ?? undefined,
+      paymentReference: row.payment_reference ?? undefined,
+      reconciliationStatus: row.reconciliation_status ?? undefined,
+      reconciliationLabel: row.reconciliation_label ?? undefined,
+      reconciliationActionLabel: row.reconciliation_action_label ?? undefined,
+      reconciliationHelperText: row.reconciliation_helper_text ?? undefined,
+      counterpartyIntegrated,
+      counterpartyId,
+      disputeStatus: row.trip_id && disputesByTripId[row.trip_id]
+        ? disputesByTripId[row.trip_id].status
+        : null,
+      disputeDirection: row.trip_id && disputesByTripId[row.trip_id]
+        ? disputesByTripId[row.trip_id].direction
+        : null,
     };
+  }
+
+  function openLedgerDetail(row: financeService.LedgerRow) {
+    const rowData = buildFinancialRowDataForRow(row);
+    const payload = JSON.stringify(rowData);
+    router.push({
+      pathname: "/finance-entry/[id]",
+      params: { id: rowData.id, payload },
+    });
   }
 
   const expandedRow =
@@ -452,11 +637,13 @@ export function LedgerTab({
     <LedgerTransactionListView
       transactions={transactionListRows}
       onRowPress={(id) => {
-        setExpandedLedgerRowId((prev) => (prev === id ? null : id));
+        const row = transactionListRows.find((r) => r.id === id);
+        if (!row) return;
+        openLedgerDetail(row);
       }}
-      expandedRowId={expandedLedgerRowId}
-      expandedRowData={expandedRowData}
-      highlightId={expandedLedgerRowId}
+      expandedRowId={null}
+      expandedRowData={null}
+      highlightId={null}
       showTitle={false}
       showHistoryHeader={true}
       showGridFooter={true}
@@ -468,24 +655,27 @@ export function LedgerTab({
       onMissionChange={onMissionChange}
       fullWidth
       renderPartyAvatar={(row) => {
-        if (!row.contact_id) return null;
-        let url: string | null = null;
-        if (row.contact_type === 'client') {
-          // avatar_url from get_clients_with_profiles RPC — synchronous public URL
-          url = resolveAvatarPublicUrl(clientById.get(row.contact_id)?.avatar_url);
-        } else if (row.contact_type === 'supplier') {
-          url = resolveAvatarPublicUrl(supplierById.get(row.contact_id)?.avatar_url);
-        } else {
-          // Drivers: resolved via async profileImages state
-          url = profileImages[row.contact_id] ?? null;
-        }
-        if (!url) return null;
+        const name = getResolvedPartyName(row);
+        const ctx: LedgerIdentityContext = {
+          clientById,
+          supplierById,
+          driverById,
+          linkedOrgDisplayMap,
+          profileImages,
+          driverProfileImageUrls,
+          tripPartyMap,
+          partyDisplayName: name,
+        };
+        const identity = resolveLedgerRowPartyIdentity(row, ctx);
+        if (!identity) return null;
         return (
-          <Image
-            source={{ uri: url }}
-            style={{ width: 40, height: 40 }}
-          />
+          <EntityIdentityAvatar identity={identity} size="md" showIntegrationBadge />
         );
+      }}
+      driverRows={driverRows}
+      driverProfileImageUrls={{
+        ...driverProfileImageUrls,
+        ...profileImages,
       }}
     />
   );
@@ -498,9 +688,9 @@ export function LedgerTab({
         </View>
       ) : (
       rows.map((row) => {
-        const desc = row.description ?? "";
-        const categoryLabel = ALL_LEDGER_CATEGORY_VALUES.includes(desc)
-          ? desc
+        const categoryBase = row.primary_category ?? row.description ?? "";
+        const categoryLabel = ALL_LEDGER_CATEGORY_VALUES.includes(categoryBase)
+          ? categoryBase
           : "GENERAL";
         const isDriverPayment =
           row.contact_type === "driver" ||
@@ -676,13 +866,19 @@ export function LedgerTab({
           transactionTypeLabel: getDoubleEntryDisplayLabel(row) ?? undefined,
           tripPaymentSummary: tripPaymentSummary ?? undefined,
           sameTripTransactions: sameTripTransactions ?? undefined,
+          paymentMode: row.payment_mode ?? undefined,
+          paymentReference: row.payment_reference ?? undefined,
+          reconciliationStatus: row.reconciliation_status ?? undefined,
+          reconciliationLabel: row.reconciliation_label ?? undefined,
+          reconciliationActionLabel: row.reconciliation_action_label ?? undefined,
+          reconciliationHelperText: row.reconciliation_helper_text ?? undefined,
         };
         return (
           <FinancialRow
             key={row.id}
             type="ledger"
             data={data}
-            onSelect={onRowSelect}
+            onSelect={() => openLedgerDetail(row)}
             onEntityPress={
               onEntitySelect
                 ? () =>
@@ -696,8 +892,8 @@ export function LedgerTab({
             tripOptions={tripOptionsForRow}
             recommendedTripIds={recommendedTripIds}
             onMissionChange={onMissionChange}
-            expandedRowId={expandedLedgerRowId}
-            onExpandedChange={setExpandedLedgerRowId}
+            expandedRowId={null}
+            onExpandedChange={undefined}
           />
         );
       })

@@ -3,8 +3,17 @@
  * Layout aligned with Customers tab: wrap, header, summary row, table card.
  */
 import type { ReactNode } from 'react';
-import { useEffect, useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  RefreshControl,
+  ScrollView,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LiquidFillPill } from '@/components/LiquidFillPill';
@@ -17,6 +26,7 @@ import type { EntityListFilter } from "@/features/finance/components/TreasurySum
 import type { FinancialRowData } from "@/features/finance/components/FinancialRow";
 import { aggregateDrivers, type DriverOfferForAggregation, type TripPartyMap } from "@/features/finance/aggregation";
 import { useDriversQuery, useTripsQuery } from '@/lib/queries';
+import { usePaginatedScroll } from '@/lib/usePaginatedScroll';
 import type { DriverRow, DriverOffer } from '../services/drivers.service';
 import type { VehicleRow } from '@/features/vehicles/services/vehicles.service';
 
@@ -178,6 +188,26 @@ export function DriversTab({
     return list;
   }, [rows, q, entityFilter]);
 
+  const driverTableResetKey = useMemo(
+    () => `${filteredRows.length}|${q}|${entityFilter}|${searchQuery}`,
+    [filteredRows.length, q, entityFilter, searchQuery],
+  );
+  const {
+    visible: visibleDriverRows,
+    onScroll: onDriverTablePaginatedScroll,
+  } = usePaginatedScroll(filteredRows, { resetKey: driverTableResetKey });
+
+  const handleDriverTableScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const p = tabBarScrollProps as {
+        onScroll?: (ev?: NativeSyntheticEvent<NativeScrollEvent>) => void;
+      };
+      p.onScroll?.(e);
+      onDriverTablePaginatedScroll(e);
+    },
+    [tabBarScrollProps, onDriverTablePaginatedScroll],
+  );
+
   useEffect(() => {
     if (onTotals) {
       onTotals(totals);
@@ -211,6 +241,8 @@ export function DriversTab({
         ]}
         showsVerticalScrollIndicator={false}
         {...tabBarScrollProps}
+        onScroll={handleDriverTableScroll}
+        scrollEventThrottle={tabBarScrollProps.scrollEventThrottle ?? 100}
         stickyHeaderIndices={[stickyHeaderIndex]}
         refreshControl={
           onRefresh ? (
@@ -254,7 +286,7 @@ export function DriversTab({
           </View>
         </View>
         <View style={styles.tableCard}>
-          {filteredRows.map((data) => {
+          {visibleDriverRows.map((data) => {
             const pending = data.pending ?? 0;
             const paid = data.paid ?? 0;
             const tripCount = data.trips ?? 0;

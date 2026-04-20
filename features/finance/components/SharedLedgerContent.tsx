@@ -7,7 +7,12 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { getClientById } from "@/features/clients/services/clients.service";
 import { getSupplierById } from "@/features/suppliers/services/suppliers.service";
-import { getTripDisplayNumber, type TripRow } from "@/features/trips";
+import {
+  createTrip,
+  getTripDisplayNumber,
+  type CreateTripData,
+  type TripRow,
+} from "@/features/trips";
 import {
     createConnectionRequest,
     getConnectionInviteeByPhone,
@@ -25,9 +30,10 @@ import {
     resolveDispute,
     resolveDisputeTableOnly,
     type DisputeRow,
+    type SharedLedgerEntry,
 } from "@/services/sharedLedgerService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -42,8 +48,21 @@ import {
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { LedgerRow } from "../services/finance.service";
-import { TreasurySummaryCard } from "./TreasurySummaryCard";
+import { createLedgerEntry, type LedgerRow } from "../services/finance.service";
+import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
+import {
+  SHARED_LEDGER_AWAITING_PARTNER_UPDATE,
+  SHARED_LEDGER_PARTNER_PENDING_LABEL,
+  inferSharedTxnLineKind,
+  type InternalTrip,
+  type ReconciledRow,
+  type ReconStatus,
+} from "./sharedLedgerTypes";
+import {
+  SharedLedgerCommandCenter,
+  type CommandTxnRow,
+} from "./SharedLedgerCommandCenter";
+import { LedgerReportModal } from "./LedgerReportModal";
 
 export interface SharedTripData {
   tripId: string;
@@ -52,7 +71,13 @@ export interface SharedTripData {
 }
 
 export interface EntityCompareVerifyViewProps {
-  entity: { id: string; name: string; linked_organization_id?: string | null };
+  entity: {
+    id: string;
+    name: string;
+    linked_organization_id?: string | null;
+    /** Optional; when set, shared-ledger hub shows partner photo (public URL) or initials. */
+    avatar_url?: string | null;
+  };
   entityType: "CLIENT" | "SUPPLIER";
   trips: TripRow[];
   transactions: LedgerRow[] | null | undefined;
@@ -73,38 +98,70 @@ export interface EntityCompareVerifyViewProps {
   onRequestConnection?: () => void;
   /** Optional callback to trigger an invitation to join the app for a partner not yet in the app. */
   onInviteToApp?: () => void;
-}
-
-type ReconStatus = "VERIFIED" | "PENDING" | "MISMATCH" | "UNRECOGNIZED";
-
-interface InternalTrip {
-  tripId: string;
-  missionId: string;
-  date: string;
-  sales: number;
-  paid: number;
-  /** Amount we paid out (amount_out) for this trip; used for supplier Net Trip Due. */
-  paidOut: number;
-  due: number;
-}
-
-interface ReconciledRow {
-  tripId: string;
-  missionId: string;
-  status: ReconStatus;
-  issue: string | null;
-  internal: InternalTrip | null;
-  external: { sales: number; paid: number } | null;
-  intSales: number;
-  intPaid: number;
-  /** Amount we paid out (for supplier); used for entity-aware Net Trip Due. */
-  intPaidOut: number;
-  extSales: number;
-  extPaid: number;
+  /**
+   * Increment from parent (e.g. party detail header download) to open the same PDF/Excel
+   * flow as Trips tab — while Shared tab is active.
+   */
+  externalDownloadRequest?: number;
 }
 
 function formatINR(n: number): string {
   return `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 0, minimumFractionDigits: 0 })}`;
+}
+
+function formatTxnShortDate(iso: string | undefined | null): string {
+  if (iso == null || !String(iso).trim()) return "";
+  const raw = String(iso).trim();
+  const d = new Date(raw);
+  if (!Number.isNaN(d.getTime())) {
+    return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  }
+  return raw.length >= 10 ? raw.slice(0, 10) : raw;
+}
+
+function normTripKey(s: string | null | undefined): string {
+  return s == null ? "" : String(s).trim().toLowerCase();
+}
+
+function tripStatusLabelForReport(r: ReconciledRow): string {
+  if (r.status === "VERIFIED") return "Same";
+  if (r.status === "PENDING") return SHARED_LEDGER_PARTNER_PENDING_LABEL;
+  if (r.status === "MISMATCH") return "Different";
+  return "New";
+}
+
+function txnStatusLabelForReport(
+  s: "matched" | "no_entry" | "pending" | "conflict",
+): string {
+  if (s === "matched") return "Same";
+  if (s === "no_entry") return "Add to yours";
+  if (s === "pending") return SHARED_LEDGER_PARTNER_PENDING_LABEL;
+  return "Different";
+}
+
+function partnerBookLine(row: ReconciledRow): string {
+  return row.external ? "In partner book" : SHARED_LEDGER_AWAITING_PARTNER_UPDATE;
+}
+
+function isUuidString(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value.trim(),
+  );
+}
+
+function compactLedgerRef(
+  paymentRef: string | null | undefined,
+  idFallback: string,
+): string {
+  const p = (paymentRef ?? "").trim();
+  if (p) return p.length > 24 ? `${p.slice(0, 24)}…` : p;
+  const id = idFallback.trim();
+  return id.length > 14 ? `${id.slice(0, 14)}…` : id;
+}
+
+function modeLabel(raw: string | null | undefined): string {
+  const m = (raw ?? "").trim();
+  return m ? m.toUpperCase() : "—";
 }
 
 /** Build internal per-trip from trips + transactions (O(n)).
@@ -308,6 +365,100 @@ function getLedgerEscalationKind(
   return "raise_dispute";
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+ *  StatusFilter UI helpers — colors + labels for chips / pills / icons.
+ *  Keeping them as module-level pure functions so they don't re-create on
+ *  every render and are easy to unit test.
+ *
+ *  (Shared across the By-Trip and By-Transaction views in the shared-ledger.)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+function filterChipDotStyle(key: "matched" | "no_entry" | "pending" | "conflict") {
+  switch (key) {
+    case "matched":
+      return { backgroundColor: Theme.darkGreen };
+    case "no_entry":
+      return { backgroundColor: Theme.primary };
+    case "pending":
+      return { backgroundColor: Theme.driverGold };
+    case "conflict":
+      return { backgroundColor: Theme.teslaRed };
+  }
+}
+
+function txnStatusLabel(s: "matched" | "no_entry" | "pending" | "conflict") {
+  if (s === "matched") return "Same";
+  if (s === "no_entry") return "Add to yours";
+  if (s === "pending") return "Awaiting partner";
+  return "Doesn’t match";
+}
+
+function txnStatusPillStyle(s: "matched" | "no_entry" | "pending" | "conflict") {
+  switch (s) {
+    case "matched":
+      return {
+        backgroundColor: Theme.positiveMuted,
+        borderColor: Theme.darkGreen,
+      };
+    case "no_entry":
+      return {
+        backgroundColor: Theme.surfaceLight,
+        borderColor: Theme.primary,
+      };
+    case "pending":
+      return {
+        backgroundColor: Theme.surfaceLight,
+        borderColor: Theme.driverGold,
+      };
+    case "conflict":
+      return {
+        backgroundColor: Theme.negativeMuted,
+        borderColor: Theme.teslaRed,
+      };
+  }
+}
+
+function txnStatusPillTextStyle(
+  s: "matched" | "no_entry" | "pending" | "conflict",
+) {
+  switch (s) {
+    case "matched":
+      return { color: Theme.darkGreen };
+    case "no_entry":
+      return { color: Theme.primary };
+    case "pending":
+      return { color: Theme.driverGold };
+    case "conflict":
+      return { color: Theme.teslaRed };
+  }
+}
+
+function txnIconColor(s: "matched" | "no_entry" | "pending" | "conflict") {
+  switch (s) {
+    case "matched":
+      return Theme.darkGreen;
+    case "no_entry":
+      return Theme.primary;
+    case "pending":
+      return Theme.driverGold;
+    case "conflict":
+      return Theme.teslaRed;
+  }
+}
+
+function txnIconWrapStyle(s: "matched" | "no_entry" | "pending" | "conflict") {
+  switch (s) {
+    case "matched":
+      return { backgroundColor: Theme.positiveMuted };
+    case "no_entry":
+      return { backgroundColor: Theme.surfaceLight };
+    case "pending":
+      return { backgroundColor: Theme.surfaceLight };
+    case "conflict":
+      return { backgroundColor: Theme.negativeMuted };
+  }
+}
+
 export function SharedLedgerContent({
   entity,
   entityType,
@@ -322,6 +473,7 @@ export function SharedLedgerContent({
   onRequestInvite,
   onRequestConnection,
   onInviteToApp,
+  externalDownloadRequest,
 }: EntityCompareVerifyViewProps) {
   const resolutionOptions = entityType === "CLIENT" ? [
     "Partner needs to update Sales amount",
@@ -355,6 +507,26 @@ export function SharedLedgerContent({
     useState<DisputeRow | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
+  const partnerProfileImageUrl = useMemo(
+    () => resolveAvatarPublicUrl(entity.avatar_url),
+    [entity.avatar_url],
+  );
+
+  /**
+   * Party-level shared-ledger view has two modes:
+   *  - "trip": existing mission-level comparison (one row per trip).
+   *  - "txn":  transaction-level feed, including entries the partner has
+   *           logged but that are not yet in our books ("No entry from my side").
+   * Both modes are filtered by a common status chip — all, matched,
+   * no_entry (partner only), pending (we only), conflict (amounts disagree).
+   */
+  type ViewMode = "trip" | "txn";
+  type StatusFilter = "all" | "matched" | "no_entry" | "pending" | "conflict";
+  const [viewMode, setViewMode] = useState<ViewMode>("trip");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  /** Raw partner entries used to build the "By Transaction" view. */
+  const [partnerEntries, setPartnerEntries] = useState<SharedLedgerEntry[]>([]);
+
   // Manual partner (not integrated): resolve phone → invitee in app or not → Request vs Invite
   type InviteeStatus =
     | "idle"
@@ -368,6 +540,9 @@ export function SharedLedgerContent({
   const [pendingRequestSent, setPendingRequestSent] = useState(false);
   const [requestInviteLoading, setRequestInviteLoading] = useState(false);
   const [inviteeRetryKey, setInviteeRetryKey] = useState(0);
+  const [sharedReportVisible, setSharedReportVisible] = useState(false);
+  const [pendingOpenSharedReport, setPendingOpenSharedReport] = useState(false);
+  const prevExternalDownloadRequest = useRef(0);
 
   const insets = useSafeAreaInsets();
 
@@ -384,6 +559,34 @@ export function SharedLedgerContent({
   }, [organizationId, partnerOrgId]);
 
   const txs = transactions ?? [];
+
+  const tripByNormRef = useMemo(() => {
+    const m = new Map<string, TripRow>();
+    for (const t of trips) {
+      m.set(normTripKey(t.id), t);
+    }
+    return m;
+  }, [trips]);
+
+  const missionLabelForTripRef = useCallback(
+    (tripRef: string) => {
+      const t = tripByNormRef.get(normTripKey(tripRef));
+      return t ? getTripDisplayNumber(t) : tripRef.slice(0, 8).toUpperCase();
+    },
+    [tripByNormRef],
+  );
+
+  const tripRouteForTripRef = useCallback(
+    (tripRef: string) => {
+      const t = tripByNormRef.get(normTripKey(tripRef));
+      if (!t) return null;
+      const from = (t.pickup_area ?? "").trim();
+      const to = (t.drop_location ?? "").trim();
+      if (!from && !to) return null;
+      return [from, to].filter(Boolean).join(" → ");
+    },
+    [tripByNormRef],
+  );
 
   const internalMap = useMemo(
     () =>
@@ -506,6 +709,7 @@ export function SharedLedgerContent({
         getSharedLedgerEntriesForPartner(organizationId, entity.id).then(({ error: e2, entries }) => {
           if (cancelled) return;
           setLoadingShared(false);
+          if (!e2 && entries) setPartnerEntries(entries);
           const byTrip = new Map<string, number>();
           if (!e2 && entries?.length) {
             const partnerPaidFromOut = entityType === "CLIENT"; // client pays us = their amount_out
@@ -533,6 +737,7 @@ export function SharedLedgerContent({
       getSharedLedgerEntriesForPartner(organizationId, entity.id).then(({ error: e2, entries }) => {
         if (cancelled) return;
         setLoadingShared(false);
+        if (!e2 && entries) setPartnerEntries(entries);
         if (e2 || !entries?.length) return;
         const byTrip = new Map<string, { in: number; out: number }>();
         for (const e of entries) {
@@ -594,16 +799,472 @@ export function SharedLedgerContent({
     [internalMap, sharedTrips, sharedTripsProp, entity.name, entityType],
   );
 
-  const searchLower = (searchQuery ?? "").trim().toLowerCase();
-  const filteredRows = useMemo(
-    () =>
-      searchLower
-        ? reconciledRows.filter((r) =>
-            (r.missionId ?? "").toLowerCase().includes(searchLower),
-          )
-        : reconciledRows,
-    [reconciledRows, searchLower],
+  const mergePartnerLineIntoBook = useCallback(
+    async (
+      txn: CommandTxnRow,
+    ): Promise<{ createdTrip: boolean; tripId: string }> => {
+      if (!organizationId) {
+        Alert.alert("Cannot merge", "Missing organization.");
+        throw new Error("no org");
+      }
+      let resolvedTripId =
+        txn.tripDbId ?? tripByNormRef.get(normTripKey(txn.tripRef))?.id;
+      let createdTrip = false;
+
+      if (!resolvedTripId) {
+        const ghostRow = reconciledRows.find(
+          (r) =>
+            normTripKey(r.tripId) === normTripKey(txn.tripRef) &&
+            r.status === "UNRECOGNIZED",
+        );
+        const fromSummary =
+          ghostRow?.external != null
+            ? Number(ghostRow.external.sales ?? 0)
+            : 0;
+        const fromTxnAmt = txn.partnerAmount ?? txn.amountAbs;
+        const extSales = Math.max(fromSummary, fromTxnAmt);
+        if (!(extSales > 0)) {
+          Alert.alert("Cannot merge", "Missing partner trip amount for this entry.");
+          throw new Error("no amount");
+        }
+        const rawDate = (txn.date ?? "").trim();
+        const pickupDate =
+          rawDate.length >= 10
+            ? rawDate.slice(0, 10)
+            : new Date().toISOString().slice(0, 10);
+        const clientName = (entity.name ?? "—").trim() || "—";
+        const partnerTripRef = (txn.tripRef ?? "").trim();
+        const baseTrip: CreateTripData = {
+          ...(isUuidString(partnerTripRef) ? { id: partnerTripRef } : {}),
+          pickup_area: "Partner shared trip",
+          drop_location: "—",
+          client_name: clientName,
+          pickup_date: pickupDate,
+          notes: isUuidString(partnerTripRef)
+            ? "Auto-created from partner shared ledger (align books)."
+            : `Auto-created from partner shared ledger (ref: ${partnerTripRef}).`,
+          client_price: extSales,
+          supplier_rate: extSales,
+        };
+        if (entityType === "CLIENT") {
+          baseTrip.client_id = entity.id;
+        } else {
+          baseTrip.supplier_id = entity.id;
+        }
+        const { error: tripErr, trip } = await createTrip(organizationId, baseTrip);
+        if (tripErr || !trip) {
+          Alert.alert(
+            "Could not create trip",
+            tripErr?.message ??
+              "Create the trip manually or ask your admin to enable trip id sync, then try again.",
+          );
+          throw tripErr ?? new Error("create trip");
+        }
+        resolvedTripId = trip.id;
+        createdTrip = true;
+      }
+      const amount = txn.partnerAmount ?? txn.amountAbs;
+      if (!(amount > 0)) {
+        throw new Error("bad amount");
+      }
+      const contactType = entityType === "CLIENT" ? "client" : "supplier";
+      const rawDate = (txn.date ?? "").trim();
+      const transaction_date =
+        rawDate.length >= 10
+          ? rawDate.slice(0, 10)
+          : new Date().toISOString().slice(0, 10);
+      const partnerTag =
+        txn.partnerRef && txn.partnerRef !== "—"
+          ? txn.partnerRef
+          : `log:${txn.id.slice(0, 8)}`;
+      const description = `Shared ledger sync | Partner: ${partnerTag}`;
+
+      const { error } = await createLedgerEntry(organizationId, {
+        trip_id: resolvedTripId,
+        party_name: (entity.name ?? "—").trim() || "—",
+        description,
+        amount_in: entityType === "CLIENT" ? amount : 0,
+        amount_out: entityType === "SUPPLIER" ? amount : 0,
+        transaction_date,
+        contact_id: entity.id,
+        contact_type: contactType,
+      });
+      if (error) {
+        Alert.alert("Merge failed", error.message);
+        throw error;
+      }
+      onRefresh?.();
+      return { createdTrip, tripId: resolvedTripId };
+    },
+    [
+      organizationId,
+      entity.id,
+      entity.name,
+      entityType,
+      tripByNormRef,
+      reconciledRows,
+      onRefresh,
+    ],
   );
+
+  const searchLower = (searchQuery ?? "").trim().toLowerCase();
+
+  /**
+   * Map a reconciled-row status to the common StatusFilter vocabulary
+   * shared by both the Trip and Transaction views.
+   * - VERIFIED      → matched
+   * - MISMATCH      → conflict
+   * - PENDING       → pending (we have entry, partner hasn't)
+   * - UNRECOGNIZED  → no_entry (partner logged a trip we don't have)
+   */
+  const tripRowFilterStatus = useCallback((r: ReconciledRow): StatusFilter => {
+    if (r.status === "VERIFIED") return "matched";
+    if (r.status === "MISMATCH") return "conflict";
+    if (r.status === "UNRECOGNIZED") return "no_entry";
+    return "pending";
+  }, []);
+
+  const filteredRows = useMemo(() => {
+    let rows = reconciledRows;
+    if (statusFilter !== "all") {
+      rows = rows.filter((r) => tripRowFilterStatus(r) === statusFilter);
+    }
+    if (searchLower) {
+      rows = rows.filter((r) =>
+        (r.missionId ?? "").toLowerCase().includes(searchLower),
+      );
+    }
+    return rows;
+  }, [reconciledRows, searchLower, statusFilter, tripRowFilterStatus]);
+
+  /**
+   * Transaction-level rows: merge partner entries + local entries into one
+   * list, each tagged with a StatusFilter so the chip bar can filter them.
+   *
+   * Status resolution (per (tripRef, amount) pair):
+   *  - both partner & local entry exist with equal amount → "matched"
+   *  - both exist for same trip but amounts differ         → "conflict"
+   *  - partner entry exists, no local entry for that trip  → "no_entry"
+   *  - local entry exists, no partner entry for that trip  → "pending"
+   */
+  const txnRows = useMemo<CommandTxnRow[]>(() => {
+    const norm = (s: string | null | undefined) =>
+      s == null ? "" : String(s).trim().toLowerCase();
+    const tripMap = new Map<string, TripRow>();
+    for (const t of trips) {
+      tripMap.set(norm(t.id), t);
+    }
+    const contactType = entityType === "CLIENT" ? "client" : "supplier";
+
+    /** Only entries for this partner, bilateral (ignore driver/vehicle/etc). */
+    const localRelevant = txs.filter(
+      (t) =>
+        t.contact_type === contactType &&
+        t.contact_id != null &&
+        t.contact_id === entity.id,
+    );
+
+    /** Index local entries by tripId (may have multiple per trip). */
+    const localByTrip = new Map<string, typeof localRelevant>();
+    for (const l of localRelevant) {
+      const trip = norm(l.trip_id);
+      if (!trip) continue;
+      const arr = localByTrip.get(trip) ?? [];
+      arr.push(l);
+      localByTrip.set(trip, arr);
+    }
+
+    const rows: CommandTxnRow[] = [];
+    const matchedLocalIds = new Set<string>();
+
+    for (const p of partnerEntries) {
+      const tripRef = norm(p.reference_id);
+      if (!tripRef) continue;
+      const amt = Number(p.amount ?? 0);
+      const amtAbs = Math.abs(amt);
+      const locals = localByTrip.get(tripRef) ?? [];
+
+      /** Try to pair partner entry with a local one on the same trip.
+       *  Exact match (same absolute amount) → matched. Otherwise → conflict. */
+      const exact = locals.find((l) => {
+        if (matchedLocalIds.has(l.id)) return false;
+        const net = (l.amount_in ?? 0) + (l.amount_out ?? 0);
+        return Math.abs(net - amtAbs) < 0.5;
+      });
+      const nearest = locals.find((l) => !matchedLocalIds.has(l.id));
+
+      if (exact) {
+        matchedLocalIds.add(exact.id);
+        rows.push({
+          id: p.id || `p:${tripRef}:${amtAbs}`,
+          status: "matched",
+          tripRef,
+          date: p.transaction_date || exact.transaction_date || "",
+          amountAbs: amtAbs,
+          partnerAmount: amtAbs,
+          localAmount: amtAbs,
+          displayDate:
+            formatTxnShortDate(
+              p.transaction_date || exact.transaction_date || "",
+            ) || undefined,
+          myRef: compactLedgerRef(exact.payment_reference, exact.id),
+          partnerRef: compactLedgerRef(undefined, p.id),
+          myMode: modeLabel(exact.payment_mode),
+          partnerMode: "—",
+          lineKind: inferSharedTxnLineKind(
+            exact.primary_category,
+            exact.description,
+          ),
+        });
+      } else if (nearest) {
+        matchedLocalIds.add(nearest.id);
+        const localNet =
+          (nearest.amount_in ?? 0) + (nearest.amount_out ?? 0);
+        rows.push({
+          id: p.id || `p:${tripRef}:${amtAbs}`,
+          status: "conflict",
+          tripRef,
+          date: p.transaction_date || nearest.transaction_date || "",
+          amountAbs: amtAbs,
+          partnerAmount: amtAbs,
+          localAmount: Math.abs(localNet),
+          displayDate:
+            formatTxnShortDate(
+              p.transaction_date || nearest.transaction_date || "",
+            ) || undefined,
+          myRef: compactLedgerRef(nearest.payment_reference, nearest.id),
+          partnerRef: compactLedgerRef(undefined, p.id),
+          myMode: modeLabel(nearest.payment_mode),
+          partnerMode: "—",
+          lineKind: inferSharedTxnLineKind(
+            nearest.primary_category,
+            nearest.description,
+          ),
+        });
+      } else {
+        const tripRow = tripMap.get(tripRef);
+        rows.push({
+          id: p.id || `p:${tripRef}:${amtAbs}`,
+          status: "no_entry",
+          tripRef,
+          date: p.transaction_date || "",
+          amountAbs: amtAbs,
+          /** No local ledger line yet — keep at 0 so UI never mirrors partner into “You”. */
+          localAmount: 0,
+          partnerAmount: amtAbs,
+          partnerSignedAmount: Number(p.amount ?? 0),
+          tripDbId: tripRow?.id,
+          hasLocalTrip: !!tripRow,
+          displayDate: formatTxnShortDate(p.transaction_date) || undefined,
+          partnerRef: compactLedgerRef(undefined, p.id),
+          myMode: "—",
+          partnerMode: "—",
+        });
+      }
+    }
+
+    /** Any local entry not matched to a partner entry is still pending. */
+    for (const l of localRelevant) {
+      if (matchedLocalIds.has(l.id)) continue;
+      const amtIn = l.amount_in ?? 0;
+      const amtOut = l.amount_out ?? 0;
+      const net = amtIn + amtOut;
+      const amtAbs = Math.abs(net);
+      rows.push({
+        id: `l:${l.id}`,
+        status: "pending",
+        tripRef: norm(l.trip_id),
+        date: l.transaction_date || "",
+        amountAbs: amtAbs,
+        localAmount: amtAbs,
+        displayDate: formatTxnShortDate(l.transaction_date) || undefined,
+        myRef: compactLedgerRef(l.payment_reference, l.id),
+        partnerRef: "—",
+        myMode: modeLabel(l.payment_mode),
+        partnerMode: "—",
+        lineKind: inferSharedTxnLineKind(l.primary_category, l.description),
+      });
+    }
+
+    /** Most recent first. */
+    rows.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    return rows;
+  }, [partnerEntries, txs, entity.id, entity.name, entityType, trips]);
+
+  const filteredTxnRows = useMemo(() => {
+    let rows = txnRows;
+    if (statusFilter !== "all") {
+      rows = rows.filter((r) => r.status === statusFilter);
+    }
+    if (searchLower) {
+      rows = rows.filter((r) =>
+        (r.tripRef ?? "").toLowerCase().includes(searchLower),
+      );
+    }
+    return rows;
+  }, [txnRows, statusFilter, searchLower]);
+
+  /** Live counts for status chips — always computed from the unfiltered sets. */
+  const tripCounts = useMemo(() => {
+    const c = { all: reconciledRows.length, matched: 0, no_entry: 0, pending: 0, conflict: 0 };
+    for (const r of reconciledRows) {
+      const s = tripRowFilterStatus(r);
+      c[s] += 1;
+    }
+    return c;
+  }, [reconciledRows, tripRowFilterStatus]);
+
+  const txnCounts = useMemo(() => {
+    const c = { all: txnRows.length, matched: 0, no_entry: 0, pending: 0, conflict: 0 };
+    for (const r of txnRows) c[r.status] += 1;
+    return c;
+  }, [txnRows]);
+
+  const tripTxnMetaByRefForExport = useMemo(() => {
+    const map = new Map<string, { count: number; last: string | null }>();
+    for (const txn of txnRows) {
+      const key = normTripKey(txn.tripRef);
+      if (!key) continue;
+      const prev = map.get(key) ?? { count: 0, last: null };
+      const candidate = (txn.displayDate ?? txn.date ?? "").trim() || null;
+      const nextLast =
+        !prev.last || (candidate && candidate > prev.last)
+          ? candidate
+          : prev.last;
+      map.set(key, { count: prev.count + 1, last: nextLast });
+    }
+    return map;
+  }, [txnRows]);
+
+  const sharedLedgerCustomReport = useMemo(() => {
+    if (viewMode === "trip") {
+      const rows = filteredRows.map((row) => {
+        const partnerSales = row.external ? row.extSales : null;
+        const partnerPaid = row.external ? row.extPaid : null;
+        const intPaidTrip =
+          entityType === "SUPPLIER" ? row.intPaidOut : row.intPaid;
+        const mySales = row.intSales;
+        const billingConflict =
+          partnerSales != null && Math.abs(partnerSales - mySales) >= 0.5;
+        const paymentConflict =
+          partnerPaid != null && Math.abs(partnerPaid - intPaidTrip) >= 0.5;
+        const syncSafe = !billingConflict && !paymentConflict;
+        const meta = tripTxnMetaByRefForExport.get(normTripKey(row.tripId));
+        const route = tripRouteForTripRef(row.tripId) ?? "—";
+        return {
+          mission: row.missionId,
+          status: tripStatusLabelForReport(row),
+          route,
+          partnerNote: partnerBookLine(row),
+          mySales: row.internal ? formatINR(mySales) : "—",
+          themSales:
+            partnerSales != null ? formatINR(partnerSales) : "—",
+          myReceived: formatINR(intPaidTrip),
+          themReceived:
+            partnerPaid != null ? formatINR(partnerPaid) : "—",
+          due: formatINR(Math.max(0, mySales - intPaidTrip)),
+          txns: meta?.count ?? 0,
+          lastTxn: meta?.last ?? "—",
+          sync: syncSafe ? "Safe" : "Fix",
+        };
+      });
+      return {
+        columns: [
+          { key: "mission", label: "Mission" },
+          { key: "status", label: "Status" },
+          { key: "route", label: "Route" },
+          { key: "partnerNote", label: "Partner" },
+          { key: "mySales", label: "My book (sales)", align: "right" as const },
+          {
+            key: "themSales",
+            label: "Partner (sales)",
+            align: "right" as const,
+          },
+          { key: "myReceived", label: "My book (paid)", align: "right" as const },
+          {
+            key: "themReceived",
+            label: "Partner (paid)",
+            align: "right" as const,
+          },
+          { key: "due", label: "Due", align: "right" as const },
+          { key: "txns", label: "Txns", align: "right" as const },
+          { key: "lastTxn", label: "Last txn", align: "center" as const },
+          { key: "sync", label: "Sync", align: "center" as const },
+        ],
+        rows,
+      };
+    }
+    const rows = filteredTxnRows.map((txn) => ({
+      trip: missionLabelForTripRef(txn.tripRef),
+      date:
+        txn.displayDate ??
+        (txn.date.length >= 10 ? txn.date.slice(0, 10) : txn.date),
+      status: txnStatusLabelForReport(txn.status),
+      you: formatINR(txn.localAmount ?? 0),
+      partner:
+        txn.partnerAmount != null ? formatINR(txn.partnerAmount) : "—",
+      refs: `${txn.myRef ?? "—"} · ${txn.partnerRef ?? "—"}`,
+    }));
+    return {
+      columns: [
+        { key: "trip", label: "Trip" },
+        { key: "date", label: "Date" },
+        { key: "status", label: "Status" },
+        { key: "you", label: "You", align: "right" as const },
+        { key: "partner", label: "Partner", align: "right" as const },
+        { key: "refs", label: "References" },
+      ],
+      rows,
+    };
+  }, [
+    viewMode,
+    filteredRows,
+    filteredTxnRows,
+    entityType,
+    tripTxnMetaByRefForExport,
+    tripRouteForTripRef,
+    missionLabelForTripRef,
+  ]);
+
+  const openSharedReport = useCallback(() => {
+    if (!integrated) {
+      Alert.alert(
+        "Reports",
+        "Connect with this partner on the shared ledger to export a report.",
+      );
+      return;
+    }
+    if (loadingShared) {
+      setPendingOpenSharedReport(true);
+      return;
+    }
+    setSharedReportVisible(true);
+  }, [integrated, loadingShared]);
+
+  useEffect(() => {
+    if (externalDownloadRequest == null) return;
+    if (externalDownloadRequest <= prevExternalDownloadRequest.current) return;
+    prevExternalDownloadRequest.current = externalDownloadRequest;
+    if (!integrated) {
+      Alert.alert(
+        "Reports",
+        "Connect with this partner on the shared ledger to export a report.",
+      );
+      return;
+    }
+    if (loadingShared) setPendingOpenSharedReport(true);
+    else setSharedReportVisible(true);
+  }, [externalDownloadRequest, integrated, loadingShared]);
+
+  useEffect(() => {
+    if (pendingOpenSharedReport && !loadingShared) {
+      setPendingOpenSharedReport(false);
+      setSharedReportVisible(true);
+    }
+  }, [pendingOpenSharedReport, loadingShared]);
+
+  /** Which counts drive the chip numbers depends on the active view. */
+  const activeCounts = viewMode === "trip" ? tripCounts : txnCounts;
 
   const disputeSentByTripId = useMemo(() => {
     const m = new Map<string, DisputeRow>();
@@ -618,23 +1279,6 @@ export function SharedLedgerContent({
       m.set(String(d.transaction_id).trim().toLowerCase(), d);
     return m;
   }, [disputesReceived]);
-
-  const totalBilling = useMemo(
-    () => reconciledRows.reduce((s, r) => s + r.intSales, 0),
-    [reconciledRows],
-  );
-  const totalDue = useMemo(
-    () =>
-      reconciledRows.reduce(
-        (s, r) =>
-          s +
-          (entityType === "SUPPLIER"
-            ? Math.max(0, r.intSales - r.intPaidOut)
-            : r.intSales - r.intPaid),
-        0,
-      ),
-    [reconciledRows, entityType],
-  );
 
   const handleUpdateMyBook = useCallback(
     async (row: ReconciledRow) => {
@@ -1048,7 +1692,9 @@ export function SharedLedgerContent({
   }
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[styles.container, Platform.OS === "web" && styles.containerWeb]}
+    >
       {loadingShared ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color={Theme.primary} />
@@ -1056,472 +1702,42 @@ export function SharedLedgerContent({
         </View>
       ) : (
         <>
-          {!embeddedInOverlay && (
-            <>
-              <View style={styles.auditHeader}>
-                <Text style={styles.auditHeaderLabel}>SHARED LEDGER AUDIT</Text>
-              </View>
-              <View style={styles.cardWrap}>
-                <TreasurySummaryCard
-                  totalIn={totalBilling}
-                  totalOut={totalDue}
-                  labelIn="Total Billing"
-                  labelOut="Total Balance"
-                  searchQuery={searchQuery}
-                  onSearchChange={setSearchQuery}
-                  searchPlaceholder="Search mission…"
-                  onReportPress={() => {}}
-                  hideReportInToolbar
-                />
-              </View>
-            </>
-          )}
-
-          <View style={styles.tableWrap}>
-            <Text style={styles.sectionTitle}>COMPARE BY MISSION</Text>
-            <View style={styles.table}>
-              <View style={styles.tableHeader}>
-                <Text style={[styles.th, styles.thMission]}>MISSION</Text>
-                <Text style={[styles.th, styles.thGroup]}>
-                  {entityType === "CLIENT" ? "SALES COMP" : "COST COMP"}
-                </Text>
-                <Text style={[styles.th, styles.thGroup]}>PAID COMP</Text>
-              </View>
-              <View style={styles.tableSubHeader}>
-                <View style={styles.thMission} />
-                <Text style={[styles.thSub, styles.thRight]} numberOfLines={1}>
-                  {myBookLabel}
-                </Text>
-                <Text style={[styles.thSub, styles.thRight]} numberOfLines={1}>
-                  {partnerLabel}
-                </Text>
-                <Text style={[styles.thSub, styles.thRight]} numberOfLines={1}>
-                  {myBookLabel}
-                </Text>
-                <Text style={[styles.thSub, styles.thRight]} numberOfLines={1}>
-                  {partnerLabel}
-                </Text>
-              </View>
-
-              <ScrollView
-                style={styles.tableScroll}
-                showsVerticalScrollIndicator={true}
-              >
-                {filteredRows.length === 0 ? (
-                  <View style={styles.emptyTable}>
-                    <FontAwesome
-                      name="exchange"
-                      size={28}
-                      color={Theme.textMuted}
-                    />
-                    <Text style={styles.emptyTableText}>
-                      No trips to compare yet.
-                    </Text>
-                  </View>
-                ) : (
-                  filteredRows.map((row) => {
-                    const isExpanded = expandedTripId === row.tripId;
-                    const isSalesMismatch =
-                      row.status === "MISMATCH" &&
-                      row.intSales !== row.extSales;
-                    const isGhost = row.status === "UNRECOGNIZED";
-                    const isPending = row.status === "PENDING";
-                    const salesVar = row.extSales - row.intSales;
-                    // Total Paid: amount moved in this relationship.
-                    // - When entityType === 'SUPPLIER', we are the client paying them → use amount_out (intPaidOut).
-                    // - When entityType === 'CLIENT', we are the supplier receiving from them → use amount_in (intPaid).
-                    const intPaidDisplay =
-                      entityType === "SUPPLIER" ? row.intPaidOut : row.intPaid;
-                    const paidVar = row.extPaid - intPaidDisplay;
-                    const isPaidMismatchDisplay =
-                      row.status === "MISMATCH" &&
-                      intPaidDisplay !== row.extPaid;
-                    // Net Trip Due: sales minus what has moved in this relationship.
-                    // For both client and supplier, use the same relationship-paid figure shown above.
-                    const netInt = row.intSales - intPaidDisplay;
-                    const netExt = row.extSales - row.extPaid;
-                    const netVar = netExt - netInt;
-                    const rowKey = String(row.tripId).trim().toLowerCase();
-                    const hasDisputeSent = disputeSentByTripId.has(rowKey);
-                    const hasDisputeReceived =
-                      disputeReceivedByTripId.has(rowKey);
-                    const receivedDispute = disputeReceivedByTripId.get(rowKey);
-                    const showUpdateMyBook =
-                      (row.status === "MISMATCH" || row.status === "PENDING") &&
-                      !!row.external;
-                    const escalationKind = getLedgerEscalationKind(row);
-                    const isNotifyPartnerFlow = escalationKind === "notify_partner";
-
-                    return (
-                      <View key={row.tripId}>
-                        <TouchableOpacity
-                          style={[
-                            styles.dataRow,
-                            isExpanded && styles.dataRowExpanded,
-                            isGhost && styles.dataRowGhost,
-                            isPending && styles.dataRowPending,
-                          ]}
-                          onPress={() =>
-                            setExpandedTripId(isExpanded ? null : row.tripId)
-                          }
-                          activeOpacity={0.7}
-                        >
-                          <View style={styles.cellMission}>
-                            <FontAwesome
-                              name={isExpanded ? "chevron-up" : "chevron-down"}
-                              size={10}
-                              color={Theme.textMuted}
-                              style={styles.chevron}
-                            />
-                            <Text style={styles.missionId} numberOfLines={1}>
-                              {row.missionId}
-                            </Text>
-                            {row.status === "VERIFIED" && (
-                              <Text style={styles.badgeMatched}>MATCHED</Text>
-                            )}
-                            {row.status === "PENDING" && !hasDisputeSent && (
-                              <Text style={styles.badgePending}>PENDING</Text>
-                            )}
-                            {row.status === "MISMATCH" && !hasDisputeSent && (
-                              <Text style={styles.badgeVariance}>VARIANCE</Text>
-                            )}
-                            {row.status === "UNRECOGNIZED" &&
-                              !hasDisputeSent && (
-                                <Text style={styles.badgeGhost}>GHOST</Text>
-                              )}
-                            {hasDisputeSent && (
-                              <Text style={styles.badgeSent}>DISPUTE SENT</Text>
-                            )}
-                            {hasDisputeReceived && (
-                              <Text style={styles.badgeReceived}>
-                                DISPUTE RECEIVED
-                              </Text>
-                            )}
-                          </View>
-                          <Text
-                            style={[styles.cellAmount, styles.cellSales]}
-                            numberOfLines={1}
-                          >
-                            {row.internal ? formatINR(row.intSales) : "—"}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.cellAmount,
-                              styles.cellSales,
-                              (isSalesMismatch || isGhost) &&
-                                styles.cellMismatch,
-                              isPending && styles.cellPending,
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {isPending
-                              ? "Wait"
-                              : row.external
-                                ? formatINR(row.extSales)
-                                : "—"}
-                          </Text>
-                          <Text
-                            style={[styles.cellAmount, styles.cellPaid]}
-                            numberOfLines={1}
-                          >
-                            {row.internal ? formatINR(intPaidDisplay) : "—"}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.cellAmount,
-                              styles.cellPaid,
-                              (isPaidMismatchDisplay || isGhost) &&
-                                styles.cellMismatch,
-                              isPending && styles.cellPending,
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {isPending
-                              ? "Wait"
-                              : row.external
-                                ? formatINR(row.extPaid)
-                                : "—"}
-                          </Text>
-                        </TouchableOpacity>
-
-                        {isExpanded && (
-                          <View style={styles.expandedWrap}>
-                            <View style={styles.reconHeader}>
-                              <Text style={styles.reconTitle}>
-                                Reconciliation Statement
-                              </Text>
-                              <Text style={styles.reconRef}>
-                                REF: {row.missionId}
-                              </Text>
-                            </View>
-                            <View style={styles.reconCardsContainer}>
-                              <View style={styles.valueCard}>
-                                <Text style={styles.valueCardTitle}>
-                                  {entityType === "CLIENT" ? "Sale Value" : "Cost Value"}
-                                </Text>
-                                <View style={styles.valueCardRowHeader}>
-                                  <Text style={[styles.valueCardColHeader, styles.valueCardColLeft]}>
-                                    {myBookLabel}
-                                  </Text>
-                                  <Text style={[styles.valueCardColHeader, styles.valueCardColCenter]}>
-                                    {partnerLabel}
-                                  </Text>
-                                  <Text style={[styles.valueCardColHeader, styles.valueCardColRight]}>
-                                    Var
-                                  </Text>
-                                </View>
-                                <View style={styles.valueCardRowValues}>
-                                  <View style={[styles.valueCardColValueContainer, styles.valueCardColLeft]}>
-                                    <Text style={styles.valueCardValue}>
-                                      {row.internal ? formatINR(row.intSales) : "—"}
-                                    </Text>
-                                    <Text style={styles.valueCardDate}>{row.internal?.date ?? "—"}</Text>
-                                  </View>
-                                  <View style={[styles.valueCardColValueContainer, styles.valueCardColCenter]}>
-                                    <Text style={styles.valueCardValue}>
-                                      {isPending
-                                        ? "—"
-                                        : row.external
-                                          ? formatINR(row.extSales)
-                                          : "—"}
-                                    </Text>
-                                    <Text style={styles.valueCardDate}>{isPending ? "—" : row.internal?.date ?? "—"}</Text>
-                                  </View>
-                                  <View style={[styles.valueCardColValueContainer, styles.valueCardColRight]}>
-                                    <Text style={[styles.valueCardVar, !isPending && salesVar !== 0 && styles.varianceRed]}>
-                                      {isPending
-                                        ? "Wait"
-                                        : salesVar === 0
-                                          ? "—"
-                                          : `${salesVar > 0 ? "+" : ""}${formatINR(salesVar)}`}
-                                    </Text>
-                                  </View>
-                                </View>
-                              </View>
-
-                              <View style={styles.valueCard}>
-                                <Text style={styles.valueCardTitle}>Transaction Value</Text>
-                                <View style={styles.valueCardRowHeader}>
-                                  <Text style={[styles.valueCardColHeader, styles.valueCardColLeft]}>
-                                    {myBookLabel}
-                                  </Text>
-                                  <Text style={[styles.valueCardColHeader, styles.valueCardColCenter]}>
-                                    {partnerLabel}
-                                  </Text>
-                                  <Text style={[styles.valueCardColHeader, styles.valueCardColRight]}>
-                                    Var
-                                  </Text>
-                                </View>
-                                <View style={styles.valueCardRowValues}>
-                                  <View style={[styles.valueCardColValueContainer, styles.valueCardColLeft]}>
-                                    <Text style={[styles.valueCardValue, styles.textPaid]}>
-                                      {row.internal ? formatINR(intPaidDisplay) : "—"}
-                                    </Text>
-                                    <Text style={styles.valueCardDate}>{row.internal?.date ?? "—"}</Text>
-                                  </View>
-                                  <View style={[styles.valueCardColValueContainer, styles.valueCardColCenter]}>
-                                    <Text style={[styles.valueCardValue, !isPending && paidVar !== 0 && styles.varianceRed]}>
-                                      {isPending
-                                        ? "—"
-                                        : row.external
-                                          ? formatINR(row.extPaid)
-                                          : "—"}
-                                    </Text>
-                                    <Text style={styles.valueCardDate}>{isPending ? "—" : row.internal?.date ?? "—"}</Text>
-                                  </View>
-                                  <View style={[styles.valueCardColValueContainer, styles.valueCardColRight]}>
-                                    <Text style={[styles.valueCardVar, !isPending && paidVar !== 0 && styles.varianceRed]}>
-                                      {isPending
-                                        ? "Wait"
-                                        : paidVar === 0
-                                          ? "—"
-                                          : `${paidVar > 0 ? "+" : ""}${formatINR(paidVar)}`}
-                                    </Text>
-                                  </View>
-                                </View>
-                              </View>
-
-                              <View style={styles.netDueCard}>
-                                <Text style={styles.netDueTitle}>Net Trip Due</Text>
-                                <Text
-                                  style={[
-                                    styles.netDueValue,
-                                    netInt < 0
-                                      ? styles.netDueValueNegative
-                                      : styles.netDueValueNonNegative,
-                                  ]}
-                                >
-                                  {isPending ? "Wait" : row.internal ? formatINR(netInt) : "—"}
-                                </Text>
-                              </View>
-                            </View>
-                            {hasDisputeReceived && receivedDispute && (
-                              <View style={styles.receivedBar}>
-                                <Text style={styles.receivedLabel}>
-                                  Dispute received from partner
-                                </Text>
-                                <View style={styles.receivedActions}>
-                                  <TouchableOpacity
-                                    style={[
-                                      styles.acceptBtn,
-                                      actionLoading && styles.btnDisabled,
-                                    ]}
-                                    onPress={() =>
-                                      handleAcceptReceivedDispute(
-                                        receivedDispute,
-                                      )
-                                    }
-                                    disabled={actionLoading}
-                                    activeOpacity={0.8}
-                                    hitSlop={{
-                                      top: 12,
-                                      bottom: 12,
-                                      left: 8,
-                                      right: 8,
-                                    }}
-                                    accessibilityRole="button"
-                                    accessibilityLabel="Accept and auto-update ledger"
-                                  >
-                                    <FontAwesome
-                                      name="check"
-                                      size={12}
-                                      color={Theme.textOnDark}
-                                    />
-                                    <Text style={styles.acceptBtnText}>
-                                      Accept & Auto-Update Ledger
-                                    </Text>
-                                  </TouchableOpacity>
-                                  <TouchableOpacity
-                                    style={[
-                                      styles.declineBtn,
-                                      actionLoading && styles.btnDisabled,
-                                    ]}
-                                    onPress={() =>
-                                      handleDeclineReceivedDispute(
-                                        receivedDispute,
-                                      )
-                                    }
-                                    disabled={actionLoading}
-                                    activeOpacity={0.8}
-                                    hitSlop={{
-                                      top: 12,
-                                      bottom: 12,
-                                      left: 8,
-                                      right: 8,
-                                    }}
-                                    accessibilityRole="button"
-                                    accessibilityLabel="Decline dispute"
-                                  >
-                                    <Text style={styles.declineBtnText}>
-                                      Decline
-                                    </Text>
-                                  </TouchableOpacity>
-                                </View>
-                              </View>
-                            )}
-                            {!hasDisputeSent &&
-                              (row.status === "MISMATCH" ||
-                                row.status === "PENDING" ||
-                                row.status === "UNRECOGNIZED") && (
-                                <View style={styles.varianceActionCard}>
-                                  {isNotifyPartnerFlow ? (
-                                    <View style={styles.varianceActionWaitingBlock}>
-                                      <Text
-                                        style={[
-                                          styles.varianceActionTitle,
-                                          styles.varianceActionTextCenter,
-                                          row.issue && styles.varianceActionTitleWaiting,
-                                        ]}
-                                        numberOfLines={2}
-                                      >
-                                        Waiting on partner ledger
-                                      </Text>
-                                      {row.issue ? (
-                                        <Text
-                                          style={[
-                                            styles.varianceActionSubtitle,
-                                            styles.varianceActionSubtitleWaitingCenter,
-                                            styles.varianceActionTextCenter,
-                                          ]}
-                                          numberOfLines={2}
-                                        >
-                                          {row.issue}
-                                        </Text>
-                                      ) : null}
-                                    </View>
-                                  ) : (
-                                    <Text
-                                      style={styles.varianceActionTitle}
-                                      numberOfLines={2}
-                                    >
-                                      {row.issue ?? "Data Variance Detected"}
-                                    </Text>
-                                  )}
-                                  {(showUpdateMyBook || !isNotifyPartnerFlow) && (
-                                    <View style={styles.varianceActionButtons}>
-                                      {showUpdateMyBook && (
-                                        <TouchableOpacity
-                                          style={[
-                                            styles.varianceBtnUpdate,
-                                            !isNotifyPartnerFlow
-                                              ? styles.varianceBtnEqual
-                                              : styles.varianceBtnDisputeFull,
-                                            actionLoading && styles.btnDisabled,
-                                          ]}
-                                          onPress={() => handleUpdateMyBook(row)}
-                                          disabled={actionLoading}
-                                          activeOpacity={0.8}
-                                        >
-                                          <FontAwesome
-                                            name="edit"
-                                            size={12}
-                                            color="#16A34A"
-                                          />
-                                          <Text style={styles.varianceBtnUpdateText}>
-                                            Update My Book
-                                          </Text>
-                                        </TouchableOpacity>
-                                      )}
-                                      {!isNotifyPartnerFlow && (
-                                        <TouchableOpacity
-                                          style={[
-                                            styles.varianceBtnDispute,
-                                            showUpdateMyBook
-                                              ? styles.varianceBtnEqual
-                                              : styles.varianceBtnDisputeFull,
-                                            actionLoading && styles.btnDisabled,
-                                          ]}
-                                          onPress={() => setSelectedDispute(row)}
-                                          disabled={actionLoading}
-                                          activeOpacity={0.8}
-                                          accessibilityRole="button"
-                                          accessibilityLabel="Raise dispute"
-                                        >
-                                          <FontAwesome
-                                            name="exclamation-triangle"
-                                            size={12}
-                                            color="#111827"
-                                          />
-                                          <Text style={styles.varianceBtnDisputeText}>
-                                            Raise Dispute
-                                          </Text>
-                                        </TouchableOpacity>
-                                      )}
-                                    </View>
-                                  )}
-                                </View>
-                              )}
-                          </View>
-                        )}
-                      </View>
-                    );
-                  })
-                )}
-              </ScrollView>
-            </View>
-          </View>
+          <SharedLedgerCommandCenter
+            entityName={entity.name ?? "—"}
+            partnerProfileImageUrl={partnerProfileImageUrl}
+            entityType={entityType}
+            embeddedInOverlay={embeddedInOverlay}
+            myBookLabel={myBookLabel}
+            partnerLabel={partnerLabel}
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+            tripCounts={tripCounts}
+            txnCounts={txnCounts}
+            statusFilter={statusFilter}
+            setStatusFilter={setStatusFilter}
+            filteredRows={filteredRows}
+            filteredTxnRows={filteredTxnRows}
+            txnRowsAll={txnRows}
+            reconciledRows={reconciledRows}
+            onUpdateMyBook={handleUpdateMyBook}
+            onRaiseDispute={setSelectedDispute}
+            actionLoading={actionLoading}
+            onMergePartnerTransaction={mergePartnerLineIntoBook}
+            missionLabelForTripRef={missionLabelForTripRef}
+            tripRouteForTripRef={tripRouteForTripRef}
+            onPressDownload={embeddedInOverlay ? undefined : openSharedReport}
+          />
         </>
       )}
+
+      <LedgerReportModal
+        visible={sharedReportVisible}
+        onClose={() => setSharedReportVisible(false)}
+        transactions={[]}
+        title={`Shared ledger · ${(entity.name ?? "Partner").trim()}`}
+        customReport={sharedLedgerCustomReport}
+        hideCashSummary
+      />
 
       <Modal
         visible={Platform.OS === "web" && !!pendingAcceptDispute}
@@ -1722,11 +1938,20 @@ export function SharedLedgerContent({
   );
 }
 
+export type SharedLedgerContentProps = EntityCompareVerifyViewProps;
+export type SharedLedgerPartyRow = ReconciledRow;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingBottom: 24,
     backgroundColor: Theme.screenBackground,
+  },
+  /** Web: stretch inside parent ScrollView so shared-ledger drill-downs get width + height. */
+  containerWeb: {
+    width: "100%",
+    alignSelf: "stretch",
+    minHeight: 1,
   },
   notIntegratedWrap: {
     flex: 1,
@@ -1842,16 +2067,158 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   cardWrap: {
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 4,
+    paddingHorizontal: 8,
+    paddingTop: 8,
+    paddingBottom: 2,
+  },
+  desktopShell: {
+    maxWidth: 1900,
+    width: "100%",
+    alignSelf: "center",
+    paddingHorizontal: 0,
+    paddingTop: 2,
+    gap: 14,
+  },
+  desktopTopHeader: {
+    alignItems: "center",
+    paddingVertical: 12,
+    backgroundColor: Theme.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
+  desktopTopTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+    letterSpacing: 0.2,
+  },
+  desktopTopSubTitle: {
+    marginTop: 3,
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 2.2,
+  },
+  desktopHeroCard: {
+    backgroundColor: "#0F172A",
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  desktopHeroLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#818CF8",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+  },
+  desktopHeroCaption: {
+    marginTop: 8,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#94A3B8",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  desktopHeroValue: {
+    marginTop: 8,
+    fontSize: 34,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    letterSpacing: 0.2,
+  },
+  desktopHeroSplit: {
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.12)",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 14,
+  },
+  desktopHeroSplitCell: {
+    flex: 1,
+  },
+  desktopHeroSplitLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#10B981",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
+  desktopHeroSplitLabelDue: { color: "#F87171", textAlign: "right" as const },
+  desktopHeroSplitValue: {
+    marginTop: 6,
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#FFFFFF",
+  },
+  desktopHeroSplitValueDue: {
+    color: "#F87171",
+    textAlign: "right" as const,
+  },
+  desktopMainTabs: {
+    backgroundColor: Theme.surfaceLight,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  desktopMainTab: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  desktopMainTabActive: {
+    backgroundColor: Theme.textPrimaryDark,
+  },
+  desktopMainTabText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  desktopMainTabTextActive: {
+    color: Theme.textOnDark,
+  },
+  desktopPlaceholder: {
+    marginTop: 28,
+    paddingVertical: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 18,
+    backgroundColor: Theme.surface,
+  },
+  desktopPlaceholderTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+  },
+  desktopPlaceholderText: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textMuted,
   },
   sectionTitle: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: Theme.textMutedDemo,
-    letterSpacing: 2,
-    marginBottom: 16,
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.8,
+    marginBottom: 8,
     paddingHorizontal: 4,
     textTransform: "uppercase",
   },
@@ -1867,11 +2234,30 @@ const styles = StyleSheet.create({
   },
   tableWrap: {
     paddingHorizontal: 0,
-    paddingTop: 16,
+    paddingTop: 8,
     overflow: "visible",
+  },
+  tableWrapWebDesktop: {
+    paddingTop: 6,
   },
   table: {
     backgroundColor: Theme.screenBackground,
+  },
+  tableWebDesktop: {
+    maxWidth: 1900,
+    width: "100%",
+    alignSelf: "center",
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    borderRadius: 14,
+    overflow: "hidden",
+    backgroundColor: Theme.surface,
+    marginHorizontal: 0,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 12,
+    elevation: 2,
   },
   tableHeader: {
     flexDirection: "row",
@@ -1879,6 +2265,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
+  tableHeaderWebDesktop: {
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    backgroundColor: Theme.surfaceLight,
     borderBottomColor: Theme.borderLight,
   },
   tableSubHeader: {
@@ -1889,19 +2281,45 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
+  tableSubHeaderWebDesktop: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderBottomColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceLight,
+  },
   th: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "800",
+    fontStyle: "italic",
     color: Theme.textMutedDemo,
     textTransform: "uppercase",
-    letterSpacing: 1.5,
+    letterSpacing: 0.7,
   },
   thMission: { width: "32%" },
   thGroup: { flex: 1, textAlign: "center" as const },
+  /** On web grid, avoid flex:1 on label text — it forces line breaks ("COST" / "COMP"). */
+  thGroupWebDesktop: {
+    flex: 0,
+    flexGrow: 0,
+    flexShrink: 0,
+    alignSelf: "center",
+    maxWidth: "100%",
+  },
+  thGroupWrap: { flex: 1, alignItems: "center" },
+  thMissionWebDesktop: { width: "44%" },
+  thGroupWrapWebDesktop: {
+    width: "28%",
+    flex: 0,
+    flexGrow: 0,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   thSub: {
     fontSize: 9,
     fontWeight: "700",
-    color: Theme.textMutedDemo,
+    fontStyle: "italic",
+    color: Theme.textMuted,
     textAlign: "right" as const,
     flex: 1,
   },
@@ -1910,11 +2328,14 @@ const styles = StyleSheet.create({
   dataRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 18,
-    paddingHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.surface,
+  },
+  dataRowStriped: {
+    backgroundColor: Theme.surfaceLight,
   },
   dataRowExpanded: { backgroundColor: Theme.screenBackground },
   dataRowGhost: { backgroundColor: Theme.positiveMuted },
@@ -1926,87 +2347,104 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexWrap: "wrap",
   },
+  cellMissionWebDesktop: {
+    width: "44%",
+    paddingRight: 10,
+  },
+  amountCol: {
+    flex: 1,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  amountColWebDesktop: {
+    width: "14%",
+    flex: 0,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 6,
+  },
   missionId: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "700",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
   },
   badgeMatched: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "800",
     color: Theme.darkGreen,
     backgroundColor: Theme.positiveMuted,
     borderWidth: 1,
     borderColor: Theme.darkGreen,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
     borderRadius: 4,
     marginLeft: 6,
     overflow: "hidden",
     marginTop: 2,
   },
   badgePending: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "800",
     color: Theme.driverGold,
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: Theme.driverGold,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
     borderRadius: 4,
     marginLeft: 6,
     marginTop: 2,
   },
   badgeVariance: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "800",
     color: Theme.teslaRed,
     backgroundColor: Theme.negativeMuted,
     borderWidth: 1,
     borderColor: Theme.teslaRed,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
     borderRadius: 4,
     marginLeft: 6,
     marginTop: 2,
   },
   badgeGhost: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "800",
     color: Theme.textSecondary,
     backgroundColor: Theme.surfaceLight,
     borderWidth: 1,
     borderColor: Theme.borderMedium,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
     borderRadius: 4,
     marginLeft: 6,
     marginTop: 2,
   },
   badgeSent: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "800",
     color: Theme.primary,
     backgroundColor: Theme.surfaceLight,
     borderWidth: 1,
     borderColor: Theme.primary,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
     borderRadius: 4,
     marginLeft: 6,
     marginTop: 2,
   },
   badgeReceived: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "800",
     color: Theme.driverGold,
     backgroundColor: Theme.surfaceLight,
     borderWidth: 1,
     borderColor: Theme.driverGold,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
     borderRadius: 4,
     marginLeft: 6,
     marginTop: 2,
@@ -2015,35 +2453,153 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     fontWeight: "600",
+    fontStyle: "italic",
     textAlign: "right" as const,
+  },
+  cellAmountWebDesktop: {
+    width: "100%",
+    flex: 0,
+    fontSize: 13,
+    fontWeight: "700",
+    fontStyle: "italic",
   },
   cellSales: { color: Theme.textPrimaryDark },
   cellPaid: { color: Theme.darkGreen },
   cellMismatch: { color: Theme.teslaRed },
   cellPending: { color: Theme.driverGold, fontStyle: "italic" },
   expandedWrap: {
-    backgroundColor: "#F9FAFB",
+    backgroundColor: Theme.surface,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    borderRadius: 16,
-    marginHorizontal: 16,
-    marginBottom: 16,
-    marginTop: 8,
+    borderRadius: 12,
+    marginHorizontal: 12,
+    marginBottom: 12,
+    marginTop: 6,
     overflow: "hidden",
+  },
+  /** Flush to table edges: same column grid as data rows, less “card in card”. */
+  expandedWrapWebDesktop: {
+    marginHorizontal: 0,
+    marginBottom: 0,
+    marginTop: 0,
+    borderRadius: 0,
+    borderLeftWidth: 0,
+    borderRightWidth: 0,
+    backgroundColor: Theme.surface,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderMedium,
+  },
+  reconDesktopBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: Theme.textPrimaryDark,
+  },
+  reconDesktopBarTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  reconDesktopBarRef: {
+    fontSize: 11,
+    color: "#E5E7EB",
+    fontFamily: Platform.OS === "web" ? "monospace" : undefined,
+  },
+  reconDesktopGrid: {
+    paddingBottom: 4,
+  },
+  reconDesktopRowBase: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+  },
+  reconDesktopBookRow: {
+    backgroundColor: "#FFFFFF",
+  },
+  reconDesktopMissionCell: {
+    justifyContent: "flex-start",
+    paddingRight: 8,
+  },
+  reconDesktopSectionLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    lineHeight: 14,
+  },
+  reconDesktopAmount: {
+    fontSize: 14,
+    fontWeight: "700",
+    fontStyle: "italic",
+    textAlign: "right",
+  },
+  reconDesktopDate: {
+    marginTop: 4,
+    fontSize: 9,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    textAlign: "right",
+  },
+  reconDesktopVarFoot: {
+    marginTop: 6,
+    minHeight: 14,
+    alignItems: "flex-end",
+  },
+  reconDesktopVarFootText: {
+    fontSize: 10,
+    fontWeight: "700",
+    fontStyle: "italic",
+    textAlign: "right",
+  },
+  reconDesktopVarFootMuted: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    textAlign: "right",
+  },
+  reconDesktopNetStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: Theme.surfaceLight,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+  },
+  reconDesktopNetLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textMutedDemo,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  reconDesktopNetValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    fontStyle: "italic",
   },
   reconHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#161616",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    backgroundColor: Theme.textPrimaryDark,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
   },
   reconTitle: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "800",
     color: "#FFFFFF",
-    letterSpacing: 1,
+    letterSpacing: 0.8,
   },
   reconRef: { 
     fontSize: 10, 
@@ -2054,12 +2610,22 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
   },
+  reconCardsContainerWebDesktop: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 12,
+  },
   valueCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     padding: 16,
+  },
+  valueCardWebDesktop: {
+    flex: 1,
+    minWidth: 0,
+    padding: 14,
   },
   valueCardTitle: {
     fontSize: 10,
@@ -2104,16 +2670,19 @@ const styles = StyleSheet.create({
   valueCardValue: {
     fontSize: 15,
     fontWeight: "500",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
   },
   valueCardDate: {
     fontSize: 10,
+    fontStyle: "normal",
     color: Theme.textMuted,
     marginTop: 4,
   },
   valueCardVar: {
     fontSize: 15,
     fontWeight: "500",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
   },
   netDueCard: {
@@ -2126,6 +2695,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
+  netDueCardWebDesktop: {
+    width: 220,
+    flexShrink: 0,
+  },
   netDueTitle: {
     fontSize: 10,
     fontWeight: "700",
@@ -2136,6 +2709,7 @@ const styles = StyleSheet.create({
   netDueValue: {
     fontSize: 15,
     fontWeight: "600",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
   },
   netDueValueNegative: {
@@ -2154,12 +2728,12 @@ const styles = StyleSheet.create({
   },
   varianceActionCard: {
     marginTop: 4,
-    marginHorizontal: 16,
+    marginHorizontal: 12,
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 16,
     backgroundColor: "#F9FAFB",
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: "#E5E7EB",
   },
@@ -2172,7 +2746,7 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
   },
   varianceActionTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: "#C62828",
     marginBottom: 12,
@@ -2196,6 +2770,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "stretch",
     gap: 8,
+  },
+  varianceActionButtonsWebDesktop: {
+    justifyContent: "flex-start",
+    gap: 10,
   },
   varianceBtnEqual: {
     flex: 1,
@@ -2240,6 +2818,10 @@ const styles = StyleSheet.create({
     color: "#111827",
     marginLeft: 6,
   },
+  varianceBtnWebDesktop: {
+    minWidth: 200,
+    flex: 0,
+  },
   receivedBar: {
     marginTop: 16,
     marginHorizontal: 16,
@@ -2248,6 +2830,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: Theme.driverGold,
+  },
+  receivedBarWebDesktop: {
+    marginTop: 12,
+    marginHorizontal: 12,
   },
   receivedLabel: {
     fontSize: 12,
@@ -2268,6 +2854,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 8,
   },
+  acceptBtnWebDesktop: {
+    maxWidth: 220,
+    flex: 0,
+  },
   acceptBtnText: { fontSize: 12, fontWeight: "800", color: Theme.textOnDark },
   declineBtn: {
     minHeight: 44,
@@ -2277,6 +2867,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.borderMedium,
     justifyContent: "center",
+  },
+  declineBtnWebDesktop: {
+    maxWidth: 180,
   },
   declineBtnText: {
     fontSize: 12,
@@ -2471,5 +3064,258 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textMuted,
     marginTop: 8,
+  },
+
+  /* ─── View-mode segment (By Trip / By Transaction) ─── */
+  viewModeWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  viewModeWrapWebDesktop: {
+    maxWidth: 1900,
+    width: "100%",
+    alignSelf: "center",
+    paddingHorizontal: 0,
+    paddingTop: 6,
+  },
+  viewModeTabs: {
+    flexDirection: "row",
+    backgroundColor: Theme.surfaceLight,
+    borderRadius: 14,
+    padding: 5,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  viewModeTab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 11,
+    minHeight: 46,
+  },
+  viewModeTabActive: {
+    backgroundColor: Theme.textPrimaryDark,
+    shadowColor: "#000",
+    shadowOpacity: 0.14,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  viewModeTabText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  viewModeTabTextActive: {
+    color: Theme.textOnDark,
+  },
+  viewModeCount: {
+    minWidth: 22,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: "rgba(17, 24, 39, 0.06)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewModeCountActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.18)",
+  },
+  viewModeCountText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textMuted,
+  },
+  viewModeCountTextActive: {
+    color: Theme.textOnDark,
+  },
+
+  /* ─── Status filter chips ─── */
+  filterChipsRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 12,
+  },
+  filterChipsRowWebDesktop: {
+    maxWidth: 1900,
+    width: "100%",
+    alignSelf: "center",
+    paddingHorizontal: 0,
+    paddingVertical: 6,
+  },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceLight,
+    marginRight: 8,
+  },
+  filterChipActive: {
+    backgroundColor: Theme.textPrimaryDark,
+    borderColor: Theme.textPrimaryDark,
+  },
+  filterChipDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.3,
+  },
+  filterChipTextActive: {
+    color: Theme.textOnDark,
+  },
+  filterChipCount: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    minWidth: 14,
+    textAlign: "right",
+  },
+  filterChipCountActive: {
+    color: Theme.textOnDark,
+  },
+
+  /* ─── By-Transaction list ─── */
+  txnListWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 24,
+  },
+  txnCard: {
+    backgroundColor: Theme.surfaceLight,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 14,
+    marginBottom: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 12,
+    elevation: 1,
+  },
+  txnHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  txnLeftCol: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+    minWidth: 0,
+  },
+  txnRightCol: {
+    alignItems: "flex-end",
+    gap: 6,
+  },
+  txnIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  txnTripRef: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.3,
+  },
+  txnMeta: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    marginTop: 2,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  txnAmount: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  txnStatusPill: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  txnStatusPillText: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+  },
+  txnCompareRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 14,
+    padding: 10,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  txnCompareCell: {
+    flex: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    gap: 3,
+  },
+  txnCompareDivider: {
+    width: 1,
+    backgroundColor: Theme.borderLight,
+    marginVertical: 2,
+  },
+  txnCompareLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  txnCompareValue: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  txnCompareValueAccent: {
+    color: Theme.teslaRed,
+  },
+  txnHintRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+  },
+  txnHintText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    flex: 1,
+  },
+  txnHintTextPositive: {
+    color: Theme.darkGreen,
   },
 });

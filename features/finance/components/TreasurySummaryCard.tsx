@@ -19,7 +19,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { LedgerCategory } from '../types';
+import type { FinancePeriodFilter, LedgerCategory } from '../types';
 
 export type EntityListFilter = 'all' | 'has_due' | 'no_due';
 
@@ -36,8 +36,8 @@ export interface TreasurySummaryCardProps {
   entityFilter?: EntityListFilter;
   onEntityFilterChange?: (f: EntityListFilter) => void;
   showPeriodFilter?: boolean;
-  periodFilter?: 'TODAY' | 'MONTH' | 'RANGE';
-  onPeriodFilterChange?: (p: 'TODAY' | 'MONTH' | 'RANGE') => void;
+  periodFilter?: FinancePeriodFilter;
+  onPeriodFilterChange?: (p: FinancePeriodFilter) => void;
   /** Ledger tab only: source filter (All / Asset / Aggregate) shown next to period filter. */
   sourceFilter?: 'all' | 'asset' | 'aggregate';
   onSourceFilterChange?: (s: 'all' | 'asset' | 'aggregate') => void;
@@ -297,6 +297,7 @@ export function TreasurySummaryCard({
   const compactToolbar = windowWidth < 560;
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [showPeriodDropdown, setShowPeriodDropdown] = useState(false);
+  const [showLedgerCategoryDropdown, setShowLedgerCategoryDropdown] = useState(false);
   const [showSourceDropdown, setShowSourceDropdown] = useState(false);
   const [dropdownAnchorY, setDropdownAnchorY] = useState(0);
   const refPeriodFilter = useRef<View>(null);
@@ -312,12 +313,28 @@ export function TreasurySummaryCard({
       : showPeriodFilter && onPeriodFilterChange
         ? periodFilter === 'MONTH'
           ? 'This month'
-          : periodFilter
-        : null;
+          : periodFilter === 'TODAY'
+            ? 'Today'
+            : periodFilter === 'YESTERDAY'
+              ? 'Yesterday'
+              : periodFilter === 'WEEK'
+                ? 'This week'
+                : periodFilter === 'RANGE'
+                  ? 'All time'
+                  : periodFilter === 'CUSTOM'
+                    ? 'Custom'
+                    : String(periodFilter)
+        : cashNetworkToolbar && onLedgerCategoryChange && !showPeriodFilter
+          ? LEDGER_CATEGORY_LABELS[ledgerCategory]
+          : null;
   const sourceFilterLabel = onSourceFilterChange != null ? SOURCE_FILTER_LABELS[sourceFilter] : null;
   const showFilterDropdownOpen =
     (onEntityFilterChange != null && showFilterDropdown) ||
     (showPeriodFilter && onPeriodFilterChange && showPeriodDropdown) ||
+    (onLedgerCategoryChange != null &&
+      showLedgerCategoryDropdown &&
+      cashNetworkToolbar &&
+      !showPeriodFilter) ||
     (onSourceFilterChange != null && showSourceDropdown);
 
   const filterBtnScale = useSharedValue(1);
@@ -344,11 +361,22 @@ export function TreasurySummaryCard({
                 if (onEntityFilterChange) {
                   setShowPeriodDropdown(false);
                   setShowSourceDropdown(false);
+                  setShowLedgerCategoryDropdown(false);
                   setShowFilterDropdown((v) => !v);
-                } else if (onPeriodFilterChange) {
+                } else if (showPeriodFilter && onPeriodFilterChange) {
                   setShowFilterDropdown(false);
                   setShowSourceDropdown(false);
+                  setShowLedgerCategoryDropdown(false);
                   setShowPeriodDropdown((v) => !v);
+                } else if (
+                  cashNetworkToolbar &&
+                  onLedgerCategoryChange &&
+                  !showPeriodFilter
+                ) {
+                  setShowFilterDropdown(false);
+                  setShowPeriodDropdown(false);
+                  setShowSourceDropdown(false);
+                  setShowLedgerCategoryDropdown((v) => !v);
                 }
               });
             }}
@@ -365,7 +393,6 @@ export function TreasurySummaryCard({
               <Text style={styles.filterTriggerText} numberOfLines={1}>
                 {filterLabel}
               </Text>
-              <FontAwesome name="chevron-down" size={11} color={Theme.textOnDark} />
             </Animated.View>
           </TouchableOpacity>
           {showFilterDropdownOpen && (
@@ -376,6 +403,7 @@ export function TreasurySummaryCard({
               onRequestClose={() => {
                 setShowFilterDropdown(false);
                 setShowPeriodDropdown(false);
+                setShowLedgerCategoryDropdown(false);
                 setShowSourceDropdown(false);
               }}
             >
@@ -384,6 +412,7 @@ export function TreasurySummaryCard({
                   onPress={() => {
                     setShowFilterDropdown(false);
                     setShowPeriodDropdown(false);
+                    setShowLedgerCategoryDropdown(false);
                     setShowSourceDropdown(false);
                   }}
                 >
@@ -520,6 +549,7 @@ export function TreasurySummaryCard({
                             onPress={() => {
                               onPeriodFilterChange(p);
                               setShowPeriodDropdown(false);
+                              setShowLedgerCategoryDropdown(false);
                             }}
                             activeOpacity={0.75}
                           >
@@ -579,6 +609,45 @@ export function TreasurySummaryCard({
                         )}
                       </>
                     )}
+                    {showLedgerCategoryDropdown &&
+                      onLedgerCategoryChange &&
+                      !showPeriodFilter && (
+                      <>
+                        <View style={styles.filterModalSectionRow}>
+                          <FontAwesome name="users" size={11} color={Theme.teslaRed} style={styles.filterModalSectionIcon} />
+                          <Text style={styles.filterModalSectionLabel}>Type</Text>
+                        </View>
+                        {(['all', 'customers', 'suppliers', 'vehicle', 'driver'] as const).map((c) => (
+                          <TouchableOpacity
+                            key={c}
+                            style={[styles.dropdownItem, ledgerCategory === c && styles.dropdownItemActive]}
+                            onPress={() => {
+                              onLedgerCategoryChange(c);
+                              setShowFilterDropdown(false);
+                              setShowPeriodDropdown(false);
+                              setShowLedgerCategoryDropdown(false);
+                              setShowSourceDropdown(false);
+                            }}
+                            activeOpacity={0.75}
+                          >
+                            {ledgerCategory === c && <View style={styles.dropdownItemAccent} />}
+                            <View style={[styles.dropdownItemIconWrap, ledgerCategory === c && styles.dropdownItemIconWrapActive]}>
+                              <FontAwesome
+                                name={c === 'all' ? 'list' : c === 'customers' ? 'building' : c === 'suppliers' ? 'warehouse' : c === 'vehicle' ? 'truck' : 'user'}
+                                size={14}
+                                color={ledgerCategory === c ? Theme.teslaRed : Theme.textMutedDemo}
+                              />
+                            </View>
+                            <Text style={[styles.dropdownItemText, ledgerCategory === c && styles.dropdownItemTextActive]}>
+                              {LEDGER_CATEGORY_LABELS[c]}
+                            </Text>
+                            {ledgerCategory === c && (
+                              <FontAwesome name="check" size={12} color={Theme.teslaRed} style={styles.dropdownItemCheck} />
+                            )}
+                          </TouchableOpacity>
+                        ))}
+                      </>
+                    )}
                     {onSourceFilterChange && showSourceDropdown && (
                       <>
                         <View style={styles.filterModalSectionRow}>
@@ -629,6 +698,7 @@ export function TreasurySummaryCard({
                 setDropdownAnchorY(y + h + 6);
                 setShowFilterDropdown(false);
                 setShowPeriodDropdown(false);
+                setShowLedgerCategoryDropdown(false);
                 setShowSourceDropdown((v) => !v);
               });
             }}
@@ -645,7 +715,6 @@ export function TreasurySummaryCard({
               <Text style={styles.filterTriggerText} numberOfLines={1}>
                 {sourceFilterLabel}
               </Text>
-              <FontAwesome name="chevron-down" size={11} color={Theme.textOnDark} />
             </Animated.View>
           </TouchableOpacity>
         </View>

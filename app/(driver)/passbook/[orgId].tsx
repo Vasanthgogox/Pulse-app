@@ -5,6 +5,7 @@
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
+import { ThemedConfirmModal } from '@/components/ThemedConfirmModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { phonePeMetaDate } from '@/lib/driverGpayTransactions';
@@ -16,7 +17,9 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+    Alert,
     ActivityIndicator,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -42,6 +45,29 @@ function formatTransactionDateSection(dateStr: string): string {
   if (dDate === yesterday.getDate() && dMonth === yesterday.getMonth() && dYear === yesterday.getFullYear())
     return 'Yesterday';
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+}
+
+function derivePaymentModeFromLedgerDescription(
+  raw?: string | null,
+): "UPI" | "BANK TRANSFER" | "CASH" | null {
+  const s = (raw ?? "").toLowerCase();
+  if (!s) return null;
+  if (s.includes("upi")) return "UPI";
+  if (s.includes("bank") || s.includes("neft") || s.includes("rtgs") || s.includes("imps")) return "BANK TRANSFER";
+  if (s.includes("cash")) return "CASH";
+  return null;
+}
+
+function hasReceiptMeta(desc: string | null | undefined): boolean {
+  if (!desc) return false;
+  return /(\bUTR\b|\bMode\s*:)/i.test(String(desc));
+}
+
+function extractUtr(raw?: string | null): string | null {
+  const s = (raw ?? '').trim();
+  if (!s) return null;
+  const m = s.match(/\bUTR\b\s*[:=]?\s*([0-9A-Za-z-]{8,24})\b/i);
+  return m?.[1] ?? null;
 }
 
 const LEDGER_TYPE_LABELS: Record<string, string> = {
@@ -85,6 +111,12 @@ export default function DriverPassbookDetailScreen() {
   const [ledgerEntries, setLedgerEntries] = useState<driversService.DriverLedgerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [activityTab, setActivityTab] = useState<'all' | 'trips' | 'settled'>('all');
+  const [markPaidLoadingTripId, setMarkPaidLoadingTripId] = useState<string | null>(null);
+  const [markPaidConfirmState, setMarkPaidConfirmState] = useState<{
+    trip: tripsService.TripRow;
+    amount: number;
+    sourceLedger?: driversService.DriverLedgerRow | null;
+  } | null>(null);
 
   const load = useCallback(() => {
     if (!profile?.uid || !orgId) {
@@ -133,20 +165,68 @@ export default function DriverPassbookDetailScreen() {
     () => tripsForOrg.filter((t) => tripsService.isTripCompleted(t)),
     [tripsForOrg],
   );
-  const { receivedByTripId, nonTripLedgerEntries } = useMemo(() => {
+
+  const hasFleetPaidPendingToken = useCallback((raw?: string | null) => {
+    const s = (raw ?? '').trim();
+    if (!s) return false;
+    return /Sync\s*:\s*FLEET_PAID_PENDING/i.test(s);
+  }, []);
+
+  const isLegacyFleetPendingEvidence = useCallback((raw?: string | null) => {
+    const s = (raw ?? '').trim();
+    if (!s) return false;
+    return /(\bUTR\b|\bMode\s*:|\bTrip\s*Commission\b|\bTrip\s*Payment\b|\bSettlement\b)/i.test(s);
+  }, []);
+
+  const { receivedByTripId, nonTripLedgerEntries, latestCreditLedgerByTripId } = useMemo(() => {
     const byTrip: Record<string, number> = {};
     const nonTrip: driversService.DriverLedgerRow[] = [];
+    const latestByTrip: Record<string, driversService.DriverLedgerRow> = {};
     for (const e of ledgerEntries) {
       const amt = Number(e.amount) || 0;
       const tid = e.trip_id?.trim() || null;
-      if (tid) byTrip[tid] = (byTrip[tid] ?? 0) + amt;
-      else nonTrip.push(e);
+      if (tid) {
+        // Only settlement credits (verified by driver) count as "received".
+        if (e.type === 'settlement') byTrip[tid] = (byTrip[tid] ?? 0) + amt;
+      } else {
+        nonTrip.push(e);
+      }
+
+      // Only settlement credits (amt > 0) are used to infer payment mode.
+      if (tid && e.type === 'settlement' && amt > 0) {
+        const prev = latestByTrip[tid];
+        const prevT = prev?.created_at ? new Date(prev.created_at).getTime() : 0;
+        const nextT = e.created_at ? new Date(e.created_at).getTime() : 0;
+        if (!prev || nextT > prevT) latestByTrip[tid] = e;
+      }
     }
-    return { receivedByTripId: byTrip, nonTripLedgerEntries: nonTrip };
+    return { receivedByTripId: byTrip, nonTripLedgerEntries: nonTrip, latestCreditLedgerByTripId: latestByTrip };
   }, [ledgerEntries]);
 
+  const latestFleetPaidPendingLedgerByTripId = useMemo(() => {
+    const byTrip: Record<string, driversService.DriverLedgerRow> = {};
+    for (const e of ledgerEntries) {
+      const tid = e.trip_id?.trim() || null;
+      if (!tid) continue;
+      if (e.type === 'settlement') continue;
+      const amt = Number(e.amount) || 0;
+      if (amt <= 0) continue;
+      if (!hasFleetPaidPendingToken(e.description) && !isLegacyFleetPendingEvidence(e.description)) continue;
+      const prev = byTrip[tid];
+      const prevT = prev?.created_at ? new Date(prev.created_at).getTime() : 0;
+      const nextT = e.created_at ? new Date(e.created_at).getTime() : 0;
+      if (!prev || nextT > prevT) byTrip[tid] = e;
+    }
+    return byTrip;
+  }, [ledgerEntries, hasFleetPaidPendingToken, isLegacyFleetPendingEvidence]);
+
   const totalReceived = Math.round(
-    ledgerEntries.reduce((sum, e) => sum + (Number(e.amount) ?? 0), 0),
+    ledgerEntries.reduce((sum, e) => {
+      const tid = e.trip_id?.trim() || null;
+      const amt = Number(e.amount) || 0;
+      if (tid) return e.type === 'settlement' ? sum + amt : sum;
+      return sum + amt;
+    }, 0),
   );
 
   const totalEarned = useMemo(() => {
@@ -269,6 +349,70 @@ export default function DriverPassbookDetailScreen() {
     return bySection;
   }, [completedTrips]);
 
+  const markTripAsPaid = useCallback(
+    async (
+      trip: tripsService.TripRow,
+      amount: number,
+      sourceLedger?: driversService.DriverLedgerRow | null,
+    ) => {
+      const driverId = trip.driver_id ?? driver?.id ?? null;
+      if (!driverId || !trip.organization_id) {
+        Alert.alert('Error', 'Missing driver or organization.');
+        return;
+      }
+      const rawDescription = sourceLedger?.description ?? `Trip ${tripsService.getTripDisplayNumber(trip)}`;
+      const settledDescription = rawDescription.replace(/\s*\|\s*Sync\s*:\s*FLEET_PAID_PENDING\s*/i, '').trim();
+
+      setMarkPaidLoadingTripId(trip.id);
+      let { error, row } = await driversService.createDriverLedgerEntry(
+        trip.organization_id,
+        driverId,
+        Math.round(amount),
+        'settlement',
+        { tripId: trip.id, createdBy: profile?.uid ?? null, description: settledDescription },
+      );
+      if (error?.message?.includes("driver_ledger_created_by_fkey")) {
+        const retry = await driversService.createDriverLedgerEntry(
+          trip.organization_id,
+          driverId,
+          Math.round(amount),
+          'settlement',
+          { tripId: trip.id, createdBy: null, description: settledDescription },
+        );
+        error = retry.error;
+        if (retry.row) row = retry.row;
+      }
+      setMarkPaidLoadingTripId(null);
+
+      if (error) {
+        const isDriverLedgerRls =
+          /row-level security policy.*driver_ledger|driver_ledger.*row-level security/i.test(error.message);
+        const message = isDriverLedgerRls
+          ? "You don't have permission to record this payment yet. Ask support to apply the driver settlement policy."
+          : error.message;
+        if (Platform.OS === 'web') {
+          window.alert(`Could not mark as paid: ${message}`);
+        } else {
+          Alert.alert('Could not mark as paid', message);
+        }
+        return;
+      }
+      if (row) {
+        setLedgerEntries((prev) => [row, ...prev]);
+      } else {
+        load();
+      }
+    },
+    [driver?.id, profile?.uid, load],
+  );
+
+  const confirmMarkAsPaid = useCallback(
+    (trip: tripsService.TripRow, amount: number, sourceLedger?: driversService.DriverLedgerRow | null) => {
+      setMarkPaidConfirmState({ trip, amount, sourceLedger: sourceLedger ?? null });
+    },
+    [],
+  );
+
   if (loading) {
     return (
       <View style={[styles.loadingWrap, { paddingTop: insets.top, backgroundColor: colors.background }]}>
@@ -299,6 +443,7 @@ export default function DriverPassbookDetailScreen() {
   }
 
   return (
+    <>
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
@@ -407,9 +552,13 @@ export default function DriverPassbookDetailScreen() {
                   {trips.map((trip, tripIdx) => {
                     const receivedAmt = receivedByTripId[trip.id] ?? 0;
                     const pending = receivedAmt === 0;
+                    const fleetPendingLedger = latestFleetPaidPendingLedgerByTripId[trip.id];
+                    const hasFleetPending = !!fleetPendingLedger;
                     const tripRef = tripsService.getTripDisplayNumber(trip);
                     const from = trip.pickup_area?.trim() || 'Unknown origin';
                     const to = trip.drop_location?.trim() || 'Unknown destination';
+                    const pendingMode = derivePaymentModeFromLedgerDescription(fleetPendingLedger?.description) ?? 'BANK TRANSFER';
+                    const pendingUtr = extractUtr(fleetPendingLedger?.description) ?? '—';
                     const isLastTrip = tripIdx === trips.length - 1;
                     const listDivider = isDark ? colors.borderSubtle : Theme.borderMedium;
                     return (
@@ -442,7 +591,20 @@ export default function DriverPassbookDetailScreen() {
                                 pending ? styles.passbookTripStatusInfo : styles.passbookTripStatusSuccess,
                               ]}
                             >
-                              {pending ? 'PENDING FROM FLEET' : 'PAID TO BANK'}
+                              {pending
+                                ? hasFleetPending
+                                  ? 'FLEET MARKED PAID'
+                                  : 'PENDING FROM FLEET'
+                                : (() => {
+                                    const latest = latestCreditLedgerByTripId[trip.id];
+                                    const desc = latest?.description ?? null;
+                                    if (hasReceiptMeta(desc)) return 'PAID SYNCED';
+                                    const mode = derivePaymentModeFromLedgerDescription(desc);
+                                    if (mode === 'UPI') return 'PAID TO UPI';
+                                    if (mode === 'BANK TRANSFER') return 'PAID TO BANK';
+                                    if (mode === 'CASH') return 'PAID';
+                                    return 'PAID TO BANK';
+                                  })()}
                             </Text>
                           </View>
                         </View>
@@ -470,6 +632,30 @@ export default function DriverPassbookDetailScreen() {
                             <Text style={[styles.passbookRouteValue, { color: colors.text }]} numberOfLines={1}>{to}</Text>
                           </View>
                         </View>
+                        {pending && hasFleetPending ? (
+                          <View style={styles.tripActionWrap}>
+                            <View style={[styles.tripActionHint, { backgroundColor: colors.emeraldMuted, borderColor: colors.emeraldBorderSoft }]}>
+                              <Text style={[styles.tripActionHintText, { color: colors.emerald }]}>
+                                Fleet update: {pendingMode} · UTR {pendingUtr}
+                              </Text>
+                            </View>
+                            <TouchableOpacity
+                              style={[styles.tripVerifyBtn, { backgroundColor: colors.emerald }]}
+                              onPress={() => confirmMarkAsPaid(trip, Math.round(tripEarnings(trip)), fleetPendingLedger)}
+                              disabled={markPaidLoadingTripId === trip.id}
+                              activeOpacity={0.9}
+                            >
+                              {markPaidLoadingTripId === trip.id ? (
+                                <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                              ) : (
+                                <>
+                                  <FontAwesome name="check-circle" size={13} color={Theme.textOnPrimary} />
+                                  <Text style={styles.tripVerifyBtnText}>Verify & update payment</Text>
+                                </>
+                              )}
+                            </TouchableOpacity>
+                          </View>
+                        ) : null}
                       </View>
                     );
                   })}
@@ -588,6 +774,8 @@ export default function DriverPassbookDetailScreen() {
                   {trips.map((trip, tripIdx) => {
                     const earned = Math.round(tripEarnings(trip));
                     const receivedAmt = receivedByTripId[trip.id] ?? 0;
+                    const fleetPendingLedger = latestFleetPaidPendingLedgerByTripId[trip.id];
+                    const hasFleetPending = !!fleetPendingLedger;
                     const isAggregate = isAggregateTrip(trip);
                     const routeSummary = [trip.pickup_area?.trim(), trip.drop_location?.trim()]
                       .filter(Boolean)
@@ -623,10 +811,18 @@ export default function DriverPassbookDetailScreen() {
                         ? 'Added to cash balance'
                         : isAggregate && earned === 0
                           ? 'Pending'
-                          : 'Pending from fleet';
+                          : hasFleetPending
+                            ? 'Fleet marked paid'
+                            : 'Pending from fleet';
                     const isLastTrip = tripIdx === trips.length - 1;
                     const iconName =
-                      isAggregate && earned === 0 ? 'exchange' : receivedAmt > 0 ? 'arrow-down' : 'clock-o';
+                      isAggregate && earned === 0
+                        ? 'exchange'
+                        : receivedAmt > 0
+                          ? 'arrow-down'
+                          : hasFleetPending
+                            ? 'check-circle'
+                            : 'clock-o';
                     const isReceived = receivedAmt > 0;
                     const statusLabel = isReceived ? 'RECEIVED' : 'PENDING';
                     const statusPillBg = isReceived ? colors.emeraldMuted : AMBER_50;
@@ -635,6 +831,8 @@ export default function DriverPassbookDetailScreen() {
                     const rowToneBorder = isReceived ? colors.emeraldBorderSoft : 'rgba(180,83,9,0.25)';
                     const iconSqBg = isReceived ? colors.emeraldMuted : AMBER_50;
                     const iconColor = isReceived ? colors.emerald : Theme.warning;
+                    const pendingMode = derivePaymentModeFromLedgerDescription(fleetPendingLedger?.description) ?? 'BANK TRANSFER';
+                    const pendingUtr = extractUtr(fleetPendingLedger?.description) ?? '—';
                     return (
                       <View
                         key={trip.id}
@@ -676,6 +874,28 @@ export default function DriverPassbookDetailScreen() {
                             <FontAwesome name="university" size={13} color={colors.emerald} style={styles.ppMetaBankIcon} />
                           </View>
                         </View>
+                        {!isReceived && hasFleetPending ? (
+                          <View style={styles.tripHistoryActionRow}>
+                            <Text style={[styles.tripHistoryActionMeta, { color: colors.textMuted }]}>
+                              Fleet marked paid via {pendingMode} · UTR {pendingUtr}
+                            </Text>
+                            <TouchableOpacity
+                              style={[styles.tripHistoryVerifyBtn, { borderColor: colors.emerald }]}
+                              onPress={() => confirmMarkAsPaid(trip, earned, fleetPendingLedger)}
+                              disabled={markPaidLoadingTripId === trip.id}
+                              activeOpacity={0.85}
+                            >
+                              {markPaidLoadingTripId === trip.id ? (
+                                <ActivityIndicator size="small" color={colors.emerald} />
+                              ) : (
+                                <>
+                                  <FontAwesome name="check" size={11} color={colors.emerald} />
+                                  <Text style={[styles.tripHistoryVerifyBtnText, { color: colors.emerald }]}>UPDATE PAYMENT</Text>
+                                </>
+                              )}
+                            </TouchableOpacity>
+                          </View>
+                        ) : null}
                       </View>
                     );
                   })}
@@ -686,6 +906,35 @@ export default function DriverPassbookDetailScreen() {
         )}
       </View>
     </ScrollView>
+    <ThemedConfirmModal
+      visible={!!markPaidConfirmState}
+      title="Verify fleet payment update"
+      message={
+        markPaidConfirmState
+          ? (() => {
+              const tripDisplay = tripsService.getTripDisplayNumber(markPaidConfirmState.trip);
+              const amountStr = `₹${Math.round(markPaidConfirmState.amount).toLocaleString('en-IN')}`;
+              const sourceDesc = markPaidConfirmState.sourceLedger?.description ?? null;
+              const mode = derivePaymentModeFromLedgerDescription(sourceDesc) ?? 'BANK TRANSFER';
+              const utr = extractUtr(sourceDesc) ?? '—';
+              return `Fleet owner marked ${tripDisplay} as paid for ${amountStr} (Mode: ${mode}, UTR: ${utr}). Confirm to sync this into your passbook and cash balance.`;
+            })()
+          : ''
+      }
+      cancelText="Cancel"
+      confirmText={markPaidLoadingTripId && markPaidConfirmState ? 'Saving...' : 'Proceed'}
+      confirmVariant="primary"
+      onCancel={() => {
+        if (!markPaidLoadingTripId) setMarkPaidConfirmState(null);
+      }}
+      onConfirm={() => {
+        const next = markPaidConfirmState;
+        if (!next) return;
+        setMarkPaidConfirmState(null);
+        void markTripAsPaid(next.trip, next.amount, next.sourceLedger ?? null);
+      }}
+    />
+    </>
   );
 }
 
@@ -1013,6 +1262,67 @@ const styles = StyleSheet.create({
     width: 1,
     height: 22,
     marginVertical: 2,
+  },
+  tripActionWrap: {
+    marginTop: 12,
+    gap: 10,
+  },
+  tripActionHint: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  tripActionHintText: {
+    fontSize: 9,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  tripVerifyBtn: {
+    minHeight: 42,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 14,
+  },
+  tripVerifyBtnText: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    color: Theme.textOnPrimary,
+  },
+  tripHistoryActionRow: {
+    marginTop: 10,
+    marginLeft: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  tripHistoryActionMeta: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  tripHistoryVerifyBtn: {
+    minHeight: 30,
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  tripHistoryVerifyBtnText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1,
   },
   header: {
     flexDirection: 'row',

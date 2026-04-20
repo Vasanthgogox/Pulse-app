@@ -11,7 +11,8 @@ import { styles } from "./FinanceScreen.styles";
 import { FinanceTabRow } from "./FinanceTabRow";
 import type { EntityListFilter } from "./TreasurySummaryCard";
 import { TreasurySummaryCard } from "./TreasurySummaryCard";
-import type { LedgerCategory } from "../types";
+import type { FinancePeriodFilter, LedgerCategory } from "../types";
+import { DatePresetPillBar } from "@/components/DatePresetPillBar";
 
 export type LedgerViewMode = "table" | "transaction";
 
@@ -43,8 +44,16 @@ export interface FinanceSummarySectionProps {
   garageViewTab?: "vehicle" | "trips" | "revenue" | "profit";
   onGarageViewTabChange?: (v: "vehicle" | "trips" | "revenue" | "profit") => void;
   showPeriodFilter?: boolean;
-  periodFilter?: "TODAY" | "MONTH" | "RANGE";
-  onPeriodFilterChange?: (p: "TODAY" | "MONTH" | "RANGE") => void;
+  periodFilter?: FinancePeriodFilter;
+  onPeriodFilterChange?: (p: FinancePeriodFilter) => void;
+  /** Date preset row under fiscal tabs (all Finance sub-tabs). */
+  datePreset?: {
+    period: FinancePeriodFilter;
+    onPeriodChange: (p: FinancePeriodFilter) => void;
+    onCustomRangePress: () => void;
+    customFrom: string | null;
+    customTo: string | null;
+  } | null;
   sourceFilter?: "all" | "asset" | "aggregate";
   onSourceFilterChange?: (s: "all" | "asset" | "aggregate") => void;
   /** Ledger tab: Table | Transaction view. Shown in header when on Ledger. */
@@ -90,6 +99,7 @@ export function FinanceSummarySection({
   showPeriodFilter,
   periodFilter,
   onPeriodFilterChange,
+  datePreset,
   sourceFilter,
   onSourceFilterChange,
   ledgerViewMode,
@@ -116,6 +126,16 @@ export function FinanceSummarySection({
                 onTabPress={onTabPress}
                 screenWidth={screenWidth}
               />
+              {datePreset != null && (
+                <DatePresetPillBar
+                  variant="onDark"
+                  period={datePreset.period}
+                  onPeriodChange={datePreset.onPeriodChange}
+                  onCustomRangePress={datePreset.onCustomRangePress}
+                  customFrom={datePreset.customFrom}
+                  customTo={datePreset.customTo}
+                />
+              )}
               {(activeTab as FinanceSubTab | "ledger") === "ledger" &&
                 onLedgerViewModeChange != null &&
                 ledgerViewMode != null && (

@@ -345,7 +345,10 @@ export function TripExpandableCard({
         <View style={styles.cardTop}>
           <View style={styles.cardTopLeft}>
             <View style={styles.cardIdPill}>
-              <Text style={styles.cardIdPillText}>#{getTripDisplayNumber(trip)}</Text>
+              <Text style={styles.cardIdPillText}>
+                #{getTripDisplayNumber(trip)}
+                {trip.indent_number ? ` · ${trip.indent_number}` : ""}
+              </Text>
             </View>
             <View
               style={[

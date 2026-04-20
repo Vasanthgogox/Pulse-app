@@ -30,7 +30,7 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { canAccessFinance, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { formatINR, formatLedgerDate, formatRelative, normalizeVehicleNumberForMatch } from "@/lib/format";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
-import { getDriversByOrganization } from "@/features/drivers";
+import { getDriversByOrganization, type DriverRow } from "@/features/drivers";
 import {
   getTripsByOrganization,
   getTripsWhereOrgIsSupplier,
@@ -67,6 +67,7 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
   const [trips, setTrips] = useState<TripRow[]>([]);
   const [transactions, setTransactions] = useState<LedgerRow[]>([]);
   const [drivers, setDrivers] = useState<DriverOption[]>([]);
+  const [driverRowsForLedger, setDriverRowsForLedger] = useState<DriverRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
@@ -103,6 +104,7 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
       for (const t of supplierTrips) if (!byId.has(t.id)) byId.set(t.id, t);
       setTrips(Array.from(byId.values()));
       const driverList = driversRes?.error ? [] : (driversRes?.drivers ?? []);
+      setDriverRowsForLedger(driverList);
       setDrivers(driverList.map((d) => ({ id: d.id, name: d.name ?? d.phone ?? t('driver') })));
       const allTx =
         (txRes.error ? [] : ((txRes.transactions ?? []) as LedgerRow[])) ?? [];
@@ -496,6 +498,7 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
               showHistoryHeader={false}
               showGridFooter={false}
               embedInParentScroll={true}
+              driverRows={driverRowsForLedger}
             />
           </View>
         )}

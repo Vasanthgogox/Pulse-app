@@ -130,11 +130,15 @@ export default function DriverWalletScreen() {
 
   const [mainTab, setMainTab] = useState<'trips' | 'cash' | 'fleet'>('trips');
   const [journeySearch, setJourneySearch] = useState('');
-  const [journeyFilter, setJourneyFilter] = useState<'all' | 'pending' | 'settled'>('all');
+  const [journeyFilter, setJourneyFilter] = useState<'all' | 'pending' | 'fleet_marked' | 'settled'>('all');
   const [followUpSentTripId, setFollowUpSentTripId] = useState<string | null>(null);
   const [copiedTripId, setCopiedTripId] = useState<string | null>(null);
   const [whatsAppReminderMessage, setWhatsAppReminderMessage] = useState<string | null>(null);
-  const [markPaidConfirmState, setMarkPaidConfirmState] = useState<{ trip: tripsService.TripRow; amount: number } | null>(null);
+  const [markPaidConfirmState, setMarkPaidConfirmState] = useState<{
+    trip: tripsService.TripRow;
+    amount: number;
+    sourceLedger?: driversService.DriverLedgerRow | null;
+  } | null>(null);
 
   const openWhatsAppReminder = useCallback(async (message: string) => {
     const encoded = encodeURIComponent(message);
@@ -262,7 +266,7 @@ export default function DriverWalletScreen() {
     });
   }, [trips]);
 
-  /** O(n): one pass over ledgerEntries → received total per trip_id + non-trip entries. */
+  /** O(n): one pass over ledgerEntries → settlement totals per trip_id + non-trip entries. */
   const { receivedByTripId, nonTripLedgerEntries } = useMemo(() => {
     const byTrip: Record<string, number> = {};
     const nonTrip: driversService.DriverLedgerRow[] = [];
@@ -271,7 +275,10 @@ export default function DriverWalletScreen() {
       const amt = Number(e.amount) || 0;
       const tid = e.trip_id?.trim() || null;
       if (tid) {
-        byTrip[tid] = (byTrip[tid] ?? 0) + amt;
+        // Only verified trip settlements count as "received" in the driver app.
+        if (e.type === 'settlement') {
+          byTrip[tid] = (byTrip[tid] ?? 0) + amt;
+        }
       } else {
         nonTrip.push(e);
       }
@@ -284,7 +291,8 @@ export default function DriverWalletScreen() {
   }, [ledgerEntries]);
 
   const receivedLedgerEntries = useMemo(() => {
-    return sortedLedgerEntries.filter((entry) => (Number(entry.amount) || 0) > 0);
+    // Settlement credits only (used for "received"/"settled" UI).
+    return sortedLedgerEntries.filter((entry) => entry.type === 'settlement' && (Number(entry.amount) || 0) > 0);
   }, [sortedLedgerEntries]);
 
   const latestCreditLedgerByTripId = useMemo(() => {
@@ -304,6 +312,40 @@ export default function DriverWalletScreen() {
     }
     return byTrip;
   }, [receivedLedgerEntries]);
+
+  const hasFleetPaidPendingToken = useCallback((raw?: string | null) => {
+    const s = (raw ?? '').trim();
+    if (!s) return false;
+    // Token appended by fleet-side ledger-sync for "pending verification" entries.
+    return /Sync\s*:\s*FLEET_PAID_PENDING/i.test(s);
+  }, []);
+
+  const isLegacyFleetPendingEvidence = useCallback((raw?: string | null) => {
+    const s = (raw ?? '').trim();
+    if (!s) return false;
+    // Backward-compatibility for existing DB rows created before the explicit sync token rollout.
+    // These rows typically still carry payment metadata or trip-commission wording.
+    return /(\bUTR\b|\bMode\s*:|\bTrip\s*Commission\b|\bTrip\s*Payment\b|\bSettlement\b)/i.test(s);
+  }, []);
+
+  const latestFleetPaidPendingLedgerByTripId = useMemo(() => {
+    const byTrip: Record<string, driversService.DriverLedgerRow> = {};
+    for (let i = 0; i < ledgerEntries.length; i++) {
+      const e = ledgerEntries[i];
+      const tid = e.trip_id?.trim() || null;
+      if (!tid) continue;
+      if (e.type === 'settlement') continue; // settlement entries are already "received"
+      const amt = Number(e.amount) || 0;
+      if (amt <= 0) continue;
+      const desc = e.description;
+      if (!hasFleetPaidPendingToken(desc) && !isLegacyFleetPendingEvidence(desc)) continue;
+      const prev = byTrip[tid];
+      const prevT = prev?.created_at ? new Date(prev.created_at).getTime() : 0;
+      const nextT = e.created_at ? new Date(e.created_at).getTime() : 0;
+      if (!prev || nextT > prevT) byTrip[tid] = e;
+    }
+    return byTrip;
+  }, [ledgerEntries, hasFleetPaidPendingToken, isLegacyFleetPendingEvidence]);
 
   const extractUtr = useCallback((raw?: string | null) => {
     const s = (raw ?? '').trim();
@@ -936,8 +978,19 @@ export default function DriverWalletScreen() {
     return bySection;
   }, [receivedTrips]);
 
-  // Cash balance = only received (sum of all driver_ledger entries). Trip earnings are not in balance until received.
-  const totalReceived = Math.round(ledgerEntries.reduce((sum, e) => sum + (Number(e.amount) ?? 0), 0));
+  // Cash balance:
+  // - trip-related cash is only counted once the driver verifies (verified entries are type === 'settlement').
+  // - non-trip ledger entries (salary/reimbursement/etc) still affect cash as before.
+  const totalReceived = Math.round(
+    ledgerEntries.reduce((sum, e) => {
+      const tid = e.trip_id?.trim() || null;
+      const amt = Number(e.amount) || 0;
+      if (tid) {
+        return e.type === 'settlement' ? sum + amt : sum;
+      }
+      return sum + amt;
+    }, 0),
+  );
 
   /** Salary request: only show connected fleets (accepted invite). Use org name from invite when available, else "Fleet". */
   const salaryRequestOrgOptions = useMemo(() => {
@@ -969,10 +1022,13 @@ export default function DriverWalletScreen() {
           String(trip.driver_id ?? '') === String(fleet.driverId),
       );
       const earned = Math.round(fleetTrips.reduce((sum, trip) => sum + tripEarnings(trip), 0));
+      // Received for trip progress = only verified settlements.
       const received = Math.round(
         ledgerEntries
           .filter(
             (entry) =>
+              entry.type === 'settlement' &&
+              !!entry.trip_id &&
               String(entry.organization_id ?? '') === String(fleet.orgId) &&
               String(entry.driver_id ?? '') === String(fleet.driverId),
           )
@@ -996,17 +1052,40 @@ export default function DriverWalletScreen() {
     return completedTrips.map((trip) => {
       const receivedAmt = receivedByTripId[trip.id] ?? 0;
       const isSettled = receivedAmt > 0;
-      const isActionRequired = !isSettled && isAggregateTrip(trip) && tripEarnings(trip) === 0;
+      const fleetPendingLedger = latestFleetPaidPendingLedgerByTripId[trip.id];
+      const hasFleetPending = !!fleetPendingLedger;
+      const isActionRequired = !isSettled && !hasFleetPending && isAggregateTrip(trip) && tripEarnings(trip) === 0;
       const status: 'Pending' | 'Action Required' | 'Settled' = isSettled
         ? 'Settled'
         : isActionRequired
           ? 'Action Required'
           : 'Pending';
-      const subStatus = isSettled
-        ? 'Paid to bank'
-        : isActionRequired
-          ? 'Ready to claim'
-          : 'Pending from fleet';
+      const latestLedger = latestCreditLedgerByTripId[trip.id];
+      const latestDesc = latestLedger?.description ?? null;
+      const hasReceiptMeta = !!latestDesc && /(\\bUTR\\b|\\bMode\\s*:)/i.test(String(latestDesc));
+      const paymentMode = derivePaymentMode(latestDesc);
+      const paidLabel = hasReceiptMeta
+        ? 'Paid synced'
+        : paymentMode === 'UPI'
+          ? 'Paid via UPI'
+          : paymentMode === 'BANK TRANSFER'
+            ? 'Paid to bank'
+            : paymentMode === 'CASH'
+              ? 'Paid in cash'
+              : 'Paid to bank';
+
+      const fleetPendingDesc = fleetPendingLedger?.description ?? null;
+      const fleetPendingMode = derivePaymentMode(fleetPendingDesc);
+      const fleetPendingLabel =
+        fleetPendingMode === 'UPI'
+          ? 'Fleet marked paid (UPI)'
+          : fleetPendingMode === 'BANK TRANSFER'
+            ? 'Fleet marked paid (Bank)'
+            : fleetPendingMode === 'CASH'
+              ? 'Fleet marked paid (Cash)'
+              : 'Fleet marked paid';
+
+      const subStatus = isSettled ? paidLabel : isActionRequired ? 'Ready to claim' : hasFleetPending ? fleetPendingLabel : 'Pending from fleet';
       const provider =
         salaryRequestOrgOptions.find(
           (o) =>
@@ -1021,7 +1100,9 @@ export default function DriverWalletScreen() {
         id: tripsService.getTripDisplayNumber(trip),
         rawDate: trip.completed_at ?? trip.updated_at ?? trip.created_at ?? '',
         date: formatTransactionDateSection(trip.completed_at ?? trip.updated_at ?? trip.created_at ?? ''),
-        amount: Math.round(isSettled ? receivedAmt : tripEarnings(trip)),
+        amount: Math.round(
+          isSettled ? receivedAmt : hasFleetPending ? Number(fleetPendingLedger?.amount ?? tripEarnings(trip)) : tripEarnings(trip),
+        ),
         status,
         subStatus,
         provider,
@@ -1032,9 +1113,10 @@ export default function DriverWalletScreen() {
           minute: '2-digit',
           hour12: true,
         }),
+        fleetPendingLedger: fleetPendingLedger ?? null,
       };
     });
-  }, [completedTrips, receivedByTripId, salaryRequestOrgOptions]);
+  }, [completedTrips, receivedByTripId, salaryRequestOrgOptions, latestCreditLedgerByTripId, derivePaymentMode, latestFleetPaidPendingLedgerByTripId]);
 
   const filteredTripJourneyItems = useMemo(() => {
     const search = journeySearch.trim().toLowerCase();
@@ -1049,6 +1131,7 @@ export default function DriverWalletScreen() {
       const matchesFilter =
         journeyFilter === 'all' ||
         (journeyFilter === 'pending' && (item.status === 'Pending' || item.status === 'Action Required')) ||
+        (journeyFilter === 'fleet_marked' && !!item.fleetPendingLedger) ||
         (journeyFilter === 'settled' && item.status === 'Settled');
 
       return matchesSearch && matchesFilter;
@@ -1056,7 +1139,7 @@ export default function DriverWalletScreen() {
   }, [tripJourneyItems, journeySearch, journeyFilter]);
 
   const pendingTripJourneyItems = useMemo(() => {
-    return filteredTripJourneyItems.filter((i) => i.status === 'Pending' || i.status === 'Action Required');
+    return filteredTripJourneyItems.filter((i) => i.status === 'Action Required' || (i.status === 'Pending' && !i.fleetPendingLedger));
   }, [filteredTripJourneyItems]);
 
   const claimAllPendingTrips = useCallback(async () => {
@@ -1224,19 +1307,28 @@ export default function DriverWalletScreen() {
 
   /** Mark trip as paid (settlement ledger entry). */
   const markTripAsPaid = useCallback(
-    async (trip: tripsService.TripRow, amount: number) => {
+    async (
+      trip: tripsService.TripRow,
+      amount: number,
+      sourceLedger?: driversService.DriverLedgerRow | null,
+    ) => {
       const driverId = trip.driver_id ?? linkedDrivers[0]?.id;
       if (!driverId || !trip.organization_id) {
         Alert.alert('Error', 'Missing driver or organization.');
         return;
       }
+
+      const rawDescription = sourceLedger?.description ?? `Trip ${tripsService.getTripDisplayNumber(trip)}`;
+      // Remove the "pending verification" token so the settled receipt looks clean.
+      const settledDescription = rawDescription.replace(/\s*\|\s*Sync\s*:\s*FLEET_PAID_PENDING\s*/i, '').trim();
+
       setMarkPaidLoadingTripId(trip.id);
       let { error, row } = await driversService.createDriverLedgerEntry(
         trip.organization_id,
         driverId,
         Math.round(amount),
         'settlement',
-        { tripId: trip.id, createdBy: profile?.uid ?? null, description: `Trip ${tripsService.getTripDisplayNumber(trip)}` }
+        { tripId: trip.id, createdBy: profile?.uid ?? null, description: settledDescription }
       );
       if (error?.message?.includes("driver_ledger_created_by_fkey")) {
         const retry = await driversService.createDriverLedgerEntry(
@@ -1244,7 +1336,7 @@ export default function DriverWalletScreen() {
           driverId,
           Math.round(amount),
           'settlement',
-          { tripId: trip.id, createdBy: null, description: `Trip ${tripsService.getTripDisplayNumber(trip)}` }
+          { tripId: trip.id, createdBy: null, description: settledDescription }
         );
         error = retry.error;
         if (retry.row) row = retry.row;
@@ -1275,8 +1367,8 @@ export default function DriverWalletScreen() {
 
   /** Confirm then mark trip as paid. */
   const confirmMarkAsPaid = useCallback(
-    (trip: tripsService.TripRow, amount: number) => {
-      setMarkPaidConfirmState({ trip, amount });
+    (trip: tripsService.TripRow, amount: number, sourceLedger?: driversService.DriverLedgerRow | null) => {
+      setMarkPaidConfirmState({ trip, amount, sourceLedger: sourceLedger ?? null });
     },
     []
   );
@@ -1467,13 +1559,14 @@ export default function DriverWalletScreen() {
               {[
                 { id: 'all', label: 'All' },
                 { id: 'pending', label: 'Pending' },
+                { id: 'fleet_marked', label: 'Fleet marked' },
                 { id: 'settled', label: 'Settled' },
               ].map((chip) => {
                 const active = journeyFilter === chip.id;
                 return (
                   <TouchableOpacity
                     key={chip.id}
-                    onPress={() => setJourneyFilter(chip.id as 'all' | 'pending' | 'settled')}
+                    onPress={() => setJourneyFilter(chip.id as 'all' | 'pending' | 'fleet_marked' | 'settled')}
                     style={[
                       styles.filterChip,
                       active
@@ -1670,6 +1763,8 @@ export default function DriverWalletScreen() {
                         const isActionRequired = item.status === 'Action Required';
                         const isPending = item.status === 'Pending' || isActionRequired;
                         const isSettled = item.status === 'Settled';
+                        const fleetPendingLedger = item.fleetPendingLedger;
+                        const hasFleetPending = !!fleetPendingLedger && !isSettled;
                         const providerShort = item.provider.split("'")[0];
                         const receiptExpanded = expandedTripReceiptId === tripId;
                         const ledger = latestCreditLedgerByTripId[item.trip.id];
@@ -1678,6 +1773,13 @@ export default function DriverWalletScreen() {
                         const settlementMode = derivePaymentMode(ledger?.description) ?? '—';
                         const settlementCapturedAt = phonePeMetaDate(ledger?.created_at ?? item.trip.completed_at ?? item.trip.updated_at ?? item.trip.created_at);
                         const settlementRoute = `${item.from} → ${item.to}`;
+
+                        const pendingTxnId = fleetPendingLedger?.id ?? tripId;
+                        const pendingUtr = extractUtr(fleetPendingLedger?.description) ?? '—';
+                        const pendingMode = derivePaymentMode(fleetPendingLedger?.description) ?? '—';
+                        const pendingCapturedAt = phonePeMetaDate(
+                          fleetPendingLedger?.created_at ?? item.trip.completed_at ?? item.trip.updated_at ?? item.trip.created_at,
+                        );
 
                         return (
                           <View
@@ -1720,9 +1822,17 @@ export default function DriverWalletScreen() {
                                     ]}
                                   >
                                     <FontAwesome
-                                      name={isActionRequired ? 'exclamation-circle' : 'line-chart'}
+                                      name={isActionRequired ? 'exclamation-circle' : hasFleetPending || isSettled ? 'check-circle' : 'line-chart'}
                                       size={18}
-                                      color={isExpanded ? colors.textOnPrimary : isActionRequired ? 'rgb(249,115,22)' : colors.textMuted}
+                                      color={
+                                        isExpanded
+                                          ? colors.textOnPrimary
+                                          : isActionRequired
+                                            ? 'rgb(249,115,22)'
+                                            : hasFleetPending || isSettled
+                                              ? colors.emerald
+                                              : colors.textMuted
+                                      }
                                     />
                                   </View>
                                   <View style={styles.tripsHeadText}>
@@ -1760,6 +1870,11 @@ export default function DriverWalletScreen() {
                                       style={isExpanded ? styles.tripsChevronExpanded : undefined}
                                     />
                                   </View>
+                                  {__DEV__ ? (
+                                    <Text style={[styles.tripsDebugSyncToken, { color: hasFleetPending ? colors.emerald : colors.textMuted }]}>
+                                      {hasFleetPending ? 'SYNC TOKEN: FOUND' : 'SYNC TOKEN: MISSING'}
+                                    </Text>
+                                  ) : null}
                                 </View>
                               </View>
 
@@ -1817,7 +1932,7 @@ export default function DriverWalletScreen() {
                                   </View>
                                 )}
 
-                                {isPending && (
+                                {isPending && !hasFleetPending && (
                                   <TouchableOpacity
                                     activeOpacity={0.88}
                                     onPress={() =>
@@ -1960,6 +2075,106 @@ export default function DriverWalletScreen() {
                                       </View>
                                     )}
                                   </>
+                                ) : hasFleetPending ? (
+                                  <View style={styles.tripsExpandedGrid}>
+                                    <TouchableOpacity
+                                      activeOpacity={0.88}
+                                      style={[
+                                        styles.tripsReceiptButton,
+                                        {
+                                          backgroundColor: isDark ? colors.surfaceElevated : 'rgba(248,250,252,0.7)',
+                                          borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.8)',
+                                        },
+                                      ]}
+                                      onPress={() =>
+                                        setExpandedTripReceiptId((prev) => (prev === tripId ? null : tripId))
+                                      }
+                                    >
+                                      <View style={styles.tripsReceiptButtonLeft}>
+                                        <FontAwesome name="file-text-o" size={14} color={colors.textMuted} />
+                                        <Text style={[styles.tripsReceiptButtonText, { color: colors.textMuted }]}>View fleet payment</Text>
+                                      </View>
+                                      <FontAwesome
+                                        name={receiptExpanded ? 'chevron-up' : 'chevron-down'}
+                                        size={14}
+                                        color={colors.textMuted}
+                                      />
+                                    </TouchableOpacity>
+
+                                    {receiptExpanded && (
+                                      <View style={styles.tripsReceiptCardWrap}>
+                                        <View
+                                          style={[
+                                            styles.tripsReceiptCard,
+                                            { backgroundColor: colors.surface, borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.9)' },
+                                          ]}
+                                        >
+                                          <View style={styles.tripsReceiptHero}>
+                                            <View style={[styles.tripsReceiptIcon, { backgroundColor: 'rgba(249,115,22,0.12)' }]}>
+                                              <FontAwesome name="check" size={20} color={'rgb(249,115,22)'} />
+                                            </View>
+                                            <Text style={[styles.tripsReceiptEyebrow, { color: 'rgb(249,115,22)' }]}>FLEET MARKED PAID</Text>
+                                            <Text style={[styles.tripsReceiptAmount, { color: colors.text }]}>
+                                              ₹{Math.round(item.amount).toLocaleString('en-IN')}
+                                            </Text>
+                                          </View>
+
+                                          <View style={[styles.tripsReceiptMeta, { borderTopColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.9)' }]}>
+                                            {[
+                                              { k: 'Transaction ID', v: String(pendingTxnId) },
+                                              { k: 'UTR', v: String(pendingUtr) },
+                                              { k: 'Payment mode', v: String(pendingMode) },
+                                              { k: 'Captured at', v: String(pendingCapturedAt) },
+                                              { k: 'Reference', v: item.id },
+                                              { k: 'Marked by', v: providerShort },
+                                            ].map((r) => (
+                                              <View key={r.k} style={styles.tripsReceiptMetaRow}>
+                                                <Text style={[styles.tripsReceiptMetaLabel, { color: colors.textMuted }]}>{r.k}</Text>
+                                                <Text style={[styles.tripsReceiptMetaValue, { color: colors.text }]} numberOfLines={1} ellipsizeMode="middle">
+                                                  {r.v}
+                                                </Text>
+                                              </View>
+                                            ))}
+                                          </View>
+
+                                          <View style={styles.tripsReceiptActions}>
+                                            <TouchableOpacity
+                                              activeOpacity={0.85}
+                                              style={[
+                                                styles.tripsReceiptActionSecondary,
+                                                {
+                                                  backgroundColor: isDark ? colors.surfaceElevated : '#f8fafc',
+                                                  borderColor: isDark ? colors.borderSubtle : '#e2e8f0',
+                                                },
+                                              ]}
+                                              onPress={() => {
+                                                const msg = buildSettlementShareMessage({
+                                                  fleetName: providerShort,
+                                                  tripId: item.id,
+                                                  amount: Math.round(item.amount),
+                                                  transactionId: String(pendingTxnId),
+                                                  utr: String(pendingUtr),
+                                                });
+                                                Share.share({ message: msg }).catch(() => {});
+                                              }}
+                                            >
+                                              <FontAwesome name="share-square-o" size={13} color={colors.textMuted} />
+                                              <Text style={[styles.tripsReceiptActionSecondaryText, { color: colors.textMuted }]}>Share</Text>
+                                            </TouchableOpacity>
+
+                                            <TouchableOpacity
+                                              activeOpacity={0.85}
+                                              style={[styles.tripsReceiptActionPrimary, { backgroundColor: colors.emerald }]}
+                                              onPress={() => confirmMarkAsPaid(item.trip, item.amount, fleetPendingLedger)}
+                                            >
+                                              <FontAwesome name="check" size={13} color={colors.textOnPrimary} />
+                                              <Text style={styles.tripsReceiptActionPrimaryText}>Verify & Mark as paid</Text>
+                                            </TouchableOpacity>
+                                          </View>
+                                        </View>
+                                      </View>
+                                    )}
+                                  </View>
                                 ) : (
                                   <View style={styles.tripsExpandedGrid}>
                                     <TouchableOpacity
@@ -2353,10 +2568,20 @@ export default function DriverWalletScreen() {
     </Modal>
     <ThemedConfirmModal
       visible={!!markPaidConfirmState}
-      title="Mark as paid"
+      title={markPaidConfirmState?.sourceLedger ? 'Verify & Mark as paid' : 'Mark as paid'}
       message={
         markPaidConfirmState
-          ? `Record ₹${Math.round(markPaidConfirmState.amount).toLocaleString('en-IN')} for ${tripsService.getTripDisplayNumber(markPaidConfirmState.trip)} as received? This will update your cash balance.`
+          ? (() => {
+              const tripDisplay = tripsService.getTripDisplayNumber(markPaidConfirmState.trip);
+              const amountStr = `₹${Math.round(markPaidConfirmState.amount).toLocaleString('en-IN')}`;
+              const sourceDesc = markPaidConfirmState.sourceLedger?.description ?? null;
+              if (!sourceDesc) {
+                return `Record ${amountStr} for ${tripDisplay} as received? This will update your cash balance.`;
+              }
+              const utr = extractUtr(sourceDesc) ?? '—';
+              const mode = derivePaymentMode(sourceDesc) ?? '—';
+              return `Verify fleet marked payment for ${tripDisplay}: ${amountStr} (Mode: ${mode}, UTR: ${utr}). This will update your cash balance.`;
+            })()
           : ''
       }
       cancelText="Cancel"
@@ -2369,7 +2594,7 @@ export default function DriverWalletScreen() {
         const next = markPaidConfirmState;
         if (!next) return;
         setMarkPaidConfirmState(null);
-        void markTripAsPaid(next.trip, next.amount);
+        void markTripAsPaid(next.trip, next.amount, next.sourceLedger ?? null);
       }}
     />
     </>
@@ -3121,6 +3346,11 @@ const styles = StyleSheet.create({
   },
   tripsChevronExpanded: {
     transform: [{ rotate: '180deg' }],
+  },
+  tripsDebugSyncToken: {
+    fontSize: 9,
+    fontWeight: '600',
+    letterSpacing: 0.6,
   },
   tripsRouteCard: {
     flexDirection: 'row',
