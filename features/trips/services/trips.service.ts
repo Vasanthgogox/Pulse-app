@@ -2,9 +2,9 @@
  * Trips service — Supabase only (mobile). Same DB as Q-unified-base.
  */
 import {
-    DEFAULT_PAGE_SIZE,
-    DRIVER_TRIPS_PAGE_SIZE,
-    type PageOpts,
+  DEFAULT_PAGE_SIZE,
+  DRIVER_TRIPS_PAGE_SIZE,
+  type PageOpts,
 } from "@/lib/pagination";
 import { supabase } from "@/lib/supabase";
 

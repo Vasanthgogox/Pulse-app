@@ -173,7 +173,7 @@ export default function PassbookHistoryScreen() {
             </Text>
             <TouchableOpacity
               style={[styles.joinOrgBtn, { backgroundColor: colors.emerald }]}
-              onPress={() => router.push('/(driver)/requests')}
+              onPress={() => router.push('/(driver)')}
               activeOpacity={0.8}
             >
               <FontAwesome name="plus" size={20} color={Theme.textOnPrimary} />
@@ -186,7 +186,7 @@ export default function PassbookHistoryScreen() {
               onPress={() =>
                 Alert.alert(
                   'How it works',
-                  'Accept an invitation from an organization on the Requests screen to connect. Once connected, you\'ll receive trips and your earnings will be tracked in your passbook. When you leave a fleet, it appears here in history.'
+                  'Accept an invitation from an organization on the Dashboard screen to connect. Once connected, you\'ll receive trips and your earnings will be tracked in your passbook. When you leave a fleet, it appears here in history.'
                 )
               }
               activeOpacity={0.8}
