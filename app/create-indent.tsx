@@ -179,7 +179,7 @@ export default function CreateIndentScreen() {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const { currentOrganization } = useOrganization();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const [form, setForm] = useState<FormState>(initialFormState);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -286,7 +286,7 @@ export default function CreateIndentScreen() {
         if (!error && indent) {
           const nextForm: FormState = {
             client_name: String(indent.client_name ?? ""),
-            client_id: null,
+            client_id: (indent.client_id as string) ?? null,
             pickup_area: String(indent.pickup_area ?? ""),
             drop_location: String(indent.drop_location ?? ""),
             vehicle_type: String(indent.vehicle_type ?? ""),
@@ -437,9 +437,17 @@ export default function CreateIndentScreen() {
 
   const handleSelectClient = useCallback(
     (client: ClientRow) => {
+      const clientName = client.name ?? client.contact_person ?? "";
+      if (!clientName.trim()) {
+        showDialog(
+          "Invalid Client",
+          "Selected client has no name. Please select a client with a valid name or contact person.",
+        );
+        return;
+      }
       update({
         client_id: client.id,
-        client_name: client.name ?? client.contact_person ?? "",
+        client_name: clientName,
       });
     },
     [update],
@@ -496,12 +504,12 @@ export default function CreateIndentScreen() {
       weight: (parseFloat((form.weight ?? "").replace(/,/g, "")) || 0) * 1000,
       pickup_date: form.pickup_date.trim() || null,
       circulation_target: "integrated_supplier",
-      owner_user_id: profile?.id ?? undefined,
-      created_by_user_id: profile?.id ?? undefined,
+      owner_user_id: profile?.uid ?? user?.uid ?? undefined,
+      created_by_user_id: profile?.uid ?? user?.uid ?? undefined,
     };
     if (form.client_id) payload.client_id = form.client_id;
     return payload;
-  }, [form]);
+  }, [form, profile, user]);
 
   const persistDraft = useCallback(async () => {
     if (!orgId) {
@@ -910,9 +918,17 @@ export default function CreateIndentScreen() {
                       throw error;
                     }
                     if (client) {
+                      const clientName = client.name ?? client.contact_person ?? "";
+                      if (!clientName.trim()) {
+                        showDialog(
+                          "Invalid Client",
+                          "Added client has no name. Please ensure client has a valid name or contact person.",
+                        );
+                        return;
+                      }
                       update({
                         client_id: client.id,
-                        client_name: client.name ?? client.contact_person ?? "",
+                        client_name: clientName,
                       });
                       setClients((prev) => [...prev, client]);
                     }

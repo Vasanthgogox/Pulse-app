@@ -75,6 +75,7 @@ export interface IndentRow {
   client_price: number;
   supplier_target: number;
   status: string;
+  client_id?: string | null;
   vehicle_type: string | null;
   load_type: string | null;
   pickup_date: string | null;
@@ -341,6 +342,7 @@ export async function createIndent(
     shared_at: action === "share" ? new Date().toISOString() : null,
     last_saved_at: action === "draft" ? new Date().toISOString() : null,
   };
+  if (data.client_id) payload.client_id = data.client_id;
 
   const { data: row, error } = await supabase()
     .from("indents")
@@ -442,12 +444,16 @@ type DraftEditableFields = Partial<
     | "pickup_area"
     | "drop_location"
     | "client_name"
+    | "client_id"
     | "client_price"
     | "supplier_target"
     | "vehicle_type"
     | "load_type"
     | "pickup_date"
     | "circulation_target"
+    | "weight"
+    | "owner_user_id"
+    | "created_by_user_id"
   >
 >;
 
@@ -471,6 +477,7 @@ export async function updateIndentDraft(
     payload.drop_location = updates.drop_location;
   if (updates.client_name !== undefined)
     payload.client_name = updates.client_name;
+  if (updates.client_id !== undefined) payload.client_id = updates.client_id;
   if (updates.client_price !== undefined)
     payload.client_price = updates.client_price;
   if (updates.supplier_target !== undefined)
@@ -482,6 +489,11 @@ export async function updateIndentDraft(
     payload.pickup_date = updates.pickup_date;
   if (updates.circulation_target !== undefined)
     payload.circulation_target = updates.circulation_target;
+  if (updates.weight !== undefined) payload.weight = updates.weight;
+  if (updates.owner_user_id !== undefined)
+    payload.owner_user_id = updates.owner_user_id;
+  if (updates.created_by_user_id !== undefined)
+    payload.created_by_user_id = updates.created_by_user_id;
   payload.last_saved_at = new Date().toISOString();
 
   const { data, error } = await supabase()
