@@ -696,17 +696,18 @@ export default function CreateIndentScreen() {
     (form.supplier_target ?? "").trim().length > 0 &&
     parseFloat(String(form.client_price ?? "").replace(/,/g, "")) > 0 &&
     parseFloat(String(form.supplier_target ?? "").replace(/,/g, "")) >= 0;
-  const stackActionButtons = windowWidth < 760;
   const canProgressStep1 =
     (form.pickup_area ?? "").trim().length > 0 &&
-    (form.drop_location ?? "").trim().length > 0 &&
-    (form.vehicle_type ?? "").trim().length > 0;
+    (form.drop_location ?? "").trim().length > 0;
   const canProgressStep2 =
-    canProgressStep1 &&
     Boolean(form.client_id?.trim()) &&
+    (form.client_name ?? "").trim().length > 0 &&
+    (form.client_price ?? "").trim().length > 0 &&
+    (form.supplier_target ?? "").trim().length > 0 &&
     parseFloat(String(form.client_price ?? "").replace(/,/g, "")) > 0 &&
     parseFloat(String(form.supplier_target ?? "").replace(/,/g, "")) >= 0;
-  const canShareNow = currentStep >= 3 && canSubmit;
+  const stackActionButtons = windowWidth < 760;
+  const stackFieldGrid = windowWidth < 920;
 
   return (
     <KeyboardAvoidingView
@@ -765,7 +766,6 @@ export default function CreateIndentScreen() {
                 styles.stepCard,
                 currentStep !== 1 && styles.stepCardDimmed,
               ]}
-              pointerEvents={currentStep === 1 ? "auto" : "none"}
             >
               <View style={styles.stepCardHead}>
                 <View style={styles.stepChip}>
@@ -773,7 +773,7 @@ export default function CreateIndentScreen() {
                 </View>
                 <Text style={styles.stepCardTitle}>Route & Vehicle</Text>
               </View>
-            <View style={styles.sheetGrid}>
+            <View style={[styles.sheetGrid, stackFieldGrid && styles.sheetGridStacked]}>
               <View style={styles.sheetField}>
                 <Text style={styles.sheetLabel}>Origin Node</Text>
                 <LocationSearchField
@@ -869,7 +869,6 @@ export default function CreateIndentScreen() {
                 styles.stepCard,
                 currentStep < 2 && styles.stepCardDimmed,
               ]}
-              pointerEvents={currentStep >= 2 ? "auto" : "none"}
             >
               <View style={styles.stepCardHead}>
                 <View style={styles.stepChip}>
@@ -1073,7 +1072,6 @@ export default function CreateIndentScreen() {
                 styles.stepCard,
                 currentStep < 3 && styles.stepCardDimmed,
               ]}
-              pointerEvents={currentStep >= 3 ? "auto" : "none"}
             >
               <View style={styles.stepCardHead}>
                 <View style={styles.stepChip}>
@@ -1081,7 +1079,7 @@ export default function CreateIndentScreen() {
                 </View>
                 <Text style={styles.stepCardTitle}>Load Specifics</Text>
               </View>
-            <View style={styles.sheetGrid}>
+            <View style={[styles.sheetGrid, stackFieldGrid && styles.sheetGridStacked]}>
               <View style={styles.sheetField}>
                 <Text style={styles.sheetLabel}>Vehicle</Text>
                 {vehicleTypeIsOther ? (
@@ -1439,14 +1437,7 @@ export default function CreateIndentScreen() {
               </Text>
             </View>
 
-            <View
-              style={[
-                styles.actionFooterBar,
-                Platform.OS === "web"
-                  ? ({ backdropFilter: "blur(16px)" } as never)
-                  : null,
-              ]}
-            >
+            <View style={styles.actionFooterBar}>
             <View
               style={[
                 styles.actionButtonsRow,
@@ -1476,10 +1467,10 @@ export default function CreateIndentScreen() {
                 style={[
                   styles.submitBtn,
                   stackActionButtons && styles.actionBtnStacked,
-                  (!canShareNow || submitting) && styles.submitBtnDisabled,
+                  (!canSubmit || submitting) && styles.submitBtnDisabled,
                 ]}
                 onPress={handleSubmit}
-                disabled={!canShareNow || submitting}
+                disabled={!canSubmit || submitting}
                 activeOpacity={0.8}
               >
                 {submitting ? (
@@ -1529,11 +1520,14 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 14,
+    paddingTop: 16,
     flexGrow: 1,
+    width: "100%",
+    maxWidth: 1080,
+    alignSelf: "center",
   },
   sheet: {
-    gap: 10,
+    gap: 14,
   },
   designHeaderCard: {
     backgroundColor: Theme.darkSurface,
@@ -1594,10 +1588,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.borderLight,
     borderRadius: 20,
-    padding: 12,
+    padding: 16,
   },
   stepCardDimmed: {
-    opacity: 0.55,
+    opacity: 0.92,
   },
   stepCardHead: {
     flexDirection: "row",
@@ -1626,31 +1620,34 @@ const styles = StyleSheet.create({
   },
   sheetGrid: {
     flexDirection: "row",
-    gap: 10,
-    marginBottom: 10,
+    gap: 12,
+    marginBottom: 12,
+  },
+  sheetGridStacked: {
+    flexDirection: "column",
   },
   sheetField: { flex: 1, minWidth: 0 },
   hiddenLabel: { height: 0, margin: 0, padding: 0, opacity: 0 },
   sheetSection: { marginBottom: 8 },
   sheetLabel: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "700",
     color: Theme.textMutedDemo,
     textTransform: "uppercase",
-    letterSpacing: 0.8,
-    marginBottom: 6,
+    letterSpacing: 0.6,
+    marginBottom: 8,
   },
   sheetInput: {
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: "rgba(0,0,0,0.06)",
     borderRadius: 12,
-    paddingVertical: 11,
-    paddingHorizontal: 12,
-    fontSize: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    fontSize: 16,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
-    minHeight: 46,
+    minHeight: 52,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.03,
@@ -1748,7 +1745,7 @@ const styles = StyleSheet.create({
   clientSearchInput: {
     flex: 1,
     minWidth: 0,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
     paddingVertical: 0,
@@ -1792,10 +1789,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     marginBottom: 10,
+    flexWrap: "wrap",
   },
   quickDateChip: {
     flex: 1,
-    minHeight: 40,
+    minHeight: 44,
+    minWidth: 110,
     paddingVertical: 9,
     paddingHorizontal: 8,
     borderRadius: 12,
@@ -1970,13 +1969,14 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   actionFooterBar: {
-    marginTop: 10,
+    marginTop: 12,
     paddingTop: 8,
-    paddingHorizontal: 2,
-    paddingBottom: 2,
-    backgroundColor: "rgba(255,255,255,0.82)",
     borderTopWidth: 1,
     borderTopColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    borderRadius: 16,
+    paddingHorizontal: 8,
+    paddingBottom: 8,
   },
   actionButtonsRowStacked: {
     flexDirection: "column",
