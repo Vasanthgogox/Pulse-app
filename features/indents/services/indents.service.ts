@@ -94,6 +94,33 @@ export interface IndentRow {
   [key: string]: unknown;
 }
 
+async function ensurePublicUserRecord(userId?: string | null): Promise<void> {
+  const id = (userId ?? "").trim();
+  if (!id) return;
+
+  const { error } = await supabase().from("users").upsert(
+    {
+      id,
+      name: "User",
+    },
+    { onConflict: "id" },
+  );
+
+  if (error) {
+    const msg = (error.message ?? "").toLowerCase();
+    // Keep backward compatibility with DBs that do not have this table
+    // or block direct writes to it.
+    if (
+      msg.includes("relation") ||
+      msg.includes("permission denied") ||
+      msg.includes("policy")
+    ) {
+      return;
+    }
+    throw new Error(error.message);
+  }
+}
+
 export async function getIndentsByOrganization(
   orgId: string,
   opts?: PageOpts,
@@ -342,7 +369,20 @@ export async function createIndent(
     shared_at: action === "share" ? new Date().toISOString() : null,
     last_saved_at: action === "draft" ? new Date().toISOString() : null,
   };
-  if (data.client_id) payload.client_id = data.client_id;
+
+  const ownerUserId =
+    typeof payload.owner_user_id === "string" ? payload.owner_user_id : null;
+  const creatorUserId =
+    typeof payload.created_by_user_id === "string"
+      ? payload.created_by_user_id
+      : null;
+
+  // Sequential indent trigger writes user_counters(user_id),
+  // which references public.users(id).
+  await ensurePublicUserRecord(ownerUserId);
+  if (creatorUserId && creatorUserId !== ownerUserId) {
+    await ensurePublicUserRecord(creatorUserId);
+  }
 
   const { data: row, error } = await supabase()
     .from("indents")
@@ -444,7 +484,6 @@ type DraftEditableFields = Partial<
     | "pickup_area"
     | "drop_location"
     | "client_name"
-    | "client_id"
     | "client_price"
     | "supplier_target"
     | "vehicle_type"
@@ -477,7 +516,6 @@ export async function updateIndentDraft(
     payload.drop_location = updates.drop_location;
   if (updates.client_name !== undefined)
     payload.client_name = updates.client_name;
-  if (updates.client_id !== undefined) payload.client_id = updates.client_id;
   if (updates.client_price !== undefined)
     payload.client_price = updates.client_price;
   if (updates.supplier_target !== undefined)

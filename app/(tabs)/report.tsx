@@ -12,7 +12,6 @@ import {
 import * as FileSystem from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import * as XLSX from 'xlsx';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DetailScreenLayout } from '@/components/DetailScreenLayout';
 import { TransactionRow } from '@/components/TransactionRow';
@@ -113,51 +112,6 @@ export default function ReportScreen() {
   const handleShare = async () => {
     try {
       await Share.share({ message: buildReportMessage(), title: 'View Report' });
-    } catch {
-      /* user cancelled */
-    }
-  };
-
-  const handleDownloadExcel = async () => {
-    const rows = filteredTransactions.map((t) => ({
-      dateTime: t.dateTime,
-      name: t.name,
-      amount: t.amount,
-      type: t.color === 'green' ? 'In' : 'Out',
-    }));
-    const sheetRows: (string | number)[][] = [
-      ['Date/Time', 'Name', 'Amount', 'Type'],
-      ...rows.map((r) => [r.dateTime, r.name, r.amount, r.type]),
-    ];
-    const worksheet = XLSX.utils.aoa_to_sheet(sheetRows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Report');
-    try {
-      if (Platform.OS === 'web') {
-        const arrayBuffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
-        const blob = new Blob(
-          [arrayBuffer],
-          { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
-        );
-        triggerWebDownload(blob, `report-${Date.now()}.xlsx`);
-        return;
-      }
-      if (!FileSystem.cacheDirectory) throw new Error('No cache directory available');
-      const base64 = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' });
-      const uri = `${FileSystem.cacheDirectory}report-${Date.now()}.xlsx`;
-      await FileSystem.writeAsStringAsync(uri, base64, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      const sharingAvailable = await Sharing.isAvailableAsync();
-      if (sharingAvailable) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          dialogTitle: 'Save or share report Excel',
-          UTI: 'org.openxmlformats.spreadsheetml.sheet',
-        });
-      } else {
-        await Share.share({ url: uri, title: 'Report' });
-      }
     } catch {
       /* user cancelled */
     }
@@ -300,16 +254,6 @@ export default function ReportScreen() {
               activeOpacity={0.8}
             >
               <Text style={styles.downloadOptionText}>PDF</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.downloadOption}
-              onPress={() => {
-                setDownloadModalVisible(false);
-                void handleDownloadExcel();
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.downloadOptionText}>Excel (.xlsx)</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.downloadOption}

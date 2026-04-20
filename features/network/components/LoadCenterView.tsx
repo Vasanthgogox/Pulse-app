@@ -7,82 +7,69 @@ import { SemanticAddIcon } from "@/components/SemanticAddIcon";
 import { SubTabs } from "@/components/SubTabs";
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
-import { StyleSheet } from "react-native";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
-import { formatMobileNumber } from "@/lib/format";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { searchExistingDriversByPhone } from "@/features/drivers/services/drivers.service";
 import { upsertTripSubcontract } from "@/features/finance/services/tripSubcontracts.service";
 import {
-  BidReceivedHammer,
-  createDirectQuote,
-  getIndentDisplayNumber,
-  updateDirectQuoteAssignment,
-  updateDirectQuoteStatus,
-  updateIndent,
-  type DirectQuoteRow,
-  type IndentRow,
+    BidReceivedHammer,
+    createDirectQuote,
+    getIndentDisplayNumber,
+    updateDirectQuoteAssignment,
+    updateDirectQuoteStatus,
+    updateIndent,
+    type DirectQuoteRow,
+    type IndentRow,
 } from "@/features/indents";
-import { shareDraftIndent } from "@/features/indents/services/indents.service";
 import { acceptAwardedQuote } from "@/features/indents/services/accept-awarded-quote.service";
+import { shareDraftIndent } from "@/features/indents/services/indents.service";
 import {
-  assignAggregateTripDriverByPhone,
-  getDriverAvailabilityByPhone,
-  generateTripOtp,
-  isTripCompleted,
-  regenerateTripOtp,
-  setInitialTripForDetail,
-  updateTripSupplier,
+    assignAggregateTripDriverByPhone,
+    generateTripOtp,
+    getDriverAvailabilityByPhone,
+    regenerateTripOtp,
+    setInitialTripForDetail,
+    updateTripSupplier
 } from "@/features/trips";
-import { formatINR } from "@/lib/format";
-import { validatePhone } from "@/lib/phoneValidation";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
+import { formatINR, formatMobileNumber } from "@/lib/format";
+import { validatePhone } from "@/lib/phoneValidation";
 import {
-  useDirectQuoteCountsQuery,
-  useDriversQuery,
-  useIndentDirectQuotesQuery,
-  useIndentsQuery,
-  useInvalidateIndents,
-  useInvalidateTrips,
-  useMarketIndentsQuery,
-  useMyDirectQuotesQuery,
-  useSuppliersQuery,
-  useTripsQuery,
-  useVehiclesQuery,
+    useDirectQuoteCountsQuery,
+    useDriversQuery,
+    useIndentDirectQuotesQuery,
+    useIndentsQuery,
+    useInvalidateIndents,
+    useInvalidateTrips,
+    useMarketIndentsQuery,
+    useMyDirectQuotesQuery,
+    useSuppliersQuery,
+    useTripsQuery,
+    useVehiclesQuery,
 } from "@/lib/queries";
-import { FlashList } from "@shopify/flash-list";
-import { searchExistingDriversByPhone } from "@/features/drivers/services/drivers.service";
 import { queryKeys } from "@/lib/queryKeys";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { FlashList } from "@shopify/flash-list";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
+import { Building2, Package, Share2, Users, X } from "lucide-react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Building2,
-  Package,
-  Share2,
-  Users,
-  X,
-} from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useState, useRef } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Platform as RNPlatform,
-  RefreshControl,
-  ScrollView,
-  Share,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  useWindowDimensions,
-  View
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform, RefreshControl, Platform as RNPlatform, ScrollView,
+    Share, StyleSheet, Switch,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -96,7 +83,11 @@ const STATUS_TABS: {
   label: string;
   statuses: string[];
 }[] = [
-  { id: "OPEN", label: "Open", statuses: ["open", "pending", "broadcast", "draft"] },
+  {
+    id: "OPEN",
+    label: "Open",
+    statuses: ["open", "pending", "broadcast", "draft"],
+  },
   { id: "QUOTED", label: "Quoted", statuses: ["quoted"] },
   { id: "AWARDED", label: "Awarded", statuses: ["awarded"] },
   {
@@ -128,9 +119,7 @@ function giveLoadStatusPillStyles(status: string): {
       text: { color: Theme.textOnPrimary },
     };
   }
-  if (
-    ["completed", "closed", "cancelled", "expired"].includes(s)
-  ) {
+  if (["completed", "closed", "cancelled", "expired"].includes(s)) {
     return {
       pill: {
         backgroundColor: Theme.surfaceGray,
@@ -251,11 +240,15 @@ export function LoadCenterView({
     useState("");
   const [useAdHocDriver, setUseAdHocDriver] = useState(false);
   const [aggregateDriverPhone, setAggregateDriverPhone] = useState("");
-  const [aggregatePhoneName, setAggregatePhoneName] = useState<string | null>(null);
+  const [aggregatePhoneName, setAggregatePhoneName] = useState<string | null>(
+    null,
+  );
   const [aggregatePhoneNotFound, setAggregatePhoneNotFound] = useState(false);
   const [aggregatePhoneInTrip, setAggregatePhoneInTrip] = useState(false);
   const aggregatePhoneLookupTimeoutRef = useRef<number | null>(null);
-  const [subcontractSupplierId, setSubcontractSupplierId] = useState<string | null>(null);
+  const [subcontractSupplierId, setSubcontractSupplierId] = useState<
+    string | null
+  >(null);
   const [subcontractRate, setSubcontractRate] = useState<string>("");
   const [subcontractPickerOpen, setSubcontractPickerOpen] = useState(false);
   const [showIntegratedPartners, setShowIntegratedPartners] = useState(false);
@@ -327,20 +320,34 @@ export function LoadCenterView({
       );
   }, [loadAction, localBidHistoryByIndentId]);
 
-  const isIntegratedSupplierRow = useCallback((s: { supplier_type?: string | null; linked_organization_id?: string | null }) => {
-    return s.supplier_type === "integrated" && !!s.linked_organization_id;
-  }, []);
+  const isIntegratedSupplierRow = useCallback(
+    (s: {
+      supplier_type?: string | null;
+      linked_organization_id?: string | null;
+    }) => {
+      return s.supplier_type === "integrated" && !!s.linked_organization_id;
+    },
+    [],
+  );
 
   const visiblePartnersForHandshake = useMemo(() => {
     const manual = suppliers.filter((s) => !isIntegratedSupplierRow(s));
     const base = showIntegratedPartners ? suppliers : manual;
     // Never hide the currently selected partner (keeps existing selection stable).
-    if (subcontractSupplierId && !base.some((s) => s.id === subcontractSupplierId)) {
+    if (
+      subcontractSupplierId &&
+      !base.some((s) => s.id === subcontractSupplierId)
+    ) {
       const selected = suppliers.find((s) => s.id === subcontractSupplierId);
       if (selected) return [selected, ...base];
     }
     return base;
-  }, [suppliers, showIntegratedPartners, subcontractSupplierId, isIntegratedSupplierRow]);
+  }, [
+    suppliers,
+    showIntegratedPartners,
+    subcontractSupplierId,
+    isIntegratedSupplierRow,
+  ]);
 
   const awardModalIndentId =
     loadAction?.type === "AWARD" ? loadAction.load.id : null;
@@ -409,9 +416,8 @@ export function LoadCenterView({
 
         if (!foundName) {
           // Some deployments store phone as +91XXXXXXXXXX; try that too.
-          const { matches: matchesWithCode } = await searchExistingDriversByPhone(
-            `+91${last10}`,
-          );
+          const { matches: matchesWithCode } =
+            await searchExistingDriversByPhone(`+91${last10}`);
           foundName = matchesWithCode[0]?.full_name ?? null;
         }
 
@@ -493,8 +499,7 @@ export function LoadCenterView({
       const status = (i.status || "").toLowerCase();
       if (!statusMatchesFilter(status, "DONE")) return false;
       const target = (i.circulation_target || "").toLowerCase();
-      const isTargeted =
-        target === "integrated_supplier" || target === "both";
+      const isTargeted = target === "integrated_supplier" || target === "both";
       if (!isTargeted) return false;
       if (awardedToMeIndentIds.has(i.id)) return false;
       return myQuoteByIndentId.has(i.id);
@@ -620,7 +625,9 @@ export function LoadCenterView({
       return [];
     })();
 
-    return statusFiltered.filter((load) => loadMatchesSearch(load, searchQuery));
+    return statusFiltered.filter((load) =>
+      loadMatchesSearch(load, searchQuery),
+    );
   }, [
     findWorkLoads,
     statusFilterTab,
@@ -637,7 +644,9 @@ export function LoadCenterView({
   }, [findWorkDoneUnionLoads, searchQuery, loadMatchesSearch]);
 
   const filteredFindWorkList =
-    statusFilterTab === "DONE" ? filteredFindWorkDoneLoads : filteredFindWorkLoads;
+    statusFilterTab === "DONE"
+      ? filteredFindWorkDoneLoads
+      : filteredFindWorkLoads;
 
   useEffect(() => {
     let cancelled = false;
@@ -1133,19 +1142,20 @@ export function LoadCenterView({
       const subSupplierId = (subcontractSupplierId ?? "").trim();
       const subRateNum = Number(subcontractRate);
       const shouldSaveSubcontract =
-        subSupplierId !== "" &&
-        Number.isFinite(subRateNum) &&
-        subRateNum >= 0;
+        subSupplierId !== "" && Number.isFinite(subRateNum) && subRateNum >= 0;
 
       const saveSubcontract = async () => {
         if (!shouldSaveSubcontract) return;
         const isTripOwner = trip.organization_id === orgId;
-        
+
         if (isTripOwner) {
-          const { error: supplierUpdateErr } = await updateTripSupplier(trip.id, {
-            supplier_id: subSupplierId,
-            supplier_rate: subRateNum,
-          });
+          const { error: supplierUpdateErr } = await updateTripSupplier(
+            trip.id,
+            {
+              supplier_id: subSupplierId,
+              supplier_rate: subRateNum,
+            },
+          );
           if (supplierUpdateErr) {
             Alert.alert(
               "Trip created",
@@ -1153,14 +1163,18 @@ export function LoadCenterView({
             );
           }
         }
-        
+
         const { error: subErr } = await upsertTripSubcontract({
           viewerOrgId: orgId,
           tripId: trip.id,
           supplierId: subSupplierId,
           rate: subRateNum,
         });
-        if (subErr) Alert.alert("Trip created", `Partner could not be saved. ${subErr.message}`);
+        if (subErr)
+          Alert.alert(
+            "Trip created",
+            `Partner could not be saved. ${subErr.message}`,
+          );
         queryClient.invalidateQueries({
           queryKey: ["q", "trips", "subcontracts", orgId],
         });
@@ -1228,7 +1242,11 @@ export function LoadCenterView({
         return;
       }
 
-      const { error: otpErr, code, expires_at } = await generateTripOtp(trip.id);
+      const {
+        error: otpErr,
+        code,
+        expires_at,
+      } = await generateTripOtp(trip.id);
       if (otpErr || !code) {
         await saveSubcontract();
         await updateIndent(load.id, { status: "completed" });
@@ -1316,11 +1334,7 @@ export function LoadCenterView({
 
   /** Vehicle / weight / load: one header row, one detail row (lighter type). */
   const renderLoadCardSpecsColumns = useCallback(
-    (
-      vehicleDetail: string,
-      weightDetail: string,
-      loadTypeDetail: string,
-    ) => (
+    (vehicleDetail: string, weightDetail: string, loadTypeDetail: string) => (
       <View style={styles.loadCardSpecsGrid}>
         <View style={styles.loadCardSpecsLabelsRow}>
           <View style={styles.loadCardSpecCell}>
@@ -1400,7 +1414,10 @@ export function LoadCenterView({
               ]}
             >
               <Text
-                style={[styles.loadStatePillText, { color: Theme.textOnPrimary }]}
+                style={[
+                  styles.loadStatePillText,
+                  { color: Theme.textOnPrimary },
+                ]}
               >
                 {isDone ? "DEPLOYED" : "AWARDED"}
               </Text>
@@ -1442,7 +1459,9 @@ export function LoadCenterView({
               <View
                 style={[
                   styles.bidIconCircle,
-                  isDone ? styles.bidIconCircleActive : styles.bidIconCircleMuted,
+                  isDone
+                    ? styles.bidIconCircleActive
+                    : styles.bidIconCircleMuted,
                 ]}
               >
                 <Package
@@ -1547,11 +1566,7 @@ export function LoadCenterView({
               accessibilityLabel="My network"
               hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
             >
-              <Users
-                size={18}
-                color={Theme.textOnDark}
-                strokeWidth={2.1}
-              />
+              <Users size={18} color={Theme.textOnDark} strokeWidth={2.1} />
               <Text style={styles.loadMyNetworkBtnLabel}>Network</Text>
             </TouchableOpacity>
           ) : null}
@@ -1687,206 +1702,225 @@ export function LoadCenterView({
                 </View>
               ) : (
                 <View style={useGridLayout ? styles.gridList : undefined}>
-                <View style={styles.loadSectionRow}>
-                  <Text style={styles.loadSectionTitle}>
-                    Your active indents
-                  </Text>
-                  <View style={styles.loadSectionPill}>
-                    <Text style={styles.loadSectionPillText}>Live</Text>
-                  </View>
-                </View>
-                {filteredHirePartnerLoads.map((load) => {
-                  const status = (load.status || "").toLowerCase();
-                  const isDraft = status === "draft";
-                  const isAwardedPendingTrip =
-                    status === "awarded" && !indentIdsWithTrip.has(load.id);
-                  const isDone = statusMatchesFilter(status, "DONE");
-                  const vehicleDetail = load.vehicle_type || "—";
-                  const weightValue = Number(load.weight);
-                  const weightDetail =
-                    Number.isFinite(weightValue) && weightValue > 0
-                      ? `${weightValue} KG`
-                      : "—";
-                  const loadTypeDetail = load.load_type || "—";
-                  // Indent was assigned a supplier directly (no quote needed).
-                  const hasDirectSupplier = !!load["assigned_supplier_id"];
-                  // Shipper view: never show "Create Trip". The supplier creates the trip from
-                  // Claimed (Assign Staff & Deploy). When awarded but no trip yet, supplier
-                  // is assigned (from accepted quote or assigned_supplier_id); status stays
-                  // "awarded" until supplier deploys.
-                  const isAwaitingSupplierDeploy =
-                    isAwardedPendingTrip || hasDirectSupplier;
-                  const statusPill = giveLoadStatusPillStyles(status);
-                  const bidCount = quoteCounts[load.id] ?? 0;
-                  return (
-                    <View key={load.id} style={useGridLayout ? styles.gridCardWrap : undefined}>
-                      <TouchableOpacity
-                        style={[
-                          styles.loadCard,
-                          useGridLayout && styles.loadCardGrid,
-                        ]}
-                        onPress={() => onIndentPress(load)}
-                        activeOpacity={0.7}
-                      >
-                        <View style={styles.loadCardOrb} pointerEvents="none" />
-                        <View style={styles.loadCardHeroRow}>
-                          <View style={styles.loadPillRow}>
-                            <View style={styles.loadTypePill}>
-                              <Text style={styles.loadTypePillText}>GIVE LOAD</Text>
-                            </View>
-                            <View style={[styles.loadStatePill, statusPill.pill]}>
-                              <Text
-                                style={[styles.loadStatePillText, statusPill.text]}
-                              >
-                                {status.toUpperCase()}
-                              </Text>
-                            </View>
-                          </View>
-                          <Text style={styles.loadCardDateHero}>
-                            {formatIndentCardDate(load.pickup_date)}
-                          </Text>
-                        </View>
-                        <LoadCardRouteRow
-                          origin={load.pickup_area || "—"}
-                          destination={load.drop_location || "—"}
-                          compact={useGridLayout}
-                        />
-                        <Text style={styles.loadCardIdCompact} numberOfLines={1}>
-                          {getIndentDisplayNumber(load)}
-                        </Text>
-                        <View style={styles.loadCardSpecsPanel}>
-                          {renderLoadCardSpecsColumns(
-                            vehicleDetail,
-                            weightDetail,
-                            loadTypeDetail,
-                          )}
-                        </View>
-                        <View
-                          style={[
-                            styles.loadCardFooter,
-                            useGridLayout && styles.loadCardFooterGrid,
-                          ]}
-                        >
-                          <View style={styles.loadCardMeta}>
-                            {isDone ? (
-                              <View style={styles.bidMetaWrap}>
-                                <View
-                                  style={[
-                                    styles.bidIconCircle,
-                                    styles.bidIconCircleMuted,
-                                  ]}
-                                >
-                                  <FontAwesome
-                                    name="check-circle"
-                                    size={16}
-                                    color={
-                                      status === "cancelled"
-                                        ? Theme.textMuted
-                                        : Theme.positive
-                                    }
-                                  />
-                                </View>
-                                <Text style={styles.loadCardMetaText}>
-                                  {status === "cancelled"
-                                    ? "Cancelled"
-                                    : "Completed"}
-                                </Text>
-                              </View>
-                            ) : isAwardedPendingTrip ? (
-                              <View style={styles.bidMetaWrap}>
-                                <View
-                                  style={[
-                                    styles.bidIconCircle,
-                                    styles.bidIconCircleActive,
-                                  ]}
-                                >
-                                  <FontAwesome
-                                    name="trophy"
-                                    size={16}
-                                    color={Theme.driverGold}
-                                  />
-                                </View>
-                                <Text style={styles.loadCardMetaText}>
-                                  Supplier claimed
-                                </Text>
-                              </View>
-                            ) : (
-                              <View style={styles.bidMetaWrap}>
-                                <View
-                                  style={[
-                                    styles.bidIconCircle,
-                                    bidCount > 0
-                                      ? styles.bidIconCircleActive
-                                      : styles.bidIconCircleMuted,
-                                  ]}
-                                >
-                                  {bidCount > 0 ? (
-                                    <BidReceivedHammer visible={true} size={16} />
-                                  ) : (
-                                    <FontAwesome
-                                      name="gavel"
-                                      size={16}
-                                      color={Theme.textMuted}
-                                    />
-                                  )}
-                                </View>
-                                <Text style={styles.loadCardMetaText}>
-                                  {bidCount} bids received
-                                </Text>
-                              </View>
-                            )}
-                          </View>
-                          <View style={styles.loadCardActions}>
-                            <TouchableOpacity
-                              style={styles.shareIndentIconBtn}
-                              onPress={() =>
-                                isDone || isAwardedPendingTrip
-                                  ? onIndentPress(load)
-                                  : handleShareIndent(load)
-                              }
-                              activeOpacity={0.88}
-                              accessibilityLabel={
-                                isDone || isAwardedPendingTrip
-                                  ? "View detail"
-                                  : "Share indent"
-                              }
-                            >
-                              <Share2
-                                size={18}
-                                color={Theme.textMuted}
-                                strokeWidth={2.2}
-                              />
-                            </TouchableOpacity>
-                            {isDone ? null : isAwaitingSupplierDeploy ? (
-                              <View style={styles.deployPendingWrap}>
-                                <Text style={styles.deployPendingText}>
-                                  Pending
-                                </Text>
-                              </View>
-                            ) : (
-                              <TouchableOpacity
-                                style={styles.reviewBidsBtn}
-                                onPress={() => {
-                                  if (isDraft) {
-                                    handleBroadcastDraft(load);
-                                    return;
-                                  }
-                                  setSelectedQuoteId(null);
-                                  setLoadAction({ type: "AWARD", load });
-                                }}
-                                activeOpacity={0.9}
-                              >
-                                <Text style={styles.reviewBidsBtnText}>
-                                  {isDraft ? "Broadcast" : "Review Hub"}
-                                </Text>
-                              </TouchableOpacity>
-                            )}
-                          </View>
-                        </View>
-                      </TouchableOpacity>
+                  <View style={styles.loadSectionRow}>
+                    <Text style={styles.loadSectionTitle}>
+                      Your active indents
+                    </Text>
+                    <View style={styles.loadSectionPill}>
+                      <Text style={styles.loadSectionPillText}>Live</Text>
                     </View>
-                  );
-                })}
+                  </View>
+                  {filteredHirePartnerLoads.map((load) => {
+                    const status = (load.status || "").toLowerCase();
+                    const isDraft = status === "draft";
+                    const isAwardedPendingTrip =
+                      status === "awarded" && !indentIdsWithTrip.has(load.id);
+                    const isDone = statusMatchesFilter(status, "DONE");
+                    const vehicleDetail = load.vehicle_type || "—";
+                    const weightValue = Number(load.weight);
+                    const weightDetail =
+                      Number.isFinite(weightValue) && weightValue > 0
+                        ? `${weightValue} KG`
+                        : "—";
+                    const loadTypeDetail = load.load_type || "—";
+                    // Indent was assigned a supplier directly (no quote needed).
+                    const hasDirectSupplier = !!load["assigned_supplier_id"];
+                    // Shipper view: never show "Create Trip". The supplier creates the trip from
+                    // Claimed (Assign Staff & Deploy). When awarded but no trip yet, supplier
+                    // is assigned (from accepted quote or assigned_supplier_id); status stays
+                    // "awarded" until supplier deploys.
+                    const isAwaitingSupplierDeploy =
+                      isAwardedPendingTrip || hasDirectSupplier;
+                    const statusPill = giveLoadStatusPillStyles(status);
+                    const bidCount = quoteCounts[load.id] ?? 0;
+                    return (
+                      <View
+                        key={load.id}
+                        style={useGridLayout ? styles.gridCardWrap : undefined}
+                      >
+                        <TouchableOpacity
+                          style={[
+                            styles.loadCard,
+                            useGridLayout && styles.loadCardGrid,
+                          ]}
+                          onPress={() => onIndentPress(load)}
+                          activeOpacity={0.7}
+                        >
+                          <View
+                            style={styles.loadCardOrb}
+                            pointerEvents="none"
+                          />
+                          <View style={styles.loadCardHeroRow}>
+                            <View style={styles.loadPillRow}>
+                              <View style={styles.loadTypePill}>
+                                <Text style={styles.loadTypePillText}>
+                                  GIVE LOAD
+                                </Text>
+                              </View>
+                              <View
+                                style={[styles.loadStatePill, statusPill.pill]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.loadStatePillText,
+                                    statusPill.text,
+                                  ]}
+                                >
+                                  {status.toUpperCase()}
+                                </Text>
+                              </View>
+                            </View>
+                            <Text style={styles.loadCardDateHero}>
+                              {formatIndentCardDate(load.pickup_date)}
+                            </Text>
+                          </View>
+                          <LoadCardRouteRow
+                            origin={load.pickup_area || "—"}
+                            destination={load.drop_location || "—"}
+                            compact={useGridLayout}
+                          />
+                          <Text
+                            style={styles.loadCardIdCompact}
+                            numberOfLines={1}
+                          >
+                            {getIndentDisplayNumber(load)}
+                          </Text>
+                          <View style={styles.loadCardSpecsPanel}>
+                            {renderLoadCardSpecsColumns(
+                              vehicleDetail,
+                              weightDetail,
+                              loadTypeDetail,
+                            )}
+                          </View>
+                          <View
+                            style={[
+                              styles.loadCardFooter,
+                              useGridLayout && styles.loadCardFooterGrid,
+                            ]}
+                          >
+                            <View style={styles.loadCardMeta}>
+                              {isDone ? (
+                                <View style={styles.bidMetaWrap}>
+                                  <View
+                                    style={[
+                                      styles.bidIconCircle,
+                                      styles.bidIconCircleMuted,
+                                    ]}
+                                  >
+                                    <FontAwesome
+                                      name="check-circle"
+                                      size={16}
+                                      color={
+                                        status === "cancelled"
+                                          ? Theme.textMuted
+                                          : Theme.positive
+                                      }
+                                    />
+                                  </View>
+                                  <Text style={styles.loadCardMetaText}>
+                                    {status === "cancelled"
+                                      ? "Cancelled"
+                                      : "Completed"}
+                                  </Text>
+                                </View>
+                              ) : isAwardedPendingTrip ? (
+                                <View style={styles.bidMetaWrap}>
+                                  <View
+                                    style={[
+                                      styles.bidIconCircle,
+                                      styles.bidIconCircleActive,
+                                    ]}
+                                  >
+                                    <FontAwesome
+                                      name="trophy"
+                                      size={16}
+                                      color={Theme.driverGold}
+                                    />
+                                  </View>
+                                  <Text style={styles.loadCardMetaText}>
+                                    Supplier claimed
+                                  </Text>
+                                </View>
+                              ) : (
+                                <View style={styles.bidMetaWrap}>
+                                  <View
+                                    style={[
+                                      styles.bidIconCircle,
+                                      bidCount > 0
+                                        ? styles.bidIconCircleActive
+                                        : styles.bidIconCircleMuted,
+                                    ]}
+                                  >
+                                    {bidCount > 0 ? (
+                                      <BidReceivedHammer
+                                        visible={true}
+                                        size={16}
+                                      />
+                                    ) : (
+                                      <FontAwesome
+                                        name="gavel"
+                                        size={16}
+                                        color={Theme.textMuted}
+                                      />
+                                    )}
+                                  </View>
+                                  <Text style={styles.loadCardMetaText}>
+                                    {bidCount} bids received
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                            <View style={styles.loadCardActions}>
+                              <TouchableOpacity
+                                style={styles.shareIndentIconBtn}
+                                onPress={() =>
+                                  isDone || isAwardedPendingTrip
+                                    ? onIndentPress(load)
+                                    : handleShareIndent(load)
+                                }
+                                activeOpacity={0.88}
+                                accessibilityLabel={
+                                  isDone || isAwardedPendingTrip
+                                    ? "View detail"
+                                    : "Share indent"
+                                }
+                              >
+                                <Share2
+                                  size={18}
+                                  color={Theme.textMuted}
+                                  strokeWidth={2.2}
+                                />
+                              </TouchableOpacity>
+                              {isDone ? null : isAwaitingSupplierDeploy ? (
+                                <View style={styles.deployPendingWrap}>
+                                  <Text style={styles.deployPendingText}>
+                                    Pending
+                                  </Text>
+                                </View>
+                              ) : (
+                                <TouchableOpacity
+                                  style={styles.reviewBidsBtn}
+                                  onPress={() => {
+                                    if (isDraft) {
+                                      handleBroadcastDraft(load);
+                                      return;
+                                    }
+                                    setSelectedQuoteId(null);
+                                    setLoadAction({ type: "AWARD", load });
+                                  }}
+                                  activeOpacity={0.9}
+                                >
+                                  <Text style={styles.reviewBidsBtnText}>
+                                    {isDraft ? "Broadcast" : "Review Hub"}
+                                  </Text>
+                                </TouchableOpacity>
+                              )}
+                            </View>
+                          </View>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
                 </View>
               )}
             </>
@@ -1952,232 +1986,255 @@ export function LoadCenterView({
                   </View>
                 </View>
                 {filteredFindWorkList.map((load) => {
-                const existingQuote = myQuoteByIndentId.get(load.id);
-                const quoteStatus = (existingQuote?.status ?? "").toLowerCase();
-                const isPending = quoteStatus === "pending";
-                const isRejected = quoteStatus === "rejected";
-                const isAccepted = quoteStatus === "accepted";
-                const vehicleDetail = load.vehicle_type || "—";
-                const weightValue = Number(load.weight);
-                const weightDetail =
-                  Number.isFinite(weightValue) && weightValue > 0
-                    ? `${weightValue} KG`
-                    : "—";
-                const loadTypeDetail = load.load_type || "—";
-                const openBidModal = () => {
-                  setQuoteAmount(
-                    existingQuote ? String(existingQuote.amount) : "",
-                  );
-                  setLoadAction({ type: "BID", load });
-                };
-                const clientLabel = (
-                  load.creator_organization_name ||
-                  load.client_name ||
-                  ""
-                ).trim();
-                const getStatePill = () => {
-                  if (isAccepted) {
+                  const existingQuote = myQuoteByIndentId.get(load.id);
+                  const quoteStatus = (
+                    existingQuote?.status ?? ""
+                  ).toLowerCase();
+                  const isPending = quoteStatus === "pending";
+                  const isRejected = quoteStatus === "rejected";
+                  const isAccepted = quoteStatus === "accepted";
+                  const vehicleDetail = load.vehicle_type || "—";
+                  const weightValue = Number(load.weight);
+                  const weightDetail =
+                    Number.isFinite(weightValue) && weightValue > 0
+                      ? `${weightValue} KG`
+                      : "—";
+                  const loadTypeDetail = load.load_type || "—";
+                  const openBidModal = () => {
+                    setQuoteAmount(
+                      existingQuote ? String(existingQuote.amount) : "",
+                    );
+                    setLoadAction({ type: "BID", load });
+                  };
+                  const clientLabel = (
+                    load.creator_organization_name ||
+                    load.client_name ||
+                    ""
+                  ).trim();
+                  const getStatePill = () => {
+                    if (isAccepted) {
+                      return {
+                        wrap: {
+                          backgroundColor: Theme.positive,
+                          borderWidth: 1,
+                          borderColor: Theme.darkGreen,
+                        },
+                        txt: { color: Theme.textOnPrimary },
+                        label: (
+                          existingQuote?.status || "AWARDED"
+                        ).toUpperCase(),
+                      };
+                    }
+                    if (isRejected) {
+                      return {
+                        wrap: {
+                          backgroundColor: Theme.negativeMuted,
+                          borderWidth: 1,
+                          borderColor: Theme.teslaRed,
+                        },
+                        txt: { color: Theme.teslaRed },
+                        label: "DECLINED",
+                      };
+                    }
+                    if (isPending) {
+                      return {
+                        wrap: {
+                          backgroundColor: Theme.tripHubUnassignedPillBg,
+                          borderWidth: 1,
+                          borderColor: Theme.textPrimaryDark,
+                        },
+                        txt: { color: Theme.textPrimaryDark },
+                        label: "QUOTED",
+                      };
+                    }
                     return {
                       wrap: {
-                        backgroundColor: Theme.positive,
+                        backgroundColor: Theme.surfaceGray,
                         borderWidth: 1,
-                        borderColor: Theme.darkGreen,
-                      },
-                      txt: { color: Theme.textOnPrimary },
-                      label: (existingQuote?.status || "AWARDED").toUpperCase(),
-                    };
-                  }
-                  if (isRejected) {
-                    return {
-                      wrap: {
-                        backgroundColor: Theme.negativeMuted,
-                        borderWidth: 1,
-                        borderColor: Theme.teslaRed,
-                      },
-                      txt: { color: Theme.teslaRed },
-                      label: "DECLINED",
-                    };
-                  }
-                  if (isPending) {
-                    return {
-                      wrap: {
-                        backgroundColor: Theme.tripHubUnassignedPillBg,
-                        borderWidth: 1,
-                        borderColor: Theme.textPrimaryDark,
+                        borderColor: Theme.borderMedium,
                       },
                       txt: { color: Theme.textPrimaryDark },
-                      label: "QUOTED",
+                      label: "OPEN",
                     };
-                  }
-                  return {
-                    wrap: {
-                      backgroundColor: Theme.surfaceGray,
-                      borderWidth: 1,
-                      borderColor: Theme.borderMedium,
-                    },
-                    txt: { color: Theme.textPrimaryDark },
-                    label: "OPEN",
                   };
-                };
-                const sp = getStatePill();
-                const metaLine = isAccepted
-                  ? "Awarded — open Claimed to deploy"
-                  : isRejected
-                    ? "Quote declined — send a new price"
-                    : isPending
-                      ? `Your quote ${formatINR(Number(existingQuote?.amount ?? 0))}`
-                      : "No quote sent yet";
-                const ctaLabel = isAccepted
-                  ? "View claimed"
-                  : isPending
-                    ? "Update quote"
+                  const sp = getStatePill();
+                  const metaLine = isAccepted
+                    ? "Awarded — open Claimed to deploy"
                     : isRejected
-                      ? "New quote"
-                      : "Bid now";
-                return (
-                  <View key={load.id} style={useGridLayout ? styles.gridCardWrap : undefined}>
-                    <TouchableOpacity
-                      style={[
-                        styles.loadCard,
-                        useGridLayout && styles.loadCardGrid,
-                      ]}
-                      onPress={() => onIndentPress(load)}
-                      activeOpacity={0.7}
+                      ? "Quote declined — send a new price"
+                      : isPending
+                        ? `Your quote ${formatINR(Number(existingQuote?.amount ?? 0))}`
+                        : "No quote sent yet";
+                  const ctaLabel = isAccepted
+                    ? "View claimed"
+                    : isPending
+                      ? "Update quote"
+                      : isRejected
+                        ? "New quote"
+                        : "Bid now";
+                  return (
+                    <View
+                      key={load.id}
+                      style={useGridLayout ? styles.gridCardWrap : undefined}
                     >
-                    <View style={styles.loadCardOrb} pointerEvents="none" />
-                    <View style={styles.loadCardHeroRow}>
-                      <View style={styles.loadPillRow}>
-                        <View style={styles.loadTypePill}>
-                          <Text style={styles.loadTypePillText}>GET LOAD</Text>
-                        </View>
-                        <View style={[styles.loadStatePill, sp.wrap]}>
-                          <Text style={[styles.loadStatePillText, sp.txt]}>
-                            {sp.label}
+                      <TouchableOpacity
+                        style={[
+                          styles.loadCard,
+                          useGridLayout && styles.loadCardGrid,
+                        ]}
+                        onPress={() => onIndentPress(load)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.loadCardOrb} pointerEvents="none" />
+                        <View style={styles.loadCardHeroRow}>
+                          <View style={styles.loadPillRow}>
+                            <View style={styles.loadTypePill}>
+                              <Text style={styles.loadTypePillText}>
+                                GET LOAD
+                              </Text>
+                            </View>
+                            <View style={[styles.loadStatePill, sp.wrap]}>
+                              <Text style={[styles.loadStatePillText, sp.txt]}>
+                                {sp.label}
+                              </Text>
+                            </View>
+                          </View>
+                          <Text style={styles.loadCardDateHero}>
+                            {formatIndentCardDate(load.pickup_date)}
                           </Text>
                         </View>
-                      </View>
-                      <Text style={styles.loadCardDateHero}>
-                        {formatIndentCardDate(load.pickup_date)}
-                      </Text>
-                    </View>
-                    <LoadCardRouteRow
-                      origin={load.pickup_area || "—"}
-                      destination={load.drop_location || "—"}
-                      compact={useGridLayout}
-                    />
-                    {clientLabel ? (
-                      <View
-                        style={[
-                          styles.loadMarketClientRow,
-                          useGridLayout && styles.loadMarketClientRowGrid,
-                        ]}
-                      >
-                        <View style={styles.getLoadAvatarWrap}>
-                          {loadAvatarByIndentId[load.id] ? (
-                            <Image
-                              source={{ uri: loadAvatarByIndentId[load.id] }}
-                              style={styles.getLoadAvatarImage}
-                            />
-                          ) : (
-                            <Text style={styles.getLoadAvatarInitial}>
-                              {clientLabel.trim().charAt(0).toUpperCase()}
-                            </Text>
-                          )}
-                        </View>
-                        <Building2
-                          size={14}
-                          color={Theme.textSecondary}
-                          strokeWidth={2.2}
+                        <LoadCardRouteRow
+                          origin={load.pickup_area || "—"}
+                          destination={load.drop_location || "—"}
+                          compact={useGridLayout}
                         />
-                        <Text
-                          style={styles.loadMarketClientText}
-                          numberOfLines={1}
-                        >
-                          {clientLabel.toUpperCase()}
-                        </Text>
-                      </View>
-                    ) : useGridLayout ? (
-                      <View style={styles.loadMarketClientRowGridReserve} />
-                    ) : null}
-                    <Text style={styles.loadCardIdCompact} numberOfLines={1}>
-                      {getIndentDisplayNumber(load)}
-                    </Text>
-                    <View style={styles.loadCardSpecsPanel}>
-                      {renderLoadCardSpecsColumns(
-                        vehicleDetail,
-                        weightDetail,
-                        loadTypeDetail,
-                      )}
-                      <View style={styles.loadCardQuoteHint}>
-                        <Text style={styles.loadCardQuoteHintText}>
-                          Target{" "}
-                          {formatINR(
-                            Number(load.supplier_target ?? load.client_price ?? 0),
-                          )}
-                        </Text>
-                      </View>
-                    </View>
-                    <View
-                      style={[
-                        styles.loadCardFooter,
-                        useGridLayout && styles.loadCardFooterGrid,
-                      ]}
-                    >
-                      <View style={styles.loadCardMeta}>
-                        <View style={styles.bidMetaWrap}>
+                        {clientLabel ? (
                           <View
                             style={[
-                              styles.bidIconCircle,
-                              existingQuote
-                                ? styles.bidIconCircleActive
-                                : styles.bidIconCircleMuted,
+                              styles.loadMarketClientRow,
+                              useGridLayout && styles.loadMarketClientRowGrid,
                             ]}
                           >
-                            <Package
-                              size={16}
-                              color={
-                                existingQuote
-                                  ? Theme.textPrimaryDark
-                                  : Theme.textMuted
-                              }
+                            <View style={styles.getLoadAvatarWrap}>
+                              {loadAvatarByIndentId[load.id] ? (
+                                <Image
+                                  source={{
+                                    uri: loadAvatarByIndentId[load.id],
+                                  }}
+                                  style={styles.getLoadAvatarImage}
+                                />
+                              ) : (
+                                <Text style={styles.getLoadAvatarInitial}>
+                                  {clientLabel.trim().charAt(0).toUpperCase()}
+                                </Text>
+                              )}
+                            </View>
+                            <Building2
+                              size={14}
+                              color={Theme.textSecondary}
                               strokeWidth={2.2}
                             />
+                            <Text
+                              style={styles.loadMarketClientText}
+                              numberOfLines={1}
+                            >
+                              {clientLabel.toUpperCase()}
+                            </Text>
                           </View>
-                          <Text style={styles.loadCardMetaText} numberOfLines={2}>
-                            {metaLine}
-                          </Text>
+                        ) : useGridLayout ? (
+                          <View style={styles.loadMarketClientRowGridReserve} />
+                        ) : null}
+                        <Text
+                          style={styles.loadCardIdCompact}
+                          numberOfLines={1}
+                        >
+                          {getIndentDisplayNumber(load)}
+                        </Text>
+                        <View style={styles.loadCardSpecsPanel}>
+                          {renderLoadCardSpecsColumns(
+                            vehicleDetail,
+                            weightDetail,
+                            loadTypeDetail,
+                          )}
+                          <View style={styles.loadCardQuoteHint}>
+                            <Text style={styles.loadCardQuoteHintText}>
+                              Target{" "}
+                              {formatINR(
+                                Number(
+                                  load.supplier_target ??
+                                    load.client_price ??
+                                    0,
+                                ),
+                              )}
+                            </Text>
+                          </View>
                         </View>
-                      </View>
-                      <View style={styles.loadCardActions}>
-                        <TouchableOpacity
-                          style={styles.shareIndentIconBtn}
-                          onPress={() => handleShareIndent(load)}
-                          activeOpacity={0.88}
-                          accessibilityLabel="Share load"
+                        <View
+                          style={[
+                            styles.loadCardFooter,
+                            useGridLayout && styles.loadCardFooterGrid,
+                          ]}
                         >
-                          <Share2
-                            size={18}
-                            color={Theme.textMuted}
-                            strokeWidth={2.2}
-                          />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.reviewBidsBtn}
-                          onPress={
-                            isAccepted
-                              ? () => setLoadSubTab("AWARDED")
-                              : openBidModal
-                          }
-                          activeOpacity={0.9}
-                        >
-                          <Text style={styles.reviewBidsBtnText}>{ctaLabel}</Text>
-                        </TouchableOpacity>
-                      </View>
+                          <View style={styles.loadCardMeta}>
+                            <View style={styles.bidMetaWrap}>
+                              <View
+                                style={[
+                                  styles.bidIconCircle,
+                                  existingQuote
+                                    ? styles.bidIconCircleActive
+                                    : styles.bidIconCircleMuted,
+                                ]}
+                              >
+                                <Package
+                                  size={16}
+                                  color={
+                                    existingQuote
+                                      ? Theme.textPrimaryDark
+                                      : Theme.textMuted
+                                  }
+                                  strokeWidth={2.2}
+                                />
+                              </View>
+                              <Text
+                                style={styles.loadCardMetaText}
+                                numberOfLines={2}
+                              >
+                                {metaLine}
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={styles.loadCardActions}>
+                            <TouchableOpacity
+                              style={styles.shareIndentIconBtn}
+                              onPress={() => handleShareIndent(load)}
+                              activeOpacity={0.88}
+                              accessibilityLabel="Share load"
+                            >
+                              <Share2
+                                size={18}
+                                color={Theme.textMuted}
+                                strokeWidth={2.2}
+                              />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.reviewBidsBtn}
+                              onPress={
+                                isAccepted
+                                  ? () => setLoadSubTab("AWARDED")
+                                  : openBidModal
+                              }
+                              activeOpacity={0.9}
+                            >
+                              <Text style={styles.reviewBidsBtnText}>
+                                {ctaLabel}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </TouchableOpacity>
                     </View>
-                    </TouchableOpacity>
-                  </View>
-                );
-              })}
+                  );
+                })}
               </View>
             ))}
 
@@ -2213,7 +2270,8 @@ export function LoadCenterView({
                       key={`claimed-${load.id}`}
                       style={[
                         useGridLayout ? styles.gridCardWrap : undefined,
-                        highlightedIndentId === load.id && styles.highlightedIndentCard,
+                        highlightedIndentId === load.id &&
+                          styles.highlightedIndentCard,
                       ]}
                     >
                       {renderClaimedLoadCard(load, false, useGridLayout)}
@@ -2228,7 +2286,10 @@ export function LoadCenterView({
         </ScrollView>
         {loadSubTab === "GIVE_LOAD" ? (
           <View
-            style={[styles.hirePartnerFabWrap, { bottom: hirePartnerFabBottom }]}
+            style={[
+              styles.hirePartnerFabWrap,
+              { bottom: hirePartnerFabBottom },
+            ]}
             pointerEvents="box-none"
           >
             <TouchableOpacity
@@ -2375,12 +2436,16 @@ export function LoadCenterView({
                   <View>
                     <Text style={styles.reviewHubHeroStatLabel}>Offers</Text>
                     <Text style={styles.reviewHubHeroStatValue}>
-                      {awardModalQuotesLoading ? "—" : String(awardModalQuotes.length)}
+                      {awardModalQuotesLoading
+                        ? "—"
+                        : String(awardModalQuotes.length)}
                     </Text>
                   </View>
                   {lowestPendingAmount != null && pendingOfferCount > 0 ? (
                     <View style={{ alignItems: "flex-end" }}>
-                      <Text style={styles.reviewHubHeroStatLabel}>Lowest bid</Text>
+                      <Text style={styles.reviewHubHeroStatLabel}>
+                        Lowest bid
+                      </Text>
                       <Text style={styles.reviewHubHeroStatValue}>
                         {formatINR(lowestPendingAmount)}
                       </Text>
@@ -2560,7 +2625,9 @@ export function LoadCenterView({
                 <View style={styles.bidIndentDetailSection}>
                   <View style={styles.bidHubHero}>
                     <View style={styles.bidHubHeroGlow} pointerEvents="none" />
-                    <Text style={styles.bidHubHeroKicker}>You are bidding on</Text>
+                    <Text style={styles.bidHubHeroKicker}>
+                      You are bidding on
+                    </Text>
                     <Text style={styles.bidHubHeroRoute} numberOfLines={4}>
                       {(loadAction.load.pickup_area || "—").trim()} →{" "}
                       {(loadAction.load.drop_location || "—").trim()}
@@ -2583,13 +2650,17 @@ export function LoadCenterView({
                     </View>
                     <View style={[styles.reviewHubHeroMeta, { marginTop: 14 }]}>
                       <View>
-                        <Text style={styles.reviewHubHeroStatLabel}>Indent</Text>
+                        <Text style={styles.reviewHubHeroStatLabel}>
+                          Indent
+                        </Text>
                         <Text style={styles.reviewHubHeroStatValue}>
                           {getIndentDisplayNumber(loadAction.load)}
                         </Text>
                       </View>
                       <View style={{ alignItems: "flex-end" }}>
-                        <Text style={styles.reviewHubHeroStatLabel}>Target</Text>
+                        <Text style={styles.reviewHubHeroStatLabel}>
+                          Target
+                        </Text>
                         <Text style={styles.reviewHubHeroStatValue}>
                           {formatINR(
                             Number(
@@ -2689,7 +2760,9 @@ export function LoadCenterView({
                   }
                   const load = loadAction.load;
                   const hadExistingQuote = !!myQuoteByIndentId.get(load.id);
-                  const existingQuoteBeforeSave = myQuoteByIndentId.get(load.id);
+                  const existingQuoteBeforeSave = myQuoteByIndentId.get(
+                    load.id,
+                  );
                   try {
                     setSubmittingQuote(true);
                     const { error } = await createDirectQuote(
@@ -3012,7 +3085,9 @@ export function LoadCenterView({
                                     {d.name ?? d.phone ?? "—"}
                                   </Text>
                                   <Text style={styles.assignEntitySubtitle}>
-                                    {d.phone ? `Phone: ${d.phone}` : "Available"}
+                                    {d.phone
+                                      ? `Phone: ${d.phone}`
+                                      : "Available"}
                                   </Text>
                                 </View>
                                 <FontAwesome
@@ -3033,10 +3108,10 @@ export function LoadCenterView({
                             {activeDrivers.length === 0 ? (
                               <View style={styles.assignEmptyState}>
                                 <Text style={styles.assignEmptyText}>
-                                  No asset drivers were found in your organization.
-                                  Add a salaried driver to continue with Asset-based
-                                  assignment, or use the Aggregate flow from the
-                                  previous step.
+                                  No asset drivers were found in your
+                                  organization. Add a salaried driver to
+                                  continue with Asset-based assignment, or use
+                                  the Aggregate flow from the previous step.
                                 </Text>
                                 <TouchableOpacity
                                   style={styles.assignEmptyActionBtn}
@@ -3046,11 +3121,14 @@ export function LoadCenterView({
                                     setDeployOtpExpiresAt(null);
                                     setDeployTripIdForOtp(null);
                                     setHandshakeStep("flow_choice");
-                                    setTimeout(() => {
-                                      router.push(
-                                        "/(modals)/add-driver" as import("expo-router").Href,
-                                      );
-                                    }, RNPlatform.OS === "ios" ? 100 : 0);
+                                    setTimeout(
+                                      () => {
+                                        router.push(
+                                          "/(modals)/add-driver" as import("expo-router").Href,
+                                        );
+                                      },
+                                      RNPlatform.OS === "ios" ? 100 : 0,
+                                    );
                                   }}
                                   activeOpacity={0.9}
                                 >
@@ -3107,7 +3185,9 @@ export function LoadCenterView({
                                   <Text style={styles.assignEntitySubtitle}>
                                     {v.vehicle_type
                                       ? `${v.vehicle_type}${
-                                          v.vehicle_body_type ? ` · ${v.vehicle_body_type}` : ""
+                                          v.vehicle_body_type
+                                            ? ` · ${v.vehicle_body_type}`
+                                            : ""
                                         }`
                                       : "Fleet vehicle"}
                                   </Text>
@@ -3130,8 +3210,9 @@ export function LoadCenterView({
                             {vehicles.length === 0 ? (
                               <View style={styles.assignEmptyState}>
                                 <Text style={styles.assignEmptyText}>
-                                  No vehicles were found in your fleet. Add an own
-                                  vehicle to continue with Asset-based assignment.
+                                  No vehicles were found in your fleet. Add an
+                                  own vehicle to continue with Asset-based
+                                  assignment.
                                 </Text>
                                 <TouchableOpacity
                                   style={styles.assignEmptyActionBtn}
@@ -3141,11 +3222,14 @@ export function LoadCenterView({
                                     setDeployOtpExpiresAt(null);
                                     setDeployTripIdForOtp(null);
                                     setHandshakeStep("flow_choice");
-                                    setTimeout(() => {
-                                      router.push(
-                                        "/(modals)/add-vehicle" as import("expo-router").Href,
-                                      );
-                                    }, RNPlatform.OS === "ios" ? 100 : 0);
+                                    setTimeout(
+                                      () => {
+                                        router.push(
+                                          "/(modals)/add-vehicle" as import("expo-router").Href,
+                                        );
+                                      },
+                                      RNPlatform.OS === "ios" ? 100 : 0,
+                                    );
                                   }}
                                   activeOpacity={0.9}
                                 >
@@ -3207,9 +3291,7 @@ export function LoadCenterView({
                         color={Theme.textOnPrimary}
                         style={{ marginRight: 8 }}
                       />
-                      <Text style={styles.modalSubmitText}>
-                        Assign Trip
-                      </Text>
+                      <Text style={styles.modalSubmitText}>Assign Trip</Text>
                     </TouchableOpacity>
                   ) : (
                     <Text style={styles.modalHint}>
@@ -3235,7 +3317,8 @@ export function LoadCenterView({
                     Aggregate
                   </Text>
                   <Text style={styles.modalHint}>
-                    Assign driver and vehicle for OTP (partner and rate optional).
+                    Assign driver and vehicle for OTP (partner and rate
+                    optional).
                   </Text>
 
                   <View style={styles.tripAssignCard}>
@@ -3243,7 +3326,12 @@ export function LoadCenterView({
                       <Text style={styles.tripAssignCardHeaderTitle}>
                         Current Node
                       </Text>
-                      <View style={[styles.tripAssignSourceBadge, styles.tripAssignBadgeUnassigned]}>
+                      <View
+                        style={[
+                          styles.tripAssignSourceBadge,
+                          styles.tripAssignBadgeUnassigned,
+                        ]}
+                      >
                         <Text
                           style={[
                             styles.tripAssignSourceBadgeText,
@@ -3284,25 +3372,33 @@ export function LoadCenterView({
                             placeholder="Phone for OTP (optional)"
                             placeholderTextColor={Theme.textMuted}
                             value={aggregateDriverPhone}
-                            onChangeText={(t) => setAggregateDriverPhone(formatMobileNumber(t))}
+                            onChangeText={(t) =>
+                              setAggregateDriverPhone(formatMobileNumber(t))
+                            }
                             keyboardType="phone-pad"
                             autoComplete="tel"
                           />
                           {aggregatePhoneName ? (
-                            <Text style={styles.phoneModalFound}>Found: {aggregatePhoneName}</Text>
+                            <Text style={styles.phoneModalFound}>
+                              Found: {aggregatePhoneName}
+                            </Text>
                           ) : aggregatePhoneNotFound ? (
                             <Text style={styles.phoneModalNotFound}>
                               No driver found for this number
                             </Text>
                           ) : null}
                           {aggregatePhoneName && aggregatePhoneInTrip ? (
-                            <Text style={styles.phoneModalInTrip}>Driver is in trip</Text>
+                            <Text style={styles.phoneModalInTrip}>
+                              Driver is in trip
+                            </Text>
                           ) : null}
                         </View>
                       </View>
                     </View>
 
-                    <View style={[styles.tripAssignRow, styles.tripAssignRowLast]}>
+                    <View
+                      style={[styles.tripAssignRow, styles.tripAssignRowLast]}
+                    >
                       <View style={styles.tripAssignRowLeft}>
                         <View
                           style={[
@@ -3354,16 +3450,16 @@ export function LoadCenterView({
                           numberOfLines={1}
                         >
                           {subcontractSupplierId
-                            ? (suppliers.find(
+                            ? suppliers.find(
                                 (s) => s.id === subcontractSupplierId,
                               )?.company_name ||
-                                suppliers.find(
-                                  (s) => s.id === subcontractSupplierId,
-                                )?.name ||
-                                suppliers.find(
-                                  (s) => s.id === subcontractSupplierId,
-                                )?.contact_person ||
-                                "Selected")
+                              suppliers.find(
+                                (s) => s.id === subcontractSupplierId,
+                              )?.name ||
+                              suppliers.find(
+                                (s) => s.id === subcontractSupplierId,
+                              )?.contact_person ||
+                              "Selected"
                             : "Select partner"}
                         </Text>
                         <FontAwesome
@@ -3409,7 +3505,8 @@ export function LoadCenterView({
                         style={{ marginRight: 8 }}
                       />
                       <Text style={styles.modalSubmitText}>
-                        {aggregateDriverPhone.trim().length > 0 && aggregatePhoneInTrip
+                        {aggregateDriverPhone.trim().length > 0 &&
+                        aggregatePhoneInTrip
                           ? "Driver On Trip"
                           : "Deploy & get OTP"}
                       </Text>
@@ -3530,7 +3627,6 @@ export function LoadCenterView({
           </View>
         </View>
       </Modal>
-
     </View>
   );
 }

@@ -302,7 +302,6 @@ export default function TripDetailScreen({
   const [showFullScreenMap, setShowFullScreenMap] = useState(false);
   const [showDriverRejectedModal, setShowDriverRejectedModal] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<TripDocItem | null>(null);
-  const [activeTab, setActiveTab] = useState<"tracking" | "finance">("tracking");
   /** True when assigned driver has linked their account (user_id set); false when unlinked (e.g. OTP not claimed). */
   const [driverLinked, setDriverLinked] = useState(false);
   /** Latest driver location for Live Tracking map (from driver_locations). */
@@ -2822,43 +2821,6 @@ export default function TripDetailScreen({
         </TouchableOpacity>
       </View>
 
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          onPress={() => setActiveTab("tracking")}
-          style={[
-            styles.tabButton,
-            activeTab === "tracking" && styles.tabButtonActive,
-          ]}
-          activeOpacity={0.8}
-        >
-          <Text
-            style={[
-              styles.tabLabel,
-              activeTab === "tracking" && styles.tabLabelActive,
-            ]}
-          >
-            Tracking
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => setActiveTab("finance")}
-          style={[
-            styles.tabButton,
-            activeTab === "finance" && styles.tabButtonActive,
-          ]}
-          activeOpacity={0.8}
-        >
-          <Text
-            style={[
-              styles.tabLabel,
-              activeTab === "finance" && styles.tabLabelActive,
-            ]}
-          >
-            Finance
-          </Text>
-        </TouchableOpacity>
-      </View>
-
       <ScrollView
         style={[styles.scroll, { backgroundColor: "#F9FAFB" }]}
         contentContainerStyle={[
@@ -3912,35 +3874,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.darkBackground,
-  },
-  tabContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingBottom: 12,
-    backgroundColor: "rgba(255,255,255,0.6)",
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0,0,0,0.05)",
-  },
-  tabButton: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: Theme.surfaceGray,
-  },
-  tabButtonActive: {
-    backgroundColor: Theme.primary,
-  },
-  tabLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: Theme.textMuted,
-  },
-  tabLabelActive: {
-    color: Theme.textOnPrimary,
   },
   scroll: { flex: 1 },
   scrollContent: {

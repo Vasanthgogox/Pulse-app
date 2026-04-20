@@ -313,11 +313,12 @@ async function getDriverOngoingTrip(
   excludeTripId?: string,
 ): Promise<{
   error: Error | null;
-  trip: Pick<TripRow, "id" | "trip_number" | "display_trip_id"> | null;
+  trip: Pick<TripRow, "id" | "trip_number"> | null;
 }> {
   let q = supabase()
     .from("trips")
-    .select("id, trip_number, display_trip_id")
+    // Keep this select compatible with DBs that do not expose display_trip_id yet.
+    .select("id, trip_number")
     .eq("driver_id", driverId)
     .not("status", "in", `("${ONGOING_TRIP_TERMINAL_STATUSES.join('","')}")`)
     .order("updated_at", { ascending: false })
@@ -329,17 +330,14 @@ async function getDriverOngoingTrip(
   if (error) return { error: new Error(error.message), trip: null };
   return {
     error: null,
-    trip: (data ?? null) as Pick<
-      TripRow,
-      "id" | "trip_number" | "display_trip_id"
-    > | null,
+    trip: (data ?? null) as Pick<TripRow, "id" | "trip_number"> | null,
   };
 }
 
 function getTripIdentifierLabel(
-  trip: Pick<TripRow, "trip_number" | "display_trip_id"> | null | undefined,
+  trip: Pick<TripRow, "trip_number"> | null | undefined,
 ): string {
-  return trip?.display_trip_id ?? trip?.trip_number ?? "another ongoing trip";
+  return trip?.trip_number ?? "another ongoing trip";
 }
 
 export interface DriverAvailabilityByPhoneResult {
@@ -733,16 +731,55 @@ export async function assignAggregateTripDriverByPhone(
     };
   }
 
+  const trimmedVehicleDisplay =
+    vehicleDisplayNumber != null && String(vehicleDisplayNumber).trim() !== ""
+      ? String(vehicleDisplayNumber).trim()
+      : null;
+
   const { data, error } = await supabase().rpc("assign_aggregate_trip_driver", {
     p_trip_id: tripId,
     p_driver_org_id: driverOrgId,
     p_driver_phone: normalized,
-    p_vehicle_display_number:
-      vehicleDisplayNumber != null && String(vehicleDisplayNumber).trim() !== ""
-        ? String(vehicleDisplayNumber).trim()
-        : null,
+    p_vehicle_display_number: trimmedVehicleDisplay,
   });
-  if (error) return { error: new Error(error.message), trip: null };
+  if (error) {
+    const msg = String(error.message ?? "");
+    const missingDisplayColumn =
+      /column\s+trip_display_trip_id\s+does\s+not\s+exist/i.test(msg) ||
+      /trip_display_trip_id/i.test(msg);
+
+    // Backward-compatible fallback for environments with stale RPC definition.
+    if (!missingDisplayColumn) return { error: new Error(msg), trip: null };
+
+    const { error: assignError, trip } = await assignTripDriverByPhone(
+      tripId,
+      driverOrgId,
+      normalized,
+      {
+        trackingOnly: true,
+        forceOtpClaim: true,
+      },
+    );
+    if (assignError || !trip) {
+      return {
+        error:
+          assignError ??
+          new Error(
+            "Assignment failed via RPC and fallback. Please contact support.",
+          ),
+        trip: null,
+      };
+    }
+    if (trimmedVehicleDisplay) {
+      const { error: vehicleError, trip: updatedTrip } = await updateTripAssignment(
+        tripId,
+        { vehicle_display_number: trimmedVehicleDisplay },
+      );
+      if (vehicleError) return { error: vehicleError, trip: null };
+      return { error: null, trip: updatedTrip ?? trip };
+    }
+    return { error: null, trip };
+  }
   const obj = data as { ok?: boolean; error?: string; trip?: TripRow } | null;
   if (!obj || obj.ok !== true) {
     return {
