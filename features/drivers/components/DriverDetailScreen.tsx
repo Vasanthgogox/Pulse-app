@@ -1496,7 +1496,7 @@ export default function DriverDetailScreen({
                     <View key={r.id} style={styles.ledgerRowWrapper}>
                       <Pressable
                         style={({ pressed }) => [
-                          styles.tableRow,
+                          styles.ledgerTableRow,
                           pressed && styles.ledgerRowPressed,
                         ]}
                         onPress={() =>
@@ -2533,14 +2533,14 @@ const styles = StyleSheet.create({
   },
   ledgerSummaryRow: {
     flexDirection: "row",
-    backgroundColor: Theme.surface,
-    borderRadius: 10,
+    backgroundColor: Theme.darkBackground,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    borderColor: Theme.borderOnDark ?? Theme.darkBackground,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     marginBottom: 14,
-    gap: 12,
+    gap: 0,
   },
   ledgerSummaryCell: {
     flex: 1,
@@ -2548,28 +2548,28 @@ const styles = StyleSheet.create({
   },
   ledgerSummaryCellBorder: {
     borderLeftWidth: 1,
-    borderLeftColor: Theme.borderLight,
-    paddingLeft: 14,
+    borderLeftColor: Theme.borderOnDark ?? Theme.borderLight,
+    paddingLeft: 12,
   },
   ledgerSummaryLabel: {
-    fontSize: 9,
+    fontSize: 7,
     fontWeight: "700",
-    color: Theme.textMutedDemo,
+    color: Theme.textOnDarkMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.8,
+    letterSpacing: 1,
     marginBottom: 4,
   },
   ledgerSummaryAmount: {
-    fontSize: 15,
+    fontSize: 19,
     fontWeight: "800",
-    color: Theme.textPrimaryDark,
+    color: Theme.textOnDark,
   },
   ledgerSummaryIn: { color: Theme.positive ?? Theme.darkGreen },
   ledgerSummaryOut: { color: Theme.teslaRed },
   ledgerTableHeaderWrap: {
     width: "100%",
     backgroundColor: Theme.surface,
-    paddingHorizontal: 10,
+    paddingHorizontal: 0,
     borderLeftWidth: 1,
     borderRightWidth: 1,
     borderBottomWidth: 1,
@@ -2591,11 +2591,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   ledgerTh: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
-    letterSpacing: 0.3,
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.6,
     paddingVertical: 10,
+    textTransform: "uppercase",
   },
   ledgerThNode: {
     flex: 0.25,
@@ -2623,7 +2624,7 @@ const styles = StyleSheet.create({
   ledgerTdBorderLeft: {
     borderLeftWidth: 1,
     borderLeftColor: Theme.borderLight,
-    paddingLeft: 8,
+    paddingLeft: 10,
   },
   ledgerThCredit: {
     flex: 0.25,
@@ -2664,15 +2665,15 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   ledgerCellSubCategory: {
-    fontSize: 10,
-    fontWeight: "500",
-    color: Theme.textSecondary,
-    letterSpacing: 0.05,
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.5,
     marginTop: 2,
     textTransform: "uppercase",
   },
   ledgerCellSubDate: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "400",
     color: Theme.textMuted,
     letterSpacing: 0.03,
@@ -2706,7 +2707,7 @@ const styles = StyleSheet.create({
     flex: 0.5,
     minWidth: 0,
     paddingVertical: 10,
-    paddingLeft: 10,
+    paddingLeft: 12,
     paddingRight: 8,
     justifyContent: "center",
   },
@@ -2719,7 +2720,7 @@ const styles = StyleSheet.create({
   driverLedgerTdColRouteDate: {
     flex: 0.5,
     minWidth: 0,
-    paddingLeft: 10,
+    paddingLeft: 12,
     paddingRight: 8,
     paddingVertical: 10,
   },
@@ -2732,9 +2733,9 @@ const styles = StyleSheet.create({
   },
   /** TRIP/ROUTE column: muted text to match client ledger (other tabs). */
   ledgerRouteText: {
-    fontSize: 10,
-    fontWeight: "400",
-    color: Theme.textMutedDemo,
+    fontSize: 9,
+    fontWeight: "500",
+    color: Theme.textMuted,
     letterSpacing: 0.05,
     textAlign: "center",
   },
@@ -2753,7 +2754,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Theme.borderLight,
   },
   ledgerRowPressed: {
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.surfaceGray,
   },
   /** Ledger expanded detail — compact, aligned with EntityDetailOverlay / table. */
   ledgerExpandedDetail: {
@@ -2906,7 +2907,7 @@ const styles = StyleSheet.create({
     textAlign: "right" as const,
   },
   ledgerTableBodyWrap: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 0,
     borderLeftWidth: 1,
     borderRightWidth: 1,
     borderBottomWidth: 1,
@@ -2968,6 +2969,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.surfaceLight,
   },
+  ledgerTableRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 0,
+  },
   statementMonthRow: {
     borderBottomWidth: 1,
     borderBottomColor: Theme.surfaceLight,
@@ -2989,10 +2996,11 @@ const styles = StyleSheet.create({
   tdMission: { flex: 0.42 },
   tdMissionWrap: { flex: 0.42, minWidth: 0 },
   tdMissionId: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
+    fontStyle: "italic",
   },
   tdDest: {
     fontSize: 6,
