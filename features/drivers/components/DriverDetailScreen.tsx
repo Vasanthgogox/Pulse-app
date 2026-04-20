@@ -2377,7 +2377,7 @@ const styles = StyleSheet.create({
   },
   // Scorecard (copied from vehicle detail for visual parity)
   scorecard: {
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.primary,
     borderRadius: 40,
     padding: 32,
     marginBottom: 24,
@@ -2475,9 +2475,11 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
     padding: 4,
     borderRadius: 16,
-    marginHorizontal: Layout.screenPaddingHorizontal,
+    marginHorizontal: 0,
     marginBottom: 24,
     gap: 4,
+    width: "100%",
+    alignSelf: "stretch",
   },
   tabItem: {
     flex: 1,
@@ -2505,7 +2507,9 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
   },
   tabScroll: { flex: 1 },
-  tabScrollContent: {},
+  tabScrollContent: {
+    flexGrow: 1,
+  },
   tableWrap: { paddingHorizontal: 16, paddingTop: 24 },
   sectionTitle: {
     fontSize: 8,
@@ -2533,10 +2537,10 @@ const styles = StyleSheet.create({
   },
   ledgerSummaryRow: {
     flexDirection: "row",
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.screenBackground,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Theme.borderOnDark ?? Theme.darkBackground,
+    borderColor: Theme.borderLight,
     paddingVertical: 10,
     paddingHorizontal: 12,
     marginBottom: 14,
@@ -2548,13 +2552,13 @@ const styles = StyleSheet.create({
   },
   ledgerSummaryCellBorder: {
     borderLeftWidth: 1,
-    borderLeftColor: Theme.borderOnDark ?? Theme.borderLight,
+    borderLeftColor: Theme.borderLight,
     paddingLeft: 12,
   },
   ledgerSummaryLabel: {
     fontSize: 7,
     fontWeight: "700",
-    color: Theme.textOnDarkMuted,
+    color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 1,
     marginBottom: 4,
@@ -2562,7 +2566,7 @@ const styles = StyleSheet.create({
   ledgerSummaryAmount: {
     fontSize: 19,
     fontWeight: "800",
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
   },
   ledgerSummaryIn: { color: Theme.positive ?? Theme.darkGreen },
   ledgerSummaryOut: { color: Theme.teslaRed },
