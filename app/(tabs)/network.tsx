@@ -26,8 +26,10 @@ import {
   useDriverInvitesSentQuery,
   useDriversQuery,
   useInvalidateNetwork,
+  useRealtimeNetworkInvalidation,
   useSuppliersQuery,
 } from "@/lib/queries";
+import { getInitials } from "@/lib/stringUtils";
 import { useRefreshWithFeedback } from "@/lib/useRefreshWithFeedback";
 import {
   approveConnectionRequest,
@@ -69,7 +71,6 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { getInitials } from "@/lib/stringUtils";
 
 type InvitationSegment = "SENT" | "RECEIVED";
 type ManageView = "CONNECTIONS" | "INVITATIONS";
@@ -463,6 +464,7 @@ export default function NetworkScreen() {
   const { t } = useLanguage();
    const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
+  useRealtimeNetworkInvalidation(orgId);
 
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const screenTopPad =
@@ -919,6 +921,7 @@ export default function NetworkScreen() {
     const q = searchQuery.trim().toLowerCase();
     return nodes.filter((n) => {
       if (manageView === "CONNECTIONS" && !n.isIntegrated) return false;
+      if (manageView === "CONNECTIONS" && !isNodeOnApp(n)) return false;
       if (manageView === "INVITATIONS" && showInvitationSearch && n.isIntegrated)
         return false;
       if (manageView === "INVITATIONS" && showInvitationSearch) {
@@ -939,6 +942,7 @@ export default function NetworkScreen() {
     });
   }, [
     invitationSegment,
+    isNodeOnApp,
     manageView,
     nodeKind,
     nodes,
@@ -1209,16 +1213,6 @@ export default function NetworkScreen() {
 
         {manageView === "INVITATIONS" && showInvitationSearch ? (
           <View style={styles.invitationSearchRow}>
-            <TouchableOpacity
-              style={styles.invitationSearchBackBtn}
-              onPress={() => {
-                setShowInvitationSearch(false);
-                setSearchQuery("");
-              }}
-              activeOpacity={0.8}
-            >
-              <FontAwesome name="arrow-left" size={13} color={Theme.textOnDark} />
-            </TouchableOpacity>
             <View style={styles.searchWrapDark}>
               <FontAwesome
                 name="search"
@@ -1234,6 +1228,31 @@ export default function NetworkScreen() {
                 onChangeText={setSearchQuery}
                 autoCapitalize="none"
                 autoFocus
+              />
+            </View>
+          </View>
+        ) : null}
+
+        {manageView === "INVITATIONS" && !showInvitationSearch ? (
+          <View style={styles.invitationSegmentSearchRow}>
+            <View style={styles.searchWrapDark}>
+              <FontAwesome
+                name="search"
+                size={14}
+                color={Theme.textOnDarkMuted}
+                style={styles.searchIconDark}
+              />
+              <TextInput
+                style={styles.searchInputDark}
+                placeholder={
+                  invitationSegment === "RECEIVED"
+                    ? "Search received invitations..."
+                    : "Search sent invitations..."
+                }
+                placeholderTextColor={Theme.textOnDarkMuted}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoCapitalize="none"
               />
             </View>
           </View>
@@ -1328,7 +1347,7 @@ export default function NetworkScreen() {
           !isLargeScreen &&
           filteredNodes.length > 0 ? (
             <View style={styles.storiesSection}>
-              <Text style={styles.storiesSectionLabel}>On your grid</Text>
+              <Text style={styles.storiesSectionLabel}>On your network</Text>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -1343,11 +1362,20 @@ export default function NetworkScreen() {
                       activeOpacity={0.85}
                       onPress={() => {
                         if (node.type === "CLIENT")
-                          router.push(`/client/${node.id}`);
+                          router.push({
+                            pathname: "/client/[id]",
+                            params: { id: node.id },
+                          });
                         else if (node.type === "SUPPLIER")
-                          router.push(`/supplier/${node.id}`);
+                          router.push({
+                            pathname: "/supplier/[id]",
+                            params: { id: node.id },
+                          });
                         else if (node.type === "DRIVER")
-                          router.push(`/driver/${node.id}`);
+                          router.push({
+                            pathname: "/driver/[id]",
+                            params: { id: node.id },
+                          });
                       }}
                     >
                       <NetworkAvatar
@@ -1935,11 +1963,20 @@ export default function NetworkScreen() {
                         activeOpacity={0.7}
                         onPress={() => {
                           if (node.type === "CLIENT")
-                            router.push(`/client/${node.id}`);
+                            router.push({
+                              pathname: "/client/[id]",
+                              params: { id: node.id },
+                            });
                           else if (node.type === "SUPPLIER")
-                            router.push(`/supplier/${node.id}`);
+                            router.push({
+                              pathname: "/supplier/[id]",
+                              params: { id: node.id },
+                            });
                           else if (node.type === "DRIVER")
-                            router.push(`/driver/${node.id}`);
+                            router.push({
+                              pathname: "/driver/[id]",
+                              params: { id: node.id },
+                            });
                         }}
                       >
                         <View style={styles.networkCardTop}>
@@ -2349,7 +2386,7 @@ export default function NetworkScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
-                  styles.confirmModalCancelBtn,
+                  styles.confirmModalConfirmBtn,
                   actingRequestId === acceptTermsItem?.id
                     ? styles.modalActionDisabled
                     : null,
@@ -2359,9 +2396,9 @@ export default function NetworkScreen() {
                 activeOpacity={0.8}
               >
                 {actingRequestId === acceptTermsItem?.id ? (
-                  <ActivityIndicator size="small" color={ROSE_500} />
+                  <ActivityIndicator size="small" color={Theme.screenBackground} />
                 ) : (
-                  <Text style={styles.confirmModalCancelText}>Confirm</Text>
+                  <Text style={styles.confirmModalConfirmText}>Confirm</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -2529,6 +2566,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    paddingTop: 6,
+  },
+  invitationSegmentSearchRow: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingTop: 6,
   },
   invitationSearchBackBtn: {
@@ -3619,6 +3661,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     color: ROSE_500,
+    textTransform: "uppercase",
+  },
+  confirmModalConfirmBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: EMERALD,
+    backgroundColor: EMERALD,
+  },
+  confirmModalConfirmText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.screenBackground,
     textTransform: "uppercase",
   },
   modalActionDisabled: {

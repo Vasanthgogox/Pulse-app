@@ -1,3 +1,7 @@
+// Driver UI
+export { AddDriverModal, type DriverFormData, type DriverSource } from './components/AddDriverModal';
+export { default as DriverDetailScreen } from './components/DriverDetailScreen';
+
 // Driver services
 export {
     acceptDriverInvite,

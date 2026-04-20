@@ -49,6 +49,10 @@ export function useInvalidateNetwork(orgId: string | null) {
   const qc = useQueryClient();
   return () => {
     if (!orgId) return;
+    // Connection request decisions can create/update linked parties; refresh all network data.
+    qc.invalidateQueries({ queryKey: queryKeys.clients.all(orgId) });
+    qc.invalidateQueries({ queryKey: queryKeys.suppliers.all(orgId) });
+    qc.invalidateQueries({ queryKey: queryKeys.drivers.all(orgId) });
     qc.invalidateQueries({ queryKey: queryKeys.connectionRequests.received(orgId) });
     qc.invalidateQueries({ queryKey: queryKeys.connectionRequests.sent(orgId) });
     qc.invalidateQueries({ queryKey: queryKeys.driverInvites.sent(orgId) });

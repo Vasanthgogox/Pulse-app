@@ -2,7 +2,11 @@
  * Central export for TanStack Query hooks. Use these for cache + optional pagination.
  * See docs/PAGINATION_AND_CACHE_ANALYSIS.md.
  */
-export { useRealtimeTripsInvalidation, useRealtimeTransactionsInvalidation } from './useRealtimeInvalidation';
+export {
+  useRealtimeNetworkInvalidation,
+  useRealtimeTripsInvalidation,
+  useRealtimeTransactionsInvalidation,
+} from './useRealtimeInvalidation';
 export {
   useTripsQuery,
   useTripsInfiniteQuery,
