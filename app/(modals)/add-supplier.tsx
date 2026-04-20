@@ -11,6 +11,7 @@ import {
   createConnectionRequest,
 } from '@/services/connectionRequestsService';
 import { queryKeys } from '@/lib/queryKeys';
+import { ROUTES } from '@/lib/routes';
 import { useQueryClient } from '@tanstack/react-query';
 
 export default function AddSupplierScreen() {
@@ -19,7 +20,7 @@ export default function AddSupplierScreen() {
   const { currentOrganization } = useOrganization();
 
   const closeModal = () => {
-    router.replace("/(tabs)/network");
+    router.replace(ROUTES.TABS.NETWORK as '/');
   };
 
   const handleComplete = async (data: SupplierFormData) => {

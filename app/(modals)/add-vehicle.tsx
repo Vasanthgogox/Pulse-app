@@ -2,9 +2,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { AddVehicleModal, type AddVehicleCompletePayload, createVehicle } from '@/features/vehicles';
 import { queryKeys } from '@/lib/queryKeys';
+import { ROUTES } from '@/lib/routes';
 import { useQueryClient } from '@tanstack/react-query';
 
-const DEFAULT_FALLBACK_ROUTE = '/(tabs)/resources';
+const DEFAULT_FALLBACK_ROUTE = ROUTES.TABS.RESOURCES;
 
 /** Dismiss modal: go back to the page that opened it. */
 function closeModal(router: ReturnType<typeof useRouter>, returnTo?: string) {
