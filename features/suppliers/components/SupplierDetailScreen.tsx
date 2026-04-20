@@ -31,7 +31,7 @@ import { getTripSubcontracts } from "@/features/finance/services/tripSubcontract
 import {
   getClientsByOrganization,
   type ClientRow,
-} from "@/features/clients";
+} from "@/features/clients/services/clients.service";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import {
     canAccessFinance,

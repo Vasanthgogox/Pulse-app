@@ -44,6 +44,7 @@ import {
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -151,8 +152,6 @@ export default function TripsScreen() {
   useRealtimeTripsInvalidation(orgId);
   useRealtimeTransactionsInvalidation(orgId);
 
-  const loading = tripsLoading;
-
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([
@@ -165,6 +164,14 @@ export default function TripsScreen() {
     ]);
     setRefreshing(false);
   }, [refetchTrips, refetchTransactions, refetchAssignment, queryClient, orgId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      onRefresh();
+    }, [onRefresh])
+  );
+
+  const loading = tripsLoading;
 
   const isCompletedStatus = (s: string) => {
     const v = (s || "").toLowerCase();
@@ -489,6 +496,30 @@ export default function TripsScreen() {
     [tr, tripFilter],
   );
 
+  const subTabs = useMemo(
+    () => [
+      {
+        id: "all" as const,
+        label: tr("all"),
+        isActive: supplyFilter === "all",
+        onPress: () => setSupplyFilter("all"),
+      },
+      {
+        id: "asset" as const,
+        label: tr("tripAsset"),
+        isActive: supplyFilter === "asset",
+        onPress: () => setSupplyFilter("asset"),
+      },
+      {
+        id: "aggregated" as const,
+        label: tr("tripAggregate"),
+        isActive: supplyFilter === "aggregated",
+        onPress: () => setSupplyFilter("aggregated"),
+      },
+    ],
+    [tr, supplyFilter],
+  );
+
   const tripMetricCopy = useMemo(
     () =>
       ({
@@ -614,6 +645,58 @@ export default function TripsScreen() {
           </ScrollView>
         )}
 
+        {/* SUB-TABS: ALL | ASSET | AGGREGATED */}
+        {Platform.OS === "web" ? (
+          <View style={styles.tabRowWebSub}>
+            {subTabs.map((tab) => (
+              <TouchableOpacity
+                key={tab.id}
+                style={[styles.tabWeb, tab.isActive && styles.tabActive]}
+                onPress={tab.onPress}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.tabText,
+                    { fontSize: 7 },
+                    tab.isActive && styles.tabTextActive,
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+                {tab.isActive ? <View style={styles.tabUnderline} /> : null}
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabRowScrollContent}
+            style={styles.tabRowScrollSub}
+          >
+            {subTabs.map((tab) => (
+              <TouchableOpacity
+                key={tab.id}
+                style={[styles.tab, tab.isActive && styles.tabActive]}
+                onPress={tab.onPress}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.tabText,
+                    { fontSize: 7 },
+                    tab.isActive && styles.tabTextActive,
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+                {tab.isActive ? <View style={styles.tabUnderline} /> : null}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+
         <View style={styles.tripsToolbar}>
           <View style={styles.tripsLayoutToggle} accessibilityRole="tablist">
             <TouchableOpacity
@@ -691,46 +774,6 @@ export default function TripsScreen() {
             />
           </View>
           <View style={styles.tripsToolbarActions}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={[
-                styles.tripsSupplyChipsScroll,
-                isLargeScreen && styles.tripsSupplyChipsScrollRow,
-              ]}
-              contentContainerStyle={styles.tripsSupplyChipsScrollInner}
-            >
-              <View style={styles.tripsSupplyChipsRail}>
-                {(
-                  [
-                    { id: "all" as const, label: tr("all") },
-                    { id: "asset" as const, label: tr("tripAsset") },
-                    { id: "aggregated" as const, label: tr("tripAggregate") },
-                  ] as const
-                ).map(({ id, label }) => (
-                  <TouchableOpacity
-                    key={id}
-                    style={[
-                      styles.tripsSupplyChip,
-                      supplyFilter === id && styles.tripsSupplyChipActive,
-                      Platform.OS === "web" && styles.tripsSupplyChipWeb,
-                    ]}
-                    onPress={() => setSupplyFilter(id)}
-                    activeOpacity={0.8}
-                  >
-                    <Text
-                      style={[
-                        styles.tripsSupplyChipText,
-                        supplyFilter === id && styles.tripsSupplyChipTextActive,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
             <TouchableOpacity
               style={[
                 styles.tripsFilterIconBtn,
