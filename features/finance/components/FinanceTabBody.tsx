@@ -18,6 +18,7 @@ import type { GarrageViewTab } from "@/features/vehicles/components/GarrageTab";
 import { GarrageTab } from "@/features/vehicles/components/GarrageTab";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
 import type { ConnectionRequestRow } from "@/services/connectionRequestsService";
+import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
 import type { ReactNode } from "react";
 import { Platform, Text, View, useWindowDimensions } from "react-native";
 import type { LedgerRow } from "../services/finance.service";
@@ -99,6 +100,7 @@ export interface FinanceTabBodyProps {
   onRefresh?: () => void;
   bottomInset?: number;
   profileImages: Record<string, string>;
+  linkedOrgDisplayMap: Record<string, LinkedOrgDisplay>;
 }
 
 export function FinanceTabBody({
@@ -141,6 +143,7 @@ export function FinanceTabBody({
   onRefresh,
   bottomInset = 120,
   profileImages,
+  linkedOrgDisplayMap,
 }: FinanceTabBodyProps) {
   const { width: windowWidth } = useWindowDimensions();
   // Kanban only for Web desktop (large screens); mobile/native/tablet uses standard list
@@ -159,7 +162,9 @@ export function FinanceTabBody({
               tripDetailsMap={tripDetailsMap}
               clientRows={clientRows}
               supplierRows={supplierRows}
+              driverRows={driverRows}
               tripPartyMap={tripPartyMap}
+              linkedOrgDisplayMap={linkedOrgDisplayMap}
               onRowSelect={(row) => {
                 if (row.trip_id) {
                   onTripSelect(row.trip_id);
@@ -193,7 +198,10 @@ export function FinanceTabBody({
           onAddTransactionPress={onAddTransactionPress}
           clientRows={clientRows}
           supplierRows={supplierRows}
+          driverRows={driverRows}
+          driverProfileImageUrls={profileImages}
           tripPartyMap={tripPartyMap}
+          linkedOrgDisplayMap={linkedOrgDisplayMap}
         />
         )}
       </View>

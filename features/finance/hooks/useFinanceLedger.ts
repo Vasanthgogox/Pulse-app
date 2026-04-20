@@ -12,7 +12,10 @@ import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
 import { useTransactionsQuery } from "@/lib/queries";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { filterLedgerByPeriod } from "../lib/filterLedgerByPeriod";
+import {
+  filterLedgerByPeriod,
+  type LedgerPeriodFilterOptions,
+} from "../lib/filterLedgerByPeriod";
 import { ledgerTotals } from "../lib/ledgerTotals";
 import type { LedgerRow } from "../services/finance.service";
 import type { ClientRow } from "@/features/clients/services/clients.service";
@@ -46,6 +49,9 @@ export interface UseFinanceLedgerResult {
   refetchLedger: () => Promise<unknown>;
   financePeriodFilter: FinancePeriodFilter;
   setFinancePeriodFilter: (v: FinancePeriodFilter) => void;
+  financeCustomRangeFrom: string | null;
+  financeCustomRangeTo: string | null;
+  setFinanceCustomRange: (from: string, to: string) => void;
   sourceSupplyFilter: "all" | "asset" | "aggregate";
   setSourceSupplyFilter: (v: "all" | "asset" | "aggregate") => void;
   ledgerSortKey: LedgerSortKey;
@@ -131,6 +137,29 @@ export function useFinanceLedger({
 
   const [financePeriodFilter, setFinancePeriodFilter] =
     useState<FinancePeriodFilter>("RANGE");
+  const [financeCustomRangeFrom, setFinanceCustomRangeFrom] = useState<
+    string | null
+  >(null);
+  const [financeCustomRangeTo, setFinanceCustomRangeTo] = useState<
+    string | null
+  >(null);
+
+  const setFinanceCustomRange = useCallback((from: string, to: string) => {
+    setFinanceCustomRangeFrom(from.slice(0, 10));
+    setFinanceCustomRangeTo(to.slice(0, 10));
+    setFinancePeriodFilter("CUSTOM");
+  }, []);
+
+  const setFinancePeriodFilterWrapped = useCallback(
+    (v: FinancePeriodFilter) => {
+      if (v !== "CUSTOM") {
+        setFinanceCustomRangeFrom(null);
+        setFinanceCustomRangeTo(null);
+      }
+      setFinancePeriodFilter(v);
+    },
+    [],
+  );
   const [sourceSupplyFilter, setSourceSupplyFilter] = useState<
     "all" | "asset" | "aggregate"
   >("all");
@@ -144,12 +173,20 @@ export function useFinanceLedger({
   const [searchQuery, setSearchQuery] = useState("");
 
   const clearFilters = useCallback(() => {
-    setFinancePeriodFilter("RANGE");
+    setFinancePeriodFilterWrapped("RANGE");
     setSourceSupplyFilter("all");
     setCashDirectionFilter("all");
     setSelectedLedgerCategory("all");
     setSearchQuery("");
-  }, []);
+  }, [setFinancePeriodFilterWrapped]);
+
+  const periodOpts: LedgerPeriodFilterOptions = useMemo(
+    () => ({
+      customFrom: financeCustomRangeFrom,
+      customTo: financeCustomRangeTo,
+    }),
+    [financeCustomRangeFrom, financeCustomRangeTo],
+  );
 
   const isAnyFilterActive = useMemo(
     () =>
@@ -157,7 +194,7 @@ export function useFinanceLedger({
       sourceSupplyFilter !== "all" ||
       cashDirectionFilter !== "all" ||
       selectedLedgerCategory !== "all" ||
-      searchQuery !== "",
+      searchQuery.trim() !== "",
     [
       financePeriodFilter,
       sourceSupplyFilter,
@@ -193,8 +230,13 @@ export function useFinanceLedger({
   }, [selectedLedgerCategory]);
 
   const filteredLedger = useMemo(
-    () => filterLedgerByPeriod(ledgerTransactions ?? [], financePeriodFilter),
-    [ledgerTransactions, financePeriodFilter],
+    () =>
+      filterLedgerByPeriod(
+        ledgerTransactions ?? [],
+        financePeriodFilter,
+        periodOpts,
+      ),
+    [ledgerTransactions, financePeriodFilter, periodOpts],
   );
 
   const tripCountByParty = useMemo(() => {
@@ -518,7 +560,10 @@ export function useFinanceLedger({
     setLedgerRefreshKey,
     refetchLedger,
     financePeriodFilter,
-    setFinancePeriodFilter,
+    setFinancePeriodFilter: setFinancePeriodFilterWrapped,
+    financeCustomRangeFrom,
+    financeCustomRangeTo,
+    setFinanceCustomRange,
     sourceSupplyFilter,
     setSourceSupplyFilter,
     ledgerSortKey,

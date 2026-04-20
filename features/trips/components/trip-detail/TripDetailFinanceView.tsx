@@ -7,9 +7,9 @@ import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getDoubleEntryDisplayLabel } from "@/features/finance/accounting/accountingModel";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
-import { adjustedCost, adjustedRevenue } from "@/features/trips/services/tripAdjustments";
-import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import type { TripAssignmentAuditRow } from "@/features/trips/services/trip-assignment-audit.service";
+import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
+import { adjustedCost, adjustedRevenue } from "@/features/trips/services/tripAdjustments";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import type { ReactNode } from "react";
@@ -109,6 +109,9 @@ export interface ReconciliationPartyInfo {
   onRecordPayment?: () => void;
 }
 
+/** Trip detail screen: Tracking (status, docs, map, log) vs Finance (ledger, billing, transactions). */
+export type TripDetailTab = "tracking" | "finance";
+
 export interface TripDetailFinanceViewProps {
   trip: TripRow;
   tripLedgerEntries: LedgerRow[];
@@ -190,6 +193,11 @@ export interface TripDetailFinanceViewProps {
    * scalar props above.
    */
   reconciliationParties?: ReconciliationPartyInfo[];
+  /** When set with `onTripDetailTabChange`, the view uses two tabs (full trip detail screen). */
+  tripDetailTab?: TripDetailTab | null;
+  onTripDetailTabChange?: (tab: TripDetailTab) => void;
+  /** Tracking tab: map + vehicle + driver activity (parent renders `TrackingMapBlock` + timeline). */
+  trackingTabExtras?: ReactNode;
 }
 
 export type DocCategory = "vehicle" | "trip" | "driver";
@@ -1066,8 +1074,17 @@ export function TripDetailFinanceView({
   onAcceptPartnerView,
   onRaiseDispute,
   reconciliationParties,
+  tripDetailTab = null,
+  onTripDetailTabChange,
+  trackingTabExtras,
 }: TripDetailFinanceViewProps) {
   const { t } = useLanguage();
+  const tabsEnabled =
+    typeof onTripDetailTabChange === "function" && tripDetailTab != null;
+  const activeTab: TripDetailTab = tripDetailTab ?? "finance";
+  const showTrackingSection = !tabsEnabled || activeTab === "tracking";
+  const showFinanceSection = !tabsEnabled || activeTab === "finance";
+  const showAssignmentsSection = !tabsEnabled || activeTab === "tracking";
   const routeStr = `${trip.pickup_area ?? "—"} → ${trip.drop_location ?? "—"}`.trim() || "—";
   const customerSales = Number(trip.client_price ?? 0) || 0;
   const supplierCost = Number(trip.supplier_rate ?? 0) || 0;
@@ -1250,7 +1267,51 @@ export function TripDetailFinanceView({
 
   return (
     <View style={styles.content}>
+      {tabsEnabled ? (
+        <View style={styles.detailTabBar}>
+          <TouchableOpacity
+            style={[
+              styles.detailTabBtn,
+              activeTab === "tracking" && styles.detailTabBtnOn,
+            ]}
+            onPress={() => onTripDetailTabChange?.("tracking")}
+            activeOpacity={0.88}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === "tracking" }}
+          >
+            <Text
+              style={[
+                styles.detailTabBtnTxt,
+                activeTab === "tracking" && styles.detailTabBtnTxtOn,
+              ]}
+            >
+              Tracking
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.detailTabBtn,
+              activeTab === "finance" && styles.detailTabBtnOn,
+            ]}
+            onPress={() => onTripDetailTabChange?.("finance")}
+            activeOpacity={0.88}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === "finance" }}
+          >
+            <Text
+              style={[
+                styles.detailTabBtnTxt,
+                activeTab === "finance" && styles.detailTabBtnTxtOn,
+              ]}
+            >
+              Finance
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
       {/* Active Grid Sync — tappable to open tracking view */}
+      {showTrackingSection ? (
       <TouchableOpacity
         style={styles.trackingCard}
         onPress={handleTrackingCardPress}
@@ -1320,13 +1381,20 @@ export function TripDetailFinanceView({
           </View>
         </View>
       </TouchableOpacity>
+      ) : null}
 
       {/* Documents */}
-      {tripDocs.length > 0 && (
+      {showTrackingSection && tripDocs.length > 0 ? (
         <TripDocsGrid tripDocs={tripDocs} onOpenDoc={onOpenDoc} />
-      )}
+      ) : null}
 
-      {/* Unified Trip Finances Card */}
+      {showTrackingSection && trackingTabExtras ? (
+        <View style={styles.trackingTabExtrasWrap}>{trackingTabExtras}</View>
+      ) : null}
+
+      {/* Unified Trip Finances Card + ledger modal + transactions */}
+      {showFinanceSection ? (
+      <>
       <View style={styles.financeCard}>
         <View style={styles.financeHeader}>
           <View>
@@ -2005,8 +2073,12 @@ export function TripDetailFinanceView({
           </View>
         )}
       </View>
+      </>
+      ) : null}
 
       {/* Assignments Registry (Current Node card + Activity Log; aggregate partner/OTP live inside the block) */}
+      {showAssignmentsSection ? (
+      <>
       <Text style={styles.handshakesLabel}>Assignments Registry</Text>
       <View style={styles.handshakesWrap}>
         {assignmentBlock ? (
@@ -2140,6 +2212,8 @@ export function TripDetailFinanceView({
           })()}
         </View>
       </View>
+      </>
+      ) : null}
     </View>
   );
 }
@@ -2149,6 +2223,43 @@ const SECTION_GAP = 16;
 
 const styles = StyleSheet.create({
   content: { paddingBottom: 80 },
+  detailTabBar: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: SECTION_GAP,
+    padding: 4,
+    borderRadius: 14,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  detailTabBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  detailTabBtnOn: {
+    backgroundColor: Theme.screenBackground,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  detailTabBtnTxt: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.2,
+  },
+  detailTabBtnTxtOn: {
+    color: Theme.primary,
+  },
+  trackingTabExtrasWrap: {
+    marginBottom: SECTION_GAP,
+  },
   trackingCard: {
     backgroundColor: Theme.screenBackground,
     borderRadius: 20,

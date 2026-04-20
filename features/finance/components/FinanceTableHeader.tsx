@@ -1,6 +1,6 @@
 import { Text, TouchableOpacity, View } from "react-native";
 import { useLanguage } from "@/contexts/LanguageContext";
-import type { LedgerSortKey } from "../hooks/useFinanceLedger";
+import type { LedgerSortKey } from "../types";
 import type { FinanceSubTab } from "../types";
 import { styles } from "./FinanceScreen.styles";
 

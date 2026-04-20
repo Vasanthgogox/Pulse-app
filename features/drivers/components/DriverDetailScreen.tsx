@@ -862,6 +862,14 @@ export default function DriverDetailScreen({
       rightAction={
         <View style={styles.headerRightActions}>
           <TouchableOpacity
+            style={styles.publicProfileHeaderBtn}
+            onPress={() => router.push(`/public-profile/driver/${driverId}`)}
+            activeOpacity={0.8}
+            accessibilityLabel="View public profile"
+          >
+            <FontAwesome name="id-card-o" size={15} color={Theme.textOnPrimary} />
+          </TouchableOpacity>
+          <TouchableOpacity
             style={styles.profileHeaderBtn}
             onPress={() => setShowProfileModal(true)}
             activeOpacity={0.8}
@@ -1776,6 +1784,7 @@ export default function DriverDetailScreen({
               showHistoryHeader={false}
               showGridFooter={false}
               embedInParentScroll={true}
+              driverRows={driver ? [driver] : []}
             />
           </View>
         </ScrollView>
@@ -2097,6 +2106,16 @@ const styles = StyleSheet.create({
     right: Layout.fabRightOffset,
     zIndex: 100,
     elevation: 10,
+  },
+  publicProfileHeaderBtn: {
+    width: 36,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   profileHeaderBtn: {
     width: 40,

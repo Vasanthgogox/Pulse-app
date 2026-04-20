@@ -10,10 +10,20 @@ import type { EntityListFilter } from "@/features/finance/components/TreasurySum
 import { aggregateSuppliers, type FinancialRowData, type TripPartyMap } from "@/features/finance/aggregation";
 import type { DirectQuoteForAggregation, IndentForAggregation } from "@/features/finance/aggregation/types";
 import { getTripsByOrganization, type TripRow } from "@/features/trips";
+import { usePaginatedScroll } from "@/lib/usePaginatedScroll";
 import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
     getSuppliersByOrganization,
@@ -163,6 +173,26 @@ export function SuppliersTab({
     return list;
   }, [rows, q, entityFilter]);
 
+  const supplierTableResetKey = useMemo(
+    () => `${filteredRows.length}|${q}|${entityFilter}|${searchQuery}`,
+    [filteredRows.length, q, entityFilter, searchQuery],
+  );
+  const {
+    visible: visibleSupplierRows,
+    onScroll: onSupplierTablePaginatedScroll,
+  } = usePaginatedScroll(filteredRows, { resetKey: supplierTableResetKey });
+
+  const handleSupplierTableScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const p = tabBarScrollProps as {
+        onScroll?: (ev?: NativeSyntheticEvent<NativeScrollEvent>) => void;
+      };
+      p.onScroll?.(e);
+      onSupplierTablePaginatedScroll(e);
+    },
+    [tabBarScrollProps, onSupplierTablePaginatedScroll],
+  );
+
   const filteredPendingInvites = useMemo(() => {
     if (!q) return pendingSupplierInvites;
     return pendingSupplierInvites.filter((r) =>
@@ -209,6 +239,8 @@ export function SuppliersTab({
         ]}
         showsVerticalScrollIndicator={false}
         {...tabBarScrollProps}
+        onScroll={handleSupplierTableScroll}
+        scrollEventThrottle={tabBarScrollProps.scrollEventThrottle ?? 100}
         stickyHeaderIndices={[stickyHeaderIndex]}
         refreshControl={
           onRefresh ? (
@@ -267,7 +299,7 @@ export function SuppliersTab({
           </View>
         ) : null}
         <View style={styles.tableCard}>
-          {filteredRows.map((data) => {
+          {visibleSupplierRows.map((data) => {
             const due = data.due ?? 0;
             const paid = data.paid ?? 0;
             const tripCount = data.trips ?? 0;

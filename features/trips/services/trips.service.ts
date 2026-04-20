@@ -241,6 +241,11 @@ export async function getTripsByDriverIds(
 
 /** Create trip payload. Manual trip: pickup, drop, client, prices. */
 export interface CreateTripData {
+  /**
+   * When set (valid UUID), inserted row uses this id so shared-ledger `reference_id`
+   * and local `trips.id` stay aligned (e.g. partner-only / ghost trip sync).
+   */
+  id?: string;
   pickup_area: string;
   drop_location: string;
   /** From place search; optional. */
@@ -265,13 +270,23 @@ export interface CreateTripData {
   vehicle_display_number?: string | null;
 }
 
+function isUuidString(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value.trim(),
+  );
+}
+
 export async function createTrip(
   orgId: string,
+  userId: string,
   data: CreateTripData,
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
   const clientPrice = Number(data.client_price) || 0;
   const supplierRate = Number(data.supplier_rate) || 0;
+  const explicitId =
+    data.id && isUuidString(data.id) ? data.id.trim() : undefined;
   const insertData = {
+    ...(explicitId ? { id: explicitId } : {}),
     organization_id: orgId,
     trip_number: null as string | null,
     source: "manual",
@@ -321,13 +336,14 @@ export interface TripOtpInfo {
  */
 export async function createTripWithOtp(
   orgId: string,
+  userId: string,
   data: CreateTripData
 ): Promise<{
   error: Error | null;
   trip: TripRow | null;
   otp: TripOtpInfo | null;
 }> {
-  const { error, trip } = await createTrip(orgId, data);
+  const { error, trip } = await createTrip(orgId, userId, data);
   if (error || !trip) return { error: error ?? new Error('No trip returned'), trip: null, otp: null };
   const isAggregate = !!data.supplier_id;
   const hasAssignment = !!data.driver_id || !!data.vehicle_id || !!data.vehicle_display_number;
