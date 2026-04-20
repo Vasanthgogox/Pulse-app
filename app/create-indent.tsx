@@ -2,47 +2,47 @@
  * Create Indent — Deploy New Load.
  * Full-screen form: origin, destination, client, budget, supplier target, vehicle, load type, weight, pickup date.
  */
+import { TeslaHeader } from "@/components/TeslaHeader";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { ThemedConfirmModal } from "@/components/ThemedConfirmModal";
-import { TeslaHeader } from "@/components/TeslaHeader";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { ROUTES } from "@/lib/routes";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
-  AddClientModal,
-  createClient,
-  getClientsByOrganization,
-  type ClientRow,
+    AddClientModal,
+    createClient,
+    getClientsByOrganization,
+    type ClientRow,
 } from "@/features/clients";
 import { createIndent, type CreateIndentInput } from "@/features/indents";
 import {
-  getIndentById,
-  shareDraftIndent,
-  updateIndentDraft,
+    getIndentById,
+    shareDraftIndent,
+    updateIndentDraft,
 } from "@/features/indents/services/indents.service";
 import { LocationSearchField } from "@/features/trips/components/add-trip/LocationSearchField";
 import {
-  BODY_LENGTH_SELECT_OPTIONS,
-  normalizeBodyLengthKey,
-  OTHER_LABEL,
-  VEHICLE_CATEGORY_LABELS,
+    BODY_LENGTH_SELECT_OPTIONS,
+    normalizeBodyLengthKey,
+    OTHER_LABEL,
+    VEHICLE_CATEGORY_LABELS,
 } from "@/features/vehicles/utils/vehicleFormOptions.util";
 import {
-  getCapabilitiesFromProfile,
-  getEffectivePermissions,
+    getCapabilitiesFromProfile,
+    getEffectivePermissions,
 } from "@/lib/capabilities";
 import { useInvalidateIndents } from "@/lib/queries";
+import { ROUTES } from "@/lib/routes";
 import { useSafeBack } from "@/lib/useSafeBack";
 import {
-  dateISO,
-  maxLength,
-  nonNegativeAmount,
-  positiveAmount,
-  required,
-  runValidators,
-  VALIDATION,
+    dateISO,
+    maxLength,
+    nonNegativeAmount,
+    positiveAmount,
+    required,
+    runValidators,
+    VALIDATION,
 } from "@/lib/validation";
 import { getOptimalRoute } from "@/services/routingService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -51,19 +51,18 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    ActivityIndicator,
+    Dimensions,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -258,7 +257,13 @@ export default function CreateIndentScreen() {
       confirmText = "Confirm",
     ): Promise<boolean> => {
       return new Promise((resolve) => {
-        setConfirmState({ visible: true, title, message, confirmText, resolve });
+        setConfirmState({
+          visible: true,
+          title,
+          message,
+          confirmText,
+          resolve,
+        });
       });
     },
     [],
@@ -532,12 +537,10 @@ export default function CreateIndentScreen() {
           setLastSavedForm(form);
           invalidateIndents(orgId);
           if (indent?.id) {
-            router.replace(
-              {
-                pathname: ROUTES.TABS.NETWORK,
-                params: { tab: "load", indentId: indent.id },
-              } as import("expo-router").Href,
-            );
+            router.replace({
+              pathname: ROUTES.TABS.NETWORK,
+              params: { tab: "load", indentId: indent.id },
+            } as import("expo-router").Href);
           } else {
             showDialog(
               "Draft saved",
@@ -562,7 +565,10 @@ export default function CreateIndentScreen() {
       if (indent) {
         setDraftIndentId(indent.id);
         await AsyncStorage.setItem(`indent_draft_id_${orgId}`, indent.id);
-        router.replace({ pathname: ROUTES.TABS.NETWORK, params: { tab: "load", indentId: indent.id } } as import("expo-router").Href);
+        router.replace({
+          pathname: ROUTES.TABS.NETWORK,
+          params: { tab: "load", indentId: indent.id },
+        } as import("expo-router").Href);
         return;
       }
       setLastSavedForm(form);
@@ -624,7 +630,10 @@ export default function CreateIndentScreen() {
           await AsyncStorage.removeItem(`indent_draft_${orgId}`);
           await AsyncStorage.removeItem(`indent_draft_id_${orgId}`);
           invalidateIndents(orgId);
-          router.replace({ pathname: ROUTES.TABS.NETWORK, params: { tab: "load", indentId: indent.id } } as import("expo-router").Href);
+          router.replace({
+            pathname: ROUTES.TABS.NETWORK,
+            params: { tab: "load", indentId: indent.id },
+          } as import("expo-router").Href);
         }
         return;
       }
@@ -639,7 +648,10 @@ export default function CreateIndentScreen() {
         await AsyncStorage.removeItem(`indent_draft_${orgId}`);
         await AsyncStorage.removeItem(`indent_draft_id_${orgId}`);
         invalidateIndents(orgId);
-        router.replace({ pathname: ROUTES.TABS.NETWORK, params: { tab: "load", indentId: indent.id } } as import("expo-router").Href);
+        router.replace({
+          pathname: ROUTES.TABS.NETWORK,
+          params: { tab: "load", indentId: indent.id },
+        } as import("expo-router").Href);
       }
     } finally {
       setSubmitting(false);
@@ -720,11 +732,7 @@ export default function CreateIndentScreen() {
             styles.scrollContent,
             {
               paddingHorizontal:
-                windowWidth >= 1440
-                  ? 12
-                  : windowWidth >= 1024
-                    ? 16
-                    : Layout.screenPaddingHorizontal,
+                windowWidth >= 1024 ? 0 : Layout.screenPaddingHorizontal,
             },
             { paddingBottom: insets.bottom + 120 },
           ]}
@@ -743,84 +751,89 @@ export default function CreateIndentScreen() {
                 </View>
                 <Text style={styles.stepCardTitle}>Route & Vehicle</Text>
               </View>
-            <View style={[styles.sheetGrid, stackFieldGrid && styles.sheetGridStacked]}>
-              <View style={styles.sheetField}>
-                <Text style={styles.sheetLabel}>Origin Node</Text>
-                <LocationSearchField
-                  label=""
-                  placeholder="Enter origin node"
-                  value={form.pickup_area}
-                  onChangeText={(t) => {
-                    update({ pickup_area: t });
-                    setPickupLat(null);
-                    setPickupLon(null);
-                  }}
-                  onSelectPlace={(_name, coords) => {
-                    update({ pickup_area: compactLocationLabel(_name) });
-                    setPickupLat(coords.lat);
-                    setPickupLon(coords.lon);
-                  }}
-                  inputStyle={[
-                    styles.sheetInput,
-                    errors.pickup_area && styles.inputError,
-                  ]}
-                  labelStyle={styles.hiddenLabel}
-                  onDropdownOpenChange={setPickupDropdownOpen}
-                />
-                {errors.pickup_area ? (
-                  <Text style={styles.errorText}>{errors.pickup_area}</Text>
-                ) : null}
-              </View>
-              <View style={styles.sheetField}>
-                <Text style={styles.sheetLabel}>Destination Node</Text>
-                <LocationSearchField
-                  label=""
-                  placeholder="Enter destination node"
-                  value={form.drop_location}
-                  onChangeText={(t) => {
-                    update({ drop_location: t });
-                    setDropLat(null);
-                    setDropLon(null);
-                  }}
-                  onSelectPlace={(_name, coords) => {
-                    update({ drop_location: compactLocationLabel(_name) });
-                    setDropLat(coords.lat);
-                    setDropLon(coords.lon);
-                  }}
-                  inputStyle={[
-                    styles.sheetInput,
-                    errors.drop_location && styles.inputError,
-                  ]}
-                  labelStyle={styles.hiddenLabel}
-                  onDropdownOpenChange={setDropDropdownOpen}
-                />
-                {errors.drop_location ? (
-                  <Text style={styles.errorText}>{errors.drop_location}</Text>
-                ) : null}
-              </View>
-            </View>
-            {routeLoading ||
-            routeDistanceKm != null ||
-            routeEtaLabel != null ? (
-              <View style={styles.routeStatsRow}>
-                <View style={styles.routeStat}>
-                  <Text style={styles.routeStatLabel}>Distance</Text>
-                  <Text style={styles.routeStatValue}>
-                    {routeLoading
-                      ? "…"
-                      : routeDistanceKm != null
-                        ? `${routeDistanceKm} km`
-                        : "—"}
-                  </Text>
+              <View
+                style={[
+                  styles.sheetGrid,
+                  stackFieldGrid && styles.sheetGridStacked,
+                ]}
+              >
+                <View style={styles.sheetField}>
+                  <Text style={styles.sheetLabel}>Origin Node</Text>
+                  <LocationSearchField
+                    label=""
+                    placeholder="Enter origin node"
+                    value={form.pickup_area}
+                    onChangeText={(t) => {
+                      update({ pickup_area: t });
+                      setPickupLat(null);
+                      setPickupLon(null);
+                    }}
+                    onSelectPlace={(_name, coords) => {
+                      update({ pickup_area: compactLocationLabel(_name) });
+                      setPickupLat(coords.lat);
+                      setPickupLon(coords.lon);
+                    }}
+                    inputStyle={[
+                      styles.sheetInput,
+                      errors.pickup_area && styles.inputError,
+                    ]}
+                    labelStyle={styles.hiddenLabel}
+                    onDropdownOpenChange={setPickupDropdownOpen}
+                  />
+                  {errors.pickup_area ? (
+                    <Text style={styles.errorText}>{errors.pickup_area}</Text>
+                  ) : null}
                 </View>
-                <View style={styles.routeStat}>
-                  <Text style={styles.routeStatLabel}>ETA</Text>
-                  <Text style={styles.routeStatValue}>
-                    {routeLoading ? "…" : (routeEtaLabel ?? "—")}
-                  </Text>
+                <View style={styles.sheetField}>
+                  <Text style={styles.sheetLabel}>Destination Node</Text>
+                  <LocationSearchField
+                    label=""
+                    placeholder="Enter destination node"
+                    value={form.drop_location}
+                    onChangeText={(t) => {
+                      update({ drop_location: t });
+                      setDropLat(null);
+                      setDropLon(null);
+                    }}
+                    onSelectPlace={(_name, coords) => {
+                      update({ drop_location: compactLocationLabel(_name) });
+                      setDropLat(coords.lat);
+                      setDropLon(coords.lon);
+                    }}
+                    inputStyle={[
+                      styles.sheetInput,
+                      errors.drop_location && styles.inputError,
+                    ]}
+                    labelStyle={styles.hiddenLabel}
+                    onDropdownOpenChange={setDropDropdownOpen}
+                  />
+                  {errors.drop_location ? (
+                    <Text style={styles.errorText}>{errors.drop_location}</Text>
+                  ) : null}
                 </View>
               </View>
-            ) : null}
+              {routeLoading ||
+              routeDistanceKm != null ||
+              routeEtaLabel != null ? (
+                <View style={styles.routeStatsRow}>
+                  <View style={styles.routeStat}>
+                    <Text style={styles.routeStatLabel}>Distance</Text>
+                    <Text style={styles.routeStatValue}>
+                      {routeLoading
+                        ? "…"
+                        : routeDistanceKm != null
+                          ? `${routeDistanceKm} km`
+                          : "—"}
+                    </Text>
+                  </View>
+                  <View style={styles.routeStat}>
+                    <Text style={styles.routeStatLabel}>ETA</Text>
+                    <Text style={styles.routeStatValue}>
+                      {routeLoading ? "…" : (routeEtaLabel ?? "—")}
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
             </View>
 
             <View style={styles.stepCard}>
@@ -830,174 +843,175 @@ export default function CreateIndentScreen() {
                 </View>
                 <Text style={styles.stepCardTitle}>Commercial Details</Text>
               </View>
-            <View style={styles.sheetSection}>
-              <Text style={styles.sheetLabel}>Client</Text>
-              <View style={styles.clientSearchRow}>
-                <FontAwesome
-                  name="search"
-                  size={14}
-                  color={Theme.textMuted}
-                  style={styles.clientSearchIcon}
-                />
-                <TextInput
-                  style={styles.clientSearchInput}
-                  placeholder="Search client…"
-                  placeholderTextColor={Theme.textMuted}
-                  value={clientSearch}
-                  onChangeText={setClientSearch}
-                  autoCorrect={false}
-                  spellCheck={false}
-                  autoComplete="off"
-                  returnKeyType="search"
-                />
-                {clientSearch.trim() ? (
-                  <TouchableOpacity
-                    style={styles.clientSearchClear}
-                    onPress={() => setClientSearch("")}
-                    hitSlop={10}
-                    accessibilityRole="button"
-                    accessibilityLabel="Clear client search"
+              <View style={styles.sheetSection}>
+                <Text style={styles.sheetLabel}>Client</Text>
+                <View style={styles.clientSearchRow}>
+                  <FontAwesome
+                    name="search"
+                    size={14}
+                    color={Theme.textMuted}
+                    style={styles.clientSearchIcon}
+                  />
+                  <TextInput
+                    style={styles.clientSearchInput}
+                    placeholder="Search client…"
+                    placeholderTextColor={Theme.textMuted}
+                    value={clientSearch}
+                    onChangeText={setClientSearch}
+                    autoCorrect={false}
+                    spellCheck={false}
+                    autoComplete="off"
+                    returnKeyType="search"
+                  />
+                  {clientSearch.trim() ? (
+                    <TouchableOpacity
+                      style={styles.clientSearchClear}
+                      onPress={() => setClientSearch("")}
+                      hitSlop={10}
+                      accessibilityRole="button"
+                      accessibilityLabel="Clear client search"
+                    >
+                      <FontAwesome
+                        name="times-circle"
+                        size={16}
+                        color={Theme.textMuted}
+                      />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+                {clientsLoading ? (
+                  <View style={styles.partnersWrap}>
+                    <Text style={styles.partnersPlaceholder}>Loading…</Text>
+                  </View>
+                ) : filteredClients.length === 0 ? (
+                  <View style={styles.partnersWrap}>
+                    <Text style={styles.partnersPlaceholder}>
+                      {clients.length === 0
+                        ? "No clients. Add one below."
+                        : "No matching clients."}
+                    </Text>
+                  </View>
+                ) : (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.partnersScrollContent}
                   >
-                    <FontAwesome
-                      name="times-circle"
-                      size={16}
-                      color={Theme.textMuted}
-                    />
-                  </TouchableOpacity>
+                    {filteredClients.map((client) => {
+                      const isSelected = form.client_id === client.id;
+                      return (
+                        <TouchableOpacity
+                          key={client.id}
+                          style={[
+                            styles.partnerChip,
+                            isSelected && styles.partnerChipSelected,
+                          ]}
+                          onPress={() => handleSelectClient(client)}
+                          activeOpacity={0.8}
+                        >
+                          <Text
+                            style={[
+                              styles.partnerChipText,
+                              isSelected && styles.partnerChipTextSelected,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {client.name || client.contact_person || "—"}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                )}
+                <TouchableOpacity
+                  style={styles.addClientBtn}
+                  onPress={() => setShowAddClientModal(true)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.addClientBtnText}>Add new client</Text>
+                </TouchableOpacity>
+                {errors.client_name ? (
+                  <Text style={styles.errorText}>{errors.client_name}</Text>
                 ) : null}
               </View>
-              {clientsLoading ? (
-                <View style={styles.partnersWrap}>
-                  <Text style={styles.partnersPlaceholder}>Loading…</Text>
-                </View>
-              ) : filteredClients.length === 0 ? (
-                <View style={styles.partnersWrap}>
-                  <Text style={styles.partnersPlaceholder}>
-                    {clients.length === 0
-                      ? "No clients. Add one below."
-                      : "No matching clients."}
-                  </Text>
-                </View>
-              ) : (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.partnersScrollContent}
+
+              {orgId ? (
+                <Modal
+                  visible={showAddClientModal}
+                  animationType="slide"
+                  presentationStyle="fullScreen"
+                  onRequestClose={() => setShowAddClientModal(false)}
                 >
-                  {filteredClients.map((client) => {
-                    const isSelected = form.client_id === client.id;
-                    return (
-                      <TouchableOpacity
-                        key={client.id}
-                        style={[
-                          styles.partnerChip,
-                          isSelected && styles.partnerChipSelected,
-                        ]}
-                        onPress={() => handleSelectClient(client)}
-                        activeOpacity={0.8}
-                      >
-                        <Text
-                          style={[
-                            styles.partnerChipText,
-                            isSelected && styles.partnerChipTextSelected,
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {client.name || client.contact_person || "—"}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              )}
-              <TouchableOpacity
-                style={styles.addClientBtn}
-                onPress={() => setShowAddClientModal(true)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.addClientBtnText}>Add new client</Text>
-              </TouchableOpacity>
-              {errors.client_name ? (
-                <Text style={styles.errorText}>{errors.client_name}</Text>
-              ) : null}
-            </View>
-
-            {orgId ? (
-              <Modal
-                visible={showAddClientModal}
-                animationType="slide"
-                presentationStyle="fullScreen"
-                onRequestClose={() => setShowAddClientModal(false)}
-              >
-                <AddClientModal
-                  onClose={() => setShowAddClientModal(false)}
-                  onComplete={async (data) => {
-                    const { error, client } = await createClient(orgId, {
-                      contact_person: data.contactPerson,
-                      phone: data.phone,
-                      organization_name: data.organizationName || undefined,
-                    });
-                    if (error) {
-                      showDialog("Could not add client", error.message);
-                      throw error;
-                    }
-                    if (client) {
-                      const clientName = client.name ?? client.contact_person ?? "";
-                      if (!clientName.trim()) {
-                        showDialog(
-                          "Invalid Client",
-                          "Added client has no name. Please ensure client has a valid name or contact person.",
-                        );
-                        return;
-                      }
-                      update({
-                        client_id: client.id,
-                        client_name: clientName,
+                  <AddClientModal
+                    onClose={() => setShowAddClientModal(false)}
+                    onComplete={async (data) => {
+                      const { error, client } = await createClient(orgId, {
+                        contact_person: data.contactPerson,
+                        phone: data.phone,
+                        organization_name: data.organizationName || undefined,
                       });
-                      setClients((prev) => [...prev, client]);
-                    }
-                  }}
-                  organizationId={orgId}
-                  noOrganizationMessage={null}
+                      if (error) {
+                        showDialog("Could not add client", error.message);
+                        throw error;
+                      }
+                      if (client) {
+                        const clientName =
+                          client.name ?? client.contact_person ?? "";
+                        if (!clientName.trim()) {
+                          showDialog(
+                            "Invalid Client",
+                            "Added client has no name. Please ensure client has a valid name or contact person.",
+                          );
+                          return;
+                        }
+                        update({
+                          client_id: client.id,
+                          client_name: clientName,
+                        });
+                        setClients((prev) => [...prev, client]);
+                      }
+                    }}
+                    organizationId={orgId}
+                    noOrganizationMessage={null}
+                  />
+                </Modal>
+              ) : null}
+
+              <View style={[styles.sheetSection, styles.commercialHighlight]}>
+                <Text style={styles.sheetLabel}>Client Rate (₹)</Text>
+                <TextInput
+                  style={[
+                    styles.sheetInput,
+                    errors.client_price && styles.inputError,
+                  ]}
+                  value={form.client_price}
+                  onChangeText={(t) => update({ client_price: t })}
+                  placeholder="Enter Amount"
+                  placeholderTextColor={Theme.textMuted}
+                  keyboardType="decimal-pad"
                 />
-              </Modal>
-            ) : null}
+                {errors.client_price ? (
+                  <Text style={styles.errorText}>{errors.client_price}</Text>
+                ) : null}
+              </View>
 
-            <View style={[styles.sheetSection, styles.commercialHighlight]}>
-              <Text style={styles.sheetLabel}>Client Rate (₹)</Text>
-              <TextInput
-                style={[
-                  styles.sheetInput,
-                  errors.client_price && styles.inputError,
-                ]}
-                value={form.client_price}
-                onChangeText={(t) => update({ client_price: t })}
-                placeholder="Enter Amount"
-                placeholderTextColor={Theme.textMuted}
-                keyboardType="decimal-pad"
-              />
-              {errors.client_price ? (
-                <Text style={styles.errorText}>{errors.client_price}</Text>
-              ) : null}
-            </View>
-
-            <View style={[styles.sheetSection, styles.commercialHighlight]}>
-              <Text style={styles.sheetLabel}>Supplier Target (₹)</Text>
-              <TextInput
-                style={[
-                  styles.sheetInput,
-                  errors.supplier_target && styles.inputError,
-                ]}
-                value={form.supplier_target}
-                onChangeText={(t) => update({ supplier_target: t })}
-                placeholder="0"
-                placeholderTextColor={Theme.textMuted}
-                keyboardType="decimal-pad"
-              />
-              {errors.supplier_target ? (
-                <Text style={styles.errorText}>{errors.supplier_target}</Text>
-              ) : null}
-            </View>
+              <View style={[styles.sheetSection, styles.commercialHighlight]}>
+                <Text style={styles.sheetLabel}>Supplier Target (₹)</Text>
+                <TextInput
+                  style={[
+                    styles.sheetInput,
+                    errors.supplier_target && styles.inputError,
+                  ]}
+                  value={form.supplier_target}
+                  onChangeText={(t) => update({ supplier_target: t })}
+                  placeholder="0"
+                  placeholderTextColor={Theme.textMuted}
+                  keyboardType="decimal-pad"
+                />
+                {errors.supplier_target ? (
+                  <Text style={styles.errorText}>{errors.supplier_target}</Text>
+                ) : null}
+              </View>
             </View>
 
             <View style={styles.stepCard}>
@@ -1007,210 +1021,220 @@ export default function CreateIndentScreen() {
                 </View>
                 <Text style={styles.stepCardTitle}>Load Specifics</Text>
               </View>
-            <View style={[styles.sheetGrid, stackFieldGrid && styles.sheetGridStacked]}>
-              <View style={styles.sheetField}>
-                <Text style={styles.sheetLabel}>Vehicle</Text>
-                {vehicleTypeIsOther ? (
-                  <TextInput
-                    style={[
-                      styles.sheetInput,
-                      errors.vehicle_type && styles.inputError,
-                    ]}
-                    value={form.vehicle_type}
-                    onChangeText={(t) => update({ vehicle_type: t })}
-                    placeholder="Type vehicle"
-                    placeholderTextColor={Theme.textMuted}
-                  />
-                ) : (
-                  <TouchableOpacity
-                    style={[
-                      styles.sheetInput,
-                      { justifyContent: "center" },
-                      errors.vehicle_type && styles.inputError,
-                    ]}
-                    onPress={() => setVehicleTypePickerOpen(true)}
-                    activeOpacity={0.8}
-                  >
-                    <Text
-                      style={
-                        form.vehicle_type
-                          ? styles.dropdownTouchableText
-                          : styles.dropdownTouchablePlaceholder
-                      }
-                      numberOfLines={1}
-                    >
-                      {form.vehicle_type || "Select Vehicle"}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-                {vehicleTypeIsOther ? (
-                  <TouchableOpacity
-                    onPress={() => setVehicleTypePickerOpen(true)}
-                    style={styles.switchToPresetLink}
-                  >
-                    <Text style={styles.switchToPresetLinkText}>
-                      Choose from list instead
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-                {errors.vehicle_type ? (
-                  <Text style={styles.errorText}>{errors.vehicle_type}</Text>
-                ) : null}
-              </View>
-              <View style={styles.sheetField}>
-                <Text style={styles.sheetLabel}>Load Type</Text>
-                <TextInput
-                  style={[
-                    styles.sheetInput,
-                    errors.load_type && styles.inputError,
-                  ]}
-                  value={form.load_type}
-                  onChangeText={(t) => update({ load_type: t })}
-                  placeholder="e.g. FMCG"
-                  placeholderTextColor={Theme.textMuted}
-                />
-                {errors.load_type ? (
-                  <Text style={styles.errorText}>{errors.load_type}</Text>
-                ) : null}
-              </View>
-            </View>
-
-            <View style={styles.sheetSection}>
-              <Text style={styles.sheetLabel}>Weight (Tons)</Text>
-              <TextInput
-                style={[styles.sheetInput, errors.weight && styles.inputError]}
-                value={form.weight}
-                onChangeText={(t) =>
-                  update({ weight: t.replace(/[^\d.]/g, "").slice(0, 12) })
-                }
-                placeholder="e.g. 10 (tons)"
-                placeholderTextColor={Theme.textMuted}
-                keyboardType="decimal-pad"
-              />
-              {errors.weight ? (
-                <Text style={styles.errorText}>{errors.weight}</Text>
-              ) : null}
-            </View>
-
-            <View style={styles.sheetSection}>
-              <Text style={styles.sheetLabel}>Pickup date</Text>
-              <View style={styles.quickDateRow}>
-                {[
-                  { label: "Today", get: getToday },
-                  { label: "Tomorrow", get: getTomorrow },
-                  { label: "Day after", get: getDayAfter },
-                ].map(({ label, get }) => {
-                  const iso = get();
-                  const isActive = form.pickup_date === iso;
-                  return (
-                    <TouchableOpacity
-                      key={label}
+              <View
+                style={[
+                  styles.sheetGrid,
+                  stackFieldGrid && styles.sheetGridStacked,
+                ]}
+              >
+                <View style={styles.sheetField}>
+                  <Text style={styles.sheetLabel}>Vehicle</Text>
+                  {vehicleTypeIsOther ? (
+                    <TextInput
                       style={[
-                        styles.quickDateChip,
-                        isActive && styles.quickDateChipActive,
+                        styles.sheetInput,
+                        errors.vehicle_type && styles.inputError,
                       ]}
-                      onPress={() => update({ pickup_date: iso })}
+                      value={form.vehicle_type}
+                      onChangeText={(t) => update({ vehicle_type: t })}
+                      placeholder="Type vehicle"
+                      placeholderTextColor={Theme.textMuted}
+                    />
+                  ) : (
+                    <TouchableOpacity
+                      style={[
+                        styles.sheetInput,
+                        { justifyContent: "center" },
+                        errors.vehicle_type && styles.inputError,
+                      ]}
+                      onPress={() => setVehicleTypePickerOpen(true)}
                       activeOpacity={0.8}
                     >
                       <Text
-                        style={[
-                          styles.quickDateChipText,
-                          isActive && styles.quickDateChipTextActive,
-                        ]}
+                        style={
+                          form.vehicle_type
+                            ? styles.dropdownTouchableText
+                            : styles.dropdownTouchablePlaceholder
+                        }
+                        numberOfLines={1}
                       >
-                        {label}
+                        {form.vehicle_type || "Select Vehicle"}
                       </Text>
                     </TouchableOpacity>
-                  );
-                })}
-              </View>
-              <TouchableOpacity
-                style={[
-                  styles.sheetInput,
-                  styles.dateTouchable,
-                  errors.pickup_date && styles.inputError,
-                ]}
-                onPress={() => setShowDatePicker(true)}
-                activeOpacity={0.8}
-              >
-                <Text
-                  style={
-                    form.pickup_date
-                      ? styles.dateTouchableText
-                      : styles.dateTouchablePlaceholder
-                  }
-                >
-                  {form.pickup_date
-                    ? new Date(
-                        form.pickup_date + "T12:00:00",
-                      ).toLocaleDateString("en-IN", {
-                        weekday: "short",
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })
-                    : "Tap to pick date"}
-                </Text>
-              </TouchableOpacity>
-              {errors.pickup_date ? (
-                <Text style={styles.errorText}>{errors.pickup_date}</Text>
-              ) : null}
-
-              {showDatePicker &&
-                (Platform.OS === "android" ? (
-                  <DateTimePicker
-                    value={
-                      form.pickup_date
-                        ? new Date(form.pickup_date + "T12:00:00")
-                        : new Date()
-                    }
-                    mode="date"
-                    display="default"
-                    minimumDate={new Date()}
-                    onChange={(e, date) => {
-                      setShowDatePicker(false);
-                      if (e.type === "set" && date)
-                        update({ pickup_date: toISODate(date) });
-                    }}
-                  />
-                ) : (
-                  <Modal visible transparent animationType="slide">
+                  )}
+                  {vehicleTypeIsOther ? (
                     <TouchableOpacity
-                      style={styles.datePickerBackdrop}
-                      activeOpacity={1}
-                      onPress={() => setShowDatePicker(false)}
+                      onPress={() => setVehicleTypePickerOpen(true)}
+                      style={styles.switchToPresetLink}
                     >
-                      <View
-                        style={styles.datePickerSheet}
-                        onStartShouldSetResponder={() => true}
-                      >
-                        <View style={styles.datePickerHeader}>
-                          <Text style={styles.datePickerTitle}>Pick date</Text>
-                          <TouchableOpacity
-                            onPress={() => setShowDatePicker(false)}
-                            hitSlop={12}
-                          >
-                            <Text style={styles.datePickerDone}>Done</Text>
-                          </TouchableOpacity>
-                        </View>
-                        <DateTimePicker
-                          value={
-                            form.pickup_date
-                              ? new Date(form.pickup_date + "T12:00:00")
-                              : new Date()
-                          }
-                          mode="date"
-                          display="spinner"
-                          minimumDate={new Date()}
-                          onChange={(_, date) =>
-                            date && update({ pickup_date: toISODate(date) })
-                          }
-                        />
-                      </View>
+                      <Text style={styles.switchToPresetLinkText}>
+                        Choose from list instead
+                      </Text>
                     </TouchableOpacity>
-                  </Modal>
-                ))}
-            </View>
+                  ) : null}
+                  {errors.vehicle_type ? (
+                    <Text style={styles.errorText}>{errors.vehicle_type}</Text>
+                  ) : null}
+                </View>
+                <View style={styles.sheetField}>
+                  <Text style={styles.sheetLabel}>Load Type</Text>
+                  <TextInput
+                    style={[
+                      styles.sheetInput,
+                      errors.load_type && styles.inputError,
+                    ]}
+                    value={form.load_type}
+                    onChangeText={(t) => update({ load_type: t })}
+                    placeholder="e.g. FMCG"
+                    placeholderTextColor={Theme.textMuted}
+                  />
+                  {errors.load_type ? (
+                    <Text style={styles.errorText}>{errors.load_type}</Text>
+                  ) : null}
+                </View>
+              </View>
+
+              <View style={styles.sheetSection}>
+                <Text style={styles.sheetLabel}>Weight (Tons)</Text>
+                <TextInput
+                  style={[
+                    styles.sheetInput,
+                    errors.weight && styles.inputError,
+                  ]}
+                  value={form.weight}
+                  onChangeText={(t) =>
+                    update({ weight: t.replace(/[^\d.]/g, "").slice(0, 12) })
+                  }
+                  placeholder="e.g. 10 (tons)"
+                  placeholderTextColor={Theme.textMuted}
+                  keyboardType="decimal-pad"
+                />
+                {errors.weight ? (
+                  <Text style={styles.errorText}>{errors.weight}</Text>
+                ) : null}
+              </View>
+
+              <View style={styles.sheetSection}>
+                <Text style={styles.sheetLabel}>Pickup date</Text>
+                <View style={styles.quickDateRow}>
+                  {[
+                    { label: "Today", get: getToday },
+                    { label: "Tomorrow", get: getTomorrow },
+                    { label: "Day after", get: getDayAfter },
+                  ].map(({ label, get }) => {
+                    const iso = get();
+                    const isActive = form.pickup_date === iso;
+                    return (
+                      <TouchableOpacity
+                        key={label}
+                        style={[
+                          styles.quickDateChip,
+                          isActive && styles.quickDateChipActive,
+                        ]}
+                        onPress={() => update({ pickup_date: iso })}
+                        activeOpacity={0.8}
+                      >
+                        <Text
+                          style={[
+                            styles.quickDateChipText,
+                            isActive && styles.quickDateChipTextActive,
+                          ]}
+                        >
+                          {label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.sheetInput,
+                    styles.dateTouchable,
+                    errors.pickup_date && styles.inputError,
+                  ]}
+                  onPress={() => setShowDatePicker(true)}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={
+                      form.pickup_date
+                        ? styles.dateTouchableText
+                        : styles.dateTouchablePlaceholder
+                    }
+                  >
+                    {form.pickup_date
+                      ? new Date(
+                          form.pickup_date + "T12:00:00",
+                        ).toLocaleDateString("en-IN", {
+                          weekday: "short",
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })
+                      : "Tap to pick date"}
+                  </Text>
+                </TouchableOpacity>
+                {errors.pickup_date ? (
+                  <Text style={styles.errorText}>{errors.pickup_date}</Text>
+                ) : null}
+
+                {showDatePicker &&
+                  (Platform.OS === "android" ? (
+                    <DateTimePicker
+                      value={
+                        form.pickup_date
+                          ? new Date(form.pickup_date + "T12:00:00")
+                          : new Date()
+                      }
+                      mode="date"
+                      display="default"
+                      minimumDate={new Date()}
+                      onChange={(e, date) => {
+                        setShowDatePicker(false);
+                        if (e.type === "set" && date)
+                          update({ pickup_date: toISODate(date) });
+                      }}
+                    />
+                  ) : (
+                    <Modal visible transparent animationType="slide">
+                      <TouchableOpacity
+                        style={styles.datePickerBackdrop}
+                        activeOpacity={1}
+                        onPress={() => setShowDatePicker(false)}
+                      >
+                        <View
+                          style={styles.datePickerSheet}
+                          onStartShouldSetResponder={() => true}
+                        >
+                          <View style={styles.datePickerHeader}>
+                            <Text style={styles.datePickerTitle}>
+                              Pick date
+                            </Text>
+                            <TouchableOpacity
+                              onPress={() => setShowDatePicker(false)}
+                              hitSlop={12}
+                            >
+                              <Text style={styles.datePickerDone}>Done</Text>
+                            </TouchableOpacity>
+                          </View>
+                          <DateTimePicker
+                            value={
+                              form.pickup_date
+                                ? new Date(form.pickup_date + "T12:00:00")
+                                : new Date()
+                            }
+                            mode="date"
+                            display="spinner"
+                            minimumDate={new Date()}
+                            onChange={(_, date) =>
+                              date && update({ pickup_date: toISODate(date) })
+                            }
+                          />
+                        </View>
+                      </TouchableOpacity>
+                    </Modal>
+                  ))}
+              </View>
             </View>
 
             {vehicleTypePickerOpen ? (
@@ -1366,51 +1390,51 @@ export default function CreateIndentScreen() {
             </View>
 
             <View style={styles.actionFooterBar}>
-            <View
-              style={[
-                styles.actionButtonsRow,
-                stackActionButtons && styles.actionButtonsRowStacked,
-              ]}
-            >
-              <TouchableOpacity
+              <View
                 style={[
-                  styles.draftBtn,
-                  stackActionButtons && styles.actionBtnStacked,
-                  submitting && styles.submitBtnDisabled,
+                  styles.actionButtonsRow,
+                  stackActionButtons && styles.actionButtonsRowStacked,
                 ]}
-                onPress={persistDraft}
-                disabled={submitting}
-                activeOpacity={0.8}
               >
-                {submitting ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={Theme.textPrimaryDark}
-                  />
-                ) : (
-                  <Text style={styles.draftBtnText}>Save Draft</Text>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.submitBtn,
-                  stackActionButtons && styles.actionBtnStacked,
-                  (!canSubmit || submitting) && styles.submitBtnDisabled,
-                ]}
-                onPress={handleSubmit}
-                disabled={!canSubmit || submitting}
-                activeOpacity={0.8}
-              >
-                {submitting ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={Theme.buttonPrimaryText}
-                  />
-                ) : (
-                  <Text style={styles.submitBtnText}>Share to Network</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+                <TouchableOpacity
+                  style={[
+                    styles.draftBtn,
+                    stackActionButtons && styles.actionBtnStacked,
+                    submitting && styles.submitBtnDisabled,
+                  ]}
+                  onPress={persistDraft}
+                  disabled={submitting}
+                  activeOpacity={0.8}
+                >
+                  {submitting ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={Theme.textPrimaryDark}
+                    />
+                  ) : (
+                    <Text style={styles.draftBtnText}>Save Draft</Text>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.submitBtn,
+                    stackActionButtons && styles.actionBtnStacked,
+                    (!canSubmit || submitting) && styles.submitBtnDisabled,
+                  ]}
+                  onPress={handleSubmit}
+                  disabled={!canSubmit || submitting}
+                  activeOpacity={0.8}
+                >
+                  {submitting ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={Theme.buttonPrimaryText}
+                    />
+                  ) : (
+                    <Text style={styles.submitBtnText}>Share to Network</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </ScrollView>
@@ -1428,11 +1452,19 @@ export default function CreateIndentScreen() {
           confirmText={confirmState.confirmText}
           onCancel={() => {
             if (confirmState.resolve) confirmState.resolve(false);
-            setConfirmState((prev) => ({ ...prev, visible: false, resolve: null }));
+            setConfirmState((prev) => ({
+              ...prev,
+              visible: false,
+              resolve: null,
+            }));
           }}
           onConfirm={() => {
             if (confirmState.resolve) confirmState.resolve(true);
-            setConfirmState((prev) => ({ ...prev, visible: false, resolve: null }));
+            setConfirmState((prev) => ({
+              ...prev,
+              visible: false,
+              resolve: null,
+            }));
           }}
         />
       </View>
@@ -1451,9 +1483,14 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     flexGrow: 1,
     width: "100%",
+    minWidth: "100%",
+    alignSelf: "stretch",
   },
   sheet: {
     gap: 12,
+    width: "100%",
+    minWidth: "100%",
+    alignSelf: "stretch",
   },
   stepCard: {
     backgroundColor: Theme.surface,
@@ -1461,6 +1498,8 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     borderRadius: 20,
     padding: 16,
+    width: "100%",
+    alignSelf: "stretch",
   },
   stepCardDimmed: {
     opacity: 0.92,
