@@ -850,7 +850,8 @@ const styles = StyleSheet.create({
   },
   th: {
     fontSize: 9,
-    fontWeight: "700",
+    fontWeight: "600",
+    fontStyle: "normal",
     color: Theme.textMuted,
     letterSpacing: 0.4,
     textTransform: "uppercase",
@@ -869,17 +870,21 @@ const styles = StyleSheet.create({
   td: {
     fontSize: 10,
     fontWeight: "600",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
   },
   tdMission: { flex: 2, minWidth: 0 },
   tdMissionId: {
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "600",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
   },
   tdRoute: {
     fontSize: 10,
+    fontWeight: "400",
+    fontStyle: "italic",
     color: Theme.textMuted,
     marginTop: 4,
   },
