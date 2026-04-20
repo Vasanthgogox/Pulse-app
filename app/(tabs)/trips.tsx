@@ -1202,6 +1202,7 @@ export default function TripsScreen() {
                     router.push(`/trip/${trip.id}` as const)
                   }
                   tr={tr}
+                  clientNameByTripId={shipperNameByTripId}
                   linkedOrgByOrganizationId={linkedOrgByOrganizationId}
                   partyMetaByTripId={tripHubPartyMetaByTripId}
                 />

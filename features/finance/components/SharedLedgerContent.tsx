@@ -1727,8 +1727,8 @@ export function SharedLedgerContent({
             tripRouteForTripRef={tripRouteForTripRef}
             onPressDownload={embeddedInOverlay ? undefined : openSharedReport}
           />
-        </>
-      )}
+            </>
+          )}
 
       <LedgerReportModal
         visible={sharedReportVisible}

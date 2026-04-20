@@ -7,11 +7,9 @@
  */
 import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { useEffect, useState } from "react";
 import {
   Modal,
-  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -44,16 +42,39 @@ function parseIso(s: string | null | undefined): Date | null {
   return new Date(y, m - 1, d);
 }
 
+function toMonthLabel(year: number, month: number): string {
+  return new Date(year, month, 1).toLocaleDateString("en-IN", {
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function monthMatrix(year: number, month: number): Array<{
+  iso: string;
+  day: number;
+  inMonth: boolean;
+}> {
+  const first = new Date(year, month, 1);
+  const firstWeekday = first.getDay(); // 0=Sun
+  const gridStart = new Date(year, month, 1 - firstWeekday);
+  return Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(
+      gridStart.getFullYear(),
+      gridStart.getMonth(),
+      gridStart.getDate() + i,
+    );
+    return {
+      iso: toIsoDate(d),
+      day: d.getDate(),
+      inMonth: d.getMonth() === month,
+    };
+  });
+}
+
 function formatDisplay(iso: string): string {
   const d = parseIso(iso);
   if (!d) return "—";
-  return d
-    .toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    })
-    .toUpperCase();
+  return d.toLocaleDateString("en-GB");
 }
 
 export function DateRangePickerModal({
@@ -68,77 +89,28 @@ export function DateRangePickerModal({
   const [from, setFrom] = useState<string>(initialFrom ?? "");
   const [to, setTo] = useState<string>(initialTo ?? "");
   const [activeField, setActiveField] = useState<"from" | "to" | null>(null);
+  const [calendarYear, setCalendarYear] = useState<number>(
+    new Date().getFullYear(),
+  );
+  const [calendarMonth, setCalendarMonth] = useState<number>(
+    new Date().getMonth(),
+  );
 
   useEffect(() => {
     if (visible) {
       setFrom(initialFrom ?? "");
       setTo(initialTo ?? "");
       setActiveField(null);
+      const pivot = parseIso(initialTo ?? initialFrom ?? null) ?? new Date();
+      setCalendarYear(pivot.getFullYear());
+      setCalendarMonth(pivot.getMonth());
     }
   }, [visible, initialFrom, initialTo]);
 
   const canApply = Boolean(from && to) && new Date(from) <= new Date(to);
-
-  const renderNativePicker = () => {
-    if (!activeField) return null;
-    const base = activeField === "from" ? parseIso(from) : parseIso(to);
-    const value = base ?? new Date();
-    if (Platform.OS === "android") {
-      return (
-        <DateTimePicker
-          value={value}
-          mode="date"
-          display="default"
-          onChange={(e, d) => {
-            const field = activeField;
-            setActiveField(null);
-            if (e.type === "set" && d) {
-              const iso = toIsoDate(d);
-              if (field === "from") setFrom(iso);
-              else setTo(iso);
-            }
-          }}
-        />
-      );
-    }
-    return (
-      <View style={styles.iosPickerWrap}>
-        <DateTimePicker
-          value={value}
-          mode="date"
-          display="spinner"
-          onChange={(_, d) => {
-            if (d) {
-              const iso = toIsoDate(d);
-              if (activeField === "from") setFrom(iso);
-              else setTo(iso);
-            }
-          }}
-        />
-        <TouchableOpacity
-          style={styles.iosPickerDoneBtn}
-          onPress={() => setActiveField(null)}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.iosPickerDoneBtnText}>Done</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
-  const renderWebInput = (field: "from" | "to") => {
-    const value = field === "from" ? from : to;
-    const onChange = field === "from" ? setFrom : setTo;
-    return (
-      // @ts-ignore - web-only native input
-      <input
-        type="date"
-        value={value}
-        onChange={(e: any) => onChange(e.target.value)}
-        style={webInputStyle}
-      />
-    );
-  };
+  const days = monthMatrix(calendarYear, calendarMonth);
+  const fromIso = from.slice(0, 10);
+  const toIso = to.slice(0, 10);
 
   return (
     <Modal
@@ -152,18 +124,23 @@ export function DateRangePickerModal({
           <TouchableWithoutFeedback>
             <View
               style={[
-                styles.sheet,
-                { paddingBottom: Math.max(insets.bottom + 16, 20) },
+                styles.card,
+                {
+                  marginTop: Math.max(insets.top + 10, 22),
+                  marginBottom: Math.max(insets.bottom + 16, 20),
+                },
               ]}
             >
-              <View style={styles.handle} />
-
               <View style={styles.header}>
                 <View style={styles.headerIconChip}>
-                  <FontAwesome name="calendar" size={12} color={Theme.textOnDark} />
+                  <FontAwesome
+                    name="calendar"
+                    size={12}
+                    color={Theme.textPrimaryDark}
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.title}>DATE RANGE</Text>
+                  <Text style={styles.title}>AUDIT MATRIX</Text>
                   <Text style={styles.subtitle}>Pick a custom window</Text>
                 </View>
                 <TouchableOpacity
@@ -172,100 +149,185 @@ export function DateRangePickerModal({
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   activeOpacity={0.7}
                 >
-                  <FontAwesome name="times" size={14} color={Theme.textOnDarkMuted} />
+                  <FontAwesome name="times" size={14} color={Theme.textMuted} />
                 </TouchableOpacity>
               </View>
 
               <View style={styles.fieldRow}>
                 <View style={styles.fieldBlock}>
                   <Text style={styles.fieldLabel}>FROM</Text>
-                  {Platform.OS === "web" ? (
-                    renderWebInput("from")
-                  ) : (
-                    <TouchableOpacity
+                  <TouchableOpacity
+                    style={[
+                      styles.fieldBtn,
+                      activeField === "from" && styles.fieldBtnActive,
+                    ]}
+                    onPress={() =>
+                      setActiveField(activeField === "from" ? null : "from")
+                    }
+                    activeOpacity={0.85}
+                  >
+                    <Text
                       style={[
-                        styles.fieldBtn,
-                        activeField === "from" && styles.fieldBtnActive,
+                        styles.fieldValue,
+                        !from && styles.fieldValuePlaceholder,
                       ]}
-                      onPress={() =>
-                        setActiveField(activeField === "from" ? null : "from")
-                      }
-                      activeOpacity={0.85}
                     >
-                      <Text
-                        style={[
-                          styles.fieldValue,
-                          !from && styles.fieldValuePlaceholder,
-                        ]}
-                      >
-                        {from ? formatDisplay(from) : "Select"}
-                      </Text>
-                      <FontAwesome
-                        name="calendar"
-                        size={10}
-                        color={Theme.textOnDarkMuted}
-                      />
-                    </TouchableOpacity>
-                  )}
+                      {from ? formatDisplay(from) : "Select"}
+                    </Text>
+                    <FontAwesome
+                      name="calendar"
+                      size={10}
+                      color={Theme.textOnDarkMuted}
+                    />
+                  </TouchableOpacity>
                 </View>
 
                 <View style={styles.fieldDivider}>
                   <FontAwesome
                     name="arrow-right"
                     size={10}
-                    color={Theme.textOnDarkMuted}
+                    color={Theme.textMuted}
                   />
                 </View>
 
                 <View style={styles.fieldBlock}>
                   <Text style={styles.fieldLabel}>TO</Text>
-                  {Platform.OS === "web" ? (
-                    renderWebInput("to")
-                  ) : (
-                    <TouchableOpacity
+                  <TouchableOpacity
+                    style={[
+                      styles.fieldBtn,
+                      activeField === "to" && styles.fieldBtnActive,
+                    ]}
+                    onPress={() =>
+                      setActiveField(activeField === "to" ? null : "to")
+                    }
+                    activeOpacity={0.85}
+                  >
+                    <Text
                       style={[
-                        styles.fieldBtn,
-                        activeField === "to" && styles.fieldBtnActive,
+                        styles.fieldValue,
+                        !to && styles.fieldValuePlaceholder,
                       ]}
-                      onPress={() =>
-                        setActiveField(activeField === "to" ? null : "to")
-                      }
-                      activeOpacity={0.85}
                     >
-                      <Text
-                        style={[
-                          styles.fieldValue,
-                          !to && styles.fieldValuePlaceholder,
-                        ]}
-                      >
-                        {to ? formatDisplay(to) : "Select"}
-                      </Text>
-                      <FontAwesome
-                        name="calendar"
-                        size={10}
-                        color={Theme.textOnDarkMuted}
-                      />
-                    </TouchableOpacity>
-                  )}
+                      {to ? formatDisplay(to) : "Select"}
+                    </Text>
+                    <FontAwesome
+                      name="calendar"
+                      size={10}
+                      color={Theme.textOnDarkMuted}
+                    />
+                  </TouchableOpacity>
                 </View>
               </View>
 
-              {Platform.OS !== "web" && activeField ? renderNativePicker() : null}
+              {activeField ? (
+                <View style={styles.calendarWrap}>
+                  <View style={styles.calendarHeader}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        const prev = new Date(calendarYear, calendarMonth - 1, 1);
+                        setCalendarYear(prev.getFullYear());
+                        setCalendarMonth(prev.getMonth());
+                      }}
+                      style={styles.navBtn}
+                      activeOpacity={0.8}
+                    >
+                      <FontAwesome name="chevron-left" size={11} color={Theme.textSecondary} />
+                    </TouchableOpacity>
+                    <Text style={styles.calendarMonthText}>
+                      {toMonthLabel(calendarYear, calendarMonth)}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        const next = new Date(calendarYear, calendarMonth + 1, 1);
+                        setCalendarYear(next.getFullYear());
+                        setCalendarMonth(next.getMonth());
+                      }}
+                      style={styles.navBtn}
+                      activeOpacity={0.8}
+                    >
+                      <FontAwesome name="chevron-right" size={11} color={Theme.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.weekRow}>
+                    {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
+                      <Text key={d} style={styles.weekText}>{d}</Text>
+                    ))}
+                  </View>
+                  <View style={styles.daysGrid}>
+                    {days.map((d) => {
+                      const selected = d.iso === fromIso || d.iso === toIso;
+                      const inRange =
+                        fromIso &&
+                        toIso &&
+                        d.iso > fromIso &&
+                        d.iso < toIso;
+                      return (
+                        <TouchableOpacity
+                          key={d.iso}
+                          style={[
+                            styles.dayCell,
+                            selected && styles.dayCellSelected,
+                            inRange && styles.dayCellRange,
+                          ]}
+                          onPress={() => {
+                            if (activeField === "from") {
+                              if (toIso && d.iso > toIso) {
+                                setFrom(toIso);
+                                setTo(d.iso);
+                                setActiveField(null);
+                                return;
+                              }
+                              setFrom(d.iso);
+                              // Smart flow: immediately continue with end-date selection.
+                              setActiveField("to");
+                              return;
+                            }
+
+                            const nextTo = d.iso;
+                            if (fromIso && nextTo < fromIso) {
+                              setTo(fromIso);
+                              setFrom(nextTo);
+                            } else {
+                              setTo(nextTo);
+                            }
+                            setActiveField(null);
+                          }}
+                          activeOpacity={0.85}
+                        >
+                          <Text
+                            style={[
+                              styles.dayText,
+                              !d.inMonth && styles.dayTextMuted,
+                              selected && styles.dayTextSelected,
+                              inRange && styles.dayTextRange,
+                            ]}
+                          >
+                            {d.day}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              ) : null}
+
+              <View style={styles.analysisCard}>
+                <View style={styles.analysisGlow} />
+                <View style={styles.analysisRow}>
+                  <View>
+                    <Text style={styles.analysisLabel}>RANGE ANALYSIS</Text>
+                    <Text style={styles.analysisValue}>
+                      {from && to ? `${formatDisplay(from)} - ${formatDisplay(to)}` : "Select window"}
+                    </Text>
+                  </View>
+                  <View style={styles.analysisRight}>
+                    <Text style={styles.analysisPct}>0.4%</Text>
+                    <Text style={styles.analysisSub}>Avg. Variance</Text>
+                  </View>
+                </View>
+              </View>
 
               <View style={styles.actions}>
-                {onClear ? (
-                  <TouchableOpacity
-                    style={styles.clearBtn}
-                    onPress={() => {
-                      setFrom("");
-                      setTo("");
-                      onClear();
-                    }}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.clearBtnText}>CLEAR</Text>
-                  </TouchableOpacity>
-                ) : null}
                 <TouchableOpacity
                   style={[styles.applyBtn, !canApply && styles.applyBtnDisabled]}
                   onPress={() => {
@@ -281,9 +343,22 @@ export function DateRangePickerModal({
                       !canApply && styles.applyBtnTextDisabled,
                     ]}
                   >
-                    APPLY RANGE
+                    APPLY MIRROR
                   </Text>
                 </TouchableOpacity>
+                {onClear ? (
+                  <TouchableOpacity
+                    style={styles.clearBtnLink}
+                    onPress={() => {
+                      setFrom("");
+                      setTo("");
+                      onClear();
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.clearBtnText}>Clear</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
             </View>
           </TouchableWithoutFeedback>
@@ -293,96 +368,76 @@ export function DateRangePickerModal({
   );
 }
 
-const webInputStyle: any = {
-  backgroundColor: "rgba(255,255,255,0.06)",
-  color: "#fff",
-  border: "1px solid rgba(255,255,255,0.12)",
-  borderRadius: 10,
-  padding: "10px 12px",
-  fontSize: 12,
-  fontWeight: 700,
-  width: "100%",
-  outline: "none",
-  fontFamily: "inherit",
-};
-
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.68)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
   },
-  sheet: {
-    backgroundColor: Theme.darkBackground,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+  card: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 42,
     paddingHorizontal: 20,
-    paddingTop: 10,
-    borderTopWidth: 2,
-    borderTopColor: Theme.teslaRed,
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    alignSelf: "center",
-    marginBottom: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginBottom: 18,
+    gap: 8,
+    marginBottom: 10,
   },
   headerIconChip: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: Theme.surface,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: Theme.surfaceBorder,
   },
   title: {
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: "900",
-    color: Theme.textOnDark,
-    letterSpacing: 1.8,
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.8,
     textTransform: "uppercase",
   },
   subtitle: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: Theme.textOnDarkMuted,
-    letterSpacing: 0.5,
-    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.4,
   },
   closeBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: Theme.surface,
   },
   fieldRow: {
     flexDirection: "row",
     alignItems: "flex-end",
-    gap: 8,
+    gap: 10,
   },
   fieldBlock: {
     flex: 1,
   },
   fieldDivider: {
-    paddingBottom: 14,
+    paddingBottom: 12,
   },
   fieldLabel: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
-    color: Theme.textOnDarkMuted,
-    letterSpacing: 1.4,
+    color: Theme.textPrimaryDark,
+    letterSpacing: 1.2,
     textTransform: "uppercase",
     marginBottom: 6,
   },
@@ -391,81 +446,178 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 12,
-    paddingVertical: 11,
-    borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: Theme.surface,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: Theme.surfaceBorder,
   },
   fieldBtnActive: {
-    borderColor: Theme.teslaRed,
-    backgroundColor: "rgba(255,255,255,0.10)",
+    borderColor: Theme.primary,
+    backgroundColor: Theme.screenBackground,
   },
   fieldValue: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: "800",
-    color: Theme.textOnDark,
-    letterSpacing: 0.6,
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.2,
   },
   fieldValuePlaceholder: {
-    color: Theme.textOnDarkMuted,
-    fontWeight: "600",
+    color: Theme.textSecondary,
+    fontWeight: "700",
   },
-  iosPickerWrap: {
-    marginTop: 12,
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderRadius: 12,
-    paddingBottom: 8,
+  calendarWrap: {
+    marginTop: 10,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+    padding: 14,
   },
-  iosPickerDoneBtn: {
-    alignSelf: "flex-end",
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-  },
-  iosPickerDoneBtnText: {
-    color: Theme.teslaRed,
-    fontWeight: "800",
-    fontSize: 12,
-    letterSpacing: 0.6,
-  },
-  actions: {
+  calendarHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginTop: 20,
+    justifyContent: "space-between",
+    marginBottom: 8,
   },
-  clearBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(255,255,255,0.04)",
+  navBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.surface,
+  },
+  calendarMonthText: {
+    color: Theme.textPrimaryDark,
+    fontSize: 16,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+  },
+  weekRow: {
+    flexDirection: "row",
+    marginBottom: 6,
+  },
+  weekText: {
+    flex: 1,
+    textAlign: "center",
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  daysGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  dayCell: {
+    width: `${100 / 7}%`,
+    aspectRatio: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 8,
+    marginBottom: 2,
+  },
+  dayCellSelected: {
+    backgroundColor: Theme.textPrimaryDark,
+  },
+  dayCellRange: {
+    backgroundColor: "rgba(99,102,241,0.10)",
+  },
+  dayText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  dayTextMuted: {
+    color: Theme.textSecondary,
+  },
+  dayTextSelected: {
+    color: Theme.textOnPrimary,
+    fontWeight: "900",
+  },
+  dayTextRange: {
+    color: Theme.textPrimaryDark,
+  },
+  analysisCard: {
+    marginTop: 12,
+    backgroundColor: Theme.textPrimaryDark,
+    borderRadius: 24,
+    padding: 14,
+    overflow: "hidden",
+  },
+  analysisGlow: {
+    position: "absolute",
+    top: -8,
+    right: -8,
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    backgroundColor: "rgba(79,70,229,0.35)",
+  },
+  analysisRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  analysisLabel: {
+    color: "rgba(255,255,255,0.55)",
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+  },
+  analysisValue: {
+    color: Theme.textOnPrimary,
+    marginTop: 3,
+    fontSize: 14,
+    fontWeight: "900",
+    fontStyle: "italic",
+  },
+  analysisRight: {
+    alignItems: "flex-end",
+  },
+  analysisPct: {
+    color: "#818cf8",
+    fontSize: 18,
+    fontWeight: "900",
+    fontStyle: "italic",
+  },
+  analysisSub: {
+    color: "rgba(255,255,255,0.5)",
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+  },
+  actions: {
+    marginTop: 12,
+  },
+  applyBtn: {
+    paddingVertical: 14,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.primary,
+  },
+  applyBtnDisabled: {
+    backgroundColor: Theme.borderMedium,
+  },
+  applyBtnText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: Theme.textOnPrimary,
+    letterSpacing: 3,
+  },
+  applyBtnTextDisabled: {
+    color: Theme.textMuted,
+  },
+  clearBtnLink: {
+    alignSelf: "center",
+    marginTop: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
   clearBtnText: {
     fontSize: 11,
-    fontWeight: "800",
-    color: Theme.textOnDarkMuted,
-    letterSpacing: 1.4,
-  },
-  applyBtn: {
-    flex: 1,
-    paddingVertical: 13,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Theme.teslaRed,
-  },
-  applyBtnDisabled: {
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-  applyBtnText: {
-    fontSize: 11,
-    fontWeight: "900",
-    color: "#fff",
-    letterSpacing: 1.6,
-  },
-  applyBtnTextDisabled: {
-    color: Theme.textOnDarkMuted,
+    fontWeight: "600",
+    color: Theme.textMuted,
   },
 });
