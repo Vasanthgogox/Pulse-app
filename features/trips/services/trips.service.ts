@@ -440,19 +440,35 @@ function isUuidString(value: string): boolean {
   );
 }
 
-function shouldRetryCreateWithFallbackTripNumber(errorMessage: string): boolean {
+function shouldRetryCreateWithFallbackTripNumber(
+  errorMessage: string,
+  errorCode?: string | null,
+): boolean {
   const msg = (errorMessage ?? "").toLowerCase();
+  const code = (errorCode ?? "").trim();
+  const mentionsTripIdentity =
+    msg.includes("trip_number") ||
+    msg.includes("display_trip_id") ||
+    msg.includes("sequence_number");
+  const isIdentityGenerationFailure =
+    msg.includes("null value") ||
+    msg.includes("not-null") ||
+    msg.includes("violates not-null constraint");
+  const isIdentityConflict =
+    msg.includes("duplicate key") ||
+    msg.includes("unique constraint") ||
+    msg.includes("already exists") ||
+    msg.includes("conflict");
+  const isPgUniqueViolation = code === "23505";
   return (
-    msg.includes("trip_number") &&
-    (msg.includes("null value") ||
-      msg.includes("not-null") ||
-      msg.includes("violates not-null constraint"))
+    isPgUniqueViolation ||
+    (mentionsTripIdentity && (isIdentityGenerationFailure || isIdentityConflict))
   );
 }
 
 function buildFallbackTripNumber(): string {
-  const stamp = Date.now().toString().slice(-8);
-  const rand = Math.floor(Math.random() * 900 + 100).toString();
+  const stamp = Date.now().toString().slice(-10);
+  const rand = Math.floor(Math.random() * 900000 + 100000).toString();
   return `TRP${stamp}${rand}`;
 }
 
@@ -532,21 +548,32 @@ export async function createTrip(
     .select()
     .single();
   if (error) {
-    if (!shouldRetryCreateWithFallbackTripNumber(error.message)) {
+    if (!shouldRetryCreateWithFallbackTripNumber(error.message, error.code)) {
       return { error: new Error(error.message), trip: null };
     }
-
-    const fallbackInsertData = {
-      ...insertData,
-      trip_number: buildFallbackTripNumber(),
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const fallbackInsertData = {
+        ...insertData,
+        trip_number: buildFallbackTripNumber(),
+      };
+      const { data: retryRow, error: retryError } = await supabase()
+        .from("trips")
+        .insert(fallbackInsertData as Record<string, unknown>)
+        .select()
+        .single();
+      if (!retryError) return { error: null, trip: retryRow as TripRow };
+      lastError = new Error(retryError.message);
+      if (!shouldRetryCreateWithFallbackTripNumber(retryError.message, retryError.code)) {
+        return { error: lastError, trip: null };
+      }
+    }
+    return {
+      error:
+        lastError ??
+        new Error("Trip creation conflict. Please retry in a moment."),
+      trip: null,
     };
-    const { data: retryRow, error: retryError } = await supabase()
-      .from("trips")
-      .insert(fallbackInsertData as Record<string, unknown>)
-      .select()
-      .single();
-    if (retryError) return { error: new Error(retryError.message), trip: null };
-    return { error: null, trip: retryRow as TripRow };
   }
   return { error: null, trip: row as TripRow };
 }

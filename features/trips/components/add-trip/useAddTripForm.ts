@@ -99,7 +99,8 @@ export function useAddTripForm() {
 
   const canSubmit = (() => {
     if (!state.pickupArea.trim() || !state.dropLocation.trim()) return false;
-    if (!state.clientId || !state.clientName.trim()) return false;
+    // Manual trips can be created with just a typed client name (client_id optional).
+    if (!state.clientName.trim()) return false;
     const cp = parseFloat(state.clientPrice) || 0;
     if (cp <= 0 || cp > VALIDATION.AMOUNT_MAX) return false;
     const sr = parseFloat(state.supplierRate) || 0;

@@ -57,8 +57,8 @@ export default function AddTripPage() {
         supplier_id: data.supplier_id ?? undefined,
         notes: data.notes ?? undefined,
         vehicle_display_number: data.vehicle_display_number?.trim() || undefined,
-        owner_user_id: profile?.uid ?? undefined,
-        created_by_user_id: profile?.uid ?? undefined,
+        owner_user_id: profile?.uid ?? userId,
+        created_by_user_id: profile?.uid ?? userId,
       });
       if (error) throw error;
       const advancePaidAgg = Number(data.advance_paid ?? 0);
@@ -103,8 +103,8 @@ export default function AddTripPage() {
       notes: data.notes ?? undefined,
       driver_id: data.driver_id ?? undefined,
       vehicle_id: data.vehicle_id ?? undefined,
-      owner_user_id: profile?.uid ?? undefined,
-      created_by_user_id: profile?.uid ?? undefined,
+      owner_user_id: profile?.uid ?? userId,
+      created_by_user_id: profile?.uid ?? userId,
     });
     if (error) throw error;
     if (trip && options?.supplySource === 'aggregate' && options?.driverPhone?.trim()) {
