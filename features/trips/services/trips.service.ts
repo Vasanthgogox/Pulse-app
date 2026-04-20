@@ -440,6 +440,22 @@ function isUuidString(value: string): boolean {
   );
 }
 
+function shouldRetryCreateWithFallbackTripNumber(errorMessage: string): boolean {
+  const msg = (errorMessage ?? "").toLowerCase();
+  return (
+    msg.includes("trip_number") &&
+    (msg.includes("null value") ||
+      msg.includes("not-null") ||
+      msg.includes("violates not-null constraint"))
+  );
+}
+
+function buildFallbackTripNumber(): string {
+  const stamp = Date.now().toString().slice(-8);
+  const rand = Math.floor(Math.random() * 900 + 100).toString();
+  return `TRP${stamp}${rand}`;
+}
+
 export async function createTrip(
   orgId: string,
   userId: string,
@@ -515,7 +531,23 @@ export async function createTrip(
     .insert(insertData as Record<string, unknown>)
     .select()
     .single();
-  if (error) return { error: new Error(error.message), trip: null };
+  if (error) {
+    if (!shouldRetryCreateWithFallbackTripNumber(error.message)) {
+      return { error: new Error(error.message), trip: null };
+    }
+
+    const fallbackInsertData = {
+      ...insertData,
+      trip_number: buildFallbackTripNumber(),
+    };
+    const { data: retryRow, error: retryError } = await supabase()
+      .from("trips")
+      .insert(fallbackInsertData as Record<string, unknown>)
+      .select()
+      .single();
+    if (retryError) return { error: new Error(retryError.message), trip: null };
+    return { error: null, trip: retryRow as TripRow };
+  }
   return { error: null, trip: row as TripRow };
 }
 

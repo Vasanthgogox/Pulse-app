@@ -24,10 +24,24 @@ export default function AddTripPage() {
     router.replace('/(tabs)/trips');
   };
 
+  const ensureSessionReady = () => {
+    if (!currentOrganization?.id || !user?.uid) {
+      throw new Error(
+        'Organization or user session is not ready. Please wait a moment and try again.',
+      );
+    }
+    return { orgId: currentOrganization.id, userId: user.uid };
+  };
+
+  const refreshTripsAfterCreate = async (orgId: string) => {
+    await Promise.resolve(invalidateTrips(orgId));
+  };
+
   const handleComplete = async (data: AddTripFormData, options?: { supplySource: string; driverPhone?: string }) => {
-    if (!currentOrganization?.id || !user?.id) return;    const isAggregate = options?.supplySource === 'aggregate' && !!data.supplier_id;
+    const { orgId, userId } = ensureSessionReady();
+    const isAggregate = options?.supplySource === 'aggregate' && !!data.supplier_id;
     if (isAggregate) {
-      const { error, trip, otp } = await createTripWithOtp(currentOrganization.id, user.id, {
+      const { error, trip, otp } = await createTripWithOtp(orgId, userId, {
         pickup_area: data.pickup_area,
         drop_location: data.drop_location,
         pickup_lat: data.pickup_lat ?? undefined,
@@ -43,14 +57,14 @@ export default function AddTripPage() {
         supplier_id: data.supplier_id ?? undefined,
         notes: data.notes ?? undefined,
         vehicle_display_number: data.vehicle_display_number?.trim() || undefined,
-        owner_user_id: profile?.id ?? undefined,
-        created_by_user_id: profile?.id ?? undefined,
+        owner_user_id: profile?.uid ?? undefined,
+        created_by_user_id: profile?.uid ?? undefined,
       });
       if (error) throw error;
       const advancePaidAgg = Number(data.advance_paid ?? 0);
       const supplierIdAgg = data.supplier_id ?? null;
       if (trip && advancePaidAgg > 0 && supplierIdAgg) {
-        const { error: ledgerErr } = await createLedgerEntry(currentOrganization.id, {
+        const { error: ledgerErr } = await createLedgerEntry(orgId, {
           trip_id: trip.id,
           party_name: 'Advance',
           description: 'Trip Payment',
@@ -62,17 +76,17 @@ export default function AddTripPage() {
         if (ledgerErr) throw ledgerErr;
       }
       if (trip && options?.driverPhone?.trim()) {
-        const { error: assignErr } = await assignTripDriverByPhone(trip.id, currentOrganization.id, options.driverPhone.trim(), { trackingOnly: true });
+        const { error: assignErr } = await assignTripDriverByPhone(trip.id, orgId, options.driverPhone.trim(), { trackingOnly: true });
         if (assignErr) console.warn('Trip created but driver assign by phone failed:', assignErr.message);
       }
       if (trip) {
-        invalidateTrips(currentOrganization.id);
+        await refreshTripsAfterCreate(orgId);
       }
       if (trip && otp && options?.driverPhone?.trim()) return { trip, otp };
       closeAndGoBack();
       return;
     }
-    const { error, trip } = await createTrip(currentOrganization.id, user.id, {
+    const { error, trip } = await createTrip(orgId, userId, {
       pickup_area: data.pickup_area,
       drop_location: data.drop_location,
       pickup_lat: data.pickup_lat ?? undefined,
@@ -89,18 +103,18 @@ export default function AddTripPage() {
       notes: data.notes ?? undefined,
       driver_id: data.driver_id ?? undefined,
       vehicle_id: data.vehicle_id ?? undefined,
-      owner_user_id: profile?.id ?? undefined,
-      created_by_user_id: profile?.id ?? undefined,
+      owner_user_id: profile?.uid ?? undefined,
+      created_by_user_id: profile?.uid ?? undefined,
     });
     if (error) throw error;
     if (trip && options?.supplySource === 'aggregate' && options?.driverPhone?.trim()) {
-      const { error: assignErr } = await assignTripDriverByPhone(trip.id, currentOrganization.id, options.driverPhone.trim(), { trackingOnly: true });
+      const { error: assignErr } = await assignTripDriverByPhone(trip.id, orgId, options.driverPhone.trim(), { trackingOnly: true });
       if (assignErr) console.warn('Trip created but driver assign by phone failed:', assignErr.message);
     }
     const advancePaid = Number(data.advance_paid ?? 0);
     const supplierId = data.supplier_id ?? null;
     if (trip && advancePaid > 0 && supplierId) {
-      const { error: ledgerErr } = await createLedgerEntry(currentOrganization.id, {
+      const { error: ledgerErr } = await createLedgerEntry(orgId, {
         trip_id: trip.id,
         party_name: 'Advance',
         description: 'Trip Payment',
@@ -112,7 +126,7 @@ export default function AddTripPage() {
       if (ledgerErr) throw ledgerErr;
     }
     if (trip) {
-      invalidateTrips(currentOrganization.id);
+      await refreshTripsAfterCreate(orgId);
     }
     closeAndGoBack();
   };
