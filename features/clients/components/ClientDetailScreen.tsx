@@ -66,7 +66,7 @@ import {
 import {
   getSuppliersByOrganization,
   type SupplierRow,
-} from "@/features/suppliers";
+} from "@/features/suppliers/services/suppliers.service";
 import {
   getDriversByOrganization,
   type DriverRow,
