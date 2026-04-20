@@ -86,7 +86,7 @@
   "trackingResourceCard": "Tracking & Resource Card",
   "account": "Account",
   "linking": "Linking…",
-  "linkToAppAccount": "Link to app account",
+  "linkToAppAccount": "Invite to app",
   "ledger": "Ledger",
   "statement": "Statement",
   "linkToAppAccountMessage": "The driver must have signed up in the app first (with this phone or email). Then tap Link to connect their account to this driver record.",
