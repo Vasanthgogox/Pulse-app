@@ -1244,7 +1244,11 @@ export default function TripDetailScreen({
       setDriverAvatarUri(null);
       setDriverLinked(false);
     }
-    if (trip.vehicle_id) {
+    const aggregateVehicleDisplay = (trip.vehicle_display_number ?? "").trim();
+    if (isAggregateTrip(trip) && aggregateVehicleDisplay) {
+      setVehicleLabel(formatIndianVehicleNumber(aggregateVehicleDisplay));
+      setVehicleDocs(null);
+    } else if (trip.vehicle_id) {
       getVehicleById(orgId, trip.vehicle_id).then((res) => {
         if (!cancelled && res.vehicle) {
           const parts = [res.vehicle.vehicle_number];
@@ -2916,7 +2920,20 @@ export default function TripDetailScreen({
                 onUpdated={load}
                 partnerName={partnerName}
                 driverName={driverName}
+                vehicleLabel={
+                  isAggregate
+                    ? ((displayVehicleFromInput.trim() || vehicleLabel) ?? null)
+                    : vehicleLabel
+                }
                 driverAvatarUri={driverAvatarUri}
+                showAssignByPhone={showAssignByPhone}
+                onVehicleDisplayChange={(value) => {
+                  const normalized = formatIndianVehicleNumber(value ?? "");
+                  setDisplayVehicleFromInput(normalized);
+                  if (showAssignByPhone && normalized.trim()) {
+                    setVehicleLabel(normalized);
+                  }
+                }}
               />
             ) : null
           }
