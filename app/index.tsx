@@ -2,6 +2,7 @@ import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { getLastTabRoute } from '@/lib/lastRoute';
 import { DEFAULT_DRIVER_ROUTE } from '@/lib/routes';
+import { useIsFocused } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
@@ -11,8 +12,14 @@ export default function Index() {
   const insets = useSafeAreaInsets();
   const { user, profile, loading } = useAuth();
   const router = useRouter();
+  // React Navigation mounts this screen in the background when deep-linking to
+  // any other route (unstable_settings.initialRouteName keeps it in the stack).
+  // Without this guard, the useEffect below would fire and redirect away from
+  // the intended deep-link destination.
+  const isFocused = useIsFocused();
 
   useEffect(() => {
+    if (!isFocused) return;
     if (loading) return;
     if (!user) {
       router.replace('/sign-in');
@@ -28,7 +35,7 @@ export default function Index() {
     getLastTabRoute().then((route) => {
       router.replace(route as '/');
     });
-  }, [user, profile, loading, router]);
+  }, [user, profile, loading, router, isFocused]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
