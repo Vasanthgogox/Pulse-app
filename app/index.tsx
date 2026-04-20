@@ -1,5 +1,7 @@
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { getLastTabRoute } from '@/lib/lastRoute';
+import { DEFAULT_DRIVER_ROUTE } from '@/lib/routes';
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
@@ -18,10 +20,14 @@ export default function Index() {
     }
     if (!profile) return;
     if (profile.role === 'driver') {
-      router.replace('/(driver)');
-    } else {
-      router.replace('/(tabs)/finance');
+      router.replace(DEFAULT_DRIVER_ROUTE as '/');
+      return;
     }
+    // Restore the last visited tab so cold-start lands where the user left off,
+    // rather than always defaulting to the Cash/Finance tab.
+    getLastTabRoute().then((route) => {
+      router.replace(route as '/');
+    });
   }, [user, profile, loading, router]);
 
   return (

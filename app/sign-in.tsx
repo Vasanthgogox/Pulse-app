@@ -40,7 +40,7 @@ function getEmailFromParams(params: { email?: string | string[] }): string {
 export default function SignIn() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ email?: string | string[] }>();
-  const { signIn, user, profile, loading: authLoading } = useAuth();
+  const { signIn, user } = useAuth();
   const { t, locale, localeOptions } = useLanguage();
   const isOnline = useIsOnline();
   const router = useRouter();
@@ -69,7 +69,8 @@ export default function SignIn() {
   }, []);
 
   useEffect(() => {
-    // Automatically redirect to home if the user is already or becomes logged in.
+    // Redirect authenticated users through the auth guard at `/`, which
+    // handles role-based routing and last-tab restoration in one place.
     if (user) {
       router.replace('/');
     }
@@ -79,17 +80,6 @@ export default function SignIn() {
     const next = getEmailFromParams(params);
     if (next) setEmail(next);
   }, [params.email]);
-
-  useEffect(() => {
-    // Wait for AuthContext to finish hydration/auth events before navigating.
-    if (authLoading) return;
-    if (!user || !profile) return;
-    if (profile.role === 'driver') {
-      router.replace('/(driver)');
-      return;
-    }
-    router.replace('/(tabs)/finance');
-  }, [authLoading, user, profile, router]);
 
   useEffect(() => {
     const show = () => {

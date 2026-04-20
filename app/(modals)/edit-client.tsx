@@ -9,12 +9,13 @@ import {
   type UpdateClientData,
 } from "@/features/clients/services/clients.service";
 import { queryKeys } from "@/lib/queryKeys";
+import { ROUTES } from "@/lib/routes";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 
 function closeModal(router: ReturnType<typeof useRouter>) {
-  router.replace("/(tabs)/network");
+  router.replace(ROUTES.TABS.NETWORK as '/');
 }
 
 export default function EditClientScreen() {

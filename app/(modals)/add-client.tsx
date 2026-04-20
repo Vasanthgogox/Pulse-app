@@ -8,6 +8,7 @@ import {
 } from "@/features/clients";
 import { queryKeys } from "@/lib/queryKeys";
 import { useInvalidateClients } from "@/lib/queries/useClientsQuery";
+import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -20,7 +21,7 @@ const NO_ORG_MESSAGE =
 
 /** Close modal: go back to network. */
 function closeModal(router: ReturnType<typeof useRouter>) {
-  router.replace("/(tabs)/network");
+  router.replace(ROUTES.TABS.NETWORK as '/');
 }
 
 export default function AddClientScreen() {
