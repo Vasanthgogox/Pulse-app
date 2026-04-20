@@ -18,6 +18,7 @@ import {
 } from "@/contexts/DriverThemeContext";
 import { computeDriverCommissionForTrip } from "@/features/finance/aggregation/aggregateDrivers";
 import { claimTripByOtp, getPendingOtpTrips } from "@/features/trips";
+import { getLatestAssignmentAuditByTripIds } from "@/features/trips/services/trip-assignment-audit.service";
 import { useDriverAvatarUri } from "@/lib/avatarUpload";
 import {
     buildOfferText,
@@ -45,6 +46,7 @@ import {
     type RouteResult,
 } from "@/services/routingService";
 import * as tripsService from "@/services/tripsService";
+import { supabase } from "@/lib/supabase";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import BottomSheet, {
     BottomSheetScrollView,
@@ -425,6 +427,15 @@ export default function DriverRadarScreen() {
   const [pendingOtpTrips, setPendingOtpTrips] = useState<
     tripsService.TripRow[]
   >([]);
+  const [assignerNamesByUserId, setAssignerNamesByUserId] = useState<
+    Record<string, string>
+  >({});
+  const [organizationNamesById, setOrganizationNamesById] = useState<
+    Record<string, string>
+  >({});
+  const [assignmentActorByTripId, setAssignmentActorByTripId] = useState<
+    Record<string, string>
+  >({});
   const [incomingOtpPopupTripId, setIncomingOtpPopupTripId] = useState<
     string | null
   >(null);
@@ -1110,8 +1121,14 @@ export default function DriverRadarScreen() {
     </View>
   );
 
-  const activeMission = allTrips.find((t) => isTripInProgress(t));
-  const incomingTrips = allTrips.filter((t) => isAssignedNotStarted(t.status));
+  const activeMission = useMemo(
+    () => allTrips.find((t) => isTripInProgress(t)),
+    [allTrips],
+  );
+  const incomingTrips = useMemo(
+    () => allTrips.filter((t) => isAssignedNotStarted(t.status)),
+    [allTrips],
+  );
   const mergedIncomingTrips = useMemo(() => {
     const byId = new Map<string, tripsService.TripRow>();
     for (const trip of [...incomingTrips, ...pendingOtpTrips]) {
@@ -1247,18 +1264,59 @@ export default function DriverRadarScreen() {
   const incomingNotificationsWithMeta = useMemo(
     () =>
       visibleIncomingTrips.map((trip) => {
+        const tripMeta = trip as tripsService.TripRow &
+          Record<string, string | number | boolean | null | undefined>;
         const inviteForTrip =
           invites.find(
             (i) =>
               (i.from_organization_id ?? "").trim() ===
               (trip.organization_id ?? "").trim(),
           ) ?? null;
-        const assignedByName =
-          inviteForTrip?.from_org_name?.trim() ||
+        const assignerUserId = (
+          trip.created_by_user_id ??
+          (trip as { created_by?: string | null }).created_by ??
+          assignmentActorByTripId[String(trip.id)] ??
+          ""
+        ).trim();
+        const tripAssignedByUserNameCandidates = [
+          tripMeta.assigned_by_name,
+          tripMeta.assigned_by_user_name,
+          tripMeta.created_by_name,
+          tripMeta.dispatcher_name,
+        ];
+        const tripAssignedByOrgNameCandidates = [
+          inviteForTrip?.from_org_name ?? null,
+          (trip.supplier_name as string | null | undefined) ?? null,
+          (trip.client_name as string | null | undefined) ?? null,
+          (tripMeta.organization_name as string | null | undefined) ?? null,
+          (tripMeta.org_name as string | null | undefined) ?? null,
+          (tripMeta.from_org_name as string | null | undefined) ?? null,
+          organizationNamesById[(trip.organization_id ?? "").trim()] ?? null,
+        ];
+        const assignedByUserName =
+          tripAssignedByUserNameCandidates
+            .map((value) => String(value ?? "").trim())
+            .find((value) => value.length > 0) ??
+          assignerNamesByUserId[assignerUserId] ??
+          null;
+        const assignedByUserFallbackLabel =
+          assignerUserId.length > 0
+            ? `User ${assignerUserId.slice(0, 8)}`
+            : null;
+        const assignedByOrgName =
+          tripAssignedByOrgNameCandidates
+            .map((value) => String(value ?? "").trim())
+            .find((value) => value.length > 0) ??
           ((trip.organization_id ?? "").trim() ===
           (driver?.organization_id ?? "").trim()
-            ? "Your organization dispatcher"
-            : "Partner dispatcher");
+            ? "Your organization"
+            : "Partner organization");
+        const assignedByName =
+          assignedByUserName != null && assignedByUserName !== ""
+            ? `${assignedByUserName} · ${assignedByOrgName}`
+            : assignedByUserFallbackLabel != null
+              ? `${assignedByUserFallbackLabel} · ${assignedByOrgName}`
+              : `${assignedByOrgName} dispatcher`;
         const requiresOtp =
           !isRosterTrip(trip) &&
           (pendingOtpTripsRequiringOtp.some((t) => t.id === trip.id) ||
@@ -1274,9 +1332,24 @@ export default function DriverRadarScreen() {
           commissionPercent: acceptedInviteForTrip?.commission_percent ?? null,
           commissionPerKm: acceptedInviteForTrip?.commission_per_km ?? null,
         });
-        return { trip, assignedByName, requiresOtp, commissionForTrip };
+        return {
+          trip,
+          assignedByName,
+          assignedByUserName,
+          assignedByOrgName,
+          requiresOtp,
+          commissionForTrip,
+        };
       }),
-    [visibleIncomingTrips, invites, driver?.organization_id, pendingOtpTripsRequiringOtp],
+    [
+      visibleIncomingTrips,
+      invites,
+      driver?.organization_id,
+      pendingOtpTripsRequiringOtp,
+      assignerNamesByUserId,
+      organizationNamesById,
+      assignmentActorByTripId,
+    ],
   );
   const selectedIncomingMeta =
     incomingNotificationsWithMeta.find(
@@ -1313,6 +1386,78 @@ export default function DriverRadarScreen() {
       setSelectedIncomingTripId(null);
     }
   }, [selectedIncomingTripId, visibleIncomingTrips, activeMission]);
+  useEffect(() => {
+    let cancelled = false;
+    const loadAssignmentSources = async () => {
+      const trips = mergedIncomingTrips;
+      if (trips.length === 0) {
+        if (!cancelled) {
+          setAssignerNamesByUserId({});
+          setOrganizationNamesById({});
+        }
+        return;
+      }
+
+      const userIds = Array.from(
+        new Set(
+          trips
+            .map((trip) => (trip.created_by_user_id ?? "").trim())
+            .filter((id) => id.length > 0),
+        ),
+      );
+      const organizationIds = Array.from(
+        new Set(
+          trips
+            .map((trip) => (trip.organization_id ?? "").trim())
+            .filter((id) => id.length > 0),
+        ),
+      );
+
+      if (userIds.length > 0) {
+        const { data, error } = await supabase()
+          .from("profiles")
+          .select("id, full_name, email")
+          .in("id", userIds);
+        if (!cancelled && !error) {
+          const byId: Record<string, string> = {};
+          for (const row of
+            (data ?? []) as Array<{
+              id: string;
+              full_name?: string | null;
+              email?: string | null;
+            }>) {
+            const fallbackEmailName =
+              (row.email ?? "").trim().split("@")[0]?.trim() || "Dispatcher";
+            byId[row.id] = (row.full_name ?? "").trim() || fallbackEmailName;
+          }
+          setAssignerNamesByUserId(byId);
+        }
+      } else if (!cancelled) {
+        setAssignerNamesByUserId({});
+      }
+
+      if (organizationIds.length > 0) {
+        const { data, error } = await supabase()
+          .from("organizations")
+          .select("id, name")
+          .in("id", organizationIds);
+        if (!cancelled && !error) {
+          const byId: Record<string, string> = {};
+          for (const row of
+            (data ?? []) as Array<{ id: string; name?: string | null }>) {
+            byId[row.id] = (row.name ?? "").trim();
+          }
+          setOrganizationNamesById(byId);
+        }
+      } else if (!cancelled) {
+        setOrganizationNamesById({});
+      }
+    };
+    void loadAssignmentSources();
+    return () => {
+      cancelled = true;
+    };
+  }, [mergedIncomingTrips]);
   const movePendingNotificationsToHistory = useCallback(
     (selectedTripId: string, reason: "accepted_other" | "declined") => {
       const selectedId = String(selectedTripId).toLowerCase();
@@ -1333,6 +1478,28 @@ export default function DriverRadarScreen() {
     },
     [visibleIncomingTrips],
   );
+  useEffect(() => {
+    let cancelled = false;
+    const loadAssignmentActors = async () => {
+      const tripIds = mergedIncomingTrips.map((trip) => trip.id).filter(Boolean);
+      if (tripIds.length === 0) {
+        if (!cancelled) setAssignmentActorByTripId({});
+        return;
+      }
+      const { byTripId } = await getLatestAssignmentAuditByTripIds(tripIds);
+      if (cancelled) return;
+      const next: Record<string, string> = {};
+      byTripId.forEach((value, key) => {
+        const actorId = (value.changed_by ?? "").trim();
+        if (actorId) next[key] = actorId;
+      });
+      setAssignmentActorByTripId(next);
+    };
+    void loadAssignmentActors();
+    return () => {
+      cancelled = true;
+    };
+  }, [mergedIncomingTrips]);
   const activeGuidanceTrip =
     activeMission ??
     (effectiveFirstIncoming &&
@@ -3337,7 +3504,7 @@ export default function DriverRadarScreen() {
               ]}
             >
               <Text style={[styles.offlineCardTitle, { color: colors.text }]}>
-                New trip notifications
+                New trip notifications ({incomingNotificationsWithMeta.length})
               </Text>
               <Text
                 style={[
