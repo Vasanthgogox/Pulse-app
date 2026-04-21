@@ -1878,7 +1878,12 @@ export function SharedLedgerCommandCenter({
                                 style={styles.missionCardSummary}
                                 numberOfLines={2}
                               >
-                                {`Reference: ${displayLedgerToken(txn.myRef ?? txn.partnerRef ?? "—")} · Paid via: ${txn.myMode ?? txn.partnerMode ?? "—"}`}
+                                {`Trip: ${
+                                  (txn.tripRef &&
+                                    (missionLabelForTripRef?.(txn.tripRef) ??
+                                      `${String(txn.tripRef).slice(0, 8).toUpperCase()}…`)) ||
+                                  "—"
+                                } · Paid via: ${txn.myMode ?? txn.partnerMode ?? "—"}`}
                               </Text>
                               <View style={styles.missionBadges}>
                                 <Text
@@ -2463,9 +2468,14 @@ export function SharedLedgerCommandCenter({
       partnerAmt == null ? 0 : Math.abs(myAmt - partnerAmt);
     const matchAmt =
       partnerAmt != null && deltaAbs < 0.5;
-    const leftRef = displayLedgerToken(t.myRef);
-    const rightRef = displayLedgerToken(t.partnerRef);
-    const matchRef = normLedgerToken(t.myRef) === normLedgerToken(t.partnerRef);
+    const tripDisplay =
+      (t.tripRef &&
+        (missionLabelForTripRef?.(t.tripRef) ??
+          `${String(t.tripRef).slice(0, 8).toUpperCase()}…`)) ||
+      "—";
+    const leftRef = tripDisplay;
+    const rightRef = tripDisplay;
+    const matchRef = true;
     const leftMode = displayLedgerToken(t.myMode);
     const rightMode = displayLedgerToken(t.partnerMode);
     const matchMode = normLedgerToken(t.myMode) === normLedgerToken(t.partnerMode);
@@ -2490,7 +2500,7 @@ export function SharedLedgerCommandCenter({
         match: matchAmt,
       },
       {
-        label: "Reference ID",
+        label: "Trip ID",
         left: leftRef,
         right: rightRef,
         match: matchRef,
@@ -2581,7 +2591,7 @@ export function SharedLedgerCommandCenter({
               <Text style={styles.forensicDiagBody}>
                 {fullyAligned ? (
                   <>
-                    The amount, reference ID, and payment route{" "}
+                    The amount, trip ID, and payment route{" "}
                     <Text style={styles.forensicDiagEm}>match</Text> on both
                     books.
                   </>
@@ -2613,9 +2623,9 @@ export function SharedLedgerCommandCenter({
                     The amount matches, but{" "}
                     <Text style={styles.forensicDiagEm}>
                       {!matchRef && !matchMode
-                        ? "reference ID and payment via"
+                        ? "trip ID and payment via"
                         : !matchRef
-                          ? "reference ID"
+                          ? "trip ID"
                           : "payment via"}
                     </Text>{" "}
                     still differs below.
