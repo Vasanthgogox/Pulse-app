@@ -11,7 +11,6 @@ import {
   buildBulkTripClaimWhatsappMessage,
   buildSettlementShareMessage,
   buildTripClaimWhatsappMessage,
-  buildTripFollowUpWhatsappMessage,
 } from '@/lib/driverCommunication';
 import {
   phonePeMetaDate
@@ -131,7 +130,6 @@ export default function DriverWalletScreen() {
   const [mainTab, setMainTab] = useState<'trips' | 'cash' | 'fleet'>('trips');
   const [journeySearch, setJourneySearch] = useState('');
   const [journeyFilter, setJourneyFilter] = useState<'all' | 'pending' | 'fleet_marked' | 'settled'>('all');
-  const [followUpSentTripId, setFollowUpSentTripId] = useState<string | null>(null);
   const [copiedTripId, setCopiedTripId] = useState<string | null>(null);
   const [whatsAppReminderMessage, setWhatsAppReminderMessage] = useState<string | null>(null);
   const [markPaidConfirmState, setMarkPaidConfirmState] = useState<{
@@ -159,49 +157,6 @@ export default function DriverWalletScreen() {
   const promptWhatsAppReminder = useCallback(async (message: string) => {
     setWhatsAppReminderMessage(message);
   }, []);
-
-  const handleWhatsAppFollowUp = useCallback(
-    async (args: { tripId: string; trip: tripsService.TripRow; fleetName: string; displayId: string; from: string; to: string; amount: number }) => {
-      const { tripId, trip, fleetName, displayId, from, to, amount } = args;
-      setFollowUpSentTripId(tripId);
-      setTimeout(() => setFollowUpSentTripId(null), 2500);
-
-      // "Push notification" to fleet side: create a trip-based salary request.
-      // Fleet apps typically subscribe to driver_salary_requests; backend may notify org members.
-      const driverId = trip.driver_id ?? linkedDrivers[0]?.id ?? null;
-      const orgId = trip.organization_id ?? null;
-      const reqAmount = Math.round(amount);
-      if (!driverId || !orgId) return;
-      if (!Number.isFinite(reqAmount) || reqAmount <= 0) return;
-
-      const { error } = await salaryRequestsService.createSalaryRequest(
-        driverId,
-        orgId,
-        'trip_based',
-        reqAmount,
-        {
-          createdBy: profile?.uid ?? null,
-          tripIds: [trip.id],
-          note: `WhatsApp follow-up: ${displayId}`,
-        },
-      );
-      if (error) {
-        if (Platform.OS === 'web') window.alert(`Could not notify fleet: ${error.message}`);
-        else Alert.alert('Could not notify fleet', error.message);
-        return;
-      }
-
-      const message = buildTripFollowUpWhatsappMessage({
-        fleetName,
-        tripId: displayId,
-        amount,
-        from,
-        to,
-      });
-      await promptWhatsAppReminder(message);
-    },
-    [linkedDrivers, profile?.uid, promptWhatsAppReminder],
-  );
 
   const handleCopyTripId = useCallback((tripId: string) => {
     Clipboard.setStringAsync(tripId)
@@ -796,7 +751,7 @@ export default function DriverWalletScreen() {
       const { error } = await salaryRequestsService.createSalaryRequest(driverId, orgId, 'trip_based', reqAmount, {
         createdBy: profile?.uid ?? null,
         tripIds: [trip.id],
-        note: `Claim via wallet: ${displayId}`,
+        note: `Request for payment (wallet): ${displayId}`,
       });
       setRequestPaymentLoadingTripId(null);
       if (error) {
@@ -1932,41 +1887,6 @@ export default function DriverWalletScreen() {
                                   </View>
                                 )}
 
-                                {isPending && !hasFleetPending && (
-                                  <TouchableOpacity
-                                    activeOpacity={0.88}
-                                    onPress={() =>
-                                      handleWhatsAppFollowUp({
-                                        tripId,
-                                        trip: item.trip,
-                                        fleetName: item.provider.split("'")[0],
-                                        displayId: item.id,
-                                        from: item.from,
-                                        to: item.to,
-                                        amount: item.amount,
-                                      })
-                                    }
-                                    style={[
-                                      styles.tripsWhatsAppButton,
-                                      followUpSentTripId === tripId && styles.tripsWhatsAppButtonSent,
-                                    ]}
-                                  >
-                                    <FontAwesome
-                                      name={followUpSentTripId === tripId ? 'check' : 'whatsapp'}
-                                      size={16}
-                                      color={followUpSentTripId === tripId ? 'rgb(4,120,87)' : '#16a34a'}
-                                    />
-                                    <Text
-                                      style={[
-                                        styles.tripsWhatsAppButtonText,
-                                        followUpSentTripId === tripId ? styles.tripsWhatsAppButtonTextSent : undefined,
-                                      ]}
-                                    >
-                                      {followUpSentTripId === tripId ? 'SENT' : 'SHARE ON WHATSAPP'}
-                                    </Text>
-                                  </TouchableOpacity>
-                                )}
-
                                 {isSettled ? (
                                   <>
                                     <TouchableOpacity
@@ -2190,12 +2110,22 @@ export default function DriverWalletScreen() {
                                           status: item.subStatus || item.status,
                                         }).catch(() => {})
                                       }
+                                      disabled={requestPaymentLoadingTripId === item.trip.id}
                                       style={[styles.tripsClaimButton, { backgroundColor: '#0f172a' }]}
+                                      accessibilityLabel="Request for payment — notifies fleet and opens WhatsApp share"
                                     >
-                                      <FontAwesome name="bolt" size={14} color={Theme.textOnPrimary} />
-                                      <Text style={styles.tripsClaimButtonText}>
-                                        {requestPaymentLoadingTripId === item.trip.id ? 'REQUESTING…' : 'CLAIM'}
-                                      </Text>
+                                      <FontAwesome
+                                        name={requestPaymentLoadingTripId === item.trip.id ? 'spinner' : 'whatsapp'}
+                                        size={15}
+                                        color="#25D366"
+                                      />
+                                      <View style={styles.tripsRequestPaymentLabelWrap}>
+                                        <Text style={[styles.tripsClaimButtonText, styles.tripsRequestPaymentButtonText]}>
+                                          {requestPaymentLoadingTripId === item.trip.id
+                                            ? 'REQUESTING…'
+                                            : 'REQUEST FOR PAYMENT'}
+                                        </Text>
+                                      </View>
                                     </TouchableOpacity>
 
                                     <TouchableOpacity
@@ -3432,40 +3362,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
-  tripsWhatsAppButton: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 16,
-    borderRadius: 18,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: 'rgba(226,232,240,0.9)',
-    shadowColor: 'rgba(15,23,42,0.10)',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.14,
-    shadowRadius: 22,
-    elevation: 6,
-  },
-  tripsWhatsAppButtonSent: {
-    backgroundColor: 'rgba(16,185,129,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(16,185,129,0.25)',
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  tripsWhatsAppButtonText: {
-    fontSize: 11,
-    fontWeight: '500',
-    textTransform: 'uppercase',
-    letterSpacing: 1.6,
-    color: '#0f172a',
-  },
-  tripsWhatsAppButtonTextSent: {
-    color: 'rgb(4,120,87)',
-  },
   tripsExpandedGrid: {
     flexDirection: 'row',
     gap: 12,
@@ -3541,6 +3437,17 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1.7,
     color: Theme.textOnPrimary,
+  },
+  tripsRequestPaymentLabelWrap: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+  },
+  tripsRequestPaymentButtonText: {
+    fontSize: 9,
+    letterSpacing: 1.2,
+    flexShrink: 1,
+    textAlign: 'center',
   },
   tripsReceiptButton: {
     width: '100%',

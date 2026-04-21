@@ -10,13 +10,31 @@ import {
 import { useDriverAvatarUri } from "@/lib/avatarUpload";
 import { isAggregateTrip, tripEarningsForDriver } from "@/lib/driverUtils";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
-import { formatTime } from "@/lib/format";
+import { formatLedgerDateTime, formatTime } from "@/lib/format";
 import * as driversService from "@/services/driversService";
 import * as tripsService from "@/services/tripsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { LinearGradient } from "expo-linear-gradient";
+import {
+    ArrowDownToLine,
+    Banknote,
+    Calendar,
+    CheckCircle2,
+    ChevronDown,
+    ChevronRight,
+    ChevronUp,
+    Clock,
+    Info,
+    Navigation,
+    Route,
+    Share2,
+    ShieldCheck,
+    Sparkles,
+    Wallet,
+} from "lucide-react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
     AppState,
     FlatList,
@@ -24,6 +42,7 @@ import {
     Modal,
     Platform,
     ScrollView,
+    Share,
     StyleSheet,
     Text,
     TextInput,
@@ -31,8 +50,11 @@ import {
     View,
 } from "react-native";
 import Animated, {
+    cancelAnimation,
     useAnimatedStyle,
     useSharedValue,
+    withRepeat,
+    withSequence,
     withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -141,6 +163,42 @@ interface MissionLogEntry {
   time: string;
   status: string;
   loc: string;
+  details: string;
+  /** ISO timestamp for expanded row (full date/time display). */
+  atIso: string | null;
+}
+
+function isInTransitStatus(status: string): boolean {
+  return status.trim().toLowerCase() === "in transit";
+}
+
+/** Pulse the timeline node when the row is expanded (draws attention without clipping). */
+function TimelinePulseIcon({
+  expanded,
+  children,
+  style,
+}: {
+  expanded: boolean;
+  children: ReactNode;
+  style?: object;
+}) {
+  const scale = useSharedValue(1);
+  useEffect(() => {
+    cancelAnimation(scale);
+    if (expanded) {
+      scale.value = withRepeat(
+        withSequence(withTiming(1.07, { duration: 700 }), withTiming(1, { duration: 700 })),
+        -1,
+        false,
+      );
+    } else {
+      scale.value = withTiming(1, { duration: 220 });
+    }
+  }, [expanded, scale]);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+  return <Animated.View style={[animatedStyle, style]}>{children}</Animated.View>;
 }
 
 /** Trip log from trip timestamps (Assigned → Pickup → In-transit → Delivered). */
@@ -149,34 +207,49 @@ function buildMissionLog(trip: tripsService.TripRow): MissionLogEntry[] {
   if (trip.created_at) {
     entries.push({
       time: formatTime(trip.created_at),
-      status: "ASSIGNED",
+      status: "Assigned",
       loc: trip.pickup_area || "—",
+      details:
+        "Trip ID assigned to pilot. Vehicle ready for pickup at the scheduled origin.",
+      atIso: trip.created_at,
     });
   }
   if (trip.started_at) {
     entries.push({
       time: formatTime(trip.started_at),
-      status: "PICKUP",
+      status: "Pickup",
       loc: trip.pickup_area || "—",
+      details:
+        "Cargo verified at origin. Load confirmed and departure logged for this trip.",
+      atIso: trip.started_at,
     });
     entries.push({
       time: formatTime(trip.started_at),
-      status: "IN-TRANSIT",
+      status: "In transit",
       loc: trip.pickup_area || "—",
+      details:
+        "Route progress updated. Movement tracked toward the destination.",
+      atIso: trip.started_at,
     });
   }
   if (trip.completed_at) {
     entries.push({
       time: formatTime(trip.completed_at),
-      status: "DELIVERED",
+      status: "Delivered",
       loc: trip.drop_location || "—",
+      details:
+        "Handed over at destination. Trip marked complete and eligible for settlement.",
+      atIso: trip.completed_at,
     });
   }
   if (entries.length === 0 && trip.created_at) {
     entries.push({
       time: formatTime(trip.created_at),
-      status: "ASSIGNED",
+      status: "Assigned",
       loc: trip.pickup_area || "—",
+      details:
+        "Trip ID assigned to pilot. Vehicle ready for pickup at the scheduled origin.",
+      atIso: trip.created_at,
     });
   }
   return entries;
@@ -272,8 +345,15 @@ export default function DriverTripsScreen() {
   const [detailTab, setDetailTab] = useState<"journey" | "settlement">(
     "journey",
   );
+  /** Expanded row index in trip detail timeline (modal). */
+  const [expandedLogIndex, setExpandedLogIndex] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [tripView, setTripView] = useState<"active" | "history">("active");
+
+  useEffect(() => {
+    setExpandedLogIndex(null);
+    setDetailTab("journey");
+  }, [selectedTrip?.id]);
 
   const fetch = useCallback(() => {
     if (!profile?.uid) {
@@ -759,7 +839,7 @@ export default function DriverTripsScreen() {
                 styles.detailHeaderRef,
                 styles.detailHeaderStyled,
                 {
-                  paddingTop: 10,
+                  paddingTop: 12,
                   paddingBottom: 12,
                   paddingHorizontal: Layout.screenPaddingHorizontal,
                   backgroundColor: colors.surface,
@@ -783,11 +863,11 @@ export default function DriverTripsScreen() {
               >
                 <FontAwesome
                   name="chevron-left"
-                  size={20}
+                  size={22}
                   color={colors.text}
                 />
               </TouchableOpacity>
-              <View style={styles.detailTitleWrap}>
+              <View style={styles.tdHeaderCenter}>
                 <Text
                   style={[
                     styles.detailHeaderLabelRef,
@@ -805,8 +885,11 @@ export default function DriverTripsScreen() {
                   </Text>
                   <View
                     style={[
-                      styles.detailHeaderDotRef,
-                      { backgroundColor: colors.emerald },
+                      styles.tdStatusDot,
+                      {
+                        backgroundColor: colors.emerald,
+                        shadowColor: colors.emerald,
+                      },
                     ]}
                   />
                 </View>
@@ -820,15 +903,15 @@ export default function DriverTripsScreen() {
                     borderColor: colors.border,
                   },
                 ]}
-                onPress={() => {}}
+                onPress={() => {
+                  void Share.share({
+                    message: `Trip ${tripsService.getTripDisplayNumber(selectedTrip)}`,
+                  }).catch(() => {});
+                }}
                 activeOpacity={0.75}
                 accessibilityLabel="Share trip"
               >
-                <FontAwesome
-                  name="share-square-o"
-                  size={18}
-                  color={colors.text}
-                />
+                <Share2 size={20} color={colors.text} />
               </TouchableOpacity>
             </View>
             <ScrollView
@@ -841,139 +924,103 @@ export default function DriverTripsScreen() {
                 {
                   paddingHorizontal: Layout.screenPaddingHorizontal,
                   paddingBottom: Layout.modalBottomPadding + insets.bottom,
+                  paddingTop: 16,
                 },
               ]}
               showsVerticalScrollIndicator={false}
             >
-              <View
-                style={[
-                  styles.routeCardRef,
-                  { borderBottomColor: colors.emerald },
-                ]}
-              >
-                <View style={styles.routeCardWatermark}>
-                  <FontAwesome
-                    name="location-arrow"
-                    size={120}
-                    color="rgba(255,255,255,0.06)"
-                    style={styles.routeCardWatermarkIcon}
+              <View style={styles.tdHeroOuter}>
+                <LinearGradient
+                  colors={["#0f172a", "#020617"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.tdHeroCard}
+                >
+                  <View style={styles.tdHeroGlow} pointerEvents="none" />
+                  <Route
+                    size={128}
+                    color="rgba(255,255,255,0.08)"
+                    style={styles.tdHeroWatermark}
                   />
-                </View>
-                <Text
-                  style={[
-                    styles.routeCardLabelRef,
-                    { color: colors.textOnPrimary, opacity: 0.65 },
-                  ]}
-                >
-                  Route Logic History
-                </Text>
-                <Text
-                  style={[
-                    styles.routeCardOriginRef,
-                    { color: colors.textOnPrimary },
-                  ]}
-                >
-                  {selectedTripPickupParts.primary.toUpperCase()}
-                </Text>
-                {selectedTripPickupParts.secondary ? (
-                  <Text
-                    style={[
-                      styles.routeCardStateRef,
-                      { color: colors.textOnPrimary, opacity: 0.65 },
-                    ]}
-                  >
-                    {selectedTripPickupParts.secondary.toUpperCase()}
-                  </Text>
-                ) : null}
-                <Text
-                  style={[styles.routeCardToRef, { color: colors.emerald }]}
-                >
-                  TO
-                </Text>
-                <Text
-                  style={[
-                    styles.routeCardDestRef,
-                    { color: colors.textOnPrimary },
-                  ]}
-                >
-                  {selectedTripDropParts.primary.toUpperCase()}
-                </Text>
-                {selectedTripDropParts.secondary ? (
-                  <Text
-                    style={[
-                      styles.routeCardStateRef,
-                      { color: colors.textOnPrimary, opacity: 0.65 },
-                    ]}
-                  >
-                    {selectedTripDropParts.secondary.toUpperCase()}
-                  </Text>
-                ) : null}
-                <View
-                  style={[
-                    styles.routeCardMetaRef,
-                    { borderTopColor: colors.border },
-                  ]}
-                >
-                  <View style={styles.routeCardMetaItemRef}>
-                    <FontAwesome
-                      name="compass"
-                      size={14}
-                      color={colors.emerald}
-                    />
-                    <Text
-                      style={[
-                        styles.routeCardMetaTextRef,
-                        { color: colors.textOnPrimary },
-                      ]}
-                    >
-                      {formatDistance(selectedTrip.distance)}
+                  <View style={styles.tdHeroInner}>
+                    <Text style={styles.tdHeroKicker}>Route Logic History</Text>
+                    <Text style={styles.tdHeroCity}>
+                      {selectedTripPickupParts.primary.toUpperCase()}
                     </Text>
-                  </View>
-                  <View style={styles.routeCardMetaItemRef}>
-                    <FontAwesome
-                      name="clock-o"
-                      size={14}
-                      color={colors.emerald}
-                    />
-                    <Text
-                      style={[
-                        styles.routeCardMetaTextRef,
-                        { color: colors.textOnPrimary },
-                      ]}
-                    >
-                      {formatDurationForTrip(selectedTrip)}
+                    {selectedTripPickupParts.secondary ? (
+                      <Text style={styles.tdHeroState}>
+                        {selectedTripPickupParts.secondary.toUpperCase()}
+                      </Text>
+                    ) : null}
+
+                    <View style={styles.tdHeroToRow}>
+                      <View style={styles.tdHeroToRail}>
+                        <View style={[styles.tdHeroDot, { backgroundColor: "#10b981" }]} />
+                        <LinearGradient
+                          colors={["#10b981", "transparent"]}
+                          style={styles.tdHeroRailGrad}
+                        />
+                      </View>
+                      <Text style={[styles.tdHeroToLabel, { color: "#34d399" }]}>
+                        TO
+                      </Text>
+                    </View>
+
+                    <Text style={styles.tdHeroCity}>
+                      {selectedTripDropParts.primary.toUpperCase()}
                     </Text>
+                    {selectedTripDropParts.secondary ? (
+                      <Text style={[styles.tdHeroState, { marginBottom: 18 }]}>
+                        {selectedTripDropParts.secondary.toUpperCase()}
+                      </Text>
+                    ) : (
+                      <View style={{ height: 18 }} />
+                    )}
+
+                    <View style={styles.tdHeroDivider} />
+                    <View style={styles.tdHeroMetaRow}>
+                      <View style={styles.tdHeroMetaItem}>
+                        <View style={styles.tdHeroMetaIconWrap}>
+                          <Navigation size={16} color="#34d399" />
+                        </View>
+                        <View>
+                          <Text style={styles.tdHeroMetaKicker}>Distance</Text>
+                          <Text style={styles.tdHeroMetaValue}>
+                            {formatDistance(selectedTrip.distance)}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.tdHeroMetaItem}>
+                        <View style={styles.tdHeroMetaIconWrap}>
+                          <Clock size={16} color="#34d399" />
+                        </View>
+                        <View>
+                          <Text style={styles.tdHeroMetaKicker}>Duration</Text>
+                          <Text style={styles.tdHeroMetaValue}>
+                            {formatDurationForTrip(selectedTrip)}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
                   </View>
-                </View>
+                  <View style={[styles.tdHeroAccentBar, { backgroundColor: colors.emerald }]} />
+                </LinearGradient>
               </View>
 
-              {/* Segmented tab: Journey Log | Settlement (match reference) */}
-              <View
-                style={[
-                  styles.detailTabSegmentedRef,
-                  { backgroundColor: colors.border },
-                ]}
-              >
+              <View style={[styles.tdTabBar, { backgroundColor: `${colors.border}99` }]}>
                 <TouchableOpacity
                   style={[
-                    styles.detailTabSegmentedBtnRef,
-                    detailTab === "journey" &&
-                      styles.detailTabSegmentedBtnActiveRef,
-                    detailTab === "journey" && {
-                      backgroundColor: colors.surface,
-                    },
+                    styles.tdTabBtn,
+                    detailTab === "journey" && styles.tdTabBtnActive,
                   ]}
                   onPress={() => setDetailTab("journey")}
-                  activeOpacity={0.85}
+                  activeOpacity={0.88}
                 >
                   <Text
                     style={[
-                      styles.detailTabSegmentedLabelRef,
+                      styles.tdTabLabel,
                       {
-                        color:
-                          detailTab === "journey"
-                            ? colors.text
-                            : colors.textMuted,
+                        color: detailTab === "journey" ? "#ffffff" : colors.textMuted,
                       },
                     ]}
                   >
@@ -982,24 +1029,17 @@ export default function DriverTripsScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
-                    styles.detailTabSegmentedBtnRef,
-                    detailTab === "settlement" &&
-                      styles.detailTabSegmentedBtnActiveRef,
-                    detailTab === "settlement" && {
-                      backgroundColor: colors.surface,
-                    },
+                    styles.tdTabBtn,
+                    detailTab === "settlement" && styles.tdTabBtnActive,
                   ]}
                   onPress={() => setDetailTab("settlement")}
-                  activeOpacity={0.85}
+                  activeOpacity={0.88}
                 >
                   <Text
                     style={[
-                      styles.detailTabSegmentedLabelRef,
+                      styles.tdTabLabel,
                       {
-                        color:
-                          detailTab === "settlement"
-                            ? colors.text
-                            : colors.textMuted,
+                        color: detailTab === "settlement" ? "#ffffff" : colors.textMuted,
                       },
                     ]}
                   >
@@ -1008,327 +1048,402 @@ export default function DriverTripsScreen() {
                 </TouchableOpacity>
               </View>
 
-              {detailTab === "journey" && archiveMissionLog.length > 0 && (
-                <>
-                  <View style={styles.logSectionHeaderRef}>
+              {detailTab === "journey" ? (
+                <View style={{ marginBottom: 20 }}>
+                  <View style={styles.tdTimelineHeader}>
+                    <View style={styles.tdTimelineHeaderIcon}>
+                      <Calendar size={16} color="#ffffff" />
+                    </View>
+                    <Text style={[styles.tdTimelineHeaderTitle, { color: colors.text }]}>
+                      Trip Timeline
+                    </Text>
+                  </View>
+
+                  {archiveMissionLog.length === 0 ? (
                     <View
                       style={[
-                        styles.logSectionIconWrap,
-                        { backgroundColor: colors.whiteMuted },
+                        styles.tdTimelineCard,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                        },
                       ]}
                     >
-                      <FontAwesome name="list-alt" size={14} color={colors.text} />
+                      <Text style={[styles.tdEmptyTimeline, { color: colors.textMuted }]}>
+                        No timeline events for this trip yet.
+                      </Text>
                     </View>
-                    <Text style={[styles.logSectionTitleRef, { color: colors.text }]}>
-                      Trip Log
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.logCardActivityRef,
-                      {
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      },
-                    ]}
-                  >
-                    {archiveMissionLog.map((log, i) => {
-                      const completed = true;
-                      const isLast = i === archiveMissionLog.length - 1;
-                      return (
-                        <View
-                          key={i}
-                          style={[
-                            styles.logItemActivityRef,
-                            isLast && styles.logItemActivityLastRef,
-                          ]}
-                        >
-                          <View style={styles.logMarkerColRef}>
-                            <View
-                              style={[
-                                styles.logCircleWrapRef,
-                                completed
-                                  ? { backgroundColor: colors.emerald }
-                                  : { backgroundColor: colors.border },
-                              ]}
-                            >
-                              {completed && (
-                                <FontAwesome
-                                  name="check"
-                                  size={9}
-                                  color={Theme.textOnPrimary}
-                                />
-                              )}
-                            </View>
-                            {!isLast && (
+                  ) : (
+                    <View
+                      style={[
+                        styles.tdTimelineCard,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      {archiveMissionLog.map((log, i) => {
+                        const isLast = i === archiveMissionLog.length - 1;
+                        const expanded = expandedLogIndex === i;
+                        return (
+                          <View key={`${log.status}-${i}`} style={styles.tdLogRowWrap}>
+                            {!isLast ? (
                               <View
-                                style={[
-                                  styles.logConnectorRef,
-                                  { backgroundColor: colors.border },
-                                ]}
+                                style={[styles.tdLogConnector, { backgroundColor: colors.border }]}
                               />
-                            )}
-                          </View>
-                          <View style={styles.logContentActivityRef}>
-                            <View style={styles.logHeadRef}>
-                              <Text
-                                style={[
-                                  styles.logStatusRef,
-                                  {
-                                    color: completed
-                                      ? colors.text
-                                      : colors.textMuted,
-                                  },
-                                ]}
-                              >
-                                {log.status}
-                              </Text>
-                              <Text
-                                style={[
-                                  styles.logTimeRef,
-                                  { color: colors.textMuted },
-                                ]}
-                              >
-                                {log.time}
-                              </Text>
-                            </View>
-                            <Text
+                            ) : null}
+                            <TouchableOpacity
+                              activeOpacity={0.85}
                               style={[
-                                styles.logLocTextRef,
-                                { color: colors.text },
+                                styles.tdLogTouchable,
+                                expanded && {
+                                  backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#f8fafc",
+                                  borderRadius: 16,
+                                },
                               ]}
-                              numberOfLines={2}
+                              onPress={() =>
+                                setExpandedLogIndex(expanded ? null : i)
+                              }
                             >
-                              {log.loc}
-                            </Text>
+                              <View style={styles.tdLogMarkerCol}>
+                                <TimelinePulseIcon expanded={expanded}>
+                                  <View
+                                    style={[
+                                      styles.tdLogCircle,
+                                      {
+                                        backgroundColor: colors.emerald,
+                                        borderColor: colors.surface,
+                                      },
+                                    ]}
+                                  >
+                                    <CheckCircle2 size={14} color="#ffffff" />
+                                  </View>
+                                </TimelinePulseIcon>
+                              </View>
+                              <View style={styles.tdLogBody}>
+                                <View style={styles.tdLogHead}>
+                                  <Text style={[styles.tdLogStatus, { color: colors.text }]}>
+                                    {log.status}
+                                  </Text>
+                                  <View style={styles.tdLogHeadRight}>
+                                    <Text style={[styles.tdLogTime, { color: colors.textMuted }]}>
+                                      {log.time}
+                                    </Text>
+                                    {expanded ? (
+                                      <ChevronUp size={16} color={colors.textMuted} />
+                                    ) : (
+                                      <ChevronDown size={16} color={colors.textMuted} />
+                                    )}
+                                  </View>
+                                </View>
+                                <Text
+                                  style={[styles.tdLogLoc, { color: colors.textMuted }]}
+                                  numberOfLines={expanded ? undefined : 2}
+                                >
+                                  {log.loc}
+                                </Text>
+                                {expanded ? (
+                                  <View style={styles.tdLogExpanded}>
+                                    {isInTransitStatus(log.status) ? (
+                                      <View style={styles.tdLogInTransitGrid}>
+                                        <View style={styles.tdLogInTransitCol}>
+                                          <Text style={[styles.tdLogMetaK, { color: colors.textMuted }]}>
+                                            Location
+                                          </Text>
+                                          <Text style={[styles.tdLogMetaV, { color: colors.text }]}>
+                                            {log.loc}
+                                          </Text>
+                                        </View>
+                                        <View style={styles.tdLogInTransitCol}>
+                                          <Text style={[styles.tdLogMetaK, { color: colors.textMuted }]}>
+                                            Timestamp
+                                          </Text>
+                                          <Text style={[styles.tdLogMetaV, { color: colors.text }]}>
+                                            {formatLedgerDateTime(log.atIso)}
+                                          </Text>
+                                        </View>
+                                      </View>
+                                    ) : (
+                                      <>
+                                        <Text style={[styles.tdLogDetailsKicker, { color: colors.textMuted }]}>
+                                          Details
+                                        </Text>
+                                        <View
+                                          style={[
+                                            styles.tdLogDetailsBox,
+                                            {
+                                              backgroundColor: colors.background,
+                                              borderColor: colors.border,
+                                            },
+                                          ]}
+                                        >
+                                          <Text style={[styles.tdLogDetailsText, { color: colors.text }]}>
+                                            {log.details}
+                                          </Text>
+                                        </View>
+                                        <View style={styles.tdLogMetaGrid}>
+                                          <View style={{ flex: 1, minWidth: 0 }}>
+                                            <Text style={[styles.tdLogMetaK, { color: colors.textMuted }]}>
+                                              Timestamp
+                                            </Text>
+                                            <Text style={[styles.tdLogMetaV, { color: colors.textMuted }]}>
+                                              {formatLedgerDateTime(log.atIso)}
+                                            </Text>
+                                          </View>
+                                        </View>
+                                      </>
+                                    )}
+                                  </View>
+                                ) : null}
+                              </View>
+                            </TouchableOpacity>
                           </View>
+                        );
+                      })}
+                    </View>
+                  )}
+
+                  {isCompleted(selectedTrip.status) ? (
+                    <LinearGradient
+                      colors={["#059669", "#10b981"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.tdDeliveredBanner}
+                    >
+                      <View>
+                        <Text style={styles.tdDeliveredKicker}>Status</Text>
+                        <Text style={styles.tdDeliveredTitle}>DELIVERED SUCCESSFULLY</Text>
+                      </View>
+                      <View style={styles.tdDeliveredIconCircle}>
+                        <CheckCircle2 size={24} color="#ffffff" />
+                      </View>
+                    </LinearGradient>
+                  ) : (
+                    <View
+                      style={[
+                        styles.tdProgressBanner,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <View>
+                        <Text style={[styles.tdProgressKicker, { color: colors.textMuted }]}>
+                          Status
+                        </Text>
+                        <Text style={[styles.tdProgressTitle, { color: colors.text }]}>
+                          TRIP IN PROGRESS
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.tdDeliveredIconCircle,
+                          { backgroundColor: `${colors.emerald}22` },
+                        ]}
+                      >
+                        <Clock size={22} color={colors.emerald} />
+                      </View>
+                    </View>
+                  )}
+                </View>
+              ) : null}
+
+              {detailTab === "settlement" ? (
+                <View style={{ marginBottom: 20 }}>
+                  <View style={styles.tdSettlementGlow}>
+                    <View
+                      style={[
+                        styles.tdNetCard,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <View style={styles.tdNetBlur} pointerEvents="none" />
+                      <View style={styles.tdNetHeader}>
+                        <View style={styles.tdNetWalletIcon}>
+                          <Wallet size={28} color={colors.emerald} />
                         </View>
-                      );
-                    })}
-                  </View>
-                </>
-              )}
-
-              {detailTab === "settlement" && (
-                <View
-                  style={[
-                    styles.yieldCardSettlementRef,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.yieldRowRef,
-                      styles.yieldRowBorderRef,
-                      { borderBottomColor: colors.border },
-                    ]}
-                  >
-                    <View style={styles.yieldRowTextBlockRef}>
-                      <Text
-                        style={[
-                          styles.yieldRowLabelSettlementRef,
-                          { color: colors.text },
-                        ]}
-                      >
-                        Fare Earnings
-                      </Text>
-                      <Text
-                        style={[
-                          styles.yieldRowSubtextRef,
-                          { color: colors.textMuted },
-                        ]}
-                      >
-                        Base trip rate calculation
-                      </Text>
-                    </View>
-                    <View style={styles.yieldRowValueBlockRef}>
-                      <Text
-                        style={[styles.yieldRowValueRef, { color: colors.text }]}
-                      >
-                        {getGrossRevenue(selectedTrip) === "SALARY" ? "SALARY" : `₹${getGrossRevenue(selectedTrip).toLocaleString()}`}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.yieldRowValueMetaRef,
-                          { color: colors.textMuted },
-                        ]}
-                      >
-                        CALCULATED
-                      </Text>
-                    </View>
-                  </View>
-                  <View
-                    style={[
-                      styles.yieldRowRef,
-                      styles.yieldRowBorderRef,
-                      { borderBottomColor: colors.border },
-                    ]}
-                  >
-                    <View style={styles.yieldRowTextBlockRef}>
-                      <Text
-                        style={[
-                          styles.yieldRowLabelSettlementRef,
-                          { color: colors.text },
-                        ]}
-                      >
-                        Partner Bonus
-                      </Text>
-                      <Text
-                        style={[
-                          styles.yieldRowSubtextRef,
-                          { color: colors.textMuted },
-                        ]}
-                      >
-                        Precision pilot multiplier
-                      </Text>
-                    </View>
-                    <View style={styles.yieldRowValueBlockRef}>
-                      <Text
-                        style={[
-                          styles.yieldRowValueEmeraldRef,
-                          { color: colors.emerald },
-                        ]}
-                      >
-                        {getEarning(selectedTrip) === "SALARY" ? "—" : `+ ₹${Math.round(getEarningAmount(selectedTrip)).toLocaleString()}`}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.yieldRowValueMetaRef,
-                          { color: colors.textMuted },
-                        ]}
-                      >
-                        AWARDED
-                      </Text>
-                    </View>
-                  </View>
-                  <View
-                    style={[
-                      styles.yieldRowRef,
-                      styles.yieldRowBorderRef,
-                      { borderBottomColor: colors.border },
-                    ]}
-                  >
-                    <View style={styles.yieldRowTextBlockRef}>
-                      <Text
-                        style={[
-                          styles.yieldRowLabelSettlementRef,
-                          { color: colors.text },
-                        ]}
-                      >
-                        Tax Deductions
-                      </Text>
-                      <Text
-                        style={[
-                          styles.yieldRowSubtextRef,
-                          { color: colors.textMuted },
-                        ]}
-                      >
-                        TDS and platform overhead
-                      </Text>
-                    </View>
-                    <View style={styles.yieldRowValueBlockRef}>
-                      <Text
-                        style={[
-                          styles.yieldRowValueDeductionRef,
-                          { color: Theme.negative },
-                        ]}
-                      >
-                        - ₹0
-                      </Text>
-                      <Text
-                        style={[
-                          styles.yieldRowValueMetaRef,
-                          { color: colors.textMuted },
-                        ]}
-                      >
-                        DEDUCTED
-                      </Text>
+                        <Text style={[styles.tdNetKicker, { color: colors.textMuted }]}>
+                          Net Payout
+                        </Text>
+                        <View style={styles.tdNetAmountRow}>
+                          {getEarning(selectedTrip) === "SALARY" ? null : (
+                            <Text style={[styles.tdNetRupee, { color: colors.textMuted }]}>
+                              ₹
+                            </Text>
+                          )}
+                          <Text
+                            style={[styles.tdNetAmount, { color: colors.text }]}
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                          >
+                            {getEarning(selectedTrip) === "SALARY"
+                              ? "SALARY"
+                              : Math.round(getEarningAmount(selectedTrip)).toLocaleString()}
+                          </Text>
+                        </View>
+                        <View style={[styles.tdNetSuccessPill, { backgroundColor: `${colors.emerald}22` }]}>
+                          <CheckCircle2 size={16} color={colors.emerald} />
+                          <Text style={[styles.tdNetSuccessText, { color: colors.emerald }]}>
+                            Settlement Success
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.tdNetMiniGrid}>
+                        <View style={[styles.tdNetMiniCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                          <Text style={[styles.tdNetMiniK, { color: colors.textMuted }]}>
+                            Gross total
+                          </Text>
+                          <Text style={[styles.tdNetMiniV, { color: colors.text }]}>
+                            {getGrossRevenue(selectedTrip) === "SALARY"
+                              ? "SALARY"
+                              : `₹${Number(getGrossRevenue(selectedTrip)).toLocaleString()}`}
+                          </Text>
+                        </View>
+                        <View style={[styles.tdNetMiniCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                          <Text style={[styles.tdNetMiniK, { color: colors.textMuted }]}>
+                            Deductions
+                          </Text>
+                          <Text style={[styles.tdNetMiniV, { color: Theme.negative }]}>
+                            -₹0
+                          </Text>
+                        </View>
+                      </View>
                     </View>
                   </View>
 
-                  <View style={styles.yieldPayoutHeroDarkRef}>
-                    <Text style={styles.yieldPayoutHeroLabelDarkRef}>
-                      Net payout
+                  <View style={styles.tdEarningsHeader}>
+                    <Text style={[styles.tdEarningsHeaderTitle, { color: colors.textMuted }]}>
+                      Earnings detail
                     </Text>
-                    <View style={styles.yieldPayoutHeroAmountRowRef}>
-                      {getEarning(selectedTrip) === "SALARY" ? null : <Text style={styles.yieldPayoutHeroRupeeRef}>₹</Text>}
-                      <Text style={styles.yieldPayoutHeroAmountDarkRef}>
-                        {getEarning(selectedTrip) === "SALARY" ? "SALARY" : Math.round(
-                          getEarningAmount(selectedTrip),
-                        ).toLocaleString()}
-                      </Text>
-                    </View>
+                    <Info size={16} color={colors.textMuted} />
                   </View>
-                </View>
-              )}
 
-              {detailTab === "settlement" && (
-                <View style={[styles.yieldMetaGridRef, { marginTop: 16 }]}>
                   <View
                     style={[
-                      styles.yieldMetaCardRef,
+                      styles.tdBreakdownCard,
                       {
                         backgroundColor: colors.surface,
                         borderColor: colors.border,
                       },
                     ]}
                   >
-                    <FontAwesome
-                      name="calendar"
-                      size={18}
-                      color={colors.textMuted}
-                      style={styles.yieldMetaIconRef}
-                    />
-                    <Text
-                      style={[
-                        styles.yieldMetaLabelRef,
-                        { color: colors.textMuted },
-                      ]}
-                    >
-                      Billing Period
-                    </Text>
-                    <Text
-                      style={[styles.yieldMetaValueRef, { color: colors.text }]}
-                    >
-                      {formatDate(
-                        selectedTrip.pickup_date ?? selectedTrip.created_at,
-                      )}
-                    </Text>
+                    <View style={styles.tdBreakRow}>
+                      <View style={styles.tdBreakLeft}>
+                        <View style={[styles.tdBreakIcon, { backgroundColor: colors.border }]}>
+                          <Banknote size={20} color={colors.textMuted} />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={[styles.tdBreakTitle, { color: colors.text }]}>
+                            Base fare
+                          </Text>
+                          <Text style={[styles.tdBreakSub, { color: colors.textMuted }]}>
+                            Calculation based on route distance
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.tdBreakValue, { color: colors.text }]}>
+                        {getGrossRevenue(selectedTrip) === "SALARY"
+                          ? "SALARY"
+                          : `₹${Number(getGrossRevenue(selectedTrip)).toLocaleString()}`}
+                      </Text>
+                    </View>
+
+                    <View style={[styles.tdBreakRowHighlight, { backgroundColor: `${colors.emerald}18` }]}>
+                      <View style={styles.tdBreakLeft}>
+                        <View style={[styles.tdBreakIcon, { backgroundColor: `${colors.emerald}33` }]}>
+                          <Sparkles size={20} color={colors.emerald} />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <View style={styles.tdBreakTitleRow}>
+                            <Text style={[styles.tdBreakTitle, { color: colors.text }]}>
+                              Partner bonus
+                            </Text>
+                            <View style={[styles.tdActiveBadge, { backgroundColor: colors.emerald }]}>
+                              <Text style={styles.tdActiveBadgeText}>Active</Text>
+                            </View>
+                          </View>
+                          <Text style={[styles.tdBreakSub, { color: colors.textMuted }]}>
+                            Precision pilot multiplier applied
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.tdBreakValue, { color: colors.emerald }]}>
+                        {getEarning(selectedTrip) === "SALARY"
+                          ? "—"
+                          : `+₹${Math.round(getEarningAmount(selectedTrip)).toLocaleString()}`}
+                      </Text>
+                    </View>
+
+                    <View style={styles.tdBreakRow}>
+                      <View style={styles.tdBreakLeft}>
+                        <View style={[styles.tdBreakIcon, { backgroundColor: `${Theme.negative}22` }]}>
+                          <ShieldCheck size={20} color={Theme.negative} />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={[styles.tdBreakTitle, { color: colors.text }]}>
+                            TDS / Platform
+                          </Text>
+                          <Text style={[styles.tdBreakSub, { color: colors.textMuted }]}>
+                            Standard regulatory overhead
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.tdBreakValue, { color: Theme.negative }]}>
+                        -₹0
+                      </Text>
+                    </View>
                   </View>
-                  <View
+
+                  <View style={styles.tdSettledBar}>
+                    <View style={styles.tdSettledLeft}>
+                      <View style={styles.tdSettledCalWrap}>
+                        <Calendar size={22} color="#ffffff" />
+                      </View>
+                      <View>
+                        <Text style={styles.tdSettledK}>Settled on</Text>
+                        <Text style={styles.tdSettledV}>
+                          {formatDate(
+                            selectedTrip.pickup_date ?? selectedTrip.created_at,
+                          )}
+                        </Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.tdSettledExport}
+                      activeOpacity={0.85}
+                      accessibilityLabel="Export settlement reference"
+                      onPress={() => {
+                        void Share.share({
+                          message: `Settlement reference #${tripsService.getTripDisplayNumber(selectedTrip)}`,
+                        }).catch(() => {});
+                      }}
+                    >
+                      <ArrowDownToLine size={20} color="#ffffff" />
+                    </TouchableOpacity>
+                  </View>
+
+                  <TouchableOpacity
                     style={[
-                      styles.yieldMetaCardRef,
+                      styles.tdQueryBtn,
                       {
                         backgroundColor: colors.surface,
                         borderColor: colors.border,
                       },
                     ]}
+                    activeOpacity={0.85}
                   >
-                    <FontAwesome
-                      name="info-circle"
-                      size={18}
-                      color={colors.textMuted}
-                      style={styles.yieldMetaIconRef}
-                    />
-                    <Text
-                      style={[
-                        styles.yieldMetaLabelRef,
-                        { color: colors.textMuted },
-                      ]}
-                    >
-                      Reference
+                    <Text style={[styles.tdQueryBtnText, { color: colors.textMuted }]}>
+                      Raise a query
                     </Text>
-                    <Text
-                      style={[styles.yieldMetaValueRef, { color: colors.text }]}
-                    >
-                      #{tripsService.getTripDisplayNumber(selectedTrip)}
-                    </Text>
-                  </View>
+                    <ChevronRight size={16} color={colors.textMuted} />
+                  </TouchableOpacity>
                 </View>
-              )}
+              ) : null}
             </ScrollView>
           </View>
         )}
@@ -1712,6 +1827,697 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     minWidth: 0,
     marginLeft: 12,
+  },
+  tdHeaderCenter: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    minWidth: 0,
+  },
+  tdStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    ...Platform.select({
+      ios: {
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.5,
+        shadowRadius: 6,
+      },
+      default: { elevation: 2 },
+    }),
+  },
+  tdHeroOuter: {
+    marginBottom: 20,
+    borderRadius: 40,
+    overflow: "hidden",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#0f172a",
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.2,
+        shadowRadius: 24,
+      },
+      default: { elevation: 10 },
+    }),
+  },
+  tdHeroCard: {
+    borderRadius: 40,
+    padding: 32,
+    paddingBottom: 28,
+    overflow: "hidden",
+  },
+  tdHeroGlow: {
+    position: "absolute",
+    bottom: -48,
+    left: -48,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: "rgba(16,185,129,0.22)",
+    opacity: 1,
+  },
+  tdHeroWatermark: {
+    position: "absolute",
+    top: 28,
+    right: 28,
+    opacity: 1,
+    transform: [{ rotate: "12deg" }],
+  },
+  tdHeroInner: {
+    position: "relative",
+    zIndex: 2,
+  },
+  tdHeroKicker: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 4,
+    color: "rgba(148,163,184,0.95)",
+    textTransform: "uppercase",
+    marginBottom: 22,
+  },
+  tdHeroCity: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: "#ffffff",
+    letterSpacing: -0.8,
+    textTransform: "uppercase",
+  },
+  tdHeroState: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 3,
+    color: "rgba(148,163,184,0.95)",
+    textTransform: "uppercase",
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  tdHeroToRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginVertical: 12,
+  },
+  tdHeroToRail: {
+    alignItems: "center",
+    width: 14,
+  },
+  tdHeroDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  tdHeroRailGrad: {
+    width: 2,
+    height: 18,
+    marginTop: 2,
+    borderRadius: 1,
+  },
+  tdHeroToLabel: {
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 4,
+  },
+  tdHeroDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    marginBottom: 18,
+  },
+  tdHeroMetaRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 28,
+  },
+  tdHeroMetaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+    minWidth: 0,
+  },
+  tdHeroMetaIconWrap: {
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  tdHeroMetaKicker: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "rgba(148,163,184,0.95)",
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    marginBottom: 2,
+  },
+  tdHeroMetaValue: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#ffffff",
+    letterSpacing: 0.5,
+  },
+  tdHeroAccentBar: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 4,
+    borderBottomLeftRadius: 40,
+    borderBottomRightRadius: 40,
+  },
+  tdTabBar: {
+    flexDirection: "row",
+    padding: 6,
+    borderRadius: 18,
+    gap: 6,
+    marginBottom: 22,
+  },
+  tdTabBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+  },
+  tdTabBtnActive: {
+    backgroundColor: "#0f172a",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+      },
+      default: { elevation: 4 },
+    }),
+  },
+  tdTabLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  tdTimelineHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  tdTimelineHeaderIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: "#0f172a",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tdTimelineHeaderTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 2,
+    textTransform: "uppercase",
+  },
+  tdTimelineCard: {
+    borderRadius: 36,
+    borderWidth: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 18,
+    marginBottom: 16,
+    overflow: "visible",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+      },
+      default: { elevation: 2 },
+    }),
+  },
+  tdEmptyTimeline: {
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "center",
+    paddingVertical: 20,
+  },
+  tdLogRowWrap: {
+    position: "relative",
+    paddingBottom: 22,
+  },
+  tdLogConnector: {
+    position: "absolute",
+    left: 31,
+    top: 44,
+    bottom: 0,
+    width: 2,
+    zIndex: 0,
+  },
+  tdLogTouchable: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    paddingLeft: 12,
+    paddingRight: 12,
+    paddingVertical: 8,
+    zIndex: 1,
+  },
+  tdLogMarkerCol: {
+    width: 40,
+    alignItems: "center",
+    justifyContent: "flex-start",
+    paddingTop: 2,
+  },
+  tdLogCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#10b981",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 6,
+      },
+      default: { elevation: 2 },
+    }),
+  },
+  tdLogBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  tdLogHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 4,
+  },
+  tdLogHeadRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  tdLogStatus: {
+    fontSize: 15,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+    flexShrink: 1,
+  },
+  tdLogTime: {
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  tdLogLoc: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  tdLogExpanded: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(148,163,184,0.35)",
+  },
+  tdLogDetailsKicker: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 3,
+    textTransform: "uppercase",
+    marginBottom: 6,
+  },
+  tdLogDetailsBox: {
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 10,
+  },
+  tdLogDetailsText: {
+    fontSize: 11,
+    fontWeight: "500",
+    lineHeight: 17,
+  },
+  tdLogMetaGrid: {
+    flexDirection: "row",
+    gap: 24,
+    flexWrap: "wrap",
+  },
+  tdLogMetaK: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    marginBottom: 4,
+  },
+  tdLogMetaV: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  tdLogInTransitGrid: {
+    flexDirection: "row",
+    gap: 16,
+    alignItems: "flex-start",
+  },
+  tdLogInTransitCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  tdDeliveredBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderRadius: 28,
+    paddingHorizontal: 22,
+    paddingVertical: 22,
+    marginTop: 4,
+  },
+  tdDeliveredKicker: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 3,
+    color: "rgba(236,253,245,0.95)",
+    textTransform: "uppercase",
+    marginBottom: 6,
+  },
+  tdDeliveredTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: "#ffffff",
+    letterSpacing: -0.3,
+  },
+  tdDeliveredIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tdProgressBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderRadius: 28,
+    paddingHorizontal: 22,
+    paddingVertical: 22,
+    marginTop: 4,
+    borderWidth: 1,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+      },
+      default: { elevation: 2 },
+    }),
+  },
+  tdProgressKicker: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 3,
+    textTransform: "uppercase",
+    marginBottom: 6,
+  },
+  tdProgressTitle: {
+    fontSize: 17,
+    fontWeight: "900",
+    letterSpacing: -0.3,
+    fontStyle: "italic",
+  },
+  tdSettlementGlow: {
+    marginBottom: 22,
+    borderRadius: 42,
+    padding: 4,
+    overflow: "hidden",
+    backgroundColor: "transparent",
+  },
+  tdNetCard: {
+    borderRadius: 38,
+    borderWidth: 1,
+    paddingHorizontal: 28,
+    paddingTop: 26,
+    paddingBottom: 22,
+    overflow: "hidden",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 16,
+      },
+      default: { elevation: 3 },
+    }),
+  },
+  tdNetBlur: {
+    position: "absolute",
+    top: -48,
+    right: -48,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: "rgba(16,185,129,0.14)",
+    opacity: 1,
+  },
+  tdNetHeader: {
+    alignItems: "center",
+  },
+  tdNetWalletIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+    backgroundColor: "rgba(16,185,129,0.12)",
+  },
+  tdNetKicker: {
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 4,
+    marginBottom: 10,
+    textTransform: "uppercase",
+  },
+  tdNetAmountRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 4,
+    marginBottom: 14,
+    maxWidth: "100%",
+  },
+  tdNetRupee: {
+    fontSize: 28,
+    fontWeight: "700",
+    marginRight: 2,
+  },
+  tdNetAmount: {
+    fontSize: 42,
+    fontWeight: "900",
+    letterSpacing: -2,
+    flexShrink: 1,
+  },
+  tdNetSuccessPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  tdNetSuccessText: {
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 2,
+    textTransform: "uppercase",
+  },
+  tdNetMiniGrid: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 26,
+  },
+  tdNetMiniCard: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    minWidth: 0,
+  },
+  tdNetMiniK: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1,
+    marginBottom: 8,
+    textTransform: "uppercase",
+  },
+  tdNetMiniV: {
+    fontSize: 17,
+    fontWeight: "900",
+  },
+  tdEarningsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 10,
+    marginBottom: 10,
+  },
+  tdEarningsHeaderTitle: {
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 4,
+    textTransform: "uppercase",
+  },
+  tdBreakdownCard: {
+    borderRadius: 26,
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    gap: 4,
+    marginBottom: 18,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+      },
+      default: { elevation: 2 },
+    }),
+  },
+  tdBreakRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    gap: 12,
+    borderRadius: 20,
+  },
+  tdBreakRowHighlight: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    gap: 12,
+    borderRadius: 20,
+    marginVertical: 2,
+  },
+  tdBreakLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    flex: 1,
+    minWidth: 0,
+  },
+  tdBreakIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tdBreakTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  tdBreakTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    marginBottom: 2,
+  },
+  tdBreakSub: {
+    fontSize: 10,
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  tdBreakValue: {
+    fontSize: 14,
+    fontWeight: "900",
+    flexShrink: 0,
+    textAlign: "right",
+  },
+  tdActiveBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  tdActiveBadgeText: {
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 1,
+    color: "#ffffff",
+    textTransform: "uppercase",
+  },
+  tdSettledBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    borderRadius: 26,
+    marginBottom: 14,
+    backgroundColor: "#0f172a",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.18,
+        shadowRadius: 12,
+      },
+      default: { elevation: 6 },
+    }),
+  },
+  tdSettledLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    flex: 1,
+    minWidth: 0,
+  },
+  tdSettledCalWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  tdSettledK: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 3,
+    color: "rgba(148,163,184,0.95)",
+    textTransform: "uppercase",
+    marginBottom: 4,
+  },
+  tdSettledV: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#ffffff",
+    letterSpacing: 0.2,
+  },
+  tdSettledExport: {
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  tdQueryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 20,
+    borderRadius: 26,
+    borderWidth: 1,
+  },
+  tdQueryBtnText: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 4,
+    textTransform: "uppercase",
   },
   detailHeaderLabelRef: {
     fontSize: 10,
