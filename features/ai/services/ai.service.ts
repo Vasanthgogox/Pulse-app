@@ -14,6 +14,16 @@ import type {
   AIInsightsSummary,
 } from '../types';
 
+function isSchemaMissingError(message: string | undefined): boolean {
+  const msg = String(message ?? '').toLowerCase();
+  return (
+    msg.includes('404') ||
+    msg.includes('not found') ||
+    msg.includes('relation') ||
+    msg.includes('does not exist')
+  );
+}
+
 export async function getClientRiskScore(
   organizationId: string,
   clientId: string
@@ -78,9 +88,17 @@ export async function getCashflowForecast(
       .gte('date', fromDate)
       .order('date', { ascending: true })
       .limit(30);
-    if (error) return { error: new Error(error.message), data: [] };
+    // `cashflow_forecast` is optional in some environments.
+    // Treat missing table/schema as empty data instead of surfacing runtime noise.
+    if (error) {
+      if (isSchemaMissingError(error.message)) return { error: null, data: [] };
+      return { error: new Error(error.message), data: [] };
+    }
     return { error: null, data: (data ?? []) as CashflowForecastDay[] };
   } catch (e) {
+    if (e instanceof Error && isSchemaMissingError(e.message)) {
+      return { error: null, data: [] };
+    }
     return { error: e instanceof Error ? e : new Error(String(e)), data: [] };
   }
 }

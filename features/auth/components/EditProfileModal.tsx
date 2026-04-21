@@ -971,7 +971,7 @@ export function EditProfileModal({
         ) : null}
 
         {driverRefLayout && showAvatarActions ? (
-          <View style={styles.actionSheetOverlay} pointerEvents="box-none">
+          <View style={[styles.actionSheetOverlay, { pointerEvents: 'box-none' }]}>
             <Pressable
               style={styles.actionSheetBackdropFill}
               onPress={() => setShowAvatarActions(false)}
@@ -980,9 +980,8 @@ export function EditProfileModal({
             <View
               style={[
                 styles.actionSheetCard,
-                { paddingBottom: Math.max(insets.bottom, 16) + 12 },
+                { paddingBottom: Math.max(insets.bottom, 16) + 12, pointerEvents: 'box-none' },
               ]}
-              pointerEvents="box-none"
             >
               <Text style={styles.actionSheetTitle}>Profile photo</Text>
               <TouchableOpacity

@@ -131,14 +131,6 @@ function tripHubRevenue(
     : Number(trip.client_price ?? 0);
 }
 
-function rosterFromLoadHub(trip: TripRow): boolean {
-  return (
-    trip?.source === "direct_quote" &&
-    trip?.driver_id != null &&
-    trip?.vehicle_id != null
-  );
-}
-
 function deployPercentForTrip(trip: TripRow, stageUpper: string): number {
   const completedLike =
     stageUpper === "COMPLETED" ||
@@ -446,8 +438,9 @@ export function TripsHubTripCard({
   lastLedgerDateLabel,
 }: TripsHubTripCardProps) {
   const aggregate = isAggregateTrip(trip);
-  const rosterHub = rosterFromLoadHub(trip);
-  const showAssetTripIcon = !aggregate || rosterHub;
+  // Keep Trips hub labels aligned with Trip Detail header semantics:
+  // aggregate is determined by supplier linkage, not by assignment completeness.
+  const showAssetTripIcon = !aggregate;
   const typeLabel = showAssetTripIcon ? tr("tripAsset") : tr("tripAggregate");
   const subTypeLabel = aggregate ? tr("integrated") : tr("manual");
   const revenue = tripHubRevenue(trip, currentOrganizationId);
@@ -515,7 +508,7 @@ export function TripsHubTripCard({
       }`}
     >
       <View style={styles.fleetCard}>
-        <View style={styles.fleetOrb} pointerEvents="none" />
+        <View style={[styles.fleetOrb, { pointerEvents: 'none' }]} />
         <View style={styles.fleetHead}>
           <View style={styles.fleetHeadLeft}>
             <View style={styles.fleetTruckWrap}>
@@ -1113,8 +1106,9 @@ export function TripsHubTableView({
         );
         const hasSalesConflict = hasLedgerMismatch;
         const aggregate = isAggregateTrip(t);
-        const rosterHub = rosterFromLoadHub(t);
-        const showAssetTripIcon = !aggregate || rosterHub;
+        // Keep Trips hub labels aligned with Trip Detail header semantics:
+        // aggregate is determined by supplier linkage, not by assignment completeness.
+        const showAssetTripIcon = !aggregate;
         const typeLabel = showAssetTripIcon ? tr("tripAsset") : tr("tripAggregate");
         const subTypeLabel = aggregate ? tr("integrated") : tr("manual");
         const stageUpper = getStageLabel(t).toUpperCase();

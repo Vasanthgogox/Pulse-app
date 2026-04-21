@@ -153,13 +153,17 @@ export default function TripsScreen() {
   useRealtimeTransactionsInvalidation(orgId);
 
   const onRefresh = useCallback(async () => {
+    if (!orgId) {
+      setRefreshing(false);
+      return;
+    }
     setRefreshing(true);
     await Promise.all([
       refetchTrips(),
       refetchTransactions(),
       refetchAssignment(),
       queryClient.invalidateQueries({
-        queryKey: ["q", "trips", "doc-trip-ids", orgId ?? ""],
+        queryKey: ["q", "trips", "doc-trip-ids", orgId],
       }),
     ]);
     setRefreshing(false);

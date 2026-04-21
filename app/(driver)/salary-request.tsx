@@ -660,14 +660,14 @@ export default function SalaryRequestScreen() {
                 </View>
                 <Text style={[styles.emptyStateTitle, { color: colors.text }]}>Connect a fleet first</Text>
                 <Text style={[styles.emptyStateText, { color: colors.textMuted }]}>
-                  Go to Requests to accept a fleet invite. Then you can request salary here.
+                  Go to Dashboard to accept a fleet invite. Then you can request salary here.
                 </Text>
                 <TouchableOpacity
                   style={[styles.emptyStateButton, { backgroundColor: colors.emerald }]}
-                  onPress={() => router.push('/(driver)/requests')}
+                  onPress={() => router.push('/(driver)')}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.emptyStateButtonText}>Go to Requests</Text>
+                  <Text style={styles.emptyStateButtonText}>Go to Dashboard</Text>
                 </TouchableOpacity>
               </View>
             </View>

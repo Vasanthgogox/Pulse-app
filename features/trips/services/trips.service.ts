@@ -2,9 +2,9 @@
  * Trips service — Supabase only (mobile). Same DB as Q-unified-base.
  */
 import {
-    DEFAULT_PAGE_SIZE,
-    DRIVER_TRIPS_PAGE_SIZE,
-    type PageOpts,
+  DEFAULT_PAGE_SIZE,
+  DRIVER_TRIPS_PAGE_SIZE,
+  type PageOpts,
 } from "@/lib/pagination";
 import { supabase } from "@/lib/supabase";
 
@@ -62,6 +62,8 @@ export interface TripRow {
   owner_user_id?: string | null;
   /** User who created this row. */
   created_by_user_id?: string | null;
+  /** Dispatcher / user who assigned the driver (when set in DB). */
+  assigned_by_user_id?: string | null;
   /** Optimistic revision for status/progress updates (monotonic). */
   status_revision?: number | null;
   /** Last actor who advanced status (auth.uid). */
@@ -196,6 +198,28 @@ export async function getTripById(
   return { error: null, trip };
 }
 
+/** Latest trip row for an indent (direct-quote / Staff Handshake recovery). */
+export async function getTripByIndentId(
+  indentId: string,
+): Promise<{ error: Error | null; trip: TripRow | null }> {
+  const { data, error } = await supabase()
+    .from("trips")
+    .select("*, indents(indent_number)")
+    .eq("indent_id", indentId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), trip: null };
+  const raw = data as any;
+  const trip: TripRow | null = raw
+    ? {
+        ...raw,
+        indent_number: raw.indents?.indent_number ?? null,
+      }
+    : null;
+  return { error: null, trip };
+}
+
 /**
  * Driver rejects/declines an assigned trip.
  *
@@ -313,24 +337,34 @@ async function getDriverOngoingTrip(
   excludeTripId?: string,
 ): Promise<{
   error: Error | null;
-  trip: Pick<TripRow, "id" | "trip_number"> | null;
+  trip: Pick<TripRow, "id" | "trip_number" | "status" | "started_at"> | null;
 }> {
   let q = supabase()
     .from("trips")
     // Keep this select compatible with DBs that do not expose display_trip_id yet.
-    .select("id, trip_number")
+    .select("id, trip_number, status, started_at")
     .eq("driver_id", driverId)
     .not("status", "in", `("${ONGOING_TRIP_TERMINAL_STATUSES.join('","')}")`)
     .order("updated_at", { ascending: false })
-    .limit(1);
+    .limit(20);
   if (excludeTripId != null && excludeTripId.trim() !== "") {
     q = q.neq("id", excludeTripId);
   }
-  const { data, error } = await q.maybeSingle();
+  const { data, error } = await q;
   if (error) return { error: new Error(error.message), trip: null };
   return {
     error: null,
-    trip: (data ?? null) as Pick<TripRow, "id" | "trip_number"> | null,
+    trip:
+      ((data ?? []) as Pick<
+        TripRow,
+        "id" | "trip_number" | "status" | "started_at"
+      >[]).find((row) => {
+        const status = String(row.status ?? "").trim().toLowerCase();
+        // "Busy" applies only after the driver actually accepts/starts the trip.
+        // Pre-acceptance assignment (status="assigned", started_at=null) must stay available.
+        const isAcceptedStatus = status === "in_progress" || status === "at_drop";
+        return isAcceptedStatus || row.started_at != null;
+      }) ?? null,
   };
 }
 
@@ -1233,14 +1267,24 @@ export async function updateTripPayment(
 export async function getActiveDriverIds(orgId: string): Promise<Set<string>> {
   const { data } = await supabase()
     .from("trips")
-    .select("driver_id")
+    .select("driver_id, status, started_at")
     .eq("organization_id", orgId)
     .not("driver_id", "is", null)
     .not("status", "in", `("${ONGOING_TRIP_TERMINAL_STATUSES.join('","')}")`);
 
   const ids = new Set<string>();
-  (data ?? []).forEach((row: { driver_id: string | null }) => {
-    if (row.driver_id) ids.add(row.driver_id);
-  });
+  (data ?? []).forEach(
+    (row: {
+      driver_id: string | null;
+      status?: string | null;
+      started_at?: string | null;
+    }) => {
+      const status = String(row.status ?? "").trim().toLowerCase();
+      const isAcceptedStatus = status === "in_progress" || status === "at_drop";
+      if (row.driver_id && (isAcceptedStatus || row.started_at != null)) {
+        ids.add(row.driver_id);
+      }
+    },
+  );
   return ids;
 }

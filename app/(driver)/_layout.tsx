@@ -30,8 +30,8 @@ function DriverTabsNavigator() {
       {/* Keep route for internal dashboard flow, but hide from tab bar */}
       <Tabs.Screen name="control" options={{ title: 'Trip', href: null }} />
       <Tabs.Screen name="trips" options={{ title: 'History' }} />
-      <Tabs.Screen name="requests" options={{ title: 'Requests', href: null }} />
       <Tabs.Screen name="wallet" options={{ title: 'Transactions' }} />
+      <Tabs.Screen name="notifications" options={{ title: 'Notifications', href: null }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile', href: null }} />
       <Tabs.Screen name="level-progression" options={{ title: 'Level progression', href: null }} />
       <Tabs.Screen name="documents" options={{ title: 'Documents', href: null }} />

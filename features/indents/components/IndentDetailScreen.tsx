@@ -389,7 +389,7 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
 
         {/* Summary card — same structure as Load Center list cards */}
         <View style={styles.indentSummaryCard}>
-          <View style={styles.indentSummaryOrb} pointerEvents="none" />
+          <View style={[styles.indentSummaryOrb, { pointerEvents: 'none' }]} />
           <View style={styles.indentSummaryHeroRow}>
             <View style={styles.indentSummaryPillRow}>
               <View style={styles.indentSummaryTypePill}>

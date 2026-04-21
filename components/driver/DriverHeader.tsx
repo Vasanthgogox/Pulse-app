@@ -103,7 +103,7 @@ export function DriverHeader({
 
       <View style={styles.headerRight}>
         <TouchableOpacity
-          onPress={() => router.push('/(driver)/requests')}
+          onPress={() => router.push('/(driver)')}
           style={[
             styles.notificationBtn,
             { backgroundColor: colors.whiteMuted, borderColor: colors.border },
@@ -116,7 +116,7 @@ export function DriverHeader({
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={onPressNotifications ?? (() => {})}
+          onPress={onPressNotifications ?? (() => router.push('/(driver)/notifications'))}
           style={[
             styles.notificationBtn,
             { backgroundColor: colors.whiteMuted, borderColor: colors.border },

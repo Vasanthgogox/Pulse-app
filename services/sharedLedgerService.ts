@@ -61,6 +61,29 @@ export interface CreateDisputePayload {
   proposed_amount?: number;
 }
 
+function isDisputeConflictError(error: {
+  code?: string | null;
+  message?: string | null;
+  details?: string | null;
+  hint?: string | null;
+}): boolean {
+  const joined = [
+    String(error.code ?? ''),
+    String(error.message ?? ''),
+    String(error.details ?? ''),
+    String(error.hint ?? ''),
+  ]
+    .join(' ')
+    .toLowerCase();
+  return (
+    joined.includes('23505') ||
+    joined.includes('409') ||
+    joined.includes('conflict') ||
+    joined.includes('unique') ||
+    joined.includes('duplicate')
+  );
+}
+
 /**
  * Get aggregated verified balances per partner for an org.
  * RPC get_verified_balances(org_id) returns { partner_key, balance }[].
@@ -182,6 +205,36 @@ export async function createDispute(payload: CreateDisputePayload): Promise<{
   disputeId: string | null;
   alreadyInDispute?: boolean;
 }> {
+  // Avoid noisy 409 conflicts by short-circuiting when an OPEN dispute already exists.
+  // Check both org-order permutations because backend uniqueness is pair-wise.
+  const baseQuery = supabase()
+    .from('dispute')
+    .select('id')
+    .eq('transaction_id', payload.transaction_id)
+    .eq('status', 'OPEN');
+  const [forward, reverse] = await Promise.all([
+    baseQuery
+      .eq('raised_by_org_id', payload.orgId)
+      .eq('partner_org_id', payload.partner_org_id)
+      .maybeSingle(),
+    supabase()
+      .from('dispute')
+      .select('id')
+      .eq('transaction_id', payload.transaction_id)
+      .eq('status', 'OPEN')
+      .eq('raised_by_org_id', payload.partner_org_id)
+      .eq('partner_org_id', payload.orgId)
+      .maybeSingle(),
+  ]);
+  const existingId = forward.data?.id ?? reverse.data?.id ?? null;
+  if (existingId) {
+    return {
+      error: null,
+      disputeId: existingId,
+      alreadyInDispute: true,
+    };
+  }
+
   const { data, error } = await supabase()
     .from('dispute')
     .insert({
@@ -200,7 +253,16 @@ export async function createDispute(payload: CreateDisputePayload): Promise<{
     .select('id')
     .single();
   if (error) {
-    const alreadyInDispute = error.code === '23505' || /unique|duplicate|already/i.test(error.message);
+    const alreadyInDispute = isDisputeConflictError(error);
+    if (alreadyInDispute) {
+      // Idempotent behavior: if another open dispute already exists, treat as success.
+      // This prevents "Submit dispute" from feeling broken on repeated taps or stale UI state.
+      return {
+        error: null,
+        disputeId: payload.transaction_id,
+        alreadyInDispute: true,
+      };
+    }
     return {
       error: new Error(error.message),
       disputeId: null,

@@ -2132,9 +2132,9 @@ export function AddTransactionModal({
         {formContent}
         {pickerModalVisible ? (
           <Modal transparent visible animationType="fade" onRequestClose={closeAllPickers}>
-            <View style={[styles.pickerModalContainer, { paddingBottom: insets.bottom + 16 }]} pointerEvents="box-none">
+            <View style={[styles.pickerModalContainer, { paddingBottom: insets.bottom + 16, pointerEvents: 'box-none' }]}>
               <TouchableOpacity style={StyleSheet.absoluteFill} onPress={closeAllPickers} activeOpacity={1} />
-              <View style={[styles.pickerModalPanel, { height: Math.min(windowHeight * 0.5, 380) }]} pointerEvents="auto">
+              <View style={[styles.pickerModalPanel, { height: Math.min(windowHeight * 0.5, 380), pointerEvents: 'auto' }]}>
                 {renderPickerModalContent()}
               </View>
             </View>

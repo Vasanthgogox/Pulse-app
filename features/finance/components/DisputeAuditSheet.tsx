@@ -169,6 +169,7 @@ export function DisputeAuditSheet({
   const canRaiseDispute = !reasonCodeError && !proposedAmountError;
 
   const handleRaiseDispute = useCallback(async () => {
+    if (submitting) return;
     if (!selectedItem || !organizationId || !partnerOrgId) {
       Alert.alert('Cannot raise dispute', 'Partner connection is missing.');
       return;
@@ -207,18 +208,25 @@ export function DisputeAuditSheet({
     });
     setSubmitting(false);
     if (error) {
+      if (alreadyInDispute) {
+        onSuccess?.();
+        onClose();
+        Alert.alert('Already in dispute', 'An open dispute already exists for this item.');
+        return;
+      }
       Alert.alert(
-        alreadyInDispute ? 'Already in dispute' : 'Error',
+        'Error',
         error.message
       );
       return;
     }
-    if (disputeId) {
+    if (disputeId || alreadyInDispute) {
       onSuccess?.();
       onClose();
     }
   }, [
     selectedItem,
+    submitting,
     organizationId,
     partnerOrgId,
     reasonCode,
