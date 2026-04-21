@@ -162,16 +162,25 @@ export async function updateDirectQuoteAssignment(
   driverId: string | null,
   vehicleId: string | null
 ): Promise<{ error: Error | null }> {
-  const { error } = await supabase()
+  const { data, error } = await supabase()
     .from('direct_quotes')
     .update({
       driver_id: driverId ?? null,
       vehicle_id: vehicleId ?? null,
       updated_at: new Date().toISOString(),
     })
-    .eq('id', quoteId);
+    .eq('id', quoteId)
+    .select('id')
+    .maybeSingle();
 
   if (error) return { error: new Error(error.message) };
+  if (!data?.id) {
+    return {
+      error: new Error(
+        'Could not update quote assignment (no matching quote or permission denied).',
+      ),
+    };
+  }
   return { error: null };
 }
 

@@ -307,7 +307,6 @@ function buildReconciledRows(
         // - As CLIENT (we are supplier): our payment is amount_in (paid).
         const internalPaidForCompare =
           entityType === "SUPPLIER" ? int.paidOut : int.paid;
-        const paidMatch = internalPaidForCompare === ext.paid;
         // Partner's "sales" = payables/receivables (supplier_rate) only, never client_price.
         // If backend returns ext > int, it's likely client_price; use int (supplier_rate) for both CLIENT and SUPPLIER views.
         const extSalesResolved =
@@ -316,12 +315,26 @@ function buildReconciledRows(
             : ext.sales > int.sales && int.sales > 0
               ? int.sales
               : ext.sales;
-        const isMatch = int.sales === extSalesResolved && paidMatch;
+        const salesMatch = int.sales === extSalesResolved;
+        const paidMatch = internalPaidForCompare === ext.paid;
+        // If sales are already aligned but partner payment is still zero while ours is present,
+        // treat it as awaiting partner update (not a hard mismatch).
+        const awaitingPartnerPaymentEntry =
+          salesMatch && internalPaidForCompare > 0 && ext.paid === 0;
+        const isMatch = salesMatch && paidMatch;
         results.push({
           tripId: int.tripId,
           missionId: int.missionId,
-          status: isMatch ? "VERIFIED" : "MISMATCH",
-          issue: isMatch ? null : "Data Variance Detected",
+          status: isMatch
+            ? "VERIFIED"
+            : awaitingPartnerPaymentEntry
+              ? "PENDING"
+              : "MISMATCH",
+          issue: isMatch
+            ? null
+            : awaitingPartnerPaymentEntry
+              ? "Partner has not reported payment entry"
+              : "Data Variance Detected",
           internal: int,
           external: ext,
           intSales: int.sales,
@@ -564,9 +577,20 @@ export function SharedLedgerContent({
     const m = new Map<string, TripRow>();
     for (const t of trips) {
       m.set(normTripKey(t.id), t);
+      m.set(normTripKey(getTripDisplayNumber(t)), t);
     }
     return m;
   }, [trips]);
+
+  const resolveTripRefToCanonicalId = useCallback(
+    (tripRef: string | null | undefined): string => {
+      const key = normTripKey(tripRef);
+      if (!key) return "";
+      const t = tripByNormRef.get(key);
+      return t ? normTripKey(t.id) : key;
+    },
+    [tripByNormRef],
+  );
 
   const missionLabelForTripRef = useCallback(
     (tripRef: string) => {
@@ -714,7 +738,9 @@ export function SharedLedgerContent({
           if (!e2 && entries?.length) {
             const partnerPaidFromOut = entityType === "CLIENT"; // client pays us = their amount_out
             for (const e of entries) {
-              const ref = (e.reference_id ?? e.id ?? "").toString().trim().toLowerCase();
+              const ref = resolveTripRefToCanonicalId(
+                (e.reference_id ?? e.id ?? "").toString(),
+              );
               if (!ref) continue;
               const amt = Number(e.amount ?? 0);
               const out = amt < 0 ? -amt : 0;
@@ -724,7 +750,7 @@ export function SharedLedgerContent({
             }
           }
           const merged = fromSummary.map((r) => {
-            const key = r.tripId.trim().toLowerCase();
+            const key = resolveTripRefToCanonicalId(r.tripId);
             const entryPaid = byTrip.get(key);
             const paid = r.paid === 0 && entryPaid != null ? entryPaid : r.paid;
             return { ...r, paid };
@@ -741,7 +767,9 @@ export function SharedLedgerContent({
         if (e2 || !entries?.length) return;
         const byTrip = new Map<string, { in: number; out: number }>();
         for (const e of entries) {
-          const ref = (e.reference_id ?? e.id ?? "").toString().trim().toLowerCase();
+          const ref = resolveTripRefToCanonicalId(
+            (e.reference_id ?? e.id ?? "").toString(),
+          );
           if (!ref) continue;
           if (!byTrip.has(ref)) byTrip.set(ref, { in: 0, out: 0 });
           const cur = byTrip.get(ref)!;
@@ -766,7 +794,14 @@ export function SharedLedgerContent({
     return () => {
       cancelled = true;
     };
-  }, [organizationId, integrated, entity.id, entityType, sharedTripsProp?.length]);
+  }, [
+    organizationId,
+    integrated,
+    entity.id,
+    entityType,
+    sharedTripsProp?.length,
+    resolveTripRefToCanonicalId,
+  ]);
 
   useEffect(() => {
     if (!organizationId || !partnerOrgId) return;
@@ -976,10 +1011,26 @@ export function SharedLedgerContent({
 
     const rows: CommandTxnRow[] = [];
     const matchedLocalIds = new Set<string>();
+    const partnerTxnCountByTrip = new Map<string, number>();
+
+    // Trip-level fallback: when partner summary is present but entry-level rows are not yet exposed,
+    // use reconciled external paid so the forensic "Entry comparison" does not stay stuck at
+    // "Awaiting partner" for single-line trips.
+    const partnerPaidByTripFromSummary = new Map<string, number>();
+    for (const row of reconciledRows) {
+      const key = norm(row.tripId);
+      if (!key) continue;
+      const paid = Number(row.extPaid ?? 0);
+      if (paid > 0) partnerPaidByTripFromSummary.set(key, paid);
+    }
 
     for (const p of partnerEntries) {
-      const tripRef = norm(p.reference_id);
+      const tripRef = resolveTripRefToCanonicalId(p.reference_id);
       if (!tripRef) continue;
+      partnerTxnCountByTrip.set(
+        tripRef,
+        (partnerTxnCountByTrip.get(tripRef) ?? 0) + 1,
+      );
       const amt = Number(p.amount ?? 0);
       const amtAbs = Math.abs(amt);
       const locals = localByTrip.get(tripRef) ?? [];
@@ -1066,14 +1117,47 @@ export function SharedLedgerContent({
     /** Any local entry not matched to a partner entry is still pending. */
     for (const l of localRelevant) {
       if (matchedLocalIds.has(l.id)) continue;
+      const tripRef = norm(l.trip_id);
       const amtIn = l.amount_in ?? 0;
       const amtOut = l.amount_out ?? 0;
       const net = amtIn + amtOut;
       const amtAbs = Math.abs(net);
+      const localTripLines = tripRef ? (localByTrip.get(tripRef) ?? []) : [];
+      const partnerTripLineCount = tripRef
+        ? (partnerTxnCountByTrip.get(tripRef) ?? 0)
+        : 0;
+      const partnerTripPaid = tripRef
+        ? partnerPaidByTripFromSummary.get(tripRef)
+        : undefined;
+      const canUseTripSummaryFallback =
+        !!tripRef &&
+        partnerTripLineCount === 0 &&
+        localTripLines.length === 1 &&
+        partnerTripPaid != null &&
+        partnerTripPaid > 0;
+
+      if (canUseTripSummaryFallback) {
+        rows.push({
+          id: `l:${l.id}`,
+          status: Math.abs(amtAbs - partnerTripPaid) < 0.5 ? "matched" : "conflict",
+          tripRef,
+          date: l.transaction_date || "",
+          amountAbs: amtAbs,
+          localAmount: amtAbs,
+          partnerAmount: partnerTripPaid,
+          displayDate: formatTxnShortDate(l.transaction_date) || undefined,
+          myRef: compactLedgerRef(l.payment_reference, l.id),
+          partnerRef: "Trip summary",
+          myMode: modeLabel(l.payment_mode),
+          partnerMode: "—",
+          lineKind: inferSharedTxnLineKind(l.primary_category, l.description),
+        });
+        continue;
+      }
       rows.push({
         id: `l:${l.id}`,
         status: "pending",
-        tripRef: norm(l.trip_id),
+        tripRef,
         date: l.transaction_date || "",
         amountAbs: amtAbs,
         localAmount: amtAbs,
@@ -1089,7 +1173,16 @@ export function SharedLedgerContent({
     /** Most recent first. */
     rows.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
     return rows;
-  }, [partnerEntries, txs, entity.id, entity.name, entityType, trips]);
+  }, [
+    partnerEntries,
+    txs,
+    entity.id,
+    entity.name,
+    entityType,
+    trips,
+    reconciledRows,
+    resolveTripRefToCanonicalId,
+  ]);
 
   const filteredTxnRows = useMemo(() => {
     let rows = txnRows;

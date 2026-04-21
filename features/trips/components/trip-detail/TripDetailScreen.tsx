@@ -70,6 +70,7 @@ import {
   getTripDisplayNumber,
   getTripsWhereOrgIsSupplier,
   isTripCompleted,
+  manualAdvanceTrip,
   type TripRow,
 } from "../../services/trips.service";
 import { TripAssignmentBlock, type AssignmentSource } from "../TripAssignmentBlock";
@@ -299,6 +300,7 @@ export default function TripDetailScreen({
   const [showTrackingModal, setShowTrackingModal] = useState(false);
   const [tripDetailTab, setTripDetailTab] = useState<TripDetailTab>("finance");
   const [expandedTimelineEntryIds, setExpandedTimelineEntryIds] = useState<Record<string, boolean>>({});
+  const [manualAdvanceLoading, setManualAdvanceLoading] = useState(false);
   const [showFullScreenMap, setShowFullScreenMap] = useState(false);
   const [showDriverRejectedModal, setShowDriverRejectedModal] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<TripDocItem | null>(null);
@@ -402,6 +404,56 @@ export default function TripDetailScreen({
   ]);
 
   const tripCompleted = trip != null && isTripCompleted(trip);
+
+  const manualAdvanceMeta = useMemo((): {
+    action: "confirm_arrival" | "start_transit" | "reach_drop" | "complete";
+    ctaLabel: string;
+    successLabel: string;
+  } | null => {
+    if (!trip) return null;
+    const status = String(trip.status ?? "").toLowerCase();
+    if (status === "completed" || status === "delivered" || status === "done") {
+      return null;
+    }
+    if (
+      status === "arrived_pickup" ||
+      status === "arrived_at_pickup" ||
+      status === "pickup_arrived" ||
+      status === "at_pickup" ||
+      status === "confirmed_arrival"
+    ) {
+      return {
+        action: "start_transit",
+        ctaLabel: "Manual: Start Transit",
+        successLabel: "Trip moved to in-transit.",
+      };
+    }
+    if (
+      status === "in_progress" ||
+      status === "in_transit" ||
+      status === "picked_up" ||
+      status === "dispatched" ||
+      status === "pickup"
+    ) {
+      return {
+        action: "reach_drop",
+        ctaLabel: "Manual: Reach Drop",
+        successLabel: "Trip moved to drop reached.",
+      };
+    }
+    if (status === "arrived" || status === "at_destination" || status === "at_drop") {
+      return {
+        action: "complete",
+        ctaLabel: "Manual: Complete Trip",
+        successLabel: "Trip marked as completed.",
+      };
+    }
+    return {
+      action: "confirm_arrival",
+      ctaLabel: "Manual: Confirm Arrival",
+      successLabel: "Trip marked as arrival confirmed.",
+    };
+  }, [trip]);
 
   /** Trip ratings fetched when completed; used for driver rating display and TripRatingsBlock. */
   const [tripRatings, setTripRatings] = useState<{ score: number }[]>([]);
@@ -512,6 +564,49 @@ export default function TripDetailScreen({
       else setAssignmentAuditRows([]);
     });
   }, [tripId]);
+
+  const handleManualTripAdvance = useCallback(async () => {
+    if (!trip?.id || !manualAdvanceMeta || manualAdvanceLoading) return;
+    setManualAdvanceLoading(true);
+    try {
+      const expectedRevision =
+        Number.isFinite(Number(trip.status_revision))
+          ? Number(trip.status_revision)
+          : 0;
+      const idempotencyKey = `manual-${trip.id}-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 10)}`;
+      const { error: advanceError, trip: updatedTrip } = await manualAdvanceTrip(
+        trip.id,
+        {
+          action: manualAdvanceMeta.action,
+          expectedRevision,
+          idempotencyKey,
+        },
+      );
+      if (advanceError) {
+        const message = advanceError.message || "Manual advance failed.";
+        const revisionMismatch = /revision|conflict|expected/i.test(message);
+        if (revisionMismatch) {
+          load();
+          Alert.alert(
+            "Trip was updated elsewhere",
+            "Refreshing latest status. Please try manual advance again.",
+          );
+          return;
+        }
+        Alert.alert("Manual advance failed", message);
+        return;
+      }
+      if (updatedTrip) setTrip(updatedTrip);
+      loadAssignmentAudit();
+      setFinanceRefreshKey((k) => k + 1);
+      refetchTransactionsRef.current();
+      Alert.alert("Manual update applied", manualAdvanceMeta.successLabel);
+    } finally {
+      setManualAdvanceLoading(false);
+    }
+  }, [trip, manualAdvanceMeta, manualAdvanceLoading, load, loadAssignmentAudit]);
 
   /** For aggregate trips, load current OTP for display in Assignments section. */
   const loadTripOtp = useCallback(() => {
@@ -1517,7 +1612,7 @@ export default function TripDetailScreen({
         parts.push(latestReassignmentRow.changed_at.slice(0, 16));
       }
     }
-    return parts.length > 0 ? parts.join("  ·  ") : null;
+    return parts.length > 0 ? parts.join("\n") : null;
   }, [
     latestReassignmentRow,
     assignmentDriverNames,
@@ -2927,6 +3022,15 @@ export default function TripDetailScreen({
                 }
                 driverAvatarUri={driverAvatarUri}
                 showAssignByPhone={showAssignByPhone}
+                assignmentSource={assignmentSource}
+                currentUserId={currentUserId}
+                previousDriverName={previousDriverName}
+                latestReassignmentSummary={latestReassignmentSummary}
+                driverAssignOrgId={
+                  showAssignByPhone && currentOrganization?.id
+                    ? currentOrganization.id
+                    : null
+                }
                 onVehicleDisplayChange={(value) => {
                   const normalized = formatIndianVehicleNumber(value ?? "");
                   setDisplayVehicleFromInput(normalized);
@@ -3048,6 +3152,23 @@ export default function TripDetailScreen({
                   to activate journey tracking.
                 </Text>
                 <View style={styles.driverOfflineActions}>
+                  {manualAdvanceMeta && !isClientIndentView ? (
+                    <TouchableOpacity
+                      style={styles.driverOfflineBtnPrimary}
+                      onPress={() => void handleManualTripAdvance()}
+                      activeOpacity={0.8}
+                      disabled={manualAdvanceLoading}
+                    >
+                      {manualAdvanceLoading ? (
+                        <ActivityIndicator size="small" color={Theme.primary} />
+                      ) : (
+                        <FontAwesome name="forward" size={16} color={Theme.primary} />
+                      )}
+                      <Text style={styles.driverOfflineBtnPrimaryText}>
+                        {manualAdvanceLoading ? "Applying Manual Step..." : manualAdvanceMeta.ctaLabel}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
                   <TouchableOpacity
                     style={styles.driverOfflineBtnPrimary}
                     onPress={() => setShowTrackingModal(false)}

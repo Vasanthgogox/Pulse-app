@@ -35,6 +35,7 @@ export {
   getTripsWhereOrgIsClient,
   getTripsWhereOrgIsSupplier,
   getTripById,
+  getTripByIndentId,
   getTripDisplayNumber,
   getTripsByDriver,
   getTripsByDriverIds,

@@ -2464,10 +2464,20 @@ export function SharedLedgerCommandCenter({
     const t = txnFocus;
     const myAmt = localColumnRupees(t);
     const partnerAmt = partnerColumnRupees(t);
+    const tripForTxn = findTripByRef(t.tripRef);
+    const sameTripTxnCount = txnRowsAll.filter(
+      (row) => norm(row.tripRef) === norm(t.tripRef),
+    ).length;
+    const tripLevelPartnerPaid =
+      tripForTxn && sameTripTxnCount === 1 && (tripForTxn.extPaid ?? 0) > 0
+        ? Number(tripForTxn.extPaid ?? 0)
+        : null;
+    const usingTripLevelFallback = partnerAmt == null && tripLevelPartnerPaid != null;
+    const resolvedPartnerAmt = partnerAmt ?? tripLevelPartnerPaid;
     const deltaAbs =
-      partnerAmt == null ? 0 : Math.abs(myAmt - partnerAmt);
+      resolvedPartnerAmt == null ? 0 : Math.abs(myAmt - resolvedPartnerAmt);
     const matchAmt =
-      partnerAmt != null && deltaAbs < 0.5;
+      resolvedPartnerAmt != null && deltaAbs < 0.5;
     const tripDisplay =
       (t.tripRef &&
         (missionLabelForTripRef?.(t.tripRef) ??
@@ -2477,8 +2487,12 @@ export function SharedLedgerCommandCenter({
     const rightRef = tripDisplay;
     const matchRef = true;
     const leftMode = displayLedgerToken(t.myMode);
-    const rightMode = displayLedgerToken(t.partnerMode);
-    const matchMode = normLedgerToken(t.myMode) === normLedgerToken(t.partnerMode);
+    const rightMode = usingTripLevelFallback
+      ? leftMode
+      : displayLedgerToken(t.partnerMode);
+    const matchMode = usingTripLevelFallback
+      ? true
+      : normLedgerToken(t.myMode) === normLedgerToken(t.partnerMode);
     const forensicRows = [
       ...(t.lineKind
         ? [
@@ -2494,9 +2508,9 @@ export function SharedLedgerCommandCenter({
         label: "Amount",
         left: formatINR(myAmt),
         right:
-          partnerAmt == null
+          resolvedPartnerAmt == null
             ? SHARED_LEDGER_PARTNER_PENDING_LABEL
-            : formatINR(partnerAmt),
+            : formatINR(resolvedPartnerAmt),
         match: matchAmt,
       },
       {
@@ -2515,7 +2529,7 @@ export function SharedLedgerCommandCenter({
     const syncLabel = t.displayDate ?? t.date.slice(0, 10);
     const fullyAligned = matchAmt && matchRef && matchMode;
     const gapRupees =
-      partnerAmt == null ? null : Math.abs(myAmt - partnerAmt);
+      resolvedPartnerAmt == null ? null : Math.abs(myAmt - resolvedPartnerAmt);
 
     return (
       <View style={[styles.subScreen, detailShellLayoutStyle]}>
@@ -2583,7 +2597,7 @@ export function SharedLedgerCommandCenter({
                 >
                   {fullyAligned
                     ? "Verified"
-                    : partnerAmt == null
+                    : resolvedPartnerAmt == null
                       ? "Awaiting partner"
                       : "Found a difference"}
                 </Text>
@@ -2595,7 +2609,7 @@ export function SharedLedgerCommandCenter({
                     <Text style={styles.forensicDiagEm}>match</Text> on both
                     books.
                   </>
-                ) : partnerAmt == null ? (
+                ) : resolvedPartnerAmt == null ? (
                   <>
                     You’ve logged this payment; your partner hasn’t shared their
                     line for it yet — their amount shows as{" "}
@@ -2610,7 +2624,7 @@ export function SharedLedgerCommandCenter({
                     <Text style={styles.forensicDiagEm}>{formatINR(myAmt)}</Text>{" "}
                     but partner recorded{" "}
                     <Text style={styles.forensicDiagAmt}>
-                      {formatINR(partnerAmt)}
+                      {formatINR(resolvedPartnerAmt)}
                     </Text>
                     . A gap of{" "}
                     <Text style={styles.forensicDiagAmt}>
