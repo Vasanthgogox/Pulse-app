@@ -868,6 +868,41 @@ export function useTripDetail({
     router,
   ]);
 
+  /** Add Income → full ledger entry (cash IN), same flow as Finance / trip “record payment”. */
+  const openLedgerSyncForTripIncome = useCallback(() => {
+    if (!trip?.id) return;
+    const tripNumber = getTripDisplayNumber(trip);
+    const params = new URLSearchParams({
+      tripId: trip.id,
+      tripNumber,
+      defaultType: "in",
+    });
+    const clientId = clientIdFromContext ?? trip.client_id ?? "";
+    if (clientId) {
+      params.set("partyContext", "clients");
+      params.set("partyId", clientId);
+      const name =
+        clientNameFromContext ?? displayClientName ?? trip.client_name ?? "";
+      if (name) params.set("partyName", name);
+    }
+    const received = tripLedgerEntries.reduce(
+      (s, r) => s + Number(r.amount_in ?? 0),
+      0,
+    );
+    const sale = Number(trip.client_price ?? 0);
+    const due = Math.max(0, sale - received);
+    if (due > 0) params.set("dueAmountIn", String(due));
+
+    router.push(`/(modals)/ledger-sync?${params.toString()}`);
+  }, [
+    trip,
+    clientIdFromContext,
+    clientNameFromContext,
+    displayClientName,
+    tripLedgerEntries,
+    router,
+  ]);
+
   const handleRecordDriverPayment = useCallback(() => {
     if (!trip?.id || !trip.driver_id) return;
     const tripNumber = getTripDisplayNumber(trip);
@@ -1282,6 +1317,7 @@ export function useTripDetail({
     load,
     handleRefresh,
     openAddEntry,
+    openLedgerSyncForTripIncome,
     handleAcceptPartnerView,
     handleRaiseDispute,
     openCompareVerifyFromTrip,

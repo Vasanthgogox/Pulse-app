@@ -15,6 +15,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { getTripDisplayNumber } from "../../services/trips.service";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import type { TripDetailScreenProps } from "./TripDetailScreen";
@@ -27,6 +28,25 @@ import { TripStatusTimeline, type TripStageTimestamp } from "./sections/TripStat
 import { TruckAssignmentCard } from "./sections/TruckAssignmentCard";
 
 type Tab = "tracking" | "finance";
+
+function formatLedgerDate(s: string | null | undefined) {
+  if (!s) return "—";
+  const d = s.slice(0, 10);
+  const [y, m, day] = d.split("-");
+  const months = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
+  const mi = Number(m);
+  if (!y || !day || !Number.isFinite(mi) || mi < 1 || mi > 12) return "—";
+  return `${day} ${months[mi - 1]} ${y}`;
+}
+
+function ledgerHistoryTitle(tx: LedgerRow, isIn: boolean) {
+  const desc = tx.description?.trim();
+  if (desc) return desc;
+  if (isIn && tx.contact_type === "client") return "Customer payment";
+  if (!isIn && tx.contact_type === "supplier") return "Supplier payment";
+  if (!isIn && tx.contact_type === "driver") return "Driver payment";
+  return isIn ? "Cash in" : "Cash out";
+}
 
 export default function TripDetailScreen({
   tripId,
@@ -87,14 +107,14 @@ export default function TripDetailScreen({
   // ── Expense rows ──────────────────────────────────────────────────────────────
   const expenseRows: ExpenseRow[] = detail.tripLedgerEntries
     .filter((e) => Number(e.amount_out ?? 0) > 0)
-    .map((e, idx) => ({
+    .map((e) => ({
       id: e.id,
       date: new Date(e.transaction_date).toLocaleDateString("en-IN", {
         day: "2-digit",
         month: "2-digit",
         year: "numeric",
       }),
-      expenseId: `EXP${String(idx + 1488).padStart(4, "0")}`,
+      expenseId: e.id.replace(/-/g, "").slice(0, 10).toUpperCase(),
       category: e.primary_category ?? "Petty Cash",
       type: e.contact_type ?? e.party_name ?? "—",
       description: e.description ?? "—",
@@ -132,6 +152,23 @@ export default function TripDetailScreen({
     0,
   );
   const supplierDue = Math.max(0, supplierCost - supplierPaid);
+
+  type FinanceHistoryRow = { key: string; tx: LedgerRow; isIn: boolean; amount: number };
+  const financeHistoryRows: FinanceHistoryRow[] = (() => {
+    const rows: FinanceHistoryRow[] = [];
+    for (const tx of detail.tripLedgerEntries) {
+      const inAmt = Number(tx.amount_in ?? 0);
+      const outAmt = Number(tx.amount_out ?? 0);
+      if (inAmt > 0) rows.push({ key: `${tx.id}-in`, tx, isIn: true, amount: inAmt });
+      if (outAmt > 0) rows.push({ key: `${tx.id}-out`, tx, isIn: false, amount: outAmt });
+    }
+    rows.sort((a, b) => {
+      const da = new Date(a.tx.transaction_date || a.tx.created_at).getTime();
+      const db = new Date(b.tx.transaction_date || b.tx.created_at).getTime();
+      return db - da;
+    });
+    return rows;
+  })();
 
   // ── Map ───────────────────────────────────────────────────────────────────────
   const hasOrigin = !!detail.trackingMapOriginCoordinate;
@@ -328,7 +365,7 @@ export default function TripDetailScreen({
                   deductionDetails={detail.adjustments
                     .filter((a) => a.type === "revenue" && a.impact === "minus")
                     .map((a) => ({ label: a.reason, amount: a.amount }))}
-                  onAddIncome={detail.handleAddAdjustment}
+                  onAddIncome={detail.openLedgerSyncForTripIncome}
                   onAddDeduction={detail.handleAddAdjustment}
                 />
               </View>
@@ -339,44 +376,59 @@ export default function TripDetailScreen({
                   <View style={styles.summaryCardRow}>
                     <View style={styles.summaryCardItem}>
                       <Text style={styles.summaryCardLabel}>SALE</Text>
-                      <Text style={styles.summaryCardValue}>{formatINR(25000)}</Text>
+                      <Text style={styles.summaryCardValue}>{formatINR(sales)}</Text>
                     </View>
                     <View style={styles.summaryCardItem}>
                       <Text style={styles.summaryCardLabel}>RECEIVED</Text>
-                      <Text style={[styles.summaryCardValue, styles.summaryCardValueGreen]}>{formatINR(5000)}</Text>
+                      <Text style={[styles.summaryCardValue, styles.summaryCardValueGreen]}>{formatINR(received)}</Text>
                     </View>
                     <View style={styles.summaryCardItem}>
                       <Text style={styles.summaryCardLabel}>DUE</Text>
-                      <Text style={[styles.summaryCardValue, styles.summaryCardValueRed]}>{formatINR(20000)}</Text>
+                      <Text style={[styles.summaryCardValue, styles.summaryCardValueRed]}>{formatINR(pending)}</Text>
                     </View>
                   </View>
 
                   {/* Transaction History Wrapper */}
                   <View>
                     <Text style={styles.transactionHistoryHeader}>TRANSACTION HISTORY</Text>
-                    {/* Transaction Item 1 */}
-                    <View style={styles.transactionRow}>
-                      <View style={[styles.transactionIconWrap, styles.transactionIconIn]}>
-                        <FontAwesome name="arrow-down" size={12} color="#fff" />
-                      </View>
-                      <View style={styles.transactionInfo}>
-                        <Text style={styles.transactionText1}>Customer payment</Text>
-                        <Text style={styles.transactionText2}>09 MAR 2026 • DAVID TAYLOR</Text>
-                      </View>
-                      <Text style={[styles.transactionAmount, styles.transactionAmountIn]}>+ {formatINR(5000)}</Text>
-                    </View>
-
-                    {/* Transaction Item 2 */}
-                    <View style={styles.transactionRow}>
-                      <View style={[styles.transactionIconWrap, styles.transactionIconOut]}>
-                        <FontAwesome name="arrow-up" size={12} color="#fff" />
-                      </View>
-                      <View style={styles.transactionInfo}>
-                        <Text style={styles.transactionText1}>Supplier payment</Text>
-                        <Text style={styles.transactionText2}>07 MAR 2026 • KATE BELL</Text>
-                      </View>
-                      <Text style={[styles.transactionAmount, styles.transactionAmountOut]}>− {formatINR(3000)}</Text>
-                    </View>
+                    {financeHistoryRows.length === 0 ? (
+                      <Text style={styles.transactionHistoryEmpty}>No transactions for this trip yet</Text>
+                    ) : (
+                      financeHistoryRows.map(({ key, tx, isIn, amount }) => (
+                        <View key={key} style={styles.transactionRow}>
+                          <View
+                            style={[
+                              styles.transactionIconWrap,
+                              isIn ? styles.transactionIconIn : styles.transactionIconOut,
+                            ]}
+                          >
+                            <FontAwesome
+                              name={isIn ? "arrow-down" : "arrow-up"}
+                              size={12}
+                              color="#fff"
+                            />
+                          </View>
+                          <View style={styles.transactionInfo}>
+                            <Text style={styles.transactionText1} numberOfLines={2}>
+                              {ledgerHistoryTitle(tx, isIn)}
+                            </Text>
+                            <Text style={styles.transactionText2} numberOfLines={1}>
+                              {formatLedgerDate(tx.transaction_date || tx.created_at)} ·{" "}
+                              {tx.party_name?.trim() || "—"}
+                            </Text>
+                          </View>
+                          <Text
+                            style={[
+                              styles.transactionAmount,
+                              isIn ? styles.transactionAmountIn : styles.transactionAmountOut,
+                            ]}
+                          >
+                            {isIn ? "+ " : "− "}
+                            {formatINR(amount)}
+                          </Text>
+                        </View>
+                      ))
+                    )}
                   </View>
                 </View>
               </View>
@@ -820,6 +872,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: "uppercase",
     marginBottom: 12,
+  },
+  transactionHistoryEmpty: {
+    fontSize: 13,
+    color: "#64748b",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
   },
   transactionRow: {
     flexDirection: "row",
