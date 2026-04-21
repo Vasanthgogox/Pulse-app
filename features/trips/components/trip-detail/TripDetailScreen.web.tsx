@@ -295,8 +295,6 @@ export default function TripDetailScreen({
                         status: "Uploaded" as const,
                         onView: d.storagePath ? () => detail.setSelectedDoc(d) : undefined,
                       }))}
-                    onUpdateLR={() => detail.setShowAdjustmentModal(true)}
-                    onAddDocument={() => detail.setShowAdjustmentModal(true)}
                   />
                 </View>
               </View>
@@ -394,8 +392,8 @@ export default function TripDetailScreen({
                     label: adjustmentDeductionLineLabel(a),
                     amount: a.amount,
                   }))}
-                  onAddIncome={detail.openLedgerSyncForTripIncome}
-                  onAddDeduction={detail.handleAddAdjustment}
+                  onAddIncome={detail.openClientIncomeAdjustment}
+                  onAddDeduction={detail.openClientDeductionAdjustment}
                 />
               </View>
               <View style={styles.financeSummaryCol}>
@@ -472,7 +470,8 @@ export default function TripDetailScreen({
       {/* ── Modals ────────────────────────────────────────────────────────────── */}
       <TripAdjustmentModal
         visible={detail.showAdjustmentModal}
-        onClose={() => detail.setShowAdjustmentModal(false)}
+        preset={detail.adjustmentModalPreset}
+        onClose={detail.closeTripAdjustmentModal}
         onSave={detail.handleSaveAdjustment}
       />
       <ThemedAlertModal

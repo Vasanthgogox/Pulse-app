@@ -42,6 +42,7 @@ export function TripAdjustmentModal({
   visible,
   onClose,
   onSave,
+  preset = null,
 }: TripAdjustmentModalProps) {
   const insets = useSafeAreaInsets();
   const [type, setType] = useState<TripAdjustmentType>("revenue");
@@ -49,6 +50,20 @@ export function TripAdjustmentModal({
   const [amountStr, setAmountStr] = useState("");
   const [reason, setReason] = useState("");
   const [otherReason, setOtherReason] = useState("");
+
+  useEffect(() => {
+    if (!visible) return;
+    if (preset) {
+      setType(preset.type);
+      setImpact(preset.impact);
+    } else {
+      setType("revenue");
+      setImpact("plus");
+    }
+    setAmountStr("");
+    setReason("");
+    setOtherReason("");
+  }, [visible, preset]);
 
   const reasonOptions = type === "revenue" ? REVENUE_REASON_OPTIONS : COST_REASON_OPTIONS;
   const selectedReason = reason === "Other" ? (otherReason.trim() || "Other") : reason;
