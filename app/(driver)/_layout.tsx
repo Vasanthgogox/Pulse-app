@@ -31,6 +31,7 @@ function DriverTabsNavigator() {
       <Tabs.Screen name="control" options={{ title: 'Trip', href: null }} />
       <Tabs.Screen name="trips" options={{ title: 'History' }} />
       <Tabs.Screen name="wallet" options={{ title: 'Transactions' }} />
+      <Tabs.Screen name="notifications" options={{ title: 'Notifications', href: null }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile', href: null }} />
       <Tabs.Screen name="level-progression" options={{ title: 'Level progression', href: null }} />
       <Tabs.Screen name="documents" options={{ title: 'Documents', href: null }} />

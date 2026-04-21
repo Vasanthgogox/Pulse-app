@@ -62,6 +62,8 @@ export interface TripRow {
   owner_user_id?: string | null;
   /** User who created this row. */
   created_by_user_id?: string | null;
+  /** Dispatcher / user who assigned the driver (when set in DB). */
+  assigned_by_user_id?: string | null;
   /** Optimistic revision for status/progress updates (monotonic). */
   status_revision?: number | null;
   /** Last actor who advanced status (auth.uid). */

@@ -116,7 +116,7 @@ export function DriverHeader({
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={onPressNotifications ?? (() => {})}
+          onPress={onPressNotifications ?? (() => router.push('/(driver)/notifications'))}
           style={[
             styles.notificationBtn,
             { backgroundColor: colors.whiteMuted, borderColor: colors.border },
