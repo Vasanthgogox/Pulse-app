@@ -1414,7 +1414,7 @@ export default function DriverWalletScreen() {
                 params: { orgName: fleet.orgName, from: 'wallet' },
               } as Parameters<typeof router.push>[0]);
             } else {
-              router.push('/(driver)/requests');
+              router.push('/(driver)');
             }
           }}
           style={[styles.passbookHeaderBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}

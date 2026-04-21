@@ -2,9 +2,9 @@
  * Trips service — Supabase only (mobile). Same DB as Q-unified-base.
  */
 import {
-    DEFAULT_PAGE_SIZE,
-    DRIVER_TRIPS_PAGE_SIZE,
-    type PageOpts,
+  DEFAULT_PAGE_SIZE,
+  DRIVER_TRIPS_PAGE_SIZE,
+  type PageOpts,
 } from "@/lib/pagination";
 import { supabase } from "@/lib/supabase";
 
@@ -62,6 +62,8 @@ export interface TripRow {
   owner_user_id?: string | null;
   /** User who created this row. */
   created_by_user_id?: string | null;
+  /** Dispatcher / user who assigned the driver (when set in DB). */
+  assigned_by_user_id?: string | null;
   /** Optimistic revision for status/progress updates (monotonic). */
   status_revision?: number | null;
   /** Last actor who advanced status (auth.uid). */
@@ -184,6 +186,28 @@ export async function getTripById(
     .from("trips")
     .select("*, indents(indent_number)")
     .eq("id", tripId)
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), trip: null };
+  const raw = data as any;
+  const trip: TripRow | null = raw
+    ? {
+        ...raw,
+        indent_number: raw.indents?.indent_number ?? null,
+      }
+    : null;
+  return { error: null, trip };
+}
+
+/** Latest trip row for an indent (direct-quote / Staff Handshake recovery). */
+export async function getTripByIndentId(
+  indentId: string,
+): Promise<{ error: Error | null; trip: TripRow | null }> {
+  const { data, error } = await supabase()
+    .from("trips")
+    .select("*, indents(indent_number)")
+    .eq("indent_id", indentId)
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (error) return { error: new Error(error.message), trip: null };
   const raw = data as any;

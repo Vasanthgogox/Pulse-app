@@ -4,40 +4,40 @@
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { formatIndianVehicleNumber, formatIndianVehicleNumberInput, formatMobileNumber } from "@/lib/format";
-import { validatePhone } from "@/lib/phoneValidation";
 import { type ClientRow } from "@/features/clients/services/clients.service";
 import {
-    getDriversByOrganization,
-    searchExistingDriversByPhone,
-    type DriverRow,
+  getDriversByOrganization,
+  searchExistingDriversByPhone,
+  type DriverRow,
 } from "@/features/drivers/services/drivers.service";
 import {
-    getSuppliersByOrganization,
-    type SupplierRow,
+  getSuppliersByOrganization,
+  type SupplierRow,
 } from "@/features/suppliers/services/suppliers.service";
 import {
-    getTripsByOrganization,
+  getTripsByOrganization,
 } from "@/features/trips/services/trips.service";
 import {
-    getVehiclesByOrganization,
-    type VehicleRow,
+  getVehiclesByOrganization,
+  type VehicleRow,
 } from "@/features/vehicles/services/vehicles.service";
+import { formatIndianVehicleNumber, formatIndianVehicleNumberInput, formatMobileNumber } from "@/lib/format";
+import { validatePhone } from "@/lib/phoneValidation";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-    Dimensions,
-    FlatList,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Switch,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    View,
+  Dimensions,
+  FlatList,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
 } from "react-native";
 import { ClientSearchField } from "./ClientSearchField";
 import { LocationSearchField } from "./LocationSearchField";

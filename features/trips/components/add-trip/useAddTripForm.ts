@@ -3,18 +3,18 @@
  * Keeps modal component thin and makes it easy to add steps/fields later.
  * Validation: single O(n) pass over fields.
  */
-import { useEffect, useState, useCallback, useMemo } from 'react';
-import type { AddTripFormData, AddTripFormState } from './types';
 import { validatePhone } from '@/lib/phoneValidation';
-import { getOptimalRoute } from '@/services/routingService';
 import {
-  VALIDATION,
-  maxLength,
-  nonNegativeAmount,
-  positiveAmount,
-  required,
-  runValidators,
+    VALIDATION,
+    maxLength,
+    nonNegativeAmount,
+    positiveAmount,
+    required,
+    runValidators,
 } from '@/lib/validation';
+import { getOptimalRoute } from '@/services/routingService';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { AddTripFormData, AddTripFormState } from './types';
 
 const initialState: AddTripFormState = {
   pickupArea: '',
