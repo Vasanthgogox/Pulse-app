@@ -634,6 +634,7 @@ export function TripAssignmentBlock({
             (d.phone ?? "").replace(/\s+/g, "").includes(q.replace(/\s+/g, "")),
         )
       : drivers;
+    const withoutCurrent = searched.filter((d) => d.id !== trip.driver_id);
 
     // Asset-based reassignment (no assign-by-phone): list available drivers first.
     if (!showAssignByPhone) {
@@ -643,25 +644,26 @@ export function TripAssignmentBlock({
         if (isOnTrip) return 1;
         return 0; // available
       };
-      return [...searched].sort((a, b) => {
+      return [...withoutCurrent].sort((a, b) => {
         const rankDiff = availabilityRank(a) - availabilityRank(b);
         if (rankDiff !== 0) return rankDiff;
         return (a.name ?? "").localeCompare(b.name ?? "");
       });
     }
 
-    return searched;
+    return withoutCurrent;
   }, [drivers, assignSearch, showAssignByPhone, activeDriverIds, trip.driver_id]);
 
   const filteredVehicles = useMemo(() => {
-    if (!assignSearch.trim()) return vehicles;
+    const withoutCurrent = vehicles.filter((v) => v.id !== trip.vehicle_id);
+    if (!assignSearch.trim()) return withoutCurrent;
     const q = assignSearch.trim().toLowerCase();
-    return vehicles.filter(
+    return withoutCurrent.filter(
       (v) =>
         (v.vehicle_number ?? "").toLowerCase().includes(q) ||
         (v.vehicle_type ?? "").toLowerCase().includes(q),
     );
-  }, [vehicles, assignSearch]);
+  }, [vehicles, assignSearch, trip.vehicle_id]);
 
   const getDriverRatingMeta = useCallback((driver: DriverRow) => {
     const data = driver as DriverRow & {
@@ -873,7 +875,7 @@ export function TripAssignmentBlock({
         {latestReassignmentSummary ? (
           <View style={styles.assignmentLogRow}>
             <Text style={styles.label}>LAST CHANGE</Text>
-            <Text style={styles.assignmentLogText} numberOfLines={2}>
+            <Text style={styles.assignmentLogText}>
               {latestReassignmentSummary}
             </Text>
           </View>

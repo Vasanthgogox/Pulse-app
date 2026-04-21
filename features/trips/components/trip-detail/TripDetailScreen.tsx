@@ -1517,7 +1517,7 @@ export default function TripDetailScreen({
         parts.push(latestReassignmentRow.changed_at.slice(0, 16));
       }
     }
-    return parts.length > 0 ? parts.join("  ·  ") : null;
+    return parts.length > 0 ? parts.join("\n") : null;
   }, [
     latestReassignmentRow,
     assignmentDriverNames,
