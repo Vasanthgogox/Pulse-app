@@ -565,7 +565,7 @@ export function DriverTripFlowCard({
               onPressOut={cancelHold}
             >
               <View style={[styles.holdFill, { width: `${holdProgress}%`, backgroundColor: colors.emerald }]} />
-              <View style={styles.holdContent} pointerEvents="none">
+              <View style={[styles.holdContent, { pointerEvents: 'none' }]}>
                 <FontAwesome name="check-circle" size={18} color={holdProgress > 20 ? Theme.textOnPrimary : colors.emerald} />
                 <Text
                   style={[

@@ -30,7 +30,7 @@ export function LoadCardRouteRow({ origin, destination, style, compact }: LoadCa
           {o}
         </Text>
       </View>
-      <View style={[styles.mid, compact && styles.midCompact]} pointerEvents="none">
+      <View style={[styles.mid, compact && styles.midCompact, { pointerEvents: 'none' }]}>
         <View style={styles.midLine} />
         <ChevronRight size={14} color={Theme.textMuted} strokeWidth={2.4} />
       </View>

@@ -945,6 +945,7 @@ export function LoadCenterView({
   };
 
   const handleFinalAssignment = async (load: IndentRow) => {
+    if (assigningTripId === load.id) return;
     if (!orgId) {
       Alert.alert(
         "Cannot start trip",
@@ -1005,6 +1006,7 @@ export function LoadCenterView({
   };
 
   const handleDeployRoster = async (load: IndentRow) => {
+    if (assigningTripId === load.id) return;
     if (!orgId) {
       Alert.alert(
         "Cannot deploy",
@@ -1085,6 +1087,7 @@ export function LoadCenterView({
   };
 
   const handleDeployAdHoc = async (load: IndentRow) => {
+    if (assigningTripId === load.id) return;
     if (!orgId) {
       Alert.alert(
         "Cannot deploy",
@@ -1397,7 +1400,7 @@ export function LoadCenterView({
         onPress={() => onIndentPress(load)}
         activeOpacity={0.7}
       >
-        <View style={styles.loadCardOrb} pointerEvents="none" />
+        <View style={[styles.loadCardOrb, { pointerEvents: 'none' }]} />
         <View style={styles.loadCardHeroRow}>
           <View style={styles.loadPillRow}>
             <View style={styles.loadTypePill}>
@@ -1746,10 +1749,7 @@ export function LoadCenterView({
                           onPress={() => onIndentPress(load)}
                           activeOpacity={0.7}
                         >
-                          <View
-                            style={styles.loadCardOrb}
-                            pointerEvents="none"
-                          />
+                          <View style={[styles.loadCardOrb, { pointerEvents: 'none' }]} />
                           <View style={styles.loadCardHeroRow}>
                             <View style={styles.loadPillRow}>
                               <View style={styles.loadTypePill}>
@@ -2085,7 +2085,7 @@ export function LoadCenterView({
                         onPress={() => onIndentPress(load)}
                         activeOpacity={0.7}
                       >
-                        <View style={styles.loadCardOrb} pointerEvents="none" />
+                        <View style={[styles.loadCardOrb, { pointerEvents: 'none' }]} />
                         <View style={styles.loadCardHeroRow}>
                           <View style={styles.loadPillRow}>
                             <View style={styles.loadTypePill}>
@@ -2288,9 +2288,8 @@ export function LoadCenterView({
           <View
             style={[
               styles.hirePartnerFabWrap,
-              { bottom: hirePartnerFabBottom },
+              { bottom: hirePartnerFabBottom, pointerEvents: 'box-none' },
             ]}
-            pointerEvents="box-none"
           >
             <TouchableOpacity
               style={styles.hirePartnerFab}
@@ -2426,7 +2425,7 @@ export function LoadCenterView({
             </View>
             {loadAction?.type === "AWARD" ? (
               <View style={styles.reviewHubHero}>
-                <View style={styles.reviewHubHeroGlow} pointerEvents="none" />
+                <View style={[styles.reviewHubHeroGlow, { pointerEvents: 'none' }]} />
                 <Text style={styles.reviewHubHeroKicker}>Target route</Text>
                 <Text style={styles.reviewHubHeroRoute} numberOfLines={3}>
                   {(loadAction.load.pickup_area || "—").toUpperCase()} →{" "}
@@ -2624,7 +2623,7 @@ export function LoadCenterView({
               {loadAction?.type === "BID" ? (
                 <View style={styles.bidIndentDetailSection}>
                   <View style={styles.bidHubHero}>
-                    <View style={styles.bidHubHeroGlow} pointerEvents="none" />
+                    <View style={[styles.bidHubHeroGlow, { pointerEvents: 'none' }]} />
                     <Text style={styles.bidHubHeroKicker}>
                       You are bidding on
                     </Text>
@@ -3539,9 +3538,9 @@ export function LoadCenterView({
               {
                 paddingTop: insets.top + 12,
                 paddingBottom: insets.bottom + 12,
+                pointerEvents: 'box-none',
               },
             ]}
-            pointerEvents="box-none"
           >
             <View style={styles.subcontractPickerCard}>
               <Text style={styles.subcontractPickerTitle}>Select partner</Text>

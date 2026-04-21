@@ -388,7 +388,7 @@ function MultiPartyReconHero({
     Animated.timing(bodyOpacity, {
       toValue: 1,
       duration: 220,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
     }).start();
   }, [safeIdx, bodyOpacity]);
 

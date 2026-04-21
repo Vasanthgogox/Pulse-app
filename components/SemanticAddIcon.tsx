@@ -37,10 +37,9 @@ export function SemanticAddIcon({
         strokeWidth={iconStrokeWidth}
       />
       <View
-        pointerEvents="none"
         style={[
           styles.badgeWrap,
-          { right: badgeOffsetX, bottom: badgeOffsetY },
+          { right: badgeOffsetX, bottom: badgeOffsetY, pointerEvents: 'none' },
         ]}
       >
         <View
