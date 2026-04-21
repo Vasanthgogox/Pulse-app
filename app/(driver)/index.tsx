@@ -1290,6 +1290,14 @@ export default function DriverRadarScreen() {
     visibleAssignableIncomingTrips.length === 1;
   const hasMultipleAssignableIncomingTrips =
     visibleAssignableIncomingTrips.length > 1;
+  const showDeferredInviteCard = Boolean(
+    showNotification &&
+      pendingInvite &&
+      !activeMission &&
+      !effectiveFirstIncoming &&
+      !hasAssignableIncomingTrip &&
+      assignmentFeedback == null,
+  );
   const effectiveIncomingId = String(
     effectiveFirstIncoming?.id ?? "",
   ).toLowerCase();
@@ -4200,7 +4208,7 @@ export default function DriverRadarScreen() {
                   ]}
                 >
                   <View style={[styles.assignedSheetContent, { flexGrow: 0 }]}>
-                    {showNotification && pendingInvite && (
+                    {showDeferredInviteCard ? (
                       <DriverInviteCard
                         invite={pendingInvite}
                         colors={colors}
@@ -4230,7 +4238,7 @@ export default function DriverRadarScreen() {
                           }
                         }}
                       />
-                    )}
+                    ) : null}
                     {loading && !assignmentFeedback ? (
                       <ActivityIndicator
                         style={{ marginTop: 20 }}
@@ -4257,7 +4265,7 @@ export default function DriverRadarScreen() {
                   ]}
                 >
                   <View style={styles.assignedSheetContent}>
-                    {showNotification && pendingInvite && (
+                    {showDeferredInviteCard ? (
                       <DriverInviteCard
                         invite={pendingInvite}
                         colors={colors}
@@ -4287,7 +4295,7 @@ export default function DriverRadarScreen() {
                           }
                         }}
                       />
-                    )}
+                    ) : null}
                     {loading && !assignmentFeedback ? (
                       <ActivityIndicator
                         style={{ marginTop: 20 }}
@@ -4395,7 +4403,7 @@ export default function DriverRadarScreen() {
                 </TouchableOpacity>
               ) : null}
 
-              {showNotification && pendingInvite && (
+              {showDeferredInviteCard ? (
                 <DriverInviteCard
                   invite={pendingInvite}
                   colors={colors}
@@ -4422,7 +4430,7 @@ export default function DriverRadarScreen() {
                     }
                   }}
                 />
-              )}
+              ) : null}
             </View>
           </View>
 
