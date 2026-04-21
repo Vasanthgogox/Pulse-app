@@ -2927,6 +2927,15 @@ export default function TripDetailScreen({
                 }
                 driverAvatarUri={driverAvatarUri}
                 showAssignByPhone={showAssignByPhone}
+                assignmentSource={assignmentSource}
+                currentUserId={currentUserId}
+                previousDriverName={previousDriverName}
+                latestReassignmentSummary={latestReassignmentSummary}
+                driverAssignOrgId={
+                  showAssignByPhone && currentOrganization?.id
+                    ? currentOrganization.id
+                    : null
+                }
                 onVehicleDisplayChange={(value) => {
                   const normalized = formatIndianVehicleNumber(value ?? "");
                   setDisplayVehicleFromInput(normalized);

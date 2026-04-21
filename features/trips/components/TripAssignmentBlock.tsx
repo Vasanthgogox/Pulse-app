@@ -391,7 +391,8 @@ export function TripAssignmentBlock({
       }
     }
     // Ensure OTP exists so driver app shows "Trip waiting for OTP" (get_pending_otp_claim_count).
-    // Aggregate: always generate after assign; non-aggregate reassign: regenerate.
+    // Aggregate: always generate after assign; non-aggregate: refresh when replacing a driver or
+    // when modal was opened as reassign (e.g. after reject trip.driver_id is already null in props).
     if (trip.supplier_id) {
       const { error: otpErr, code: newCode, expires_at: newExpires } =
         await generateTripOtp(trip.id);
@@ -399,7 +400,7 @@ export function TripAssignmentBlock({
         setOtpCode(newCode);
         setOtpExpiresAt(newExpires ?? null);
       }
-    } else if (trip.driver_id != null) {
+    } else if (phoneModalIsReassign || trip.driver_id != null) {
       const { error: otpErr, code: newCode, expires_at: newExpires } =
         await regenerateTripOtp(trip.id);
       if (!otpErr && newCode != null) {
@@ -425,6 +426,7 @@ export function TripAssignmentBlock({
     phoneInput,
     phoneVehicleInput,
     phoneModalVehicles,
+    phoneModalIsReassign,
     currentUserId,
     normalizeVehicleNumber,
     onUpdated,
@@ -739,7 +741,8 @@ export function TripAssignmentBlock({
                   style={[styles.actionBtn, hasDriver ? styles.actionBtnSecondary : styles.actionBtnPrimary]}
                   onPress={() =>
                     openPhoneModal(
-                      hasDriver,
+                      hasDriver ||
+                        !!(previousDriverName ?? "").trim(),
                       propsVehicleLabel ?? trip.vehicle_display_number ?? "",
                     )
                   }
