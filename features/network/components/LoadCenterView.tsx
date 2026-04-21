@@ -1327,9 +1327,7 @@ export function LoadCenterView({
     return hirePartnerFabBottom + Layout.fabSize + Layout.fabBottomOffset;
   }, [hirePartnerFabBottom, insets.bottom, loadSubTab]);
   const statusTabsForRole = useMemo(() => {
-    return isClaimedTab
-      ? STATUS_TABS.filter((t) => t.id === "AWARDED")
-      : STATUS_TABS;
+    return isClaimedTab ? [] : STATUS_TABS;
   }, [isClaimedTab]);
 
   /** Vehicle / weight / load: one header row, one detail row (lighter type). */
@@ -1402,25 +1400,6 @@ export function LoadCenterView({
           <View style={styles.loadPillRow}>
             <View style={styles.loadTypePill}>
               <Text style={styles.loadTypePillText}>CLAIMED</Text>
-            </View>
-            <View
-              style={[
-                styles.loadStatePill,
-                {
-                  backgroundColor: isDone ? Theme.positive : Theme.driverGold,
-                  borderWidth: 1,
-                  borderColor: isDone ? Theme.darkGreen : Theme.warning,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.loadStatePillText,
-                  { color: Theme.textOnPrimary },
-                ]}
-              >
-                {isDone ? "DEPLOYED" : "AWARDED"}
-              </Text>
             </View>
           </View>
           <Text style={styles.loadCardIdCompact} numberOfLines={1}>
@@ -1595,44 +1574,46 @@ export function LoadCenterView({
               autoCorrect={false}
             />
           </View>
-          <View style={styles.loadTypeFilterWrap}>
-            {statusTabsForRole.map((tab) => {
-              const count = statusTabCounts[tab.id];
-              const isActive = statusFilterTab === tab.id;
-              const tabLabel =
-                loadSubTab === "GIVE_LOAD" && tab.id === "OPEN"
-                  ? "Created"
-                  : tab.label;
-              return (
-                <TouchableOpacity
-                  key={tab.id}
-                  style={[
-                    styles.loadTypeFilterChip,
-                    isActive && styles.loadTypeFilterChipActive,
-                  ]}
-                  onPress={() => setStatusFilterTab(tab.id)}
-                  activeOpacity={0.8}
-                >
-                  <Text
+          {!isClaimedTab ? (
+            <View style={styles.loadTypeFilterWrap}>
+              {statusTabsForRole.map((tab) => {
+                const count = statusTabCounts[tab.id];
+                const isActive = statusFilterTab === tab.id;
+                const tabLabel =
+                  loadSubTab === "GIVE_LOAD" && tab.id === "OPEN"
+                    ? "Created"
+                    : tab.label;
+                return (
+                  <TouchableOpacity
+                    key={tab.id}
                     style={[
-                      styles.loadTypeFilterChipText,
-                      isActive && styles.loadTypeFilterChipTextActive,
+                      styles.loadTypeFilterChip,
+                      isActive && styles.loadTypeFilterChipActive,
                     ]}
+                    onPress={() => setStatusFilterTab(tab.id)}
+                    activeOpacity={0.8}
                   >
-                    {tabLabel}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.loadTypeFilterChipCount,
-                      isActive && styles.loadTypeFilterChipCountActive,
-                    ]}
-                  >
-                    {count}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+                    <Text
+                      style={[
+                        styles.loadTypeFilterChipText,
+                        isActive && styles.loadTypeFilterChipTextActive,
+                      ]}
+                    >
+                      {tabLabel}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.loadTypeFilterChipCount,
+                        isActive && styles.loadTypeFilterChipCountActive,
+                      ]}
+                    >
+                      {count}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : null}
         </View>
       </View>
 
