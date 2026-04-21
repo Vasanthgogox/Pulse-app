@@ -226,8 +226,17 @@ export function useFinanceTransactionSubmit(
           : "ENTRY") as string;
           
       const descParts = [baseDescription];
-      if (data.paymentMode && data.paymentMode !== 'CASH') {
-        const modeName = data.paymentMode === 'UPI' ? 'UPI' : data.paymentMode === 'BANK' ? 'Bank Transfer' : data.paymentMode === 'CHEQUE' ? 'Cheque' : data.paymentMode;
+      if (data.paymentMode) {
+        const modeName =
+          data.paymentMode === "UPI"
+            ? "UPI"
+            : data.paymentMode === "BANK"
+              ? "Bank Transfer"
+              : data.paymentMode === "CHEQUE"
+                ? "Cheque"
+                : data.paymentMode === "CASH"
+                  ? "Cash"
+                  : data.paymentMode;
         descParts.push(`Mode: ${modeName}`);
       }
       if (data.paymentReference) {
