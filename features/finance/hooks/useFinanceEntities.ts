@@ -10,7 +10,6 @@ import type { DirectQuoteRow } from "@/features/indents/services/direct-quotes.s
 import type { IndentRow } from "@/features/indents/services/indents.service";
 import { type SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import { getTripDisplayNumber, type TripRow } from "@/features/trips";
-import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import { getAvailablePeriodOptions } from "@/features/vehicles/pnl";
 import { type VehicleRow } from "@/features/vehicles/services/vehicles.service";
 import { formatLedgerDate } from "@/lib/format";
@@ -164,11 +163,6 @@ export function useFinanceEntities({
     [tripRows]
   );
 
-  const loadBoardOnlyTripsAsClient = useMemo(
-    () => tripsWhereOrgIsClient.filter((t) => isLoadBasedTrip(t)),
-    [tripsWhereOrgIsClient]
-  );
-
   const suppliersList = useMemo(
     () =>
       supplierRows.map((s) => ({
@@ -192,7 +186,9 @@ export function useFinanceEntities({
     clientRows,
     trips,
     tripRows,
-    tripsWhereOrgIsClient: loadBoardOnlyTripsAsClient,
+    // Keep full partner-owned client-perspective set (load + aggregate) so shared-ledger
+    // and supplier remap can include cross-org aggregate trips too.
+    tripsWhereOrgIsClient,
     tripsWhereOrgIsSupplier: tripsWhereOrgIsSupplierWithSubcontracts,
     supplierRows,
     suppliersList,
