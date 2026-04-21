@@ -22,7 +22,10 @@ import {
     type DirectQuoteRow,
     type IndentRow,
 } from "@/features/indents";
-import { acceptAwardedQuote } from "@/features/indents/services/accept-awarded-quote.service";
+import {
+  acceptAwardedQuote,
+  applyRosterDeployFromDirectQuote,
+} from "@/features/indents/services/accept-awarded-quote.service";
 import { shareDraftIndent } from "@/features/indents/services/indents.service";
 import {
     assignAggregateTripDriverByPhone,
@@ -63,7 +66,7 @@ import {
     Image,
     KeyboardAvoidingView,
     Modal,
-    Platform, RefreshControl, Platform as RNPlatform, ScrollView,
+    Platform, Pressable, RefreshControl, Platform as RNPlatform, ScrollView,
     Share, StyleSheet, Switch,
     Text,
     TextInput,
@@ -1039,22 +1042,16 @@ export function LoadCenterView({
     }
     try {
       setAssigningTripId(load.id);
-      const { error: assignErr } = await updateDirectQuoteAssignment(
+      const { error: deployErr, trip } = await applyRosterDeployFromDirectQuote(
         acceptedQuote.id,
         assignDriverId,
         assignVehicleId,
       );
-      if (assignErr) {
-        Alert.alert("Could not assign", assignErr.message);
-        return;
-      }
-      const { error: tripErr, trip } = await acceptAwardedQuote(
-        acceptedQuote.id,
-      );
-      if (tripErr || !trip) {
+      if (deployErr || !trip) {
         Alert.alert(
           "Could not create trip",
-          tripErr?.message ?? "Unknown error.",
+          deployErr?.message ??
+            "Trip was not returned. Check your connection and try again.",
         );
         return;
       }
@@ -2845,11 +2842,17 @@ export function LoadCenterView({
             </TouchableOpacity>
           </View>
           {loadAction?.type === "ASSIGN" && (
+            <View style={styles.assignModalBody}>
             <ScrollView
               style={styles.assignModalScroll}
               contentContainerStyle={[
                 styles.assignModalScrollContent,
-                { paddingBottom: 24 + insets.bottom },
+                {
+                  paddingBottom:
+                    handshakeStep === "roster" && !deployOtpCode
+                      ? 12
+                      : 24 + insets.bottom,
+                },
               ]}
               keyboardShouldPersistTaps="handled"
             >
@@ -3014,11 +3017,11 @@ export function LoadCenterView({
                   </Text>
                   {(() => {
                     const selectedDriver = activeDrivers.find(
-                      (d) => d.id === assignDriverId,
+                      (d) => String(d.id) === assignDriverId,
                     );
                     const selectedVehicle =
                       typeof assignVehicleId === "string"
-                        ? vehicles.find((v) => v.id === assignVehicleId)
+                        ? vehicles.find((v) => String(v.id) === assignVehicleId)
                         : null;
                     return (
                       <>
@@ -3044,10 +3047,10 @@ export function LoadCenterView({
                                 key={d.id}
                                 style={[
                                   styles.assignEntityRow,
-                                  assignDriverId === d.id &&
+                                  assignDriverId === String(d.id) &&
                                     styles.assignEntityRowActive,
                                 ]}
-                                onPress={() => setAssignDriverId(d.id)}
+                                onPress={() => setAssignDriverId(String(d.id))}
                                 activeOpacity={0.85}
                               >
                                 <View style={styles.assignEntityIconWrap}>
@@ -3055,7 +3058,7 @@ export function LoadCenterView({
                                     name="user"
                                     size={16}
                                     color={
-                                      assignDriverId === d.id
+                                      assignDriverId === String(d.id)
                                         ? Theme.textOnPrimary
                                         : Theme.textMuted
                                     }
@@ -3073,13 +3076,13 @@ export function LoadCenterView({
                                 </View>
                                 <FontAwesome
                                   name={
-                                    assignDriverId === d.id
+                                    assignDriverId === String(d.id)
                                       ? "check-circle"
                                       : "chevron-right"
                                   }
                                   size={15}
                                   color={
-                                    assignDriverId === d.id
+                                    assignDriverId === String(d.id)
                                       ? Theme.primary
                                       : Theme.textMuted
                                   }
@@ -3142,10 +3145,10 @@ export function LoadCenterView({
                                 key={v.id}
                                 style={[
                                   styles.assignEntityRow,
-                                  assignVehicleId === v.id &&
+                                  assignVehicleId === String(v.id) &&
                                     styles.assignEntityRowActive,
                                 ]}
-                                onPress={() => setAssignVehicleId(v.id)}
+                                onPress={() => setAssignVehicleId(String(v.id))}
                                 activeOpacity={0.85}
                               >
                                 <View style={styles.assignEntityIconWrap}>
@@ -3153,7 +3156,7 @@ export function LoadCenterView({
                                     name="truck"
                                     size={16}
                                     color={
-                                      assignVehicleId === v.id
+                                      assignVehicleId === String(v.id)
                                         ? Theme.textOnPrimary
                                         : Theme.textMuted
                                     }
@@ -3175,13 +3178,13 @@ export function LoadCenterView({
                                 </View>
                                 <FontAwesome
                                   name={
-                                    assignVehicleId === v.id
+                                    assignVehicleId === String(v.id)
                                       ? "check-circle"
                                       : "chevron-right"
                                   }
                                   size={15}
                                   color={
-                                    assignVehicleId === v.id
+                                    assignVehicleId === String(v.id)
                                       ? Theme.primary
                                       : Theme.textMuted
                                   }
@@ -3255,30 +3258,6 @@ export function LoadCenterView({
                       </>
                     );
                   })()}
-                  {assigningTripId === loadAction.load.id ? (
-                    <View style={styles.loadingWrap}>
-                      <ActivityIndicator size="small" color={Theme.primary} />
-                      <Text style={styles.loadingText}>Creating trip…</Text>
-                    </View>
-                  ) : rosterReady ? (
-                    <TouchableOpacity
-                      style={[styles.modalSubmit, styles.handshakeBtnModal]}
-                      onPress={() => handleDeployRoster(loadAction.load)}
-                      activeOpacity={0.9}
-                    >
-                      <FontAwesome
-                        name="bolt"
-                        size={18}
-                        color={Theme.textOnPrimary}
-                        style={{ marginRight: 8 }}
-                      />
-                      <Text style={styles.modalSubmitText}>Assign Trip</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <Text style={styles.modalHint}>
-                      Select a driver and a vehicle from your org to continue.
-                    </Text>
-                  )}
                 </>
               ) : (
                 /* Aggregate — same fields as before; UI aligned with TripAssignmentBlock (trip detail). */
@@ -3496,6 +3475,51 @@ export function LoadCenterView({
                 </>
               )}
             </ScrollView>
+            {handshakeStep === "roster" && !deployOtpCode ? (
+              <View
+                style={[
+                  styles.assignHandshakeFooter,
+                  { paddingBottom: Math.max(16, insets.bottom + 8) },
+                ]}
+              >
+                {loadAction?.type === "ASSIGN" &&
+                assigningTripId === loadAction.load.id ? (
+                  <View style={styles.loadingWrap}>
+                    <ActivityIndicator size="small" color={Theme.primary} />
+                    <Text style={styles.loadingText}>Creating trip…</Text>
+                  </View>
+                ) : loadAction?.type === "ASSIGN" && rosterReady ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    style={({ pressed }) => [
+                      styles.modalSubmit,
+                      styles.handshakeBtnModal,
+                      pressed && { opacity: 0.88 },
+                      Platform.OS === "web" &&
+                        ({ cursor: "pointer" } as const),
+                    ]}
+                    onPress={() => {
+                      if (loadAction?.type === "ASSIGN") {
+                        void handleDeployRoster(loadAction.load);
+                      }
+                    }}
+                  >
+                    <FontAwesome
+                      name="bolt"
+                      size={18}
+                      color={Theme.textOnPrimary}
+                      style={{ marginRight: 8 }}
+                    />
+                    <Text style={styles.modalSubmitText}>Assign Trip</Text>
+                  </Pressable>
+                ) : (
+                  <Text style={[styles.modalHint, { marginBottom: 0 }]}>
+                    Select a driver and a vehicle from your org to continue.
+                  </Text>
+                )}
+              </View>
+            ) : null}
+            </View>
           )}
         </View>
       </Modal>
@@ -4809,6 +4833,23 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   assignModalScroll: { flex: 1 },
+  assignModalBody: {
+    flex: 1,
+    minHeight: 0,
+  },
+  assignHandshakeFooter: {
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    zIndex: 2,
+    elevation: 4,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+  },
   assignModalScrollContent: {
     paddingHorizontal: 20,
     paddingTop: 20,
