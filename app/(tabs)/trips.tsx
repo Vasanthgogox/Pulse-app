@@ -1235,7 +1235,7 @@ export default function TripsScreen() {
                   {
                     minWidth: Math.max(
                       width - Layout.screenPaddingHorizontal * 2,
-                      isMobile ? 1240 : 1580,
+                      isMobile ? 980 : 1120,
                     ),
                   },
                 ]}

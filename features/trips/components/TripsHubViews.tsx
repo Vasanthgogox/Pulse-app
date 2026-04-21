@@ -22,6 +22,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Image,
+  Share,
   LayoutAnimation,
   Modal,
   Platform,
@@ -315,19 +316,22 @@ export const DEFAULT_TRIPS_HUB_TABLE_COLUMNS: Record<TripsHubTableColumnId, bool
 /** Ledger rollups for hub card + table (received = sum amount_in on trip). */
 export function summarizeTripLedgerForHub(entries: LedgerRow[]): {
   receivedTotal: number;
+  paidTotal: number;
   count: number;
   lastAtIso: string | null;
 } {
   let receivedTotal = 0;
+  let paidTotal = 0;
   for (const r of entries) {
     receivedTotal += Number(r.amount_in ?? 0);
+    paidTotal += Number(r.amount_out ?? 0);
   }
   const sorted = sortedTripLedger(entries);
   const head = sorted[0];
   const lastAtIso = head
     ? String(head.transaction_date || head.created_at || "")
     : null;
-  return { receivedTotal, count: entries.length, lastAtIso };
+  return { receivedTotal, paidTotal, count: entries.length, lastAtIso };
 }
 
 const HUB_TABLE_PARTY_AVATAR = 22;
@@ -796,6 +800,10 @@ export function TripsHubTableView({
     "all" | "verified" | "pending" | "attention"
   >("all");
   const [showColSettings, setShowColSettings] = useState(false);
+  const [receiptTx, setReceiptTx] = useState<{
+    trip: TripRow;
+    row: LedgerRow | null;
+  } | null>(null);
   const [cols, setCols] = useState({
     telemetry: true,
     earnings: true,
@@ -878,14 +886,35 @@ export function TripsHubTableView({
 
   const sortLabel =
     sortKey === "recent"
-      ? "Sort: Recent"
+      ? "Recent"
       : sortKey === "due_desc"
-        ? "Sort: Due"
-        : "Sort: Sales";
+        ? "Due"
+        : "Sales";
+
+  const statusLabel =
+    statusFilter === "all"
+      ? "All status"
+      : statusFilter === "verified"
+        ? "Verified"
+        : statusFilter === "pending"
+          ? "Pending"
+          : "Needs review";
 
   const cycleSortKey = () => {
     setSortKey((prev) =>
       prev === "recent" ? "due_desc" : prev === "due_desc" ? "sales_desc" : "recent",
+    );
+  };
+
+  const cycleStatusFilter = () => {
+    setStatusFilter((prev) =>
+      prev === "all"
+        ? "verified"
+        : prev === "verified"
+          ? "pending"
+          : prev === "pending"
+            ? "attention"
+            : "all",
     );
   };
 
@@ -942,13 +971,25 @@ export function TripsHubTableView({
           </View>
           <TouchableOpacity
             style={styles.auditToolbarBtn}
+            onPress={cycleStatusFilter}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Cycle status filter"
+          >
+            <FontAwesome name="check-circle-o" size={13} color={Theme.textSecondary} />
+            <Text style={styles.auditToolbarText}>{statusLabel}</Text>
+            <FontAwesome name="chevron-down" size={10} color={Theme.textMuted} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.auditToolbarBtn}
             onPress={cycleSortKey}
             activeOpacity={0.85}
             accessibilityRole="button"
             accessibilityLabel="Cycle table sort"
           >
             <FontAwesome name="sort" size={13} color={Theme.textSecondary} />
-            <Text style={styles.auditToolbarText}>{sortLabel}</Text>
+            <Text style={styles.auditToolbarText}>Sort: {sortLabel}</Text>
+            <FontAwesome name="chevron-down" size={10} color={Theme.textMuted} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.auditToolbarBtn}
@@ -1036,37 +1077,29 @@ export function TripsHubTableView({
 
       <View style={styles.manifestHeaderRow}>
         <View style={[styles.manifestTh, styles.manifestColIdentity]}>
-          <Text style={styles.manifestThText}>Voyage Identity</Text>
+          <Text style={styles.manifestThText}>Trip Identity</Text>
         </View>
-        {cols.telemetry ? (
-          <View style={[styles.manifestTh, styles.manifestColTelemetry]}>
-            <Text style={styles.manifestThText}>Telemetry</Text>
-          </View>
-        ) : null}
-        {cols.earnings ? (
-          <View style={[styles.manifestTh, styles.manifestColEarnings]}>
-            <Text style={[styles.manifestThText, styles.manifestThTextRight]}>
-              Audit Analysis
-            </Text>
-          </View>
-        ) : null}
-        {cols.supplier ? (
-          <View style={[styles.manifestTh, styles.manifestColSupplier]}>
-            <Text style={styles.manifestThText}>Provider</Text>
-          </View>
-        ) : null}
-        {cols.driver ? (
-          <View style={[styles.manifestTh, styles.manifestColDriver]}>
-            <Text style={styles.manifestThText}>Driver</Text>
-          </View>
-        ) : null}
-        {cols.audit ? (
-          <View style={[styles.manifestTh, styles.manifestColAudit]}>
-            <Text style={styles.manifestThText}>Audit</Text>
-          </View>
-        ) : null}
+        <View style={[styles.manifestTh, styles.manifestColTelemetry]}>
+          <Text style={styles.manifestThText}>Telemetry Path</Text>
+        </View>
+        <View style={[styles.manifestTh, styles.manifestColDriver]}>
+          <Text style={styles.manifestThText}>Operator & App</Text>
+        </View>
+        <View style={[styles.manifestTh, styles.manifestColSupplier]}>
+          <Text style={styles.manifestThText}>Asset Logic</Text>
+        </View>
+        <View style={[styles.manifestTh, styles.manifestColEarnings]}>
+          <Text style={[styles.manifestThText, styles.manifestThTextRight]}>
+            Audit Ledger
+          </Text>
+        </View>
+        <View style={[styles.manifestTh, styles.manifestColAudit]}>
+          <Text style={[styles.manifestThText, styles.manifestThTextCenter]}>
+            Settlement
+          </Text>
+        </View>
         <View style={[styles.manifestTh, styles.manifestColActions]}>
-          <Text style={[styles.manifestThText, styles.manifestThTextCenter]}>Actions</Text>
+          <Text style={[styles.manifestThText, styles.manifestThTextCenter]}>Health</Text>
         </View>
       </View>
 
@@ -1074,9 +1107,6 @@ export function TripsHubTableView({
         const entries = transactionsByTripId.get(t.id) ?? [];
         const mySales = tripHubRevenue(t, currentOrganizationId);
         const cost = tripHubCost(t, currentOrganizationId);
-        const pnl = tripHubPnl(t, currentOrganizationId);
-        const marginPct = marginPercentLabel(t, currentOrganizationId);
-        const due = tripHubDue(t, currentOrganizationId);
         const ledgerRoll = summarizeTripLedgerForHub(entries);
         const hasLedgerMismatch = entries.some(
           (r) => r.reconciliation_status === "mismatch",
@@ -1088,11 +1118,6 @@ export function TripsHubTableView({
         const typeLabel = showAssetTripIcon ? tr("tripAsset") : tr("tripAggregate");
         const subTypeLabel = aggregate ? tr("integrated") : tr("manual");
         const stageUpper = getStageLabel(t).toUpperCase();
-        const isDelayed =
-          stageUpper.includes("IN_PROGRESS") ||
-          stageUpper.includes("TRANSIT") ||
-          stageUpper.includes("AT_DROP");
-        const isUnassigned = stageUpper.includes("UNASSIGNED");
         const routeShort = `${t.pickup_area ?? "—"} → ${t.drop_location ?? "—"}`;
         const expanded = expandedIds.has(t.id);
         const sortedEntries = sortedTripLedger(entries);
@@ -1116,6 +1141,32 @@ export function TripsHubTableView({
             : filterKind === "verified"
               ? styles.tableStatusPillEmerald
               : styles.tableStatusPillUnassigned;
+        const receivableTarget = Math.max(mySales, 0);
+        const payableTarget = Math.max(cost, 0);
+        const receivedActual = Math.max(ledgerRoll.receivedTotal, 0);
+        const paidActual = Math.max(ledgerRoll.paidTotal, 0);
+        const pendingReceivable = Math.max(receivableTarget - receivedActual, 0);
+        const pendingPayable = Math.max(payableTarget - paidActual, 0);
+        const settlementTag =
+          pendingReceivable <= 0 && pendingPayable <= 0
+            ? "CLEARED"
+            : pendingReceivable > 0 && pendingPayable <= 0
+              ? "RECEIVABLE"
+              : pendingPayable > 0 && pendingReceivable <= 0
+                ? "PAYABLE"
+                : "PENDING";
+        const settlementTagStyle =
+          settlementTag === "CLEARED"
+            ? styles.tableStatusPillEmerald
+            : settlementTag === "PENDING"
+              ? styles.tableStatusPillUnassigned
+              : styles.tableStatusPillRose;
+        const settlementTagTextStyle =
+          settlementTag === "CLEARED"
+            ? styles.tableStatusPillTextPositive
+            : settlementTag === "PENDING"
+              ? styles.tableStatusPillTextUnassigned
+              : styles.tableStatusPillTextNegative;
 
         return (
           <View key={t.id} style={styles.auditRowGroup}>
@@ -1164,87 +1215,94 @@ export function TripsHubTableView({
                 </View>
               </View>
 
-              {cols.telemetry ? (
-                <View style={[styles.manifestTd, styles.manifestColTelemetry]}>
-                  <Text style={styles.auditRouteHint} numberOfLines={1}>
-                    {routeShort}
-                  </Text>
-                  <View style={styles.manifestProgressTrack}>
-                    <View style={[styles.manifestProgressFill, { width: `${progressPct}%` }]} />
+              <View style={[styles.manifestTd, styles.manifestColTelemetry]}>
+                <Text style={styles.auditRouteHint} numberOfLines={1}>
+                  {routeShort}
+                </Text>
+                <View style={styles.manifestProgressTrack}>
+                  <View style={[styles.manifestProgressFill, { width: `${progressPct}%` }]} />
+                </View>
+                <Text style={styles.manifestDateMeta} numberOfLines={1}>
+                  {lastTxnShort} sync
+                </Text>
+              </View>
+
+              <View style={[styles.manifestTd, styles.manifestColDriver]}>
+                <Text style={styles.manifestProviderName} numberOfLines={1}>
+                  {(t.driver_display_name ?? "—").trim() || "—"}
+                </Text>
+                <Text style={styles.manifestDateMeta} numberOfLines={1}>
+                  {(t.vehicle_display_number ?? "—").trim() || "—"}
+                </Text>
+              </View>
+
+              <View style={[styles.manifestTd, styles.manifestColSupplier]}>
+                <Text
+                  style={[
+                    styles.manifestProviderName,
+                    supplierLine === "—" && styles.manifestProviderNamePending,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {showAssetTripIcon
+                    ? "Own Asset"
+                    : supplierLine === "—"
+                      ? "Aggregate"
+                      : supplierLine}
+                </Text>
+                <View style={styles.tableBadgeRow}>
+                  <View style={styles.tableBadgeBlue}>
+                    <Text style={styles.tableBadgeBlueText}>{typeLabel}</Text>
+                  </View>
+                  <View style={styles.tableBadgeViolet}>
+                    <Text style={styles.tableBadgeVioletText}>{subTypeLabel}</Text>
                   </View>
                 </View>
-              ) : null}
+              </View>
 
-              {cols.earnings ? (
-                <View style={[styles.manifestTd, styles.manifestColEarnings, styles.manifestTdRight]}>
-                  <Text style={styles.manifestMoneyMain}>{formatINR(mySales)}</Text>
-                  <Text style={[styles.manifestMoneySub, pnl >= 0 ? styles.manifestMoneyGood : styles.manifestMoneyBad]}>
-                    PnL: {formatINR(pnl)}
-                  </Text>
-                </View>
-              ) : null}
+              <View style={[styles.manifestTd, styles.manifestColEarnings, styles.manifestTdRight]}>
+                <Text style={styles.manifestMoneyMain}>{formatINR(mySales)}</Text>
+                <Text style={styles.manifestDateMeta}>Cost {formatINR(cost)}</Text>
+              </View>
 
-              {cols.supplier ? (
-                <View style={[styles.manifestTd, styles.manifestColSupplier]}>
+              <View style={[styles.manifestTd, styles.manifestColAudit, styles.manifestTdRight]}>
+                <Text style={[styles.manifestMoneyMain, styles.manifestSettlementAmount]}>
+                  {formatINR(receivedActual)}
+                </Text>
+                <Text style={styles.manifestSettlementMeta}>
+                  Recv {formatINR(receivedActual)} / {formatINR(receivableTarget)}
+                </Text>
+                <Text style={styles.manifestSettlementMeta}>
+                  Pay {formatINR(paidActual)} / {formatINR(payableTarget)}
+                </Text>
+                <View style={[styles.tableStatusPill, settlementTagStyle]}>
                   <Text
                     style={[
-                      styles.manifestProviderName,
-                      supplierLine === "—" && styles.manifestProviderNamePending,
+                      styles.tableStatusPillText,
+                      settlementTagTextStyle,
                     ]}
-                    numberOfLines={1}
                   >
-                    {supplierLine === "—" ? "Supplier pending" : supplierLine}
-                  </Text>
-                  <View style={styles.tableBadgeRow}>
-                    <View style={styles.tableBadgeBlue}>
-                      <Text style={styles.tableBadgeBlueText}>{typeLabel}</Text>
-                    </View>
-                    <View style={styles.tableBadgeViolet}>
-                      <Text style={styles.tableBadgeVioletText}>{subTypeLabel}</Text>
-                    </View>
-                  </View>
-                </View>
-              ) : null}
-
-              {cols.driver ? (
-                <View style={[styles.manifestTd, styles.manifestColDriver]}>
-                  <Text style={styles.manifestProviderName} numberOfLines={1}>
-                    {(t.driver_display_name ?? "—").trim() || "—"}
-                  </Text>
-                  <Text style={styles.manifestDateMeta} numberOfLines={1}>
-                    {(t.vehicle_display_number ?? "—").trim() || "—"}
+                    {settlementTag}
                   </Text>
                 </View>
-              ) : null}
-
-              {cols.audit ? (
-                <View style={[styles.manifestTd, styles.manifestColAudit, styles.manifestTdCenter]}>
-                  <View style={[styles.tableStatusPill, statusPillStyle]}>
-                    <Text
-                      style={[
-                        styles.tableStatusPillText,
-                        filterKind === "pending" && styles.tableStatusPillTextUnassigned,
-                        filterKind === "attention" && { color: Theme.teslaRed },
-                        filterKind === "verified" && { color: Theme.darkGreen },
-                      ]}
-                    >
-                      {auditLabel}
-                    </Text>
-                  </View>
-                  <Text style={styles.manifestDateMeta} numberOfLines={1}>
-                    {ledgerRoll.count} txn · {lastTxnShort}
-                  </Text>
-                </View>
-              ) : null}
+              </View>
 
               <View style={[styles.manifestTd, styles.manifestColActions]}>
                 <View style={styles.auditCellIconRow}>
+                  <View
+                    style={[
+                      styles.manifestHealthDot,
+                      filterKind === "verified"
+                        ? styles.manifestHealthDotGood
+                        : filterKind === "attention"
+                          ? styles.manifestHealthDotBad
+                          : styles.manifestHealthDotWarn,
+                    ]}
+                  />
                   <Pressable
                     style={({ pressed }) => [
                       styles.auditIconAction,
-                      expanded
-                        ? styles.auditIconActionTxnExpanded
-                        : styles.auditIconActionTxn,
+                      styles.auditIconActionTxn,
                       pressed && styles.auditCtaPressed,
                     ]}
                     onPress={() => toggleExpanded(t.id)}
@@ -1258,25 +1316,27 @@ export function TripsHubTableView({
                     hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                   >
                     <FontAwesome
-                      name="list-ul"
-                      size={9}
-                      color={Theme.textOnDark}
+                      name={expanded ? "chevron-up" : "list-ul"}
+                      size={8}
+                      color={Theme.textPrimaryDark}
                     />
                   </Pressable>
                   <Pressable
                     style={({ pressed }) => [
                       styles.auditIconAction,
-                      styles.auditIconActionTrip,
+                      expanded
+                        ? styles.auditIconActionTxnExpanded
+                        : styles.auditIconActionTrip,
                       pressed && styles.auditCtaPressed,
                     ]}
-                    onPress={() => onOpenTripDetails(t)}
+                    onPress={() => setReceiptTx({ trip: t, row: sortedEntries[0] ?? null })}
                     accessibilityRole="button"
-                    accessibilityLabel={tr("tripsHubAuditViewTripDetail")}
+                    accessibilityLabel="Open trip receipt popup"
                     hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                   >
                     <FontAwesome
                       name="external-link"
-                      size={9}
+                      size={8}
                       color={Theme.textPrimaryDark}
                     />
                   </Pressable>
@@ -1289,24 +1349,88 @@ export function TripsHubTableView({
                 {sortedEntries.length === 0 ? (
                   <Text style={styles.expandEmpty}>{tr("tripsHubNoTransactions")}</Text>
                 ) : (
-                  sortedEntries.map((row) => {
-                    const when = formatLedgerDateTime(
-                      row.transaction_date || row.created_at,
-                    );
-                    const flow = txnFlowLabel(row, tr);
-                    const amt = txnAmount(row);
-                    return (
-                      <View key={row.id} style={styles.txnLine}>
-                        <View style={styles.txnLineLeft}>
-                          <Text style={styles.txnFlow}>{flow}</Text>
-                          <Text style={styles.txnWhen} numberOfLines={1}>
-                            {when}
-                          </Text>
-                        </View>
-                        <Text style={styles.txnAmt}>{formatINR(amt)}</Text>
+                  <>
+                    <View style={styles.txnSectionHead}>
+                      <View style={styles.txnSectionHeadLeft}>
+                        <View style={styles.txnSectionAccent} />
+                        <Text style={styles.txnSectionTitle}>
+                          Associated Ledger Entries ({sortedEntries.length})
+                        </Text>
                       </View>
-                    );
-                  })
+                      <View style={styles.txnVerifiedBadge}>
+                        <Text style={styles.txnVerifiedBadgeText}>System Verified</Text>
+                      </View>
+                    </View>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.txnHorizontalList}
+                    >
+                      {sortedEntries.map((row) => {
+                        const when = formatLedgerDateTime(
+                          row.transaction_date || row.created_at,
+                        );
+                        const flow = txnFlowLabel(row, tr);
+                        const amt = txnAmount(row);
+                        const inFlow = (row.amount_in ?? 0) > 0;
+                        const counterparty =
+                          (row.party_name ?? row.driver_name ?? row.contact_type ?? "Party")
+                            .trim()
+                            .slice(0, 26) || "Party";
+                        return (
+                          <Pressable
+                            key={row.id}
+                            style={[
+                              styles.txnVaultCard,
+                              inFlow ? styles.txnVaultCardIn : styles.txnVaultCardOut,
+                            ]}
+                            onPress={() => setReceiptTx({ trip: t, row })}
+                            accessibilityRole="button"
+                            accessibilityLabel="Open transaction receipt"
+                          >
+                            <View style={styles.txnVaultLeft}>
+                              <View
+                                style={[
+                                  styles.txnVaultIcon,
+                                  inFlow ? styles.txnVaultIconIn : styles.txnVaultIconOut,
+                                ]}
+                              >
+                                <FontAwesome
+                                  name={inFlow ? "arrow-down" : "arrow-up"}
+                                  size={14}
+                                  color={inFlow ? Theme.darkGreen : Theme.teslaRed}
+                                />
+                              </View>
+                              <View style={styles.txnLineLeft}>
+                                <View style={styles.txnFlowRow}>
+                                  <Text
+                                    style={[styles.txnFlow, inFlow ? styles.txnFlowIn : styles.txnFlowOut]}
+                                    numberOfLines={1}
+                                  >
+                                    {inFlow ? "RECEIVED" : "PAID"}
+                                  </Text>
+                                  <Text style={styles.txnFlowSep}>/</Text>
+                                  <Text style={styles.txnCounterparty} numberOfLines={1}>
+                                    {counterparty}
+                                  </Text>
+                                </View>
+                                <Text style={styles.txnWhen} numberOfLines={1}>
+                                  {when}
+                                </Text>
+                              </View>
+                            </View>
+                            <View style={styles.txnAmtWrap}>
+                              <Text style={[styles.txnAmt, inFlow ? styles.txnAmtIn : styles.txnAmtOut]}>
+                                {inFlow ? "+" : "-"}
+                                {formatINR(Math.abs(amt))}
+                              </Text>
+                              <Text style={styles.txnReceiptLink}>View Receipt</Text>
+                            </View>
+                          </Pressable>
+                        );
+                      })}
+                    </ScrollView>
+                  </>
                 )}
               </View>
             ) : null}
@@ -1337,6 +1461,213 @@ export function TripsHubTableView({
           <FontAwesome name="cloud-download" size={14} color={Theme.textOnPrimary} />
         </TouchableOpacity>
       </View>
+
+      <Modal
+        visible={receiptTx != null}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setReceiptTx(null)}
+      >
+        <View style={styles.receiptBackdrop}>
+          <Pressable
+            style={StyleSheet.absoluteFillObject}
+            onPress={() => setReceiptTx(null)}
+            accessibilityRole="button"
+            accessibilityLabel="Close receipt popup"
+          />
+          {receiptTx ? (
+            <View
+              style={[
+                styles.receiptSheet,
+                { paddingBottom: Math.max(insets.bottom, 12) + 10 },
+              ]}
+            >
+              {(() => {
+                const receiptTrip = receiptTx.trip;
+                const txRow = receiptTx.row;
+                const txAmount = Number(txRow?.amount_in ?? txRow?.amount_out ?? 0);
+                const txDate = formatLedgerDateTime(
+                  txRow?.transaction_date || txRow?.created_at || receiptTrip.pickup_date,
+                );
+                const txMode = (txRow?.payment_mode ?? "Bank").trim() || "Bank";
+                const settledTo =
+                  (txRow?.party_name ?? clientNameByTripId?.[receiptTrip.id] ?? receiptTrip.client_name ?? "—")
+                    .trim() || "—";
+                const txRef = (txRow?.payment_reference ?? "—").trim() || "—";
+                return (
+                  <>
+              <View style={styles.receiptHead}>
+                <View style={styles.receiptHeadLeft}>
+                  <Text style={styles.receiptParty} numberOfLines={1}>
+                    {(
+                      clientNameByTripId?.[receiptTrip.id] ??
+                      receiptTrip.client_name ??
+                      "—"
+                    )
+                      .trim()
+                      .toUpperCase()}
+                  </Text>
+                  <Text style={styles.receiptSub}>
+                    {getTripDisplayNumber(receiptTrip)} •{" "}
+                    {formatTripPickupCell(receiptTrip.pickup_date).toUpperCase()}
+                  </Text>
+                </View>
+                <Text style={styles.receiptAmount}>
+                  {txAmount >= 0 ? "+" : "-"}
+                  {formatINR(Math.abs(txAmount))}
+                </Text>
+              </View>
+
+              <View style={styles.receiptCenter}>
+                <View style={styles.receiptSuccessDot}>
+                  <FontAwesome name="check" size={22} color={Theme.driverEmerald} />
+                </View>
+                <Text style={styles.receiptSuccessLabel}>SETTLEMENT RECEIVED</Text>
+                <Text style={styles.receiptCenterAmount}>
+                  {formatINR(Math.abs(txAmount))}
+                </Text>
+              </View>
+
+              <View style={styles.receiptMetaList}>
+                <View style={styles.receiptMetaRow}>
+                  <Text style={styles.receiptMetaLabel}>Transaction ID</Text>
+                  <Text style={styles.receiptMetaValue}>{txRow?.id ?? receiptTrip.id}</Text>
+                </View>
+                <View style={styles.receiptMetaRow}>
+                  <Text style={styles.receiptMetaLabel}>UTR / Reference</Text>
+                  <Text style={styles.receiptMetaValue}>{txRef}</Text>
+                </View>
+                <View style={styles.receiptMetaRow}>
+                  <Text style={styles.receiptMetaLabel}>Payment Mode</Text>
+                  <Text style={styles.receiptMetaValue}>{txMode}</Text>
+                </View>
+                <View style={styles.receiptMetaRow}>
+                  <Text style={styles.receiptMetaLabel}>Captured At</Text>
+                  <Text style={styles.receiptMetaValue}>{txDate}</Text>
+                </View>
+                <View style={styles.receiptMetaRow}>
+                  <Text style={styles.receiptMetaLabel}>Reference</Text>
+                  <Text style={styles.receiptMetaValue}>
+                    {getTripDisplayNumber(receiptTrip)}
+                  </Text>
+                </View>
+                <View style={styles.receiptMetaRow}>
+                  <Text style={styles.receiptMetaLabel}>Settled To</Text>
+                  <Text style={styles.receiptMetaValue}>{settledTo}</Text>
+                </View>
+                <View style={styles.receiptMetaRow}>
+                  <Text style={styles.receiptMetaLabel}>Route</Text>
+                  <Text style={styles.receiptMetaValue}>
+                    {(receiptTrip.pickup_area ?? "—").trim()} →{" "}
+                    {(receiptTrip.drop_location ?? "—").trim()}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.receiptActions}>
+                <TouchableOpacity
+                  style={[styles.receiptBtn, styles.receiptBtnSecondary]}
+                  onPress={() => {
+                    setReceiptTx(null);
+                    onOpenTripDetails(receiptTrip);
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.receiptBtnSecondaryText}>VIEW TRIP DETAIL</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.receiptBtn, styles.receiptBtnPrimary]}
+                  onPress={async () => {
+                    setReceiptTx(null);
+                    try {
+                      const routeLabel = `${(receiptTrip.pickup_area ?? "—").trim()} -> ${(receiptTrip.drop_location ?? "—").trim()}`;
+                      const receiptTextPayload = [
+                        "Settlement Receipt",
+                        `Trip: ${getTripDisplayNumber(receiptTrip)}`,
+                        `Amount: ${formatINR(Math.abs(txAmount))}`,
+                        `Date: ${txDate}`,
+                        `Transaction ID: ${txRow?.id ?? receiptTrip.id}`,
+                        `UTR / Reference: ${txRef}`,
+                        `Payment Mode: ${txMode}`,
+                        `Settled To: ${settledTo}`,
+                        `Route: ${routeLabel}`,
+                      ].join("\n");
+
+                      if (Platform.OS === "web" && typeof window !== "undefined") {
+                        const html = `
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Settlement Receipt</title>
+    <style>
+      body { font-family: Inter, Arial, sans-serif; padding: 24px; color: #0f172a; }
+      h2 { margin: 0 0 8px 0; }
+      .sub { margin: 0 0 16px 0; color: #64748b; }
+      h1 { margin: 0 0 20px 0; }
+      table { width: 100%; border-collapse: collapse; }
+      td { padding: 8px 0; vertical-align: top; }
+      td:first-child { color: #64748b; width: 45%; }
+      td:last-child { text-align: right; }
+    </style>
+  </head>
+  <body>
+    <h2>Settlement Receipt</h2>
+    <p class="sub">${getTripDisplayNumber(receiptTrip)} • ${txDate}</p>
+    <h1>${formatINR(Math.abs(txAmount))}</h1>
+    <table>
+      <tr><td>Transaction ID</td><td>${txRow?.id ?? receiptTrip.id}</td></tr>
+      <tr><td>UTR / Reference</td><td>${txRef}</td></tr>
+      <tr><td>Payment Mode</td><td>${txMode}</td></tr>
+      <tr><td>Settled To</td><td>${settledTo}</td></tr>
+      <tr><td>Route</td><td>${routeLabel}</td></tr>
+    </table>
+  </body>
+</html>`;
+                        const previewWindow = window.open("", "_blank");
+                        if (previewWindow) {
+                          previewWindow.document.open();
+                          previewWindow.document.write(html);
+                          previewWindow.document.close();
+                          previewWindow.focus();
+                          previewWindow.print();
+                        } else {
+                          await Share.share({ message: receiptTextPayload });
+                        }
+                      } else {
+                        await Share.share({ message: receiptTextPayload });
+                      }
+                    } catch {
+                      // no-op
+                    }
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.receiptBtnPrimaryText}>PDF PREVIEW</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.receiptBtn, styles.receiptBtnSecondary, styles.receiptBtnShare]}
+                  onPress={async () => {
+                    try {
+                      await Share.share({
+                        message: `Settlement ${formatINR(Math.abs(txAmount))}\nReference: ${getTripDisplayNumber(receiptTrip)}`,
+                      });
+                    } catch {
+                      // no-op
+                    }
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <FontAwesome name="share-alt" size={12} color={Theme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+                  </>
+                );
+              })()}
+            </View>
+          ) : null}
+        </View>
+      </Modal>
 
       <Modal
         visible={columnPickerOpen}
@@ -1761,18 +2092,18 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     flexWrap: "wrap",
-    rowGap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    rowGap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     backgroundColor: Theme.screenBackground,
     borderBottomWidth: 1,
     borderBottomColor: Theme.surfaceBorder,
   },
   auditToolbarCount: {
-    fontSize: 8,
+    fontSize: 12,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
-    letterSpacing: 0.1,
+    letterSpacing: 0.2,
   },
   auditToolbarControls: {
     flexDirection: "row",
@@ -1781,14 +2112,14 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   auditSearchWrap: {
-    height: 30,
-    minWidth: 220,
-    maxWidth: 320,
+    height: 36,
+    minWidth: 260,
+    maxWidth: 380,
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 8,
-    borderRadius: 8,
+    gap: 6,
+    paddingHorizontal: 10,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: Theme.surfaceBorder,
     backgroundColor: Theme.surface,
@@ -1798,38 +2129,38 @@ const styles = StyleSheet.create({
     minWidth: 100,
     paddingVertical: 0,
     color: Theme.textPrimaryDark,
-    fontSize: 8,
+    fontSize: 12,
     fontWeight: "600",
   },
   auditToolbarBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: Theme.surfaceBorder,
     backgroundColor: Theme.surface,
   },
   auditToolbarText: {
-    fontSize: 8,
+    fontSize: 11,
     fontWeight: "700",
     color: Theme.textSecondary,
-    letterSpacing: 0.1,
+    letterSpacing: 0.2,
   },
   manifestFilterRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 6,
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 8,
     backgroundColor: Theme.screenBackground,
   },
   manifestFilterPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: Theme.surfaceBorder,
@@ -1840,7 +2171,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.textPrimaryDark,
   },
   manifestFilterPillText: {
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: "700",
     color: Theme.textSecondary,
   },
@@ -1881,23 +2212,23 @@ const styles = StyleSheet.create({
   manifestHeaderRow: {
     flexDirection: "row",
     alignItems: "stretch",
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.textPrimaryDark,
     borderBottomWidth: 1,
-    borderBottomColor: Theme.surfaceBorder,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    gap: 6,
+    borderBottomColor: Theme.borderOnDark,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    gap: 4,
   },
   manifestTh: {
     minWidth: 0,
     justifyContent: "center",
   },
   manifestThText: {
-    fontSize: 7,
-    fontWeight: "800",
-    color: Theme.textSecondary,
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textOnDarkMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.45,
+    letterSpacing: 0.65,
   },
   manifestThTextCenter: {
     textAlign: "center",
@@ -1909,6 +2240,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     justifyContent: "center",
     alignItems: "flex-start",
+    paddingVertical: 1,
   },
   manifestTdCenter: {
     alignItems: "center",
@@ -1917,56 +2249,51 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   manifestColIdentity: {
-    width: 200,
-    minWidth: 200,
-    maxWidth: 200,
+    width: "18%",
+    minWidth: 168,
   },
   manifestColTelemetry: {
-    flex: 0.7,
-    minWidth: 154,
+    width: "24%",
+    minWidth: 196,
     borderLeftWidth: 1,
     borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 6,
   },
   manifestColEarnings: {
-    width: 132,
-    minWidth: 132,
-    maxWidth: 132,
+    width: "12%",
+    minWidth: 112,
     borderLeftWidth: 1,
     borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 6,
   },
   manifestColSupplier: {
-    width: 176,
-    minWidth: 176,
-    maxWidth: 176,
+    width: "14%",
+    minWidth: 126,
     borderLeftWidth: 1,
     borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 6,
   },
   manifestColDriver: {
-    width: 136,
-    minWidth: 136,
-    maxWidth: 136,
+    width: "14%",
+    minWidth: 126,
     borderLeftWidth: 1,
     borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 6,
   },
   manifestColAudit: {
-    width: 136,
-    minWidth: 136,
-    maxWidth: 136,
+    width: "12%",
+    minWidth: 104,
     borderLeftWidth: 1,
     borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 6,
   },
   manifestColActions: {
-    width: 82,
-    minWidth: 82,
+    width: "6%",
+    minWidth: 72,
     borderLeftWidth: 1,
     borderLeftColor: Theme.surfaceBorder,
     alignItems: "center",
-    paddingLeft: 6,
+    paddingLeft: 0,
   },
   manifestIdentityRow: {
     flexDirection: "row",
@@ -1976,8 +2303,10 @@ const styles = StyleSheet.create({
   manifestDateMeta: {
     marginTop: 1,
     fontSize: 8,
-    fontWeight: "600",
+    fontWeight: "500",
     color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
   },
   manifestProgressTrack: {
     marginTop: 4,
@@ -1993,8 +2322,9 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.primary,
   },
   manifestMoneyMain: {
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 14,
+    fontWeight: "700",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
     textAlign: "right",
     width: "100%",
@@ -2014,14 +2344,42 @@ const styles = StyleSheet.create({
     color: Theme.teslaRed,
   },
   manifestProviderName: {
-    fontSize: 9,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
     width: "100%",
+    textTransform: "uppercase",
   },
   manifestProviderNamePending: {
     color: Theme.textMuted,
+    fontWeight: "500",
+  },
+  manifestSettlementAmount: {
+    color: Theme.darkGreen,
+    marginBottom: 2,
+  },
+  manifestSettlementMeta: {
+    marginTop: 1,
+    fontSize: 7,
     fontWeight: "600",
+    color: Theme.textMuted,
+    letterSpacing: 0.2,
+    textAlign: "center",
+  },
+  manifestHealthDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  manifestHealthDotGood: {
+    backgroundColor: Theme.darkGreen,
+  },
+  manifestHealthDotWarn: {
+    backgroundColor: Theme.warning,
+  },
+  manifestHealthDotBad: {
+    backgroundColor: Theme.teslaRed,
   },
   auditHeaderRow: {
     flexDirection: "row",
@@ -2259,30 +2617,170 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
+    gap: 3,
     width: "100%",
-    paddingVertical: 2,
+    paddingVertical: 1,
   },
   auditIconAction: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
+    width: 22,
+    height: 22,
+    borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
   },
   auditIconActionTxn: {
-    backgroundColor: Theme.teslaRed,
-    borderColor: Theme.teslaRed,
+    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.surfaceBorder,
   },
   auditIconActionTxnExpanded: {
-    backgroundColor: Theme.textPrimaryDark,
-    borderColor: Theme.textPrimaryDark,
+    backgroundColor: Theme.fiscalTabActiveBg,
+    borderColor: Theme.borderMedium,
   },
   auditIconActionTrip: {
+    backgroundColor: Theme.fiscalTabActiveBg,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+  },
+  receiptBackdrop: {
+    flex: 1,
+    backgroundColor: Theme.overlayBackdrop,
+    justifyContent: "center",
+    padding: 14,
+  },
+  receiptSheet: {
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1.5,
-    borderColor: Theme.textPrimaryDark,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+    overflow: "hidden",
+  },
+  receiptHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 8,
+  },
+  receiptHeadLeft: {
+    flex: 1,
+    minWidth: 0,
+  },
+  receiptParty: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.3,
+  },
+  receiptSub: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+    letterSpacing: 1.2,
+  },
+  receiptAmount: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: Theme.driverEmerald,
+    letterSpacing: -0.4,
+  },
+  receiptCenter: {
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  receiptSuccessDot: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(16,185,129,0.12)",
+  },
+  receiptSuccessLabel: {
+    marginTop: 10,
+    fontSize: 10,
+    fontWeight: "900",
+    color: Theme.driverEmerald,
+    letterSpacing: 2,
+  },
+  receiptCenterAmount: {
+    marginTop: 2,
+    fontSize: 40,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.8,
+  },
+  receiptMetaList: {
+    borderTopWidth: 1,
+    borderTopColor: Theme.surfaceBorder,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  receiptMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingVertical: 7,
+  },
+  receiptMetaLabel: {
+    width: 104,
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+    letterSpacing: 1.6,
+    textTransform: "uppercase",
+  },
+  receiptMetaValue: {
+    flex: 1,
+    textAlign: "right",
+    fontSize: 18,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+  },
+  receiptActions: {
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  receiptBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  receiptBtnSecondary: {
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+    backgroundColor: Theme.screenBackground,
+  },
+  receiptBtnPrimary: {
+    backgroundColor: Theme.driverEmerald,
+  },
+  receiptBtnSecondaryText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+    letterSpacing: 1.5,
+  },
+  receiptBtnPrimaryText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: Theme.textOnDark,
+    letterSpacing: 1.5,
+  },
+  receiptBtnShare: {
+    flex: 0,
+    width: 44,
+    minWidth: 44,
+    paddingHorizontal: 0,
   },
   auditRowGroup: {
     borderBottomWidth: 1,
@@ -2293,9 +2791,9 @@ const styles = StyleSheet.create({
     position: "relative" as const,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    gap: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    gap: 4,
     overflow: "hidden",
   },
   auditTrPressed: { backgroundColor: Theme.surface },
@@ -2365,25 +2863,28 @@ const styles = StyleSheet.create({
   },
   auditIdentityText: { flex: 1, minWidth: 0 },
   auditTripId: {
-    fontSize: 9,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "600",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
-    letterSpacing: 0.1,
+    letterSpacing: 0.2,
+    textTransform: "uppercase",
   },
   auditRouteHint: {
     marginTop: 1,
-    fontSize: 9,
-    fontWeight: "600",
+    fontSize: 8,
+    fontWeight: "500",
     color: Theme.textMuted,
-    letterSpacing: 0.2,
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
   },
   auditRowChevron: { marginLeft: 4 },
   tableStatusPill: {
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: 999,
     borderWidth: 1,
-    minWidth: 96,
+    minWidth: 74,
     alignItems: "center",
   },
   tableStatusPillUnassigned: {
@@ -2400,7 +2901,7 @@ const styles = StyleSheet.create({
   },
   tableStatusPillText: {
     fontSize: 7,
-    fontWeight: "800",
+    fontWeight: "700",
     letterSpacing: 0.3,
     textTransform: "uppercase",
     textAlign: "center",
@@ -2409,6 +2910,14 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     fontWeight: "600",
     letterSpacing: 0.45,
+  },
+  tableStatusPillTextPositive: {
+    color: Theme.darkGreen,
+    fontWeight: "700",
+  },
+  tableStatusPillTextNegative: {
+    color: Theme.teslaRed,
+    fontWeight: "700",
   },
   tableBadgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 4, justifyContent: "center" },
   tableBadgeBlue: {
@@ -2420,11 +2929,11 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderMedium,
   },
   tableBadgeBlueText: {
-    fontSize: 7,
-    fontWeight: "700",
+    fontSize: 8,
+    fontWeight: "600",
     color: Theme.primary,
     textTransform: "uppercase",
-    letterSpacing: 0.3,
+    letterSpacing: 0.35,
   },
   tableBadgeViolet: {
     paddingHorizontal: 6,
@@ -2435,11 +2944,11 @@ const styles = StyleSheet.create({
     borderColor: Theme.surfaceBorder,
   },
   tableBadgeVioletText: {
-    fontSize: 7,
-    fontWeight: "700",
+    fontSize: 8,
+    fontWeight: "600",
     color: Theme.textSecondary,
     textTransform: "uppercase",
-    letterSpacing: 0.3,
+    letterSpacing: 0.35,
   },
   auditBilledCell: {
     alignSelf: "center",
@@ -2576,11 +3085,58 @@ const styles = StyleSheet.create({
   },
   expandPanel: {
     paddingHorizontal: 12,
-    paddingTop: 2,
+    paddingTop: 6,
     paddingBottom: 10,
     backgroundColor: Theme.surface,
     borderTopWidth: 1,
     borderTopColor: Theme.surfaceBorder,
+  },
+  txnSectionHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 2,
+    marginBottom: 8,
+  },
+  txnSectionHeadLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
+  },
+  txnSectionAccent: {
+    width: 3,
+    height: 16,
+    borderRadius: 3,
+    backgroundColor: Theme.primary,
+  },
+  txnSectionTitle: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.45,
+  },
+  txnVerifiedBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.fiscalTabActiveBg,
+  },
+  txnVerifiedBadgeText: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.primary,
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
+  },
+  txnHorizontalList: {
+    paddingBottom: 2,
+    gap: 10,
   },
   expandEmpty: {
     fontSize: FS_BODY,
@@ -2588,14 +3144,59 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
     paddingVertical: 8,
   },
-  txnLine: {
+  txnGrid: {
+    gap: 8,
+  },
+  txnGridWeb: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    alignItems: "stretch",
+  },
+  txnCard: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 10,
+    backgroundColor: Theme.screenBackground,
     gap: 12,
+  },
+  txnCardPositive: {
+    borderColor: Theme.positiveMuted,
+  },
+  txnCardNegative: {
+    borderColor: Theme.warningMuted,
+  },
+  txnCardWeb: {
+    width: "32.3%",
+    minWidth: 210,
+  },
+  txnCardHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
+  },
+  txnAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+    backgroundColor: Theme.fiscalTabActiveBg,
+  },
+  txnAvatarText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.primary,
+    textTransform: "uppercase",
   },
   txnLineLeft: { flex: 1, minWidth: 0 },
   txnFlow: {
@@ -2606,6 +3207,12 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
+  txnCounterparty: {
+    marginTop: 1,
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
   txnWhen: {
     marginTop: 2,
     fontSize: FS_CAPTION,
@@ -2613,12 +3220,97 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: Theme.textSecondary,
   },
+  txnAmtWrap: {
+    alignItems: "flex-end",
+    paddingLeft: 6,
+  },
   txnAmt: {
     fontSize: FS_AMOUNT,
     fontWeight: "300",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.35,
+  },
+  txnAmtIn: {
+    color: Theme.darkGreen,
+  },
+  txnAmtOut: {
+    color: Theme.teslaRed,
+  },
+  txnAmtSub: {
+    marginTop: 2,
+    fontSize: 7,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.35,
+    textTransform: "uppercase",
+  },
+  txnReceiptLink: {
+    marginTop: 3,
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.primary,
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  txnVaultCard: {
+    minWidth: 316,
+    maxWidth: 360,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 18,
+    backgroundColor: Theme.screenBackground,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    gap: 10,
+  },
+  txnVaultCardIn: {
+    borderColor: Theme.positiveMuted,
+  },
+  txnVaultCardOut: {
+    borderColor: Theme.warningMuted,
+  },
+  txnVaultLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
+  },
+  txnVaultIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  txnVaultIconIn: {
+    borderColor: Theme.positiveMuted,
+    backgroundColor: Theme.positiveMuted,
+  },
+  txnVaultIconOut: {
+    borderColor: Theme.warningMuted,
+    backgroundColor: Theme.warningMuted,
+  },
+  txnFlowRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  txnFlowIn: {
+    color: Theme.darkGreen,
+  },
+  txnFlowOut: {
+    color: Theme.teslaRed,
+  },
+  txnFlowSep: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textMuted,
   },
   colPickerBackdrop: {
     flex: 1,
