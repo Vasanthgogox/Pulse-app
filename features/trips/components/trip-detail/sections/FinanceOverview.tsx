@@ -1,9 +1,7 @@
 /**
- * Finance Overview section — matches reference design.
- * BASE FREIGHT | TOTAL EXPENSES | ADDITIONAL INCOME | DEDUCTIONS
- * Net Result + Calculation Breakdown + expandable detail rows.
+ * Finance Overview — elevated design.
+ * Colored metric cards, rich net-result block, styled breakdown, expandable details.
  */
-import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -13,7 +11,6 @@ interface FinanceOverviewProps {
   totalExpenses: number;
   additionalIncome: number;
   deductions: number;
-  /** Expandable expense detail rows */
   expenseDetails?: { label: string; amount: number }[];
   incomeDetails?: { label: string; amount: number }[];
   deductionDetails?: { label: string; amount: number }[];
@@ -34,278 +31,328 @@ export function FinanceOverview({
 }: FinanceOverviewProps) {
   const netResult = baseFreight - totalExpenses + additionalIncome - deductions;
   const isProfit = netResult >= 0;
+  const netPct =
+    baseFreight > 0 ? Math.round((Math.abs(netResult) / baseFreight) * 100) : 0;
 
   return (
-    <View style={styles.section}>
-      {/* Header */}
-      <View style={styles.sectionHeader}>
+    <View style={styles.card}>
+      {/* ── Header ── */}
+      <View style={styles.header}>
         <View>
-          <Text style={styles.sectionTitle}>Finance Overview</Text>
-          <Text style={styles.sectionSubtitle}>Simplified Trip Financial Summary</Text>
+          <Text style={styles.headerTitle}>Finance Overview</Text>
+          <Text style={styles.headerSub}>Trip Financial Summary</Text>
         </View>
         <View style={styles.headerActions}>
-          <ActionButton label="Add Income" onPress={onAddIncome} />
-          <ActionButton label="Add Deduction" onPress={onAddDeduction} />
+          <ActionChip label="+ Income" color="#16a34a" bg="#dcfce7" onPress={onAddIncome} />
+          <ActionChip label="+ Deduction" color="#b45309" bg="#fef3c7" onPress={onAddDeduction} />
         </View>
       </View>
 
-      {/* 4 metric cards */}
-      <View style={styles.metricsGrid}>
+      {/* ── 4 metric cards ── */}
+      <View style={styles.metricsRow}>
         <MetricCard
-          label="BASE FREIGHT"
-          dotColor="#22c55e"
+          label="Base Freight"
           value={baseFreight}
-          subtext="Fixed trip charge"
+          icon="money"
+          iconBg="#dcfce7"
+          iconColor="#15803d"
+          valueColor="#15803d"
+          tag="Revenue"
+          tagBg="#dcfce7"
+          tagColor="#15803d"
         />
         <MetricCard
-          label="TOTAL EXPENSES"
-          dotColor="#ef4444"
+          label="Total Expenses"
           value={totalExpenses}
-          subtext="Trip-related expenses"
+          icon="minus-circle"
+          iconBg="#fee2e2"
+          iconColor="#dc2626"
+          valueColor="#dc2626"
+          tag="Cost"
+          tagBg="#fee2e2"
+          tagColor="#dc2626"
         />
         <MetricCard
-          label="ADDITIONAL INCOME"
-          dotColor="#3b82f6"
+          label="Additional Income"
           value={additionalIncome}
-          subtext="From client beyond freight"
+          icon="plus-circle"
+          iconBg="#dbeafe"
+          iconColor="#2563eb"
+          valueColor="#2563eb"
+          tag="Income"
+          tagBg="#dbeafe"
+          tagColor="#2563eb"
         />
         <MetricCard
-          label="DEDUCTIONS"
-          dotColor="#f97316"
+          label="Deductions"
           value={deductions}
-          subtext="Damage, loss, penalties"
+          icon="exclamation-triangle"
+          iconBg="#ffedd5"
+          iconColor="#ea580c"
+          valueColor="#ea580c"
+          tag="Penalties"
+          tagBg="#ffedd5"
+          tagColor="#ea580c"
         />
       </View>
 
-      {/* Net Result + Breakdown */}
-      <View style={styles.netResultRow}>
-        <View style={styles.netResultLeft}>
-          <View style={styles.netResultLabelRow}>
-            <Text style={styles.netResultLabel}>Net Result</Text>
-            <Text style={styles.netResultFormula}>
-              Base Freight – Expenses + Income – Deductions
-            </Text>
+      {/* ── Net result + breakdown ── */}
+      <View style={styles.netSection}>
+        {/* Net result card */}
+        <View style={[styles.netCard, isProfit ? styles.netCardProfit : styles.netCardLoss]}>
+          <View style={styles.netTop}>
+            <View>
+              <Text style={styles.netLabel}>Net Result</Text>
+              <Text style={styles.netFormula}>Freight – Expenses + Income – Deductions</Text>
+            </View>
+            <View style={[styles.netPctBadge, { backgroundColor: isProfit ? "#bbf7d0" : "#fecaca" }]}>
+              <Text style={[styles.netPctText, { color: isProfit ? "#15803d" : "#dc2626" }]}>
+                {isProfit ? "+" : "-"}{netPct}%
+              </Text>
+            </View>
           </View>
-          <View style={styles.netResultValueRow}>
-            <FontAwesome
-              name={isProfit ? "arrow-up" : "arrow-down"}
-              size={14}
-              color={isProfit ? "#15803d" : "#ef4444"}
-            />
-            <Text style={[styles.netResultValue, isProfit ? styles.profit : styles.loss]}>
+          <View style={styles.netAmountRow}>
+            <View style={[styles.netIconWrap, { backgroundColor: isProfit ? "#bbf7d0" : "#fecaca" }]}>
+              <FontAwesome
+                name={isProfit ? "arrow-up" : "arrow-down"}
+                size={16}
+                color={isProfit ? "#15803d" : "#dc2626"}
+              />
+            </View>
+            <Text style={[styles.netAmount, { color: isProfit ? "#15803d" : "#dc2626" }]}>
               ₹{Math.abs(netResult).toLocaleString("en-IN")}
             </Text>
-            <Text style={[styles.netResultTag, isProfit ? styles.profit : styles.loss]}>
-              {isProfit ? "Profit" : "Loss"}
-            </Text>
+            <View style={[styles.profitTag, { backgroundColor: isProfit ? "#15803d" : "#dc2626" }]}>
+              <Text style={styles.profitTagText}>{isProfit ? "PROFIT" : "LOSS"}</Text>
+            </View>
           </View>
         </View>
 
-        <View style={styles.breakdownBox}>
-          <Text style={styles.breakdownTitle}>CALCULATION BREAKDOWN</Text>
-          <BreakdownRow label="Base Freight:" value={`₹${baseFreight.toLocaleString("en-IN")}`} />
-          <BreakdownRow
-            label="– Expenses:"
-            value={`–₹${totalExpenses.toLocaleString("en-IN")}`}
-            negative
-          />
-          <BreakdownRow
-            label="+ Income:"
-            value={`+₹${additionalIncome.toLocaleString("en-IN")}`}
-            positive
-          />
-          <BreakdownRow
-            label="– Deductions:"
-            value={`–₹${deductions.toLocaleString("en-IN")}`}
-            negative
-          />
+        {/* Calculation breakdown */}
+        <View style={styles.breakdownCard}>
+          <View style={styles.breakdownTitleRow}>
+            <FontAwesome name="calculator" size={12} color="#6b7280" />
+            <Text style={styles.breakdownTitle}>Calculation Breakdown</Text>
+          </View>
+          <BreakRow label="Base Freight" value={baseFreight} color="#15803d" prefix="₹" />
+          <BreakRow label="Expenses" value={-totalExpenses} color="#dc2626" prefix="₹" signed />
+          <BreakRow label="Add. Income" value={additionalIncome} color="#2563eb" prefix="₹" signed />
+          <BreakRow label="Deductions" value={-deductions} color="#ea580c" prefix="₹" signed />
           <View style={styles.breakdownDivider} />
-          <View style={styles.breakdownNetRow}>
-            <Text style={styles.breakdownNetLabel}>Net Result:</Text>
-            <Text style={styles.breakdownNetValue}>
-              ₹{netResult.toLocaleString("en-IN")}
+          <View style={styles.breakdownNet}>
+            <Text style={styles.breakdownNetLabel}>Net Result</Text>
+            <Text style={[styles.breakdownNetValue, { color: isProfit ? "#15803d" : "#dc2626" }]}>
+              {isProfit ? "+" : ""}₹{netResult.toLocaleString("en-IN")}
             </Text>
           </View>
         </View>
       </View>
 
-      <View style={styles.detailsDivider} />
-
-      {/* Expandable detail rows */}
-      <ExpandableRow
-        dotColor="#ef4444"
-        title="Expenses Details"
-        subtitle="Trip-related expenses breakdown"
-        total={totalExpenses}
-        items={expenseDetails}
-      />
-      <ExpandableRow
-        dotColor="#3b82f6"
-        title="Additional Income Details"
-        subtitle="Income from client beyond freight"
-        total={additionalIncome}
-        items={incomeDetails}
-      />
-      <ExpandableRow
-        dotColor="#f97316"
-        title="Deductions Details"
-        subtitle="Damage, loss, and penalty charges"
-        total={deductions}
-        items={deductionDetails}
-        isLast
-      />
+      {/* ── Expandable detail rows ── */}
+      <View style={styles.expandSection}>
+        <ExpandRow
+          title="Expense Details"
+          icon="minus-circle"
+          iconColor="#dc2626"
+          total={totalExpenses}
+          items={expenseDetails}
+        />
+        <ExpandRow
+          title="Additional Income Details"
+          icon="plus-circle"
+          iconColor="#2563eb"
+          total={additionalIncome}
+          items={incomeDetails}
+        />
+        <ExpandRow
+          title="Deduction Details"
+          icon="exclamation-triangle"
+          iconColor="#ea580c"
+          total={deductions}
+          items={deductionDetails}
+          isLast
+        />
+      </View>
     </View>
   );
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Sub-components ──────────────────────────────────────────────────────────────
 
 function MetricCard({
   label,
-  dotColor,
   value,
-  subtext,
+  icon,
+  iconBg,
+  iconColor,
+  valueColor,
+  tag,
+  tagBg,
+  tagColor,
 }: {
   label: string;
-  dotColor: string;
   value: number;
-  subtext: string;
+  icon: React.ComponentProps<typeof FontAwesome>["name"];
+  iconBg: string;
+  iconColor: string;
+  valueColor: string;
+  tag: string;
+  tagBg: string;
+  tagColor: string;
 }) {
   return (
     <View style={styles.metricCard}>
-      <View style={styles.metricCardHeader}>
-        <Text style={styles.metricCardLabel}>{label}</Text>
-        <View style={[styles.metricDot, { backgroundColor: dotColor }]} />
+      <View style={styles.metricTop}>
+        <View style={[styles.metricIconWrap, { backgroundColor: iconBg }]}>
+          <FontAwesome name={icon} size={14} color={iconColor} />
+        </View>
+        <View style={[styles.metricTag, { backgroundColor: tagBg }]}>
+          <Text style={[styles.metricTagText, { color: tagColor }]}>{tag}</Text>
+        </View>
       </View>
-      <Text style={styles.metricCardValue}>₹{value.toLocaleString("en-IN")}</Text>
-      <Text style={styles.metricCardSubtext}>{subtext}</Text>
+      <Text style={[styles.metricValue, { color: valueColor }]}>
+        ₹{value.toLocaleString("en-IN")}
+      </Text>
+      <Text style={styles.metricLabel}>{label}</Text>
     </View>
   );
 }
 
-function BreakdownRow({
+function ActionChip({
   label,
-  value,
-  positive,
-  negative,
+  color,
+  bg,
+  onPress,
 }: {
   label: string;
-  value: string;
-  positive?: boolean;
-  negative?: boolean;
+  color: string;
+  bg: string;
+  onPress?: () => void;
 }) {
   return (
-    <View style={styles.breakdownRow}>
-      <Text style={styles.breakdownLabel}>{label}</Text>
-      <Text
-        style={[
-          styles.breakdownValue,
-          positive && styles.positiveText,
-          negative && styles.negativeText,
-        ]}
-      >
-        {value}
+    <TouchableOpacity
+      style={[styles.actionChip, { backgroundColor: bg }]}
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
+      <Text style={[styles.actionChipText, { color }]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+function BreakRow({
+  label,
+  value,
+  color,
+  signed,
+}: {
+  label: string;
+  value: number;
+  color: string;
+  prefix?: string;
+  signed?: boolean;
+}) {
+  const sign = signed ? (value >= 0 ? "+" : "") : "";
+  return (
+    <View style={styles.breakRow}>
+      <Text style={styles.breakLabel}>{label}</Text>
+      <Text style={[styles.breakValue, { color }]}>
+        {sign}₹{Math.abs(value).toLocaleString("en-IN")}
       </Text>
     </View>
   );
 }
 
-function ExpandableRow({
-  dotColor,
+function ExpandRow({
   title,
-  subtitle,
+  icon,
+  iconColor,
   total,
   items,
   isLast,
 }: {
-  dotColor: string;
   title: string;
-  subtitle: string;
+  icon: React.ComponentProps<typeof FontAwesome>["name"];
+  iconColor: string;
   total: number;
   items: { label: string; amount: number }[];
   isLast?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
-
+  const [open, setOpen] = useState(false);
   return (
-    <View style={[styles.expandableRow, !isLast && styles.expandableRowBorder]}>
+    <View style={[styles.expandRow, !isLast && styles.expandRowBorder]}>
       <TouchableOpacity
-        style={styles.expandableRowHeader}
-        onPress={() => setExpanded((v) => !v)}
+        style={styles.expandHeader}
+        onPress={() => setOpen((v) => !v)}
         activeOpacity={0.7}
       >
-        <View style={styles.expandableRowLeft}>
-          <View style={[styles.expandableDot, { backgroundColor: dotColor }]} />
-          <View>
-            <Text style={styles.expandableTitle}>{title}</Text>
-            <Text style={styles.expandableSubtitle}>{subtitle}</Text>
+        <View style={styles.expandLeft}>
+          <FontAwesome name={icon} size={13} color={iconColor} />
+          <Text style={styles.expandTitle}>{title}</Text>
+        </View>
+        <View style={styles.expandRight}>
+          <Text style={styles.expandTotal}>₹{total.toLocaleString("en-IN")}</Text>
+          <View style={[styles.expandChevron, open && styles.expandChevronOpen]}>
+            <FontAwesome name="chevron-down" size={10} color="#9ca3af" />
           </View>
         </View>
-        <View style={styles.expandableRowRight}>
-          <Text style={styles.expandableTotal}>₹{total.toLocaleString("en-IN")}</Text>
-          <FontAwesome
-            name={expanded ? "chevron-up" : "chevron-down"}
-            size={12}
-            color="#9ca3af"
-          />
-        </View>
       </TouchableOpacity>
-
-      {expanded && items.length > 0 ? (
-        <View style={styles.expandedContent}>
-          {items.map((item, idx) => (
-            <View key={idx} style={styles.expandedItem}>
-              <Text style={styles.expandedItemLabel}>{item.label}</Text>
-              <Text style={styles.expandedItemAmount}>
-                ₹{item.amount.toLocaleString("en-IN")}
-              </Text>
-            </View>
-          ))}
+      {open && (
+        <View style={styles.expandBody}>
+          {items.length > 0 ? (
+            items.map((it, i) => (
+              <View key={i} style={styles.expandItem}>
+                <View style={styles.expandItemDot} />
+                <Text style={styles.expandItemLabel}>{it.label}</Text>
+                <Text style={styles.expandItemAmt}>₹{it.amount.toLocaleString("en-IN")}</Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.expandEmpty}>No items recorded</Text>
+          )}
         </View>
-      ) : expanded ? (
-        <View style={styles.expandedEmpty}>
-          <Text style={styles.expandedEmptyText}>No items</Text>
-        </View>
-      ) : null}
+      )}
     </View>
   );
 }
 
-function ActionButton({ label, onPress }: { label: string; onPress?: () => void }) {
-  return (
-    <TouchableOpacity style={styles.actionBtn} onPress={onPress} activeOpacity={0.8}>
-      <Text style={styles.actionBtnText}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
-// ── Styles ────────────────────────────────────────────────────────────────────
+// ── Styles ──────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  section: {
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 12,
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "#e5e7eb",
     overflow: "hidden",
+    // Shadow
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  sectionHeader: {
+
+  // ── Header ──
+  header: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingVertical: 18,
+    paddingTop: 18,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#f3f4f6",
     flexWrap: "wrap",
-    gap: 12,
+    gap: 10,
   },
-  sectionTitle: {
+  headerTitle: {
     fontSize: 16,
     fontWeight: "700",
     color: "#111827",
+    letterSpacing: -0.3,
   },
-  sectionSubtitle: {
+  headerSub: {
     fontSize: 12,
     color: "#9ca3af",
     marginTop: 2,
@@ -314,153 +361,191 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
-  actionBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: Theme.screenBackground,
+  actionChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
-  actionBtnText: {
+  actionChipText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#374151",
   },
-  metricsGrid: {
+
+  // ── Metric cards ──
+  metricsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    padding: 16,
     gap: 12,
+    padding: 16,
   },
   metricCard: {
     flex: 1,
-    minWidth: 140,
+    minWidth: 130,
+    backgroundColor: "#fafafa",
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#f3f4f6",
-    borderRadius: 10,
     padding: 14,
+    gap: 6,
   },
-  metricCardHeader: {
+  metricTop: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  metricCardLabel: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: "#9ca3af",
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  metricDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  metricCardValue: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#111827",
     marginBottom: 4,
   },
-  metricCardSubtext: {
-    fontSize: 11,
-    color: "#9ca3af",
+  metricIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  netResultRow: {
+  metricTag: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 20,
+  },
+  metricTagText: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
+  metricValue: {
+    fontSize: 22,
+    fontWeight: "800",
+    letterSpacing: -0.5,
+  },
+  metricLabel: {
+    fontSize: 11,
+    color: "#6b7280",
+    fontWeight: "500",
+  },
+
+  // ── Net result section ──
+  netSection: {
     flexDirection: "row",
     flexWrap: "wrap",
+    gap: 12,
     paddingHorizontal: 16,
     paddingBottom: 16,
-    gap: 16,
   },
-  netResultLeft: {
+  netCard: {
     flex: 1,
     minWidth: 200,
+    borderRadius: 12,
+    padding: 16,
+    gap: 14,
     borderWidth: 1,
-    borderColor: "#f3f4f6",
-    borderRadius: 10,
-    padding: 14,
   },
-  netResultLabelRow: {
-    marginBottom: 10,
+  netCardProfit: {
+    backgroundColor: "#f0fdf4",
+    borderColor: "#bbf7d0",
   },
-  netResultLabel: {
+  netCardLoss: {
+    backgroundColor: "#fff1f2",
+    borderColor: "#fecaca",
+  },
+  netTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+  },
+  netLabel: {
     fontSize: 14,
     fontWeight: "700",
     color: "#111827",
-    marginBottom: 2,
   },
-  netResultFormula: {
-    fontSize: 11,
+  netFormula: {
+    fontSize: 10,
     color: "#9ca3af",
+    marginTop: 2,
   },
-  netResultValueRow: {
+  netPctBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  netPctText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  netAmountRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
   },
-  netResultValue: {
+  netIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  netAmount: {
     fontSize: 28,
     fontWeight: "800",
+    letterSpacing: -1,
   },
-  netResultTag: {
-    fontSize: 12,
-    fontWeight: "600",
-    marginTop: 4,
+  profitTag: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    marginLeft: 4,
   },
-  profit: {
-    color: "#15803d",
+  profitTagText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#fff",
+    letterSpacing: 0.5,
   },
-  loss: {
-    color: "#ef4444",
-  },
-  breakdownBox: {
+
+  // ── Breakdown card ──
+  breakdownCard: {
     flex: 1,
     minWidth: 200,
+    backgroundColor: "#fafafa",
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#f3f4f6",
-    borderRadius: 10,
-    padding: 14,
+    padding: 16,
+  },
+  breakdownTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 12,
   },
   breakdownTitle: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "700",
-    color: "#9ca3af",
+    color: "#6b7280",
     textTransform: "uppercase",
     letterSpacing: 0.6,
-    marginBottom: 10,
   },
-  breakdownRow: {
+  breakRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 5,
+    alignItems: "center",
+    paddingVertical: 5,
   },
-  breakdownLabel: {
+  breakLabel: {
     fontSize: 12,
     color: "#6b7280",
   },
-  breakdownValue: {
+  breakValue: {
     fontSize: 12,
-    fontWeight: "500",
-    color: "#374151",
-  },
-  positiveText: {
-    color: "#15803d",
-  },
-  negativeText: {
-    color: "#ef4444",
+    fontWeight: "600",
   },
   breakdownDivider: {
     height: 1,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#e5e7eb",
     marginVertical: 8,
   },
-  breakdownNetRow: {
+  breakdownNet: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
   },
   breakdownNetLabel: {
     fontSize: 13,
@@ -468,85 +553,89 @@ const styles = StyleSheet.create({
     color: "#111827",
   },
   breakdownNetValue: {
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  // ── Expand section ──
+  expandSection: {
+    borderTopWidth: 1,
+    borderTopColor: "#f3f4f6",
+  },
+  expandRow: {
+    paddingHorizontal: 16,
+  },
+  expandRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
+  },
+  expandHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 13,
+  },
+  expandLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  expandTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  expandRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  expandTotal: {
     fontSize: 13,
     fontWeight: "700",
     color: "#111827",
   },
-  detailsDivider: {
-    height: 1,
+  expandChevron: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: "#f3f4f6",
-    marginHorizontal: 16,
-  },
-  expandableRow: {
-    paddingHorizontal: 16,
-  },
-  expandableRowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
-  },
-  expandableRowHeader: {
-    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 14,
+    justifyContent: "center",
   },
-  expandableRowLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flex: 1,
+  expandChevronOpen: {
+    backgroundColor: "#e5e7eb",
   },
-  expandableDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  expandableTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#111827",
-  },
-  expandableSubtitle: {
-    fontSize: 11,
-    color: "#9ca3af",
-    marginTop: 1,
-  },
-  expandableRowRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  expandableTotal: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#374151",
-  },
-  expandedContent: {
+  expandBody: {
     paddingBottom: 12,
-    paddingLeft: 18,
+    paddingLeft: 22,
     gap: 6,
   },
-  expandedItem: {
+  expandItem: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    gap: 8,
   },
-  expandedItemLabel: {
+  expandItemDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: "#d1d5db",
+  },
+  expandItemLabel: {
+    flex: 1,
     fontSize: 12,
     color: "#6b7280",
   },
-  expandedItemAmount: {
+  expandItemAmt: {
     fontSize: 12,
     fontWeight: "600",
     color: "#374151",
   },
-  expandedEmpty: {
-    paddingBottom: 12,
-    paddingLeft: 18,
-  },
-  expandedEmptyText: {
+  expandEmpty: {
     fontSize: 12,
-    color: "#9ca3af",
+    color: "#d1d5db",
     fontStyle: "italic",
   },
 });
