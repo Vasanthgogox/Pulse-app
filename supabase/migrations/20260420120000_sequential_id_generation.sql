@@ -251,7 +251,7 @@ BEGIN
       vehicle_id = COALESCE(p_vehicle_id, vehicle_id),
       vehicle_display_number = COALESCE(p_vehicle_display_number, vehicle_display_number),
       updated_at = now()
-    WHERE id = v_trip.id;
+    WHERE id = (v_trip).id;
     
     RETURN NEXT v_trip;
     RETURN;
@@ -304,31 +304,31 @@ BEGIN
     amount_paid
   ) VALUES (
     v_org_id,
-    v_indent.owner_user_id,
+    (v_indent).owner_user_id,
     auth.uid(),
     '',                                       -- DB trigger sets trip_number
     p_indent_id,
     'indent_conversion',
-    COALESCE(v_indent.pickup_area, ''),
-    COALESCE(v_indent.drop_location, ''),
-    v_indent.pickup_lat,
-    v_indent.pickup_lon,
-    v_indent.drop_lat,
-    v_indent.drop_lon,
-    v_indent.distance,
-    v_indent.estimated_duration,
-    COALESCE(v_indent.client_name, ''),
-    v_indent.client_id,
-    COALESCE(v_indent.client_price, 0),
+    COALESCE((v_indent).pickup_area, ''),
+    COALESCE((v_indent).drop_location, ''),
+    (v_indent).pickup_lat,
+    (v_indent).pickup_lon,
+    (v_indent).drop_lat,
+    (v_indent).drop_lon,
+    (v_indent).distance,
+    (v_indent).estimated_duration,
+    COALESCE((v_indent).client_name, ''),
+    (v_indent).client_id,
+    COALESCE((v_indent).client_price, 0),
     v_rate,
     v_supplier_id,
     p_driver_id,
     p_vehicle_id,
     p_vehicle_display_number,
     'assigned',
-    v_indent.pickup_date,
-    v_indent.load_type,
-    v_indent.notes,
+    (v_indent).pickup_date,
+    (v_indent).load_type,
+    (v_indent).notes,
     0,
     0,
     'pending',
@@ -470,7 +470,7 @@ BEGIN
     RAISE EXCEPTION 'Quote must be accepted before creating a trip';
   END IF;
 
-  SELECT * INTO v_indent FROM public.indents WHERE id = v_quote.indent_id;
+  SELECT * INTO v_indent FROM public.indents WHERE id = (v_quote).indent_id;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Indent not found';
   END IF;
@@ -478,7 +478,7 @@ BEGIN
   v_org_id := v_indent.organization_id;
 
   IF NOT (
-    public.is_org_member(v_org_id) OR public.is_org_member(v_quote.bidder_organization_id)
+    public.is_org_member(v_org_id) OR public.is_org_member((v_quote).bidder_organization_id)
   ) THEN
     RAISE EXCEPTION 'Not authorized to create trip from this quote';
   END IF;
@@ -486,21 +486,21 @@ BEGIN
   -- Idempotent: if a trip already exists for this indent
   SELECT t.* INTO v_trip
   FROM public.trips t
-  WHERE t.indent_id = v_quote.indent_id
+  WHERE t.indent_id = (v_quote).indent_id
   LIMIT 1;
   IF FOUND THEN
     UPDATE public.trips
     SET
-      driver_id = COALESCE(v_quote.driver_id, driver_id),
-      vehicle_id = COALESCE(v_quote.vehicle_id, vehicle_id),
+      driver_id = COALESCE((v_quote).driver_id, driver_id),
+      vehicle_id = COALESCE((v_quote).vehicle_id, vehicle_id),
       updated_at = now(),
       vehicle_display_number = CASE
         WHEN v_vehicle_display IS NOT NULL THEN v_vehicle_display
         ELSE vehicle_display_number
       END
-    WHERE id = v_trip.id;
-    SELECT * INTO v_trip FROM public.trips WHERE id = v_trip.id;
-    UPDATE public.indents SET status = 'completed', updated_at = now() WHERE id = v_quote.indent_id;
+    WHERE id = (v_trip).id;
+    SELECT * INTO v_trip FROM public.trips WHERE id = (v_trip).id;
+    UPDATE public.indents SET status = 'completed', updated_at = now() WHERE id = (v_quote).indent_id;
     RETURN NEXT v_trip;
     RETURN;
   END IF;
@@ -508,7 +508,7 @@ BEGIN
   SELECT id INTO v_supplier_id
   FROM public.suppliers
   WHERE organization_id = v_org_id
-    AND linked_organization_id = v_quote.bidder_organization_id
+    AND linked_organization_id = (v_quote).bidder_organization_id
   LIMIT 1;
 
   INSERT INTO public.trips (
@@ -536,22 +536,22 @@ BEGIN
     amount_paid
   ) VALUES (
     v_org_id,
-    v_indent.owner_user_id,
+    (v_indent).owner_user_id,
     auth.uid(),
     '',                                       -- DB trigger sets trip_number
-    v_quote.indent_id,
+    (v_quote).indent_id,
     'direct_quote',
-    coalesce(v_indent.pickup_area, ''),
-    coalesce(v_indent.drop_location, ''),
-    coalesce(v_indent.client_name, ''),
-    coalesce(v_indent.client_price, 0),
-    coalesce(v_quote.amount, 0),
+    coalesce((v_indent).pickup_area, ''),
+    coalesce((v_indent).drop_location, ''),
+    coalesce((v_indent).client_name, ''),
+    coalesce((v_indent).client_price, 0),
+    coalesce((v_quote).amount, 0),
     v_supplier_id,
-    v_quote.driver_id,
-    v_quote.vehicle_id,
+    (v_quote).driver_id,
+    (v_quote).vehicle_id,
     'assigned',
-    v_indent.pickup_date,
-    coalesce(v_indent.load_type, ''),
+    (v_indent).pickup_date,
+    coalesce((v_indent).load_type, ''),
     v_vehicle_display,
     0,
     0,
@@ -560,7 +560,7 @@ BEGIN
   )
   RETURNING * INTO v_trip;
 
-  UPDATE public.indents SET status = 'completed', updated_at = now() WHERE id = v_quote.indent_id;
+  UPDATE public.indents SET status = 'completed', updated_at = now() WHERE id = (v_quote).indent_id;
 
   RETURN NEXT v_trip;
   RETURN;

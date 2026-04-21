@@ -113,6 +113,52 @@ function getTripStatusLabel(t: tripsService.TripRow): string {
   return "Proceed to pickup";
 }
 
+const UUID_V4_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function looksLikeUuidFragment(s: string): boolean {
+  const t = String(s ?? "").trim();
+  if (!t) return false;
+  if (UUID_V4_RE.test(t)) return true;
+  // Short prefix shown as "User abcdef12…"
+  if (/^[0-9a-f]{6,12}$/i.test(t)) return true;
+  return false;
+}
+
+/** Prefer assignment audit actor (who assigned driver), then explicit assigner ids, then creator. */
+function resolveAssignerUserId(
+  trip: tripsService.TripRow,
+  auditActorByTripId: Record<string, string>,
+): string {
+  const meta = trip as tripsService.TripRow &
+    Record<string, string | number | boolean | null | undefined>;
+  const audit = (auditActorByTripId[String(trip.id)] ?? "").trim();
+  const assignedByUserId = String(meta.assigned_by_user_id ?? "").trim();
+  const createdByUserId = String(trip.created_by_user_id ?? "").trim();
+  const assignedBy = String(meta.assigned_by ?? "").trim();
+  const createdBy = String(trip.created_by ?? "").trim();
+
+  if (audit) return audit;
+  if (assignedByUserId) return assignedByUserId;
+  if (createdByUserId) return createdByUserId;
+  if (assignedBy && UUID_V4_RE.test(assignedBy)) return assignedBy;
+  if (createdBy && UUID_V4_RE.test(createdBy)) return createdBy;
+  return "";
+}
+
+function humanizeAssignerDisplayName(raw: string | null | undefined): string {
+  const t = String(raw ?? "").trim();
+  if (!t) return "";
+  if (looksLikeUuidFragment(t)) return "";
+  const lower = t.toLowerCase();
+  if (lower === "partner") return "";
+  if (/^user\s+/i.test(t)) {
+    const rest = t.replace(/^user\s+/i, "").trim();
+    if (looksLikeUuidFragment(rest) || /^[0-9a-f-]{6,}$/i.test(rest)) return "";
+  }
+  return t;
+}
+
 type DriverGuidanceStep =
   | "accepted"
   | "pickup"
@@ -247,6 +293,8 @@ function getDriverGuidanceConfig(
 }
 
 const DRIVER_ACCEPTED_TRIP_ID_KEY = "driver_accepted_trip_id";
+/** Set from notifications screen so dashboard selects that trip on return. */
+const DRIVER_NOTIFICATION_FOCUS_TRIP_KEY = "driver_notification_focus_trip_id";
 const OTP_LENGTH = 6;
 
 let ExpoLocationModule: typeof Location | null = null;
@@ -430,18 +478,16 @@ export default function DriverRadarScreen() {
   const [assignerNamesByUserId, setAssignerNamesByUserId] = useState<
     Record<string, string>
   >({});
+  /** Resolved server-side (RPC); drivers cannot read dispatcher profiles via RLS. */
+  const [assignerDisplayByTripId, setAssignerDisplayByTripId] = useState<
+    Record<string, string>
+  >({});
   const [organizationNamesById, setOrganizationNamesById] = useState<
     Record<string, string>
   >({});
   const [assignmentActorByTripId, setAssignmentActorByTripId] = useState<
     Record<string, string>
   >({});
-  const [incomingOtpPopupTripId, setIncomingOtpPopupTripId] = useState<
-    string | null
-  >(null);
-  const [acknowledgedOtpPopupTripId, setAcknowledgedOtpPopupTripId] = useState<
-    string | null
-  >(null);
   const [otpClaimTripId, setOtpClaimTripId] = useState<string | null>(null);
   const [otpValue, setOtpValue] = useState("");
   const [otpSubmitting, setOtpSubmitting] = useState(false);
@@ -867,8 +913,15 @@ export default function DriverRadarScreen() {
   // Refetch on focus and re-read accepted trip id (e.g. after OTP claim) so Dashboard shows "View trip" not "Accept & Enter OTP".
   useFocusEffect(
     useCallback(() => {
-      AsyncStorage.getItem(DRIVER_ACCEPTED_TRIP_ID_KEY).then((id) => {
-        if (id != null && id !== "") setAcceptedTripId(id);
+      Promise.all([
+        AsyncStorage.getItem(DRIVER_ACCEPTED_TRIP_ID_KEY),
+        AsyncStorage.getItem(DRIVER_NOTIFICATION_FOCUS_TRIP_KEY),
+      ]).then(([acceptedId, focusTripId]) => {
+        if (acceptedId != null && acceptedId !== "") setAcceptedTripId(acceptedId);
+        if (focusTripId != null && focusTripId !== "") {
+          setSelectedIncomingTripId(focusTripId);
+          void AsyncStorage.removeItem(DRIVER_NOTIFICATION_FOCUS_TRIP_KEY);
+        }
       });
       if (profile?.uid) fetch();
     }, [profile?.uid, fetch]),
@@ -980,18 +1033,8 @@ export default function DriverRadarScreen() {
     triggerSuccess("Trip accepted. Proceed to pickup.");
     setSelectedIncomingTripId(trip.id);
     setAcceptedTripId(trip.id);
-    movePendingNotificationsToHistory(trip.id, "accepted_other");
     AsyncStorage.setItem(DRIVER_ACCEPTED_TRIP_ID_KEY, trip.id);
     setAcceptLoading(false);
-    setAssignmentFeedback("accepted");
-
-    if (assignmentFeedbackTimeoutRef.current)
-      clearTimeout(assignmentFeedbackTimeoutRef.current);
-    assignmentFeedbackTimeoutRef.current = setTimeout(() => {
-      setAssignmentFeedback(null);
-      assignmentFeedbackTimeoutRef.current = null;
-      // Dashboard now hosts the in-card trip flow; do not auto-navigate to Trip screen.
-    }, 1200);
   };
 
   const handleDeclineAssignment = (tripId: string) => {
@@ -1149,10 +1192,59 @@ export default function DriverRadarScreen() {
       mergedIncomingTrips.filter((trip) => !notificationHistoryTripIds.has(trip.id)),
     [mergedIncomingTrips, notificationHistoryTripIds],
   );
+  /** Trips still needing accept/OTP — excludes the trip we've already accepted (trip progress owns it). */
+  const visibleAssignableIncomingTrips = useMemo(
+    () =>
+      visibleIncomingTrips.filter((trip) => {
+        if (!acceptedTripId || String(acceptedTripId).trim() === "") return true;
+        return (
+          String(trip.id).toLowerCase() !==
+          String(acceptedTripId).toLowerCase()
+        );
+      }),
+    [visibleIncomingTrips, acceptedTripId],
+  );
+  /** Canonical row for the accepted trip — survives pending→linked refresh lag after OTP claim. */
+  const resolvedAcceptedIncomingTrip = useMemo(() => {
+    if (!acceptedTripId || String(acceptedTripId).trim() === "") return null;
+    const want = String(acceptedTripId).toLowerCase();
+    const fromMerged = mergedIncomingTrips.find(
+      (t) => String(t.id).toLowerCase() === want,
+    );
+    if (fromMerged) return fromMerged;
+    const fromAll = allTrips.find((t) => String(t.id).toLowerCase() === want);
+    if (fromAll) return fromAll;
+    return (
+      pendingOtpTrips.find((t) => String(t.id).toLowerCase() === want) ?? null
+    );
+  }, [acceptedTripId, mergedIncomingTrips, allTrips, pendingOtpTrips]);
+
   const selectedIncomingTrip =
     visibleIncomingTrips.find((trip) => trip.id === selectedIncomingTripId) ??
     null;
-  const effectiveFirstIncoming = selectedIncomingTrip;
+  /** Among trips still awaiting decision: auto-pick single, else honor picker. */
+  const pickerFocusedIncoming =
+    visibleAssignableIncomingTrips.length === 1
+      ? visibleAssignableIncomingTrips[0]
+      : visibleAssignableIncomingTrips.find(
+          (trip) => trip.id === selectedIncomingTripId,
+        ) ?? null;
+  /**
+   * Prefer accepted assignment first so we never flash the notification list during fetch lag.
+   * Otherwise single assignable trip or picker selection among remaining trips.
+   */
+  const effectiveFirstIncoming =
+    resolvedAcceptedIncomingTrip ?? pickerFocusedIncoming;
+
+  /** Keep selection aligned when only one assignable incoming trip remains. */
+  useEffect(() => {
+    if (visibleAssignableIncomingTrips.length !== 1) return;
+    const onlyId = visibleAssignableIncomingTrips[0]?.id;
+    if (!onlyId) return;
+    setSelectedIncomingTripId((prev) =>
+      prev == null || prev === "" ? String(onlyId) : prev,
+    );
+  }, [visibleAssignableIncomingTrips]);
   // OTP only for non-roster (ad-hoc) trips; connected/roster trips accept directly.
   const pendingOtpTripsRequiringOtp = pendingOtpTrips.filter(
     (t) => !isRosterTrip(t),
@@ -1180,6 +1272,7 @@ export default function DriverRadarScreen() {
     : null;
 
   const hasIncomingTrip = visibleIncomingTrips.length > 0;
+  const hasAssignableIncomingTrip = visibleAssignableIncomingTrips.length > 0;
   const effectiveIncomingId = String(
     effectiveFirstIncoming?.id ?? "",
   ).toLowerCase();
@@ -1211,56 +1304,6 @@ export default function DriverRadarScreen() {
     activeMission != null
       ? computeDriverCommissionForTrip(activeMission, offerForCommission)
       : 0;
-  const firstIncomingIsAggregate =
-    effectiveFirstIncoming != null && isAggregateTrip(effectiveFirstIncoming);
-
-  // For driver view: load-based (roster/ad hoc) counterparty is the supplier (fleet); asset-only is the customer.
-  const firstIncomingCounterpartyLabel = firstIncomingIsAggregate
-    ? "Partner load"
-    : "Customer";
-  const firstIncomingCounterpartyName = firstIncomingIsAggregate
-    ? (invites
-        .find(
-          (i) =>
-            (i.from_organization_id ?? "").trim() ===
-              (driver?.organization_id ?? "").trim() &&
-            String(i.status ?? "").toLowerCase() === "accepted",
-        )
-        ?.from_org_name?.trim() ?? "Partner")
-    : effectiveFirstIncoming?.client_name?.trim() || "Customer";
-  const incomingTripOrgInvite =
-    effectiveFirstIncoming == null
-      ? null
-      : (invites.find(
-          (i) =>
-            (i.from_organization_id ?? "").trim() ===
-            (effectiveFirstIncoming.organization_id ?? "").trim(),
-        ) ?? null);
-  const incomingOtpPopupTitle = firstIncomingIsAggregate
-    ? "Trip received from supplier"
-    : "Trip received from customer";
-  const incomingOtpPopupName = firstIncomingIsAggregate
-    ? incomingTripOrgInvite?.from_org_name?.trim() ||
-      firstIncomingCounterpartyName
-    : firstIncomingCounterpartyName;
-  const incomingOtpPopupAvatarUri =
-    incomingTripOrgInvite?.from_org_logo_url?.trim() ||
-    incomingTripOrgInvite?.from_org_avatar_url?.trim() ||
-    null;
-  const incomingOtpPopupPickup =
-    effectiveFirstIncoming?.pickup_area?.trim() || "Pickup";
-  const incomingOtpPopupDrop =
-    effectiveFirstIncoming?.drop_location?.trim() || "Drop-off";
-  const incomingOtpPopupBadge = firstIncomingRequiresOtp
-    ? "OTP verification required"
-    : "New trip";
-  const incomingOtpPopupEarnings =
-    newAssignmentCommission > 0 ? formatINR(newAssignmentCommission) : null;
-  const handleDismissIncomingOtpPopup = () => {
-    if (!effectiveFirstIncoming) return;
-    setAcknowledgedOtpPopupTripId(String(effectiveFirstIncoming.id));
-    setIncomingOtpPopupTripId(null);
-  };
   const incomingNotificationsWithMeta = useMemo(
     () =>
       visibleIncomingTrips.map((trip) => {
@@ -1272,51 +1315,53 @@ export default function DriverRadarScreen() {
               (i.from_organization_id ?? "").trim() ===
               (trip.organization_id ?? "").trim(),
           ) ?? null;
-        const assignerUserId = (
-          trip.created_by_user_id ??
-          (trip as { created_by?: string | null }).created_by ??
-          assignmentActorByTripId[String(trip.id)] ??
-          ""
+        const assignerUserId = resolveAssignerUserId(
+          trip,
+          assignmentActorByTripId,
         ).trim();
+
         const tripAssignedByUserNameCandidates = [
           tripMeta.assigned_by_name,
           tripMeta.assigned_by_user_name,
           tripMeta.created_by_name,
           tripMeta.dispatcher_name,
         ];
+        /** Fleet / assigning org — never use client/supplier names (those are cargo parties). */
         const tripAssignedByOrgNameCandidates = [
+          organizationNamesById[(trip.organization_id ?? "").trim()] ?? null,
           inviteForTrip?.from_org_name ?? null,
-          (trip.supplier_name as string | null | undefined) ?? null,
-          (trip.client_name as string | null | undefined) ?? null,
           (tripMeta.organization_name as string | null | undefined) ?? null,
           (tripMeta.org_name as string | null | undefined) ?? null,
           (tripMeta.from_org_name as string | null | undefined) ?? null,
-          organizationNamesById[(trip.organization_id ?? "").trim()] ?? null,
         ];
+        const resolvedFromTripFields = tripAssignedByUserNameCandidates
+          .map((value) => humanizeAssignerDisplayName(String(value ?? "")))
+          .find((value) => value.length > 0);
+        const resolvedFromProfiles = humanizeAssignerDisplayName(
+          assignerNamesByUserId[assignerUserId] ?? "",
+        );
+        const fromRpc = humanizeAssignerDisplayName(
+          assignerDisplayByTripId[String(trip.id)] ?? "",
+        );
         const assignedByUserName =
-          tripAssignedByUserNameCandidates
-            .map((value) => String(value ?? "").trim())
-            .find((value) => value.length > 0) ??
-          assignerNamesByUserId[assignerUserId] ??
-          null;
-        const assignedByUserFallbackLabel =
-          assignerUserId.length > 0
-            ? `User ${assignerUserId.slice(0, 8)}`
-            : null;
+          (fromRpc.length > 0 ? fromRpc : null) ??
+          resolvedFromTripFields ??
+          (resolvedFromProfiles.length > 0 ? resolvedFromProfiles : null);
+
         const assignedByOrgName =
           tripAssignedByOrgNameCandidates
             .map((value) => String(value ?? "").trim())
             .find((value) => value.length > 0) ??
           ((trip.organization_id ?? "").trim() ===
           (driver?.organization_id ?? "").trim()
-            ? "Your organization"
-            : "Partner organization");
-        const assignedByName =
-          assignedByUserName != null && assignedByUserName !== ""
-            ? `${assignedByUserName} · ${assignedByOrgName}`
-            : assignedByUserFallbackLabel != null
-              ? `${assignedByUserFallbackLabel} · ${assignedByOrgName}`
-              : `${assignedByOrgName} dispatcher`;
+            ? "Your fleet"
+            : "Assigning fleet");
+
+        /** Dispatcher / fleet user who assigned — not cargo party names. */
+        const assignerPersonDisplay =
+          (assignedByUserName ?? "").trim() || "Fleet dispatcher";
+
+        const assignedByName = `${assignerPersonDisplay} · ${assignedByOrgName}`;
         const requiresOtp =
           !isRosterTrip(trip) &&
           (pendingOtpTripsRequiringOtp.some((t) => t.id === trip.id) ||
@@ -1337,6 +1382,7 @@ export default function DriverRadarScreen() {
           assignedByName,
           assignedByUserName,
           assignedByOrgName,
+          assignerPersonDisplay,
           requiresOtp,
           commissionForTrip,
         };
@@ -1347,10 +1393,132 @@ export default function DriverRadarScreen() {
       driver?.organization_id,
       pendingOtpTripsRequiringOtp,
       assignerNamesByUserId,
+      assignerDisplayByTripId,
       organizationNamesById,
       assignmentActorByTripId,
     ],
   );
+  /** Notification picker only lists trips still awaiting accept/OTP. */
+  const assignableIncomingNotificationsWithMeta = useMemo(
+    () =>
+      incomingNotificationsWithMeta.filter(
+        (item) =>
+          !acceptedTripId ||
+          String(item.trip.id).toLowerCase() !==
+            String(acceptedTripId).toLowerCase(),
+      ),
+    [incomingNotificationsWithMeta, acceptedTripId],
+  );
+  /** In-dashboard inbox for trips still awaiting accept — never blocks with a stacking modal. */
+  const renderOtherPendingTripsInbox = useCallback(() => {
+    if (assignableIncomingNotificationsWithMeta.length === 0) return null;
+    return (
+      <View style={[styles.centerCardConstraint, styles.otherPendingTripsWrap]}>
+        <View style={[styles.centerCardWrap, styles.notificationListIntro]}>
+          <Text style={[styles.notificationListTitle, { color: colors.text }]}>
+            Other trips ({assignableIncomingNotificationsWithMeta.length})
+          </Text>
+          <Text
+            style={[styles.notificationListSubtitle, { color: colors.textMuted }]}
+          >
+            Pending assignments — tap when you are ready. Your current trip stays
+            active.
+          </Text>
+        </View>
+        <ScrollView
+          style={styles.invitesScroll}
+          contentContainerStyle={styles.invitesScrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {assignableIncomingNotificationsWithMeta.map((item) => (
+            <TouchableOpacity
+              key={item.trip.id}
+              activeOpacity={0.85}
+              onPress={() => setSelectedIncomingTripId(item.trip.id)}
+              style={[
+                styles.centerCardWrap,
+                styles.notificationSelectCard,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <View style={styles.notificationSelectHeader}>
+                <Text style={[styles.notificationSelectTripId, { color: colors.text }]}>
+                  {tripsService.getTripDisplayNumber(item.trip)}
+                </Text>
+                {item.requiresOtp ? (
+                  <View
+                    style={[
+                      styles.notificationOtpBadgeMinimal,
+                      {
+                        borderColor: colors.border,
+                        backgroundColor: colors.surface,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.notificationOtpBadgeMinimalText,
+                        { color: colors.textMuted },
+                      ]}
+                    >
+                      OTP
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              <Text
+                style={[styles.notificationSelectRoute, { color: colors.text }]}
+                numberOfLines={2}
+              >
+                {item.trip.pickup_area?.trim() || "Pickup"} →{" "}
+                {item.trip.drop_location?.trim() || "Drop-off"}
+              </Text>
+              <Text style={styles.notificationAssignedByLine} numberOfLines={2}>
+                <Text
+                  style={[styles.notificationAssignedByPrefix, { color: colors.textMuted }]}
+                >
+                  Assigned by{" "}
+                </Text>
+                <Text style={[styles.notificationAssignedByName, { color: colors.text }]}>
+                  {item.assignerPersonDisplay}
+                </Text>
+              </Text>
+              <Text
+                style={[
+                  styles.notificationSelectMeta,
+                  { color: colors.textMuted, marginTop: 6 },
+                ]}
+              >
+                {item.commissionForTrip > 0
+                  ? `Est. earning ${formatINR(item.commissionForTrip)}`
+                  : "Est. earning · Salary"}
+              </Text>
+              <View style={styles.notificationSelectFooter}>
+                <Text
+                  style={[
+                    styles.notificationSelectActionTextMuted,
+                    { color: colors.textMuted },
+                  ]}
+                >
+                  Open
+                </Text>
+                <FontAwesome name="chevron-right" size={12} color={colors.textMuted} />
+              </View>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    );
+  }, [
+    assignableIncomingNotificationsWithMeta,
+    colors.border,
+    colors.surface,
+    colors.text,
+    colors.textMuted,
+  ]);
   const selectedIncomingMeta =
     incomingNotificationsWithMeta.find(
       (item) => item.trip.id === effectiveFirstIncoming?.id,
@@ -1383,9 +1551,22 @@ export default function DriverRadarScreen() {
       selectedIncomingTripId &&
       !visibleIncomingTrips.some((trip) => trip.id === selectedIncomingTripId)
     ) {
+      // Keep selection while the accepted trip reparents between pending OTP and driver-linked lists.
+      if (
+        acceptedTripId &&
+        String(selectedIncomingTripId).toLowerCase() ===
+          String(acceptedTripId).toLowerCase()
+      ) {
+        return;
+      }
       setSelectedIncomingTripId(null);
     }
-  }, [selectedIncomingTripId, visibleIncomingTrips, activeMission]);
+  }, [
+    selectedIncomingTripId,
+    visibleIncomingTrips,
+    activeMission,
+    acceptedTripId,
+  ]);
   useEffect(() => {
     let cancelled = false;
     const loadAssignmentSources = async () => {
@@ -1393,22 +1574,53 @@ export default function DriverRadarScreen() {
       if (trips.length === 0) {
         if (!cancelled) {
           setAssignerNamesByUserId({});
+          setAssignerDisplayByTripId({});
           setOrganizationNamesById({});
         }
         return;
       }
 
+      const tripIdsForRpc = trips
+        .map((t) => t.id)
+        .filter((id): id is string => Boolean(id && String(id).length > 0));
+      const { data: assignerRpcRows, error: assignerRpcError } = await supabase().rpc(
+        "get_trip_assigner_displays_for_driver",
+        { p_trip_ids: tripIdsForRpc },
+      );
+      if (!cancelled && !assignerRpcError && Array.isArray(assignerRpcRows)) {
+        const byTrip: Record<string, string> = {};
+        for (const row of assignerRpcRows as Array<{
+          trip_id?: string;
+          display_name?: string | null;
+        }>) {
+          const tid = row.trip_id != null ? String(row.trip_id) : "";
+          const dn = String(row.display_name ?? "").trim();
+          if (tid && dn) byTrip[tid] = dn;
+        }
+        setAssignerDisplayByTripId(byTrip);
+      }
+
       const userIds = Array.from(
         new Set(
           trips
-            .map((trip) => (trip.created_by_user_id ?? "").trim())
+            .map((trip) => resolveAssignerUserId(trip, assignmentActorByTripId))
             .filter((id) => id.length > 0),
         ),
       );
       const organizationIds = Array.from(
         new Set(
           trips
-            .map((trip) => (trip.organization_id ?? "").trim())
+            .flatMap((trip) => {
+              const tripMeta = trip as tripsService.TripRow &
+                Record<string, string | number | boolean | null | undefined>;
+              return [
+                (trip.organization_id ?? "").trim(),
+                (
+                  (tripMeta.from_organization_id as string | null | undefined) ?? ""
+                ).trim(),
+                ((tripMeta.from_org_id as string | null | undefined) ?? "").trim(),
+              ];
+            })
             .filter((id) => id.length > 0),
         ),
       );
@@ -1457,27 +1669,7 @@ export default function DriverRadarScreen() {
     return () => {
       cancelled = true;
     };
-  }, [mergedIncomingTrips]);
-  const movePendingNotificationsToHistory = useCallback(
-    (selectedTripId: string, reason: "accepted_other" | "declined") => {
-      const selectedId = String(selectedTripId).toLowerCase();
-      const movedAt = new Date().toISOString();
-      const toArchive = visibleIncomingTrips
-        .filter((trip) => String(trip.id).toLowerCase() !== selectedId)
-        .map((trip) => ({
-          tripId: trip.id,
-          reason,
-          movedAt,
-        }));
-      if (toArchive.length === 0) return;
-      setNotificationHistory((prev) => {
-        const existing = new Set(prev.map((item) => item.tripId));
-        const deduped = toArchive.filter((item) => !existing.has(item.tripId));
-        return deduped.length > 0 ? [...prev, ...deduped] : prev;
-      });
-    },
-    [visibleIncomingTrips],
-  );
+  }, [mergedIncomingTrips, assignmentActorByTripId]);
   useEffect(() => {
     let cancelled = false;
     const loadAssignmentActors = async () => {
@@ -1620,16 +1812,6 @@ export default function DriverRadarScreen() {
   const shouldUseStaticMapSheetCard = Boolean(
     showNewAssignmentCard || activeMission || isAcceptedIncomingFlow,
   );
-  const shouldShowIncomingOtpPopup = Boolean(
-    effectiveFirstIncoming &&
-    firstIncomingRequiresOtp &&
-    incomingOtpPopupTripId != null &&
-    String(incomingOtpPopupTripId).toLowerCase() ===
-      String(effectiveFirstIncoming.id).toLowerCase() &&
-    !assignmentFeedback &&
-    !activeMission &&
-    !isAcceptedIncomingFlow,
-  );
   useEffect(() => {
     if (!showNewAssignmentCard) return;
     newAssignmentBlinkAnim.setValue(0);
@@ -1651,33 +1833,12 @@ export default function DriverRadarScreen() {
     return () => loop.stop();
   }, [showNewAssignmentCard, newAssignmentBlinkAnim]);
 
-  useEffect(() => {
-    if (!effectiveFirstIncoming || !firstIncomingRequiresOtp) {
-      setIncomingOtpPopupTripId(null);
-      return;
-    }
-    const tripId = String(effectiveFirstIncoming.id);
-    if (
-      String(acceptedTripId ?? "").toLowerCase() === tripId.toLowerCase() ||
-      String(acknowledgedOtpPopupTripId ?? "").toLowerCase() ===
-        tripId.toLowerCase()
-    ) {
-      return;
-    }
-    setIncomingOtpPopupTripId(tripId);
-  }, [
-    effectiveFirstIncoming,
-    firstIncomingRequiresOtp,
-    acceptedTripId,
-    acknowledgedOtpPopupTripId,
-  ]);
-
   // Show map shell for active mission, incoming assignment (including load-based pending OTP),
   // or assignment feedback.
   const shouldShowMap = Boolean(
     activeMission ||
       isAcceptedIncomingFlow ||
-      selectedIncomingTrip ||
+      effectiveFirstIncoming ||
       assignmentFeedback != null,
   );
   const activeGuidanceStep = activeGuidanceTrip
@@ -1842,7 +2003,6 @@ export default function DriverRadarScreen() {
           void AsyncStorage.setItem(DRIVER_ACCEPTED_TRIP_ID_KEY, tripIdToSet);
           setAcceptedTripId(tripIdToSet);
           setSelectedIncomingTripId(tripIdToSet);
-          movePendingNotificationsToHistory(tripIdToSet, "accepted_other");
         }
 
         // Delay background refresh slightly more
@@ -1865,14 +2025,7 @@ export default function DriverRadarScreen() {
     } finally {
       setOtpSubmitting(false);
     }
-  }, [
-    fetch,
-    otpValue,
-    otpClaimTripId,
-    otpSubmitting,
-    assignmentFeedback,
-    movePendingNotificationsToHistory,
-  ]);
+  }, [fetch, otpValue, otpClaimTripId, otpSubmitting, assignmentFeedback]);
 
   const handleOpenOtpClaimFromHeader = useCallback(() => {
     const firstIncomingRequiringOtp =
@@ -3377,29 +3530,62 @@ export default function DriverRadarScreen() {
       )}
       {driver ? (
         activeMission ? (
-          <DriverTripFlowCard
-            trip={activeMission}
-            commissionAmount={activeMissionCommission}
-            onRefresh={fetch}
-            onTripCompleted={() => setJustCompletedTrip(true)}
-            onBackToDashboard={async () => {
-              await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
-              setAcceptedTripId(null);
-              setSelectedIncomingTripId(null);
-              setAssignmentFeedback(null);
-              setJustCompletedTrip(false);
-              justClaimedTripIdRef.current = null;
-              justClaimedOldTripIdRef.current = null;
-              fetch();
-            }}
-            {...(mapSheet
-              ? {
-                  edgeToEdge: true,
-                  variant: "page" as const,
-                  onOperationActiveChange: handleTripFlowOperationActiveChange,
-                }
-              : {})}
-          />
+          <>
+            <DriverTripFlowCard
+              trip={activeMission}
+              commissionAmount={activeMissionCommission}
+              onRefresh={fetch}
+              onTripCompleted={() => setJustCompletedTrip(true)}
+              onBackToDashboard={async () => {
+                await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
+                setAcceptedTripId(null);
+                setSelectedIncomingTripId(null);
+                setAssignmentFeedback(null);
+                setJustCompletedTrip(false);
+                justClaimedTripIdRef.current = null;
+                justClaimedOldTripIdRef.current = null;
+                fetch();
+              }}
+              {...(mapSheet
+                ? {
+                    edgeToEdge: true,
+                    variant: "page" as const,
+                    onOperationActiveChange: handleTripFlowOperationActiveChange,
+                  }
+                : {})}
+            />
+            {renderOtherPendingTripsInbox()}
+          </>
+        ) : effectiveFirstIncoming &&
+          acceptedTripId &&
+          String(effectiveFirstIncoming.id).toLowerCase() ===
+            String(acceptedTripId).toLowerCase() ? (
+          <>
+            <DriverTripFlowCard
+              trip={effectiveFirstIncoming}
+              commissionAmount={newAssignmentCommission}
+              onRefresh={fetch}
+              onTripCompleted={() => setJustCompletedTrip(true)}
+              onBackToDashboard={async () => {
+                await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
+                setAcceptedTripId(null);
+                setSelectedIncomingTripId(null);
+                setAssignmentFeedback(null);
+                setJustCompletedTrip(false);
+                justClaimedTripIdRef.current = null;
+                justClaimedOldTripIdRef.current = null;
+                fetch();
+              }}
+              {...(mapSheet
+                ? {
+                    edgeToEdge: true,
+                    variant: "page" as const,
+                    onOperationActiveChange: handleTripFlowOperationActiveChange,
+                  }
+                : {})}
+            />
+            {renderOtherPendingTripsInbox()}
+          </>
         ) : assignmentFeedback === "accepted" ? (
           <View style={styles.feedbackBlock}>
             <View
@@ -3491,28 +3677,14 @@ export default function DriverRadarScreen() {
               </Text>
             </TouchableOpacity>
           </View>
-        ) : !effectiveFirstIncoming && hasIncomingTrip ? (
+        ) : !effectiveFirstIncoming && hasAssignableIncomingTrip ? (
           <View style={styles.centerCardConstraint}>
-            <View
-              style={[
-                styles.centerCardWrap,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  marginBottom: 12,
-                },
-              ]}
-            >
-              <Text style={[styles.offlineCardTitle, { color: colors.text }]}>
-                New trip notifications ({incomingNotificationsWithMeta.length})
+            <View style={[styles.centerCardWrap, styles.notificationListIntro]}>
+              <Text style={[styles.notificationListTitle, { color: colors.text }]}>
+                New trips ({assignableIncomingNotificationsWithMeta.length})
               </Text>
-              <Text
-                style={[
-                  styles.offlineCardSubtitle,
-                  { color: colors.textMuted, marginTop: 6 },
-                ]}
-              >
-                Select a trip to continue. The map opens after you choose.
+              <Text style={[styles.notificationListSubtitle, { color: colors.textMuted }]}>
+                Tap a trip to open the map and accept.
               </Text>
             </View>
             <ScrollView
@@ -3520,10 +3692,10 @@ export default function DriverRadarScreen() {
               contentContainerStyle={styles.invitesScrollContent}
               showsVerticalScrollIndicator={false}
             >
-              {incomingNotificationsWithMeta.map((item) => (
+              {assignableIncomingNotificationsWithMeta.map((item) => (
                 <TouchableOpacity
                   key={item.trip.id}
-                  activeOpacity={0.86}
+                  activeOpacity={0.85}
                   onPress={() => setSelectedIncomingTripId(item.trip.id)}
                   style={[
                     styles.centerCardWrap,
@@ -3541,16 +3713,14 @@ export default function DriverRadarScreen() {
                     {item.requiresOtp ? (
                       <View
                         style={[
-                          styles.notificationSelectBadge,
-                          { backgroundColor: colors.emeraldMuted },
+                          styles.notificationOtpBadgeMinimal,
+                          {
+                            borderColor: colors.border,
+                            backgroundColor: colors.surface,
+                          },
                         ]}
                       >
-                        <Text
-                          style={[
-                            styles.notificationSelectBadgeText,
-                            { color: colors.emerald },
-                          ]}
-                        >
+                        <Text style={[styles.notificationOtpBadgeMinimalText, { color: colors.textMuted }]}>
                           OTP
                         </Text>
                       </View>
@@ -3558,43 +3728,31 @@ export default function DriverRadarScreen() {
                   </View>
                   <Text
                     style={[styles.notificationSelectRoute, { color: colors.text }]}
-                    numberOfLines={1}
+                    numberOfLines={2}
                   >
-                    {item.trip.pickup_area?.trim() || "Pickup"} to{" "}
+                    {item.trip.pickup_area?.trim() || "Pickup"} →{" "}
                     {item.trip.drop_location?.trim() || "Drop-off"}
                   </Text>
-                  <Text
-                    style={[
-                      styles.notificationSelectMeta,
-                      { color: colors.textMuted, marginTop: 6 },
-                    ]}
-                  >
-                    Assigned by {item.assignedByName}
+                  <Text style={styles.notificationAssignedByLine} numberOfLines={2}>
+                    <Text style={[styles.notificationAssignedByPrefix, { color: colors.textMuted }]}>
+                      Assigned by{" "}
+                    </Text>
+                    <Text style={[styles.notificationAssignedByName, { color: colors.text }]}>
+                      {item.assignerPersonDisplay}
+                    </Text>
                   </Text>
                   <Text
-                    style={[
-                      styles.notificationSelectMeta,
-                      { color: colors.textMuted, marginTop: 2 },
-                    ]}
+                    style={[styles.notificationSelectMeta, { color: colors.textMuted, marginTop: 6 }]}
                   >
                     {item.commissionForTrip > 0
                       ? `Est. earning ${formatINR(item.commissionForTrip)}`
-                      : "Est. earning SALARY"}
+                      : "Est. earning · Salary"}
                   </Text>
                   <View style={styles.notificationSelectFooter}>
-                    <Text
-                      style={[
-                        styles.notificationSelectActionText,
-                        { color: colors.emerald },
-                      ]}
-                    >
-                      Continue to trip
+                    <Text style={[styles.notificationSelectActionTextMuted, { color: colors.textMuted }]}>
+                      Open
                     </Text>
-                    <FontAwesome
-                      name="chevron-right"
-                      size={14}
-                      color={colors.emerald}
-                    />
+                    <FontAwesome name="chevron-right" size={12} color={colors.textMuted} />
                   </View>
                 </TouchableOpacity>
               ))}
@@ -3627,35 +3785,8 @@ export default function DriverRadarScreen() {
               </View>
             ) : null}
           </View>
-        ) : effectiveFirstIncoming &&
-          String(acceptedTripId ?? "").toLowerCase() ===
-            String(effectiveFirstIncoming.id).toLowerCase() ? (
-          <DriverTripFlowCard
-            trip={effectiveFirstIncoming}
-            commissionAmount={newAssignmentCommission}
-            onRefresh={fetch}
-            onTripCompleted={() => setJustCompletedTrip(true)}
-            onBackToDashboard={async () => {
-              await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
-              setAcceptedTripId(null);
-              setSelectedIncomingTripId(null);
-              setAssignmentFeedback(null);
-              setJustCompletedTrip(false);
-              justClaimedTripIdRef.current = null;
-              justClaimedOldTripIdRef.current = null;
-              fetch();
-            }}
-            {...(mapSheet
-              ? {
-                  edgeToEdge: true,
-                  variant: "page" as const,
-                  onOperationActiveChange: handleTripFlowOperationActiveChange,
-                }
-              : {})}
-          />
         ) : showNewAssignmentCard &&
           effectiveFirstIncoming &&
-          !shouldShowIncomingOtpPopup &&
           !assignmentFeedback ? (
           <JobRequestCard
             pickup={effectiveFirstIncoming.pickup_area?.trim() || "—"}
@@ -4122,232 +4253,6 @@ export default function DriverRadarScreen() {
         </View>
       </Modal>
 
-      <Modal
-        visible={shouldShowIncomingOtpPopup}
-        animationType="fade"
-        transparent
-        onRequestClose={handleDismissIncomingOtpPopup}
-      >
-        <View style={styles.incomingOtpPopupBackdrop}>
-          <View
-            style={[
-              styles.incomingOtpPopupCard,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
-          >
-            <View
-              style={[
-                styles.incomingOtpPopupBadge,
-                {
-                  backgroundColor: colors.surfaceElevated,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <FontAwesome name="shield" size={11} color={colors.textMuted} />
-              <Text
-                style={[
-                  styles.incomingOtpPopupBadgeText,
-                  { color: colors.textMuted },
-                ]}
-              >
-                {incomingOtpPopupBadge}
-              </Text>
-            </View>
-
-            <View style={styles.incomingOtpPopupHero}>
-              <View
-                style={[
-                  styles.incomingOtpPopupAvatarWrap,
-                  {
-                    backgroundColor: colors.surfaceElevated,
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                {incomingOtpPopupAvatarUri ? (
-                  <Image
-                    source={{ uri: incomingOtpPopupAvatarUri }}
-                    style={styles.incomingOtpPopupAvatar}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <FontAwesome
-                    name={
-                      firstIncomingIsAggregate ? "briefcase" : "user-circle-o"
-                    }
-                    size={18}
-                    color={colors.textPrimary}
-                  />
-                )}
-              </View>
-              <View style={styles.incomingOtpPopupHeroText}>
-                <Text
-                  style={[styles.incomingOtpPopupTitle, { color: colors.text }]}
-                >
-                  {incomingOtpPopupTitle}
-                </Text>
-                <Text
-                  style={[styles.incomingOtpPopupName, { color: colors.text }]}
-                  numberOfLines={2}
-                >
-                  {incomingOtpPopupName}
-                </Text>
-              </View>
-            </View>
-
-            <View
-              style={[
-                styles.incomingOtpPopupRouteCard,
-                {
-                  backgroundColor: colors.surfaceElevated,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <View style={styles.incomingOtpPopupRouteRow}>
-                <View
-                  style={[
-                    styles.incomingOtpPopupRouteIcon,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
-                  <FontAwesome
-                    name="arrow-up"
-                    size={11}
-                    color={colors.textMuted}
-                  />
-                </View>
-                <Text
-                  style={[
-                    styles.incomingOtpPopupRouteValue,
-                    { color: colors.text },
-                  ]}
-                  numberOfLines={2}
-                >
-                  {incomingOtpPopupPickup}
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.incomingOtpPopupRouteDivider,
-                  { backgroundColor: colors.border },
-                ]}
-              />
-              <View style={styles.incomingOtpPopupRouteRow}>
-                <View
-                  style={[
-                    styles.incomingOtpPopupRouteIcon,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
-                  <FontAwesome
-                    name="arrow-down"
-                    size={11}
-                    color={colors.textMuted}
-                  />
-                </View>
-                <Text
-                  style={[
-                    styles.incomingOtpPopupRouteValue,
-                    { color: colors.text },
-                  ]}
-                  numberOfLines={2}
-                >
-                  {incomingOtpPopupDrop}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.incomingOtpPopupMetaRow}>
-              <View
-                style={[
-                  styles.incomingOtpPopupMetaPill,
-                  {
-                    backgroundColor: colors.surfaceElevated,
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.incomingOtpPopupMetaLabel,
-                    { color: colors.textMuted },
-                  ]}
-                >
-                  Trip type
-                </Text>
-                <Text
-                  style={[
-                    styles.incomingOtpPopupMetaValue,
-                    { color: colors.text },
-                  ]}
-                >
-                  {firstIncomingCounterpartyLabel}
-                </Text>
-              </View>
-              {incomingOtpPopupEarnings ? (
-                <View
-                  style={[
-                    styles.incomingOtpPopupMetaPill,
-                    {
-                      backgroundColor: colors.surfaceElevated,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.incomingOtpPopupMetaLabel,
-                      { color: colors.textMuted },
-                    ]}
-                  >
-                    Est. earning
-                  </Text>
-                  <Text
-                    style={[
-                      styles.incomingOtpPopupMetaValue,
-                      { color: colors.emerald },
-                    ]}
-                  >
-                    {incomingOtpPopupEarnings}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-
-            <Text
-              style={[
-                styles.incomingOtpPopupCaption,
-                { color: colors.textMuted },
-              ]}
-            >
-              Review the assignment details and continue to OTP claim when you
-              are ready.
-            </Text>
-            <TouchableOpacity
-              style={[
-                styles.incomingOtpPopupButton,
-                {
-                  backgroundColor: colors.emerald,
-                  shadowColor: colors.emerald,
-                },
-              ]}
-              activeOpacity={0.85}
-              onPress={handleDismissIncomingOtpPopup}
-            >
-              <Text style={styles.incomingOtpPopupButtonText}>Continue</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
       {!showNewAssignmentCard && !shouldShowMap && (
         <>
           <View style={[styles.assignedStaticHeader]}>
@@ -4759,11 +4664,31 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 20,
   },
+  notificationListIntro: {
+    marginBottom: 4,
+  },
+  notificationListTitle: {
+    fontSize: 17,
+    fontWeight: "600",
+    letterSpacing: -0.2,
+  },
+  notificationListSubtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    fontWeight: "400",
+    lineHeight: 18,
+  },
   notificationSelectCard: {
     width: "100%",
-    borderWidth: 1,
-    borderRadius: 18,
-    padding: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
   notificationSelectHeader: {
     flexDirection: "row",
@@ -4772,39 +4697,53 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   notificationSelectTripId: {
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "600",
     letterSpacing: 0.2,
     flexShrink: 1,
   },
-  notificationSelectBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+  notificationOtpBadgeMinimal: {
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
-  notificationSelectBadgeText: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
+  notificationOtpBadgeMinimalText: {
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.2,
   },
   notificationSelectRoute: {
-    marginTop: 8,
-    fontSize: 14,
-    fontWeight: "700",
+    marginTop: 6,
+    fontSize: 15,
+    fontWeight: "600",
+    letterSpacing: -0.2,
+    lineHeight: 20,
+  },
+  notificationAssignedByLine: {
+    marginTop: 10,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  notificationAssignedByPrefix: {
+    fontWeight: "400",
+  },
+  notificationAssignedByName: {
+    fontWeight: "600",
   },
   notificationSelectMeta: {
     fontSize: 12,
-    fontWeight: "500",
+    fontWeight: "400",
   },
   notificationSelectFooter: {
-    marginTop: 10,
+    marginTop: 12,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 4,
   },
-  notificationSelectActionText: {
+  notificationSelectActionTextMuted: {
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   notificationHistoryHint: {
     marginTop: 8,
@@ -5703,179 +5642,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     maxWidth: 120,
   },
-  incomingOtpPopupBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(10, 16, 28, 0.5)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-  },
-  incomingOtpPopupCard: {
-    width: "100%",
-    maxWidth: 360,
-    borderRadius: 28,
-    borderWidth: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 22,
-    alignItems: "stretch",
-    ...(Platform.OS === "ios"
-      ? {
-          shadowColor: Theme.shadow,
-          shadowOffset: { width: 0, height: 18 },
-          shadowOpacity: 0.18,
-          shadowRadius: 36,
-        }
-      : { elevation: 10 }),
-  },
-  incomingOtpPopupBadge: {
-    alignSelf: "center",
-    minHeight: 30,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 16,
-  },
-  incomingOtpPopupBadgeText: {
-    ...Typography.headerTitle,
-    fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 0.6,
-  },
-  incomingOtpPopupHero: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  incomingOtpPopupAvatarWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    borderWidth: 1,
-    overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  incomingOtpPopupAvatar: {
-    width: "100%",
-    height: "100%",
-  },
-  incomingOtpPopupHeroText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  incomingOtpPopupEyebrow: {
-    ...Typography.headerTitle,
-    fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 0.6,
-    marginBottom: 4,
-  },
-  incomingOtpPopupTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    letterSpacing: -0.3,
-    lineHeight: 22,
-  },
-  incomingOtpPopupName: {
-    marginTop: 8,
-    fontSize: 14,
-    fontWeight: "600",
-    lineHeight: 18,
-  },
-  incomingOtpPopupRouteCard: {
+  /** Scrollable inbox below active / accepted trip flow — never blocks with a modal. */
+  otherPendingTripsWrap: {
     marginTop: 18,
-    borderRadius: 20,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-    gap: 10,
-  },
-  incomingOtpPopupRouteRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  incomingOtpPopupRouteIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 999,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  incomingOtpPopupRouteValue: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 14,
-    fontWeight: "600",
-    lineHeight: 19,
-  },
-  incomingOtpPopupRouteDivider: {
-    height: 1,
-    marginLeft: 14,
-  },
-  incomingOtpPopupMetaRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 16,
-  },
-  incomingOtpPopupMetaPill: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    minWidth: 0,
-  },
-  incomingOtpPopupMetaLabel: {
-    fontSize: 10,
-    fontWeight: "600",
-    letterSpacing: 0.2,
-    marginBottom: 4,
-  },
-  incomingOtpPopupMetaValue: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  incomingOtpPopupCaption: {
-    marginTop: 14,
-    fontSize: 13,
-    fontWeight: "500",
-    lineHeight: 20,
-    textAlign: "center",
-  },
-  incomingOtpPopupButton: {
-    marginTop: 18,
-    minWidth: 180,
-    minHeight: Layout.minTouchTargetSize,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-    paddingVertical: 13,
-    borderWidth: 0,
-    ...(Platform.OS === "web"
-      ? {
-          outlineWidth: 0,
-        }
-      : null),
-    ...(Platform.OS === "ios"
-      ? {
-          shadowOffset: { width: 0, height: 10 },
-          shadowOpacity: 0.22,
-          shadowRadius: 20,
-        }
-      : { elevation: 6 }),
-  },
-  incomingOtpPopupButtonText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: Theme.textOnPrimary,
-    letterSpacing: 0.2,
+    marginBottom: 8,
   },
   fullMapModal: {
     flex: 1,
