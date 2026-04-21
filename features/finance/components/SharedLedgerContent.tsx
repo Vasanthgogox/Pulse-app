@@ -986,8 +986,12 @@ export function SharedLedgerContent({
     const norm = (s: string | null | undefined) =>
       s == null ? "" : String(s).trim().toLowerCase();
     const tripMap = new Map<string, TripRow>();
+    const tripDisplayById = new Map<string, string>();
     for (const t of trips) {
-      tripMap.set(norm(t.id), t);
+      const idKey = norm(t.id);
+      tripMap.set(idKey, t);
+      const displayKey = norm(getTripDisplayNumber(t));
+      if (displayKey) tripDisplayById.set(idKey, displayKey);
     }
     const contactType = entityType === "CLIENT" ? "client" : "supplier";
 
@@ -1001,12 +1005,18 @@ export function SharedLedgerContent({
 
     /** Index local entries by tripId (may have multiple per trip). */
     const localByTrip = new Map<string, typeof localRelevant>();
+    const addLocalToKey = (key: string, row: (typeof localRelevant)[number]) => {
+      if (!key) return;
+      const arr = localByTrip.get(key) ?? [];
+      arr.push(row);
+      localByTrip.set(key, arr);
+    };
     for (const l of localRelevant) {
       const trip = norm(l.trip_id);
       if (!trip) continue;
-      const arr = localByTrip.get(trip) ?? [];
-      arr.push(l);
-      localByTrip.set(trip, arr);
+      addLocalToKey(trip, l);
+      const displayTrip = tripDisplayById.get(trip) ?? "";
+      if (displayTrip && displayTrip !== trip) addLocalToKey(displayTrip, l);
     }
 
     const rows: CommandTxnRow[] = [];
@@ -1017,13 +1027,23 @@ export function SharedLedgerContent({
     // use reconciled external paid so the forensic "Entry comparison" does not stay stuck at
     // "Awaiting partner" for single-line trips.
     const partnerPaidByTripFromSummary = new Map<string, number>();
+    const partnerPaidRemainingByCanonicalTrip = new Map<string, number>();
     for (const row of reconciledRows) {
       const key = norm(row.tripId);
       if (!key) continue;
       const paid = Number(row.extPaid ?? 0);
-      if (paid > 0) partnerPaidByTripFromSummary.set(key, paid);
+      if (paid > 0) {
+        partnerPaidByTripFromSummary.set(key, paid);
+        const canonical = resolveTripRefToCanonicalId(row.tripId);
+        if (canonical) {
+          partnerPaidRemainingByCanonicalTrip.set(canonical, paid);
+        }
+        const missionKey = norm(row.missionId);
+        if (missionKey && missionKey !== key) {
+          partnerPaidByTripFromSummary.set(missionKey, paid);
+        }
+      }
     }
-    const partnerPaidRemainingByTrip = new Map(partnerPaidByTripFromSummary);
 
     for (const p of partnerEntries) {
       const tripRef = resolveTripRefToCanonicalId(p.reference_id);
@@ -1115,50 +1135,60 @@ export function SharedLedgerContent({
       }
     }
 
-    /** Any local entry not matched to a partner entry is still pending. */
-    for (const l of localRelevant) {
-      if (matchedLocalIds.has(l.id)) continue;
+    const remainingLocals = localRelevant.filter((l) => !matchedLocalIds.has(l.id));
+    const remainingByTrip = new Map<string, typeof remainingLocals>();
+    for (const l of remainingLocals) {
+      const tripRef = norm(l.trip_id);
+      if (!tripRef) continue;
+      const arr = remainingByTrip.get(tripRef) ?? [];
+      arr.push(l);
+      remainingByTrip.set(tripRef, arr);
+    }
+
+    const consumedLocalIds = new Set<string>();
+    // Summary-only mode: partner has trip-level paid but no line entries.
+    // Show a single rollup row per trip to avoid redundant multi-line rows.
+    for (const [tripRef, tripLocals] of remainingByTrip) {
+      const partnerTripLineCount = partnerTxnCountByTrip.get(tripRef) ?? 0;
+      if (partnerTripLineCount > 0) continue;
+      const canonicalTripRef = resolveTripRefToCanonicalId(tripRef);
+      if (!canonicalTripRef) continue;
+      const partnerPaid = partnerPaidRemainingByCanonicalTrip.get(canonicalTripRef) ?? 0;
+      if (!(partnerPaid > 0)) continue;
+
+      let localTotal = 0;
+      let latestDate = "";
+      for (const l of tripLocals) {
+        consumedLocalIds.add(l.id);
+        localTotal += Math.abs((l.amount_in ?? 0) + (l.amount_out ?? 0));
+        const dt = l.transaction_date || "";
+        if (dt > latestDate) latestDate = dt;
+      }
+      rows.push({
+        id: `rollup:${tripRef}:${tripLocals.length}`,
+        status: Math.abs(localTotal - partnerPaid) < 0.5 ? "matched" : "conflict",
+        tripRef,
+        date: latestDate,
+        amountAbs: localTotal,
+        localAmount: localTotal,
+        partnerAmount: partnerPaid,
+        displayDate: formatTxnShortDate(latestDate) || undefined,
+        myRef: "Rollup",
+        partnerRef: "Trip summary",
+        myMode: "MIXED",
+        partnerMode: "MIXED",
+      });
+      partnerPaidRemainingByCanonicalTrip.set(canonicalTripRef, 0);
+    }
+
+    /** Any remaining local entry not matched to partner entry is pending. */
+    for (const l of remainingLocals) {
+      if (consumedLocalIds.has(l.id)) continue;
       const tripRef = norm(l.trip_id);
       const amtIn = l.amount_in ?? 0;
       const amtOut = l.amount_out ?? 0;
       const net = amtIn + amtOut;
       const amtAbs = Math.abs(net);
-      const partnerTripLineCount = tripRef
-        ? (partnerTxnCountByTrip.get(tripRef) ?? 0)
-        : 0;
-      const remainingPartnerPaid = tripRef
-        ? (partnerPaidRemainingByTrip.get(tripRef) ?? 0)
-        : 0;
-      const allocatedPartnerPaid =
-        partnerTripLineCount === 0 && remainingPartnerPaid > 0
-          ? Math.min(amtAbs, remainingPartnerPaid)
-          : 0;
-
-      if (allocatedPartnerPaid > 0) {
-        partnerPaidRemainingByTrip.set(
-          tripRef,
-          Math.max(0, remainingPartnerPaid - allocatedPartnerPaid),
-        );
-        rows.push({
-          id: `l:${l.id}`,
-          status:
-            Math.abs(amtAbs - allocatedPartnerPaid) < 0.5
-              ? "matched"
-              : "conflict",
-          tripRef,
-          date: l.transaction_date || "",
-          amountAbs: amtAbs,
-          localAmount: amtAbs,
-          partnerAmount: allocatedPartnerPaid,
-          displayDate: formatTxnShortDate(l.transaction_date) || undefined,
-          myRef: compactLedgerRef(l.payment_reference, l.id),
-          partnerRef: "Trip summary",
-          myMode: modeLabel(l.payment_mode),
-          partnerMode: modeLabel(l.payment_mode),
-          lineKind: inferSharedTxnLineKind(l.primary_category, l.description),
-        });
-        continue;
-      }
       rows.push({
         id: `l:${l.id}`,
         status: "pending",
@@ -1172,6 +1202,47 @@ export function SharedLedgerContent({
         myMode: modeLabel(l.payment_mode),
         partnerMode: "—",
         lineKind: inferSharedTxnLineKind(l.primary_category, l.description),
+      });
+    }
+
+    // If partner-paid (from summary) is still left after mapping local lines, expose it as
+    // a partner-only TXN row so the TXN table totals stay aligned with the trip header.
+    // This avoids incorrectly forcing remaining partner value into an unrelated local line.
+    const residualByCanonicalTrip = new Map<string, number>();
+    for (const [tripKeyRaw, remainingRaw] of partnerPaidRemainingByCanonicalTrip) {
+      const remaining = Number(remainingRaw ?? 0);
+      if (!(remaining > 0)) continue;
+      if ((partnerTxnCountByTrip.get(tripKeyRaw) ?? 0) > 0) continue;
+      const canonicalTrip = resolveTripRefToCanonicalId(tripKeyRaw);
+      if (!canonicalTrip) continue;
+      residualByCanonicalTrip.set(
+        canonicalTrip,
+        (residualByCanonicalTrip.get(canonicalTrip) ?? 0) + remaining,
+      );
+    }
+
+    for (const [tripRef, partnerResidual] of residualByCanonicalTrip) {
+      if (!(partnerResidual > 0)) continue;
+      const tripRow = tripMap.get(tripRef);
+      rows.push({
+        id: `summary:${tripRef}:${Math.round(partnerResidual * 100)}`,
+        status: "no_entry",
+        tripRef,
+        date:
+          tripRow?.pickup_date ??
+          tripRow?.created_at ??
+          "",
+        amountAbs: partnerResidual,
+        localAmount: 0,
+        partnerAmount: partnerResidual,
+        displayDate:
+          formatTxnShortDate(
+            tripRow?.pickup_date ?? tripRow?.created_at ?? "",
+          ) || undefined,
+        myRef: "—",
+        partnerRef: "Trip summary",
+        myMode: "—",
+        partnerMode: "—",
       });
     }
 
