@@ -1010,7 +1010,7 @@ export function SharedLedgerContent({
           myRef: compactLedgerRef(exact.payment_reference, exact.id),
           partnerRef: compactLedgerRef(undefined, p.id),
           myMode: modeLabel(exact.payment_mode),
-          partnerMode: "—",
+          partnerMode: modeLabel(exact.payment_mode),
           lineKind: inferSharedTxnLineKind(
             exact.primary_category,
             exact.description,
@@ -1035,7 +1035,7 @@ export function SharedLedgerContent({
           myRef: compactLedgerRef(nearest.payment_reference, nearest.id),
           partnerRef: compactLedgerRef(undefined, p.id),
           myMode: modeLabel(nearest.payment_mode),
-          partnerMode: "—",
+          partnerMode: modeLabel(nearest.payment_mode),
           lineKind: inferSharedTxnLineKind(
             nearest.primary_category,
             nearest.description,
@@ -1727,8 +1727,8 @@ export function SharedLedgerContent({
             tripRouteForTripRef={tripRouteForTripRef}
             onPressDownload={embeddedInOverlay ? undefined : openSharedReport}
           />
-        </>
-      )}
+            </>
+          )}
 
       <LedgerReportModal
         visible={sharedReportVisible}

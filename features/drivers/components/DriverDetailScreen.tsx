@@ -215,9 +215,6 @@ export default function DriverDetailScreen({
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
-  const [expandedLedgerRowId, setExpandedLedgerRowId] = useState<string | null>(
-    null,
-  );
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
@@ -552,26 +549,12 @@ export default function DriverDetailScreen({
         agingLabel: getAgingLabel(tripDateIso, due),
       };
     });
-    tripRows.push({
-      id: "ledger-adjustment",
-      missionId: "—",
-      dest: "Other / Ledger",
-      vehicleDisplay: undefined,
-      col1: 0,
-      col2: entityPaid - totalPaidLinked,
-      col3: entityPending,
-      tripDate: "—",
-      tripDateIso: undefined,
-      agingLabel: "",
-    });
     return tripRows;
   }, [
     trips,
     driverTransactions,
     driverId,
     driverOffer,
-    entityPaid,
-    entityPending,
   ]);
 
   /** Trip details map for Cash Flow list. */
@@ -1444,320 +1427,86 @@ export default function DriverDetailScreen({
                 </View>
               </View>
             ) : null}
-            <View style={styles.ledgerTableHeaderWrap}>
-              <View style={styles.ledgerTableHeader}>
-                <Text
-                  style={[styles.ledgerTh, styles.driverLedgerThColRouteDate]}
-                  numberOfLines={1}
-                >
+            <View style={styles.tripTableCard}>
+              <View style={styles.tripTableHeader}>
+                <Text style={[styles.tripTh, styles.tripThMission]} numberOfLines={1}>
                   TRIP
                 </Text>
-                <Text
-                  style={[
-                    styles.ledgerTh,
-                    styles.driverLedgerThCol,
-                    styles.driverLedgerThColRight,
-                    styles.ledgerThBorderLeft,
-                  ]}
-                  numberOfLines={1}
-                >
-                  PAID
-                </Text>
-                <Text
-                  style={[
-                    styles.ledgerTh,
-                    styles.driverLedgerThCol,
-                    styles.driverLedgerThColRight,
-                    styles.ledgerThBorderLeft,
-                  ]}
-                  numberOfLines={1}
-                >
-                  TO PAY
-                </Text>
-                <View style={styles.ledgerThSpacer} />
+                <View style={styles.tripHeaderAmountCol}>
+                  <Text style={[styles.tripTh, styles.tripThSales]} numberOfLines={1}>
+                    PAID
+                  </Text>
+                </View>
+                <View style={styles.tripHeaderAmountCol}>
+                  <Text style={[styles.tripTh, styles.tripThRight]} numberOfLines={1}>
+                    TO PAY
+                  </Text>
+                </View>
               </View>
-            </View>
-            <View style={styles.ledgerTableBodyWrap}>
               {ledgerRows.length === 0 ? (
-                <View style={styles.ledgerEmptyRow}>
-                  <Text style={styles.ledgerEmptyText} numberOfLines={3}>
+                <View style={styles.tripTableRow}>
+                  <Text style={[styles.tripTd, styles.tripTdMission]} numberOfLines={1}>
                     {t("noLedgerEntriesDriver")}
                   </Text>
                 </View>
               ) : (
-                ledgerRows.map((r) => {
-                  const category =
-                    r.id === "ledger-adjustment" || (r.missionId ?? "") === "—"
-                      ? "GENERAL"
-                      : "TRIP";
-                  const expanded = expandedLedgerRowId === r.id;
-                  const rowWithAging = r as { agingLabel?: string };
-                  return (
-                    <View key={r.id} style={styles.ledgerRowWrapper}>
-                      <Pressable
-                        style={({ pressed }) => [
-                          styles.tableRow,
-                          pressed && styles.ledgerRowPressed,
-                        ]}
-                        onPress={() =>
-                          setExpandedLedgerRowId((id) =>
-                            id === r.id ? null : r.id,
-                          )
-                        }
-                        android_ripple={undefined}
-                      >
-                        <View
-                          style={[
-                            styles.driverLedgerTdColRouteDate,
-                            styles.driverLedgerTdColRouteDateContent,
-                          ]}
-                        >
-                          <Text style={styles.tdMissionId} numberOfLines={1}>
-                            {r.missionId ?? "—"}
-                          </Text>
-                          <Text
-                            style={styles.ledgerCellSubCategory}
-                            numberOfLines={1}
-                          >
-                            {category}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.ledgerRouteText,
-                              styles.ledgerRouteTextBlock,
-                            ]}
-                            numberOfLines={2}
-                          >
-                            {r.dest?.trim() || "—"}
-                          </Text>
-                          {(r as { vehicleDisplay?: string }).vehicleDisplay ? (
-                            <Text
-                              style={styles.ledgerCellVehicle}
-                              numberOfLines={1}
-                            >
-                              {(r as { vehicleDisplay?: string }).vehicleDisplay}
-                            </Text>
-                          ) : null}
-                          <Text
-                            style={styles.ledgerCellSubDate}
-                            numberOfLines={1}
-                          >
-                            {formatLedgerDateTime(
-                              (r as { tripDateIso?: string }).tripDateIso,
-                            )}
-                          </Text>
-                        </View>
-                        <View
-                          style={[
-                            styles.driverLedgerTdColAmount,
-                            styles.ledgerTdBorderLeft,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.td,
-                              (r.col2 ?? 0) > 0
-                                ? styles.tdGreen
-                                : styles.tdMuted,
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {(r.col2 ?? 0) > 0
-                              ? formatLedgerAmount(r.col2)
-                              : "—"}
-                          </Text>
-                        </View>
-                        <View
-                          style={[
-                            styles.driverLedgerTdColAmount,
-                            styles.ledgerTdBorderLeft,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.td,
-                              (r.col3 ?? 0) > 0 ? styles.tdRed : styles.tdMuted,
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {(r.col3 ?? 0) > 0
-                              ? formatLedgerAmount(r.col3)
-                              : "—"}
-                          </Text>
-                        </View>
-                        <View style={styles.ledgerRowActionHint}>
-                          <FontAwesome
-                            name={expanded ? "chevron-down" : "chevron-right"}
-                            size={10}
-                            color={Theme.textMutedDemo}
-                          />
-                        </View>
-                      </Pressable>
-                      {expanded ? (
-                        <View style={styles.ledgerExpandedDetail}>
-                          <View style={styles.ledgerExpandedBlock}>
-                            <Text style={styles.ledgerExpandedBlockTitle}>
-                              TRIP
-                            </Text>
-                            <View style={styles.ledgerExpandedBlockContent}>
-                              <View
-                                style={[
-                                  styles.ledgerExpandedRowDouble,
-                                  !rowWithAging.agingLabel && styles.ledgerExpandedRowDoubleLast,
-                                ]}
-                              >
-                                <View style={styles.ledgerExpandedHalf}>
-                                  <Text style={styles.ledgerExpandedLabelSmall}>
-                                    Mission
-                                  </Text>
-                                  <Text
-                                    style={styles.ledgerExpandedValue}
-                                    numberOfLines={1}
-                                  >
-                                    {r.missionId ?? "—"}
-                                  </Text>
-                                </View>
-                                <View
-                                  style={[
-                                    styles.ledgerExpandedHalf,
-                                    !rowWithAging.agingLabel &&
-                                      styles.ledgerExpandedHalfLast,
-                                  ]}
-                                >
-                                  <Text style={styles.ledgerExpandedLabelSmall}>
-                                    Date
-                                  </Text>
-                                  <Text style={styles.ledgerExpandedValue}>
-                                    {formatLedgerDateTime(
-                                      (r as { tripDateIso?: string })
-                                        .tripDateIso,
-                                    )}
-                                  </Text>
-                                </View>
-                              </View>
-                              <View
-                                style={[
-                                  styles.ledgerExpandedRow,
-                                  !(r as { vehicleDisplay?: string }).vehicleDisplay &&
-                                    !rowWithAging.agingLabel &&
-                                    styles.ledgerExpandedRowLast,
-                                ]}
-                              >
-                                <Text style={styles.ledgerExpandedLabelSmall}>
-                                  Route
-                                </Text>
-                                <Text
-                                  style={styles.ledgerExpandedValue}
-                                  numberOfLines={2}
-                                >
-                                  {r.dest?.trim() || "—"}
-                                </Text>
-                              </View>
-                              {(r as { vehicleDisplay?: string }).vehicleDisplay ? (
-                                <View
-                                  style={[
-                                    styles.ledgerExpandedRow,
-                                    !rowWithAging.agingLabel &&
-                                      styles.ledgerExpandedRowLast,
-                                  ]}
-                                >
-                                  <Text style={styles.ledgerExpandedLabelSmall}>
-                                    Vehicle
-                                  </Text>
-                                  <Text
-                                    style={styles.ledgerExpandedValue}
-                                    numberOfLines={1}
-                                  >
-                                    {(r as { vehicleDisplay?: string }).vehicleDisplay}
-                                  </Text>
-                                </View>
-                              ) : null}
-                              {rowWithAging.agingLabel ? (
-                                <View
-                                  style={[
-                                    styles.ledgerExpandedRow,
-                                    styles.ledgerExpandedRowLast,
-                                  ]}
-                                >
-                                  <Text style={styles.ledgerExpandedLabelSmall}>
-                                    Aging
-                                  </Text>
-                                  <Text style={styles.ledgerExpandedValue}>
-                                    {rowWithAging.agingLabel}
-                                  </Text>
-                                </View>
-                              ) : null}
-                            </View>
-                          </View>
-                          <View style={styles.ledgerExpandedBlock}>
-                            <Text style={styles.ledgerExpandedBlockTitle}>
-                              PAYMENT
-                            </Text>
-                            <View style={styles.ledgerExpandedBlockContent}>
-                              <View style={styles.ledgerExpandedPaymentDark}>
-                                <View style={styles.ledgerExpandedRowTriple}>
-                                  <View style={styles.ledgerExpandedTripleCell}>
-                                    <Text
-                                      style={styles.ledgerExpandedLabelOnDark}
-                                    >
-                                      Earned
-                                    </Text>
-                                    <Text
-                                      style={styles.ledgerExpandedValueOnDark}
-                                      numberOfLines={1}
-                                    >
-                                      {(r.col1 ?? 0) > 0
-                                        ? formatINR(r.col1)
-                                        : "—"}
-                                    </Text>
-                                  </View>
-                                  <View style={styles.ledgerExpandedTripleCell}>
-                                    <Text
-                                      style={styles.ledgerExpandedLabelOnDark}
-                                    >
-                                      Paid
-                                    </Text>
-                                    <Text
-                                      style={[
-                                        styles.ledgerExpandedValueOnDark,
-                                        (r.col2 ?? 0) > 0 &&
-                                          styles.ledgerExpandedValueOnDarkGreen,
-                                      ]}
-                                      numberOfLines={1}
-                                    >
-                                      {(r.col2 ?? 0) > 0
-                                        ? formatINR(r.col2)
-                                        : "—"}
-                                    </Text>
-                                  </View>
-                                  <View style={styles.ledgerExpandedTripleCell}>
-                                    <Text
-                                      style={styles.ledgerExpandedLabelOnDark}
-                                    >
-                                      To pay
-                                    </Text>
-                                    <Text
-                                      style={[
-                                        styles.ledgerExpandedValueOnDark,
-                                        (r.col3 ?? 0) > 0 &&
-                                          styles.ledgerExpandedValueOnDarkRed,
-                                      ]}
-                                      numberOfLines={1}
-                                    >
-                                      {(r.col3 ?? 0) > 0
-                                        ? formatINR(r.col3)
-                                        : "—"}
-                                    </Text>
-                                  </View>
-                                </View>
-                              </View>
-                            </View>
-                          </View>
-                        </View>
+                ledgerRows.map((r) => (
+                  <Pressable
+                    key={r.id}
+                    style={({ pressed }) => [
+                      styles.tripTableRow,
+                      pressed && styles.ledgerRowPressed,
+                    ]}
+                    onPress={() => {
+                      const tripId = String(r.id ?? "").trim();
+                      if (!tripId) return;
+                      router.push(`/trip/${tripId}`);
+                    }}
+                  >
+                    <View style={styles.tripTdMission}>
+                      <Text style={styles.tripTdMissionId} numberOfLines={1}>
+                        {r.missionId ?? "—"}
+                      </Text>
+                      <Text style={styles.tripTdRoute} numberOfLines={1}>
+                        {r.dest?.trim() || "—"}
+                      </Text>
+                      {(r as { vehicleDisplay?: string }).vehicleDisplay ? (
+                        <Text style={styles.tripTdRoute} numberOfLines={1}>
+                          {(r as { vehicleDisplay?: string }).vehicleDisplay}
+                        </Text>
                       ) : null}
+                      <Text style={styles.tripTdRoute} numberOfLines={1}>
+                        {formatLedgerDateTime(
+                          (r as { tripDateIso?: string }).tripDateIso,
+                        )}
+                      </Text>
                     </View>
-                  );
-                })
+                    <View style={styles.tripAmountCol}>
+                      <Text
+                        style={[
+                          styles.tripTd,
+                          styles.tripTdSales,
+                          (r.col2 ?? 0) > 0 ? styles.tdGreen : styles.tdMuted,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {(r.col2 ?? 0) > 0 ? formatLedgerAmount(r.col2) : "—"}
+                      </Text>
+                    </View>
+                    <View style={styles.tripAmountCol}>
+                      <Text
+                        style={[
+                          styles.tripTd,
+                          styles.tripTdRight,
+                          (r.col3 ?? 0) > 0 ? styles.tdRed : styles.tdMuted,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {(r.col3 ?? 0) > 0 ? formatLedgerAmount(r.col3) : "—"}
+                      </Text>
+                    </View>
+                  </Pressable>
+                ))
               )}
             </View>
           </View>
@@ -2475,9 +2224,11 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
     padding: 4,
     borderRadius: 16,
-    marginHorizontal: Layout.screenPaddingHorizontal,
+    marginHorizontal: 0,
     marginBottom: 24,
     gap: 4,
+    width: "100%",
+    alignSelf: "stretch",
   },
   tabItem: {
     flex: 1,
@@ -2505,8 +2256,81 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
   },
   tabScroll: { flex: 1 },
-  tabScrollContent: {},
+  tabScrollContent: {
+    flexGrow: 1,
+  },
   tableWrap: { paddingHorizontal: 16, paddingTop: 24 },
+  tripTableCard: {
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 32,
+    overflow: "hidden",
+  },
+  tripTableHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    backgroundColor: Theme.surfaceLight,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
+  tripTh: {
+    fontSize: 9,
+    fontWeight: "700",
+    fontStyle: "italic",
+    color: Theme.textMuted,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  tripThMission: { flex: 1, minWidth: 0 },
+  tripHeaderAmountCol: {
+    width: 80,
+    minWidth: 72,
+    flexShrink: 0,
+    alignItems: "flex-end",
+  },
+  tripThSales: { width: 80, textAlign: "right" as const },
+  tripThRight: { width: 72, textAlign: "right" as const },
+  tripTableRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
+  tripTd: {
+    fontSize: 10,
+    fontWeight: "600",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+  },
+  tripTdMission: { flex: 1, minWidth: 0 },
+  tripTdMissionId: {
+    fontSize: 11,
+    fontWeight: "600",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+  },
+  tripTdRoute: {
+    fontSize: 10,
+    fontWeight: "400",
+    fontStyle: "italic",
+    color: Theme.textMuted,
+    marginTop: 4,
+  },
+  tripAmountCol: {
+    width: 80,
+    minWidth: 72,
+    flexShrink: 0,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  tripTdSales: { width: 80, textAlign: "right" as const },
+  tripTdRight: { width: 72, textAlign: "right" as const },
   sectionTitle: {
     fontSize: 8,
     fontWeight: "800",
@@ -2533,14 +2357,14 @@ const styles = StyleSheet.create({
   },
   ledgerSummaryRow: {
     flexDirection: "row",
-    backgroundColor: Theme.surface,
-    borderRadius: 10,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     marginBottom: 14,
-    gap: 12,
+    gap: 0,
   },
   ledgerSummaryCell: {
     flex: 1,
@@ -2549,18 +2373,18 @@ const styles = StyleSheet.create({
   ledgerSummaryCellBorder: {
     borderLeftWidth: 1,
     borderLeftColor: Theme.borderLight,
-    paddingLeft: 14,
+    paddingLeft: 12,
   },
   ledgerSummaryLabel: {
-    fontSize: 9,
+    fontSize: 7,
     fontWeight: "700",
-    color: Theme.textMutedDemo,
+    color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.8,
+    letterSpacing: 1,
     marginBottom: 4,
   },
   ledgerSummaryAmount: {
-    fontSize: 15,
+    fontSize: 19,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
   },
@@ -2569,7 +2393,7 @@ const styles = StyleSheet.create({
   ledgerTableHeaderWrap: {
     width: "100%",
     backgroundColor: Theme.surface,
-    paddingHorizontal: 10,
+    paddingHorizontal: 0,
     borderLeftWidth: 1,
     borderRightWidth: 1,
     borderBottomWidth: 1,
@@ -2591,11 +2415,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   ledgerTh: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
-    letterSpacing: 0.3,
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.6,
     paddingVertical: 10,
+    textTransform: "uppercase",
   },
   ledgerThNode: {
     flex: 0.25,
@@ -2623,7 +2448,7 @@ const styles = StyleSheet.create({
   ledgerTdBorderLeft: {
     borderLeftWidth: 1,
     borderLeftColor: Theme.borderLight,
-    paddingLeft: 8,
+    paddingLeft: 10,
   },
   ledgerThCredit: {
     flex: 0.25,
@@ -2664,15 +2489,15 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   ledgerCellSubCategory: {
-    fontSize: 10,
-    fontWeight: "500",
-    color: Theme.textSecondary,
-    letterSpacing: 0.05,
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.5,
     marginTop: 2,
     textTransform: "uppercase",
   },
   ledgerCellSubDate: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "400",
     color: Theme.textMuted,
     letterSpacing: 0.03,
@@ -2706,7 +2531,7 @@ const styles = StyleSheet.create({
     flex: 0.5,
     minWidth: 0,
     paddingVertical: 10,
-    paddingLeft: 10,
+    paddingLeft: 12,
     paddingRight: 8,
     justifyContent: "center",
   },
@@ -2719,7 +2544,7 @@ const styles = StyleSheet.create({
   driverLedgerTdColRouteDate: {
     flex: 0.5,
     minWidth: 0,
-    paddingLeft: 10,
+    paddingLeft: 12,
     paddingRight: 8,
     paddingVertical: 10,
   },
@@ -2732,9 +2557,9 @@ const styles = StyleSheet.create({
   },
   /** TRIP/ROUTE column: muted text to match client ledger (other tabs). */
   ledgerRouteText: {
-    fontSize: 10,
-    fontWeight: "400",
-    color: Theme.textMutedDemo,
+    fontSize: 9,
+    fontWeight: "500",
+    color: Theme.textMuted,
     letterSpacing: 0.05,
     textAlign: "center",
   },
@@ -2753,7 +2578,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Theme.borderLight,
   },
   ledgerRowPressed: {
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.surfaceGray,
   },
   /** Ledger expanded detail — compact, aligned with EntityDetailOverlay / table. */
   ledgerExpandedDetail: {
@@ -2906,7 +2731,7 @@ const styles = StyleSheet.create({
     textAlign: "right" as const,
   },
   ledgerTableBodyWrap: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 0,
     borderLeftWidth: 1,
     borderRightWidth: 1,
     borderBottomWidth: 1,
@@ -2968,6 +2793,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.surfaceLight,
   },
+  ledgerTableRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 0,
+  },
   statementMonthRow: {
     borderBottomWidth: 1,
     borderBottomColor: Theme.surfaceLight,
@@ -2989,10 +2820,11 @@ const styles = StyleSheet.create({
   tdMission: { flex: 0.42 },
   tdMissionWrap: { flex: 0.42, minWidth: 0 },
   tdMissionId: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
+    fontStyle: "italic",
   },
   tdDest: {
     fontSize: 6,

@@ -31,13 +31,36 @@ export type TripHubPartyMeta = {
   driverAvatarSeed: string | null;
 };
 
+function isGenericSupplierLabel(value: string): boolean {
+  const v = value.trim().toLowerCase();
+  if (!v) return true;
+  if (
+    v === "supplier" ||
+    v === "partner" ||
+    v === "aggregate supplier" ||
+    v === "asset / own vehicle" ||
+    v === "own vehicle"
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function resolveSupplierName(
   t: TripRow,
   entries: LedgerRow[],
   supplierById: Map<string, SupplierRow>,
 ): string {
   const raw = (t.supplier_name ?? "").trim();
-  if (raw && !isUuidLikeString(raw)) return raw;
+  const clientName = (t.client_name ?? "").trim().toLowerCase();
+  if (
+    raw &&
+    !isUuidLikeString(raw) &&
+    !isGenericSupplierLabel(raw) &&
+    raw.toLowerCase() !== clientName
+  ) {
+    return raw;
+  }
   const sid = (t.supplier_id ?? "").trim().toLowerCase();
   if (sid) {
     const row = supplierById.get(sid);
@@ -52,7 +75,14 @@ function resolveSupplierName(
   for (const tx of entries) {
     if (tx.contact_type !== "supplier") continue;
     const pn = (tx.party_name ?? "").trim();
-    if (pn && !isUuidLikeString(pn)) return pn;
+    if (
+      pn &&
+      !isUuidLikeString(pn) &&
+      !isGenericSupplierLabel(pn) &&
+      pn.toLowerCase() !== clientName
+    ) {
+      return pn;
+    }
   }
   return "";
 }

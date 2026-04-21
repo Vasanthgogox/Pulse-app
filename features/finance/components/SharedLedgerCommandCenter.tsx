@@ -1878,7 +1878,12 @@ export function SharedLedgerCommandCenter({
                                 style={styles.missionCardSummary}
                                 numberOfLines={2}
                               >
-                                {`Reference: ${displayLedgerToken(txn.myRef ?? txn.partnerRef ?? "—")} · Paid via: ${txn.myMode ?? txn.partnerMode ?? "—"}`}
+                                {`Trip: ${
+                                  (txn.tripRef &&
+                                    (missionLabelForTripRef?.(txn.tripRef) ??
+                                      `${String(txn.tripRef).slice(0, 8).toUpperCase()}…`)) ||
+                                  "—"
+                                } · Paid via: ${txn.myMode ?? txn.partnerMode ?? "—"}`}
                               </Text>
                               <View style={styles.missionBadges}>
                                 <Text
@@ -2463,9 +2468,14 @@ export function SharedLedgerCommandCenter({
       partnerAmt == null ? 0 : Math.abs(myAmt - partnerAmt);
     const matchAmt =
       partnerAmt != null && deltaAbs < 0.5;
-    const leftRef = displayLedgerToken(t.myRef);
-    const rightRef = displayLedgerToken(t.partnerRef);
-    const matchRef = normLedgerToken(t.myRef) === normLedgerToken(t.partnerRef);
+    const tripDisplay =
+      (t.tripRef &&
+        (missionLabelForTripRef?.(t.tripRef) ??
+          `${String(t.tripRef).slice(0, 8).toUpperCase()}…`)) ||
+      "—";
+    const leftRef = tripDisplay;
+    const rightRef = tripDisplay;
+    const matchRef = true;
     const leftMode = displayLedgerToken(t.myMode);
     const rightMode = displayLedgerToken(t.partnerMode);
     const matchMode = normLedgerToken(t.myMode) === normLedgerToken(t.partnerMode);
@@ -2490,7 +2500,7 @@ export function SharedLedgerCommandCenter({
         match: matchAmt,
       },
       {
-        label: "Reference ID",
+        label: "Trip ID",
         left: leftRef,
         right: rightRef,
         match: matchRef,
@@ -2531,7 +2541,7 @@ export function SharedLedgerCommandCenter({
               ]}
               numberOfLines={1}
             >
-              {shortTxnId(t.id)} review
+              {tripDisplay} · review
             </Text>
             <Text style={styles.forensicRefSub}>Entry comparison</Text>
           </View>
@@ -2581,7 +2591,7 @@ export function SharedLedgerCommandCenter({
               <Text style={styles.forensicDiagBody}>
                 {fullyAligned ? (
                   <>
-                    The amount, reference ID, and payment route{" "}
+                    The amount, trip ID, and payment route{" "}
                     <Text style={styles.forensicDiagEm}>match</Text> on both
                     books.
                   </>
@@ -2613,9 +2623,9 @@ export function SharedLedgerCommandCenter({
                     The amount matches, but{" "}
                     <Text style={styles.forensicDiagEm}>
                       {!matchRef && !matchMode
-                        ? "reference ID and payment via"
+                        ? "trip ID and payment via"
                         : !matchRef
-                          ? "reference ID"
+                          ? "trip ID"
                           : "payment via"}
                     </Text>{" "}
                     still differs below.
@@ -3520,16 +3530,16 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "stretch",
     backgroundColor: Theme.screenBackground,
-    borderRadius: 28,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     overflow: "hidden",
-    marginBottom: 28,
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowOffset: { width: 0, height: 16 },
-    shadowRadius: 36,
-    elevation: 4,
+    marginBottom: 20,
+    shadowColor: Theme.shadow,
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 18,
+    elevation: 2,
   },
   /** Fills the padded scroll column; inner table then uses 100% width (no fixed 720px cap). */
   auditTableHScroll: {
@@ -3551,18 +3561,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "stretch",
     width: "100%",
-    backgroundColor: Theme.textPrimaryDark,
-    paddingVertical: 7,
-    paddingHorizontal: 2,
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
+    backgroundColor: Theme.screenBackground,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.surfaceBorder,
   },
   auditTh: {
-    paddingVertical: 7,
-    paddingHorizontal: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
     justifyContent: "center",
     borderRightWidth: 1,
-    borderRightColor: Theme.borderOnDark,
+    borderRightColor: Theme.surfaceBorder,
   },
   auditThId: {
     width: 172,
@@ -3589,11 +3599,11 @@ const styles = StyleSheet.create({
     borderRightWidth: 0,
   },
   auditThTxt: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: Theme.textOnDarkMuted,
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textSecondary,
     textTransform: "uppercase",
-    letterSpacing: 0.6,
+    letterSpacing: 0.55,
   },
   auditThTxtCenter: {
     textAlign: "center",
@@ -3612,8 +3622,8 @@ const styles = StyleSheet.create({
     alignItems: "stretch",
     width: "100%",
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderMedium,
-    backgroundColor: Theme.surface,
+    borderBottomColor: Theme.surfaceBorder,
+    backgroundColor: Theme.screenBackground,
   },
   auditCellId: {
     width: 172,
@@ -4069,9 +4079,9 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     flexBasis: 0,
     minWidth: 156,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    paddingLeft: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    paddingLeft: 14,
     borderRightWidth: StyleSheet.hairlineWidth,
     borderRightColor: Theme.borderMedium,
     justifyContent: "center",
@@ -4082,21 +4092,21 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     flexBasis: 0,
     minWidth: 204,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
     borderRightWidth: StyleSheet.hairlineWidth,
     borderRightColor: Theme.borderMedium,
     justifyContent: "center",
     alignItems: "flex-start",
-    backgroundColor: "rgba(248,250,252,0.92)",
+    backgroundColor: Theme.surface,
   },
   fleetRouteText: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "600",
     fontStyle: "normal",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.1,
-    lineHeight: 13,
+    lineHeight: 14,
     textAlign: "left",
     width: "100%",
   },
@@ -4105,8 +4115,8 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     flexBasis: 0,
     minWidth: 196,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
     borderRightWidth: StyleSheet.hairlineWidth,
     borderRightColor: Theme.borderMedium,
     justifyContent: "center",
@@ -4125,21 +4135,19 @@ const styles = StyleSheet.create({
   },
   fleetPartnerName: {
     fontSize: 11,
-    fontWeight: "300",
-    fontStyle: "italic",
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.25,
-    textTransform: "uppercase",
-    lineHeight: 13,
+    letterSpacing: -0.1,
+    lineHeight: 14,
   },
   fleetPartnerSub: {
     marginTop: 2,
-    fontSize: 7,
+    fontSize: 8,
     fontWeight: "600",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.4,
-    lineHeight: 10,
+    lineHeight: 11,
   },
   fleetCellMoney: {
     width: 100,
@@ -4147,8 +4155,8 @@ const styles = StyleSheet.create({
     maxWidth: 100,
     flexGrow: 0,
     flexShrink: 0,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
     paddingLeft: 6,
     borderRightWidth: StyleSheet.hairlineWidth,
     borderRightColor: Theme.borderMedium,
@@ -4161,12 +4169,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   fleetMoneyVal: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     fontStyle: "normal",
     textAlign: "right",
-    letterSpacing: -0.2,
+    letterSpacing: -0.1,
     width: "100%",
   },
   fleetMoneyGood: { color: Theme.darkGreen },
@@ -4177,11 +4185,11 @@ const styles = StyleSheet.create({
   },
   fleetMoneySub: {
     marginTop: 2,
-    fontSize: 7,
-    fontWeight: "500",
+    fontSize: 8,
+    fontWeight: "600",
     color: Theme.textMuted,
     textAlign: "right",
-    lineHeight: 10,
+    lineHeight: 11,
     width: "100%",
     letterSpacing: 0.15,
   },
@@ -4211,7 +4219,7 @@ const styles = StyleSheet.create({
     maxWidth: 56,
     flexGrow: 0,
     flexShrink: 0,
-    paddingVertical: 6,
+    paddingVertical: 9,
     paddingHorizontal: 6,
     borderRightWidth: StyleSheet.hairlineWidth,
     borderRightColor: Theme.borderMedium,
@@ -4224,7 +4232,7 @@ const styles = StyleSheet.create({
     maxWidth: 84,
     flexGrow: 0,
     flexShrink: 0,
-    paddingVertical: 6,
+    paddingVertical: 9,
     paddingHorizontal: 6,
     borderRightWidth: StyleSheet.hairlineWidth,
     borderRightColor: Theme.borderMedium,
@@ -4242,8 +4250,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   fleetMetaValTab: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "800",
     color: Theme.textPrimaryDark,
     textAlign: "right",
     lineHeight: 12,
@@ -4251,7 +4259,7 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   fleetMetaValDate: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
     textAlign: "center",
@@ -4265,16 +4273,16 @@ const styles = StyleSheet.create({
     maxWidth: 52,
     flexGrow: 0,
     flexShrink: 0,
-    paddingVertical: 6,
+    paddingVertical: 9,
     paddingHorizontal: 2,
     alignItems: "center",
     justifyContent: "center",
     gap: 3,
   },
   fleetSyncIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 9,
+    width: 26,
+    height: 26,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -4288,7 +4296,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.teslaRed,
   },
   fleetSyncLabel: {
-    fontSize: 7,
+    fontSize: 8,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,

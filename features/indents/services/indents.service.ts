@@ -156,6 +156,61 @@ export async function getIndentsByOrganization(
   return { error: null, indents };
 }
 
+/**
+ * Partner shipper org → earliest ISO time the client↔supplier link became active (matches market_indents_for_org).
+ * Uses organization_relations when present; otherwise suppliers.linked_organization_id + MIN(updated_at) per shipper.
+ */
+async function fetchPartnerShipperLinkSinceMap(
+  orgId: string,
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+
+  const mergeMin = (shipperId: string, iso: string | null | undefined) => {
+    if (!shipperId || !iso) return;
+    const prev = map.get(shipperId);
+    if (!prev || iso < prev) map.set(shipperId, iso);
+  };
+
+  const { data: clientSupplier } = await supabase()
+    .from("organization_relations")
+    .select("from_organization_id, created_at")
+    .eq("to_organization_id", orgId)
+    .eq("relation_type", "client_supplier")
+    .eq("status", "active");
+
+  const { data: supplierClient } = await supabase()
+    .from("organization_relations")
+    .select("to_organization_id, created_at")
+    .eq("from_organization_id", orgId)
+    .eq("relation_type", "supplier_client")
+    .eq("status", "active");
+
+  for (const r of clientSupplier ?? []) {
+    mergeMin(String(r.from_organization_id), r.created_at as string);
+  }
+  for (const r of supplierClient ?? []) {
+    mergeMin(String(r.to_organization_id), r.created_at as string);
+  }
+
+  if (map.size > 0) return map;
+
+  const { data: suppliers } = await supabase()
+    .from("suppliers")
+    .select("organization_id, updated_at")
+    .eq("linked_organization_id", orgId);
+
+  const minByOrg = new Map<string, string>();
+  for (const s of suppliers ?? []) {
+    const oid = s.organization_id as string | null;
+    const ts = s.updated_at as string | null | undefined;
+    if (!oid || oid === orgId || !ts) continue;
+    const cur = minByOrg.get(oid);
+    if (!cur || ts < cur) minByOrg.set(oid, ts);
+  }
+  minByOrg.forEach((ts, oid) => map.set(oid, ts));
+  return map;
+}
+
 /** Market-facing indents visible to the current organization (as integrated supplier). Uses RPC (SECURITY DEFINER) then direct table fallback. */
 export async function getMarketIndentsForOrganization(
   orgId: string,
@@ -180,17 +235,25 @@ export async function getMarketIndentsForOrganization(
     return { error: null, indents };
   }
 
+  const linkMap = await fetchPartnerShipperLinkSinceMap(orgId);
+  if (linkMap.size === 0) return { error: null, indents: [] };
+
+  const shipperIds = [...linkMap.keys()];
   const { data, error } = await supabase()
     .from("indents")
     .select("*, organizations(name)")
-    .neq("organization_id", orgId)
+    .in("organization_id", shipperIds)
     .in("circulation_target", ["integrated_supplier", "both"])
     .neq("status", "draft")
     .order("created_at", { ascending: false });
 
   if (error) return { error: new Error(error.message), indents: [] };
 
-  const rows = (data ?? []) as (IndentRow & {
+  const rows = (data ?? []).filter((row) => {
+    const since = linkMap.get(String(row.organization_id ?? ""));
+    if (!since) return false;
+    return String(row.created_at ?? "") >= since;
+  }) as (IndentRow & {
     organizations?: { name: string | null } | null;
   })[];
   const indents: IndentRow[] = rows.map((row) => {
