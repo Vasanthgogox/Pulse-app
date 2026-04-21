@@ -307,7 +307,6 @@ function buildReconciledRows(
         // - As CLIENT (we are supplier): our payment is amount_in (paid).
         const internalPaidForCompare =
           entityType === "SUPPLIER" ? int.paidOut : int.paid;
-        const paidMatch = internalPaidForCompare === ext.paid;
         // Partner's "sales" = payables/receivables (supplier_rate) only, never client_price.
         // If backend returns ext > int, it's likely client_price; use int (supplier_rate) for both CLIENT and SUPPLIER views.
         const extSalesResolved =
@@ -316,12 +315,26 @@ function buildReconciledRows(
             : ext.sales > int.sales && int.sales > 0
               ? int.sales
               : ext.sales;
-        const isMatch = int.sales === extSalesResolved && paidMatch;
+        const salesMatch = int.sales === extSalesResolved;
+        const paidMatch = internalPaidForCompare === ext.paid;
+        // If sales are already aligned but partner payment is still zero while ours is present,
+        // treat it as awaiting partner update (not a hard mismatch).
+        const awaitingPartnerPaymentEntry =
+          salesMatch && internalPaidForCompare > 0 && ext.paid === 0;
+        const isMatch = salesMatch && paidMatch;
         results.push({
           tripId: int.tripId,
           missionId: int.missionId,
-          status: isMatch ? "VERIFIED" : "MISMATCH",
-          issue: isMatch ? null : "Data Variance Detected",
+          status: isMatch
+            ? "VERIFIED"
+            : awaitingPartnerPaymentEntry
+              ? "PENDING"
+              : "MISMATCH",
+          issue: isMatch
+            ? null
+            : awaitingPartnerPaymentEntry
+              ? "Partner has not reported payment entry"
+              : "Data Variance Detected",
           internal: int,
           external: ext,
           intSales: int.sales,
