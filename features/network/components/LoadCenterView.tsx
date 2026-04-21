@@ -24,7 +24,6 @@ import {
 } from "@/features/indents";
 import {
   acceptAwardedQuote,
-  applyRosterDeployFromDirectQuote,
 } from "@/features/indents/services/accept-awarded-quote.service";
 import { shareDraftIndent } from "@/features/indents/services/indents.service";
 import {
@@ -249,6 +248,8 @@ export function LoadCenterView({
   const [aggregatePhoneNotFound, setAggregatePhoneNotFound] = useState(false);
   const [aggregatePhoneInTrip, setAggregatePhoneInTrip] = useState(false);
   const aggregatePhoneLookupTimeoutRef = useRef<number | null>(null);
+  /** Prevents double-submit on Staff Handshake (parallel creates → unique trip_number 409). */
+  const staffHandshakeDeployLockRef = useRef(false);
   const [subcontractSupplierId, setSubcontractSupplierId] = useState<
     string | null
   >(null);
@@ -1040,18 +1041,26 @@ export function LoadCenterView({
       );
       return;
     }
+    if (staffHandshakeDeployLockRef.current) {
+      return;
+    }
+    staffHandshakeDeployLockRef.current = true;
     try {
       setAssigningTripId(load.id);
-      const { error: deployErr, trip } = await applyRosterDeployFromDirectQuote(
+      const { error: assignErr } = await updateDirectQuoteAssignment(
         acceptedQuote.id,
         assignDriverId,
         assignVehicleId,
       );
-      if (deployErr || !trip) {
+      if (assignErr) {
+        Alert.alert("Could not assign", assignErr.message);
+        return;
+      }
+      const { error: tripErr, trip } = await acceptAwardedQuote(acceptedQuote.id);
+      if (tripErr || !trip) {
         Alert.alert(
           "Could not create trip",
-          deployErr?.message ??
-            "Trip was not returned. Check your connection and try again.",
+          tripErr?.message ?? "Unknown error.",
         );
         return;
       }
@@ -1077,6 +1086,7 @@ export function LoadCenterView({
       const msg = e instanceof Error ? e.message : "Unknown error.";
       Alert.alert("Could not deploy", msg);
     } finally {
+      staffHandshakeDeployLockRef.current = false;
       setAssigningTripId(null);
     }
   };
@@ -1109,6 +1119,10 @@ export function LoadCenterView({
     }
     const phoneTrimmed = aggregateDriverPhone.trim();
     const phoneErr = phoneTrimmed ? validatePhone(phoneTrimmed) : null;
+    if (staffHandshakeDeployLockRef.current) {
+      return;
+    }
+    staffHandshakeDeployLockRef.current = true;
     try {
       setAssigningTripId(load.id);
       const vehicleIdForQuote =
@@ -1276,6 +1290,7 @@ export function LoadCenterView({
       const msg = e instanceof Error ? e.message : "Unknown error.";
       Alert.alert("Could not deploy", msg);
     } finally {
+      staffHandshakeDeployLockRef.current = false;
       setAssigningTripId(null);
     }
   };
@@ -3491,6 +3506,7 @@ export function LoadCenterView({
                 ) : loadAction?.type === "ASSIGN" && rosterReady ? (
                   <Pressable
                     accessibilityRole="button"
+                    disabled={assigningTripId === loadAction.load.id}
                     style={({ pressed }) => [
                       styles.modalSubmit,
                       styles.handshakeBtnModal,
