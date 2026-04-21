@@ -577,9 +577,20 @@ export function SharedLedgerContent({
     const m = new Map<string, TripRow>();
     for (const t of trips) {
       m.set(normTripKey(t.id), t);
+      m.set(normTripKey(getTripDisplayNumber(t)), t);
     }
     return m;
   }, [trips]);
+
+  const resolveTripRefToCanonicalId = useCallback(
+    (tripRef: string | null | undefined): string => {
+      const key = normTripKey(tripRef);
+      if (!key) return "";
+      const t = tripByNormRef.get(key);
+      return t ? normTripKey(t.id) : key;
+    },
+    [tripByNormRef],
+  );
 
   const missionLabelForTripRef = useCallback(
     (tripRef: string) => {
@@ -727,7 +738,9 @@ export function SharedLedgerContent({
           if (!e2 && entries?.length) {
             const partnerPaidFromOut = entityType === "CLIENT"; // client pays us = their amount_out
             for (const e of entries) {
-              const ref = (e.reference_id ?? e.id ?? "").toString().trim().toLowerCase();
+              const ref = resolveTripRefToCanonicalId(
+                (e.reference_id ?? e.id ?? "").toString(),
+              );
               if (!ref) continue;
               const amt = Number(e.amount ?? 0);
               const out = amt < 0 ? -amt : 0;
@@ -737,7 +750,7 @@ export function SharedLedgerContent({
             }
           }
           const merged = fromSummary.map((r) => {
-            const key = r.tripId.trim().toLowerCase();
+            const key = resolveTripRefToCanonicalId(r.tripId);
             const entryPaid = byTrip.get(key);
             const paid = r.paid === 0 && entryPaid != null ? entryPaid : r.paid;
             return { ...r, paid };
@@ -754,7 +767,9 @@ export function SharedLedgerContent({
         if (e2 || !entries?.length) return;
         const byTrip = new Map<string, { in: number; out: number }>();
         for (const e of entries) {
-          const ref = (e.reference_id ?? e.id ?? "").toString().trim().toLowerCase();
+          const ref = resolveTripRefToCanonicalId(
+            (e.reference_id ?? e.id ?? "").toString(),
+          );
           if (!ref) continue;
           if (!byTrip.has(ref)) byTrip.set(ref, { in: 0, out: 0 });
           const cur = byTrip.get(ref)!;
@@ -779,7 +794,14 @@ export function SharedLedgerContent({
     return () => {
       cancelled = true;
     };
-  }, [organizationId, integrated, entity.id, entityType, sharedTripsProp?.length]);
+  }, [
+    organizationId,
+    integrated,
+    entity.id,
+    entityType,
+    sharedTripsProp?.length,
+    resolveTripRefToCanonicalId,
+  ]);
 
   useEffect(() => {
     if (!organizationId || !partnerOrgId) return;
@@ -1003,7 +1025,7 @@ export function SharedLedgerContent({
     }
 
     for (const p of partnerEntries) {
-      const tripRef = norm(p.reference_id);
+      const tripRef = resolveTripRefToCanonicalId(p.reference_id);
       if (!tripRef) continue;
       partnerTxnCountByTrip.set(
         tripRef,
@@ -1151,7 +1173,16 @@ export function SharedLedgerContent({
     /** Most recent first. */
     rows.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
     return rows;
-  }, [partnerEntries, txs, entity.id, entity.name, entityType, trips, reconciledRows]);
+  }, [
+    partnerEntries,
+    txs,
+    entity.id,
+    entity.name,
+    entityType,
+    trips,
+    reconciledRows,
+    resolveTripRefToCanonicalId,
+  ]);
 
   const filteredTxnRows = useMemo(() => {
     let rows = txnRows;

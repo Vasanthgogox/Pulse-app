@@ -2472,6 +2472,7 @@ export function SharedLedgerCommandCenter({
       tripForTxn && sameTripTxnCount === 1 && (tripForTxn.extPaid ?? 0) > 0
         ? Number(tripForTxn.extPaid ?? 0)
         : null;
+    const usingTripLevelFallback = partnerAmt == null && tripLevelPartnerPaid != null;
     const resolvedPartnerAmt = partnerAmt ?? tripLevelPartnerPaid;
     const deltaAbs =
       resolvedPartnerAmt == null ? 0 : Math.abs(myAmt - resolvedPartnerAmt);
@@ -2486,8 +2487,12 @@ export function SharedLedgerCommandCenter({
     const rightRef = tripDisplay;
     const matchRef = true;
     const leftMode = displayLedgerToken(t.myMode);
-    const rightMode = displayLedgerToken(t.partnerMode);
-    const matchMode = normLedgerToken(t.myMode) === normLedgerToken(t.partnerMode);
+    const rightMode = usingTripLevelFallback
+      ? leftMode
+      : displayLedgerToken(t.partnerMode);
+    const matchMode = usingTripLevelFallback
+      ? true
+      : normLedgerToken(t.myMode) === normLedgerToken(t.partnerMode);
     const forensicRows = [
       ...(t.lineKind
         ? [

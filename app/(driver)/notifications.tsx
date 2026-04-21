@@ -3,6 +3,7 @@
  * Tapping a row returns to the dashboard with that trip selected.
  */
 import Layout from '@/constants/Layout';
+import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
@@ -417,9 +418,24 @@ export default function DriverNotificationsScreen() {
     else router.replace('/(driver)/');
   };
 
+  const acceptTripFromNotification = async (
+    trip: tripsService.TripRow,
+    requiresOtp: boolean,
+  ) => {
+    await AsyncStorage.setItem(DRIVER_NOTIFICATION_FOCUS_TRIP_KEY, trip.id);
+    if (!requiresOtp) {
+      await AsyncStorage.setItem(DRIVER_ACCEPTED_TRIP_ID_KEY, trip.id);
+    }
+    router.replace('/(driver)/');
+  };
+
   const onRefresh = () => {
     void fetch({ pull: true });
   };
+
+  const hasActiveAcceptedTrip = Boolean(
+    acceptedTripId && String(acceptedTripId).trim() !== '',
+  );
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -470,8 +486,9 @@ export default function DriverNotificationsScreen() {
           showsVerticalScrollIndicator={false}
         >
           <Text style={[styles.intro, { color: colors.textMuted }]}>
-            Trips waiting for you to accept or verify with OTP. Open one to continue
-            on the dashboard.
+            {hasActiveAcceptedTrip
+              ? 'You already have an active accepted trip. Remaining assignments stay here as notifications.'
+              : 'Trips waiting for you to accept or verify with OTP. Open one to continue on the dashboard.'}
           </Text>
           {rowsWithMeta.length === 0 ? (
             <View
@@ -490,16 +507,15 @@ export default function DriverNotificationsScreen() {
             </View>
           ) : (
             rowsWithMeta.map((item) => (
-              <TouchableOpacity
+              <View
                 key={item.trip.id}
-                activeOpacity={0.85}
-                onPress={() => void openTripOnDashboard(item.trip.id)}
                 style={[
                   styles.card,
                   {
                     backgroundColor: colors.surface,
                     borderColor: colors.border,
                   },
+                  hasActiveAcceptedTrip && styles.cardStatic,
                 ]}
               >
                 <View style={styles.cardHeader}>
@@ -550,17 +566,38 @@ export default function DriverNotificationsScreen() {
                     ? `Est. earning ${formatINR(item.commissionForTrip)}`
                     : 'Est. earning · Salary'}
                 </Text>
-                <View style={styles.cardFooter}>
-                  <Text style={[styles.openHint, { color: colors.textMuted }]}>
-                    Open on dashboard
-                  </Text>
-                  <FontAwesome
-                    name="chevron-right"
-                    size={12}
-                    color={colors.textMuted}
-                  />
-                </View>
-              </TouchableOpacity>
+                {hasActiveAcceptedTrip ? (
+                  <View style={styles.cardFooter}>
+                    <Text style={[styles.openHint, { color: colors.textMuted }]}>
+                      Pending notification
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.cardActions}>
+                    <TouchableOpacity
+                      style={[
+                        styles.openDashboardBtn,
+                        { borderColor: colors.border, backgroundColor: colors.background },
+                      ]}
+                      onPress={() => void openTripOnDashboard(item.trip.id)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.openDashboardBtnText, { color: colors.textMuted }]}>
+                        View details
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.acceptBtn}
+                      onPress={() => void acceptTripFromNotification(item.trip, item.requiresOtp)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.acceptBtnText}>
+                        {item.requiresOtp ? 'Accept & OTP' : 'Accept'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
             ))
           )}
         </ScrollView>
@@ -619,6 +656,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 16,
   },
+  cardStatic: {
+    opacity: 0.9,
+  },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -647,4 +687,36 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   openHint: { fontSize: 12, fontWeight: '600' },
+  cardActions: {
+    marginTop: 12,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  openDashboardBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 10,
+    minHeight: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  openDashboardBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  acceptBtn: {
+    flex: 1,
+    borderRadius: 10,
+    minHeight: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    backgroundColor: Theme.textPrimaryDark,
+  },
+  acceptBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: Theme.textOnPrimary,
+  },
 });
