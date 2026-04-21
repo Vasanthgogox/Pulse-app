@@ -1,8 +1,6 @@
 /**
- * Trip Expenses table — matches reference design.
- * Shows expense rows with Actions | Date | ID | Category | Type | Description | Amount | Status
+ * Trip Expenses table — elevated design matching FinanceOverview style.
  */
-import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -35,82 +33,122 @@ export function ExpensesTable({
   onViewAll,
   onAddExpense,
 }: ExpensesTableProps) {
-  const total =
-    totalAmount ?? expenses.reduce((s, e) => s + e.amount, 0);
+  const total = totalAmount ?? expenses.reduce((s, e) => s + e.amount, 0);
+  const paidTotal = expenses.filter((e) => e.status === "Paid").reduce((s, e) => s + e.amount, 0);
+  const pendingCount = expenses.filter((e) => e.status === "Requested" || e.status === "Pending").length;
 
   return (
-    <View style={styles.section}>
-      {/* Tab header — "Expenses" with underline (matches reference tab style) */}
-      <View style={styles.tabHeader}>
-        <View style={styles.activeTab}>
-          <Text style={styles.activeTabText}>Expenses</Text>
-          <View style={styles.tabUnderline} />
+    <View style={styles.card}>
+      {/* Header */}
+      <View style={styles.cardHeader}>
+        <View style={styles.headerLeft}>
+          <View style={styles.headerIconWrap}>
+            <FontAwesome name="file-text-o" size={14} color="#f97316" />
+          </View>
+          <View>
+            <Text style={styles.cardTitle}>Trip Expenses</Text>
+            <Text style={styles.cardSubtitle}>{expenses.length} expense{expenses.length !== 1 ? "s" : ""} recorded</Text>
+          </View>
+        </View>
+        <View style={styles.headerRight}>
+          {pendingCount > 0 && (
+            <View style={styles.pendingBadge}>
+              <Text style={styles.pendingBadgeText}>{pendingCount} pending</Text>
+            </View>
+          )}
+          {onAddExpense && (
+            <TouchableOpacity onPress={onAddExpense} style={styles.addBtn} activeOpacity={0.8}>
+              <FontAwesome name="plus" size={10} color="#fff" />
+              <Text style={styles.addBtnText}>Add</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
-      {/* Total + View All */}
-      <View style={styles.tableHeader}>
-        <Text style={styles.totalLabel}>
-          Trip Expenses —{" "}
-          <Text style={styles.totalAmount}>₹{total.toLocaleString("en-IN")}</Text>
-        </Text>
-        {onViewAll ? (
-          <TouchableOpacity onPress={onViewAll} activeOpacity={0.7}>
+      {/* Summary bar */}
+      <View style={styles.summaryBar}>
+        <View style={styles.summaryItem}>
+          <Text style={styles.summaryLabel}>Total</Text>
+          <Text style={styles.summaryValueTotal}>₹{total.toLocaleString("en-IN")}</Text>
+        </View>
+        <View style={styles.summaryDivider} />
+        <View style={styles.summaryItem}>
+          <Text style={styles.summaryLabel}>Paid</Text>
+          <Text style={styles.summaryValuePaid}>₹{paidTotal.toLocaleString("en-IN")}</Text>
+        </View>
+        <View style={styles.summaryDivider} />
+        <View style={styles.summaryItem}>
+          <Text style={styles.summaryLabel}>Outstanding</Text>
+          <Text style={styles.summaryValuePending}>₹{(total - paidTotal).toLocaleString("en-IN")}</Text>
+        </View>
+        {onViewAll && (
+          <TouchableOpacity onPress={onViewAll} style={styles.viewAllBtn} activeOpacity={0.7}>
             <Text style={styles.viewAllText}>View All</Text>
+            <FontAwesome name="chevron-right" size={9} color="#6366f1" />
           </TouchableOpacity>
-        ) : null}
+        )}
       </View>
 
-      {/* Table */}
-      {Platform.OS === "web" ? (
+      {/* Table / List */}
+      {expenses.length === 0 ? (
+        <EmptyState />
+      ) : Platform.OS === "web" ? (
         <WebTable expenses={expenses} />
       ) : (
         <NativeList expenses={expenses} />
       )}
-
-      {expenses.length === 0 ? (
-        <View style={styles.emptyWrap}>
-          <Text style={styles.emptyText}>No expenses recorded</Text>
-        </View>
-      ) : null}
     </View>
   );
 }
 
-// ── Web table (horizontal scroll) ────────────────────────────────────────────
+// ── Empty state ───────────────────────────────────────────────────────────────
+
+function EmptyState() {
+  return (
+    <View style={styles.emptyWrap}>
+      <View style={styles.emptyIconCircle}>
+        <FontAwesome name="inbox" size={22} color="#d1d5db" />
+      </View>
+      <Text style={styles.emptyTitle}>No expenses yet</Text>
+      <Text style={styles.emptySubtitle}>Expenses logged for this trip will appear here</Text>
+    </View>
+  );
+}
+
+// ── Web table ─────────────────────────────────────────────────────────────────
 
 function WebTable({ expenses }: { expenses: ExpenseRow[] }) {
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
       <View style={styles.table}>
-        {/* Header */}
+        {/* Header row */}
         <View style={styles.tableHeadRow}>
-          <ColHead label="Actions" width={90} />
-          <ColHead label="Date" width={90} />
-          <ColHead label="Expense ID" width={90} />
-          <ColHead label="Category" width={90} />
+          <ColHead label="Actions" width={96} />
+          <ColHead label="Date" width={96} />
+          <ColHead label="Expense ID" width={100} />
+          <ColHead label="Category" width={110} />
           <ColHead label="Type" width={110} />
-          <ColHead label="Description" width={160} flex />
-          <ColHead label="Amount" width={80} align="right" />
-          <ColHead label="Status" width={100} />
+          <ColHead label="Description" width={180} flex />
+          <ColHead label="Amount" width={90} align="right" />
+          <ColHead label="Status" width={130} />
         </View>
 
-        {/* Rows */}
-        {expenses.map((row) => (
-          <View key={row.id} style={styles.tableRow}>
-            <ActionsCell row={row} width={90} />
-            <TableCell value={row.date} width={90} />
-            <TableCell value={row.expenseId} width={90} mono />
-            <TableCell value={row.category} width={90} />
-            <TableCell value={row.type} width={110} />
-            <TableCell value={row.description} width={160} flex />
+        {/* Data rows */}
+        {expenses.map((row, idx) => (
+          <View key={row.id} style={[styles.tableRow, idx % 2 === 0 && styles.tableRowEven]}>
+            <ActionsCell row={row} width={96} />
+            <TableCell value={row.date} width={96} muted />
+            <TableCell value={row.expenseId} width={100} mono />
+            <CategoryCell value={row.category} width={110} />
+            <TypeCell value={row.type} width={110} />
+            <TableCell value={row.description} width={180} flex />
             <TableCell
               value={`₹${row.amount.toLocaleString("en-IN")}`}
-              width={80}
+              width={90}
               align="right"
               bold
             />
-            <StatusCell status={row.status} width={100} row={row} />
+            <StatusCell status={row.status} width={130} row={row} />
           </View>
         ))}
       </View>
@@ -118,24 +156,44 @@ function WebTable({ expenses }: { expenses: ExpenseRow[] }) {
   );
 }
 
-// ── Native list (cards) ───────────────────────────────────────────────────────
+// ── Native list ───────────────────────────────────────────────────────────────
 
 function NativeList({ expenses }: { expenses: ExpenseRow[] }) {
   return (
     <View>
-      {expenses.map((row) => (
-        <View key={row.id} style={styles.nativeRow}>
+      {expenses.map((row, idx) => (
+        <View key={row.id} style={[styles.nativeRow, idx % 2 === 0 && styles.nativeRowEven]}>
           <View style={styles.nativeRowTop}>
-            <Text style={styles.nativeExpenseId}>{row.expenseId}</Text>
+            <View style={styles.nativeRowTopLeft}>
+              <Text style={styles.nativeExpenseId}>{row.expenseId}</Text>
+              <CategoryChip label={row.category} />
+            </View>
             <Text style={styles.nativeAmount}>₹{row.amount.toLocaleString("en-IN")}</Text>
           </View>
-          <View style={styles.nativeRowMid}>
-            <Text style={styles.nativeMeta}>{row.date} · {row.category} · {row.type}</Text>
-          </View>
+          <Text style={styles.nativeMeta}>{row.date} · {row.type}</Text>
           <View style={styles.nativeRowBottom}>
             <Text style={styles.nativeDesc} numberOfLines={1}>{row.description}</Text>
             <StatusPill status={row.status} />
           </View>
+          {(row.onView || row.onEdit || row.onDelete) && (
+            <View style={styles.nativeActions}>
+              {row.onView && (
+                <TouchableOpacity onPress={row.onView} style={[styles.nativeActionBtn, styles.btnView]} activeOpacity={0.7}>
+                  <FontAwesome name="eye" size={11} color="#6366f1" />
+                </TouchableOpacity>
+              )}
+              {row.onEdit && (
+                <TouchableOpacity onPress={row.onEdit} style={[styles.nativeActionBtn, styles.btnEdit]} activeOpacity={0.7}>
+                  <FontAwesome name="pencil" size={11} color="#f59e0b" />
+                </TouchableOpacity>
+              )}
+              {row.onDelete && (
+                <TouchableOpacity onPress={row.onDelete} style={[styles.nativeActionBtn, styles.btnDelete]} activeOpacity={0.7}>
+                  <FontAwesome name="trash" size={11} color="#ef4444" />
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
         </View>
       ))}
     </View>
@@ -145,16 +203,8 @@ function NativeList({ expenses }: { expenses: ExpenseRow[] }) {
 // ── Cell components ───────────────────────────────────────────────────────────
 
 function ColHead({
-  label,
-  width,
-  flex,
-  align,
-}: {
-  label: string;
-  width?: number;
-  flex?: boolean;
-  align?: "left" | "right";
-}) {
+  label, width, flex, align,
+}: { label: string; width?: number; flex?: boolean; align?: "left" | "right" }) {
   return (
     <View style={[styles.colHead, { width: flex ? undefined : width }, flex && { flex: 1 }]}>
       <Text style={[styles.colHeadText, align === "right" && styles.alignRight]}>{label}</Text>
@@ -163,18 +213,10 @@ function ColHead({
 }
 
 function TableCell({
-  value,
-  width,
-  flex,
-  mono,
-  bold,
-  align,
+  value, width, flex, mono, bold, muted, align,
 }: {
-  value: string;
-  width?: number;
-  flex?: boolean;
-  mono?: boolean;
-  bold?: boolean;
+  value: string; width?: number; flex?: boolean;
+  mono?: boolean; bold?: boolean; muted?: boolean;
   align?: "left" | "right";
 }) {
   return (
@@ -183,7 +225,8 @@ function TableCell({
         style={[
           styles.tableCellText,
           mono && styles.mono,
-          bold && styles.bold,
+          bold && styles.boldCell,
+          muted && styles.mutedCell,
           align === "right" && styles.alignRight,
         ]}
         numberOfLines={1}
@@ -194,52 +237,70 @@ function TableCell({
   );
 }
 
-function ActionsCell({ row, width }: { row: ExpenseRow; width?: number }) {
+function CategoryCell({ value, width }: { value: string; width: number }) {
   return (
-    <View style={[styles.tableCell, { width }, styles.actionsCell]}>
-      {row.onView ? (
-        <TouchableOpacity onPress={row.onView} style={styles.cellActionBtn} activeOpacity={0.7}>
-          <FontAwesome name="eye" size={12} color="#6b7280" />
-        </TouchableOpacity>
-      ) : null}
-      {row.onEdit ? (
-        <TouchableOpacity onPress={row.onEdit} style={styles.cellActionBtn} activeOpacity={0.7}>
-          <FontAwesome name="pencil" size={12} color="#6b7280" />
-        </TouchableOpacity>
-      ) : null}
-      {row.onDelete ? (
-        <TouchableOpacity onPress={row.onDelete} style={styles.cellActionBtn} activeOpacity={0.7}>
-          <FontAwesome name="trash" size={12} color="#ef4444" />
-        </TouchableOpacity>
-      ) : null}
+    <View style={[styles.tableCell, { width }]}>
+      <CategoryChip label={value} />
     </View>
   );
 }
 
-function StatusCell({
-  status,
-  width,
-  row,
-}: {
-  status: ExpenseRow["status"];
-  width?: number;
-  row: ExpenseRow;
-}) {
+function CategoryChip({ label }: { label: string }) {
+  return (
+    <View style={styles.categoryChip}>
+      <Text style={styles.categoryChipText}>{label}</Text>
+    </View>
+  );
+}
+
+function TypeCell({ value, width }: { value: string; width: number }) {
+  return (
+    <View style={[styles.tableCell, { width }]}>
+      <View style={styles.typeChip}>
+        <Text style={styles.typeChipText}>{value}</Text>
+      </View>
+    </View>
+  );
+}
+
+function ActionsCell({ row, width }: { row: ExpenseRow; width?: number }) {
+  return (
+    <View style={[styles.tableCell, { width }, styles.actionsCell]}>
+      {row.onView && (
+        <TouchableOpacity onPress={row.onView} style={[styles.actionIconBtn, styles.btnView]} activeOpacity={0.75}>
+          <FontAwesome name="eye" size={11} color="#6366f1" />
+        </TouchableOpacity>
+      )}
+      {row.onEdit && (
+        <TouchableOpacity onPress={row.onEdit} style={[styles.actionIconBtn, styles.btnEdit]} activeOpacity={0.75}>
+          <FontAwesome name="pencil" size={11} color="#f59e0b" />
+        </TouchableOpacity>
+      )}
+      {row.onDelete && (
+        <TouchableOpacity onPress={row.onDelete} style={[styles.actionIconBtn, styles.btnDelete]} activeOpacity={0.75}>
+          <FontAwesome name="trash" size={11} color="#ef4444" />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
+function StatusCell({ status, width, row }: { status: ExpenseRow["status"]; width?: number; row: ExpenseRow }) {
   return (
     <View style={[styles.tableCell, { width }, styles.statusCellWrap]}>
       <StatusPill status={status} />
       {status === "Requested" && (
         <>
-          {row.onApprove ? (
-            <TouchableOpacity onPress={row.onApprove} style={styles.microBtn} activeOpacity={0.7}>
-              <FontAwesome name="check" size={10} color="#15803d" />
+          {row.onApprove && (
+            <TouchableOpacity onPress={row.onApprove} style={[styles.microBtn, styles.microApprove]} activeOpacity={0.7}>
+              <FontAwesome name="check" size={9} color="#15803d" />
             </TouchableOpacity>
-          ) : null}
-          {row.onReject ? (
-            <TouchableOpacity onPress={row.onReject} style={styles.microBtn} activeOpacity={0.7}>
-              <FontAwesome name="times" size={10} color="#ef4444" />
+          )}
+          {row.onReject && (
+            <TouchableOpacity onPress={row.onReject} style={[styles.microBtn, styles.microReject]} activeOpacity={0.7}>
+              <FontAwesome name="times" size={9} color="#ef4444" />
             </TouchableOpacity>
-          ) : null}
+          )}
         </>
       )}
     </View>
@@ -247,116 +308,190 @@ function StatusCell({
 }
 
 function StatusPill({ status }: { status: ExpenseRow["status"] }) {
-  const { bg, text } = statusStyle(status);
+  const s = STATUS_STYLE[status] ?? STATUS_STYLE.Pending;
   return (
-    <View style={[styles.statusPill, { backgroundColor: bg }]}>
-      <Text style={[styles.statusPillText, { color: text }]}>{status}</Text>
+    <View style={[styles.statusPill, { backgroundColor: s.bg }]}>
+      <View style={[styles.statusDot, { backgroundColor: s.dot }]} />
+      <Text style={[styles.statusPillText, { color: s.text }]}>{status}</Text>
     </View>
   );
 }
 
-function statusStyle(status: string): { bg: string; text: string } {
-  switch (status) {
-    case "Paid":
-      return { bg: "#dcfce7", text: "#15803d" };
-    case "Requested":
-      return { bg: "#fef3c7", text: "#b45309" };
-    case "Rejected":
-      return { bg: "#fee2e2", text: "#ef4444" };
-    default:
-      return { bg: "#f3f4f6", text: "#6b7280" };
-  }
-}
+const STATUS_STYLE: Record<string, { bg: string; dot: string; text: string }> = {
+  Paid:      { bg: "#dcfce7", dot: "#16a34a", text: "#15803d" },
+  Requested: { bg: "#fef3c7", dot: "#d97706", text: "#b45309" },
+  Pending:   { bg: "#eff6ff", dot: "#3b82f6", text: "#1d4ed8" },
+  Rejected:  { bg: "#fee2e2", dot: "#ef4444", text: "#b91c1c" },
+};
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  section: {
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 12,
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "#e5e7eb",
     overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  tabHeader: {
-    flexDirection: "row",
-    borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
-    paddingHorizontal: 20,
-  },
-  activeTab: {
-    paddingTop: 14,
-    paddingBottom: 0,
-    marginBottom: -1,
-    position: "relative",
-  },
-  activeTabText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#111827",
-    paddingBottom: 10,
-  },
-  tabUnderline: {
-    height: 2,
-    backgroundColor: "#111827",
-    borderRadius: 1,
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-  },
-  tableHeader: {
+
+  // ── Header ──
+  cardHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#f9fafb",
+    borderBottomColor: "#f3f4f6",
   },
-  totalLabel: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "#374151",
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
-  totalAmount: {
+  headerIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#fff7ed",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardTitle: {
+    fontSize: 14,
     fontWeight: "700",
     color: "#111827",
+  },
+  cardSubtitle: {
+    fontSize: 11,
+    color: "#9ca3af",
+    marginTop: 1,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  pendingBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "#fef3c7",
+  },
+  pendingBadgeText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#b45309",
+  },
+  addBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#111827",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  addBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#fff",
+  },
+
+  // ── Summary bar ──
+  summaryBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: "#f9fafb",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
+    gap: 0,
+  },
+  summaryItem: {
+    flex: 1,
+    gap: 2,
+  },
+  summaryLabel: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#9ca3af",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  summaryValueTotal: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  summaryValuePaid: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#16a34a",
+  },
+  summaryValuePending: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#f97316",
+  },
+  summaryDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: "#e5e7eb",
+    marginHorizontal: 16,
+  },
+  viewAllBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginLeft: 8,
   },
   viewAllText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#6b7280",
-    textDecorationLine: "underline",
+    color: "#6366f1",
   },
+
+  // ── Table ──
   table: {
     minWidth: "100%",
   },
   tableHeadRow: {
     flexDirection: "row",
+    backgroundColor: "#f8fafc",
     borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
-    backgroundColor: "#fafafa",
+    borderBottomColor: "#e5e7eb",
   },
   colHead: {
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 11,
   },
   colHeadText: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#9ca3af",
+    color: "#94a3b8",
     textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
   },
   tableRow: {
     flexDirection: "row",
     borderBottomWidth: 1,
-    borderBottomColor: "#f9fafb",
+    borderBottomColor: "#f1f5f9",
+    backgroundColor: "#fff",
+  },
+  tableRowEven: {
+    backgroundColor: "#fafbfc",
   },
   tableCell: {
     paddingHorizontal: 12,
-    paddingVertical: 11,
+    paddingVertical: 12,
     justifyContent: "center",
   },
   tableCellText: {
@@ -366,79 +501,171 @@ const styles = StyleSheet.create({
   mono: {
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     fontSize: 11,
+    color: "#6366f1",
   },
-  bold: {
+  boldCell: {
     fontWeight: "700",
     color: "#111827",
+    fontSize: 13,
+  },
+  mutedCell: {
+    color: "#94a3b8",
+    fontSize: 11,
   },
   alignRight: {
     textAlign: "right",
   },
+
+  // ── Category / Type chips ──
+  categoryChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: "#ede9fe",
+    alignSelf: "flex-start",
+  },
+  categoryChipText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#7c3aed",
+  },
+  typeChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: "#e0f2fe",
+    alignSelf: "flex-start",
+  },
+  typeChipText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#0369a1",
+  },
+
+  // ── Action buttons ──
   actionsCell: {
     flexDirection: "row",
-    gap: 6,
+    gap: 5,
     alignItems: "center",
   },
-  cellActionBtn: {
-    padding: 3,
+  actionIconBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
   },
+  btnView: {
+    backgroundColor: "#eff0fe",
+  },
+  btnEdit: {
+    backgroundColor: "#fffbeb",
+  },
+  btnDelete: {
+    backgroundColor: "#fef2f2",
+  },
+
+  // ── Status ──
   statusCellWrap: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
   },
   statusPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  statusDot: {
+    width: 5,
+    height: 5,
     borderRadius: 999,
   },
   statusPillText: {
     fontSize: 10,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   microBtn: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
   },
+  microApprove: {
+    backgroundColor: "#dcfce7",
+  },
+  microReject: {
+    backgroundColor: "#fee2e2",
+  },
+
+  // ── Empty state ──
   emptyWrap: {
-    paddingVertical: 24,
+    paddingVertical: 40,
     alignItems: "center",
+    gap: 8,
   },
-  emptyText: {
-    fontSize: 13,
-    color: "#9ca3af",
+  emptyIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#f9fafb",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
   },
-  // ── Native list ──
-  nativeRow: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f9fafb",
-    gap: 4,
-  },
-  nativeRowTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  nativeExpenseId: {
-    fontSize: 12,
+  emptyTitle: {
+    fontSize: 14,
     fontWeight: "600",
     color: "#374151",
   },
-  nativeAmount: {
-    fontSize: 13,
+  emptySubtitle: {
+    fontSize: 12,
+    color: "#9ca3af",
+    textAlign: "center",
+    maxWidth: 260,
+    lineHeight: 18,
+  },
+
+  // ── Native cards ──
+  nativeRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+    gap: 6,
+    backgroundColor: "#fff",
+  },
+  nativeRowEven: {
+    backgroundColor: "#fafbfc",
+  },
+  nativeRowTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  nativeRowTopLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  nativeExpenseId: {
+    fontSize: 12,
     fontWeight: "700",
+    color: "#6366f1",
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+  },
+  nativeAmount: {
+    fontSize: 14,
+    fontWeight: "800",
     color: "#111827",
   },
-  nativeRowMid: {},
   nativeMeta: {
     fontSize: 11,
-    color: "#9ca3af",
+    color: "#94a3b8",
   },
   nativeRowBottom: {
     flexDirection: "row",
@@ -449,6 +676,18 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     color: "#6b7280",
-    marginRight: 8,
+    marginRight: 10,
+  },
+  nativeActions: {
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 4,
+  },
+  nativeActionBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
