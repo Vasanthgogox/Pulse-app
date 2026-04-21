@@ -62,7 +62,7 @@ export function buildTripClaimWhatsappMessage(input: {
     `Route: ${from} → ${to}`,
     `Driver: ${driverName} (${driverPhone})`,
     ``,
-    `A claim PDF is attached for your review.`,
+    `A PDF with full trip & amount details was generated on this device—please review it alongside this message.`,
     `Shared from Q Driver app.`,
   ].join('\n');
 }

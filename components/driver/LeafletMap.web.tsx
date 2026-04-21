@@ -1,3 +1,4 @@
+import Theme from "@/constants/Theme";
 import React, { useEffect, useRef } from "react";
 import { View, type StyleProp, type ViewStyle } from "react-native";
 
@@ -311,7 +312,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
           if (!m || !m.coordinate) continue;
           const lat = m.coordinate.latitude;
           const lng = m.coordinate.longitude;
-          const color = m.color || "#10b981";
+          const color = m.color || Theme.driverEmerald;
           const el = document.createElement("div");
           el.style.width = "12px";
           el.style.height = "12px";

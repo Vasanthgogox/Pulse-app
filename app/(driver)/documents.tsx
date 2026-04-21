@@ -4,130 +4,125 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
-import Typography from '@/constants/Typography';
-import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import {
+  DRIVER_DETAIL_HORIZONTAL_PAD,
+  DriverSubScreenHeader,
+  driverDetailPageBackground,
+} from '@/components/driver/DriverSubScreenHeader';
+import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 
 export default function DocumentsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { theme } = useDriverTheme();
+  const isDark = theme === 'dark';
   const colors = useDriverThemeColors();
+  const pageBg = driverDetailPageBackground(isDark, colors.background);
 
-  const goToProfile = () => router.replace('/(driver)/profile');
+  const handleBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(driver)/profile');
+  };
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={[
-        styles.scrollContent,
-        {
-          paddingTop: 0,
-          paddingHorizontal: Layout.screenPaddingHorizontal,
-          paddingBottom: insets.bottom + 80,
-        },
-      ]}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={[styles.header, { paddingTop: insets.top + Layout.driverHeaderTopOffset, paddingBottom: Layout.driverHeaderBottomPadding, backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <TouchableOpacity
-          onPress={goToProfile}
-          style={[styles.backBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          activeOpacity={0.8}
-          accessibilityLabel="Back to profile"
-        >
-          <FontAwesome name="chevron-left" size={18} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Documents</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+    <View style={[styles.root, { backgroundColor: pageBg }]}>
+      <DriverSubScreenHeader title="KYC & documents" onBack={handleBack} />
 
-      <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>ID & proof</Text>
-      <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <TouchableOpacity
-          style={[styles.docRow, { borderTopWidth: 0 }]}
-          onPress={() => Alert.alert('Aadhaar', 'Document upload will be available here.')}
-          activeOpacity={0.7}
-        >
-          <View style={styles.docRowLeft}>
-            <View style={[styles.docRowIcon, { backgroundColor: colors.emeraldMuted }]}>
-              <FontAwesome name="id-card" size={14} color={colors.emerald} />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={{
+          paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
+          paddingBottom: insets.bottom + 80,
+          paddingTop: 16,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={[styles.sectionLead, { color: colors.text }]}>Verification upgrade</Text>
+        <Text style={[styles.sectionSubtitle, { color: colors.textMuted }]}>
+          Upload and verify your proof of identity. One place for all driver compliance.
+        </Text>
+        <Text style={[styles.sectionEyebrow, { color: colors.textMuted }]}>ID & proof</Text>
+        <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <TouchableOpacity
+            style={[styles.docRow, { borderTopWidth: 0 }]}
+            onPress={() => Alert.alert('Aadhaar', 'Document upload will be available here.')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.docRowLeft}>
+              <View style={[styles.docRowIcon, { backgroundColor: colors.emeraldMuted }]}>
+                <FontAwesome name="id-card" size={14} color={colors.emerald} />
+              </View>
+              <Text style={[styles.docRowLabel, { color: colors.text }]}>Aadhaar</Text>
             </View>
-            <Text style={[styles.docRowLabel, { color: colors.text }]}>Aadhaar</Text>
-          </View>
-          <View style={styles.docRowRight}>
-            <Text style={[styles.docRowStatus, { color: colors.textMuted }]}>Not added</Text>
-            <FontAwesome name="chevron-right" size={12} color={colors.textMuted} />
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.docRow, { borderTopColor: colors.border }]}
-          onPress={() => Alert.alert('PAN', 'Document upload will be available here.')}
-          activeOpacity={0.7}
-        >
-          <View style={styles.docRowLeft}>
-            <View style={[styles.docRowIcon, { backgroundColor: colors.emeraldMuted }]}>
-              <FontAwesome name="credit-card" size={14} color={colors.emerald} />
+            <View style={styles.docRowRight}>
+              <Text style={[styles.docRowStatus, { color: colors.textMuted }]}>Not added</Text>
+              <FontAwesome name="chevron-right" size={12} color={colors.textMuted} />
             </View>
-            <Text style={[styles.docRowLabel, { color: colors.text }]}>PAN</Text>
-          </View>
-          <View style={styles.docRowRight}>
-            <Text style={[styles.docRowStatus, { color: colors.textMuted }]}>Not added</Text>
-            <FontAwesome name="chevron-right" size={12} color={colors.textMuted} />
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.docRow, { borderTopColor: colors.border }]}
-          onPress={() => Alert.alert('Driving License', 'Document upload will be available here.')}
-          activeOpacity={0.7}
-        >
-          <View style={styles.docRowLeft}>
-            <View style={[styles.docRowIcon, { backgroundColor: colors.emeraldMuted }]}>
-              <FontAwesome name="car" size={14} color={colors.emerald} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.docRow, { borderTopColor: colors.border }]}
+            onPress={() => Alert.alert('PAN', 'Document upload will be available here.')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.docRowLeft}>
+              <View style={[styles.docRowIcon, { backgroundColor: colors.emeraldMuted }]}>
+                <FontAwesome name="credit-card" size={14} color={colors.emerald} />
+              </View>
+              <Text style={[styles.docRowLabel, { color: colors.text }]}>PAN</Text>
             </View>
-            <Text style={[styles.docRowLabel, { color: colors.text }]}>Driving license</Text>
-          </View>
-          <View style={styles.docRowRight}>
-            <Text style={[styles.docRowStatus, { color: colors.textMuted }]}>Not added</Text>
-            <FontAwesome name="chevron-right" size={12} color={colors.textMuted} />
-          </View>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+            <View style={styles.docRowRight}>
+              <Text style={[styles.docRowStatus, { color: colors.textMuted }]}>Not added</Text>
+              <FontAwesome name="chevron-right" size={12} color={colors.textMuted} />
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.docRow, { borderTopColor: colors.border }]}
+            onPress={() => Alert.alert('Driving License', 'Document upload will be available here.')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.docRowLeft}>
+              <View style={[styles.docRowIcon, { backgroundColor: colors.emeraldMuted }]}>
+                <FontAwesome name="car" size={14} color={colors.emerald} />
+              </View>
+              <Text style={[styles.docRowLabel, { color: colors.text }]}>Driving license</Text>
+            </View>
+            <View style={styles.docRowRight}>
+              <Text style={[styles.docRowStatus, { color: colors.textMuted }]}>Not added</Text>
+              <FontAwesome name="chevron-right" size={12} color={colors.textMuted} />
+            </View>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scrollContent: { paddingTop: 16 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Layout.driverHeaderHorizontalPadding,
-    borderBottomWidth: 1,
-    marginBottom: 16,
+  root: { flex: 1 },
+  scroll: { flex: 1 },
+  sectionLead: {
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    marginBottom: 8,
+    paddingHorizontal: 2,
   },
-  backBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+  sectionSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 18,
+    paddingHorizontal: 2,
   },
-  headerTitle: {
-    flex: 1,
-    ...Typography.headerTitle,
-    textAlign: 'center',
-  },
-  headerSpacer: { width: 44 },
-  sectionTitle: {
-    fontSize: 11,
+  sectionEyebrow: {
+    fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: 2,
     marginBottom: 10,
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
+    textTransform: 'uppercase',
   },
-  section: {
-    borderRadius: 16,
+  sectionCard: {
+    borderRadius: 28,
     borderWidth: 1,
     overflow: 'hidden',
   },
@@ -135,7 +130,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
+    paddingVertical: 16,
     paddingHorizontal: 16,
     borderTopWidth: 1,
   },
@@ -147,13 +142,13 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   docRowIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  docRowLabel: { fontSize: 14, fontWeight: '700', color: Theme.textPrimary },
+  docRowLabel: { fontSize: 15, fontWeight: '700', color: Theme.textPrimary },
   docRowRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   docRowStatus: { fontSize: 12, fontWeight: '600', color: Theme.textMuted },
 });

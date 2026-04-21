@@ -1,12 +1,18 @@
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
+import {
+  driverBodyPrimary,
+  driverBodySecondary,
+  driverUISemiBold,
+} from '@/constants/DriverTypography';
 import { SearchBar } from '@/components/SearchBar';
 import { ThemedConfirmModal } from '@/components/ThemedConfirmModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
+import { getFleetAvatarUriForOrg } from '@/lib/fleetAvatar';
 import {
   buildBulkTripClaimWhatsappMessage,
   buildSettlementShareMessage,
@@ -21,6 +27,8 @@ import * as driversService from '@/services/driversService';
 import * as salaryRequestsService from '@/services/salaryRequestsService';
 import * as tripsService from '@/services/tripsService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Sparkles, Wallet } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -31,9 +39,7 @@ import {
   Alert,
   Image,
   Linking,
-  Modal,
   Platform,
-  Pressable,
   ScrollView,
   Share,
   StyleSheet,
@@ -42,6 +48,14 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
 const isAndroid = Platform.OS === 'android';
 
@@ -84,18 +98,18 @@ function ledgerTypeLabel(type: string): string {
   return DRIVER_LEDGER_TYPE_LABELS[type] ?? type;
 }
 
-/** Wallet card + credits – exact match to reference: Tailwind emerald/gray */
+/** Wallet card + credits — deeper emerald palette (aligned with Theme.driver*) */
 const EMERALD_950 = '#022c22';
 const EMERALD_900 = '#064e3b';
 const EMERALD_700 = '#047857';
 const EMERALD_600 = '#059669';
-const EMERALD_500 = '#10b981';   /* emerald-500: credits title, button bg */
-const EMERALD_400 = '#34d399';   /* emerald-400: watermark, button border */
-const EMERALD_200_90 = 'rgba(167,243,208,0.9)'; /* emerald-200/90: card label */
+const EMERALD_500 = '#047857'; /* credits hero / accents */
+const EMERALD_400 = '#059669'; /* watermark, secondary accent */
+const EMERALD_200_90 = 'rgba(167,243,208,0.88)'; /* card label on dark emerald */
 const GRAY_700 = '#374151';      /* gray-700: credits subtitle (dark grey) */
 const AMBER_50 = 'rgba(245,158,11,0.12)';   /* pending badge bg */
 const AMBER_600 = '#d97706';     /* pending badge text */
-const EMERALD_50 = 'rgba(16,185,129,0.12)'; /* received badge bg */
+const EMERALD_50 = 'rgba(4,120,87,0.14)'; /* received badge bg */
 
 export default function DriverWalletScreen() {
   usePreventScreenCapture();
@@ -131,7 +145,6 @@ export default function DriverWalletScreen() {
   const [journeySearch, setJourneySearch] = useState('');
   const [journeyFilter, setJourneyFilter] = useState<'all' | 'pending' | 'fleet_marked' | 'settled'>('all');
   const [copiedTripId, setCopiedTripId] = useState<string | null>(null);
-  const [whatsAppReminderMessage, setWhatsAppReminderMessage] = useState<string | null>(null);
   const [markPaidConfirmState, setMarkPaidConfirmState] = useState<{
     trip: tripsService.TripRow;
     amount: number;
@@ -152,10 +165,6 @@ export default function DriverWalletScreen() {
     } catch {
       // ignore
     }
-  }, []);
-
-  const promptWhatsAppReminder = useCallback(async (message: string) => {
-    setWhatsAppReminderMessage(message);
   }, []);
 
   const handleCopyTripId = useCallback((tripId: string) => {
@@ -444,6 +453,8 @@ export default function DriverWalletScreen() {
     driverName?: string | null;
     driverPhone?: string | null;
     tripDate?: string | null;
+    /** DB salary_request id — printed on PDF for fleet reconciliation */
+    paymentRequestId?: string | null;
   }) => {
     const safe = (s: string) =>
       String(s)
@@ -479,20 +490,24 @@ export default function DriverWalletScreen() {
     <div class="page">
       <div class="card">
         <div class="hero">
-          <div class="eyebrow">Trip payment claim</div>
-          <p class="title">${safe(p.displayId)} · ${safe(p.fleetName)}</p>
+          <div class="eyebrow">Payment request · Trip settlement</div>
+          <p class="title">${safe(p.displayId)}</p>
+          <p class="sub">${safe(p.fleetName)}</p>
           <p class="sub">${safe(p.from)} → ${safe(p.to)}</p>
           ${driverLine ? `<p class="sub">${safe(driverLine)}</p>` : ``}
           ${p.tripDate ? `<p class="sub">${safe(p.tripDate)}</p>` : ``}
           <p class="amount">₹${Math.round(p.amount).toLocaleString('en-IN')}</p>
         </div>
         <div class="rows">
+          ${p.paymentRequestId ? `<div class="row"><div class="k">Request reference</div><div class="v">${safe(p.paymentRequestId)}</div></div>` : ``}
+          <div class="row"><div class="k">Request type</div><div class="v">Trip-based payment</div></div>
+          <div class="row"><div class="k">Fleet</div><div class="v">${safe(p.fleetName)}</div></div>
           <div class="row"><div class="k">Status</div><div class="v">${safe(p.status)}</div></div>
           <div class="row"><div class="k">Captured at</div><div class="v">${safe(p.capturedAt)}</div></div>
           <div class="row"><div class="k">Trip</div><div class="v">${safe(p.displayId)}</div></div>
           <div class="row"><div class="k">Route</div><div class="v">${safe(`${p.from} → ${p.to}`)}</div></div>
         </div>
-        <div class="footer">Generated from Q Driver · ${safe(p.capturedAt)}</div>
+        <div class="footer">Share this PDF with your fleet accounts team. Generated from Q Driver · ${safe(p.capturedAt)}</div>
       </div>
     </div>
   </body>
@@ -511,6 +526,7 @@ export default function DriverWalletScreen() {
       driverName?: string | null;
       driverPhone?: string | null;
       tripDate?: string | null;
+      paymentRequestId?: string | null;
     }) => {
       const html = buildTripClaimHtml(p);
       const file = await Print.printToFileAsync({ html });
@@ -525,7 +541,7 @@ export default function DriverWalletScreen() {
       }
       await Sharing.shareAsync(file.uri, {
         mimeType: 'application/pdf',
-        dialogTitle: 'Share claim PDF',
+        dialogTitle: 'Share payment request (PDF)',
         UTI: 'com.adobe.pdf',
       });
     },
@@ -748,56 +764,60 @@ export default function DriverWalletScreen() {
       if (!Number.isFinite(reqAmount) || reqAmount <= 0) return;
 
       setRequestPaymentLoadingTripId(trip.id);
-      const { error } = await salaryRequestsService.createSalaryRequest(driverId, orgId, 'trip_based', reqAmount, {
-        createdBy: profile?.uid ?? null,
-        tripIds: [trip.id],
-        note: `Request for payment (wallet): ${displayId}`,
-      });
-      setRequestPaymentLoadingTripId(null);
-      if (error) {
-        if (Platform.OS === 'web') window.alert(`Could not create claim: ${error.message}`);
-        else Alert.alert('Could not create claim', error.message);
-        return;
+      try {
+        const { error, request } = await salaryRequestsService.createSalaryRequest(driverId, orgId, 'trip_based', reqAmount, {
+          createdBy: profile?.uid ?? null,
+          tripIds: [trip.id],
+          note: `Request for payment (wallet): ${displayId}`,
+        });
+        if (error) {
+          if (Platform.OS === 'web') window.alert(`Could not create claim: ${error.message}`);
+          else Alert.alert('Could not create claim', error.message);
+          return;
+        }
+
+        const capturedAt = phonePeMetaDate(trip.completed_at ?? trip.updated_at ?? trip.created_at);
+        const driverRow = linkedDrivers.find((d) => String(d.id) === String(driverId)) ?? linkedDrivers[0] ?? null;
+        const tripDate = new Date(trip.completed_at ?? trip.updated_at ?? trip.created_at ?? '').toLocaleString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        });
+        const paymentRequestId = request?.id ? String(request.id) : null;
+        await shareTripClaimPdf({
+          fleetName,
+          displayId,
+          amount: reqAmount,
+          from,
+          to,
+          status,
+          capturedAt,
+          driverName: driverRow?.name ?? null,
+          driverPhone: driverRow?.phone ?? null,
+          tripDate,
+          paymentRequestId,
+        });
+
+        const msg = buildTripClaimWhatsappMessage({
+          fleetName,
+          tripId: displayId,
+          amount: reqAmount,
+          status,
+          from,
+          to,
+          tripDate,
+          driverName: driverRow?.name ?? null,
+          driverPhone: driverRow?.phone ?? null,
+        });
+        await openWhatsAppReminder(msg);
+      } finally {
+        setRequestPaymentLoadingTripId(null);
       }
-
-      const capturedAt = phonePeMetaDate(trip.completed_at ?? trip.updated_at ?? trip.created_at);
-      const driverRow = linkedDrivers.find((d) => String(d.id) === String(driverId)) ?? linkedDrivers[0] ?? null;
-      const tripDate = new Date(trip.completed_at ?? trip.updated_at ?? trip.created_at ?? '').toLocaleString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      });
-      await shareTripClaimPdf({
-        fleetName,
-        displayId,
-        amount: reqAmount,
-        from,
-        to,
-        status,
-        capturedAt,
-        driverName: driverRow?.name ?? null,
-        driverPhone: driverRow?.phone ?? null,
-        tripDate,
-      });
-
-      // Secondary reminder: WhatsApp (optional, prompted).
-      const msg = buildTripClaimWhatsappMessage({
-        fleetName,
-        tripId: displayId,
-        amount: reqAmount,
-        status,
-        from,
-        to,
-        tripDate,
-        driverName: driverRow?.name ?? null,
-        driverPhone: driverRow?.phone ?? null,
-      });
-      await promptWhatsAppReminder(msg);
     },
-    [linkedDrivers, profile?.uid, shareTripClaimPdf, promptWhatsAppReminder],
+    [linkedDrivers, profile?.uid, shareTripClaimPdf, openWhatsAppReminder],
   );
 
   const { pendingTrips, receivedTrips, filteredTrips, pendingTotal, receivedTotal } = useMemo(() => {
@@ -946,6 +966,41 @@ export default function DriverWalletScreen() {
       return sum + amt;
     }, 0),
   );
+
+  /** Cash card: pulse + watermark motion (reference wallet hero). */
+  const cashCardSparklePulse = useSharedValue(0);
+  const cashCardWatermarkDrift = useSharedValue(0);
+  useEffect(() => {
+    cashCardSparklePulse.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.quad) }),
+        withTiming(0.2, { duration: 1500 })
+      ),
+      -1,
+      false
+    );
+    cashCardWatermarkDrift.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 4000, easing: Easing.inOut(Easing.sin) }),
+        withTiming(0, { duration: 4000 })
+      ),
+      -1,
+      false
+    );
+  }, [cashCardSparklePulse, cashCardWatermarkDrift]);
+
+  const cashSparkleAnimStyle = useAnimatedStyle(() => ({
+    opacity: 0.5 + cashCardSparklePulse.value * 0.5,
+    transform: [{ scale: 0.92 + cashCardSparklePulse.value * 0.14 }],
+  }));
+
+  const cashWatermarkAnimStyle = useAnimatedStyle(() => ({
+    opacity: 0.1 + cashCardWatermarkDrift.value * 0.08,
+    transform: [
+      { rotate: `${-8 + cashCardWatermarkDrift.value * 16}deg` },
+      { translateY: cashCardWatermarkDrift.value * 6 - 3 },
+    ],
+  }));
 
   /** Salary request: only show connected fleets (accepted invite). Use org name from invite when available, else "Fleet". */
   const salaryRequestOrgOptions = useMemo(() => {
@@ -1186,7 +1241,7 @@ export default function DriverWalletScreen() {
         driverName: primaryDriver?.name ?? null,
         driverPhone: primaryDriver?.phone ?? null,
       });
-      await promptWhatsAppReminder(msg);
+      await openWhatsAppReminder(msg);
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Could not claim pending trips.';
       if (Platform.OS === 'web') window.alert(message);
@@ -1194,7 +1249,7 @@ export default function DriverWalletScreen() {
     } finally {
       setClaimAllLoading(false);
     }
-  }, [claimAllLoading, pendingTripJourneyItems, linkedDrivers, profile?.uid, shareBulkClaimPdf, promptWhatsAppReminder]);
+  }, [claimAllLoading, pendingTripJourneyItems, linkedDrivers, profile?.uid, shareBulkClaimPdf, openWhatsAppReminder]);
 
   const filteredTripJourneySections = useMemo(() => {
     const map = new Map<string, typeof filteredTripJourneyItems>();
@@ -1388,14 +1443,20 @@ export default function DriverWalletScreen() {
       </View>
 
       <View style={styles.walletCardWrap}>
-        <View
+        <LinearGradient
+          colors={
+            isDark
+              ? [EMERALD_950, Theme.driverEmeraldDark]
+              : [Theme.driverEmeraldDark, Theme.driverEmerald]
+          }
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
           style={[
             styles.walletCard,
             {
-              backgroundColor: isDark ? EMERALD_900 : EMERALD_600,
               borderWidth: 1,
-              borderColor: isDark ? 'rgba(4,120,87,0.5)' : 'rgba(16,185,129,0.5)',
-              shadowColor: isDark ? 'rgba(6,95,70,0.25)' : 'rgba(6,95,70,0.2)',
+              borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.22)',
+              shadowColor: isDark ? 'rgba(2,44,34,0.85)' : 'rgba(6,95,70,0.38)',
               shadowOffset: { width: 0, height: 20 },
               shadowOpacity: 1,
               shadowRadius: 40,
@@ -1403,19 +1464,18 @@ export default function DriverWalletScreen() {
             },
           ]}
         >
-          <View style={[styles.walletCardWatermarkWrap, { pointerEvents: 'none' }]}>
-            <Text
-              style={[
-                styles.walletCardWatermark,
-                { color: EMERALD_400, opacity: 0.25, transform: [{ rotate: '12deg' }] },
-              ]}
-            >
-              ₹
-            </Text>
-          </View>
+          <Animated.View
+            style={[styles.walletCardWatermarkWrap, cashWatermarkAnimStyle, { pointerEvents: 'none' }]}
+          >
+            <Wallet size={112} color={EMERALD_400} strokeWidth={1.4} />
+          </Animated.View>
           <View style={styles.walletCardContent}>
-            <Text style={[styles.walletCardLabel, { color: EMERALD_200_90 }]}>CASH BALANCE</Text>
-            <Text style={[styles.walletCardSublabel, { color: EMERALD_200_90, opacity: 0.8 }]}></Text>
+            <View style={styles.walletCardLabelRow}>
+              <Animated.View style={cashSparkleAnimStyle}>
+                <Sparkles size={17} color="rgba(236,253,245,0.95)" strokeWidth={2.5} />
+              </Animated.View>
+              <Text style={[styles.walletCardLabel, { color: EMERALD_200_90 }]}>CASH BALANCE</Text>
+            </View>
             <View style={styles.walletCardBalanceRow}>
               <Text style={[styles.walletCardBalanceRupee, { color: '#ffffff' }]}>₹</Text>
               <Text
@@ -1432,16 +1492,25 @@ export default function DriverWalletScreen() {
               </Text>
             </View>
             <TouchableOpacity
-              style={[styles.walletCardWithdrawBtn, { backgroundColor: EMERALD_500, borderColor: 'rgba(52,211,153,0.3)' }]}
-              activeOpacity={0.8}
+              style={[
+                styles.walletCardWithdrawBtn,
+                {
+                  backgroundColor: 'rgba(248,250,252,0.96)',
+                  borderColor: 'rgba(255,255,255,0.38)',
+                  shadowColor: '#000',
+                },
+              ]}
+              activeOpacity={0.85}
               onPress={() => router.push('/(driver)/salary-request')}
               accessibilityLabel="Salary request"
               accessibilityHint="Request salary from your fleet"
             >
-              <Text style={[styles.walletCardWithdrawText, { color: '#000000' }]}>SALARY REQUEST</Text>
+              <Text style={[styles.walletCardWithdrawText, { color: Theme.textPrimaryDark }]}>
+                SALARY REQUEST
+              </Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </LinearGradient>
       </View>
 
       <View
@@ -1544,7 +1613,7 @@ export default function DriverWalletScreen() {
               activeOpacity={0.88}
               style={[
                 styles.bulkClaimButton,
-                { backgroundColor: colors.emerald, shadowColor: isDark ? '#000' : 'rgba(16,185,129,0.35)' },
+                { backgroundColor: colors.emerald, shadowColor: isDark ? '#000' : 'rgba(4,120,87,0.35)' },
               ]}
               onPress={() => claimAllPendingTrips().catch(() => {})}
               disabled={claimAllLoading}
@@ -1588,12 +1657,19 @@ export default function DriverWalletScreen() {
                         style={[
                           styles.fleetCardLogoNew,
                           {
-                            backgroundColor: colors.emerald,
-                            shadowColor: isDark ? '#000' : 'rgba(16,185,129,0.35)',
+                            backgroundColor: isDark ? colors.surfaceElevated : 'rgba(248,250,252,0.92)',
+                            shadowColor: isDark ? '#000' : 'rgba(4,120,87,0.35)',
+                            overflow: 'hidden',
+                            borderWidth: 1,
+                            borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.9)',
                           },
                         ]}
                       >
-                        <FontAwesome name="building-o" size={22} color={Theme.textOnPrimary} />
+                        <Image
+                          source={{ uri: getFleetAvatarUriForOrg(String(fleet.orgId ?? ''), fleet.orgName) }}
+                          style={styles.fleetCardLogoImage}
+                          resizeMode="cover"
+                        />
                       </View>
                       <View style={styles.fleetCardBody}>
                         <Text style={[styles.fleetCardTitle, { color: colors.text }]} numberOfLines={1}>
@@ -1612,8 +1688,8 @@ export default function DriverWalletScreen() {
                         style={[
                           styles.fleetStatusPillNew,
                           {
-                            backgroundColor: isDark ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.10)',
-                            borderColor: isDark ? 'rgba(16,185,129,0.35)' : 'rgba(16,185,129,0.18)',
+                            backgroundColor: isDark ? 'rgba(4,120,87,0.18)' : 'rgba(4,120,87,0.10)',
+                            borderColor: isDark ? 'rgba(4,120,87,0.35)' : 'rgba(4,120,87,0.18)',
                           },
                         ]}
                       >
@@ -1707,7 +1783,7 @@ export default function DriverWalletScreen() {
                       pointerEvents="none"
                       style={[
                         styles.tripsTimelineLine,
-                        { backgroundColor: isDark ? colors.borderSubtle : 'rgba(16,185,129,0.35)' },
+                        { backgroundColor: isDark ? colors.borderSubtle : 'rgba(4,120,87,0.35)' },
                       ]}
                     />
 
@@ -1735,6 +1811,10 @@ export default function DriverWalletScreen() {
                         const pendingCapturedAt = phonePeMetaDate(
                           fleetPendingLedger?.created_at ?? item.trip.completed_at ?? item.trip.updated_at ?? item.trip.created_at,
                         );
+                        const fleetAvatarUri = getFleetAvatarUriForOrg(
+                          String(item.trip.organization_id ?? ''),
+                          providerShort,
+                        );
 
                         return (
                           <View
@@ -1750,7 +1830,7 @@ export default function DriverWalletScreen() {
                                     : isDark
                                       ? colors.borderSubtle
                                       : 'rgba(226,232,240,0.9)',
-                                shadowColor: isActionRequired ? 'rgba(249,115,22,0.25)' : 'rgba(16,185,129,0.18)',
+                                shadowColor: isActionRequired ? 'rgba(249,115,22,0.25)' : 'rgba(4,120,87,0.18)',
                               },
                               isExpanded && styles.tripsCardExpanded,
                             ]}
@@ -1776,19 +1856,17 @@ export default function DriverWalletScreen() {
                                       },
                                     ]}
                                   >
-                                    <FontAwesome
-                                      name={isActionRequired ? 'exclamation-circle' : hasFleetPending || isSettled ? 'check-circle' : 'line-chart'}
-                                      size={18}
-                                      color={
-                                        isExpanded
-                                          ? colors.textOnPrimary
-                                          : isActionRequired
-                                            ? 'rgb(249,115,22)'
-                                            : hasFleetPending || isSettled
-                                              ? colors.emerald
-                                              : colors.textMuted
-                                      }
-                                    />
+                                    {isActionRequired ? (
+                                      <FontAwesome name="exclamation-circle" size={18} color="rgb(249,115,22)" />
+                                    ) : hasFleetPending || isSettled ? (
+                                      <FontAwesome
+                                        name="check-circle"
+                                        size={18}
+                                        color={isExpanded ? colors.textOnPrimary : colors.emerald}
+                                      />
+                                    ) : (
+                                      <Image source={{ uri: fleetAvatarUri }} style={styles.tripsIconImage} resizeMode="cover" />
+                                    )}
                                   </View>
                                   <View style={styles.tripsHeadText}>
                                     <Text style={[styles.tripsTripId, { color: colors.text }]}>{item.id}</Text>
@@ -1916,7 +1994,7 @@ export default function DriverWalletScreen() {
                                           ]}
                                         >
                                           <View style={styles.tripsReceiptHero}>
-                                            <View style={[styles.tripsReceiptIcon, { backgroundColor: 'rgba(16,185,129,0.12)' }]}>
+                                            <View style={[styles.tripsReceiptIcon, { backgroundColor: 'rgba(4,120,87,0.12)' }]}>
                                               <FontAwesome name="check" size={20} color={colors.emerald} />
                                             </View>
                                             <Text style={[styles.tripsReceiptEyebrow, { color: colors.emerald }]}>SETTLEMENT RECEIVED</Text>
@@ -2112,14 +2190,14 @@ export default function DriverWalletScreen() {
                                       }
                                       disabled={requestPaymentLoadingTripId === item.trip.id}
                                       style={[styles.tripsClaimButton, { backgroundColor: '#0f172a' }]}
-                                      accessibilityLabel="Request for payment — notifies fleet and opens WhatsApp share"
+                                      accessibilityLabel="Request payment: save request, share PDF with fleet, optional WhatsApp"
                                     >
-                                      <FontAwesome
-                                        name={requestPaymentLoadingTripId === item.trip.id ? 'spinner' : 'whatsapp'}
-                                        size={15}
-                                        color="#25D366"
-                                      />
-                                      <View style={styles.tripsRequestPaymentLabelWrap}>
+                                      <View style={styles.tripsClaimButtonInner}>
+                                        <FontAwesome
+                                          name={requestPaymentLoadingTripId === item.trip.id ? 'spinner' : 'whatsapp'}
+                                          size={15}
+                                          color="#25D366"
+                                        />
                                         <Text style={[styles.tripsClaimButtonText, styles.tripsRequestPaymentButtonText]}>
                                           {requestPaymentLoadingTripId === item.trip.id
                                             ? 'REQUESTING…'
@@ -2198,6 +2276,10 @@ export default function DriverWalletScreen() {
                       const txnExpanded = expandedTripId === `cash-${trip.id}`;
                       const fleetName =
                         salaryRequestOrgOptions.find((o) => String(o.orgId ?? '') === String(trip.organization_id ?? ''))?.orgName ?? 'Fleet';
+                      const fleetAvatarUri = getFleetAvatarUriForOrg(
+                        String(trip.organization_id ?? ''),
+                        fleetName,
+                      );
                       const ledger = latestCreditLedgerByTripId[trip.id];
                       const paymentMode = derivePaymentMode(ledger?.description) ?? '—';
                       const utr = extractUtr(ledger?.description) ?? '—';
@@ -2216,16 +2298,28 @@ export default function DriverWalletScreen() {
                             activeOpacity={0.8}
                             onPress={() => setExpandedTripId((prev) => (prev === `cash-${trip.id}` ? null : `cash-${trip.id}`))}
                           >
-                            <View style={styles.cashPremiumLeft}>
+                              <View style={styles.cashPremiumLeft}>
                               <View
                                 style={[
                                   styles.cashPremiumAvatar,
                                   { backgroundColor: isDark ? colors.surfaceElevated : 'rgba(248,250,252,0.92)' },
                                 ]}
                               >
-                                <Text style={[styles.cashPremiumAvatarText, { color: colors.textMuted }]}>
-                                  {fleetName.charAt(0).toUpperCase()}
-                                </Text>
+                                <View
+                                  style={[
+                                    styles.cashPremiumAvatarImageClip,
+                                    {
+                                      borderColor: 'rgba(226,232,240,0.7)',
+                                      backgroundColor: isDark ? colors.surfaceElevated : 'rgba(248,250,252,0.92)',
+                                    },
+                                  ]}
+                                >
+                                  <Image
+                                    source={{ uri: fleetAvatarUri }}
+                                    style={styles.cashPremiumAvatarImage}
+                                    resizeMode="cover"
+                                  />
+                                </View>
                                 <View style={[styles.cashPremiumAvatarBadge, { backgroundColor: colors.surface }]}>
                                   <FontAwesome name="arrow-down" size={10} color={colors.emerald} />
                                 </View>
@@ -2407,96 +2501,8 @@ export default function DriverWalletScreen() {
         </View>
       )}
     </ScrollView>
-    <Modal
-      visible={!!whatsAppReminderMessage}
-      animationType="fade"
-      transparent
-      statusBarTranslucent
-      onRequestClose={() => setWhatsAppReminderMessage(null)}
-    >
-      <Pressable
-        style={[
-          styles.walletDialogOverlay,
-          {
-            paddingTop: insets.top,
-            paddingBottom: insets.bottom,
-            backgroundColor: isDark ? 'rgba(2,6,23,0.68)' : 'rgba(15,23,42,0.28)',
-          },
-        ]}
-        onPress={() => setWhatsAppReminderMessage(null)}
-      >
-        <Pressable
-          style={[
-            styles.walletDialogCard,
-            {
-              backgroundColor: isDark ? colors.surfaceElevated : '#ffffff',
-              borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.95)',
-              shadowColor: isDark ? '#000000' : 'rgba(15,23,42,0.18)',
-            },
-          ]}
-          onPress={(e) => e.stopPropagation()}
-        >
-          <View style={[styles.walletDialogAccent, { backgroundColor: colors.emerald }]} />
-          <View
-            style={[
-              styles.walletDialogIconWrap,
-              { backgroundColor: isDark ? 'rgba(16,185,129,0.14)' : 'rgba(16,185,129,0.10)' },
-            ]}
-          >
-            <FontAwesome name="whatsapp" size={26} color={colors.emerald} />
-          </View>
-          <Text style={[styles.walletDialogTitle, { color: colors.text }]}>Reminder sent</Text>
-          <Text style={[styles.walletDialogMessage, { color: colors.textMuted }]}>
-            The fleet owner has been notified in app. Send a WhatsApp reminder too?
-          </Text>
-          <View
-            style={[
-              styles.walletDialogInfoChip,
-              {
-                backgroundColor: isDark ? colors.surface : 'rgba(241,245,249,0.82)',
-                borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.9)',
-              },
-            ]}
-          >
-            <FontAwesome name="bell-o" size={12} color={colors.emerald} />
-            <Text style={[styles.walletDialogInfoChipText, { color: colors.textMuted }]}>In-app reminder created</Text>
-          </View>
-          <View style={styles.walletDialogButtons}>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              style={[
-                styles.walletDialogButton,
-                styles.walletDialogButtonSecondary,
-                {
-                  backgroundColor: isDark ? colors.surface : 'rgba(241,245,249,0.92)',
-                  borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.95)',
-                },
-              ]}
-              onPress={() => setWhatsAppReminderMessage(null)}
-            >
-              <Text style={[styles.walletDialogButtonSecondaryText, { color: colors.text }]}>Not now</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              style={[
-                styles.walletDialogButton,
-                styles.walletDialogButtonPrimary,
-                { backgroundColor: colors.emerald, shadowColor: isDark ? '#000' : 'rgba(16,185,129,0.32)' },
-              ]}
-              onPress={() => {
-                const message = whatsAppReminderMessage;
-                setWhatsAppReminderMessage(null);
-                if (message) void openWhatsAppReminder(message);
-              }}
-            >
-              <FontAwesome name="whatsapp" size={16} color={colors.textOnPrimary} />
-              <Text style={[styles.walletDialogButtonPrimaryText, { color: colors.textOnPrimary }]}>Send on WhatsApp</Text>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
     <ThemedConfirmModal
+      variant="positive"
       visible={!!markPaidConfirmState}
       title={markPaidConfirmState?.sourceLedger ? 'Verify & Mark as paid' : 'Mark as paid'}
       message={
@@ -2546,104 +2552,6 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 14,
     color: Theme.textMuted,
-  },
-  walletDialogOverlay: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-  },
-  walletDialogCard: {
-    width: '100%',
-    maxWidth: 368,
-    borderRadius: 28,
-    borderWidth: 1,
-    paddingHorizontal: 22,
-    paddingTop: 18,
-    paddingBottom: 20,
-    alignItems: 'center',
-    shadowOffset: { width: 0, height: 18 },
-    shadowOpacity: 1,
-    shadowRadius: 36,
-    elevation: 18,
-  },
-  walletDialogAccent: {
-    width: 88,
-    height: 4,
-    borderRadius: 999,
-    marginBottom: 18,
-  },
-  walletDialogIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  walletDialogTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-    textAlign: 'center',
-  },
-  walletDialogMessage: {
-    marginTop: 10,
-    fontSize: 14,
-    lineHeight: 21,
-    fontWeight: '500',
-    textAlign: 'center',
-    maxWidth: 280,
-  },
-  walletDialogInfoChip: {
-    marginTop: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-  },
-  walletDialogInfoChipText: {
-    fontSize: 12,
-    fontWeight: '500',
-    letterSpacing: 0.2,
-  },
-  walletDialogButtons: {
-    width: '100%',
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 18,
-  },
-  walletDialogButton: {
-    flex: 1,
-    minHeight: 50,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  walletDialogButtonPrimary: {
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 1,
-    shadowRadius: 18,
-    elevation: 6,
-  },
-  walletDialogButtonSecondary: {
-    borderWidth: 1,
-  },
-  walletDialogButtonPrimaryText: {
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-  walletDialogButtonSecondaryText: {
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: 0.1,
   },
   header: {
     flexDirection: 'row',
@@ -2727,26 +2635,26 @@ const styles = StyleSheet.create({
     paddingTop: 0,
   },
   walletCard: {
-    borderRadius: 24,
-    paddingVertical: 24,
-    paddingHorizontal: 60,
+    borderRadius: 28,
+    paddingVertical: 26,
+    paddingHorizontal: 56,
     alignItems: 'center',
     position: 'relative',
     overflow: 'hidden',
   },
   walletCardWatermarkWrap: {
     position: 'absolute',
-    top: 0,
-    right: -12,
-    width: 100,
-    paddingTop: 24,
-    paddingRight: 24,
+    top: 4,
+    right: -8,
     alignItems: 'flex-end',
     justifyContent: 'flex-start',
   },
-  walletCardWatermark: {
-    fontSize: 120,
-    fontWeight: '400',
+  walletCardLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: 4,
   },
   walletCardContent: {
     width: '100%',
@@ -2952,6 +2860,10 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 8,
   },
+  fleetCardLogoImage: {
+    width: '100%',
+    height: '100%',
+  },
   fleetCardBody: {
     flex: 1,
     minWidth: 0,
@@ -3147,7 +3059,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     borderWidth: 3,
     borderColor: Theme.driverBackground,
-    shadowColor: 'rgba(16,185,129,0.45)',
+    shadowColor: 'rgba(4,120,87,0.45)',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.22,
     shadowRadius: 12,
@@ -3206,6 +3118,11 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  tripsIconImage: {
+    width: '100%',
+    height: '100%',
   },
   tripsHeadText: {
     flex: 1,
@@ -3270,7 +3187,7 @@ const styles = StyleSheet.create({
   },
   tripsStatusSuccess: {
     backgroundColor: '#ecfdf5',
-    color: '#059669',
+    color: Theme.driverEmerald,
     borderWidth: 1,
     borderColor: '#a7f3d0',
   },
@@ -3401,14 +3318,20 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    flexDirection: 'row',
+    paddingHorizontal: 12,
     minHeight: 68,
     shadowColor: 'rgba(15,23,42,0.35)',
     shadowOffset: { width: 0, height: 14 },
     shadowOpacity: 0.28,
     shadowRadius: 24,
     elevation: 10,
+  },
+  tripsClaimButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    maxWidth: '100%',
   },
   tripsMarkPaidButton: {
     flex: 1,
@@ -3438,14 +3361,9 @@ const styles = StyleSheet.create({
     letterSpacing: 1.7,
     color: Theme.textOnPrimary,
   },
-  tripsRequestPaymentLabelWrap: {
-    flex: 1,
-    minWidth: 0,
-    alignItems: 'center',
-  },
   tripsRequestPaymentButtonText: {
-    fontSize: 9,
-    letterSpacing: 1.2,
+    fontSize: 10,
+    letterSpacing: 1.15,
     flexShrink: 1,
     textAlign: 'center',
   },
@@ -3477,7 +3395,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 28,
     overflow: 'hidden',
-    shadowColor: 'rgba(16,185,129,0.18)',
+    shadowColor: 'rgba(4,120,87,0.18)',
     shadowOffset: { width: 0, height: 18 },
     shadowOpacity: 0.12,
     shadowRadius: 32,
@@ -3623,11 +3541,19 @@ const styles = StyleSheet.create({
   cashPremiumAvatar: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  cashPremiumAvatarImageClip: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 24,
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(226,232,240,0.7)',
+  },
+  cashPremiumAvatarImage: {
+    width: '100%',
+    height: '100%',
   },
   cashPremiumAvatarText: {
     fontSize: 16,
@@ -3636,8 +3562,8 @@ const styles = StyleSheet.create({
   },
   cashPremiumAvatarBadge: {
     position: 'absolute',
-    right: -2,
-    bottom: -2,
+    right: -3,
+    bottom: -3,
     width: 22,
     height: 22,
     borderRadius: 11,
@@ -3645,6 +3571,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: 'rgba(226,232,240,0.7)',
+    zIndex: 2,
+    elevation: 4,
   },
   cashPremiumBody: {
     flex: 1,
@@ -3702,7 +3630,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 28,
     overflow: 'hidden',
-    shadowColor: 'rgba(16,185,129,0.18)',
+    shadowColor: 'rgba(4,120,87,0.18)',
     shadowOffset: { width: 0, height: 18 },
     shadowOpacity: 0.16,
     shadowRadius: 34,
@@ -3827,7 +3755,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   referenceTripCardExpanded: {
-    shadowColor: '#34d399',
+    shadowColor: Theme.driverEmerald,
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.14,
     shadowRadius: 24,
@@ -3919,7 +3847,7 @@ const styles = StyleSheet.create({
   },
   referenceTripStatusSuccess: {
     backgroundColor: '#ecfdf5',
-    color: '#059669',
+    color: Theme.driverEmerald,
     borderWidth: 1,
     borderColor: '#a7f3d0',
   },
@@ -4412,13 +4340,13 @@ const styles = StyleSheet.create({
   },
   ledgerDesc: { flex: 1 },
   ledgerDescText: {
+    ...driverBodyPrimary,
     fontSize: 13,
-    fontWeight: '500',
     color: Theme.textOnDark,
   },
   ledgerDate: {
+    ...driverBodySecondary,
     fontSize: 9,
-    fontWeight: '500',
     color: Theme.textMuted,
     marginTop: 2,
   },
@@ -4478,9 +4406,8 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   ppPrimary: {
+    ...driverBodyPrimary,
     fontSize: 14,
-    fontWeight: '500',
-    letterSpacing: 0,
     flexShrink: 1,
   },
   txStatusPill: {
@@ -4498,15 +4425,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0.25,
   },
   ppSecondary: {
+    ...driverBodySecondary,
     fontSize: 11,
-    fontWeight: '400',
     marginTop: 4,
     lineHeight: 16,
-    letterSpacing: 0.1,
   },
   ppAmount: {
+    ...driverUISemiBold,
     fontSize: 12,
-    fontWeight: '600',
     letterSpacing: 0,
     flexShrink: 0,
     maxWidth: '40%',
@@ -4524,8 +4450,8 @@ const styles = StyleSheet.create({
     paddingRight: 2,
   },
   ppMetaLeft: {
+    ...driverBodySecondary,
     fontSize: 10,
-    fontWeight: '400',
     flex: 1,
     minWidth: 0,
     marginRight: 8,
@@ -4539,8 +4465,8 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   ppMetaRightText: {
+    ...driverBodySecondary,
     fontSize: 10,
-    fontWeight: '400',
     textAlign: 'right',
     flexShrink: 1,
   },
@@ -4750,7 +4676,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
-    shadowColor: 'rgba(16,185,129,0.35)',
+    shadowColor: 'rgba(4,120,87,0.35)',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 8,
@@ -4809,7 +4735,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   upiExpandedBtnPrimary: {
-    shadowColor: 'rgba(16,185,129,0.35)',
+    shadowColor: 'rgba(4,120,87,0.35)',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 6,

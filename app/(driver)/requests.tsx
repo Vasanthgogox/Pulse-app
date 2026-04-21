@@ -1,4 +1,5 @@
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
+import { getFleetAvatarUriForOrg } from '@/lib/fleetAvatar';
 import { DriverInviteCard } from '@/components/driver/DriverInviteCard';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
@@ -32,8 +33,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
  * Driver Requests page — connection invites + passbook per fleet (driver_invites, trips, driver_ledger).
  * PENDING: accept/decline. CONNECTED: accepted/declined with optional Passbook summary and link to detail.
  */
-// Wallet-style hero text (match wallet.tsx creditsSection)
-const EMERALD_500 = '#10b981';
 const GRAY_700 = '#374151';
 
 type RequestsQuickTab = 'all' | 'payment_updates';
@@ -470,7 +469,7 @@ export default function DriverRequestsScreen() {
       letterSpacing: -0.5,
       fontStyle: 'italic',
       textTransform: 'uppercase',
-      color: EMERALD_500,
+      color: Theme.driverEmerald,
     },
     creditsSubtitle: {
       fontSize: 10,
@@ -535,6 +534,11 @@ export default function DriverRequestsScreen() {
       borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
+      overflow: 'hidden',
+    },
+    cardIconImage: {
+      width: '100%',
+      height: '100%',
     },
     cardHeaderText: { flex: 1, minWidth: 0 },
     cardOrgName: { fontSize: 16, fontWeight: '800', marginBottom: 4 },
@@ -852,7 +856,7 @@ export default function DriverRequestsScreen() {
       </View>
 
       <View style={[styles.creditsSection, { backgroundColor: colors.background }]}>
-        <Text style={[styles.creditsTitle, { color: EMERALD_500, textTransform: 'uppercase' }]}>
+        <Text style={[styles.creditsTitle, { color: Theme.driverEmerald, textTransform: 'uppercase' }]}>
           {hasAccepted ? 'Passbook.' : 'Requests.'}
         </Text>
         <Text style={[styles.creditsSubtitle, { color: GRAY_700 }]}>
@@ -1065,8 +1069,22 @@ export default function DriverRequestsScreen() {
                   >
                     <View style={styles.premiumHeaderRow}>
                       <View style={styles.premiumHeaderLeft}>
-                        <View style={[styles.cardIconWrap, { backgroundColor: colors.emeraldMuted }]}>
-                          <FontAwesome name="building" size={18} color={colors.emerald} />
+                        <View
+                          style={[
+                            styles.cardIconWrap,
+                            { backgroundColor: isDark ? colors.surfaceElevated : 'rgba(248,250,252,0.95)' },
+                          ]}
+                        >
+                          <Image
+                            source={{
+                              uri: getFleetAvatarUriForOrg(
+                                inv.from_organization_id,
+                                inv.from_org_name ?? 'Organisation',
+                              ),
+                            }}
+                            style={styles.cardIconImage}
+                            resizeMode="cover"
+                          />
                         </View>
                         <View style={styles.cardHeaderText}>
                           <Text style={[styles.cardOrgName, { color: colors.text }]} numberOfLines={1}>

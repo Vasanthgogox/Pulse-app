@@ -1,6 +1,10 @@
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
+import {
+  driverBodyPrimary,
+  driverBodySecondary,
+} from "@/constants/DriverTypography";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDriverAvatar } from "@/contexts/DriverAvatarContext";
 import {
@@ -25,8 +29,10 @@ import {
     ChevronUp,
     Clock,
     Info,
+    MapPinned,
     Navigation,
     Route,
+    Search as SearchIcon,
     Share2,
     ShieldCheck,
     Sparkles,
@@ -59,10 +65,6 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-// Wallet-style hero text (match wallet.tsx creditsSection)
-const EMERALD_500 = "#10b981";
-const GRAY_700 = "#374151";
-
 // Reference layout: Royal Emerald trip card (app/driver/referenced TripHistoryView)
 const TRIP_CARD_REF = {
   listBg: "rgba(250,250,250,0.4)",
@@ -72,11 +74,11 @@ const TRIP_CARD_REF = {
   label: "#a1a1aa",
   title: "#18181b",
   body: "#27272a",
-  emerald: "#10B981",
-  emeraldYield: "#059669",
+  emerald: Theme.driverEmerald,
+  emeraldYield: Theme.driverPrimary,
   muted: "#a1a1aa",
   badgeCompletedBg: "#18181b",
-  accentBar: "#10B981",
+  accentBar: Theme.driverEmerald,
 };
 
 // Reference: trip detail / archive view (app/driver/referenced selectedHistoryItem)
@@ -85,7 +87,7 @@ const DETAIL_REF = {
   headerBorder: "#f4f4f5",
   headerTitle: "#18181b",
   routeCardBg: "#18181b",
-  routeCardBorder: "#10B981",
+  routeCardBorder: Theme.driverEmerald,
   routeCardLabel: "#71717a",
   routeCardBorderTop: "rgba(255,255,255,0.05)",
   yieldSectionLabel: "#a1a1aa",
@@ -94,7 +96,7 @@ const DETAIL_REF = {
   yieldRowBorder: "rgba(0,0,0,0.06)",
   yieldRowLabel: "#71717a",
   yieldNetLabel: "#18181b",
-  emerald: "#10B981",
+  emerald: Theme.driverEmerald,
 };
 
 function isCompleted(status: string) {
@@ -300,7 +302,7 @@ function AnimatedAccentBar({
   }));
   return (
     <Animated.View
-      style={[styles.cardRefAccent, { backgroundColor }, animatedStyle, { pointerEvents: 'none' }]}
+      style={[styles.cardRefAccentLeft, { backgroundColor }, animatedStyle, { pointerEvents: 'none' }]}
     />
   );
 }
@@ -459,26 +461,40 @@ export default function DriverTripsScreen() {
     () => trips.filter((trip) => isCompleted(trip.status)).length,
     [trips],
   );
+  const activeTripsCount = useMemo(
+    () => trips.filter((trip) => !isCompleted(trip.status)).length,
+    [trips],
+  );
+  const poolCountForTab = tripView === "history" ? historyTripsCount : activeTripsCount;
 
   const renderItem = ({ item }: { item: tripsService.TripRow }) => {
     const completed = isCompleted(item.status);
+    const pickupParts = splitLocationPrimarySecondary(item.pickup_area);
+    const dropParts = splitLocationPrimarySecondary(item.drop_location);
+    const corridorHint = [pickupParts.secondary, dropParts.secondary].filter(Boolean).join(" · ");
     return (
       <TouchableOpacity
         style={[
           styles.cardRef,
-          { backgroundColor: colors.surface, borderColor: colors.border },
+          {
+            backgroundColor: colors.surface,
+            borderColor: isDark ? colors.borderSubtle : "rgba(16, 185, 129, 0.12)",
+          },
         ]}
         onPress={() => setSelectedTrip(item)}
         onPressIn={() => setPressedCardId(item.id)}
         onPressOut={() => setPressedCardId(null)}
         activeOpacity={1}
       >
-        {/* Green accent bar: direct child of card (reference: absolute top-0 right-0 w-1.5 h-full) so it doesn't collapse */}
+        {/* Emerald accent strip — left edge, fades in on press */}
         <AnimatedAccentBar
           pressed={pressedCardId === item.id}
           backgroundColor={colors.emerald}
         />
         <AnimatedCardScale pressed={pressedCardId === item.id}>
+          <View style={styles.cardWatermark} pointerEvents="none">
+            <MapPinned size={140} color={colors.emerald} strokeWidth={1.2} />
+          </View>
           <View style={styles.cardRefTop}>
             <View style={styles.cardRefTopLeft}>
               <Text
@@ -489,7 +505,8 @@ export default function DriverTripsScreen() {
                     : { color: colors.textMuted },
                 ]}
               >
-                {tripsService.getTripDisplayNumber(item)} •{" "}
+                {tripsService.getTripDisplayNumber(item)}{" "}
+                <Text style={{ color: isDark ? colors.borderSubtle : "#e2e8f0" }}> • </Text>{" "}
                 {formatDate(item.pickup_date ?? item.created_at)}
               </Text>
               <View style={styles.routeRowRef}>
@@ -497,7 +514,7 @@ export default function DriverTripsScreen() {
                   style={[styles.routeRefPickup, { color: colors.text }]}
                   numberOfLines={1}
                 >
-                  {item.pickup_area ?? "—"}
+                  {pickupParts.primary}
                 </Text>
                 <View style={styles.routeArrowWrap}>
                   <AnimatedCardArrow
@@ -509,27 +526,35 @@ export default function DriverTripsScreen() {
                   style={[styles.routeRefDrop, { color: colors.text }]}
                   numberOfLines={1}
                 >
-                  {item.drop_location ?? "—"}
+                  {dropParts.primary}
                 </Text>
               </View>
+              {corridorHint.length > 0 ? (
+                <Text
+                  style={[styles.routeCorridorHint, { color: colors.textMuted }]}
+                  numberOfLines={1}
+                >
+                  {corridorHint}
+                </Text>
+              ) : null}
             </View>
             <View
               style={[
                 styles.badgeRef,
                 completed
-                  ? { backgroundColor: isDark ? colors.surface : colors.text }
+                  ? { backgroundColor: isDark ? "#0f172a" : "#0f172a" }
                   : { backgroundColor: colors.emerald },
               ]}
             >
               <Text
                 style={[styles.badgeRefText, { color: colors.textOnPrimary }]}
               >
-                {completed ? "Completed" : "In Transit"}
+                {completed ? "COMPLETED" : "IN TRANSIT"}
               </Text>
             </View>
           </View>
           <View
-            style={[styles.cardRefBottom, { borderTopColor: colors.border }]}
+            style={[styles.cardRefBottom, { borderTopColor: isDark ? colors.borderSubtle : "#f8fafc" }]}
           >
             <View>
               <Text
@@ -540,7 +565,7 @@ export default function DriverTripsScreen() {
                     : { color: colors.textMuted },
                 ]}
               >
-                DISTANCE
+                Distance
               </Text>
               <Text style={[styles.manifestValue, { color: colors.text }]}>
                 {formatDistance(item.distance)}
@@ -555,11 +580,12 @@ export default function DriverTripsScreen() {
                     : { color: colors.textMuted },
                 ]}
               >
-                YIELD
+                Yield
               </Text>
               <Text
                 style={[
                   styles.yieldValueRef,
+                  styles.yieldValueRefLarge,
                   { color: completed ? colors.emerald : colors.textMuted },
                 ]}
               >
@@ -641,11 +667,11 @@ export default function DriverTripsScreen() {
       <View
         style={[styles.creditsSection, { backgroundColor: colors.background }]}
       >
-        <Text style={[styles.creditsTitle, { color: EMERALD_500 }]}>
-          Trips.
+        <Text style={[styles.creditsTitle, { color: Theme.driverEmeraldDark }]}>
+          TRIPS.
         </Text>
-        <Text style={[styles.creditsSubtitle, { color: GRAY_700 }]}>
-          Trip history & route archive.
+        <Text style={[styles.creditsSubtitle, { color: colors.textMuted }]}>
+          Trip history & route archive
         </Text>
       </View>
       <View
@@ -658,14 +684,17 @@ export default function DriverTripsScreen() {
           <View
             style={[
               styles.searchWrap,
-              { backgroundColor: colors.surface, borderColor: colors.border },
+              {
+                backgroundColor: colors.surface,
+                borderColor: isDark ? colors.borderSubtle : "rgba(16, 185, 129, 0.15)",
+              },
             ]}
           >
-            <FontAwesome name="search" size={14} color={colors.textMuted} />
+            <SearchIcon size={20} color={colors.textMuted} strokeWidth={2} />
             <TextInput
               style={[styles.searchInput, { color: colors.text }]}
-              placeholder="Search"
-              placeholderTextColor={colors.textMuted}
+              placeholder="Search trip IDs, routes…"
+              placeholderTextColor={colors.placeholder}
               value={searchQuery}
               onChangeText={setSearchQuery}
               autoCorrect={false}
@@ -676,8 +705,11 @@ export default function DriverTripsScreen() {
           </View>
           <View
             style={[
-              styles.segmentWrap,
-              { backgroundColor: colors.surface, borderColor: colors.border },
+              styles.segmentOuter,
+              {
+                backgroundColor: isDark ? colors.surfaceElevated : "rgba(241, 245, 249, 0.65)",
+                borderColor: isDark ? colors.borderSubtle : "#ffffff",
+              },
             ]}
           >
             <TouchableOpacity
@@ -685,7 +717,10 @@ export default function DriverTripsScreen() {
                 styles.segmentBtn,
                 tripView === "active" && [
                   styles.segmentBtnActive,
-                  { backgroundColor: colors.background, borderColor: colors.border },
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: isDark ? colors.borderSubtle : colors.border,
+                  },
                 ],
               ]}
               onPress={() => setTripView("active")}
@@ -695,11 +730,12 @@ export default function DriverTripsScreen() {
                 style={[
                   styles.segmentLabel,
                   {
-                    color: tripView === "active" ? colors.text : colors.textMuted,
+                    color:
+                      tripView === "active" ? colors.emerald : colors.textMuted,
                   },
                 ]}
               >
-                ACTIVE
+                Active
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -707,7 +743,10 @@ export default function DriverTripsScreen() {
                 styles.segmentBtn,
                 tripView === "history" && [
                   styles.segmentBtnActive,
-                  { backgroundColor: colors.background, borderColor: colors.border },
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: isDark ? colors.borderSubtle : colors.border,
+                  },
                 ],
               ]}
               onPress={() => setTripView("history")}
@@ -717,18 +756,19 @@ export default function DriverTripsScreen() {
                 style={[
                   styles.segmentLabel,
                   {
-                    color: tripView === "history" ? colors.emerald : colors.textMuted,
+                    color:
+                      tripView === "history" ? colors.emerald : colors.textMuted,
                   },
                 ]}
               >
-                HISTORY
+                History
               </Text>
             </TouchableOpacity>
           </View>
         </View>
         <View style={styles.toolbarFooter}>
           <Text style={[styles.resultMeta, { color: colors.textMuted }]}>
-            Showing {filteredTrips.length} of {trips.length}
+            Showing {filteredTrips.length} of {poolCountForTab}
           </Text>
           {searchQuery.trim().length > 0 ? (
             <TouchableOpacity
@@ -955,13 +995,13 @@ export default function DriverTripsScreen() {
 
                     <View style={styles.tdHeroToRow}>
                       <View style={styles.tdHeroToRail}>
-                        <View style={[styles.tdHeroDot, { backgroundColor: "#10b981" }]} />
+                        <View style={[styles.tdHeroDot, { backgroundColor: Theme.driverEmerald }]} />
                         <LinearGradient
-                          colors={["#10b981", "transparent"]}
+                          colors={[Theme.driverEmerald, "transparent"]}
                           style={styles.tdHeroRailGrad}
                         />
                       </View>
-                      <Text style={[styles.tdHeroToLabel, { color: "#34d399" }]}>
+                      <Text style={[styles.tdHeroToLabel, { color: Theme.driverPrimary }]}>
                         TO
                       </Text>
                     </View>
@@ -981,7 +1021,7 @@ export default function DriverTripsScreen() {
                     <View style={styles.tdHeroMetaRow}>
                       <View style={styles.tdHeroMetaItem}>
                         <View style={styles.tdHeroMetaIconWrap}>
-                          <Navigation size={16} color="#34d399" />
+                          <Navigation size={16} color={Theme.driverPrimary} />
                         </View>
                         <View>
                           <Text style={styles.tdHeroMetaKicker}>Distance</Text>
@@ -992,7 +1032,7 @@ export default function DriverTripsScreen() {
                       </View>
                       <View style={styles.tdHeroMetaItem}>
                         <View style={styles.tdHeroMetaIconWrap}>
-                          <Clock size={16} color="#34d399" />
+                          <Clock size={16} color={Theme.driverPrimary} />
                         </View>
                         <View>
                           <Text style={styles.tdHeroMetaKicker}>Duration</Text>
@@ -1206,7 +1246,7 @@ export default function DriverTripsScreen() {
 
                   {isCompleted(selectedTrip.status) ? (
                     <LinearGradient
-                      colors={["#059669", "#10b981"]}
+                      colors={[Theme.driverEmeraldDark, Theme.driverEmerald]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                       style={styles.tdDeliveredBanner}
@@ -1509,22 +1549,24 @@ const styles = StyleSheet.create({
   },
   creditsSection: {
     paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 24,
+    paddingTop: 16,
+    paddingBottom: 16,
+    gap: 6,
   },
   creditsTitle: {
-    fontSize: 36,
+    fontSize: 42,
     fontWeight: "900",
-    letterSpacing: -0.5,
-    fontStyle: "italic",
+    letterSpacing: -2,
+    lineHeight: 44,
     textTransform: "uppercase",
   },
   creditsSubtitle: {
     fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-    marginTop: 8,
+    fontWeight: "900",
+    letterSpacing: 3,
+    marginTop: 4,
     textTransform: "uppercase",
+    opacity: 0.82,
   },
   toolbarWrap: {
     paddingHorizontal: 16,
@@ -1537,60 +1579,65 @@ const styles = StyleSheet.create({
   },
   searchWrap: {
     flex: 1,
-    minHeight: 50,
-    borderWidth: 1,
-    borderRadius: 14,
+    minHeight: 54,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 26,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
-    gap: 8,
+    paddingHorizontal: 18,
+    gap: 10,
   },
   searchInput: {
     flex: 1,
     minWidth: 0,
-    fontSize: 14,
-    fontWeight: "500",
-    paddingVertical: 10,
+    fontSize: 13,
+    fontWeight: "700",
+    paddingVertical: 14,
   },
-  segmentWrap: {
-    height: 50,
-    borderRadius: 16,
-    borderWidth: 1,
+  segmentOuter: {
+    height: 54,
+    borderRadius: 26,
+    borderWidth: StyleSheet.hairlineWidth,
     padding: 4,
     flexDirection: "row",
-    alignItems: "center",
-    minWidth: 170,
+    alignItems: "stretch",
+    minWidth: 174,
+    gap: 4,
   },
   segmentBtn: {
     flex: 1,
-    height: "100%",
-    borderRadius: 12,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
+    minHeight: 42,
   },
   segmentBtnActive: {
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
   },
   segmentLabel: {
     fontSize: 10,
-    fontWeight: "800",
+    fontWeight: "900",
+    letterSpacing: 2,
     textTransform: "uppercase",
-    letterSpacing: 1,
   },
   toolbarFooter: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 2,
+    marginTop: 10,
   },
   resultMeta: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    opacity: 0.75,
+    marginLeft: 6,
   },
   clearBtn: {
     paddingHorizontal: 10,
@@ -1608,31 +1655,39 @@ const styles = StyleSheet.create({
     width: 50,
   },
   listContent: {
-    paddingHorizontal: 24,
-    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingTop: 12,
     paddingBottom: 32,
   },
   cardRef: {
     backgroundColor: TRIP_CARD_REF.cardBg,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: TRIP_CARD_REF.border,
-    borderRadius: 8,
-    padding: 24,
-    marginBottom: 16,
+    borderRadius: 28,
+    padding: 28,
+    marginBottom: 22,
     overflow: "hidden",
     position: "relative",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.06,
+    shadowRadius: 28,
+    elevation: 4,
   },
-  cardRefAccent: {
+  cardWatermark: {
+    position: "absolute",
+    right: -18,
+    top: "28%",
+    opacity: 0.045,
+    zIndex: 0,
+  },
+  cardRefAccentLeft: {
     position: "absolute",
     top: 0,
-    right: 0,
+    left: 0,
     bottom: 0,
-    width: 6,
+    width: 5,
+    zIndex: 1,
   },
   cardRefTop: {
     flexDirection: "row",
@@ -1681,10 +1736,18 @@ const styles = StyleSheet.create({
   routeArrowWrap: {
     marginHorizontal: 0,
   },
+  routeCorridorHint: {
+    marginTop: 8,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    opacity: 0.62,
+  },
   badgeRef: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 12,
     flexShrink: 0,
     marginLeft: 12,
     alignSelf: "flex-start",
@@ -1696,11 +1759,11 @@ const styles = StyleSheet.create({
     backgroundColor: TRIP_CARD_REF.emerald,
   },
   badgeRefText: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "900",
     color: "#ffffff",
     textTransform: "uppercase",
-    letterSpacing: -0.4,
+    letterSpacing: 1.4,
   },
   cardRefBottom: {
     flexDirection: "row",
@@ -1737,6 +1800,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "900",
   },
+  yieldValueRefLarge: {
+    fontSize: 22,
+    letterSpacing: -0.6,
+  },
   yieldValueCompleted: { color: TRIP_CARD_REF.emeraldYield },
   yieldValueMuted: { color: TRIP_CARD_REF.muted },
   empty: {
@@ -1766,9 +1833,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   emptyActiveSubtitle: {
+    ...driverBodyPrimary,
     marginTop: 8,
     fontSize: 13,
-    fontWeight: "500",
     lineHeight: 20,
     textAlign: "center",
     maxWidth: 320,
@@ -1789,6 +1856,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   emptyText: {
+    ...driverBodySecondary,
     fontSize: 14,
     color: Theme.textMuted,
   },
@@ -2095,7 +2163,7 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     ...Platform.select({
       ios: {
-        shadowColor: "#10b981",
+        shadowColor: Theme.driverEmerald,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.25,
         shadowRadius: 6,
@@ -2863,7 +2931,7 @@ const styles = StyleSheet.create({
   yieldPayoutHeroRupeeRef: {
     fontSize: 24,
     fontWeight: "600",
-    color: "#34d399",
+    color: Theme.driverPrimary,
     marginRight: 4,
   },
   yieldPayoutHeroAmountDarkRef: {

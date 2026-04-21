@@ -3,37 +3,31 @@
  * Accessible only via "View history" (e.g. from Requests). When no organisations:
  * shows "No History Found" empty state with Join Organization CTA and How it works.
  */
-// Wallet-style hero text (match wallet.tsx creditsSection)
-const EMERALD_500 = '#10b981';
-const GRAY_700 = '#374151';
-
-import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
-import Typography from '@/constants/Typography';
+import {
+  DRIVER_DETAIL_HORIZONTAL_PAD,
+  DriverSubScreenHeader,
+  driverDetailPageBackground,
+} from '@/components/driver/DriverSubScreenHeader';
+import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import { useAuth } from '@/contexts/AuthContext';
-import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import * as driversService from '@/services/driversService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSafeBack } from '@/lib/useSafeBack';
-import {
-  ActivityIndicator,
-  Alert,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function PassbookHistoryScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const safeBack = useSafeBack('/(driver)');
+  const { theme } = useDriverTheme();
+  const isDark = theme === 'dark';
   const colors = useDriverThemeColors();
+  const pageBg = driverDetailPageBackground(isDark, colors.background);
   const { profile } = useAuth();
 
   const [linkedDrivers, setLinkedDrivers] = useState<driversService.DriverRow[]>([]);
@@ -78,66 +72,26 @@ export default function PassbookHistoryScreen() {
   );
 
   if (loading) {
-    return (
-      <View
-        style={[
-          styles.loadingWrap,
-          { paddingTop: insets.top, backgroundColor: colors.background },
-        ]}
-      >
-        <ActivityIndicator size="large" color={colors.emerald} />
-        <Text style={[styles.loadingText, { color: colors.textMuted }]}>
-          Loading…
-        </Text>
-      </View>
-    );
+    return <CenteredLoadingView message="Loading…" color={Theme.driverPrimary} />;
   }
 
   return (
-    <View
-      style={[
-        styles.container,
-        { backgroundColor: colors.background },
-      ]}
-    >
-      <View
-        style={[
-          styles.header,
-          {
-            paddingTop: insets.top + Layout.driverHeaderTopOffset,
-            paddingBottom: Layout.driverHeaderBottomPadding,
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-          },
-        ]}
-      >
-        <TouchableOpacity
-          onPress={safeBack}
-          style={styles.backBtn}
-          hitSlop={12}
-        >
-          <FontAwesome name="arrow-left" size={20} color={colors.text} />
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>
-            Passbook history
-          </Text>
-          <Text style={[styles.headerSubtitle, { color: colors.textMuted }]}>
-            Previously worked fleets · tap to view passbook
-          </Text>
-        </View>
-      </View>
-
-      <View style={[styles.creditsSection, { backgroundColor: colors.background }]}>
-        <Text style={[styles.creditsTitle, { color: EMERALD_500 }]}>History.</Text>
-        <Text style={[styles.creditsSubtitle, { color: GRAY_700 }]}>Previously worked fleets · tap to view passbook.</Text>
-      </View>
+    <View style={[styles.container, { backgroundColor: pageBg }]}>
+      <DriverSubScreenHeader
+        title="Passbook history"
+        subtitle="Previously worked fleets · tap to view passbook"
+        onBack={safeBack}
+        backIcon="arrow"
+      />
 
       <ScrollView
-        style={styles.scroll}
+        style={[styles.scroll, { backgroundColor: pageBg }]}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: insets.bottom + 32 },
+          {
+            paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
+            paddingBottom: insets.bottom + 32,
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -253,44 +207,8 @@ export default function PassbookHistoryScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  loadingWrap: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 12,
-  },
-  loadingText: { fontSize: 14 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Layout.driverHeaderHorizontalPadding,
-    borderBottomWidth: 1,
-  },
-  backBtn: { padding: 8, marginRight: 8 },
-  headerCenter: { flex: 1, minWidth: 0 },
-  headerTitle: { ...Typography.headerTitle },
-  headerSubtitle: { ...Typography.headerSubtitle, marginTop: 2 },
-  creditsSection: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 24,
-  },
-  creditsTitle: {
-    fontSize: 36,
-    fontWeight: '900',
-    letterSpacing: -0.5,
-    fontStyle: 'italic',
-    textTransform: 'uppercase',
-  },
-  creditsSubtitle: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    marginTop: 8,
-    textTransform: 'uppercase',
-  },
   scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 24, paddingTop: 24 },
+  scrollContent: { paddingTop: 16 },
   section: { marginBottom: 24 },
   historyCardMinimal: {
     flexDirection: 'row',
@@ -299,7 +217,7 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: 12,
+    borderRadius: 28,
     borderWidth: 1,
     marginBottom: 10,
   },

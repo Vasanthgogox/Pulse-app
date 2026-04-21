@@ -1,6 +1,7 @@
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
+import { driverTabMicroLabel } from '@/constants/DriverTypography';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
@@ -197,6 +198,7 @@ const styles = StyleSheet.create({
   },
   dockLabel: {
     ...Typography.subTabLabel,
+    ...driverTabMicroLabel,
     fontSize: 7,
     letterSpacing: 1,
   },
