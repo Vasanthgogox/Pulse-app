@@ -8,7 +8,10 @@ import Theme from "@/constants/Theme";
 import { getClientById } from "@/features/clients/services/clients.service";
 import { getSupplierById } from "@/features/suppliers/services/suppliers.service";
 import { getTripDisplayNumber, type TripRow } from "@/features/trips";
-import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
+import {
+  isCrossOrgIntegrationTrip,
+  isLoadBasedTrip,
+} from "@/features/trips/visibility/tripVisibility";
 import {
     createConnectionRequest,
     getConnectionInviteeByPhone,
@@ -365,8 +368,13 @@ export function EntityCompareVerifyView({
 
   const txs = transactions ?? [];
   const sharedLedgerTrips = useMemo(
-    () => trips.filter((trip) => isLoadBasedTrip(trip)),
-    [trips],
+    () =>
+      trips.filter(
+        (trip) =>
+          isLoadBasedTrip(trip) ||
+          isCrossOrgIntegrationTrip(trip, organizationId),
+      ),
+    [trips, organizationId],
   );
 
   const internalMap = useMemo(
