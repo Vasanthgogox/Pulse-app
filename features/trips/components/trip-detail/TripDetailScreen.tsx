@@ -1517,7 +1517,7 @@ export default function TripDetailScreen({
         parts.push(latestReassignmentRow.changed_at.slice(0, 16));
       }
     }
-    return parts.length > 0 ? parts.join("  ·  ") : null;
+    return parts.length > 0 ? parts.join("\n") : null;
   }, [
     latestReassignmentRow,
     assignmentDriverNames,
@@ -2927,6 +2927,15 @@ export default function TripDetailScreen({
                 }
                 driverAvatarUri={driverAvatarUri}
                 showAssignByPhone={showAssignByPhone}
+                assignmentSource={assignmentSource}
+                currentUserId={currentUserId}
+                previousDriverName={previousDriverName}
+                latestReassignmentSummary={latestReassignmentSummary}
+                driverAssignOrgId={
+                  showAssignByPhone && currentOrganization?.id
+                    ? currentOrganization.id
+                    : null
+                }
                 onVehicleDisplayChange={(value) => {
                   const normalized = formatIndianVehicleNumber(value ?? "");
                   setDisplayVehicleFromInput(normalized);
