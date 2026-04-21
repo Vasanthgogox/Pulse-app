@@ -204,7 +204,7 @@ function SlgCardWatermark({ kind }: { kind: "trip" | "payment" }) {
   const size = SLG_WATERMARK_ICON_SIZE;
   const stroke = 1.35;
   return (
-    <View style={styles.missionCardWatermarkShell} pointerEvents="none">
+    <View style={styles.missionCardWatermarkShell}>
       <Animated.View style={[styles.missionCardWatermarkInner, wmStyle]}>
         {kind === "trip" ? (
           <Truck size={size} color={color} strokeWidth={stroke} />
@@ -464,6 +464,12 @@ export interface SharedLedgerCommandCenterProps {
   tripRouteForTripRef?: (tripRef: string) => string | null;
   /** Full-page hub: opens shared-ledger PDF/Excel flow (embedded overlay uses parent header). */
   onPressDownload?: () => void;
+  /** Mission ids with open disputes received from partner (deduped, capped by parent). */
+  receivedDisputeMissions?: string[];
+  /** Open dispute count received from partner for this entity. */
+  openReceivedDisputeCount?: number;
+  /** Opens existing received-dispute review flow for a trip. */
+  onReviewReceivedDispute?: (tripId: string) => void;
 }
 
 /** Tighter type and cards on large browser windows — closer to other Finance screens. */
@@ -584,6 +590,9 @@ export function SharedLedgerCommandCenter({
   missionLabelForTripRef,
   tripRouteForTripRef,
   onPressDownload,
+  receivedDisputeMissions = [],
+  openReceivedDisputeCount = 0,
+  onReviewReceivedDispute,
 }: SharedLedgerCommandCenterProps) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -693,6 +702,8 @@ export function SharedLedgerCommandCenter({
     () => txnRowsAll.filter((t) => t.status === "no_entry").slice(0, 4),
     [txnRowsAll],
   );
+  const showNeedsAttention =
+    pendingSyncTxns.length > 0 || openReceivedDisputeCount > 0;
   const tripTxnMetaByRef = useMemo(() => {
     const map = new Map<string, { count: number; last: string | null }>();
     for (const txn of txnRowsAll) {
@@ -710,11 +721,36 @@ export function SharedLedgerCommandCenter({
   }, [txnRowsAll]);
 
   const findTripByRef = useCallback(
-    (ref: string) => {
+    (ref: string, tripDbId?: string) => {
+      const byDbId = norm(tripDbId);
+      if (byDbId) {
+        const hit = reconciledRows.find((r) => norm(r.tripId) === byDbId);
+        if (hit) return hit;
+      }
       const k = norm(ref);
-      return reconciledRows.find((r) => norm(r.tripId) === k);
+      if (!k) return null;
+      return (
+        reconciledRows.find(
+          (r) => norm(r.tripId) === k || norm(r.missionId) === k,
+        ) ?? null
+      );
     },
     [reconciledRows],
+  );
+
+  const resolveTripForTxn = useCallback(
+    (txn: CommandTxnRow): ReconciledRow | null => {
+      const byRef = findTripByRef(txn.tripRef, txn.tripDbId);
+      if (byRef) return byRef;
+      const missionKey =
+        norm(missionLabelForTripRef?.(txn.tripRef)) || norm(txn.tripRef);
+      if (!missionKey) return null;
+      const byMission = reconciledRows.find(
+        (r) => norm(r.missionId) === missionKey || norm(r.tripId) === missionKey,
+      );
+      return byMission ?? null;
+    },
+    [findTripByRef, missionLabelForTripRef, reconciledRows],
   );
 
   const tripStatusLabel = (r: ReconciledRow) => {
@@ -763,8 +799,15 @@ export function SharedLedgerCommandCenter({
   };
 
   const handleUsePartnerFromTxn = () => {
-    if (!txnFocus) return;
-    const trip = findTripByRef(txnFocus.tripRef);
+    if (!txnFocus) {
+      Alert.alert("Select payment", "Pick a payment row first.");
+      return;
+    }
+    if (txnFocus.status === "no_entry" && onMergePartnerTransaction) {
+      setMergePreview(txnFocus);
+      return;
+    }
+    const trip = resolveTripForTxn(txnFocus);
     if (!trip) {
       Alert.alert(
         "Can’t report yet",
@@ -772,15 +815,22 @@ export function SharedLedgerCommandCenter({
       );
       return;
     }
-    // "Sync to partner" from forensic view should open the same dispute flow/page
-    // as the primary Raise Dispute action.
-    onRaiseDispute(trip);
-    backFromSub();
+    if (trip.external == null) {
+      Alert.alert(
+        "Can’t update",
+        "We couldn’t find matching trip details from your partner. Try again after data syncs.",
+      );
+      return;
+    }
+    onUpdateMyBook(trip);
   };
 
   const handleDisputeFromTxn = () => {
-    if (!txnFocus) return;
-    const trip = findTripByRef(txnFocus.tripRef);
+    if (!txnFocus) {
+      Alert.alert("Select payment", "Pick a payment row first.");
+      return;
+    }
+    const trip = resolveTripForTxn(txnFocus);
     if (!trip) {
       Alert.alert(
         "Can’t report yet",
@@ -841,7 +891,7 @@ export function SharedLedgerCommandCenter({
 
   const sharedCore = (
     <View style={styles.sharedCore}>
-      {pendingSyncTxns.length > 0 ? (
+      {showNeedsAttention ? (
         <View style={styles.pendingInboxWrap}>
           <View style={styles.pendingInboxHead}>
             <Text
@@ -853,150 +903,258 @@ export function SharedLedgerCommandCenter({
               Needs your attention
             </Text>
             <View style={styles.pendingInboxBadge}>
-              <Text style={styles.pendingInboxBadgeTxt}>New</Text>
+              <Text style={styles.pendingInboxBadgeTxt}>
+                {pendingSyncTxns.length + openReceivedDisputeCount}
+              </Text>
             </View>
           </View>
-          <View style={styles.pendingInboxGrid}>
-            {pendingSyncTxns.map((txn, pendingIdx) => {
-              const tripLabel =
-                missionLabelForTripRef?.(txn.tripRef) ??
-                txn.tripRef.toUpperCase();
-              const routeHint = tripRouteForTripRef?.(txn.tripRef);
-              const pendingAmt = txn.partnerAmount ?? txn.amountAbs;
-              const isGhostTrip = txn.hasLocalTrip === false;
-              const refRaw = (txn.partnerRef ?? "").trim() || "—";
-              const refDisplay =
-                refRaw.length > 14 ? `${refRaw.slice(0, 12)}…` : refRaw;
-              const dateLine =
-                txn.displayDate ??
-                (txn.date && txn.date.length >= 10
-                  ? txn.date.slice(0, 10)
-                  : null);
-              return (
-                <View
-                  key={`pending:${txn.id}`}
-                  style={[
-                    styles.pendingCardWrap,
-                    pendingCardsFullWidth && styles.pendingCardWrapMobile,
-                    !pendingCardsFullWidth &&
-                      pendingIdx % 3 === 2 &&
-                      styles.pendingCardWrapRowEnd,
-                  ]}
-                >
+          {openReceivedDisputeCount > 0 ? (
+            <View style={styles.pendingInboxGrid}>
+              {receivedDisputeMissions.map((missionId, idx) => {
+                const row = reconciledRows.find(
+                  (r) => norm(r.missionId) === norm(missionId),
+                );
+                const routeHint = row
+                  ? tripRouteForTripRef?.(row.tripId)
+                  : null;
+                return (
                   <View
+                    key={`dispute:${missionId}:${idx}`}
                     style={[
-                      styles.pendingCard,
-                      isWebDesktop && webDesktopStyles.pendingCard,
+                      styles.pendingCardWrap,
+                      pendingCardsFullWidth && styles.pendingCardWrapMobile,
+                      !pendingCardsFullWidth &&
+                        idx % 3 === 2 &&
+                        styles.pendingCardWrapRowEnd,
                     ]}
                   >
-                    <View style={styles.pendingCardGlow} />
-                    <View style={styles.pendingCardTop}>
-                      <View style={styles.pendingCardHeaderRow}>
-                        <SlgPartnerAvatar
-                          partyName={entityName}
-                          profileImageUrl={partnerProfileImageUrl}
-                          size={34}
-                        />
-                        <View style={styles.pendingPartyNameWrap}>
-                          <Text
-                            style={styles.pendingPartyName}
-                            numberOfLines={1}
-                          >
-                            {entityName}
-                          </Text>
-                        </View>
-                        <View style={styles.pendingRefPill}>
-                          <Text
-                            style={styles.pendingRefPillTxt}
-                            numberOfLines={1}
-                          >
-                            {refDisplay}
-                          </Text>
-                        </View>
-                      </View>
-                      <View style={styles.pendingMainRow}>
-                        <View style={styles.pendingMainCol}>
-                          <Text
-                            style={styles.pendingTripDetailLine}
-                            numberOfLines={1}
-                          >
-                            Trip · {tripLabel}
-                          </Text>
-                          {dateLine ? (
-                            <Text
-                              style={styles.pendingTripDetailMuted}
-                              numberOfLines={1}
-                            >
-                              {dateLine}
+                    <View
+                      style={[
+                        styles.pendingCard,
+                        isWebDesktop && webDesktopStyles.pendingCard,
+                      ]}
+                    >
+                      <View style={styles.pendingCardGlow} />
+                      <View style={styles.pendingCardTop}>
+                        <View style={styles.pendingCardHeaderRow}>
+                          <SlgPartnerAvatar
+                            partyName={entityName}
+                            profileImageUrl={partnerProfileImageUrl}
+                            size={34}
+                          />
+                          <View style={styles.pendingPartyNameWrap}>
+                            <Text style={styles.pendingPartyName} numberOfLines={1}>
+                              {entityName}
                             </Text>
-                          ) : null}
-                          {routeHint ? (
-                            <Text
-                              style={styles.pendingRouteHint}
-                              numberOfLines={1}
-                            >
-                              {routeHint}
-                            </Text>
-                          ) : isGhostTrip ? (
-                            <Text
-                              style={styles.pendingTripDetailMuted}
-                              numberOfLines={2}
-                            >
-                              Route will attach after this trip is created in
-                              your book.
-                            </Text>
-                          ) : null}
-                          <View style={styles.pendingBookBadge}>
-                            <Text
-                              style={
-                                isGhostTrip
-                                  ? styles.pendingBookBadgeGhost
-                                  : styles.pendingBookBadgeOk
-                              }
-                              numberOfLines={1}
-                            >
-                              {isGhostTrip
-                                ? "Ghost trip (partner book)"
-                                : "In your book"}
+                          </View>
+                          <View style={styles.pendingRefPill}>
+                            <Text style={styles.pendingRefPillTxt} numberOfLines={1}>
+                              DISPUTE
                             </Text>
                           </View>
                         </View>
-                        <Text
-                          style={[
-                            styles.pendingHeroAmount,
-                            isWebDesktop && webDesktopStyles.pendingHeroAmount,
-                          ]}
-                          numberOfLines={2}
-                        >
-                          {formatINR(pendingAmt)}
+                        <View style={styles.pendingMainRow}>
+                          <View style={styles.pendingMainCol}>
+                            <Text
+                              style={styles.pendingTripDetailLine}
+                              numberOfLines={1}
+                            >
+                              Trip · {missionId}
+                            </Text>
+                            {routeHint ? (
+                              <Text
+                                style={styles.pendingRouteHint}
+                                numberOfLines={1}
+                              >
+                                {routeHint}
+                              </Text>
+                            ) : null}
+                            <View style={styles.pendingBookBadge}>
+                              <Text style={styles.pendingBookBadgeGhost}>
+                                Partner raised dispute
+                              </Text>
+                            </View>
+                          </View>
+                          <Text
+                            style={[
+                              styles.pendingHeroAmount,
+                              isWebDesktop && webDesktopStyles.pendingHeroAmount,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            OPEN
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.pendingActionRow}>
+                        <Text style={styles.pendingActionHint} numberOfLines={2}>
+                          Review this trip and resolve the dispute.
                         </Text>
+                        <TouchableOpacity
+                          style={[
+                            styles.pendingActionBtn,
+                            isWebDesktop && webDesktopStyles.pendingActionBtn,
+                          ]}
+                          onPress={() => {
+                            if (row) onReviewReceivedDispute?.(row.tripId);
+                          }}
+                          activeOpacity={0.88}
+                          disabled={!row}
+                        >
+                          <Text style={styles.pendingActionBtnTxt}>
+                            Review Dispute
+                          </Text>
+                        </TouchableOpacity>
                       </View>
                     </View>
-                    <View style={styles.pendingActionRow}>
-                      <Text style={styles.pendingActionHint} numberOfLines={2}>
-                        They logged this — add it to your books?
-                      </Text>
-                      <TouchableOpacity
-                        style={[
-                          styles.pendingActionBtn,
-                          isWebDesktop && webDesktopStyles.pendingActionBtn,
-                        ]}
-                        onPress={() => handleAddPendingSync(txn)}
-                        activeOpacity={0.88}
-                        disabled={actionLoading || mergeSubmitting}
-                      >
-                        <Text style={styles.pendingActionBtnTxt}>
-                          {isGhostTrip
-                            ? "Adopt Trip & Finalize"
-                            : "Accept Payment Update"}
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+          {pendingSyncTxns.length > 0 ? (
+            <View style={styles.pendingInboxGrid}>
+              {pendingSyncTxns.map((txn, pendingIdx) => {
+                const tripLabel =
+                  missionLabelForTripRef?.(txn.tripRef) ??
+                  txn.tripRef.toUpperCase();
+                const routeHint = tripRouteForTripRef?.(txn.tripRef);
+                const pendingAmt = txn.partnerAmount ?? txn.amountAbs;
+                const isGhostTrip = txn.hasLocalTrip === false;
+                const refRaw = (txn.partnerRef ?? "").trim() || "—";
+                const refDisplay =
+                  refRaw.length > 14 ? `${refRaw.slice(0, 12)}…` : refRaw;
+                const dateLine =
+                  txn.displayDate ??
+                  (txn.date && txn.date.length >= 10
+                    ? txn.date.slice(0, 10)
+                    : null);
+                return (
+                  <View
+                    key={`pending:${txn.id}`}
+                    style={[
+                      styles.pendingCardWrap,
+                      pendingCardsFullWidth && styles.pendingCardWrapMobile,
+                      !pendingCardsFullWidth &&
+                        pendingIdx % 3 === 2 &&
+                        styles.pendingCardWrapRowEnd,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.pendingCard,
+                        isWebDesktop && webDesktopStyles.pendingCard,
+                      ]}
+                    >
+                      <View style={styles.pendingCardGlow} />
+                      <View style={styles.pendingCardTop}>
+                        <View style={styles.pendingCardHeaderRow}>
+                          <SlgPartnerAvatar
+                            partyName={entityName}
+                            profileImageUrl={partnerProfileImageUrl}
+                            size={34}
+                          />
+                          <View style={styles.pendingPartyNameWrap}>
+                            <Text
+                              style={styles.pendingPartyName}
+                              numberOfLines={1}
+                            >
+                              {entityName}
+                            </Text>
+                          </View>
+                          <View style={styles.pendingRefPill}>
+                            <Text
+                              style={styles.pendingRefPillTxt}
+                              numberOfLines={1}
+                            >
+                              {refDisplay}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.pendingMainRow}>
+                          <View style={styles.pendingMainCol}>
+                            <Text
+                              style={styles.pendingTripDetailLine}
+                              numberOfLines={1}
+                            >
+                              Trip · {tripLabel}
+                            </Text>
+                            {dateLine ? (
+                              <Text
+                                style={styles.pendingTripDetailMuted}
+                                numberOfLines={1}
+                              >
+                                {dateLine}
+                              </Text>
+                            ) : null}
+                            {routeHint ? (
+                              <Text
+                                style={styles.pendingRouteHint}
+                                numberOfLines={1}
+                              >
+                                {routeHint}
+                              </Text>
+                            ) : isGhostTrip ? (
+                              <Text
+                                style={styles.pendingTripDetailMuted}
+                                numberOfLines={2}
+                              >
+                                Route will attach after this trip is created in
+                                your book.
+                              </Text>
+                            ) : null}
+                            <View style={styles.pendingBookBadge}>
+                              <Text
+                                style={
+                                  isGhostTrip
+                                    ? styles.pendingBookBadgeGhost
+                                    : styles.pendingBookBadgeOk
+                                }
+                                numberOfLines={1}
+                              >
+                                {isGhostTrip
+                                  ? "Ghost trip (partner book)"
+                                  : "In your book"}
+                              </Text>
+                            </View>
+                          </View>
+                          <Text
+                            style={[
+                              styles.pendingHeroAmount,
+                              isWebDesktop && webDesktopStyles.pendingHeroAmount,
+                            ]}
+                            numberOfLines={2}
+                          >
+                            {formatINR(pendingAmt)}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.pendingActionRow}>
+                        <Text style={styles.pendingActionHint} numberOfLines={2}>
+                          They logged this — add it to your books?
                         </Text>
-                      </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.pendingActionBtn,
+                            isWebDesktop && webDesktopStyles.pendingActionBtn,
+                          ]}
+                          onPress={() => handleAddPendingSync(txn)}
+                          activeOpacity={0.88}
+                          disabled={actionLoading || mergeSubmitting}
+                        >
+                          <Text style={styles.pendingActionBtnTxt}>
+                            {isGhostTrip
+                              ? "Adopt Trip & Finalize"
+                              : "Accept Payment Update"}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   </View>
-                </View>
-              );
-            })}
-          </View>
+                );
+              })}
+            </View>
+          ) : null}
         </View>
       ) : null}
 
@@ -2498,6 +2656,7 @@ export function SharedLedgerCommandCenter({
               </Text>
             </View>
           )}
+
         </ScrollView>
       </View>
     );
@@ -2508,7 +2667,7 @@ export function SharedLedgerCommandCenter({
     const t = txnFocus;
     const myAmt = localColumnRupees(t);
     const partnerAmt = partnerColumnRupees(t);
-    const tripForTxn = findTripByRef(t.tripRef);
+    const tripForTxn = findTripByRef(t.tripRef, t.tripDbId);
     const sameTripTxnCount = txnRowsAll.filter(
       (row) => norm(row.tripRef) === norm(t.tripRef),
     ).length;
@@ -2789,7 +2948,7 @@ export function SharedLedgerCommandCenter({
             activeOpacity={0.88}
           >
             <Check size={16} color="#FFF" strokeWidth={3} />
-            <Text style={styles.fabUseTxt}>Sync to partner</Text>
+            <Text style={styles.fabUseTxt}>Update My Book</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.fabDispute}
@@ -2798,7 +2957,7 @@ export function SharedLedgerCommandCenter({
             activeOpacity={0.88}
           >
             <AlertCircle size={18} color="#FFF" strokeWidth={2.5} />
-            <Text style={styles.fabDisputeTxt}>Fix records</Text>
+            <Text style={styles.fabDisputeTxt}>Raise Dispute</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -3210,6 +3369,13 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
     textTransform: "uppercase",
   },
+  disputeInboxCaption: {
+    marginTop: 2,
+    paddingHorizontal: 4,
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
   pendingCard: {
     backgroundColor: Theme.surface,
     borderRadius: 12,
@@ -3562,6 +3728,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     zIndex: 0,
     overflow: "hidden",
+    pointerEvents: "none",
   },
   missionCardWatermarkInner: {
     position: "absolute",

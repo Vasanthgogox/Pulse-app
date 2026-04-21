@@ -50,6 +50,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { createLedgerEntry, type LedgerRow } from "../services/finance.service";
 import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
+import { supabase } from "@/lib/supabase";
 import {
   SHARED_LEDGER_AWAITING_PARTNER_UPDATE,
   SHARED_LEDGER_PARTNER_PENDING_LABEL,
@@ -515,8 +516,15 @@ export function SharedLedgerContent({
   const [partnerOrgId, setPartnerOrgId] = useState<string | null>(null);
   const [disputesRaised, setDisputesRaised] = useState<DisputeRow[]>([]);
   const [disputesReceived, setDisputesReceived] = useState<DisputeRow[]>([]);
+  const [justRaisedDisputeTripId, setJustRaisedDisputeTripId] =
+    useState<string | null>(null);
+  const [disputeNotice, setDisputeNotice] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [pendingAcceptDispute, setPendingAcceptDispute] =
+    useState<DisputeRow | null>(null);
+  const [pendingUpdateMyBookRow, setPendingUpdateMyBookRow] =
+    useState<ReconciledRow | null>(null);
+  const [pendingReviewDispute, setPendingReviewDispute] =
     useState<DisputeRow | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -886,7 +894,11 @@ export function SharedLedgerContent({
         } else {
           baseTrip.supplier_id = entity.id;
         }
-        const { error: tripErr, trip } = await createTrip(organizationId, baseTrip);
+        const { error: tripErr, trip } = await createTrip(
+          organizationId,
+          organizationId,
+          baseTrip,
+        );
         if (tripErr || !trip) {
           Alert.alert(
             "Could not create trip",
@@ -1439,15 +1451,118 @@ export function SharedLedgerContent({
     const m = new Map<string, DisputeRow>();
     for (const d of disputesRaised)
       m.set(String(d.transaction_id).trim().toLowerCase(), d);
+    if (justRaisedDisputeTripId) {
+      const key = String(justRaisedDisputeTripId).trim().toLowerCase();
+      if (key && !m.has(key)) {
+        m.set(
+          key,
+          {
+            id: `local-${key}`,
+            transaction_id: key,
+            raised_by_org_id: organizationId ?? "",
+            partner_org_id:
+              partnerOrgId ?? entity.linked_organization_id ?? "",
+            status: "OPEN",
+            internal_snapshot: 0,
+            partner_snapshot: 0,
+          } as DisputeRow,
+        );
+      }
+    }
     return m;
-  }, [disputesRaised]);
+  }, [
+    disputesRaised,
+    justRaisedDisputeTripId,
+    organizationId,
+    partnerOrgId,
+    entity.linked_organization_id,
+  ]);
+
+  useEffect(() => {
+    if (!justRaisedDisputeTripId) return;
+    const key = String(justRaisedDisputeTripId).trim().toLowerCase();
+    if (!key) return;
+    const persisted = disputesRaised.some(
+      (d) => String(d.transaction_id).trim().toLowerCase() === key,
+    );
+    if (persisted) setJustRaisedDisputeTripId(null);
+  }, [justRaisedDisputeTripId, disputesRaised]);
+
+  useEffect(() => {
+    if (!disputeNotice) return;
+    const t = setTimeout(() => setDisputeNotice(null), 5000);
+    return () => clearTimeout(t);
+  }, [disputeNotice]);
+
+  const openReceivedDisputesForView = useMemo(() => {
+    const visibleTripKeys = new Set(
+      reconciledRows.map((r) => String(r.tripId).trim().toLowerCase()),
+    );
+    return disputesReceived.filter((d) => {
+      if (d.status !== "OPEN") return false;
+      const txnKey = String(d.transaction_id ?? "").trim().toLowerCase();
+      return txnKey.length > 0 && visibleTripKeys.has(txnKey);
+    });
+  }, [disputesReceived, reconciledRows]);
 
   const disputeReceivedByTripId = useMemo(() => {
     const m = new Map<string, DisputeRow>();
-    for (const d of disputesReceived)
+    for (const d of openReceivedDisputesForView)
       m.set(String(d.transaction_id).trim().toLowerCase(), d);
     return m;
-  }, [disputesReceived]);
+  }, [openReceivedDisputesForView]);
+  const receivedDisputeMissions = useMemo(() => {
+    return openReceivedDisputesForView
+      .map((d) => {
+        const key = String(d.transaction_id ?? "").trim().toLowerCase();
+        const byTripId = trips.find((t) => String(t.id).trim().toLowerCase() === key);
+        return byTripId ? getTripDisplayNumber(byTripId) : d.transaction_id;
+      })
+      .filter((v, i, arr) => !!v && arr.indexOf(v) === i)
+      .slice(0, 3);
+  }, [openReceivedDisputesForView, trips]);
+
+  const executeUpdateMyBook = useCallback(
+    async (row: ReconciledRow) => {
+      if (
+        !organizationId ||
+        row.status === "UNRECOGNIZED" ||
+        row.external == null
+      )
+        return;
+      setPendingUpdateMyBookRow(null);
+      setActionLoading(true);
+      const { error } = await acceptPartnerView(
+        organizationId,
+        row.tripId,
+        row.extSales,
+        row.extPaid,
+        entity.id,
+      );
+      setActionLoading(false);
+      if (error) {
+        const isMissingRpc =
+          /could not find the function.*schema cache|function.*accept_partner_view.*does not exist/i.test(
+            error.message,
+          );
+        Alert.alert(
+          "Update failed",
+          isMissingRpc
+            ? "The accept_partner_view function is not in your database yet. To fix: open Supabase Dashboard -> SQL Editor, then run the SQL in this project's file: supabase/migrations/20250312120000_accept_partner_view.sql"
+            : error.message,
+        );
+        return;
+      }
+      refetchDisputes();
+      onRefresh?.();
+      setExpandedTripId(null);
+      Alert.alert(
+        "Ledger updated",
+        "Your book has been updated to match the partner. The trip is now matched.",
+      );
+    },
+    [organizationId, entity.id, onRefresh, refetchDisputes],
+  );
 
   const handleUpdateMyBook = useCallback(
     async (row: ReconciledRow) => {
@@ -1457,6 +1572,10 @@ export function SharedLedgerContent({
         row.external == null
       )
         return;
+      if (Platform.OS === "web") {
+        setPendingUpdateMyBookRow(row);
+        return;
+      }
       const msg =
         `Update your book to match ${entity.name}?\n\n` +
         `Sales: ₹${row.extSales.toLocaleString("en-IN", { maximumFractionDigits: 0 })} | Paid: ₹${row.extPaid.toLocaleString("en-IN", { maximumFractionDigits: 0 })}\n\n` +
@@ -1465,41 +1584,13 @@ export function SharedLedgerContent({
         { text: "Cancel", style: "cancel" },
         {
           text: "Update my book",
-          onPress: async () => {
-            setActionLoading(true);
-            const { error } = await acceptPartnerView(
-              organizationId,
-              row.tripId,
-              row.extSales,
-              row.extPaid,
-              entity.id,
-            );
-            setActionLoading(false);
-            if (error) {
-              const isMissingRpc =
-                /could not find the function.*schema cache|function.*accept_partner_view.*does not exist/i.test(
-                  error.message,
-                );
-              Alert.alert(
-                "Update failed",
-                isMissingRpc
-                  ? "The accept_partner_view function is not in your database yet. To fix: open Supabase Dashboard → SQL Editor, then run the SQL in this project's file: supabase/migrations/20250312120000_accept_partner_view.sql"
-                  : error.message,
-              );
-              return;
-            }
-            refetchDisputes();
-            onRefresh?.();
-            setExpandedTripId(null);
-            Alert.alert(
-              "Ledger updated",
-              "Your book has been updated to match the partner. The trip is now matched.",
-            );
+          onPress: () => {
+            void executeUpdateMyBook(row);
           },
         },
       ]);
     },
-    [organizationId, entity.id, entity.name, onRefresh, refetchDisputes],
+    [organizationId, entity.name, executeUpdateMyBook],
   );
 
   const executeAcceptReceivedDispute = useCallback(
@@ -1634,13 +1725,94 @@ export function SharedLedgerContent({
     },
     [organizationId, onRefresh, refetchDisputes],
   );
+  const reviewReceivedDisputeForTrip = useCallback(
+    (tripId: string) => {
+      const dispute = disputeReceivedByTripId.get(normTripKey(tripId));
+      if (!dispute) {
+        Alert.alert(
+          "Dispute not found",
+          "Could not find an open dispute for this trip. Refresh and try again.",
+        );
+        return;
+      }
+      if (Platform.OS === "web") {
+        setPendingReviewDispute(dispute);
+        return;
+      }
+      Alert.alert(
+        "Review dispute",
+        "Choose how to handle this received dispute.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Decline",
+            style: "destructive",
+            onPress: () => {
+              void handleDeclineReceivedDispute(dispute);
+            },
+          },
+          {
+            text: "Accept & update",
+            onPress: () => {
+              void handleAcceptReceivedDispute(dispute);
+            },
+          },
+        ],
+      );
+    },
+    [
+      disputeReceivedByTripId,
+      handleAcceptReceivedDispute,
+      handleDeclineReceivedDispute,
+    ],
+  );
 
   const handleSubmitDispute = useCallback(async () => {
+    if (actionLoading) return;
     if (!selectedDispute || !organizationId) return;
-    if (!partnerOrgId) {
+    const effectivePartnerOrgId = partnerOrgId ?? entity.linked_organization_id ?? null;
+    if (!effectivePartnerOrgId) {
       Alert.alert(
         "Could not determine partner",
         "Ensure this entity is connected for shared ledger.",
+      );
+      return;
+    }
+    let resolvedTripId = (() => {
+      const raw = String(selectedDispute.tripId ?? "").trim();
+      if (isUuidString(raw)) return raw;
+      const missionKey = normTripKey(selectedDispute.missionId);
+      if (missionKey) {
+        const found = trips.find(
+          (t) => normTripKey(getTripDisplayNumber(t)) === missionKey,
+        );
+        if (found?.id && isUuidString(found.id)) return found.id;
+      }
+      return null;
+    })();
+    if (!resolvedTripId) {
+      const missionRaw = String(selectedDispute.missionId ?? "").trim();
+      if (missionRaw) {
+        const { data: lookupRow, error: lookupErr } = await supabase()
+          .from("trips")
+          .select("id")
+          .eq("organization_id", organizationId)
+          .or(
+            `display_trip_id.eq.${missionRaw},trip_number.eq.${missionRaw},id.eq.${missionRaw}`,
+          )
+          .limit(1)
+          .maybeSingle();
+        if (!lookupErr && lookupRow?.id && isUuidString(lookupRow.id)) {
+          resolvedTripId = lookupRow.id;
+        }
+      }
+    }
+    if (!resolvedTripId) {
+      Alert.alert(
+        "Cannot submit dispute",
+        selectedDispute.status === "UNRECOGNIZED"
+          ? "This partner-only trip has no local trip id yet. Use Fix records to merge/create the trip first, then raise dispute."
+          : "Trip id is missing. Refresh and try again.",
       );
       return;
     }
@@ -1655,28 +1827,45 @@ export function SharedLedgerContent({
       entityType === "SUPPLIER"
         ? selectedDispute.intPaidOut
         : selectedDispute.intPaid;
+    const reasonText = [resolution.trim(), remarks.trim()]
+      .filter((v) => v.length > 0)
+      .join(" | ");
     setActionLoading(true);
     const { error, disputeId, alreadyInDispute } = await createDispute({
       orgId: organizationId,
-      transaction_id: selectedDispute.tripId,
-      partner_org_id: partnerOrgId,
+      transaction_id: resolvedTripId,
+      partner_org_id: effectivePartnerOrgId,
       internal_snapshot: netInt,
       partner_snapshot: netExt,
       raised_sales: raisedSales,
       raised_paid: raisedPaid,
-      reason_code: resolution.trim() || undefined,
+      reason_code: reasonText || undefined,
     });
     setActionLoading(false);
     if (error) {
-      Alert.alert(
-        alreadyInDispute ? "Already in dispute" : "Error",
-        error.message,
-      );
+      if (alreadyInDispute) {
+        setJustRaisedDisputeTripId(resolvedTripId);
+        setDisputeNotice(`Dispute already open for ${selectedDispute.missionId}.`);
+        setSelectedDispute(null);
+        setResolution("");
+        setRemarks("");
+        refetchDisputes();
+        onRefresh?.();
+        Alert.alert("Already in dispute", "An open dispute already exists for this trip.");
+        return;
+      }
+      Alert.alert("Error", error.message);
       return;
     }
-    if (disputeId) {
+    if (disputeId || alreadyInDispute) {
+      setJustRaisedDisputeTripId(resolvedTripId);
       const kind = getLedgerEscalationKind(selectedDispute);
       const missionLabel = selectedDispute.missionId;
+      setDisputeNotice(
+        kind === "notify_partner"
+          ? `Follow-up submitted for ${missionLabel}.`
+          : `Dispute sent for ${missionLabel}.`,
+      );
       setSelectedDispute(null);
       setResolution("");
       setRemarks("");
@@ -1696,11 +1885,15 @@ export function SharedLedgerContent({
     }
   }, [
     selectedDispute,
+    actionLoading,
     organizationId,
     partnerOrgId,
     resolution,
+    remarks,
     entity.name,
+    entity.linked_organization_id,
     entityType,
+    trips,
     onRefresh,
     refetchDisputes,
   ]);
@@ -1871,6 +2064,12 @@ export function SharedLedgerContent({
         </View>
       ) : (
         <>
+          {disputeNotice ? (
+            <View style={styles.disputeNoticeBar}>
+              <FontAwesome name="check-circle" size={14} color={Theme.darkGreen} />
+              <Text style={styles.disputeNoticeText}>{disputeNotice}</Text>
+            </View>
+          ) : null}
           <SharedLedgerCommandCenter
             entityName={entity.name ?? "—"}
             partnerProfileImageUrl={partnerProfileImageUrl}
@@ -1894,6 +2093,9 @@ export function SharedLedgerContent({
             onMergePartnerTransaction={mergePartnerLineIntoBook}
             missionLabelForTripRef={missionLabelForTripRef}
             tripRouteForTripRef={tripRouteForTripRef}
+            receivedDisputeMissions={receivedDisputeMissions}
+            openReceivedDisputeCount={openReceivedDisputesForView.length}
+            onReviewReceivedDispute={reviewReceivedDisputeForTrip}
             onPressDownload={embeddedInOverlay ? undefined : openSharedReport}
           />
             </>
@@ -1907,6 +2109,47 @@ export function SharedLedgerContent({
         customReport={sharedLedgerCustomReport}
         hideCashSummary
       />
+
+      <Modal
+        visible={Platform.OS === "web" && !!pendingUpdateMyBookRow}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPendingUpdateMyBookRow(null)}
+      >
+        <View style={styles.confirmModalOverlay}>
+          <View style={styles.confirmModalCard}>
+            <Text style={styles.confirmModalTitle}>Update my book?</Text>
+            <Text style={styles.confirmModalText}>
+              Your ledger for this trip will be updated to match partner sales
+              and paid amounts.
+            </Text>
+            <View style={styles.confirmModalActions}>
+              <TouchableOpacity
+                style={styles.confirmModalCancelBtn}
+                onPress={() => setPendingUpdateMyBookRow(null)}
+                disabled={actionLoading}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.confirmModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.confirmModalConfirmBtn,
+                  actionLoading && styles.btnDisabled,
+                ]}
+                onPress={() =>
+                  pendingUpdateMyBookRow &&
+                  void executeUpdateMyBook(pendingUpdateMyBookRow)
+                }
+                disabled={actionLoading || !pendingUpdateMyBookRow}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.confirmModalConfirmText}>Update my book</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={Platform.OS === "web" && !!pendingAcceptDispute}
@@ -1940,6 +2183,61 @@ export function SharedLedgerContent({
                   void executeAcceptReceivedDispute(pendingAcceptDispute)
                 }
                 disabled={actionLoading || !pendingAcceptDispute}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.confirmModalConfirmText}>
+                  Accept &amp; update
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={Platform.OS === "web" && !!pendingReviewDispute}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPendingReviewDispute(null)}
+      >
+        <View style={styles.confirmModalOverlay}>
+          <View style={styles.confirmModalCard}>
+            <Text style={styles.confirmModalTitle}>Review dispute</Text>
+            <Text style={styles.confirmModalText}>
+              Choose how to handle this received dispute for the selected trip.
+            </Text>
+            <View style={styles.confirmModalActions}>
+              <TouchableOpacity
+                style={styles.confirmModalCancelBtn}
+                onPress={() => setPendingReviewDispute(null)}
+                disabled={actionLoading}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.confirmModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmModalCancelBtn}
+                onPress={() => {
+                  const d = pendingReviewDispute;
+                  setPendingReviewDispute(null);
+                  if (d) void handleDeclineReceivedDispute(d);
+                }}
+                disabled={actionLoading || !pendingReviewDispute}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.confirmModalCancelText}>Decline</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.confirmModalConfirmBtn,
+                  actionLoading && styles.btnDisabled,
+                ]}
+                onPress={() => {
+                  const d = pendingReviewDispute;
+                  setPendingReviewDispute(null);
+                  if (d) void handleAcceptReceivedDispute(d);
+                }}
+                disabled={actionLoading || !pendingReviewDispute}
                 activeOpacity={0.8}
               >
                 <Text style={styles.confirmModalConfirmText}>
@@ -2400,6 +2698,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: Theme.textMuted,
+  },
+  disputeNoticeBar: {
+    marginHorizontal: 12,
+    marginTop: 8,
+    marginBottom: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.darkGreen,
+    backgroundColor: Theme.positiveMuted,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  disputeNoticeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.darkGreen,
+    flex: 1,
   },
   tableWrap: {
     paddingHorizontal: 0,
