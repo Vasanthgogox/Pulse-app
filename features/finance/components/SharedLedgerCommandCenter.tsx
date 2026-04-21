@@ -2541,7 +2541,7 @@ export function SharedLedgerCommandCenter({
               ]}
               numberOfLines={1}
             >
-              {shortTxnId(t.id)} review
+              {tripDisplay} · review
             </Text>
             <Text style={styles.forensicRefSub}>Entry comparison</Text>
           </View>
