@@ -21,6 +21,7 @@ import * as financeService from "../services/finance.service";
 import { getProfileImage } from "../services/finance.service";
 import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
 import { FinancialRow, type FinancialRowData } from "./FinancialRow";
+import { FinanceEntryDetailScreen } from "./FinanceEntryDetailScreen";
 import { LedgerTransactionListView } from "./LedgerTransactionListView";
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
@@ -163,6 +164,9 @@ export function LedgerTab({
   const [disputesByTripId, setDisputesByTripId] = useState<
     Record<string, { status: "OPEN" | "RESOLVED"; direction: "RAISED_BY_US" | "RECEIVED" }>
   >({});
+  const [selectedDetailData, setSelectedDetailData] = useState<FinancialRowData | null>(
+    null,
+  );
   useEffect(() => {
     if (!organizationId) {
       setDisputesByTripId({});
@@ -619,11 +623,7 @@ export function LedgerTab({
 
   function openLedgerDetail(row: financeService.LedgerRow) {
     const rowData = buildFinancialRowDataForRow(row);
-    const payload = JSON.stringify(rowData);
-    router.push({
-      pathname: "/finance-entry/[id]",
-      params: { id: rowData.id, payload },
-    });
+    setSelectedDetailData(rowData);
   }
 
   const expandedRow =
@@ -898,6 +898,20 @@ export function LedgerTab({
         );
       })
       )}
+      {selectedDetailData ? (
+        <View style={styles.inlineReceiptWrap}>
+          <FinanceEntryDetailScreen
+            data={selectedDetailData}
+            onViewTripDetail={() => {
+              if (selectedDetailData?.tripId) {
+                router.push(`/trip/${selectedDetailData.tripId}` as const);
+              }
+            }}
+            onBack={() => setSelectedDetailData(null)}
+            embedded
+          />
+        </View>
+      ) : null}
     </>
   );
 }
@@ -962,5 +976,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: Theme.textOnPrimary ?? "#fff",
+  },
+  inlineReceiptWrap: {
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: Theme.surfaceBorder,
+    backgroundColor: Theme.screenBackground,
   },
 });

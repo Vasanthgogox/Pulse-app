@@ -12,7 +12,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import React, { useMemo, useState, type ReactNode } from 'react';
-import Animated, { FadeInUp, Layout } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeInUp, FadeOutUp, Layout } from 'react-native-reanimated';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
 import {
   resolveLedgerRowPartyIdentity,
@@ -20,6 +20,7 @@ import {
 import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
 import type { LedgerRow } from '../services/finance.service';
 import { type FinancialRowData } from "./FinancialRow";
+import { FinanceEntryDetailScreen } from "./FinanceEntryDetailScreen";
 import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
 
 import type { ClientRow } from "@/features/clients/services/clients.service";
@@ -138,7 +139,7 @@ function KanbanCard({
   row: LedgerRow;
   index: number;
   cat: ColumnType | "other";
-  openDetail: (rowData: FinancialRowData) => void;
+  openDetail: (rowId: string, rowData: FinancialRowData) => void;
   hasAmtIn: boolean;
   amount: number;
   dateStr: string;
@@ -163,7 +164,7 @@ function KanbanCard({
       <TouchableOpacity
         style={styles.timelineCard}
         activeOpacity={0.7}
-        onPress={() => openDetail(rowData)}
+        onPress={() => openDetail(row.id, rowData)}
         accessibilityRole="button"
         accessibilityLabel={`Open cash entry for ${partyName}`}
       >
@@ -309,6 +310,8 @@ export function FinanceKanbanTab({
 }: FinanceKanbanTabProps) {
   const { t } = useLanguage();
   const router = useRouter();
+  const [expandedReceiptRowId, setExpandedReceiptRowId] = useState<string | null>(null);
+  const [selectedDetailData, setSelectedDetailData] = useState<FinancialRowData | null>(null);
 
   const clientById = useMemo(() => new Map(clientRows.map(c => [c.id, c])), [clientRows]);
   const supplierById = useMemo(() => new Map(supplierRows.map(s => [s.id, s])), [supplierRows]);
@@ -485,11 +488,11 @@ export function FinanceKanbanTab({
     };
   };
 
-  const openDetail = (rowData: FinancialRowData) => {
-    const payload = JSON.stringify(rowData);
-    router.push({
-      pathname: "/finance-entry/[id]",
-      params: { id: rowData.id, payload },
+  const openDetail = (rowId: string, rowData: FinancialRowData) => {
+    setExpandedReceiptRowId((prev) => {
+      const isClosing = prev === rowId;
+      setSelectedDetailData(isClosing ? null : rowData);
+      return isClosing ? null : rowId;
     });
   };
 
@@ -534,41 +537,68 @@ export function FinanceKanbanTab({
     }
 
     return (
-      <KanbanCard
-        key={row.id}
-        row={row}
-        index={index}
-        cat={cat}
-        openDetail={openDetail}
-        hasAmtIn={hasAmtIn}
-        amount={amount}
-        dateStr={dateStr}
-        vehicleStr={vehicleStr}
-        partyName={partyName}
-        routeWhyLine={routeWhyLine}
-        rowData={rowData}
-        tripIdOnly={tripIdOnly}
-        onRowSelect={onRowSelect}
-        profileImageUrl={profileImageUrl}
-        partyAvatar={partyAvatar}
-      />
+      <View key={row.id} style={styles.cardWithInlineReceipt}>
+        <KanbanCard
+          row={row}
+          index={index}
+          cat={cat}
+          openDetail={openDetail}
+          hasAmtIn={hasAmtIn}
+          amount={amount}
+          dateStr={dateStr}
+          vehicleStr={vehicleStr}
+          partyName={partyName}
+          routeWhyLine={routeWhyLine}
+          rowData={rowData}
+          tripIdOnly={tripIdOnly}
+          onRowSelect={onRowSelect}
+          profileImageUrl={profileImageUrl}
+          partyAvatar={partyAvatar}
+        />
+        {expandedReceiptRowId === row.id && selectedDetailData ? (
+          <Animated.View
+            style={styles.inlineReceiptWrapInColumn}
+            entering={FadeInDown.duration(180)}
+            exiting={FadeOutUp.duration(140)}
+            layout={Layout.springify()}
+          >
+            <FinanceEntryDetailScreen
+              data={selectedDetailData}
+              onViewTripDetail={() => {
+                if (row.trip_id) {
+                  router.push(`/trip/${row.trip_id}` as never);
+                  return;
+                }
+                onRowSelect?.(row);
+              }}
+              onBack={() => {
+                setExpandedReceiptRowId(null);
+                setSelectedDetailData(null);
+              }}
+              embedded
+            />
+          </Animated.View>
+        ) : null}
+      </View>
     );
   };
 
   return (
-    <View style={styles.wrapper}>
-      <View style={styles.kanbanContainer}>
-        {COLUMN_TYPES.map((type) => (
-            <KanbanColumn 
-              key={type}
-              type={type}
-              transactions={columns[type]}
-              t={t}
-              renderCard={renderCard}
-            />
-        ))}
+    <>
+      <View style={styles.wrapper}>
+        <View style={styles.kanbanContainer}>
+          {COLUMN_TYPES.map((type) => (
+              <KanbanColumn 
+                key={type}
+                type={type}
+                transactions={columns[type]}
+                t={t}
+                renderCard={renderCard}
+              />
+          ))}
+        </View>
       </View>
-    </View>
+    </>
   );
 }
 
@@ -583,6 +613,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     width: '100%',
+  },
+  cardWithInlineReceipt: {
+    marginBottom: 8,
+  },
+  inlineReceiptWrapInColumn: {
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: Theme.screenBackground,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 4,
   },
   column: {
     flex: 1,
