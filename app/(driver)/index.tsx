@@ -9,7 +9,6 @@ import { DriverTripFlowCard } from "@/components/DriverTripFlowCard";
 import { JobRequestCard } from "@/components/JobRequestCard";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import Typography from "@/constants/Typography";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDriverAvatar } from "@/contexts/DriverAvatarContext";
 import {
@@ -37,6 +36,7 @@ import MapView, {
     Marker,
     Polyline,
 } from "@/lib/reactNativeMapsCompat";
+import { supabase } from "@/lib/supabase";
 import * as driverLocationService from "@/services/driverLocationService";
 import * as driversService from "@/services/driversService";
 import {
@@ -46,7 +46,6 @@ import {
     type RouteResult,
 } from "@/services/routingService";
 import * as tripsService from "@/services/tripsService";
-import { supabase } from "@/lib/supabase";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import BottomSheet, {
     BottomSheetScrollView,
@@ -65,7 +64,6 @@ import {
     Animated,
     AppState,
     Dimensions,
-    Image,
     Keyboard,
     KeyboardAvoidingView,
     Modal,
@@ -75,7 +73,7 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import Reanimated, {
@@ -1292,6 +1290,14 @@ export default function DriverRadarScreen() {
     visibleAssignableIncomingTrips.length === 1;
   const hasMultipleAssignableIncomingTrips =
     visibleAssignableIncomingTrips.length > 1;
+  const showDeferredInviteCard = Boolean(
+    showNotification &&
+      pendingInvite &&
+      !activeMission &&
+      !effectiveFirstIncoming &&
+      !hasAssignableIncomingTrip &&
+      assignmentFeedback == null,
+  );
   const effectiveIncomingId = String(
     effectiveFirstIncoming?.id ?? "",
   ).toLowerCase();
@@ -4202,7 +4208,7 @@ export default function DriverRadarScreen() {
                   ]}
                 >
                   <View style={[styles.assignedSheetContent, { flexGrow: 0 }]}>
-                    {showNotification && pendingInvite && (
+                    {showDeferredInviteCard ? (
                       <DriverInviteCard
                         invite={pendingInvite}
                         colors={colors}
@@ -4232,7 +4238,7 @@ export default function DriverRadarScreen() {
                           }
                         }}
                       />
-                    )}
+                    ) : null}
                     {loading && !assignmentFeedback ? (
                       <ActivityIndicator
                         style={{ marginTop: 20 }}
@@ -4259,7 +4265,7 @@ export default function DriverRadarScreen() {
                   ]}
                 >
                   <View style={styles.assignedSheetContent}>
-                    {showNotification && pendingInvite && (
+                    {showDeferredInviteCard ? (
                       <DriverInviteCard
                         invite={pendingInvite}
                         colors={colors}
@@ -4289,7 +4295,7 @@ export default function DriverRadarScreen() {
                           }
                         }}
                       />
-                    )}
+                    ) : null}
                     {loading && !assignmentFeedback ? (
                       <ActivityIndicator
                         style={{ marginTop: 20 }}
@@ -4397,7 +4403,7 @@ export default function DriverRadarScreen() {
                 </TouchableOpacity>
               ) : null}
 
-              {showNotification && pendingInvite && (
+              {showDeferredInviteCard ? (
                 <DriverInviteCard
                   invite={pendingInvite}
                   colors={colors}
@@ -4424,7 +4430,7 @@ export default function DriverRadarScreen() {
                     }
                   }}
                 />
-              )}
+              ) : null}
             </View>
           </View>
 
