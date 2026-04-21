@@ -198,6 +198,28 @@ export async function getTripById(
   return { error: null, trip };
 }
 
+/** Latest trip row for an indent (direct-quote / Staff Handshake recovery). */
+export async function getTripByIndentId(
+  indentId: string,
+): Promise<{ error: Error | null; trip: TripRow | null }> {
+  const { data, error } = await supabase()
+    .from("trips")
+    .select("*, indents(indent_number)")
+    .eq("indent_id", indentId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), trip: null };
+  const raw = data as any;
+  const trip: TripRow | null = raw
+    ? {
+        ...raw,
+        indent_number: raw.indents?.indent_number ?? null,
+      }
+    : null;
+  return { error: null, trip };
+}
+
 /**
  * Driver rejects/declines an assigned trip.
  *
