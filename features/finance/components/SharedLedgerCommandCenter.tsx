@@ -755,14 +755,16 @@ export function SharedLedgerCommandCenter({
   const handleUsePartnerFromTxn = () => {
     if (!txnFocus) return;
     const trip = findTripByRef(txnFocus.tripRef);
-    if (!trip || trip.external == null) {
+    if (!trip) {
       Alert.alert(
-        "Can’t update",
-        "We couldn’t find matching trip details from your partner. Try again after data syncs.",
+        "Can’t report yet",
+        "We couldn’t link this payment to a trip.",
       );
       return;
     }
-    onUpdateMyBook(trip);
+    // "Sync to partner" from forensic view should open the same dispute flow/page
+    // as the primary Raise Dispute action.
+    onRaiseDispute(trip);
     backFromSub();
   };
 
