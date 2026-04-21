@@ -1023,6 +1023,7 @@ export function SharedLedgerContent({
       const paid = Number(row.extPaid ?? 0);
       if (paid > 0) partnerPaidByTripFromSummary.set(key, paid);
     }
+    const partnerPaidRemainingByTrip = new Map(partnerPaidByTripFromSummary);
 
     for (const p of partnerEntries) {
       const tripRef = resolveTripRefToCanonicalId(p.reference_id);
@@ -1122,34 +1123,38 @@ export function SharedLedgerContent({
       const amtOut = l.amount_out ?? 0;
       const net = amtIn + amtOut;
       const amtAbs = Math.abs(net);
-      const localTripLines = tripRef ? (localByTrip.get(tripRef) ?? []) : [];
       const partnerTripLineCount = tripRef
         ? (partnerTxnCountByTrip.get(tripRef) ?? 0)
         : 0;
-      const partnerTripPaid = tripRef
-        ? partnerPaidByTripFromSummary.get(tripRef)
-        : undefined;
-      const canUseTripSummaryFallback =
-        !!tripRef &&
-        partnerTripLineCount === 0 &&
-        localTripLines.length === 1 &&
-        partnerTripPaid != null &&
-        partnerTripPaid > 0;
+      const remainingPartnerPaid = tripRef
+        ? (partnerPaidRemainingByTrip.get(tripRef) ?? 0)
+        : 0;
+      const allocatedPartnerPaid =
+        partnerTripLineCount === 0 && remainingPartnerPaid > 0
+          ? Math.min(amtAbs, remainingPartnerPaid)
+          : 0;
 
-      if (canUseTripSummaryFallback) {
+      if (allocatedPartnerPaid > 0) {
+        partnerPaidRemainingByTrip.set(
+          tripRef,
+          Math.max(0, remainingPartnerPaid - allocatedPartnerPaid),
+        );
         rows.push({
           id: `l:${l.id}`,
-          status: Math.abs(amtAbs - partnerTripPaid) < 0.5 ? "matched" : "conflict",
+          status:
+            Math.abs(amtAbs - allocatedPartnerPaid) < 0.5
+              ? "matched"
+              : "conflict",
           tripRef,
           date: l.transaction_date || "",
           amountAbs: amtAbs,
           localAmount: amtAbs,
-          partnerAmount: partnerTripPaid,
+          partnerAmount: allocatedPartnerPaid,
           displayDate: formatTxnShortDate(l.transaction_date) || undefined,
           myRef: compactLedgerRef(l.payment_reference, l.id),
           partnerRef: "Trip summary",
           myMode: modeLabel(l.payment_mode),
-          partnerMode: "—",
+          partnerMode: modeLabel(l.payment_mode),
           lineKind: inferSharedTxnLineKind(l.primary_category, l.description),
         });
         continue;

@@ -55,7 +55,7 @@ export async function requestContactsPermissionNative(): Promise<boolean> {
 export async function pickContactForNameAndPhoneNative(): Promise<PickContactResult> {
   const available = await Contacts.isAvailableAsync();
   if (!available) {
-    return { ok: false, reason: "unavailable", message: "Contacts are not available on this device." };
+    return { ok: false, reason: "unavailable", message: "Contacts are not available on this app." };
   }
 
   if (Platform.OS === "android") {
