@@ -4,7 +4,7 @@
  */
 import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Modal,
   Platform,
@@ -32,6 +32,8 @@ export interface TripAdjustmentModalProps {
     amount: number;
     reason: string;
   }) => void;
+  /** When set (e.g. Finance Overview shortcuts), seeds type/impact when the modal opens. */
+  preset?: { type: TripAdjustmentType; impact: TripAdjustmentImpact } | null;
 }
 
 const BLUEPRINT_BG = "#111827";

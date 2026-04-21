@@ -16,6 +16,7 @@ import { useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
+import type { TripAdjustment } from "../../services/tripAdjustments";
 import { getTripDisplayNumber } from "../../services/trips.service";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import type { TripDetailScreenProps } from "./TripDetailScreen";
@@ -46,6 +47,34 @@ function ledgerHistoryTitle(tx: LedgerRow, isIn: boolean) {
   if (!isIn && tx.contact_type === "supplier") return "Supplier payment";
   if (!isIn && tx.contact_type === "driver") return "Driver payment";
   return isIn ? "Cash in" : "Cash out";
+}
+
+/** Revenue additions + supplier credits (cost −) improve simplified net. */
+function adjustmentsCountingAsIncome(adjustments: TripAdjustment[]) {
+  return adjustments.filter(
+    (a) =>
+      (a.type === "revenue" && a.impact === "plus") ||
+      (a.type === "cost" && a.impact === "minus"),
+  );
+}
+
+/** Revenue deductions + supplier add-ons (cost +) reduce simplified net. */
+function adjustmentsCountingAsDeductions(adjustments: TripAdjustment[]) {
+  return adjustments.filter(
+    (a) =>
+      (a.type === "revenue" && a.impact === "minus") ||
+      (a.type === "cost" && a.impact === "plus"),
+  );
+}
+
+function adjustmentIncomeLineLabel(a: TripAdjustment) {
+  if (a.type === "cost") return `${a.reason} (supplier credit)`;
+  return a.reason;
+}
+
+function adjustmentDeductionLineLabel(a: TripAdjustment) {
+  if (a.type === "cost") return `${a.reason} (supplier charge)`;
+  return a.reason;
 }
 
 export default function TripDetailScreen({
@@ -131,12 +160,10 @@ export default function TripDetailScreen({
   // ── Finance numbers ───────────────────────────────────────────────────────────
   const baseFreight = Number(trip.client_price ?? 0);
   const totalExpenses = expenseRows.reduce((s, r) => s + r.amount, 0);
-  const additionalIncome = detail.adjustments
-    .filter((a) => a.type === "revenue" && a.impact === "plus")
-    .reduce((s, a) => s + a.amount, 0);
-  const deductions = detail.adjustments
-    .filter((a) => a.type === "revenue" && a.impact === "minus")
-    .reduce((s, a) => s + a.amount, 0);
+  const incomeAdjustmentRows = adjustmentsCountingAsIncome(detail.adjustments);
+  const deductionAdjustmentRows = adjustmentsCountingAsDeductions(detail.adjustments);
+  const additionalIncome = incomeAdjustmentRows.reduce((s, a) => s + a.amount, 0);
+  const deductions = deductionAdjustmentRows.reduce((s, a) => s + a.amount, 0);
 
   const sales = Number(trip.client_price ?? 0);
   const received = detail.tripLedgerEntries.reduce(
@@ -359,12 +386,14 @@ export default function TripDetailScreen({
                   additionalIncome={additionalIncome}
                   deductions={deductions}
                   expenseDetails={expenseRows.map((e) => ({ label: e.description, amount: e.amount }))}
-                  incomeDetails={detail.adjustments
-                    .filter((a) => a.type === "revenue" && a.impact === "plus")
-                    .map((a) => ({ label: a.reason, amount: a.amount }))}
-                  deductionDetails={detail.adjustments
-                    .filter((a) => a.type === "revenue" && a.impact === "minus")
-                    .map((a) => ({ label: a.reason, amount: a.amount }))}
+                  incomeDetails={incomeAdjustmentRows.map((a) => ({
+                    label: adjustmentIncomeLineLabel(a),
+                    amount: a.amount,
+                  }))}
+                  deductionDetails={deductionAdjustmentRows.map((a) => ({
+                    label: adjustmentDeductionLineLabel(a),
+                    amount: a.amount,
+                  }))}
                   onAddIncome={detail.openLedgerSyncForTripIncome}
                   onAddDeduction={detail.handleAddAdjustment}
                 />

@@ -56,7 +56,11 @@ import {
 } from "../../../initialTripForDetail";
 import type { TripAssignmentAuditRow } from "../../../services/trip-assignment-audit.service";
 import { getTripAssignmentAuditHistory } from "../../../services/trip-assignment-audit.service";
-import type { TripAdjustment } from "../../../services/tripAdjustments";
+import type {
+  TripAdjustment,
+  TripAdjustmentImpact,
+  TripAdjustmentType,
+} from "../../../services/tripAdjustments";
 import {
   addTripAdjustment,
   getTripAdjustments,
@@ -244,6 +248,11 @@ export function useTripDetail({
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
+  /** When opening the modal from Finance Overview (client income / deductions). */
+  const [adjustmentModalPreset, setAdjustmentModalPreset] = useState<{
+    type: TripAdjustmentType;
+    impact: TripAdjustmentImpact;
+  } | null>(null);
   const [showTrackingModal, setShowTrackingModal] = useState(false);
   const [showFullScreenMap, setShowFullScreenMap] = useState(false);
   const [showDriverRejectedModal, setShowDriverRejectedModal] = useState(false);
@@ -560,9 +569,10 @@ export function useTripDetail({
       });
   }, [tripId, currentOrganization?.id]);
 
-  const loadAdjustments = useCallback(() => {
+  const loadAdjustments = useCallback(async () => {
     if (!tripId) return;
-    getTripAdjustments(tripId).then(setAdjustments);
+    const list = await getTripAdjustments(tripId);
+    setAdjustments(list);
   }, [tripId]);
 
   const loadAssignmentAudit = useCallback(() => {
@@ -917,10 +927,31 @@ export function useTripDetail({
     router.push(`/(modals)/ledger-sync?${params.toString()}`);
   }, [trip, driverName, router, t]);
 
-  // ── Adjustment handlers ───────────────────────────────────────────────────
-  const handleAddAdjustment = useCallback(() => {
+  const closeTripAdjustmentModal = useCallback(() => {
+    setShowAdjustmentModal(false);
+    setAdjustmentModalPreset(null);
+  }, []);
+
+  const openTripAdjustmentModal = useCallback(
+    (preset: { type: TripAdjustmentType; impact: TripAdjustmentImpact } | null = null) => {
+    setAdjustmentModalPreset(preset);
     setShowAdjustmentModal(true);
   }, []);
+
+  // ── Adjustment handlers ───────────────────────────────────────────────────
+  const handleAddAdjustment = useCallback(() => {
+    openTripAdjustmentModal(null);
+  }, [openTripAdjustmentModal]);
+
+  /** Maps to Finance Overview “Additional Income” (revenue + addition). */
+  const openClientIncomeAdjustment = useCallback(() => {
+    openTripAdjustmentModal({ type: "revenue", impact: "plus" });
+  }, [openTripAdjustmentModal]);
+
+  /** Maps to Finance Overview “Deductions” (revenue + deduction). */
+  const openClientDeductionAdjustment = useCallback(() => {
+    openTripAdjustmentModal({ type: "revenue", impact: "minus" });
+  }, [openTripAdjustmentModal]);
 
   const handleSaveAdjustment = useCallback(
     async (params: {
@@ -931,7 +962,7 @@ export function useTripDetail({
     }) => {
       if (!trip?.id) return;
       await addTripAdjustment(trip.id, params);
-      loadAdjustments();
+      await loadAdjustments();
     },
     [trip?.id, loadAdjustments],
   );
@@ -940,7 +971,7 @@ export function useTripDetail({
     async (adjustmentId: string) => {
       if (!trip?.id) return;
       await removeTripAdjustment(trip.id, adjustmentId);
-      loadAdjustments();
+      await loadAdjustments();
     },
     [trip?.id, loadAdjustments],
   );
@@ -1302,6 +1333,10 @@ export function useTripDetail({
     // UI state
     showAdjustmentModal,
     setShowAdjustmentModal,
+    adjustmentModalPreset,
+    closeTripAdjustmentModal,
+    openClientIncomeAdjustment,
+    openClientDeductionAdjustment,
     showTrackingModal,
     setShowTrackingModal,
     showFullScreenMap,
