@@ -320,11 +320,11 @@ export function TripRatingsBlock({
         toValue: 1,
         duration: 220,
         easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }),
       Animated.spring(modalTranslateY, {
         toValue: 0,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
         damping: 18,
         stiffness: 180,
         mass: 0.9,
@@ -343,13 +343,13 @@ export function TripRatingsBlock({
         toValue: 1,
         duration: 180,
         easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }),
       Animated.timing(composerTranslateY, {
         toValue: 0,
         duration: 180,
         easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }),
     ]).start();
   }, [score, submitSuccess, composerOpacity, composerTranslateY]);
@@ -365,11 +365,11 @@ export function TripRatingsBlock({
         toValue: 1,
         duration: 220,
         easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }),
       Animated.spring(successScale, {
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
         damping: 16,
         stiffness: 220,
         mass: 0.9,

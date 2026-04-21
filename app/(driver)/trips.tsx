@@ -22,6 +22,7 @@ import {
     FlatList,
     Image,
     Modal,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -226,8 +227,7 @@ function AnimatedAccentBar({
   }));
   return (
     <Animated.View
-      style={[styles.cardRefAccent, { backgroundColor }, animatedStyle]}
-      pointerEvents="none"
+      style={[styles.cardRefAccent, { backgroundColor }, animatedStyle, { pointerEvents: 'none' }]}
     />
   );
 }
@@ -1788,9 +1788,14 @@ const styles = StyleSheet.create({
     transform: [{ rotate: "45deg" }],
   },
   routeCardWatermarkIcon: {
-    textShadowColor: "rgba(255,255,255,0.6)",
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 3,
+    ...Platform.select({
+      web: { textShadow: "0px 0px 3px rgba(255,255,255,0.6)" } as object,
+      default: {
+        textShadowColor: "rgba(255,255,255,0.6)",
+        textShadowOffset: { width: 0, height: 0 },
+        textShadowRadius: 3,
+      },
+    }),
   },
   routeCardLabelRef: {
     fontSize: 9,

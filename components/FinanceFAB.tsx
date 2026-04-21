@@ -117,7 +117,7 @@ export function FinanceFAB({
   );
 
   return (
-    <View style={[styles.container, style]} pointerEvents="box-none">
+    <View style={[styles.container, style, { pointerEvents: 'box-none' }]}>
       <TouchableOpacity
         testID={testID}
         onPress={handlePress}

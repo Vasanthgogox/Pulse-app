@@ -65,8 +65,7 @@ export function FloatingOpsAgentButton() {
 
   return (
     <View
-      style={[styles.wrap, { bottom }]}
-      pointerEvents="box-none"
+      style={[styles.wrap, { bottom }, { pointerEvents: 'box-none' }]}
     >
       <TouchableOpacity
         activeOpacity={0.85}

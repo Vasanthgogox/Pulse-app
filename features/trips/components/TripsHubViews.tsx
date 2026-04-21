@@ -504,7 +504,7 @@ export function TripsHubTripCard({
       }`}
     >
       <View style={styles.fleetCard}>
-        <View style={styles.fleetOrb} pointerEvents="none" />
+        <View style={[styles.fleetOrb, { pointerEvents: 'none' }]} />
         <View style={styles.fleetHead}>
           <View style={styles.fleetHeadLeft}>
             <View style={styles.fleetTruckWrap}>

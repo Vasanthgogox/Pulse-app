@@ -618,8 +618,8 @@ export default function DriverDashboard() {
     if (!isOnline) return;
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pingAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
-        Animated.timing(pingAnim, { toValue: 0, duration: 2000, useNativeDriver: true }),
+        Animated.timing(pingAnim, { toValue: 1, duration: 2000, useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(pingAnim, { toValue: 0, duration: 2000, useNativeDriver: Platform.OS !== 'web' }),
       ])
     );
     loop.start();
@@ -995,8 +995,8 @@ export default function DriverDashboard() {
     pickupDotPingAnim.setValue(0);
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pickupDotPingAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
-        Animated.timing(pickupDotPingAnim, { toValue: 0, duration: 900, useNativeDriver: true }),
+        Animated.timing(pickupDotPingAnim, { toValue: 1, duration: 900, useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(pickupDotPingAnim, { toValue: 0, duration: 900, useNativeDriver: Platform.OS !== 'web' }),
       ])
     );
     loop.start();
@@ -1014,8 +1014,8 @@ export default function DriverDashboard() {
     newAssignmentBlinkAnim.setValue(0);
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(newAssignmentBlinkAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
-        Animated.timing(newAssignmentBlinkAnim, { toValue: 0, duration: 900, useNativeDriver: true }),
+        Animated.timing(newAssignmentBlinkAnim, { toValue: 1, duration: 900, useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(newAssignmentBlinkAnim, { toValue: 0, duration: 900, useNativeDriver: Platform.OS !== 'web' }),
       ])
     );
     loop.start();
@@ -1488,7 +1488,7 @@ export default function DriverDashboard() {
     if (!showSearchingOverlay) return;
     searchPulseAnim.setValue(0);
     const loop = Animated.loop(
-      Animated.timing(searchPulseAnim, { toValue: 1, duration: 1600, useNativeDriver: true })
+      Animated.timing(searchPulseAnim, { toValue: 1, duration: 1600, useNativeDriver: Platform.OS !== 'web' })
     );
     loop.start();
     return () => loop.stop();
@@ -1741,13 +1741,12 @@ export default function DriverDashboard() {
 
         {activeGuidance ? (
           <View
-            pointerEvents="none"
             style={[
               styles.mapGuidanceChip,
               isFullScreen
                 ? { top: insets.top + 16, left: 16, right: 76 }
                 : { left: 14, right: 72, bottom: 18 },
-              { backgroundColor: colors.surface, borderColor: colors.border },
+              { backgroundColor: colors.surface, borderColor: colors.border, pointerEvents: 'none' },
             ]}
           >
             <View style={styles.mapGuidanceHeaderRow}>
@@ -1782,9 +1781,8 @@ export default function DriverDashboard() {
                       : insets.top + 16,
                   right: 16,
                 }
-              : { bottom: inlineMapControlsBottom, right: 14 },
+              : { bottom: inlineMapControlsBottom, right: 14, pointerEvents: 'box-none' },
           ]}
-          pointerEvents="box-none"
         >
           <TouchableOpacity
             onPress={() => setIsFullMapVisible((prev) => !prev)}
@@ -1837,11 +1835,10 @@ export default function DriverDashboard() {
               top: insets.top + 12,
               alignSelf: 'center',
               backgroundColor: colors.text,
+              pointerEvents: 'none',
             },
           ]}
-          pointerEvents="none"
         >
-          <FontAwesome name="location-arrow" size={14} color={colors.surface} />
           <Text style={[styles.toastText, { color: colors.surface }]} numberOfLines={2}>
             {toastMessage}
           </Text>
@@ -1852,13 +1849,13 @@ export default function DriverDashboard() {
           Add a solid backdrop behind the footer so the map doesn't show through. */}
       {shouldShowMap ? (
         <View
-          pointerEvents="none"
           style={[
             styles.tabBarBackdrop,
             {
               height: driverTabBarClearance,
               backgroundColor: colors.background,
               zIndex: 999,
+              pointerEvents: 'none',
             },
           ]}
         />
@@ -2203,7 +2200,7 @@ export default function DriverDashboard() {
         <>
       {/* Ping rings (radar circles when online) — hidden when trip in progress so card is clean */}
       {isOnline && !activeMission && (
-        <View style={styles.pingWrap} pointerEvents="none">
+        <View style={[styles.pingWrap, { pointerEvents: 'none' }]}>
           <Animated.View
             style={[
               styles.pingRing,
@@ -2217,7 +2214,7 @@ export default function DriverDashboard() {
 
       {/* Searching / no assignments — effect centered in radar; text in fixed position below */}
       {showSearchingOverlay && (
-        <View style={styles.radarCenterOverlay} pointerEvents="box-none">
+        <View style={[styles.radarCenterOverlay, { pointerEvents: 'box-none' }]}>
           <View style={styles.searchPulseCenterWrap}>
             <View style={styles.searchPulseWrap}>
               <Animated.View

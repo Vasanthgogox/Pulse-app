@@ -507,12 +507,12 @@ export default function NetworkScreen() {
     Animated.parallel([
       Animated.spring(syncToastOpacity, {
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
         speed: 20,
       }),
       Animated.spring(syncToastTranslate, {
         toValue: 0,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
         speed: 20,
       }),
     ]).start(() => {
@@ -521,12 +521,12 @@ export default function NetworkScreen() {
           Animated.timing(syncToastOpacity, {
             toValue: 0,
             duration: 300,
-            useNativeDriver: true,
+            useNativeDriver: Platform.OS !== 'web',
           }),
           Animated.timing(syncToastTranslate, {
             toValue: -16,
             duration: 300,
-            useNativeDriver: true,
+            useNativeDriver: Platform.OS !== 'web',
           }),
         ]).start(() => setShowSuccess(false));
       }, 1200);

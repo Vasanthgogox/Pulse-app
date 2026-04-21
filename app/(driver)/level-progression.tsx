@@ -113,7 +113,7 @@ export default function LevelProgressionScreen() {
 
       {/* Elite Evolution — dark card (same as user profile) */}
       <View style={[styles.eliteCard, Platform.OS === 'ios' ? styles.eliteCardShadowIos : styles.eliteCardShadowAndroid]}>
-        <View style={styles.cardDeco} pointerEvents="none">
+        <View style={[styles.cardDeco, { pointerEvents: 'none' }]}>
           <FontAwesome name="star" size={72} color="rgba(255,255,255,0.12)" />
         </View>
         <Text style={styles.eliteLabel}>Elite Evolution</Text>
@@ -133,7 +133,7 @@ export default function LevelProgressionScreen() {
       {/* Stats grid — Safety, Reliability, Trips Logged, XP Level (same as user profile) */}
       <View style={styles.statsGrid}>
         <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={styles.statCardDeco} pointerEvents="none">
+          <View style={[styles.statCardDeco, { pointerEvents: 'none' }]}>
             <FontAwesome name="shield" size={56} color={colors.emerald ? `${colors.emerald}20` : 'rgba(21,128,61,0.12)'} />
           </View>
           <Text style={[styles.statLabel, { color: colors.textMuted }]}>Safety Score</Text>
@@ -143,7 +143,7 @@ export default function LevelProgressionScreen() {
           </View>
         </View>
         <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={styles.statCardDeco} pointerEvents="none">
+          <View style={[styles.statCardDeco, { pointerEvents: 'none' }]}>
             <FontAwesome name="line-chart" size={56} color={colors.emerald ? `${colors.emerald}20` : 'rgba(21,128,61,0.12)'} />
           </View>
           <Text style={[styles.statLabel, { color: colors.textMuted }]}>Reliability</Text>
@@ -153,7 +153,7 @@ export default function LevelProgressionScreen() {
           </View>
         </View>
         <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={styles.statCardDeco} pointerEvents="none">
+          <View style={[styles.statCardDeco, { pointerEvents: 'none' }]}>
             <FontAwesome name="trophy" size={56} color="rgba(217,119,6,0.14)" />
           </View>
           <Text style={[styles.statLabel, { color: colors.textMuted }]}>Trips Logged</Text>
@@ -163,7 +163,7 @@ export default function LevelProgressionScreen() {
           </View>
         </View>
         <View style={[styles.statCard, styles.statCardDark]}>
-          <View style={styles.statCardDecoDark} pointerEvents="none">
+          <View style={[styles.statCardDecoDark, { pointerEvents: 'none' }]}>
             <FontAwesome name="star" size={56} color="rgba(255,255,255,0.12)" />
           </View>
           <Text style={styles.statLabelDark}>XP Level</Text>
@@ -193,7 +193,7 @@ export default function LevelProgressionScreen() {
                 completed && styles.questCardDone,
               ]}
             >
-              <View style={styles.questCardDeco} pointerEvents="none">
+              <View style={[styles.questCardDeco, { pointerEvents: 'none' }]}>
                 <FontAwesome
                   name={iconName}
                   size={48}

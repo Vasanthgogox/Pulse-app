@@ -4,7 +4,7 @@
  */
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, View } from 'react-native';
+import { Animated, Platform, StyleSheet, View } from 'react-native';
 import Theme from '@/constants/Theme';
 
 export interface BidReceivedHammerProps {
@@ -23,12 +23,12 @@ export function BidReceivedHammer({ visible, size = 14 }: BidReceivedHammerProps
         Animated.timing(rotateAnim, {
           toValue: 1,
           duration: 180,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }),
         Animated.timing(rotateAnim, {
           toValue: 0,
           duration: 120,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }),
       ]);
     const loop = Animated.loop(
