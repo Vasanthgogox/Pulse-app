@@ -983,12 +983,12 @@ export default function DriverRadarScreen() {
         Animated.timing(pingAnim, {
           toValue: 1,
           duration: 2000,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }),
         Animated.timing(pingAnim, {
           toValue: 0,
           duration: 2000,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }),
       ]),
     );
@@ -1814,12 +1814,12 @@ export default function DriverRadarScreen() {
         Animated.timing(pickupDotPingAnim, {
           toValue: 1,
           duration: 900,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }),
         Animated.timing(pickupDotPingAnim, {
           toValue: 0,
           duration: 900,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }),
       ]),
     );
@@ -1852,12 +1852,12 @@ export default function DriverRadarScreen() {
         Animated.timing(newAssignmentBlinkAnim, {
           toValue: 1,
           duration: 900,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }),
         Animated.timing(newAssignmentBlinkAnim, {
           toValue: 0,
           duration: 900,
-          useNativeDriver: true,
+          useNativeDriver: Platform.OS !== 'web',
         }),
       ]),
     );
@@ -2666,7 +2666,7 @@ export default function DriverRadarScreen() {
       Animated.timing(searchPulseAnim, {
         toValue: 1,
         duration: 1600,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }),
     );
     loop.start();

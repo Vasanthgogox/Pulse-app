@@ -6,61 +6,70 @@
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import {
-  Activity,
-  AlertCircle,
-  ArrowLeft,
-  Check,
-  CheckCircle2,
-  ChevronRight,
-  CloudDownload,
-  Inbox,
-  LayoutGrid,
-  Layers,
-  Link2,
-  List,
-  Loader2,
-  Phone,
-  Tag,
-  Target,
-  Truck,
-  X,
-  Zap,
-} from "lucide-react-native";
-import { getTripAdjustments, type TripAdjustment } from "@/features/trips/services/tripAdjustments";
+    getTripAdjustments,
+    type TripAdjustment,
+} from "@/features/trips/services/tripAdjustments";
 import {
-  isBlankOrPlaceholderPartyName,
-  partyAvatarBackgroundColor,
-  partyAvatarInitialsTextColor,
-  partyInitialsFromName,
+    isBlankOrPlaceholderPartyName,
+    partyAvatarBackgroundColor,
+    partyAvatarInitialsTextColor,
+    partyInitialsFromName,
 } from "@/lib/partyAvatarDisplay";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  Alert,
-  Image,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  useWindowDimensions,
+    Activity,
+    AlertCircle,
+    ArrowLeft,
+    Check,
+    CheckCircle2,
+    ChevronRight,
+    CloudDownload,
+    Inbox,
+    Layers,
+    LayoutGrid,
+    Link2,
+    List,
+    Loader2,
+    Phone,
+    Tag,
+    Target,
+    Truck,
+    X,
+    Zap,
+} from "lucide-react-native";
+import {
+    useCallback,
+    useEffect,
+    useMemo,
+    useState,
+    type ReactNode,
+} from "react";
+import {
+    Alert,
+    Image,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+    useWindowDimensions,
 } from "react-native";
 import Animated, {
-  Easing,
-  interpolate,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
+    Easing,
+    interpolate,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  SHARED_LEDGER_AWAITING_PARTNER_UPDATE,
-  SHARED_LEDGER_PARTNER_PENDING_LABEL,
-  type ReconciledRow,
-  type SharedTxnLineKind,
+    SHARED_LEDGER_AWAITING_PARTNER_UPDATE,
+    SHARED_LEDGER_PARTNER_PENDING_LABEL,
+    type ReconciledRow,
+    type SharedTxnLineKind,
 } from "./sharedLedgerTypes";
 
 export type CommandTxnRow = {
@@ -119,7 +128,8 @@ const SLG_FS_ROUTE_HERO = 11;
 const SLG_MIRROR_GAP = 6;
 /** Bridge column width — must match `styles.bridge.width`; `bridgeTrackSpacer` uses gap + bridge + gap. */
 const SLG_BRIDGE_WIDTH = 34;
-const SLG_MIRROR_BRIDGE_TRACK = SLG_MIRROR_GAP + SLG_BRIDGE_WIDTH + SLG_MIRROR_GAP;
+const SLG_MIRROR_BRIDGE_TRACK =
+  SLG_MIRROR_GAP + SLG_BRIDGE_WIDTH + SLG_MIRROR_GAP;
 /** Watermark icon size (trip truck / payment link); scales slightly in animation. */
 const SLG_WATERMARK_ICON_SIZE = 118;
 
@@ -194,7 +204,7 @@ function SlgCardWatermark({ kind }: { kind: "trip" | "payment" }) {
   const size = SLG_WATERMARK_ICON_SIZE;
   const stroke = 1.35;
   return (
-    <View style={styles.missionCardWatermarkShell} pointerEvents="none">
+    <View style={styles.missionCardWatermarkShell}>
       <Animated.View style={[styles.missionCardWatermarkInner, wmStyle]}>
         {kind === "trip" ? (
           <Truck size={size} color={color} strokeWidth={stroke} />
@@ -245,7 +255,9 @@ function normLedgerToken(raw: string | undefined | null): string {
 function displayLedgerToken(raw: string | undefined | null): string {
   const s = (raw ?? "").trim();
   if (!s || s === "—") return "—";
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) {
+  if (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+  ) {
     return `${s.slice(0, 8)}…${s.slice(-4)}`;
   }
   return s.length > 28 ? `${s.slice(0, 14)}…` : s;
@@ -301,9 +313,7 @@ function missionCardSummaryLine(r: ReconciledRow): string {
   return "Only on partner's books";
 }
 
-function filterChipDotColor(
-  key: Exclude<StatusFilterKey, "all">,
-): string {
+function filterChipDotColor(key: Exclude<StatusFilterKey, "all">): string {
   switch (key) {
     case "matched":
       return Theme.darkGreen;
@@ -454,6 +464,12 @@ export interface SharedLedgerCommandCenterProps {
   tripRouteForTripRef?: (tripRef: string) => string | null;
   /** Full-page hub: opens shared-ledger PDF/Excel flow (embedded overlay uses parent header). */
   onPressDownload?: () => void;
+  /** Mission ids with open disputes received from partner (deduped, capped by parent). */
+  receivedDisputeMissions?: string[];
+  /** Open dispute count received from partner for this entity. */
+  openReceivedDisputeCount?: number;
+  /** Opens existing received-dispute review flow for a trip. */
+  onReviewReceivedDispute?: (tripId: string) => void;
 }
 
 /** Tighter type and cards on large browser windows — closer to other Finance screens. */
@@ -574,12 +590,14 @@ export function SharedLedgerCommandCenter({
   missionLabelForTripRef,
   tripRouteForTripRef,
   onPressDownload,
+  receivedDisputeMissions = [],
+  openReceivedDisputeCount = 0,
+  onReviewReceivedDispute,
 }: SharedLedgerCommandCenterProps) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   /** Large browser window: tighter type and cards to match other finance pages. */
-  const isWebDesktop =
-    Platform.OS === "web" && windowWidth >= 1024;
+  const isWebDesktop = Platform.OS === "web" && windowWidth >= 1024;
   /** Stack pending inbox cards on phones / narrow web. */
   const pendingCardsFullWidth = windowWidth < 560;
   /**
@@ -673,8 +691,7 @@ export function SharedLedgerCommandCenter({
     };
   }, [tripFocus?.tripId]);
 
-  const activeCounts =
-    viewMode === "trip" ? tripCounts : txnCounts;
+  const activeCounts = viewMode === "trip" ? tripCounts : txnCounts;
 
   const tripTxns = useMemo(() => {
     if (!tripFocus) return [];
@@ -685,6 +702,8 @@ export function SharedLedgerCommandCenter({
     () => txnRowsAll.filter((t) => t.status === "no_entry").slice(0, 4),
     [txnRowsAll],
   );
+  const showNeedsAttention =
+    pendingSyncTxns.length > 0 || openReceivedDisputeCount > 0;
   const tripTxnMetaByRef = useMemo(() => {
     const map = new Map<string, { count: number; last: string | null }>();
     for (const txn of txnRowsAll) {
@@ -693,18 +712,45 @@ export function SharedLedgerCommandCenter({
       const prev = map.get(key) ?? { count: 0, last: null };
       const candidate = (txn.displayDate ?? txn.date ?? "").trim() || null;
       const nextLast =
-        !prev.last || (candidate && candidate > prev.last) ? candidate : prev.last;
+        !prev.last || (candidate && candidate > prev.last)
+          ? candidate
+          : prev.last;
       map.set(key, { count: prev.count + 1, last: nextLast });
     }
     return map;
   }, [txnRowsAll]);
 
   const findTripByRef = useCallback(
-    (ref: string) => {
+    (ref: string, tripDbId?: string) => {
+      const byDbId = norm(tripDbId);
+      if (byDbId) {
+        const hit = reconciledRows.find((r) => norm(r.tripId) === byDbId);
+        if (hit) return hit;
+      }
       const k = norm(ref);
-      return reconciledRows.find((r) => norm(r.tripId) === k);
+      if (!k) return null;
+      return (
+        reconciledRows.find(
+          (r) => norm(r.tripId) === k || norm(r.missionId) === k,
+        ) ?? null
+      );
     },
     [reconciledRows],
+  );
+
+  const resolveTripForTxn = useCallback(
+    (txn: CommandTxnRow): ReconciledRow | null => {
+      const byRef = findTripByRef(txn.tripRef, txn.tripDbId);
+      if (byRef) return byRef;
+      const missionKey =
+        norm(missionLabelForTripRef?.(txn.tripRef)) || norm(txn.tripRef);
+      if (!missionKey) return null;
+      const byMission = reconciledRows.find(
+        (r) => norm(r.missionId) === missionKey || norm(r.tripId) === missionKey,
+      );
+      return byMission ?? null;
+    },
+    [findTripByRef, missionLabelForTripRef, reconciledRows],
   );
 
   const tripStatusLabel = (r: ReconciledRow) => {
@@ -753,9 +799,23 @@ export function SharedLedgerCommandCenter({
   };
 
   const handleUsePartnerFromTxn = () => {
-    if (!txnFocus) return;
-    const trip = findTripByRef(txnFocus.tripRef);
-    if (!trip || trip.external == null) {
+    if (!txnFocus) {
+      Alert.alert("Select payment", "Pick a payment row first.");
+      return;
+    }
+    if (txnFocus.status === "no_entry" && onMergePartnerTransaction) {
+      setMergePreview(txnFocus);
+      return;
+    }
+    const trip = resolveTripForTxn(txnFocus);
+    if (!trip) {
+      Alert.alert(
+        "Can’t report yet",
+        "We couldn’t link this payment to a trip.",
+      );
+      return;
+    }
+    if (trip.external == null) {
       Alert.alert(
         "Can’t update",
         "We couldn’t find matching trip details from your partner. Try again after data syncs.",
@@ -763,14 +823,19 @@ export function SharedLedgerCommandCenter({
       return;
     }
     onUpdateMyBook(trip);
-    backFromSub();
   };
 
   const handleDisputeFromTxn = () => {
-    if (!txnFocus) return;
-    const trip = findTripByRef(txnFocus.tripRef);
+    if (!txnFocus) {
+      Alert.alert("Select payment", "Pick a payment row first.");
+      return;
+    }
+    const trip = resolveTripForTxn(txnFocus);
     if (!trip) {
-      Alert.alert("Can’t report yet", "We couldn’t link this payment to a trip.");
+      Alert.alert(
+        "Can’t report yet",
+        "We couldn’t link this payment to a trip.",
+      );
       return;
     }
     onRaiseDispute(trip);
@@ -799,7 +864,10 @@ export function SharedLedgerCommandCenter({
       );
       setMergePreview(null);
     } catch {
-      Alert.alert("Couldn’t add", "Please check your connection and try again.");
+      Alert.alert(
+        "Couldn’t add",
+        "Please check your connection and try again.",
+      );
     } finally {
       setMergeSubmitting(false);
     }
@@ -813,1205 +881,1324 @@ export function SharedLedgerCommandCenter({
     { key: "all", label: "All", dot: "neutral" },
     { key: "matched", label: "Same", dot: "matched" },
     { key: "no_entry", label: "Only on their book", dot: "no_entry" },
-    { key: "pending", label: SHARED_LEDGER_PARTNER_PENDING_LABEL, dot: "pending" },
+    {
+      key: "pending",
+      label: SHARED_LEDGER_PARTNER_PENDING_LABEL,
+      dot: "pending",
+    },
     { key: "conflict", label: "Doesn’t match", dot: "conflict" },
   ];
 
   const sharedCore = (
-        <View style={styles.sharedCore}>
-          {pendingSyncTxns.length > 0 ? (
-            <View style={styles.pendingInboxWrap}>
-              <View style={styles.pendingInboxHead}>
-                <Text
-                  style={[
-                    styles.pendingInboxTitle,
-                    isWebDesktop && webDesktopStyles.pendingInboxTitle,
-                  ]}
-                >
-                  Needs your attention
-                </Text>
-                <View style={styles.pendingInboxBadge}>
-                  <Text style={styles.pendingInboxBadgeTxt}>New</Text>
-                </View>
-              </View>
-              <View style={styles.pendingInboxGrid}>
-                {pendingSyncTxns.map((txn, pendingIdx) => {
-                  const tripLabel =
-                    missionLabelForTripRef?.(txn.tripRef) ??
-                    txn.tripRef.toUpperCase();
-                  const routeHint = tripRouteForTripRef?.(txn.tripRef);
-                  const pendingAmt = txn.partnerAmount ?? txn.amountAbs;
-                  const isGhostTrip = txn.hasLocalTrip === false;
-                  const refRaw = (txn.partnerRef ?? "").trim() || "—";
-                  const refDisplay =
-                    refRaw.length > 14 ? `${refRaw.slice(0, 12)}…` : refRaw;
-                  const dateLine =
-                    txn.displayDate ??
-                    (txn.date && txn.date.length >= 10
-                      ? txn.date.slice(0, 10)
-                      : null);
-                  return (
-                    <View
-                      key={`pending:${txn.id}`}
-                      style={[
-                        styles.pendingCardWrap,
-                        pendingCardsFullWidth && styles.pendingCardWrapMobile,
-                        !pendingCardsFullWidth &&
-                          pendingIdx % 3 === 2 &&
-                          styles.pendingCardWrapRowEnd,
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.pendingCard,
-                          isWebDesktop && webDesktopStyles.pendingCard,
-                        ]}
-                      >
-                        <View style={styles.pendingCardGlow} />
-                        <View style={styles.pendingCardTop}>
-                          <View style={styles.pendingCardHeaderRow}>
-                            <SlgPartnerAvatar
-                              partyName={entityName}
-                              profileImageUrl={partnerProfileImageUrl}
-                              size={34}
-                            />
-                            <View style={styles.pendingPartyNameWrap}>
-                              <Text
-                                style={styles.pendingPartyName}
-                                numberOfLines={1}
-                              >
-                                {entityName}
-                              </Text>
-                            </View>
-                            <View style={styles.pendingRefPill}>
-                              <Text
-                                style={styles.pendingRefPillTxt}
-                                numberOfLines={1}
-                              >
-                                {refDisplay}
-                              </Text>
-                            </View>
-                          </View>
-                          <View style={styles.pendingMainRow}>
-                            <View style={styles.pendingMainCol}>
-                              <Text
-                                style={styles.pendingTripDetailLine}
-                                numberOfLines={1}
-                              >
-                                Trip · {tripLabel}
-                              </Text>
-                              {dateLine ? (
-                                <Text
-                                  style={styles.pendingTripDetailMuted}
-                                  numberOfLines={1}
-                                >
-                                  {dateLine}
-                                </Text>
-                              ) : null}
-                              {routeHint ? (
-                                <Text
-                                  style={styles.pendingRouteHint}
-                                  numberOfLines={1}
-                                >
-                                  {routeHint}
-                                </Text>
-                              ) : isGhostTrip ? (
-                                <Text
-                                  style={styles.pendingTripDetailMuted}
-                                  numberOfLines={2}
-                                >
-                                  Route will attach after this trip is created in
-                                  your book.
-                                </Text>
-                              ) : null}
-                              <View style={styles.pendingBookBadge}>
-                                <Text
-                                  style={
-                                    isGhostTrip
-                                      ? styles.pendingBookBadgeGhost
-                                      : styles.pendingBookBadgeOk
-                                  }
-                                  numberOfLines={1}
-                                >
-                                  {isGhostTrip
-                                    ? "Ghost trip (partner book)"
-                                    : "In your book"}
-                                </Text>
-                              </View>
-                            </View>
-                            <Text
-                              style={[
-                                styles.pendingHeroAmount,
-                                isWebDesktop && webDesktopStyles.pendingHeroAmount,
-                              ]}
-                              numberOfLines={2}
-                            >
-                              {formatINR(pendingAmt)}
-                            </Text>
-                          </View>
-                        </View>
-                        <View style={styles.pendingActionRow}>
-                          <Text style={styles.pendingActionHint} numberOfLines={2}>
-                            They logged this — add it to your books?
-                          </Text>
-                          <TouchableOpacity
-                            style={[
-                              styles.pendingActionBtn,
-                              isWebDesktop && webDesktopStyles.pendingActionBtn,
-                            ]}
-                            onPress={() => handleAddPendingSync(txn)}
-                            activeOpacity={0.88}
-                            disabled={actionLoading || mergeSubmitting}
-                          >
-                            <Text style={styles.pendingActionBtnTxt}>
-                              {isGhostTrip ? "Adopt Trip & Finalize" : "Accept Payment Update"}
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    </View>
-                  );
-                })}
-              </View>
-            </View>
-          ) : null}
-
-          <View style={styles.toolbarSingleRow}>
-            <View style={styles.layoutToggle}>
-              <TouchableOpacity
-                style={[
-                  styles.layoutBtn,
-                  viewLayout === "grid" && styles.layoutBtnOn,
-                ]}
-                onPress={() => setViewLayout("grid")}
-                activeOpacity={0.85}
-              >
-                <LayoutGrid
-                  size={16}
-                  color={
-                    viewLayout === "grid"
-                      ? Theme.textPrimaryDark
-                      : Theme.textMuted
-                  }
-                  strokeWidth={2.25}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.layoutBtn,
-                  viewLayout === "table" && styles.layoutBtnOn,
-                ]}
-                onPress={() => setViewLayout("table")}
-                activeOpacity={0.85}
-              >
-                <List
-                  size={16}
-                  color={
-                    viewLayout === "table"
-                      ? Theme.textPrimaryDark
-                      : Theme.textMuted
-                  }
-                  strokeWidth={2.25}
-                />
-              </TouchableOpacity>
-            </View>
-
-            <View
+    <View style={styles.sharedCore}>
+      {showNeedsAttention ? (
+        <View style={styles.pendingInboxWrap}>
+          <View style={styles.pendingInboxHead}>
+            <Text
               style={[
-                styles.compareToggle,
-                isWebDesktop && webDesktopStyles.compareToggle,
+                styles.pendingInboxTitle,
+                isWebDesktop && webDesktopStyles.pendingInboxTitle,
               ]}
             >
-              <TouchableOpacity
-                style={[
-                  styles.compareBtn,
-                  viewMode === "trip" && styles.compareBtnOn,
-                  isWebDesktop && webDesktopStyles.compareBtn,
-                ]}
-                onPress={() => setViewMode("trip")}
-              >
-                <Text
-                  style={[
-                    styles.compareBtnTxt,
-                    viewMode === "trip" && styles.compareBtnTxtOn,
-                    isWebDesktop && webDesktopStyles.compareBtnTxt,
-                  ]}
-                >
-                  By trip
-                </Text>
-                <View
-                  style={[
-                    styles.compareCount,
-                    viewMode === "trip" && styles.compareCountOn,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.compareCountTxt,
-                      viewMode === "trip" && styles.compareCountTxtOn,
-                    ]}
-                  >
-                    {tripCounts.all}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.compareBtn,
-                  viewMode === "txn" && styles.compareBtnOn,
-                  isWebDesktop && webDesktopStyles.compareBtn,
-                ]}
-                onPress={() => setViewMode("txn")}
-              >
-                <Text
-                  style={[
-                    styles.compareBtnTxt,
-                    viewMode === "txn" && styles.compareBtnTxtOn,
-                    isWebDesktop && webDesktopStyles.compareBtnTxt,
-                  ]}
-                >
-                  By payment
-                </Text>
-                <View
-                  style={[
-                    styles.compareCount,
-                    viewMode === "txn" && styles.compareCountOn,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.compareCountTxt,
-                      viewMode === "txn" && styles.compareCountTxtOn,
-                    ]}
-                  >
-                    {txnCounts.all}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.chipScrollView}
-              contentContainerStyle={styles.chipScrollRow}
-            >
-              {hubFilters.map((f) => {
-                const on = statusFilter === f.key;
-                const count =
-                  f.key === "all" ? activeCounts.all : activeCounts[f.key];
-                return (
-                  <TouchableOpacity
-                    key={f.key}
-                    style={[styles.chip, on && styles.chipOn]}
-                    onPress={() => setStatusFilter(f.key)}
-                  >
-                    {f.key !== "all" ? (
-                      <View
-                        style={[
-                          styles.chipDot,
-                          {
-                            backgroundColor:
-                              f.dot === "neutral"
-                                ? Theme.borderMedium
-                                : filterChipDotColor(f.dot),
-                          },
-                        ]}
-                      />
-                    ) : null}
-                    <Text style={[styles.chipTxt, on && styles.chipTxtOn]}>
-                      {f.label}
-                    </Text>
-                    <Text style={[styles.chipCnt, on && styles.chipCntOn]}>
-                      {count}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-
-          <View style={styles.gridHeader}>
-            <Text
-              style={[styles.gridTitle, isWebDesktop && webDesktopStyles.gridTitle]}
-            >
-              Trips & payments
+              Needs your attention
             </Text>
-            <View style={styles.gridBadge}>
-              <Text style={styles.gridBadgeTxt}>With partner</Text>
+            <View style={styles.pendingInboxBadge}>
+              <Text style={styles.pendingInboxBadgeTxt}>
+                {pendingSyncTxns.length + openReceivedDisputeCount}
+              </Text>
             </View>
           </View>
-
-          {viewMode === "trip" ? (
-            filteredRows.length === 0 ? (
-              <View style={styles.empty}>
-                <Inbox size={32} color={Theme.textMuted} strokeWidth={1.75} />
-                <Text style={styles.emptyTxt}>
-                  No trips match this filter.
-                </Text>
-              </View>
-            ) : (
-              viewLayout === "table" ? (
-                <View
-                  style={[
-                    styles.auditTableCard,
-                    isWebDesktop && webDesktopStyles.auditTableCard,
-                  ]}
-                >
-                  <ScrollView
-                    horizontal
-                    nestedScrollEnabled
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.auditTableHScroll}
-                    contentContainerStyle={[
-                      styles.auditTableHScrollContent,
-                      { minWidth: tripFleetTableLayout.tableWidth },
+          {openReceivedDisputeCount > 0 ? (
+            <View style={styles.pendingInboxGrid}>
+              {receivedDisputeMissions.map((missionId, idx) => {
+                const row = reconciledRows.find(
+                  (r) => norm(r.missionId) === norm(missionId),
+                );
+                const routeHint = row
+                  ? tripRouteForTripRef?.(row.tripId)
+                  : null;
+                return (
+                  <View
+                    key={`dispute:${missionId}:${idx}`}
+                    style={[
+                      styles.pendingCardWrap,
+                      pendingCardsFullWidth && styles.pendingCardWrapMobile,
+                      !pendingCardsFullWidth &&
+                        idx % 3 === 2 &&
+                        styles.pendingCardWrapRowEnd,
                     ]}
                   >
                     <View
                       style={[
-                        styles.auditTableInner,
-                        {
-                          width: tripFleetTableLayout.tableWidth,
-                          minWidth: tripFleetTableLayout.tableWidth,
-                        },
+                        styles.pendingCard,
+                        isWebDesktop && webDesktopStyles.pendingCard,
                       ]}
                     >
-                      <View style={styles.auditThead}>
-                        <View style={[styles.auditTh, styles.fleetThMission]}>
-                          <Text style={styles.auditThTxt}>Mission</Text>
+                      <View style={styles.pendingCardGlow} />
+                      <View style={styles.pendingCardTop}>
+                        <View style={styles.pendingCardHeaderRow}>
+                          <SlgPartnerAvatar
+                            partyName={entityName}
+                            profileImageUrl={partnerProfileImageUrl}
+                            size={34}
+                          />
+                          <View style={styles.pendingPartyNameWrap}>
+                            <Text style={styles.pendingPartyName} numberOfLines={1}>
+                              {entityName}
+                            </Text>
+                          </View>
+                          <View style={styles.pendingRefPill}>
+                            <Text style={styles.pendingRefPillTxt} numberOfLines={1}>
+                              DISPUTE
+                            </Text>
+                          </View>
                         </View>
-                        <View style={[styles.auditTh, styles.fleetThRoute]}>
-                          <Text style={styles.auditThTxt}>Route</Text>
-                        </View>
-                        <View style={[styles.auditTh, styles.fleetThPartner]}>
-                          <Text style={styles.auditThTxt}>Partner</Text>
-                        </View>
-                        <View style={[styles.auditTh, styles.fleetThMoney]}>
-                          <Text style={[styles.auditThTxt, styles.fleetThTxtTab]}>Sales</Text>
-                        </View>
-                        <View style={[styles.auditTh, styles.fleetThMoney]}>
-                          <Text style={[styles.auditThTxt, styles.fleetThTxtTab]}>Received</Text>
-                        </View>
-                        <View style={[styles.auditTh, styles.fleetThMoney]}>
-                          <Text style={[styles.auditThTxt, styles.fleetThTxtTab]}>Due</Text>
-                        </View>
-                        <View style={[styles.auditTh, styles.fleetThMetaTxn]}>
-                          <Text style={[styles.auditThTxt, styles.fleetThTxtTab]}>Txns</Text>
-                        </View>
-                        <View style={[styles.auditTh, styles.fleetThMetaLast]}>
-                          <Text style={[styles.auditThTxt, styles.auditThTxtCenter]}>Last txn</Text>
-                        </View>
-                        <View style={[styles.auditTh, styles.fleetThSync]}>
-                          <Text style={[styles.auditThTxt, styles.auditThTxtCenter]}>Sync</Text>
-                        </View>
-                      </View>
-                      {filteredRows.map((row) => {
-                        const partnerSales = row.external ? row.extSales : null;
-                        const partnerPaid = row.external ? row.extPaid : null;
-                        const intPaidTrip =
-                          entityType === "SUPPLIER"
-                            ? row.intPaidOut
-                            : row.intPaid;
-                        const routeHint = tripRouteForTripRef?.(row.tripId) ?? "—";
-                        const txnMeta = tripTxnMetaByRef.get(norm(row.tripId));
-                        const mySales = row.intSales;
-                        const billingConflict =
-                          partnerSales != null &&
-                          Math.abs(partnerSales - mySales) >= 0.5;
-                        const paymentConflict =
-                          partnerPaid != null &&
-                          Math.abs(partnerPaid - intPaidTrip) >= 0.5;
-                        const syncSafe = !billingConflict && !paymentConflict;
-                        return (
-                          <TouchableOpacity
-                            key={`tbl-trip:${row.tripId}`}
-                            style={styles.auditRowFleet}
-                            onPress={() => openTripDetail(row)}
-                            activeOpacity={0.88}
-                          >
-                            <View style={styles.fleetCellMission}>
-                              {billingConflict ? (
-                                <View style={styles.auditConflictBar} />
-                              ) : null}
-                              <View style={styles.auditIdRow}>
-                                <View
-                                  style={[
-                                    styles.auditIdIcon,
-                                    billingConflict && styles.auditIdIconRose,
-                                  ]}
-                                >
-                                  <Truck
-                                    size={16}
-                                    color={
-                                      billingConflict
-                                        ? Theme.teslaRed
-                                        : Theme.textMuted
-                                    }
-                                  />
-                                </View>
-                                <View style={styles.auditIdTextBlock}>
-                                  <Text
-                                    style={styles.auditIdTitle}
-                                    numberOfLines={1}
-                                  >
-                                    {row.missionId}
-                                  </Text>
-                                  <Text
-                                    style={styles.auditIdMeta}
-                                    numberOfLines={1}
-                                  >
-                                    {tripStatusLabel(row)}
-                                  </Text>
-                                </View>
-                              </View>
-                            </View>
-                            <View style={styles.fleetCellRoute}>
-                              <Text style={styles.fleetRouteText} numberOfLines={2}>
+                        <View style={styles.pendingMainRow}>
+                          <View style={styles.pendingMainCol}>
+                            <Text
+                              style={styles.pendingTripDetailLine}
+                              numberOfLines={1}
+                            >
+                              Trip · {missionId}
+                            </Text>
+                            {routeHint ? (
+                              <Text
+                                style={styles.pendingRouteHint}
+                                numberOfLines={1}
+                              >
                                 {routeHint}
                               </Text>
-                            </View>
-                            <View style={styles.fleetCellPartner}>
-                              <View style={styles.fleetPartnerRow}>
-                                <SlgPartnerAvatar
-                                  partyName={entityName}
-                                  profileImageUrl={partnerProfileImageUrl}
-                                  size={28}
-                                />
-                                <View style={styles.fleetPartnerTextCol}>
-                                  <Text style={styles.fleetPartnerName} numberOfLines={2}>
-                                    {entityName}
-                                  </Text>
-                                  <Text style={styles.fleetPartnerSub} numberOfLines={1}>
-                                    {partnerSales != null
-                                      ? "In partner book"
-                                      : SHARED_LEDGER_AWAITING_PARTNER_UPDATE}
-                                  </Text>
-                                </View>
-                              </View>
-                            </View>
-                            <View style={styles.fleetCellMoney}>
-                              <View style={styles.fleetMoneyCol}>
-                                <Text style={styles.fleetMoneyVal}>
-                                  {row.internal ? formatINR(mySales) : "—"}
-                                </Text>
-                                <Text
-                                  style={[
-                                    styles.fleetMoneySub,
-                                    billingConflict && styles.fleetMoneySubWarn,
-                                  ]}
-                                >
-                                  {partnerSales != null
-                                    ? `Them ${formatINR(partnerSales)}`
-                                    : "Them —"}
-                                </Text>
-                              </View>
-                            </View>
-                            <View style={styles.fleetCellMoney}>
-                              <View style={styles.fleetMoneyCol}>
-                                <Text style={[styles.fleetMoneyVal, styles.fleetMoneyGood]}>
-                                  {formatINR(intPaidTrip)}
-                                </Text>
-                                <Text
-                                  style={[
-                                    styles.fleetMoneySub,
-                                    paymentConflict && styles.fleetMoneySubWarn,
-                                  ]}
-                                >
-                                  {partnerPaid != null
-                                    ? `Them ${formatINR(partnerPaid)}`
-                                    : "Them —"}
-                                </Text>
-                              </View>
-                            </View>
-                            <View style={styles.fleetCellMoney}>
-                              <View style={styles.fleetMoneyCol}>
-                                <Text style={[styles.fleetMoneyVal, styles.fleetMoneyDue]}>
-                                  {formatINR(Math.max(0, mySales - intPaidTrip))}
-                                </Text>
-                                <Text
-                                  style={styles.fleetMoneySubSpacer}
-                                  accessible={false}
-                                  importantForAccessibility="no-hide-descendants"
-                                >
-                                  {"\u00a0"}
-                                </Text>
-                              </View>
-                            </View>
-                            <View style={styles.fleetCellMetaTxn}>
-                              <View style={styles.fleetMetaColRight}>
-                                <Text style={styles.fleetMetaValTab}>{txnMeta?.count ?? 0}</Text>
-                                <Text
-                                  style={styles.fleetMoneySubSpacer}
-                                  accessible={false}
-                                  importantForAccessibility="no-hide-descendants"
-                                >
-                                  {"\u00a0"}
-                                </Text>
-                              </View>
-                            </View>
-                            <View style={styles.fleetCellMetaLast}>
-                              <View style={styles.fleetMetaColCenter}>
-                                <Text style={styles.fleetMetaValDate} numberOfLines={1}>
-                                  {txnMeta?.last ?? "—"}
-                                </Text>
-                                <Text
-                                  style={styles.fleetMoneySubSpacerCenter}
-                                  accessible={false}
-                                  importantForAccessibility="no-hide-descendants"
-                                >
-                                  {"\u00a0"}
-                                </Text>
-                              </View>
-                            </View>
-                            <View style={styles.fleetCellSync}>
-                              <View
-                                style={[
-                                  styles.fleetSyncIcon,
-                                  syncSafe ? styles.fleetSyncIconOk : styles.fleetSyncIconBad,
-                                ]}
-                              >
-                                {syncSafe ? (
-                                  <Check size={13} color={Theme.darkGreen} />
-                                ) : (
-                                  <Zap
-                                    size={13}
-                                    color={Theme.teslaRed}
-                                    fill={Theme.teslaRed}
-                                    strokeWidth={2}
-                                  />
-                                )}
-                              </View>
-                              <Text
-                                style={[
-                                  styles.fleetSyncLabel,
-                                  syncSafe
-                                    ? styles.fleetSyncLabelOk
-                                    : styles.fleetSyncLabelBad,
-                                ]}
-                              >
-                                {syncSafe ? "Safe" : "Fix"}
+                            ) : null}
+                            <View style={styles.pendingBookBadge}>
+                              <Text style={styles.pendingBookBadgeGhost}>
+                                Partner raised dispute
                               </Text>
                             </View>
-                          </TouchableOpacity>
-                        );
-                      })}
+                          </View>
+                          <Text
+                            style={[
+                              styles.pendingHeroAmount,
+                              isWebDesktop && webDesktopStyles.pendingHeroAmount,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            OPEN
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.pendingActionRow}>
+                        <Text style={styles.pendingActionHint} numberOfLines={2}>
+                          Review this trip and resolve the dispute.
+                        </Text>
+                        <TouchableOpacity
+                          style={[
+                            styles.pendingActionBtn,
+                            isWebDesktop && webDesktopStyles.pendingActionBtn,
+                          ]}
+                          onPress={() => {
+                            if (row) onReviewReceivedDispute?.(row.tripId);
+                          }}
+                          activeOpacity={0.88}
+                          disabled={!row}
+                        >
+                          <Text style={styles.pendingActionBtnTxt}>
+                            Review Dispute
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
-                  </ScrollView>
-                  <View style={styles.auditTableFooter}>
-                    <View style={styles.auditFooterDot} />
-                    <Text style={styles.auditFooterTxt}>
-                      Tap a row to open the trip comparison.
-                    </Text>
                   </View>
-                </View>
-              ) : (
-                <View
-                  style={isWebDesktop ? styles.tripGridWrap : styles.tripGridWrapMobile}
-                >
-                  {filteredRows.map((row) => {
-                const intPaid =
-                  entityType === "SUPPLIER" ? row.intPaidOut : row.intPaid;
-                const partnerSales = row.external ? row.extSales : null;
-                const delta =
-                  row.external != null
-                    ? row.extSales - row.intSales
-                    : null;
-                const card = (
-                  <TouchableOpacity
+                );
+              })}
+            </View>
+          ) : null}
+          {pendingSyncTxns.length > 0 ? (
+            <View style={styles.pendingInboxGrid}>
+              {pendingSyncTxns.map((txn, pendingIdx) => {
+                const tripLabel =
+                  missionLabelForTripRef?.(txn.tripRef) ??
+                  txn.tripRef.toUpperCase();
+                const routeHint = tripRouteForTripRef?.(txn.tripRef);
+                const pendingAmt = txn.partnerAmount ?? txn.amountAbs;
+                const isGhostTrip = txn.hasLocalTrip === false;
+                const refRaw = (txn.partnerRef ?? "").trim() || "—";
+                const refDisplay =
+                  refRaw.length > 14 ? `${refRaw.slice(0, 12)}…` : refRaw;
+                const dateLine =
+                  txn.displayDate ??
+                  (txn.date && txn.date.length >= 10
+                    ? txn.date.slice(0, 10)
+                    : null);
+                return (
+                  <View
+                    key={`pending:${txn.id}`}
                     style={[
-                      styles.missionCard,
-                      isWebDesktop && webDesktopStyles.missionCard,
-                      isWebDesktop && webDesktopStyles.missionCardGrid,
+                      styles.pendingCardWrap,
+                      pendingCardsFullWidth && styles.pendingCardWrapMobile,
+                      !pendingCardsFullWidth &&
+                        pendingIdx % 3 === 2 &&
+                        styles.pendingCardWrapRowEnd,
                     ]}
-                    onPress={() => openTripDetail(row)}
-                    activeOpacity={0.88}
                   >
-                    <SlgCardWatermark kind="trip" />
-                    <View style={[styles.hubCardAccentBar, hubTripAccentStyle(row)]} />
                     <View
                       style={[
-                        styles.missionHead,
-                        isWebDesktop && webDesktopStyles.missionHead,
+                        styles.pendingCard,
+                        isWebDesktop && webDesktopStyles.pendingCard,
                       ]}
                     >
-                      <View style={styles.missionHeadLeft}>
-                        <SlgPartnerAvatar
-                          partyName={entityName}
-                          profileImageUrl={partnerProfileImageUrl}
-                          size={44}
-                        />
-                        <View style={styles.missionTitleBlock}>
-                          <View style={styles.missionEntityRow}>
+                      <View style={styles.pendingCardGlow} />
+                      <View style={styles.pendingCardTop}>
+                        <View style={styles.pendingCardHeaderRow}>
+                          <SlgPartnerAvatar
+                            partyName={entityName}
+                            profileImageUrl={partnerProfileImageUrl}
+                            size={34}
+                          />
+                          <View style={styles.pendingPartyNameWrap}>
                             <Text
-                              style={styles.missionPartnerLineInline}
+                              style={styles.pendingPartyName}
                               numberOfLines={1}
                             >
                               {entityName}
                             </Text>
                           </View>
-                          <View style={styles.missionIdRow}>
+                          <View style={styles.pendingRefPill}>
                             <Text
-                              style={[
-                                styles.missionId,
-                                isWebDesktop && webDesktopStyles.missionId,
-                                styles.missionIdHero,
-                              ]}
+                              style={styles.pendingRefPillTxt}
                               numberOfLines={1}
                             >
-                              {row.missionId}
+                              {refDisplay}
                             </Text>
-                            {delta != null && delta !== 0 ? (
-                              <Text style={styles.deltaTxtInline} numberOfLines={1}>
-                                Diff {formatINR(Math.abs(delta))}
+                          </View>
+                        </View>
+                        <View style={styles.pendingMainRow}>
+                          <View style={styles.pendingMainCol}>
+                            <Text
+                              style={styles.pendingTripDetailLine}
+                              numberOfLines={1}
+                            >
+                              Trip · {tripLabel}
+                            </Text>
+                            {dateLine ? (
+                              <Text
+                                style={styles.pendingTripDetailMuted}
+                                numberOfLines={1}
+                              >
+                                {dateLine}
                               </Text>
                             ) : null}
-                          </View>
-                          <View style={styles.missionRouteManifest}>
-                            <Text
-                              style={styles.missionRouteLine}
-                              numberOfLines={2}
-                            >
-                              {tripRouteForTripRef?.(row.tripId) ?? "Route pending"}
-                            </Text>
+                            {routeHint ? (
+                              <Text
+                                style={styles.pendingRouteHint}
+                                numberOfLines={1}
+                              >
+                                {routeHint}
+                              </Text>
+                            ) : isGhostTrip ? (
+                              <Text
+                                style={styles.pendingTripDetailMuted}
+                                numberOfLines={2}
+                              >
+                                Route will attach after this trip is created in
+                                your book.
+                              </Text>
+                            ) : null}
+                            <View style={styles.pendingBookBadge}>
+                              <Text
+                                style={
+                                  isGhostTrip
+                                    ? styles.pendingBookBadgeGhost
+                                    : styles.pendingBookBadgeOk
+                                }
+                                numberOfLines={1}
+                              >
+                                {isGhostTrip
+                                  ? "Ghost trip (partner book)"
+                                  : "In your book"}
+                              </Text>
+                            </View>
                           </View>
                           <Text
                             style={[
-                              styles.missionCardSummary,
-                              isWebDesktop && styles.missionCardSummaryDesktop,
+                              styles.pendingHeroAmount,
+                              isWebDesktop && webDesktopStyles.pendingHeroAmount,
                             ]}
                             numberOfLines={2}
                           >
-                            {missionCardSummaryLine(row)}
+                            {formatINR(pendingAmt)}
                           </Text>
-                          <View style={styles.missionBadges}>
-                            <Text
-                              style={[
-                                styles.badge,
-                                tripBadgeVariant(row),
-                                styles.missionStatusBadge,
-                              ]}
-                            >
+                        </View>
+                      </View>
+                      <View style={styles.pendingActionRow}>
+                        <Text style={styles.pendingActionHint} numberOfLines={2}>
+                          They logged this — add it to your books?
+                        </Text>
+                        <TouchableOpacity
+                          style={[
+                            styles.pendingActionBtn,
+                            isWebDesktop && webDesktopStyles.pendingActionBtn,
+                          ]}
+                          onPress={() => handleAddPendingSync(txn)}
+                          activeOpacity={0.88}
+                          disabled={actionLoading || mergeSubmitting}
+                        >
+                          <Text style={styles.pendingActionBtnTxt}>
+                            {isGhostTrip
+                              ? "Adopt Trip & Finalize"
+                              : "Accept Payment Update"}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      <View style={styles.toolbarSingleRow}>
+        <View style={styles.layoutToggle}>
+          <TouchableOpacity
+            style={[
+              styles.layoutBtn,
+              viewLayout === "grid" && styles.layoutBtnOn,
+            ]}
+            onPress={() => setViewLayout("grid")}
+            activeOpacity={0.85}
+          >
+            <LayoutGrid
+              size={16}
+              color={
+                viewLayout === "grid" ? Theme.textPrimaryDark : Theme.textMuted
+              }
+              strokeWidth={2.25}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.layoutBtn,
+              viewLayout === "table" && styles.layoutBtnOn,
+            ]}
+            onPress={() => setViewLayout("table")}
+            activeOpacity={0.85}
+          >
+            <List
+              size={16}
+              color={
+                viewLayout === "table" ? Theme.textPrimaryDark : Theme.textMuted
+              }
+              strokeWidth={2.25}
+            />
+          </TouchableOpacity>
+        </View>
+
+        <View
+          style={[
+            styles.compareToggle,
+            isWebDesktop && webDesktopStyles.compareToggle,
+          ]}
+        >
+          <TouchableOpacity
+            style={[
+              styles.compareBtn,
+              viewMode === "trip" && styles.compareBtnOn,
+              isWebDesktop && webDesktopStyles.compareBtn,
+            ]}
+            onPress={() => setViewMode("trip")}
+          >
+            <Text
+              style={[
+                styles.compareBtnTxt,
+                viewMode === "trip" && styles.compareBtnTxtOn,
+                isWebDesktop && webDesktopStyles.compareBtnTxt,
+              ]}
+            >
+              By trip
+            </Text>
+            <View
+              style={[
+                styles.compareCount,
+                viewMode === "trip" && styles.compareCountOn,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.compareCountTxt,
+                  viewMode === "trip" && styles.compareCountTxtOn,
+                ]}
+              >
+                {tripCounts.all}
+              </Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.compareBtn,
+              viewMode === "txn" && styles.compareBtnOn,
+              isWebDesktop && webDesktopStyles.compareBtn,
+            ]}
+            onPress={() => setViewMode("txn")}
+          >
+            <Text
+              style={[
+                styles.compareBtnTxt,
+                viewMode === "txn" && styles.compareBtnTxtOn,
+                isWebDesktop && webDesktopStyles.compareBtnTxt,
+              ]}
+            >
+              By payment
+            </Text>
+            <View
+              style={[
+                styles.compareCount,
+                viewMode === "txn" && styles.compareCountOn,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.compareCountTxt,
+                  viewMode === "txn" && styles.compareCountTxtOn,
+                ]}
+              >
+                {txnCounts.all}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.chipScrollView}
+          contentContainerStyle={styles.chipScrollRow}
+        >
+          {hubFilters.map((f) => {
+            const on = statusFilter === f.key;
+            const count =
+              f.key === "all" ? activeCounts.all : activeCounts[f.key];
+            return (
+              <TouchableOpacity
+                key={f.key}
+                style={[styles.chip, on && styles.chipOn]}
+                onPress={() => setStatusFilter(f.key)}
+              >
+                {f.key !== "all" ? (
+                  <View
+                    style={[
+                      styles.chipDot,
+                      {
+                        backgroundColor:
+                          f.dot === "neutral"
+                            ? Theme.borderMedium
+                            : filterChipDotColor(f.dot),
+                      },
+                    ]}
+                  />
+                ) : null}
+                <Text style={[styles.chipTxt, on && styles.chipTxtOn]}>
+                  {f.label}
+                </Text>
+                <Text style={[styles.chipCnt, on && styles.chipCntOn]}>
+                  {count}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      <View style={styles.gridHeader}>
+        <Text
+          style={[styles.gridTitle, isWebDesktop && webDesktopStyles.gridTitle]}
+        >
+          Trips & payments
+        </Text>
+        <View style={styles.gridBadge}>
+          <Text style={styles.gridBadgeTxt}>With partner</Text>
+        </View>
+      </View>
+
+      {viewMode === "trip" ? (
+        filteredRows.length === 0 ? (
+          <View style={styles.empty}>
+            <Inbox size={32} color={Theme.textMuted} strokeWidth={1.75} />
+            <Text style={styles.emptyTxt}>No trips match this filter.</Text>
+          </View>
+        ) : viewLayout === "table" ? (
+          <View
+            style={[
+              styles.auditTableCard,
+              isWebDesktop && webDesktopStyles.auditTableCard,
+            ]}
+          >
+            <ScrollView
+              horizontal
+              nestedScrollEnabled
+              showsHorizontalScrollIndicator={false}
+              style={styles.auditTableHScroll}
+              contentContainerStyle={[
+                styles.auditTableHScrollContent,
+                { minWidth: tripFleetTableLayout.tableWidth },
+              ]}
+            >
+              <View
+                style={[
+                  styles.auditTableInner,
+                  {
+                    width: tripFleetTableLayout.tableWidth,
+                    minWidth: tripFleetTableLayout.tableWidth,
+                  },
+                ]}
+              >
+                <View style={styles.auditThead}>
+                  <View style={[styles.auditTh, styles.fleetThMission]}>
+                    <Text style={styles.auditThTxt}>Mission</Text>
+                  </View>
+                  <View style={[styles.auditTh, styles.fleetThRoute]}>
+                    <Text style={styles.auditThTxt}>Route</Text>
+                  </View>
+                  <View style={[styles.auditTh, styles.fleetThPartner]}>
+                    <Text style={styles.auditThTxt}>Partner</Text>
+                  </View>
+                  <View style={[styles.auditTh, styles.fleetThMoney]}>
+                    <Text style={[styles.auditThTxt, styles.fleetThTxtTab]}>
+                      Sales
+                    </Text>
+                  </View>
+                  <View style={[styles.auditTh, styles.fleetThMoney]}>
+                    <Text style={[styles.auditThTxt, styles.fleetThTxtTab]}>
+                      Received
+                    </Text>
+                  </View>
+                  <View style={[styles.auditTh, styles.fleetThMoney]}>
+                    <Text style={[styles.auditThTxt, styles.fleetThTxtTab]}>
+                      Due
+                    </Text>
+                  </View>
+                  <View style={[styles.auditTh, styles.fleetThMetaTxn]}>
+                    <Text style={[styles.auditThTxt, styles.fleetThTxtTab]}>
+                      Txns
+                    </Text>
+                  </View>
+                  <View style={[styles.auditTh, styles.fleetThMetaLast]}>
+                    <Text style={[styles.auditThTxt, styles.auditThTxtCenter]}>
+                      Last txn
+                    </Text>
+                  </View>
+                  <View style={[styles.auditTh, styles.fleetThSync]}>
+                    <Text style={[styles.auditThTxt, styles.auditThTxtCenter]}>
+                      Sync
+                    </Text>
+                  </View>
+                </View>
+                {filteredRows.map((row) => {
+                  const partnerSales = row.external ? row.extSales : null;
+                  const partnerPaid = row.external ? row.extPaid : null;
+                  const intPaidTrip =
+                    entityType === "SUPPLIER" ? row.intPaidOut : row.intPaid;
+                  const routeHint = tripRouteForTripRef?.(row.tripId) ?? "—";
+                  const txnMeta = tripTxnMetaByRef.get(norm(row.tripId));
+                  const mySales = row.intSales;
+                  const billingConflict =
+                    partnerSales != null &&
+                    Math.abs(partnerSales - mySales) >= 0.5;
+                  const paymentConflict =
+                    partnerPaid != null &&
+                    Math.abs(partnerPaid - intPaidTrip) >= 0.5;
+                  const syncSafe = !billingConflict && !paymentConflict;
+                  return (
+                    <TouchableOpacity
+                      key={`tbl-trip:${row.tripId}`}
+                      style={styles.auditRowFleet}
+                      onPress={() => openTripDetail(row)}
+                      activeOpacity={0.88}
+                    >
+                      <View style={styles.fleetCellMission}>
+                        {billingConflict ? (
+                          <View style={styles.auditConflictBar} />
+                        ) : null}
+                        <View style={styles.auditIdRow}>
+                          <View
+                            style={[
+                              styles.auditIdIcon,
+                              billingConflict && styles.auditIdIconRose,
+                            ]}
+                          >
+                            <Truck
+                              size={16}
+                              color={
+                                billingConflict
+                                  ? Theme.teslaRed
+                                  : Theme.textMuted
+                              }
+                            />
+                          </View>
+                          <View style={styles.auditIdTextBlock}>
+                            <Text style={styles.auditIdTitle} numberOfLines={1}>
+                              {row.missionId}
+                            </Text>
+                            <Text style={styles.auditIdMeta} numberOfLines={1}>
                               {tripStatusLabel(row)}
                             </Text>
                           </View>
                         </View>
                       </View>
-                      <View style={styles.missionChevronWrap}>
-                        <SlgIconPulse>
-                          <ChevronRight
-                            size={24}
-                            color={Theme.textMuted}
-                            strokeWidth={2.25}
+                      <View style={styles.fleetCellRoute}>
+                        <Text style={styles.fleetRouteText} numberOfLines={2}>
+                          {routeHint}
+                        </Text>
+                      </View>
+                      <View style={styles.fleetCellPartner}>
+                        <View style={styles.fleetPartnerRow}>
+                          <SlgPartnerAvatar
+                            partyName={entityName}
+                            profileImageUrl={partnerProfileImageUrl}
+                            size={28}
                           />
-                        </SlgIconPulse>
-                      </View>
-                    </View>
-                    <View
-                      style={[
-                        styles.mirrorBlock,
-                        isWebDesktop && webDesktopStyles.tripGridMirrorBlock,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.mirrorSaleCaption,
-                          isWebDesktop &&
-                            webDesktopStyles.mirrorSaleCaptionDesktop,
-                        ]}
-                      >
-                        Sale value
-                      </Text>
-                      <View
-                        style={[
-                          styles.mirrorColumnsRow,
-                          isWebDesktop && webDesktopStyles.tripGridMirrorInner,
-                        ]}
-                      >
-                          <View style={[styles.mirrorMy, styles.mirrorMyHub]}>
-                            <Text style={[styles.mirrorLbl, styles.mirrorLblHub]}>
-                              {myBookLabel}
-                            </Text>
-                            <Text style={[styles.mirrorAmt, styles.mirrorAmtHub]}>
-                              {row.internal ? formatINR(row.intSales) : "—"}
-                            </Text>
-                          </View>
-                          <View style={styles.bridge}>
-                            <View style={styles.bridgeInner}>
-                              <SlgIconPulse>
-                                {row.status === "MISMATCH" ? (
-                                  <Zap
-                                    size={14}
-                                    color={Theme.teslaRed}
-                                    fill={Theme.teslaRed}
-                                    strokeWidth={2}
-                                  />
-                                ) : (
-                                  <Activity
-                                    size={14}
-                                    color={
-                                      row.status === "VERIFIED"
-                                        ? Theme.darkGreen
-                                        : Theme.primary
-                                    }
-                                    strokeWidth={2.25}
-                                  />
-                                )}
-                              </SlgIconPulse>
-                            </View>
-                          </View>
-                          <View
-                            style={[
-                              styles.mirrorPartner,
-                              !row.external && styles.mirrorPartnerWait,
-                              !!row.external && styles.mirrorPartnerHubDark,
-                            ]}
-                          >
+                          <View style={styles.fleetPartnerTextCol}>
                             <Text
-                              style={[
-                                styles.mirrorLbl,
-                                styles.mirrorLblPartner,
-                                styles.mirrorLblHub,
-                                !!row.external && styles.hubMirrorLblOnDark,
-                              ]}
-                            >
-                              {partnerLabel}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.mirrorAmt,
-                                styles.mirrorAmtPartner,
-                                styles.mirrorAmtHub,
-                                partnerSales == null && row.status === "PENDING"
-                                  ? styles.waitTxt
-                                  : partnerSales == null
-                                    ? styles.waitTxt
-                                    : null,
-                                partnerSales == null ? styles.waitTxtPartner : null,
-                                !!row.external &&
-                                  partnerSales != null &&
-                                  styles.auditAmtOnDark,
-                              ]}
-                            >
-                              {row.status === "PENDING" && !row.external
-                                ? SHARED_LEDGER_PARTNER_PENDING_LABEL
-                                : partnerSales != null
-                                  ? formatINR(partnerSales)
-                                  : "—"}
-                            </Text>
-                          </View>
-                      </View>
-                    </View>
-                    <View
-                      style={[
-                        styles.paidRow,
-                        isWebDesktop && webDesktopStyles.tripGridPaid,
-                      ]}
-                    >
-                      <View style={styles.paidColumnsRow}>
-                        <View style={styles.paidCell}>
-                          <Text style={styles.paidLbl}>
-                            Paid · {myBookLabel}
-                          </Text>
-                          <Text style={styles.paidAmt}>
-                            {row.internal ? formatINR(intPaid) : "—"}
-                          </Text>
-                        </View>
-                        <View style={styles.bridgeTrackSpacer} />
-                        <View style={[styles.paidCell, styles.paidCellRight]}>
-                          <Text style={[styles.paidLbl, styles.paidTxtRight]}>
-                            Paid · {partnerLabel}
-                          </Text>
-                          <Text style={[styles.paidAmt, styles.paidTxtRight]}>
-                            {row.status === "PENDING" && !row.external
-                              ? SHARED_LEDGER_PARTNER_PENDING_LABEL
-                              : row.external
-                                ? formatINR(row.extPaid)
-                                : "—"}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-                return (
-                  <View key={row.tripId} style={tripHubGridCellStyle}>
-                    {card}
-                  </View>
-                );
-                  })}
-                </View>
-              )
-            )
-          ) : filteredTxnRows.length === 0 ? (
-            <View style={styles.empty}>
-              <Inbox size={32} color={Theme.textMuted} strokeWidth={1.75} />
-              <Text style={styles.emptyTxt}>
-                No payments match this filter.
-              </Text>
-            </View>
-          ) : (
-            viewLayout === "table" ? (
-              <View
-                style={[
-                  styles.auditTableCard,
-                  isWebDesktop && webDesktopStyles.auditTableCard,
-                ]}
-              >
-                <ScrollView
-                  horizontal
-                  nestedScrollEnabled
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.auditTableHScroll}
-                  contentContainerStyle={styles.auditTableHScrollContent}
-                >
-                  <View style={styles.auditTableInner}>
-                    <View style={styles.auditThead}>
-                      <View style={[styles.auditTh, styles.auditThId]}>
-                        <Text style={styles.auditThTxt}>Record ID</Text>
-                      </View>
-                      <View style={[styles.auditTh, styles.hubDualThBilled]}>
-                        <Text style={[styles.auditThTxt, styles.hubDualThTitleCenter]}>
-                          Billed
-                        </Text>
-                        <Text style={styles.hubDualThSub}>You vs partner</Text>
-                      </View>
-                      <View style={[styles.auditTh, styles.hubDualThVerified]}>
-                        <Text style={[styles.auditThTxt, styles.hubDualThTitleCenter]}>
-                          Payment
-                        </Text>
-                        <Text style={styles.hubDualThSub}>You vs partner</Text>
-                      </View>
-                      <View style={[styles.auditTh, styles.hubDualThSync]}>
-                        <Text style={[styles.auditThTxt, styles.auditThTxtCenter]}>
-                          Sync
-                        </Text>
-                      </View>
-                    </View>
-                    {filteredTxnRows.map((txn) => {
-                      const p = partnerColumnRupees(txn);
-                      const localAmt = localColumnRupees(txn);
-                      const billingConflict =
-                        p != null && Math.abs(p - localAmt) >= 0.5;
-                      const syncSafe = !billingConflict;
-                      const dateLine =
-                        txn.displayDate ?? txn.date.slice(0, 10);
-                      return (
-                        <TouchableOpacity
-                          key={`tbl-txn:${txn.id}`}
-                          style={styles.auditRow}
-                          onPress={() => openTxnForensic(txn)}
-                          activeOpacity={0.88}
-                        >
-                          <View style={styles.auditCellId}>
-                            {billingConflict ? (
-                              <View style={styles.auditConflictBar} />
-                            ) : null}
-                            <View style={styles.auditIdRow}>
-                              <View
-                                style={[
-                                  styles.auditIdIcon,
-                                  billingConflict && styles.auditIdIconRose,
-                                ]}
-                              >
-                                <Layers
-                                  size={18}
-                                  color={
-                                    billingConflict
-                                      ? Theme.teslaRed
-                                      : Theme.textMuted
-                                  }
-                                />
-                              </View>
-                              <View style={styles.auditIdTextBlock}>
-                                <Text
-                                  style={styles.auditIdTitle}
-                                  numberOfLines={1}
-                                >
-                                  {shortTxnId(txn.id)}
-                                </Text>
-                                <Text
-                                  style={styles.auditIdMeta}
-                                  numberOfLines={1}
-                                >
-                                  {dateLine}
-                                </Text>
-                              </View>
-                            </View>
-                          </View>
-                          <View
-                            style={[
-                              styles.hubDualCellBilled,
-                              billingConflict && styles.hubDualCellBilledWarn,
-                            ]}
-                          >
-                            <Text style={styles.hubDualYouLine}>
-                              You: {formatINR(localAmt)}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.hubDualTheyLine,
-                                billingConflict && styles.hubDualTheyLineWarn,
-                              ]}
+                              style={styles.fleetPartnerName}
                               numberOfLines={2}
                             >
-                              {p != null
-                                ? `They say: ${formatINR(p)}`
+                              {entityName}
+                            </Text>
+                            <Text
+                              style={styles.fleetPartnerSub}
+                              numberOfLines={1}
+                            >
+                              {partnerSales != null
+                                ? "In partner book"
                                 : SHARED_LEDGER_AWAITING_PARTNER_UPDATE}
                             </Text>
                           </View>
-                          <View
-                            style={[
-                              styles.hubDualCellVerified,
-                              billingConflict &&
-                                styles.hubDualCellVerifiedWarn,
-                            ]}
-                          >
-                            <Text style={styles.hubDualVerifiedYouLine}>
-                              {entityType === "CLIENT"
-                                ? `You received: ${formatINR(localAmt)}`
-                                : `You paid: ${formatINR(localAmt)}`}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.hubDualVerifiedTheyLine,
-                                billingConflict &&
-                                  styles.hubDualVerifiedTheyLineWarn,
-                              ]}
-                              numberOfLines={2}
-                            >
-                              {p != null
-                                ? `They say: ${formatINR(p)}`
-                                : SHARED_LEDGER_AWAITING_PARTNER_UPDATE}
-                            </Text>
-                          </View>
-                          <HubDualSyncCell safe={syncSafe} />
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </ScrollView>
-                <View style={styles.auditTableFooter}>
-                  <View style={styles.auditFooterDot} />
-                  <Text style={styles.auditFooterTxt}>
-                    Tap a row to open payment details.
-                  </Text>
-                </View>
-              </View>
-            ) : (
-              <View
-                style={
-                  isWebDesktop ? styles.tripGridWrap : styles.tripGridWrapMobile
-                }
-              >
-                {filteredTxnRows.map((txn) => {
-                  const localAmt = localColumnRupees(txn);
-                  const pAmt = partnerColumnRupees(txn);
-                  const diff =
-                    pAmt != null && Math.abs(pAmt - localAmt) >= 0.5
-                      ? pAmt - localAmt
-                      : null;
-                  const bridgeOk = paymentBridgeCheckAligned(txn);
-                  return (
-                    <View key={txn.id} style={tripHubGridCellStyle}>
-                      <TouchableOpacity
-                        style={[
-                          styles.missionCard,
-                          styles.txnCardGrid,
-                          isWebDesktop && webDesktopStyles.missionCard,
-                          isWebDesktop && webDesktopStyles.missionCardGrid,
-                        ]}
-                        onPress={() => openTxnForensic(txn)}
-                        activeOpacity={0.88}
-                      >
-                        <SlgCardWatermark kind="payment" />
-                        <View style={[styles.hubCardAccentBar, hubTxnAccentStyle(txn)]} />
-                        <View
-                          style={[
-                            styles.missionHead,
-                            isWebDesktop && webDesktopStyles.missionHead,
-                          ]}
-                        >
-                          <View style={styles.missionHeadLeft}>
-                            <SlgPartnerAvatar
-                              partyName={entityName}
-                              profileImageUrl={partnerProfileImageUrl}
-                              size={40}
-                            />
-                            <View style={styles.missionTitleBlock}>
-                              <View style={styles.missionEntityRow}>
-                                <Text
-                                  style={styles.missionPartnerLineInline}
-                                  numberOfLines={1}
-                                >
-                                  {entityName}
-                                </Text>
-                              </View>
-                              <View style={styles.missionIdRow}>
-                                <Text
-                                  style={[
-                                    styles.missionId,
-                                    isWebDesktop && webDesktopStyles.missionId,
-                                    styles.missionIdHero,
-                                  ]}
-                                  numberOfLines={1}
-                                >
-                                  {missionLabelForTripRef?.(txn.tripRef) ??
-                                    `Trip ${txn.tripRef.slice(0, 8)}`}
-                                </Text>
-                                {diff != null ? (
-                                  <Text
-                                    style={styles.deltaTxtInline}
-                                    numberOfLines={1}
-                                  >
-                                    Diff {formatINR(Math.abs(diff))}
-                                  </Text>
-                                ) : null}
-                              </View>
-                              <Text
-                                style={styles.txnGridDateLine}
-                                numberOfLines={1}
-                              >
-                                {txn.displayDate ?? txn.date.slice(0, 10)}
-                              </Text>
-                              <Text
-                                style={styles.missionCardSummary}
-                                numberOfLines={2}
-                              >
-                                {`Trip: ${
-                                  (txn.tripRef &&
-                                    (missionLabelForTripRef?.(txn.tripRef) ??
-                                      `${String(txn.tripRef).slice(0, 8).toUpperCase()}…`)) ||
-                                  "—"
-                                } · Paid via: ${txn.myMode ?? txn.partnerMode ?? "—"}`}
-                              </Text>
-                              <View style={styles.missionBadges}>
-                                <Text
-                                  style={[
-                                    styles.badge,
-                                    txnBadgeVariant(txn),
-                                    styles.missionStatusBadge,
-                                  ]}
-                                >
-                                  {txnPillLabel(txn.status)}
-                                </Text>
-                              </View>
-                            </View>
-                          </View>
-                          <View style={styles.missionChevronWrap}>
-                            <SlgIconPulse>
-                              <ChevronRight
-                                size={24}
-                                color={Theme.textMuted}
-                                strokeWidth={2.25}
-                              />
-                            </SlgIconPulse>
-                          </View>
                         </View>
-                        <View
-                          style={[
-                            styles.mirrorBlock,
-                            isWebDesktop && webDesktopStyles.tripGridMirrorBlock,
-                          ]}
-                        >
+                      </View>
+                      <View style={styles.fleetCellMoney}>
+                        <View style={styles.fleetMoneyCol}>
+                          <Text style={styles.fleetMoneyVal}>
+                            {row.internal ? formatINR(mySales) : "—"}
+                          </Text>
                           <Text
                             style={[
-                              styles.mirrorSaleCaption,
-                              isWebDesktop &&
-                                webDesktopStyles.mirrorSaleCaptionDesktop,
+                              styles.fleetMoneySub,
+                              billingConflict && styles.fleetMoneySubWarn,
                             ]}
                           >
-                            Payment
+                            {partnerSales != null
+                              ? `Them ${formatINR(partnerSales)}`
+                              : "Them —"}
                           </Text>
-                          <View
+                        </View>
+                      </View>
+                      <View style={styles.fleetCellMoney}>
+                        <View style={styles.fleetMoneyCol}>
+                          <Text
                             style={[
-                              styles.mirrorColumnsRow,
-                              isWebDesktop &&
-                                webDesktopStyles.tripGridMirrorInner,
+                              styles.fleetMoneyVal,
+                              styles.fleetMoneyGood,
                             ]}
                           >
-                              <View style={[styles.mirrorMy, styles.mirrorMyHub]}>
-                                <Text style={[styles.mirrorLbl, styles.mirrorLblHub]}>
-                                  {myBookLabel}
-                                </Text>
-                                <Text style={[styles.mirrorAmt, styles.mirrorAmtHub]}>
-                                  {formatINR(localAmt)}
-                                </Text>
-                              </View>
-                              <View style={styles.bridge}>
-                                <View style={styles.bridgeInner}>
-                                  <SlgIconPulse>
-                                    {txn.status === "conflict" && !bridgeOk ? (
-                                      <Zap
-                                        size={14}
-                                        color={Theme.teslaRed}
-                                        fill={Theme.teslaRed}
-                                        strokeWidth={2}
-                                      />
-                                    ) : (
-                                      <Activity
-                                        size={14}
-                                        color={
-                                          txn.status === "matched" || bridgeOk
-                                            ? Theme.darkGreen
-                                            : Theme.primary
-                                        }
-                                        strokeWidth={2.25}
-                                      />
-                                    )}
-                                  </SlgIconPulse>
-                                </View>
-                              </View>
-                              <View
-                                style={[
-                                  styles.mirrorPartner,
-                                  pAmt == null &&
-                                    txn.status === "pending" &&
-                                    styles.mirrorPartnerWait,
-                                  pAmt != null && styles.mirrorPartnerHubDark,
-                                ]}
-                              >
-                                <Text
-                                  style={[
-                                    styles.mirrorLbl,
-                                    styles.mirrorLblPartner,
-                                    styles.mirrorLblHub,
-                                    pAmt != null && styles.hubMirrorLblOnDark,
-                                  ]}
-                                >
-                                  {partnerLabel}
-                                </Text>
-                                <Text
-                                  style={[
-                                    styles.mirrorAmt,
-                                    styles.mirrorAmtPartner,
-                                    styles.mirrorAmtHub,
-                                    pAmt == null && txn.status === "pending"
-                                      ? styles.waitTxt
-                                      : pAmt == null
-                                        ? styles.waitTxt
-                                        : null,
-                                    pAmt == null ? styles.waitTxtPartner : null,
-                                    pAmt != null && styles.auditAmtOnDark,
-                                  ]}
-                                >
-                                  {txn.status === "pending" && pAmt == null
-                                    ? SHARED_LEDGER_PARTNER_PENDING_LABEL
-                                    : pAmt != null
-                                      ? formatINR(pAmt)
-                                      : "—"}
-                                </Text>
-                              </View>
-                          </View>
+                            {formatINR(intPaidTrip)}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.fleetMoneySub,
+                              paymentConflict && styles.fleetMoneySubWarn,
+                            ]}
+                          >
+                            {partnerPaid != null
+                              ? `Them ${formatINR(partnerPaid)}`
+                              : "Them —"}
+                          </Text>
                         </View>
-                      </TouchableOpacity>
-                    </View>
+                      </View>
+                      <View style={styles.fleetCellMoney}>
+                        <View style={styles.fleetMoneyCol}>
+                          <Text
+                            style={[styles.fleetMoneyVal, styles.fleetMoneyDue]}
+                          >
+                            {formatINR(Math.max(0, mySales - intPaidTrip))}
+                          </Text>
+                          <Text
+                            style={styles.fleetMoneySubSpacer}
+                            accessible={false}
+                            importantForAccessibility="no-hide-descendants"
+                          >
+                            {"\u00a0"}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.fleetCellMetaTxn}>
+                        <View style={styles.fleetMetaColRight}>
+                          <Text style={styles.fleetMetaValTab}>
+                            {txnMeta?.count ?? 0}
+                          </Text>
+                          <Text
+                            style={styles.fleetMoneySubSpacer}
+                            accessible={false}
+                            importantForAccessibility="no-hide-descendants"
+                          >
+                            {"\u00a0"}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.fleetCellMetaLast}>
+                        <View style={styles.fleetMetaColCenter}>
+                          <Text
+                            style={styles.fleetMetaValDate}
+                            numberOfLines={1}
+                          >
+                            {txnMeta?.last ?? "—"}
+                          </Text>
+                          <Text
+                            style={styles.fleetMoneySubSpacerCenter}
+                            accessible={false}
+                            importantForAccessibility="no-hide-descendants"
+                          >
+                            {"\u00a0"}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.fleetCellSync}>
+                        <View
+                          style={[
+                            styles.fleetSyncIcon,
+                            syncSafe
+                              ? styles.fleetSyncIconOk
+                              : styles.fleetSyncIconBad,
+                          ]}
+                        >
+                          {syncSafe ? (
+                            <Check size={13} color={Theme.darkGreen} />
+                          ) : (
+                            <Zap
+                              size={13}
+                              color={Theme.teslaRed}
+                              fill={Theme.teslaRed}
+                              strokeWidth={2}
+                            />
+                          )}
+                        </View>
+                        <Text
+                          style={[
+                            styles.fleetSyncLabel,
+                            syncSafe
+                              ? styles.fleetSyncLabelOk
+                              : styles.fleetSyncLabelBad,
+                          ]}
+                        >
+                          {syncSafe ? "Safe" : "Fix"}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
                   );
                 })}
               </View>
-            )
-          )}
+            </ScrollView>
+            <View style={styles.auditTableFooter}>
+              <View style={styles.auditFooterDot} />
+              <Text style={styles.auditFooterTxt}>
+                Tap a row to open the trip comparison.
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <View
+            style={
+              isWebDesktop ? styles.tripGridWrap : styles.tripGridWrapMobile
+            }
+          >
+            {filteredRows.map((row) => {
+              const intPaid =
+                entityType === "SUPPLIER" ? row.intPaidOut : row.intPaid;
+              const partnerSales = row.external ? row.extSales : null;
+              const delta =
+                row.external != null ? row.extSales - row.intSales : null;
+              const card = (
+                <TouchableOpacity
+                  style={[
+                    styles.missionCard,
+                    isWebDesktop && webDesktopStyles.missionCard,
+                    isWebDesktop && webDesktopStyles.missionCardGrid,
+                  ]}
+                  onPress={() => openTripDetail(row)}
+                  activeOpacity={0.88}
+                >
+                  <SlgCardWatermark kind="trip" />
+                  <View
+                    style={[styles.hubCardAccentBar, hubTripAccentStyle(row)]}
+                  />
+                  <View
+                    style={[
+                      styles.missionHead,
+                      isWebDesktop && webDesktopStyles.missionHead,
+                    ]}
+                  >
+                    <View style={styles.missionHeadLeft}>
+                      <SlgPartnerAvatar
+                        partyName={entityName}
+                        profileImageUrl={partnerProfileImageUrl}
+                        size={44}
+                      />
+                      <View style={styles.missionTitleBlock}>
+                        <View style={styles.missionEntityRow}>
+                          <Text
+                            style={styles.missionPartnerLineInline}
+                            numberOfLines={1}
+                          >
+                            {entityName}
+                          </Text>
+                        </View>
+                        <View style={styles.missionIdRow}>
+                          <Text
+                            style={[
+                              styles.missionId,
+                              isWebDesktop && webDesktopStyles.missionId,
+                              styles.missionIdHero,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {row.missionId}
+                          </Text>
+                          {delta != null && delta !== 0 ? (
+                            <Text
+                              style={styles.deltaTxtInline}
+                              numberOfLines={1}
+                            >
+                              Diff {formatINR(Math.abs(delta))}
+                            </Text>
+                          ) : null}
+                        </View>
+                        <View style={styles.missionRouteManifest}>
+                          <Text
+                            style={styles.missionRouteLine}
+                            numberOfLines={2}
+                          >
+                            {tripRouteForTripRef?.(row.tripId) ??
+                              "Route pending"}
+                          </Text>
+                        </View>
+                        <Text
+                          style={[
+                            styles.missionCardSummary,
+                            isWebDesktop && styles.missionCardSummaryDesktop,
+                          ]}
+                          numberOfLines={2}
+                        >
+                          {missionCardSummaryLine(row)}
+                        </Text>
+                        <View style={styles.missionBadges}>
+                          <Text
+                            style={[
+                              styles.badge,
+                              tripBadgeVariant(row),
+                              styles.missionStatusBadge,
+                            ]}
+                          >
+                            {tripStatusLabel(row)}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                    <View style={styles.missionChevronWrap}>
+                      <SlgIconPulse>
+                        <ChevronRight
+                          size={24}
+                          color={Theme.textMuted}
+                          strokeWidth={2.25}
+                        />
+                      </SlgIconPulse>
+                    </View>
+                  </View>
+                  <View
+                    style={[
+                      styles.mirrorBlock,
+                      isWebDesktop && webDesktopStyles.tripGridMirrorBlock,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.mirrorSaleCaption,
+                        isWebDesktop &&
+                          webDesktopStyles.mirrorSaleCaptionDesktop,
+                      ]}
+                    >
+                      Sale value
+                    </Text>
+                    <View
+                      style={[
+                        styles.mirrorColumnsRow,
+                        isWebDesktop && webDesktopStyles.tripGridMirrorInner,
+                      ]}
+                    >
+                      <View style={[styles.mirrorMy, styles.mirrorMyHub]}>
+                        <Text style={[styles.mirrorLbl, styles.mirrorLblHub]}>
+                          {myBookLabel}
+                        </Text>
+                        <Text style={[styles.mirrorAmt, styles.mirrorAmtHub]}>
+                          {row.internal ? formatINR(row.intSales) : "—"}
+                        </Text>
+                      </View>
+                      <View style={styles.bridge}>
+                        <View style={styles.bridgeInner}>
+                          <SlgIconPulse>
+                            {row.status === "MISMATCH" ? (
+                              <Zap
+                                size={14}
+                                color={Theme.teslaRed}
+                                fill={Theme.teslaRed}
+                                strokeWidth={2}
+                              />
+                            ) : (
+                              <Activity
+                                size={14}
+                                color={
+                                  row.status === "VERIFIED"
+                                    ? Theme.darkGreen
+                                    : Theme.primary
+                                }
+                                strokeWidth={2.25}
+                              />
+                            )}
+                          </SlgIconPulse>
+                        </View>
+                      </View>
+                      <View
+                        style={[
+                          styles.mirrorPartner,
+                          !row.external && styles.mirrorPartnerWait,
+                          !!row.external && styles.mirrorPartnerHubDark,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.mirrorLbl,
+                            styles.mirrorLblPartner,
+                            styles.mirrorLblHub,
+                            !!row.external && styles.hubMirrorLblOnDark,
+                          ]}
+                        >
+                          {partnerLabel}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.mirrorAmt,
+                            styles.mirrorAmtPartner,
+                            styles.mirrorAmtHub,
+                            partnerSales == null && row.status === "PENDING"
+                              ? styles.waitTxt
+                              : partnerSales == null
+                                ? styles.waitTxt
+                                : null,
+                            partnerSales == null ? styles.waitTxtPartner : null,
+                            !!row.external &&
+                              partnerSales != null &&
+                              styles.auditAmtOnDark,
+                          ]}
+                        >
+                          {row.status === "PENDING" && !row.external
+                            ? SHARED_LEDGER_PARTNER_PENDING_LABEL
+                            : partnerSales != null
+                              ? formatINR(partnerSales)
+                              : "—"}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                  <View
+                    style={[
+                      styles.paidRow,
+                      isWebDesktop && webDesktopStyles.tripGridPaid,
+                    ]}
+                  >
+                    <View style={styles.paidColumnsRow}>
+                      <View style={styles.paidCell}>
+                        <Text style={styles.paidLbl}>Paid · {myBookLabel}</Text>
+                        <Text style={styles.paidAmt}>
+                          {row.internal ? formatINR(intPaid) : "—"}
+                        </Text>
+                      </View>
+                      <View style={styles.bridgeTrackSpacer} />
+                      <View style={[styles.paidCell, styles.paidCellRight]}>
+                        <Text style={[styles.paidLbl, styles.paidTxtRight]}>
+                          Paid · {partnerLabel}
+                        </Text>
+                        <Text style={[styles.paidAmt, styles.paidTxtRight]}>
+                          {row.status === "PENDING" && !row.external
+                            ? SHARED_LEDGER_PARTNER_PENDING_LABEL
+                            : row.external
+                              ? formatINR(row.extPaid)
+                              : "—"}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+              return (
+                <View key={row.tripId} style={tripHubGridCellStyle}>
+                  {card}
+                </View>
+              );
+            })}
+          </View>
+        )
+      ) : filteredTxnRows.length === 0 ? (
+        <View style={styles.empty}>
+          <Inbox size={32} color={Theme.textMuted} strokeWidth={1.75} />
+          <Text style={styles.emptyTxt}>No payments match this filter.</Text>
         </View>
+      ) : viewLayout === "table" ? (
+        <View
+          style={[
+            styles.auditTableCard,
+            isWebDesktop && webDesktopStyles.auditTableCard,
+          ]}
+        >
+          <ScrollView
+            horizontal
+            nestedScrollEnabled
+            showsHorizontalScrollIndicator={false}
+            style={styles.auditTableHScroll}
+            contentContainerStyle={styles.auditTableHScrollContent}
+          >
+            <View style={styles.auditTableInner}>
+              <View style={styles.auditThead}>
+                <View style={[styles.auditTh, styles.auditThId]}>
+                  <Text style={styles.auditThTxt}>Record ID</Text>
+                </View>
+                <View style={[styles.auditTh, styles.hubDualThBilled]}>
+                  <Text
+                    style={[styles.auditThTxt, styles.hubDualThTitleCenter]}
+                  >
+                    Billed
+                  </Text>
+                  <Text style={styles.hubDualThSub}>You vs partner</Text>
+                </View>
+                <View style={[styles.auditTh, styles.hubDualThVerified]}>
+                  <Text
+                    style={[styles.auditThTxt, styles.hubDualThTitleCenter]}
+                  >
+                    Payment
+                  </Text>
+                  <Text style={styles.hubDualThSub}>You vs partner</Text>
+                </View>
+                <View style={[styles.auditTh, styles.hubDualThSync]}>
+                  <Text style={[styles.auditThTxt, styles.auditThTxtCenter]}>
+                    Sync
+                  </Text>
+                </View>
+              </View>
+              {filteredTxnRows.map((txn) => {
+                const p = partnerColumnRupees(txn);
+                const localAmt = localColumnRupees(txn);
+                const billingConflict =
+                  p != null && Math.abs(p - localAmt) >= 0.5;
+                const syncSafe = !billingConflict;
+                const dateLine = txn.displayDate ?? txn.date.slice(0, 10);
+                return (
+                  <TouchableOpacity
+                    key={`tbl-txn:${txn.id}`}
+                    style={styles.auditRow}
+                    onPress={() => openTxnForensic(txn)}
+                    activeOpacity={0.88}
+                  >
+                    <View style={styles.auditCellId}>
+                      {billingConflict ? (
+                        <View style={styles.auditConflictBar} />
+                      ) : null}
+                      <View style={styles.auditIdRow}>
+                        <View
+                          style={[
+                            styles.auditIdIcon,
+                            billingConflict && styles.auditIdIconRose,
+                          ]}
+                        >
+                          <Layers
+                            size={18}
+                            color={
+                              billingConflict ? Theme.teslaRed : Theme.textMuted
+                            }
+                          />
+                        </View>
+                        <View style={styles.auditIdTextBlock}>
+                          <Text style={styles.auditIdTitle} numberOfLines={1}>
+                            {shortTxnId(txn.id)}
+                          </Text>
+                          <Text style={styles.auditIdMeta} numberOfLines={1}>
+                            {dateLine}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                    <View
+                      style={[
+                        styles.hubDualCellBilled,
+                        billingConflict && styles.hubDualCellBilledWarn,
+                      ]}
+                    >
+                      <Text style={styles.hubDualYouLine}>
+                        You: {formatINR(localAmt)}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.hubDualTheyLine,
+                          billingConflict && styles.hubDualTheyLineWarn,
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {p != null
+                          ? `They say: ${formatINR(p)}`
+                          : SHARED_LEDGER_AWAITING_PARTNER_UPDATE}
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.hubDualCellVerified,
+                        billingConflict && styles.hubDualCellVerifiedWarn,
+                      ]}
+                    >
+                      <Text style={styles.hubDualVerifiedYouLine}>
+                        {entityType === "CLIENT"
+                          ? `You received: ${formatINR(localAmt)}`
+                          : `You paid: ${formatINR(localAmt)}`}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.hubDualVerifiedTheyLine,
+                          billingConflict && styles.hubDualVerifiedTheyLineWarn,
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {p != null
+                          ? `They say: ${formatINR(p)}`
+                          : SHARED_LEDGER_AWAITING_PARTNER_UPDATE}
+                      </Text>
+                    </View>
+                    <HubDualSyncCell safe={syncSafe} />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </ScrollView>
+          <View style={styles.auditTableFooter}>
+            <View style={styles.auditFooterDot} />
+            <Text style={styles.auditFooterTxt}>
+              Tap a row to open payment details.
+            </Text>
+          </View>
+        </View>
+      ) : (
+        <View
+          style={isWebDesktop ? styles.tripGridWrap : styles.tripGridWrapMobile}
+        >
+          {filteredTxnRows.map((txn) => {
+            const localAmt = localColumnRupees(txn);
+            const pAmt = partnerColumnRupees(txn);
+            const diff =
+              pAmt != null && Math.abs(pAmt - localAmt) >= 0.5
+                ? pAmt - localAmt
+                : null;
+            const bridgeOk = paymentBridgeCheckAligned(txn);
+            return (
+              <View key={txn.id} style={tripHubGridCellStyle}>
+                <TouchableOpacity
+                  style={[
+                    styles.missionCard,
+                    styles.txnCardGrid,
+                    isWebDesktop && webDesktopStyles.missionCard,
+                    isWebDesktop && webDesktopStyles.missionCardGrid,
+                  ]}
+                  onPress={() => openTxnForensic(txn)}
+                  activeOpacity={0.88}
+                >
+                  <SlgCardWatermark kind="payment" />
+                  <View
+                    style={[styles.hubCardAccentBar, hubTxnAccentStyle(txn)]}
+                  />
+                  <View
+                    style={[
+                      styles.missionHead,
+                      isWebDesktop && webDesktopStyles.missionHead,
+                    ]}
+                  >
+                    <View style={styles.missionHeadLeft}>
+                      <SlgPartnerAvatar
+                        partyName={entityName}
+                        profileImageUrl={partnerProfileImageUrl}
+                        size={40}
+                      />
+                      <View style={styles.missionTitleBlock}>
+                        <View style={styles.missionEntityRow}>
+                          <Text
+                            style={styles.missionPartnerLineInline}
+                            numberOfLines={1}
+                          >
+                            {entityName}
+                          </Text>
+                        </View>
+                        <View style={styles.missionIdRow}>
+                          <Text
+                            style={[
+                              styles.missionId,
+                              isWebDesktop && webDesktopStyles.missionId,
+                              styles.missionIdHero,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {missionLabelForTripRef?.(txn.tripRef) ??
+                              `Trip ${txn.tripRef.slice(0, 8)}`}
+                          </Text>
+                          {diff != null ? (
+                            <Text
+                              style={styles.deltaTxtInline}
+                              numberOfLines={1}
+                            >
+                              Diff {formatINR(Math.abs(diff))}
+                            </Text>
+                          ) : null}
+                        </View>
+                        <Text style={styles.txnGridDateLine} numberOfLines={1}>
+                          {txn.displayDate ?? txn.date.slice(0, 10)}
+                        </Text>
+                        <Text
+                          style={styles.missionCardSummary}
+                          numberOfLines={2}
+                        >
+                          {`Trip: ${
+                            (txn.tripRef &&
+                              (missionLabelForTripRef?.(txn.tripRef) ??
+                                `${String(txn.tripRef).slice(0, 8).toUpperCase()}…`)) ||
+                            "—"
+                          } · Paid via: ${txn.myMode ?? txn.partnerMode ?? "—"}`}
+                        </Text>
+                        <View style={styles.missionBadges}>
+                          <Text
+                            style={[
+                              styles.badge,
+                              txnBadgeVariant(txn),
+                              styles.missionStatusBadge,
+                            ]}
+                          >
+                            {txnPillLabel(txn.status)}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                    <View style={styles.missionChevronWrap}>
+                      <SlgIconPulse>
+                        <ChevronRight
+                          size={24}
+                          color={Theme.textMuted}
+                          strokeWidth={2.25}
+                        />
+                      </SlgIconPulse>
+                    </View>
+                  </View>
+                  <View
+                    style={[
+                      styles.mirrorBlock,
+                      isWebDesktop && webDesktopStyles.tripGridMirrorBlock,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.mirrorSaleCaption,
+                        isWebDesktop &&
+                          webDesktopStyles.mirrorSaleCaptionDesktop,
+                      ]}
+                    >
+                      Payment
+                    </Text>
+                    <View
+                      style={[
+                        styles.mirrorColumnsRow,
+                        isWebDesktop && webDesktopStyles.tripGridMirrorInner,
+                      ]}
+                    >
+                      <View style={[styles.mirrorMy, styles.mirrorMyHub]}>
+                        <Text style={[styles.mirrorLbl, styles.mirrorLblHub]}>
+                          {myBookLabel}
+                        </Text>
+                        <Text style={[styles.mirrorAmt, styles.mirrorAmtHub]}>
+                          {formatINR(localAmt)}
+                        </Text>
+                      </View>
+                      <View style={styles.bridge}>
+                        <View style={styles.bridgeInner}>
+                          <SlgIconPulse>
+                            {txn.status === "conflict" && !bridgeOk ? (
+                              <Zap
+                                size={14}
+                                color={Theme.teslaRed}
+                                fill={Theme.teslaRed}
+                                strokeWidth={2}
+                              />
+                            ) : (
+                              <Activity
+                                size={14}
+                                color={
+                                  txn.status === "matched" || bridgeOk
+                                    ? Theme.darkGreen
+                                    : Theme.primary
+                                }
+                                strokeWidth={2.25}
+                              />
+                            )}
+                          </SlgIconPulse>
+                        </View>
+                      </View>
+                      <View
+                        style={[
+                          styles.mirrorPartner,
+                          pAmt == null &&
+                            txn.status === "pending" &&
+                            styles.mirrorPartnerWait,
+                          pAmt != null && styles.mirrorPartnerHubDark,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.mirrorLbl,
+                            styles.mirrorLblPartner,
+                            styles.mirrorLblHub,
+                            pAmt != null && styles.hubMirrorLblOnDark,
+                          ]}
+                        >
+                          {partnerLabel}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.mirrorAmt,
+                            styles.mirrorAmtPartner,
+                            styles.mirrorAmtHub,
+                            pAmt == null && txn.status === "pending"
+                              ? styles.waitTxt
+                              : pAmt == null
+                                ? styles.waitTxt
+                                : null,
+                            pAmt == null ? styles.waitTxtPartner : null,
+                            pAmt != null && styles.auditAmtOnDark,
+                          ]}
+                        >
+                          {txn.status === "pending" && pAmt == null
+                            ? SHARED_LEDGER_PARTNER_PENDING_LABEL
+                            : pAmt != null
+                              ? formatINR(pAmt)
+                              : "—"}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </View>
   );
 
   const renderHub = () => (
@@ -2123,12 +2310,9 @@ export function SharedLedgerCommandCenter({
         : r.status === "MISMATCH"
           ? ("bad" as const)
           : ("neutral" as const);
-    const netDelta =
-      r.external != null ? r.extSales - r.intSales : null;
-    const intPaidR =
-      entityType === "SUPPLIER" ? r.intPaidOut : r.intPaid;
-    const netPaidDelta =
-      r.external != null ? r.extPaid - intPaidR : null;
+    const netDelta = r.external != null ? r.extSales - r.intSales : null;
+    const intPaidR = entityType === "SUPPLIER" ? r.intPaidOut : r.intPaid;
+    const netPaidDelta = r.external != null ? r.extPaid - intPaidR : null;
     let payYouSum = 0;
     let payPartnerSum = 0;
     let partnerPendingLines = 0;
@@ -2149,7 +2333,10 @@ export function SharedLedgerCommandCenter({
           </TouchableOpacity>
           <View style={styles.subHeaderCenter}>
             <Text
-              style={[styles.subTitle, isWebDesktop && webDesktopStyles.subTitle]}
+              style={[
+                styles.subTitle,
+                isWebDesktop && webDesktopStyles.subTitle,
+              ]}
             >
               {r.missionId} command
             </Text>
@@ -2166,7 +2353,10 @@ export function SharedLedgerCommandCenter({
         </View>
         <ScrollView
           style={Platform.OS === "web" ? styles.detailScrollWeb : undefined}
-          contentContainerStyle={[styles.subScroll, { paddingBottom: 48 + insets.bottom }]}
+          contentContainerStyle={[
+            styles.subScroll,
+            { paddingBottom: 48 + insets.bottom },
+          ]}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.tripDashHero}>
@@ -2194,7 +2384,9 @@ export function SharedLedgerCommandCenter({
                     tripDashStatusKind === "bad" && styles.tripDashStatusTxtBad,
                   ]}
                 >
-                  {r.status === "MISMATCH" ? "Needs review" : tripStatusLabel(r)}
+                  {r.status === "MISMATCH"
+                    ? "Needs review"
+                    : tripStatusLabel(r)}
                 </Text>
               </View>
             </View>
@@ -2224,9 +2416,7 @@ export function SharedLedgerCommandCenter({
                 <View style={styles.tripDashColRight}>
                   <Text style={styles.tripDashMicroPartner}>They record</Text>
                   <Text style={styles.tripDashBigPartner}>
-                    {r.external
-                      ? formatINR(r.extSales)
-                      : "—"}
+                    {r.external ? formatINR(r.extSales) : "—"}
                   </Text>
                   {r.external != null &&
                   netDelta != null &&
@@ -2269,7 +2459,11 @@ export function SharedLedgerCommandCenter({
           {showAdjustmentsCallout ? (
             <View style={styles.tripDashAdjustBanner}>
               <View style={styles.tripDashAdjustIconWrap}>
-                <Tag size={15} color={Theme.textPrimaryDark} strokeWidth={2.25} />
+                <Tag
+                  size={15}
+                  color={Theme.textPrimaryDark}
+                  strokeWidth={2.25}
+                />
               </View>
               <View style={styles.tripDashAdjustBody}>
                 <Text style={styles.tripDashAdjustTitle}>
@@ -2284,10 +2478,16 @@ export function SharedLedgerCommandCenter({
                   <View style={styles.tripDashAdjustList}>
                     {tripAdjustments.map((a) => (
                       <View key={a.id} style={styles.tripDashAdjustRow}>
-                        <Text style={styles.tripDashAdjustReason} numberOfLines={2}>
+                        <Text
+                          style={styles.tripDashAdjustReason}
+                          numberOfLines={2}
+                        >
                           {a.reason}
                         </Text>
-                        <Text style={styles.tripDashAdjustAmt} numberOfLines={1}>
+                        <Text
+                          style={styles.tripDashAdjustAmt}
+                          numberOfLines={1}
+                        >
                           {a.type === "revenue" ? "Sale" : "Cost"} ·{" "}
                           {a.impact === "plus" ? "+" : "−"}
                           {formatINR(a.amount)}
@@ -2323,11 +2523,12 @@ export function SharedLedgerCommandCenter({
                   </Text>
                 )}
               </Text>
-              {Math.abs(payYouSum - intPaidR) >= 0.5 && showAdjustmentsCallout ? (
+              {Math.abs(payYouSum - intPaidR) >= 0.5 &&
+              showAdjustmentsCallout ? (
                 <Text style={styles.detailPaymentRollupHint}>
                   “You record” above is {formatINR(intPaidR)}; this list sums to{" "}
-                  {formatINR(payYouSum)} — difference may include marked charges or
-                  deductions.
+                  {formatINR(payYouSum)} — difference may include marked charges
+                  or deductions.
                 </Text>
               ) : null}
             </View>
@@ -2356,8 +2557,7 @@ export function SharedLedgerCommandCenter({
                 const myAmt = localColumnRupees(txn);
                 const partnerAmt = partnerColumnRupees(txn);
                 const rowMatch = paymentBridgeCheckAligned(txn);
-                const entrySubtitle =
-                  txn.displayDate ?? txn.date.slice(0, 10);
+                const entrySubtitle = txn.displayDate ?? txn.date.slice(0, 10);
                 const partnerMismatch = !rowMatch;
                 const partnerPending = partnerAmt == null;
                 const refSnip = txnRefSnippetForRow(txn);
@@ -2375,7 +2575,9 @@ export function SharedLedgerCommandCenter({
                       <Text style={styles.tripDashTxnTitle}>
                         {txnLedgerLineId(txn)}
                       </Text>
-                      <Text style={styles.tripDashTxnDate}>{entrySubtitle}</Text>
+                      <Text style={styles.tripDashTxnDate}>
+                        {entrySubtitle}
+                      </Text>
                       {refSnip ? (
                         <Text style={styles.tripDashTxnRef} numberOfLines={1}>
                           Ref · {refSnip}
@@ -2454,6 +2656,7 @@ export function SharedLedgerCommandCenter({
               </Text>
             </View>
           )}
+
         </ScrollView>
       </View>
     );
@@ -2464,7 +2667,7 @@ export function SharedLedgerCommandCenter({
     const t = txnFocus;
     const myAmt = localColumnRupees(t);
     const partnerAmt = partnerColumnRupees(t);
-    const tripForTxn = findTripByRef(t.tripRef);
+    const tripForTxn = findTripByRef(t.tripRef, t.tripDbId);
     const sameTripTxnCount = txnRowsAll.filter(
       (row) => norm(row.tripRef) === norm(t.tripRef),
     ).length;
@@ -2472,12 +2675,12 @@ export function SharedLedgerCommandCenter({
       tripForTxn && sameTripTxnCount === 1 && (tripForTxn.extPaid ?? 0) > 0
         ? Number(tripForTxn.extPaid ?? 0)
         : null;
-    const usingTripLevelFallback = partnerAmt == null && tripLevelPartnerPaid != null;
+    const usingTripLevelFallback =
+      partnerAmt == null && tripLevelPartnerPaid != null;
     const resolvedPartnerAmt = partnerAmt ?? tripLevelPartnerPaid;
     const deltaAbs =
       resolvedPartnerAmt == null ? 0 : Math.abs(myAmt - resolvedPartnerAmt);
-    const matchAmt =
-      resolvedPartnerAmt != null && deltaAbs < 0.5;
+    const matchAmt = resolvedPartnerAmt != null && deltaAbs < 0.5;
     const tripDisplay =
       (t.tripRef &&
         (missionLabelForTripRef?.(t.tripRef) ??
@@ -2621,7 +2824,9 @@ export function SharedLedgerCommandCenter({
                 ) : !matchAmt ? (
                   <>
                     You say{" "}
-                    <Text style={styles.forensicDiagEm}>{formatINR(myAmt)}</Text>{" "}
+                    <Text style={styles.forensicDiagEm}>
+                      {formatINR(myAmt)}
+                    </Text>{" "}
                     but partner recorded{" "}
                     <Text style={styles.forensicDiagAmt}>
                       {formatINR(resolvedPartnerAmt)}
@@ -2662,14 +2867,20 @@ export function SharedLedgerCommandCenter({
 
           <View style={styles.forensicEntryTable}>
             <View style={styles.forensicEntryHead}>
-              <Text style={[styles.forensicEntryTh, styles.forensicEntryThDetail]}>
+              <Text
+                style={[styles.forensicEntryTh, styles.forensicEntryThDetail]}
+              >
                 Details
               </Text>
-              <Text style={[styles.forensicEntryTh, styles.forensicEntryThMine]}>
+              <Text
+                style={[styles.forensicEntryTh, styles.forensicEntryThMine]}
+              >
                 Your book
               </Text>
               <Text style={styles.forensicEntryTh}>Partner book</Text>
-              <Text style={[styles.forensicEntryTh, styles.forensicEntryThSync]}>
+              <Text
+                style={[styles.forensicEntryTh, styles.forensicEntryThSync]}
+              >
                 Sync
               </Text>
             </View>
@@ -2681,10 +2892,16 @@ export function SharedLedgerCommandCenter({
                   i === forensicRows.length - 1 && styles.forensicEntryRowLast,
                 ]}
               >
-                <View style={[styles.forensicEntryTd, styles.forensicEntryTdDetail]}>
-                  <Text style={styles.forensicEntryDetailLbl}>{line.label}</Text>
+                <View
+                  style={[styles.forensicEntryTd, styles.forensicEntryTdDetail]}
+                >
+                  <Text style={styles.forensicEntryDetailLbl}>
+                    {line.label}
+                  </Text>
                 </View>
-                <View style={[styles.forensicEntryTd, styles.forensicEntryTdMine]}>
+                <View
+                  style={[styles.forensicEntryTd, styles.forensicEntryTdMine]}
+                >
                   <Text style={styles.forensicEntryMineVal} numberOfLines={3}>
                     {line.left}
                   </Text>
@@ -2705,7 +2922,9 @@ export function SharedLedgerCommandCenter({
                     {line.right}
                   </Text>
                 </View>
-                <View style={[styles.forensicEntryTd, styles.forensicEntryTdSync]}>
+                <View
+                  style={[styles.forensicEntryTd, styles.forensicEntryTdSync]}
+                >
                   {line.match ? (
                     <CheckCircle2 size={20} color={Theme.darkGreen} />
                   ) : (
@@ -2729,7 +2948,7 @@ export function SharedLedgerCommandCenter({
             activeOpacity={0.88}
           >
             <Check size={16} color="#FFF" strokeWidth={3} />
-            <Text style={styles.fabUseTxt}>Sync to partner</Text>
+            <Text style={styles.fabUseTxt}>Update My Book</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.fabDispute}
@@ -2738,7 +2957,7 @@ export function SharedLedgerCommandCenter({
             activeOpacity={0.88}
           >
             <AlertCircle size={18} color="#FFF" strokeWidth={2.5} />
-            <Text style={styles.fabDisputeTxt}>Fix records</Text>
+            <Text style={styles.fabDisputeTxt}>Raise Dispute</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -2770,10 +2989,7 @@ export function SharedLedgerCommandCenter({
       >
         <View style={styles.mergeModalRoot}>
           <View
-            style={[
-              styles.mergeModalHeader,
-              { paddingTop: 16 + insets.top },
-            ]}
+            style={[styles.mergeModalHeader, { paddingTop: 16 + insets.top }]}
           >
             <TouchableOpacity
               style={styles.mergeModalCloseBtn}
@@ -2812,8 +3028,8 @@ export function SharedLedgerCommandCenter({
                       Ghost trip from partner book
                     </Text>
                     <Text style={styles.mergeGhostNoticeText}>
-                      We will first create this trip in your local book, then post
-                      this payment entry and link both records.
+                      We will first create this trip in your local book, then
+                      post this payment entry and link both records.
                     </Text>
                   </View>
                 ) : null}
@@ -2830,7 +3046,9 @@ export function SharedLedgerCommandCenter({
                       isWebDesktop && webDesktopStyles.mergeHeroAmt,
                     ]}
                   >
-                    {formatINR(mergePreview.partnerAmount ?? mergePreview.amountAbs)}
+                    {formatINR(
+                      mergePreview.partnerAmount ?? mergePreview.amountAbs,
+                    )}
                   </Text>
                   <View style={styles.mergePartyRow}>
                     <SlgPartnerAvatar
@@ -2854,7 +3072,7 @@ export function SharedLedgerCommandCenter({
                     value={
                       mergePreview.date && mergePreview.date.length >= 10
                         ? mergePreview.date.slice(0, 10)
-                        : mergePreview.displayDate ?? "—"
+                        : (mergePreview.displayDate ?? "—")
                     }
                   />
                   <MergeRow
@@ -2866,9 +3084,14 @@ export function SharedLedgerCommandCenter({
                   />
                   <MergeRow
                     label="Amount (partner)"
-                    value={formatINR(mergePreview.partnerAmount ?? mergePreview.amountAbs)}
+                    value={formatINR(
+                      mergePreview.partnerAmount ?? mergePreview.amountAbs,
+                    )}
                   />
-                  <MergeRow label="Partner ref" value={mergePreview.partnerRef ?? "—"} />
+                  <MergeRow
+                    label="Partner ref"
+                    value={mergePreview.partnerRef ?? "—"}
+                  />
                   <MergeRow
                     label="Their record id"
                     value={shortIdForDisplay(mergePreview.id)}
@@ -2877,23 +3100,30 @@ export function SharedLedgerCommandCenter({
                 </View>
 
                 <Text
-                  style={[styles.mergeSectionTitle, styles.mergeSectionTitleAfterCard]}
+                  style={[
+                    styles.mergeSectionTitle,
+                    styles.mergeSectionTitleAfterCard,
+                  ]}
                 >
                   What we’ll add for you
                 </Text>
                 <View style={styles.mergeWillCard}>
                   {mergePreview.hasLocalTrip === false ? (
                     <Text style={styles.mergeWillLine}>
-                      • Create missing trip in your book (keeps partner trip ref for audit).
+                      • Create missing trip in your book (keeps partner trip ref
+                      for audit).
                     </Text>
                   ) : null}
                   <Text style={styles.mergeWillLine}>
-                    • One payment of {formatINR(mergePreview.partnerAmount ?? mergePreview.amountAbs)}{" "}
+                    • One payment of{" "}
+                    {formatINR(
+                      mergePreview.partnerAmount ?? mergePreview.amountAbs,
+                    )}{" "}
                     {entityType === "CLIENT" ? "received from" : "paid to"}{" "}
                     {entityName}, dated{" "}
                     {mergePreview.date && mergePreview.date.length >= 10
                       ? mergePreview.date.slice(0, 10)
-                      : mergePreview.displayDate ?? "—"}
+                      : (mergePreview.displayDate ?? "—")}
                     .
                   </Text>
                   <Text style={styles.mergeWillLine}>
@@ -2903,7 +3133,8 @@ export function SharedLedgerCommandCenter({
                     .
                   </Text>
                   <Text style={styles.mergeWillLine}>
-                    • Note on the entry will say it came from shared ledger sync.
+                    • Note on the entry will say it came from shared ledger
+                    sync.
                   </Text>
                 </View>
               </>
@@ -2926,7 +3157,8 @@ export function SharedLedgerCommandCenter({
               <TouchableOpacity
                 style={[
                   styles.mergeConfirmBtn,
-                  (mergeSubmitting || actionLoading) && styles.mergeConfirmBtnDisabled,
+                  (mergeSubmitting || actionLoading) &&
+                    styles.mergeConfirmBtnDisabled,
                 ]}
                 onPress={() => void confirmMergePartner()}
                 disabled={mergeSubmitting || actionLoading}
@@ -3136,6 +3368,13 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: Theme.textSecondary,
     textTransform: "uppercase",
+  },
+  disputeInboxCaption: {
+    marginTop: 2,
+    paddingHorizontal: 4,
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
   },
   pendingCard: {
     backgroundColor: Theme.surface,
@@ -3489,6 +3728,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     zIndex: 0,
     overflow: "hidden",
+    pointerEvents: "none",
   },
   missionCardWatermarkInner: {
     position: "absolute",
@@ -4497,13 +4737,17 @@ const styles = StyleSheet.create({
     borderRightWidth: StyleSheet.hairlineWidth,
     borderRightColor: "rgba(255,255,255,0.08)",
   },
-  tripDashThTxnCol: { flex: 1.35, minWidth: 108 },
-  tripDashThPartnerCol: { flex: 1, minWidth: 88 },
+  tripDashThTxnCol: { flex: 1.35, minWidth: 0 },
+  tripDashThPartnerCol: { flex: 1, minWidth: 0 },
   tripDashThLast: {
     borderRightWidth: 0,
-    width: 72,
+    width: 92,
+    minWidth: 92,
+    maxWidth: 92,
     flex: 0,
     textAlign: "center",
+    paddingHorizontal: 6,
+    letterSpacing: 0.2,
   },
   tripDashThMine: { backgroundColor: "rgba(255,255,255,0.05)" },
   tripDashTr: {
@@ -4520,7 +4764,7 @@ const styles = StyleSheet.create({
     borderRightWidth: StyleSheet.hairlineWidth,
     borderRightColor: Theme.borderLight,
   },
-  tripDashTdTxn: { flex: 1.35, minWidth: 108, alignItems: "flex-start" },
+  tripDashTdTxn: { flex: 1.35, minWidth: 0, alignItems: "flex-start" },
   tripDashTdMine: {
     backgroundColor: "rgba(248,250,252,0.95)",
     alignItems: "flex-start",
@@ -4530,15 +4774,19 @@ const styles = StyleSheet.create({
   tripDashTdPartner: {
     alignItems: "flex-start",
     flex: 1,
-    minWidth: 88,
+    minWidth: 0,
     justifyContent: "center",
   },
   tripDashTdPartnerDark: { backgroundColor: "#0F172A" },
   tripDashTdPartnerWarn: { backgroundColor: "rgba(255,241,242,0.5)" },
   tripDashTdSync: {
-    width: 72,
+    width: 92,
+    minWidth: 92,
+    maxWidth: 92,
     flex: 0,
     alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
     borderRightWidth: 0,
   },
   tripDashTxnTitle: {
@@ -4745,8 +4993,18 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     overflow: "hidden",
   },
-  badgeGreen: { color: Theme.darkGreen, backgroundColor: Theme.positiveMuted, borderWidth: 1, borderColor: Theme.darkGreen },
-  badgeRed: { color: Theme.teslaRed, backgroundColor: Theme.negativeMuted, borderWidth: 1, borderColor: Theme.teslaRed },
+  badgeGreen: {
+    color: Theme.darkGreen,
+    backgroundColor: Theme.positiveMuted,
+    borderWidth: 1,
+    borderColor: Theme.darkGreen,
+  },
+  badgeRed: {
+    color: Theme.teslaRed,
+    backgroundColor: Theme.negativeMuted,
+    borderWidth: 1,
+    borderColor: Theme.teslaRed,
+  },
   /** Pending / neutral — slate only (no violet). */
   badgeNeutral: {
     color: Theme.textSecondary,
@@ -4754,7 +5012,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.borderMedium,
   },
-  badgeGray: { color: Theme.textSecondary, backgroundColor: Theme.surfaceLight, borderWidth: 1, borderColor: Theme.borderMedium },
+  badgeGray: {
+    color: Theme.textSecondary,
+    backgroundColor: Theme.surfaceLight,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+  },
   deltaTxtInline: {
     fontSize: SLG_FS_LABEL,
     fontWeight: "600",
@@ -4967,7 +5230,12 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   empty: { alignItems: "center", paddingVertical: 32, gap: 8 },
-  emptyTxt: { fontSize: 12, fontWeight: "600", fontStyle: "italic", color: Theme.textMuted },
+  emptyTxt: {
+    fontSize: 12,
+    fontWeight: "600",
+    fontStyle: "italic",
+    color: Theme.textMuted,
+  },
   /** Base shell; positioning + minHeight on web come from detailShellLayoutStyle. */
   subScreen: { backgroundColor: "#FAFBFF", zIndex: 50 },
   /** Web: fill the minHeight shell so inner content scrolls instead of collapsing. */
@@ -4990,8 +5258,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   subHeaderCenter: { flex: 1, alignItems: "center" },
-  subTitle: { fontSize: 16, fontWeight: "900", color: Theme.textPrimaryDark, fontStyle: "italic" },
-  subSub: { fontSize: 9, fontWeight: "800", color: Theme.textMuted, letterSpacing: 1.2, marginTop: 2 },
+  subTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    fontStyle: "italic",
+  },
+  subSub: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    letterSpacing: 1.2,
+    marginTop: 2,
+  },
   subTitleForensic: {
     fontSize: 17,
     fontWeight: "800",
@@ -5025,7 +5304,11 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
   subScroll: { padding: 16, paddingBottom: 120 },
-  subScrollForensic: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 120 },
+  subScrollForensic: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 120,
+  },
   detailHero: {
     backgroundColor: "#0F172A",
     borderRadius: 28,
@@ -5070,7 +5353,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     zIndex: 1,
   },
-  detailLbl: { fontSize: 10, fontWeight: "800", color: "#94A3B8", textTransform: "uppercase" },
+  detailLbl: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#94A3B8",
+    textTransform: "uppercase",
+  },
   detailLblPartner: {
     fontSize: 10,
     fontWeight: "800",
@@ -5078,7 +5366,13 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     textAlign: "right",
   },
-  detailAmt: { fontSize: 24, fontWeight: "900", color: "#FFF", marginTop: 6, fontStyle: "italic" },
+  detailAmt: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#FFF",
+    marginTop: 6,
+    fontStyle: "italic",
+  },
   detailRightCol: { alignItems: "flex-end" },
   detailDeltaRow: {
     marginTop: 16,
@@ -5089,8 +5383,18 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     zIndex: 1,
   },
-  detailDeltaLbl: { fontSize: 13, fontWeight: "700", color: "#94A3B8", fontStyle: "italic" },
-  detailDeltaVal: { fontSize: 22, fontWeight: "900", color: "#F87171", fontStyle: "italic" },
+  detailDeltaLbl: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#94A3B8",
+    fontStyle: "italic",
+  },
+  detailDeltaVal: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#F87171",
+    fontStyle: "italic",
+  },
   detailTripChargeFootnote: {
     marginTop: 12,
     fontSize: 11,
@@ -5275,8 +5579,17 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     gap: 8,
   },
-  bridgeCardId: { flex: 1, fontSize: 11, fontWeight: "700", color: Theme.textMuted },
-  bridgeCardAmt: { fontSize: 13, fontWeight: "900", color: Theme.textPrimaryDark },
+  bridgeCardId: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textMuted,
+  },
+  bridgeCardAmt: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+  },
   txnBridgeCard: {
     position: "relative",
     marginBottom: 16,
@@ -5305,7 +5618,13 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: 16,
   },
-  txnBridgeHeadLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1, minWidth: 0 },
+  txnBridgeHeadLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+    minWidth: 0,
+  },
   txnBridgeIconWrap: {
     width: 48,
     height: 48,
@@ -5343,7 +5662,11 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.negativeMuted,
     borderColor: Theme.teslaRed,
   },
-  txnBridgeStatusTxt: { fontSize: 9, fontWeight: "900", textTransform: "uppercase" },
+  txnBridgeStatusTxt: {
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
   txnBridgeStatusTxtOk: { color: Theme.darkGreen },
   txnBridgeStatusTxtBad: { color: Theme.teslaRed },
   txnBridgeMirror: {
@@ -5392,7 +5715,11 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: Theme.textPrimaryDark,
   },
-  txnBridgeMirrorAmtPartner: { fontSize: 15, fontWeight: "900", color: "#FFFFFF" },
+  txnBridgeMirrorAmtPartner: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#FFFFFF",
+  },
   txnBridgePartnerPlaceholder: {
     fontSize: 11,
     fontWeight: "700",
@@ -5598,7 +5925,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: Theme.surface,
   },
-  forensicTableHead: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: Theme.borderLight },
+  forensicTableHead: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
   forensicTableHeadCell: {
     flex: 1,
     paddingVertical: 14,
@@ -5641,19 +5972,50 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
   },
-  forensicPillTxt: { fontSize: 9, fontWeight: "900", textTransform: "uppercase" },
+  forensicPillTxt: {
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
   forensicPillTxtOk: { color: Theme.darkGreen },
   forensicPillTxtBad: { color: Theme.teslaRed },
-  forensicPillOk: { backgroundColor: Theme.positiveMuted, borderColor: Theme.darkGreen },
-  forensicPillBad: { backgroundColor: Theme.negativeMuted, borderColor: Theme.teslaRed },
-  forensicGrid: { flexDirection: "row", borderRadius: 16, overflow: "hidden", borderWidth: 1, borderColor: Theme.borderLight },
-  forensicCell: { flex: 1, padding: 16, alignItems: "center", backgroundColor: Theme.surfaceLight },
+  forensicPillOk: {
+    backgroundColor: Theme.positiveMuted,
+    borderColor: Theme.darkGreen,
+  },
+  forensicPillBad: {
+    backgroundColor: Theme.negativeMuted,
+    borderColor: Theme.teslaRed,
+  },
+  forensicGrid: {
+    flexDirection: "row",
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  forensicCell: {
+    flex: 1,
+    padding: 16,
+    alignItems: "center",
+    backgroundColor: Theme.surfaceLight,
+  },
   forensicCellDark: { backgroundColor: "#0F172A" },
   forensicCellWarn: { backgroundColor: "rgba(244,63,94,0.08)" },
-  forensicLbl: { fontSize: 9, fontWeight: "900", color: Theme.textMuted, marginBottom: 6 },
+  forensicLbl: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: Theme.textMuted,
+    marginBottom: 6,
+  },
   forensicLblDark: { color: "#94A3B8" },
   forensicLblWarn: { color: "#94A3B8" },
-  forensicVal: { fontSize: 15, fontWeight: "900", color: Theme.textPrimaryDark, fontStyle: "italic" },
+  forensicVal: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    fontStyle: "italic",
+  },
   forensicValDark: { color: "#FFFFFF" },
   forensicValBad: { color: Theme.teslaRed },
   fabBar: {
@@ -5680,7 +6042,12 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 20,
   },
-  fabUseTxt: { color: "#FFF", fontWeight: "900", fontSize: 11, letterSpacing: 1 },
+  fabUseTxt: {
+    color: "#FFF",
+    fontWeight: "900",
+    fontSize: 11,
+    letterSpacing: 1,
+  },
   fabDispute: {
     flex: 1,
     flexDirection: "row",
@@ -5691,7 +6058,12 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 20,
   },
-  fabDisputeTxt: { color: "#FFF", fontWeight: "900", fontSize: 11, letterSpacing: 1 },
+  fabDisputeTxt: {
+    color: "#FFF",
+    fontWeight: "900",
+    fontSize: 11,
+    letterSpacing: 1,
+  },
   mergeModalRoot: {
     flex: 1,
     backgroundColor: "#FAFBFF",

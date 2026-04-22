@@ -1448,7 +1448,7 @@ export default function DriverWalletScreen() {
             },
           ]}
         >
-          <View style={styles.walletCardWatermarkWrap} pointerEvents="none">
+          <View style={[styles.walletCardWatermarkWrap, { pointerEvents: 'none' }]}>
             <Text
               style={[
                 styles.walletCardWatermark,

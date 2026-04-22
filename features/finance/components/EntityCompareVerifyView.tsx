@@ -8,6 +8,7 @@ import Theme from "@/constants/Theme";
 import { getClientById } from "@/features/clients/services/clients.service";
 import { getSupplierById } from "@/features/suppliers/services/suppliers.service";
 import { getTripDisplayNumber, type TripRow } from "@/features/trips";
+import { supabase } from "@/lib/supabase";
 import {
   isCrossOrgIntegrationTrip,
   isLoadBasedTrip,
@@ -112,6 +113,17 @@ interface ReconciledRow {
   intPaidOut: number;
   extSales: number;
   extPaid: number;
+}
+
+function isUuidString(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value.trim(),
+  );
+}
+
+function normTripKey(value: string | null | undefined): string {
+  return String(value ?? "").trim().toLowerCase();
 }
 
 /** Build internal per-trip from trips + transactions (O(n)). */
@@ -835,11 +847,51 @@ export function EntityCompareVerifyView({
   );
 
   const handleSubmitDispute = useCallback(async () => {
+    if (actionLoading) return;
     if (!selectedDispute || !organizationId) return;
-    if (!partnerOrgId) {
+    const effectivePartnerOrgId = partnerOrgId ?? entity.linked_organization_id ?? null;
+    if (!effectivePartnerOrgId) {
       Alert.alert(
         "Could not determine partner",
         "Ensure this entity is connected for shared ledger.",
+      );
+      return;
+    }
+    let resolvedTripId = (() => {
+      const raw = String(selectedDispute.tripId ?? "").trim();
+      if (isUuidString(raw)) return raw;
+      const missionKey = normTripKey(selectedDispute.missionId);
+      if (missionKey) {
+        const found = trips.find(
+          (t) => normTripKey(getTripDisplayNumber(t)) === missionKey,
+        );
+        if (found?.id && isUuidString(found.id)) return found.id;
+      }
+      return null;
+    })();
+    if (!resolvedTripId) {
+      const missionRaw = String(selectedDispute.missionId ?? "").trim();
+      if (missionRaw) {
+        const { data: byDisplay, error: lookupErr } = await supabase()
+          .from("trips")
+          .select("id")
+          .eq("organization_id", organizationId)
+          .or(
+            `display_trip_id.eq.${missionRaw},trip_number.eq.${missionRaw},id.eq.${missionRaw}`,
+          )
+          .limit(1)
+          .maybeSingle();
+        if (!lookupErr && byDisplay?.id && isUuidString(byDisplay.id)) {
+          resolvedTripId = byDisplay.id;
+        }
+      }
+    }
+    if (!resolvedTripId) {
+      Alert.alert(
+        "Cannot submit dispute",
+        selectedDispute.status === "UNRECOGNIZED"
+          ? "This partner-only trip has no local trip id yet. Fix records first, then submit dispute."
+          : "Trip id is missing. Refresh and try again.",
       );
       return;
     }
@@ -854,26 +906,35 @@ export function EntityCompareVerifyView({
       entityType === "SUPPLIER"
         ? selectedDispute.intPaidOut
         : selectedDispute.intPaid;
+    const reasonText = [resolution.trim(), remarks.trim()]
+      .filter((v) => v.length > 0)
+      .join(" | ");
     setActionLoading(true);
     const { error, disputeId, alreadyInDispute } = await createDispute({
       orgId: organizationId,
-      transaction_id: selectedDispute.tripId,
-      partner_org_id: partnerOrgId,
+      transaction_id: resolvedTripId,
+      partner_org_id: effectivePartnerOrgId,
       internal_snapshot: netInt,
       partner_snapshot: netExt,
       raised_sales: raisedSales,
       raised_paid: raisedPaid,
-      reason_code: resolution.trim() || undefined,
+      reason_code: reasonText || undefined,
     });
     setActionLoading(false);
     if (error) {
-      Alert.alert(
-        alreadyInDispute ? "Already in dispute" : "Error",
-        error.message,
-      );
+      if (alreadyInDispute) {
+        setSelectedDispute(null);
+        setResolution("");
+        setRemarks("");
+        refetchDisputes();
+        onRefresh?.();
+        Alert.alert("Already in dispute", "An open dispute already exists for this trip.");
+        return;
+      }
+      Alert.alert("Error", error.message);
       return;
     }
-    if (disputeId) {
+    if (disputeId || alreadyInDispute) {
       setSelectedDispute(null);
       setResolution("");
       setRemarks("");
@@ -886,11 +947,15 @@ export function EntityCompareVerifyView({
     }
   }, [
     selectedDispute,
+    actionLoading,
     organizationId,
     partnerOrgId,
     resolution,
+    remarks,
     entity.name,
+    entity.linked_organization_id,
     entityType,
+    trips,
     onRefresh,
     refetchDisputes,
   ]);

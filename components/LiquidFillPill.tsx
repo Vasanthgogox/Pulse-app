@@ -4,7 +4,7 @@
  */
 import Theme from "@/constants/Theme";
 import React, { useEffect } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -170,9 +170,9 @@ export function LiquidFillPill({
           shadowOpacity: 0.35,
           shadowRadius: 8,
           elevation: 4,
+          pointerEvents: 'none',
         },
       ]}
-      pointerEvents="none"
     >
       <Animated.View
         style={[
@@ -269,8 +269,13 @@ const styles = StyleSheet.create({
     color: Theme.primaryText,
   },
   valueOnLiquidShadow: {
-    textShadowColor: "rgba(0,0,0,0.55)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    ...Platform.select({
+      web: { textShadow: "0px 1px 3px rgba(0,0,0,0.55)" },
+      default: {
+        textShadowColor: "rgba(0,0,0,0.55)",
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 3,
+      },
+    }),
   },
 });
