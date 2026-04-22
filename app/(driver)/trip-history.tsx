@@ -1595,6 +1595,7 @@ const styles = StyleSheet.create({
   creditsTitle: {
     fontSize: 42,
     fontWeight: "900",
+    fontStyle: "italic",
     letterSpacing: -2,
     lineHeight: 44,
     textTransform: "uppercase",

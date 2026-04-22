@@ -1527,11 +1527,11 @@ export default function DriverWalletScreen() {
             styles.mainTab,
             mainTab === 'fleet' && [
               styles.mainTabActive,
-              { backgroundColor: colors.surface, shadowColor: isDark ? '#000' : 'rgba(15,23,42,0.08)' },
+              { backgroundColor: colors.surface, borderColor: isDark ? colors.borderSubtle : colors.border },
             ],
           ]}
           onPress={() => setMainTab('fleet')}
-          activeOpacity={0.8}
+          activeOpacity={0.92}
         >
           <FontAwesome name="users" size={14} color={mainTab === 'fleet' ? colors.emerald : colors.textMuted} />
           <Text style={[styles.mainTabText, mainTab === 'fleet' ? { color: colors.emerald } : { color: colors.textMuted }]}>Fleet</Text>
@@ -1541,25 +1541,33 @@ export default function DriverWalletScreen() {
             styles.mainTab,
             mainTab === 'trips' && [
               styles.mainTabActive,
-              { backgroundColor: colors.surface, shadowColor: isDark ? '#000' : 'rgba(15,23,42,0.08)' },
+              { backgroundColor: colors.surface, borderColor: isDark ? colors.borderSubtle : colors.border },
             ],
           ]}
           onPress={() => setMainTab('trips')}
-          activeOpacity={0.8}
+          activeOpacity={0.92}
         >
           <FontAwesome name="history" size={14} color={mainTab === 'trips' ? colors.emerald : colors.textMuted} />
-          <Text style={[styles.mainTabText, mainTab === 'trips' ? { color: colors.emerald } : { color: colors.textMuted }]}>Trips</Text>
+          <Text
+            style={[
+              styles.mainTabText,
+              styles.tripsItalicText,
+              mainTab === 'trips' ? { color: colors.emerald } : { color: colors.textMuted },
+            ]}
+          >
+            Trips
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[
             styles.mainTab,
             mainTab === 'cash' && [
               styles.mainTabActive,
-              { backgroundColor: colors.surface, shadowColor: isDark ? '#000' : 'rgba(15,23,42,0.08)' },
+              { backgroundColor: colors.surface, borderColor: isDark ? colors.borderSubtle : colors.border },
             ],
           ]}
           onPress={() => setMainTab('cash')}
-          activeOpacity={0.8}
+          activeOpacity={0.92}
         >
           <FontAwesome name="credit-card" size={14} color={mainTab === 'cash' ? colors.emerald : colors.textMuted} />
           <Text style={[styles.mainTabText, mainTab === 'cash' ? { color: colors.emerald } : { color: colors.textMuted }]}>Cash</Text>
@@ -1761,7 +1769,7 @@ export default function DriverWalletScreen() {
         </View>
       ) : mainTab === 'trips' ? (
         <View style={[styles.ledgerSection, { paddingHorizontal: Layout.screenPaddingHorizontal }]}>
-          <Text style={[styles.transactionHistoryTitle, { color: colors.text }]}>Trips</Text>
+          <Text style={[styles.transactionHistoryTitle, styles.tripsItalicText, { color: colors.text }]}>Trips</Text>
           {filteredTripJourneySections.length === 0 ? (
             <View style={[styles.ledgerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={[styles.ledgerEmpty, { borderBottomWidth: 0 }]}>
@@ -2617,9 +2625,10 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
   },
   creditsTitle: {
-    fontSize: 32,
-    fontWeight: '800',
-    letterSpacing: -0.3,
+    fontSize: 42,
+    fontWeight: '900',
+    letterSpacing: -2,
+    lineHeight: 44,
     fontStyle: 'italic',
     textTransform: 'uppercase',
   },
@@ -2736,10 +2745,20 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     padding: 8,
     gap: 6,
-    shadowOffset: { width: 0, height: 18 },
-    shadowOpacity: 0.14,
-    shadowRadius: 30,
-    elevation: 10,
+    // Clip active-tab visual effects inside the segmented shell.
+    overflow: 'hidden',
+    // Keep container flat to avoid platform-specific shadow compositing artifacts.
+    ...Platform.select({
+      ios: {
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.08,
+        shadowRadius: 16,
+      },
+      android: {
+        elevation: 0,
+      },
+      default: {},
+    }),
   },
   mainTab: {
     flex: 1,
@@ -2749,18 +2768,31 @@ const styles = StyleSheet.create({
     gap: 8,
     minHeight: 56,
     borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   mainTabActive: {
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.9,
-    shadowRadius: 22,
-    elevation: 6,
+    ...Platform.select({
+      ios: {
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+      },
+      android: {
+        // Prevent Android glow/ring artifact from nested elevation.
+        elevation: 0,
+      },
+      default: {},
+    }),
   },
   mainTabText: {
     fontSize: 8,
     fontWeight: '800',
     letterSpacing: 2,
     textTransform: 'uppercase',
+  },
+  tripsItalicText: {
+    fontStyle: 'italic',
   },
   searchSection: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
