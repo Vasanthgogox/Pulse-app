@@ -1,34 +1,28 @@
-import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
+import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
 import { getKeepSignedIn, setKeepSignedIn } from '@/lib/keepSignedInPreference';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { Link, useRouter, useLocalSearchParams } from 'expo-router';
-import { useRef, useEffect, useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Keyboard,
-    KeyboardAvoidingView,
-    LayoutAnimation,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    UIManager,
-    View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from 'react-native';
-
-// Layout animation: no-op in New Architecture; only enable on Android when using old arch to avoid warning.
-const isNewArch = typeof (global as unknown as { __turboModuleProxy?: unknown }).__turboModuleProxy !== 'undefined';
-if (Platform.OS === 'android' && !isNewArch && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+type ScreenState = 'LANDING' | 'SIGNIN';
 
 function getEmailFromParams(params: { email?: string | string[] }): string {
   const e = params.email;
@@ -39,29 +33,34 @@ function getEmailFromParams(params: { email?: string | string[] }): string {
 
 export default function SignIn() {
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ email?: string | string[] }>();
-  const { signIn, user } = useAuth();
-  const { t, locale, localeOptions } = useLanguage();
-  const isOnline = useIsOnline();
   const router = useRouter();
+  const params = useLocalSearchParams<{ email?: string | string[] }>();
+  const { width } = useWindowDimensions();
+  const isOnline = useIsOnline();
+  const { user, signIn } = useAuth();
+  const { locale, localeOptions } = useLanguage();
+
+  const [screen, setScreen] = useState<ScreenState>('LANDING');
+
   const [email, setEmail] = useState(() => getEmailFromParams(params));
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPass, setShowPass] = useState(false);
   const [keepSignedIn, setKeepSignedInState] = useState(true);
   const [loading, setLoading] = useState(false);
   const [waitingForAuthState, setWaitingForAuthState] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
-  const emailPrefilled = Boolean(getEmailFromParams(params));
-  const scrollRef = useRef<ScrollView>(null);
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const userToggledKeepRef = useRef(false);
+
+  const isDesktop = width >= 1024;
+
+  const currentLanguageLabel =
+    localeOptions.find((o) => o.value === locale)?.labelNative ??
+    localeOptions.find((o) => o.value === locale)?.label ??
+    'English';
 
   useEffect(() => {
     let mounted = true;
     getKeepSignedIn().then((keep) => {
-      if (mounted && !userToggledKeepRef.current) {
-        setKeepSignedInState(keep);
-      }
+      if (mounted) setKeepSignedInState(keep);
     });
     return () => {
       mounted = false;
@@ -69,258 +68,201 @@ export default function SignIn() {
   }, []);
 
   useEffect(() => {
-    // Redirect authenticated users through the auth guard at `/`, which
-    // handles role-based routing and last-tab restoration in one place.
-    if (user) {
-      router.replace('/');
-    }
+    if (user) router.replace('/');
   }, [user, router]);
 
   useEffect(() => {
     const next = getEmailFromParams(params);
-    if (next) setEmail(next);
+    if (next) {
+      setEmail(next);
+      setScreen('SIGNIN');
+    }
   }, [params.email]);
-
-  useEffect(() => {
-    const show = () => {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setKeyboardVisible(true);
-    };
-    const hide = () => {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setKeyboardVisible(false);
-    };
-    const subShow = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      show
-    );
-    const subHide = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      hide
-    );
-    return () => {
-      subShow.remove();
-      subHide.remove();
-    };
-  }, []);
-
-  const currentLanguageLabel =
-    localeOptions.find((o) => o.value === locale)?.labelNative ??
-    localeOptions.find((o) => o.value === locale)?.label ??
-    'English';
 
   const handleSignIn = async () => {
     setSignInError(null);
     setWaitingForAuthState(false);
-
     if (!isOnline) {
-      setSignInError(t('connectToSignIn'));
+      setSignInError('Connect to the internet to sign in.');
       return;
     }
-
     const trimmedEmail = email.trim();
     if (!trimmedEmail || !password) {
-      setSignInError(t('enterEmailPassword'));
+      setSignInError('Enter email and password.');
       return;
     }
-
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      setSignInError(t('validEmailAddress'));
+      setSignInError('Enter a valid email.');
       return;
     }
 
     try {
       setLoading(true);
       const { error } = await signIn(trimmedEmail, password, keepSignedIn);
-
       if (error) {
-        const isNetwork = error.message.includes('Cannot reach server');
-        if (isNetwork) {
-          setSignInError(t('cannotReachServer'));
-          Alert.alert(t('connectionError'), t('cannotReachServer'));
-          return;
-        }
-
-        const normalizedMessage = error.message.toLowerCase();
-        const isInvalidCredentials =
-          normalizedMessage.includes('invalid login credentials') ||
-          normalizedMessage.includes('invalid email or password') ||
-          normalizedMessage.includes('invalid credentials');
-
-        setSignInError(
-          isInvalidCredentials
-            ? 'Incorrect email or password.'
-            : error.message || t('signInFailed')
-        );
+        const isInvalid = error.message.toLowerCase().includes('invalid');
+        setSignInError(isInvalid ? 'Incorrect email or password.' : error.message);
         return;
       }
-
       setWaitingForAuthState(true);
     } catch (e) {
-      const msg = e instanceof Error ? (e.message || t('unknownError')) : t('unknownError');
+      const msg = e instanceof Error ? e.message : 'Sign in failed.';
       setSignInError(msg);
-      Alert.alert(t('signInFailed'), msg);
+      Alert.alert('Sign in failed', msg);
     } finally {
       setLoading(false);
     }
   };
 
-  const scrollContentStyle = [
-    styles.scrollContent,
-    keyboardVisible && styles.scrollContentKeyboardOpen,
-  ];
-
-  return (
-    <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 20 : 0}
-    >
-      {!isOnline && (
-        <View style={[styles.offlineBanner, { paddingTop: insets.top + 12 }]}>
-          <Text style={styles.offlineText}>{t('noInternetConnection')}</Text>
-        </View>
-      )}
-      <ScrollView
-        ref={scrollRef}
-        contentContainerStyle={scrollContentStyle}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        showsVerticalScrollIndicator={keyboardVisible}
+  const renderLanding = () => (
+    <View style={[styles.landingWrap, isDesktop && styles.landingWrapDesktop]}>
+      <TouchableOpacity
+        style={[styles.modeCard, styles.businessCard]}
+        activeOpacity={0.9}
+        onPress={() => router.push('/sign-up')}
       >
-        <View style={styles.inner}>
-          <View style={styles.header}>
-            <Text style={styles.title}>{t('signIn')}</Text>
-            <Text style={styles.subtitle}>
-              {emailPrefilled ? t('enterPasswordToSignIn') : t('logInToContinue')}
-            </Text>
-          </View>
+        <FontAwesome name="building-o" size={52} color="#94a3b8" />
+        <Text style={styles.modeTitle}>BUSINESS</Text>
+        <Text style={styles.modeSubtitle}>Fleet management and company tools.</Text>
+        <View style={styles.modePill}>
+          <Text style={styles.modePillText}>Sign up for Business</Text>
+        </View>
+      </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.languageRow}
-            onPress={() => router.push('/(modals)/language-settings')}
-            activeOpacity={0.7}
-          >
-            <FontAwesome name="globe" size={18} color={Theme.authTextMuted} />
-            <Text style={styles.languageLabel}>{t('language')}: </Text>
-            <Text style={styles.languageValue}>{currentLanguageLabel}</Text>
-            <FontAwesome name="chevron-right" size={14} color={Theme.authTextMuted} />
-          </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.modeCard, styles.driverCard]}
+        activeOpacity={0.9}
+        onPress={() => router.push('/driver-signup')}
+      >
+        <FontAwesome name="truck" size={52} color={Theme.driverEmeraldDark} />
+        <Text style={styles.modeTitle}>DRIVER</Text>
+        <Text style={styles.modeSubtitle}>Earn money on every trip you take.</Text>
+        <View style={[styles.modePill, styles.modePillDriver]}>
+          <Text style={styles.modePillText}>Sign up as Driver</Text>
+        </View>
+      </TouchableOpacity>
+    </View>
+  );
 
+  const renderSignIn = () => (
+    <View style={[styles.panelShell, isDesktop && styles.panelShellDesktop]}>
+      {isDesktop ? (
+        <View style={styles.leftPanel}>
+          <Text style={styles.leftLogo}>PULSE.</Text>
+          <Text style={styles.leftTag}>System Access</Text>
+          <Text style={styles.leftTitle}>Welcome Back Commander.</Text>
+          <Text style={styles.leftSubtitle}>
+            Your fleet is waiting. Log in to synchronize your logs and check earnings.
+          </Text>
+        </View>
+      ) : null}
+      <View style={[styles.rightPanel, isDesktop && styles.rightPanelDesktop]}>
+        <Text style={styles.formTitle}>Sign in.</Text>
+        <Text style={styles.formSubtitle}>Access your Pulse account dashboard.</Text>
+
+        <TextInput
+          value={email}
+          onChangeText={setEmail}
+          placeholder="Email Address"
+          placeholderTextColor={Theme.textMuted}
+          style={styles.input}
+          autoCapitalize="none"
+        />
+        <View style={styles.passwordWrap}>
           <TextInput
-            style={[styles.input, signInError ? styles.inputError : null]}
-            placeholder={t('emailPlaceholder')}
-            placeholderTextColor={Theme.authTextMuted}
-            value={email}
-            onChangeText={(value) => {
-              setEmail(value);
-              if (signInError) setSignInError(null);
-            }}
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Your Password"
+            placeholderTextColor={Theme.textMuted}
+            style={styles.input}
+            secureTextEntry={!showPass}
             autoCapitalize="none"
-            autoCorrect={false}
-            spellCheck={false}
-            autoComplete="email"
-            keyboardType="email-address"
-            editable={!loading}
           />
-          <View style={styles.passwordRow}>
-            <TextInput
-              style={[styles.inputPassword, signInError ? styles.inputError : null]}
-              placeholder={t('passwordPlaceholder')}
-              placeholderTextColor={Theme.authTextMuted}
-              value={password}
-              onChangeText={(value) => {
-                setPassword(value);
-                if (signInError) setSignInError(null);
-              }}
-              secureTextEntry={!showPassword}
-              autoCorrect={false}
-              spellCheck={false}
-              autoComplete="password"
-              editable={!loading}
-            />
-            <TouchableOpacity
-              style={styles.eyeButton}
-              onPress={() => setShowPassword((p) => !p)}
-              disabled={loading}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            >
-              <FontAwesome
-                name={showPassword ? 'eye-slash' : 'eye'}
-                size={20}
-                color={Theme.authTextMuted}
-              />
-            </TouchableOpacity>
-          </View>
+          <Pressable onPress={() => setShowPass((v) => !v)} style={styles.eyeBtn}>
+            <FontAwesome name={showPass ? 'eye-slash' : 'eye'} size={18} color={Theme.textMuted} />
+          </Pressable>
+        </View>
+        {signInError ? <Text style={styles.errorText}>{signInError}</Text> : null}
 
-          {signInError ? (
-            <View style={styles.errorBanner}>
-              <FontAwesome
-                name="exclamation-circle"
-                size={16}
-                color={Theme.negative}
-              />
-              <Text style={styles.errorBannerText}>{signInError}</Text>
-            </View>
-          ) : null}
-
+        <View style={styles.rowBetween}>
           <TouchableOpacity
-            style={styles.keepSignedInRow}
+            style={styles.keepRow}
             onPress={() => {
-              userToggledKeepRef.current = true;
               const next = !keepSignedIn;
               setKeepSignedInState(next);
               void setKeepSignedIn(next);
             }}
-            disabled={loading}
-            activeOpacity={0.8}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: keepSignedIn }}
-            accessibilityLabel={t('keepMeSignedIn')}
           >
             <FontAwesome
               name={keepSignedIn ? 'check-square' : 'square-o'}
-              size={22}
-              color={keepSignedIn ? Theme.authPrimary : Theme.authTextMuted}
+              size={18}
+              color={keepSignedIn ? Theme.driverPrimary : Theme.textMuted}
             />
-            <Text style={styles.keepSignedInLabel}>{t('keepMeSignedIn')}</Text>
+            <Text style={styles.keepText}>Remember Me</Text>
           </TouchableOpacity>
+          <Text style={styles.forgotText}>Forgot password?</Text>
+        </View>
 
-          <TouchableOpacity
-            style={[styles.button, (loading || waitingForAuthState || !isOnline) && styles.buttonDisabled]}
-            onPress={handleSignIn}
-            disabled={loading || waitingForAuthState || !isOnline}
-          >
-            {loading || waitingForAuthState ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text style={styles.buttonText}>{t('logIn')}</Text>
-            )}
-          </TouchableOpacity>
+        <TouchableOpacity
+          onPress={handleSignIn}
+          style={[styles.primaryBtn, (loading || waitingForAuthState || !isOnline) && styles.disabledBtn]}
+          disabled={loading || waitingForAuthState || !isOnline}
+        >
+          {loading || waitingForAuthState ? (
+            <ActivityIndicator color={Theme.textOnPrimary} />
+          ) : (
+            <Text style={styles.primaryBtnText}>Enter Dashboard</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 
-          <TouchableOpacity activeOpacity={0.8} disabled={loading}>
-            <Text style={styles.forgotPasswordText}>{t('forgotPassword')}</Text>
-          </TouchableOpacity>
+  return (
+    <KeyboardAvoidingView
+      style={[
+        styles.container,
+        screen === 'LANDING' && isDesktop ? styles.containerLandingDesktop : null,
+        { paddingTop: insets.top, paddingBottom: insets.bottom },
+      ]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 20 : 0}
+    >
+      {!isOnline ? (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineText}>No internet connection.</Text>
+        </View>
+      ) : null}
 
-          <View style={styles.footer}>
-            <Text style={styles.footerMuted}>Don&apos;t have an account? </Text>
-            <Link href="/sign-up" asChild>
-              <TouchableOpacity disabled={loading} activeOpacity={0.8}>
-                <Text style={styles.footerLink}>{t('createNewAccount')}</Text>
-              </TouchableOpacity>
-            </Link>
-          </View>
-          <View style={styles.footer}>
-            <Text style={styles.footerMuted}>Driver? </Text>
-            <Link href="/driver-signup" asChild>
-              <TouchableOpacity disabled={loading} activeOpacity={0.8}>
-                <Text style={styles.footerLink}>Sign up as driver</Text>
-              </TouchableOpacity>
-            </Link>
+      {screen === 'LANDING' ? (
+        <View style={styles.topBar}>
+          <Text style={[styles.brand, styles.brandOnDark]}>PULSE.</Text>
+          <View style={styles.topActions}>
+            <TouchableOpacity onPress={() => setScreen('SIGNIN')} style={[styles.topBtn, styles.topBtnOnDark]}>
+              <Text style={styles.topBtnText}>Sign In</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/(modals)/language-settings')} style={[styles.globeBtn, styles.globeBtnOnDark]}>
+              <FontAwesome name="globe" size={16} color={Theme.textOnDark} />
+            </TouchableOpacity>
+            <Text style={[styles.langText, styles.langTextOnDark]}>{currentLanguageLabel}</Text>
           </View>
         </View>
-      </ScrollView>
+      ) : null}
+
+      {screen === 'LANDING' ? renderLanding() : null}
+      {screen === 'SIGNIN' ? renderSignIn() : null}
+
+      {screen !== 'LANDING' ? (
+        <TouchableOpacity
+          onPress={() => {
+            setScreen('LANDING');
+          }}
+          style={styles.backFloating}
+        >
+          <FontAwesome name="chevron-left" size={14} color={Theme.textMuted} />
+          <Text style={styles.backFloatingText}>Back</Text>
+        </TouchableOpacity>
+      ) : null}
     </KeyboardAvoidingView>
   );
 }
@@ -329,186 +271,308 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Theme.screenBackground,
-    padding: Layout.screenPaddingHorizontal + 8,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
   },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 24,
-    paddingBottom: 24,
-    width: '100%',
-  },
-  scrollContentKeyboardOpen: {
-    paddingBottom: 120,
+  containerLandingDesktop: {
+    backgroundColor: '#020617',
+    paddingHorizontal: 0,
   },
   offlineBanner: {
+    backgroundColor: Theme.negativeMuted,
+    borderColor: Theme.negative,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  offlineText: {
+    textAlign: 'center',
+    color: Theme.negative,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  topBar: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    backgroundColor: Theme.authPrimary,
-    paddingVertical: 12,
+    zIndex: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    zIndex: 1,
+    paddingTop: 12,
   },
-  offlineText: {
+  brand: {
+    fontSize: 28,
+    fontWeight: '900',
+    letterSpacing: -0.7,
+    color: Theme.textPrimaryDark,
+  },
+  brandOnDark: {
     color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
   },
-  inner: {
-    width: '100%',
-    maxWidth: 420,
-  },
-  header: {
-    marginBottom: 32,
-  },
-  title: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: Theme.textPrimaryDark,
-    marginBottom: 8,
-    letterSpacing: -0.5,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: Theme.textMuted,
-    letterSpacing: 0.5,
-  },
-  languageRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    marginBottom: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.border,
-  },
-  languageLabel: {
-    fontSize: 14,
-    color: Theme.textMuted,
-    marginLeft: 8,
-  },
-  languageValue: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '600',
-    color: Theme.textPrimaryDark,
-    marginLeft: 4,
-  },
-  input: {
-    backgroundColor: Theme.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.border,
-    padding: 16,
-    fontSize: 16,
-    color: Theme.textPrimaryDark,
-    marginBottom: 16,
-  },
-  passwordRow: {
-    position: 'relative',
-    marginBottom: 16,
-  },
-  inputPassword: {
-    backgroundColor: Theme.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.border,
-    padding: 16,
-    paddingRight: 48,
-    fontSize: 16,
-    color: Theme.textPrimaryDark,
-  },
-  inputError: {
-    borderColor: Theme.negative,
-  },
-  eyeButton: {
-    position: 'absolute',
-    right: 16,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-  },
-  keepSignedInRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    paddingVertical: 12,
-    paddingRight: 8,
-    gap: 10,
-  },
-  errorBanner: {
+  topActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: -4,
-    marginBottom: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: Theme.negativeMuted,
+  },
+  topBtn: {
+    backgroundColor: Theme.textPrimaryDark,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  topBtnOnDark: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1,
-    borderColor: Theme.negative,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
-  errorBannerText: {
-    flex: 1,
-    fontSize: 14,
-    color: Theme.negative,
-    fontWeight: '500',
-  },
-  keepSignedInLabel: {
-    fontSize: 15,
-    color: Theme.textMuted,
-    fontWeight: '500',
-    flex: 1,
-  },
-  button: {
-    backgroundColor: Theme.authPrimary,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-    shadowColor: Theme.authPrimary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 14,
-    elevation: 4,
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonText: {
+  topBtnText: {
     color: '#ffffff',
-    fontSize: 15,
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  globeBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: Theme.textPrimaryDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  globeBtnOnDark: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  langText: {
+    fontSize: 11,
+    color: Theme.textMuted,
     fontWeight: '700',
-    letterSpacing: 0.5,
   },
-  forgotPasswordText: {
-    marginTop: 16,
-    fontSize: 14,
-    fontWeight: '500',
-    color: Theme.textPrimaryDark,
-    textAlign: 'center',
+  langTextOnDark: {
+    color: 'rgba(255,255,255,0.92)',
   },
-  footer: {
+  landingWrap: {
+    flex: 1,
+    gap: 12,
+    flexDirection: 'column',
+    paddingTop: 76,
+    paddingBottom: 12,
+  },
+  landingWrapDesktop: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    gap: 0,
+    paddingTop: 64,
+  },
+  modeCard: {
+    flex: 1,
+    borderRadius: 0,
+    padding: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 24,
-    paddingTop: 16,
+    borderWidth: 1,
   },
-  footerMuted: {
+  businessCard: {
+    backgroundColor: '#020617',
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  driverCard: {
+    backgroundColor: '#041524',
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  modeTitle: {
+    marginTop: 16,
+    fontSize: 34,
+    fontWeight: '900',
+    letterSpacing: -0.8,
+    color: Theme.textOnDark,
+  },
+  modeSubtitle: {
+    marginTop: 8,
+    fontSize: 13,
+    textAlign: 'center',
+    color: 'rgba(148,163,184,0.72)',
+    maxWidth: 280,
+  },
+  modePill: {
+    marginTop: 18,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  modePillDriver: {
+    borderColor: 'rgba(16,185,129,0.25)',
+    backgroundColor: '#10b981',
+  },
+  modePillText: {
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    fontWeight: '800',
+    color: Theme.textOnDark,
+  },
+  panelShell: {
+    flex: 1,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    backgroundColor: Theme.screenBackground,
+  },
+  panelShellDesktop: {
+    borderRadius: 0,
+    borderWidth: 0,
+  },
+  leftPanel: {
+    flex: 1,
+    backgroundColor: Theme.textPrimaryDark,
+    paddingHorizontal: 36,
+    paddingVertical: 36,
+    justifyContent: 'center',
+  },
+  leftLogo: {
+    fontSize: 48,
+    fontWeight: '900',
+    color: Theme.driverPrimary,
+    marginBottom: 10,
+  },
+  leftTag: {
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 2.5,
+    fontWeight: '700',
+    color: Theme.textOnDarkMuted,
+    marginBottom: 14,
+  },
+  leftTitle: {
+    fontSize: 34,
+    fontWeight: '900',
+    color: Theme.textOnDark,
+    letterSpacing: -0.8,
+    marginBottom: 10,
+  },
+  leftSubtitle: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: Theme.textOnDarkMuted,
+    maxWidth: 360,
+  },
+  rightPanel: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+    justifyContent: 'center',
+    backgroundColor: Theme.screenBackground,
+  },
+  rightPanelDesktop: {
+    paddingHorizontal: 48,
+    paddingVertical: 48,
+  },
+  formTitle: {
+    fontSize: 44,
+    fontWeight: '900',
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.8,
+  },
+  formSubtitle: {
+    marginTop: 6,
+    marginBottom: 18,
     fontSize: 14,
     color: Theme.textMuted,
-    fontWeight: '500',
   },
-  footerLink: {
-    fontSize: 14,
+  input: {
+    backgroundColor: Theme.surface,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
     color: Theme.textPrimaryDark,
+    marginBottom: 12,
+  },
+  passwordWrap: {
+    position: 'relative',
+  },
+  eyeBtn: {
+    position: 'absolute',
+    right: 14,
+    top: 14,
+  },
+  errorText: {
+    color: Theme.negative,
+    marginBottom: 8,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  rowBetween: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 2,
+    marginBottom: 10,
+  },
+  keepRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  keepText: {
+    fontSize: 12,
+    color: Theme.textMuted,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  forgotText: {
+    fontSize: 12,
+    color: Theme.driverPrimary,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  primaryBtn: {
+    marginTop: 6,
+    backgroundColor: Theme.driverPrimary,
+    borderRadius: 999,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  disabledBtn: {
+    opacity: 0.6,
+  },
+  primaryBtnText: {
+    color: Theme.textOnPrimary,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  backFloating: {
+    position: 'absolute',
+    left: 18,
+    bottom: 16,
+    backgroundColor: Theme.surface,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  backFloatingText: {
+    color: Theme.textMuted,
+    fontSize: 12,
     fontWeight: '700',
   },
 });
