@@ -22,8 +22,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-type ScreenState = 'LANDING' | 'SIGNIN' | 'SIGNUP';
-type ModeState = 'business' | 'driver' | null;
+type ScreenState = 'LANDING' | 'SIGNIN';
 
 function getEmailFromParams(params: { email?: string | string[] }): string {
   const e = params.email;
@@ -42,8 +41,6 @@ export default function SignIn() {
   const { locale, localeOptions } = useLanguage();
 
   const [screen, setScreen] = useState<ScreenState>('LANDING');
-  const [signupStep, setSignupStep] = useState(0);
-  const [mode, setMode] = useState<ModeState>(null);
 
   const [email, setEmail] = useState(() => getEmailFromParams(params));
   const [password, setPassword] = useState('');
@@ -52,17 +49,6 @@ export default function SignIn() {
   const [loading, setLoading] = useState(false);
   const [waitingForAuthState, setWaitingForAuthState] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
-
-  // Signup UI-only fields for progressive steps.
-  const [signupName, setSignupName] = useState('');
-  const [signupEmail, setSignupEmail] = useState('');
-  const [signupPassword, setSignupPassword] = useState('');
-  const [signupCompany, setSignupCompany] = useState('');
-  const [signupFleetSize, setSignupFleetSize] = useState('Fleet size');
-  const [signupCity, setSignupCity] = useState('');
-  const [signupPhone, setSignupPhone] = useState('');
-  const [signupExp, setSignupExp] = useState('Driving experience');
-  const [signupLicense, setSignupLicense] = useState('License category');
 
   const isDesktop = width >= 1024;
 
@@ -128,27 +114,12 @@ export default function SignIn() {
     }
   };
 
-  const goToSignup = (selectedMode: Exclude<ModeState, null>) => {
-    setMode(selectedMode);
-    setSignupStep(0);
-    setScreen('SIGNUP');
-  };
-
-  const finalizeSignup = () => {
-    // Keep current backend flow: business -> /sign-up, driver -> /driver-signup
-    if (mode === 'driver') {
-      router.push('/driver-signup');
-      return;
-    }
-    router.push('/sign-up');
-  };
-
   const renderLanding = () => (
     <View style={[styles.landingWrap, isDesktop && styles.landingWrapDesktop]}>
       <TouchableOpacity
         style={[styles.modeCard, styles.businessCard]}
         activeOpacity={0.9}
-        onPress={() => goToSignup('business')}
+        onPress={() => router.push('/sign-up')}
       >
         <FontAwesome name="building-o" size={52} color="#94a3b8" />
         <Text style={styles.modeTitle}>BUSINESS</Text>
@@ -161,7 +132,7 @@ export default function SignIn() {
       <TouchableOpacity
         style={[styles.modeCard, styles.driverCard]}
         activeOpacity={0.9}
-        onPress={() => goToSignup('driver')}
+        onPress={() => router.push('/driver-signup')}
       >
         <FontAwesome name="truck" size={52} color={Theme.driverEmeraldDark} />
         <Text style={styles.modeTitle}>DRIVER</Text>
@@ -247,74 +218,6 @@ export default function SignIn() {
     </View>
   );
 
-  const renderSignUp = () => {
-    const isBusiness = mode === 'business';
-    return (
-      <View style={[styles.panelShell, isDesktop && styles.panelShellDesktop]}>
-        {isDesktop ? (
-          <View style={[styles.leftPanel, isBusiness ? styles.leftBusiness : styles.leftDriver]}>
-            <Text style={styles.leftLogo}>PULSE.</Text>
-            <Text style={styles.leftTag}>{signupStep === 0 ? 'Account Creation' : 'Operational Details'}</Text>
-            <Text style={styles.leftTitle}>Starting as {isBusiness ? 'Business Node.' : 'Pilot.'}</Text>
-            <Text style={styles.leftSubtitle}>
-              {signupStep === 0
-                ? 'Join the network and start managing logistics with ease.'
-                : 'Complete your profile to unlock full system capabilities.'}
-            </Text>
-          </View>
-        ) : null}
-        <View style={[styles.rightPanel, isDesktop && styles.rightPanelDesktop]}>
-          <View style={styles.stepRow}>
-            <Text style={styles.formTitle}>{signupStep === 0 ? 'Identity.' : 'Profile.'}</Text>
-            <View style={styles.stepDots}>
-              <View style={[styles.stepLine, styles.stepLineActive]} />
-              <View style={[styles.stepLine, signupStep > 0 && styles.stepLineActive]} />
-            </View>
-          </View>
-          <Text style={styles.formSubtitle}>
-            {signupStep === 0 ? 'Set up your base credentials.' : 'Tell us about your operations.'}
-          </Text>
-
-          {signupStep === 0 ? (
-            <>
-              <TextInput value={signupName} onChangeText={setSignupName} placeholder="Full Name" placeholderTextColor={Theme.textMuted} style={styles.input} />
-              <TextInput value={signupEmail} onChangeText={setSignupEmail} placeholder="Email Address" placeholderTextColor={Theme.textMuted} style={styles.input} autoCapitalize="none" />
-              <TextInput value={signupPassword} onChangeText={setSignupPassword} placeholder="Create Password" placeholderTextColor={Theme.textMuted} style={styles.input} secureTextEntry />
-              <TouchableOpacity style={styles.primaryBtn} onPress={() => setSignupStep(1)}>
-                <Text style={styles.primaryBtnText}>Continue to Profile</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              {isBusiness ? (
-                <>
-                  <TextInput value={signupCompany} onChangeText={setSignupCompany} placeholder="Company / Fleet Name" placeholderTextColor={Theme.textMuted} style={styles.input} />
-                  <TouchableOpacity style={styles.selectLike} onPress={() => setSignupFleetSize(signupFleetSize === 'Fleet size' ? '1-5 Vehicles' : 'Fleet size')}>
-                    <Text style={styles.selectText}>{signupFleetSize}</Text>
-                  </TouchableOpacity>
-                  <TextInput value={signupCity} onChangeText={setSignupCity} placeholder="Headquarters City" placeholderTextColor={Theme.textMuted} style={styles.input} />
-                </>
-              ) : (
-                <>
-                  <TextInput value={signupPhone} onChangeText={setSignupPhone} placeholder="Verified Mobile Number" placeholderTextColor={Theme.textMuted} style={styles.input} keyboardType="phone-pad" />
-                  <TouchableOpacity style={styles.selectLike} onPress={() => setSignupExp(signupExp === 'Driving experience' ? '3-5 Years' : 'Driving experience')}>
-                    <Text style={styles.selectText}>{signupExp}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.selectLike} onPress={() => setSignupLicense(signupLicense === 'License category' ? 'HMV' : 'License category')}>
-                    <Text style={styles.selectText}>{signupLicense}</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-              <TouchableOpacity style={styles.primaryBtn} onPress={finalizeSignup}>
-                <Text style={styles.primaryBtnText}>Finalize Account</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </View>
-    );
-  };
-
   return (
     <KeyboardAvoidingView
       style={[
@@ -348,13 +251,11 @@ export default function SignIn() {
 
       {screen === 'LANDING' ? renderLanding() : null}
       {screen === 'SIGNIN' ? renderSignIn() : null}
-      {screen === 'SIGNUP' ? renderSignUp() : null}
 
       {screen !== 'LANDING' ? (
         <TouchableOpacity
           onPress={() => {
-            if (screen === 'SIGNUP' && signupStep > 0) setSignupStep(0);
-            else setScreen('LANDING');
+            setScreen('LANDING');
           }}
           style={styles.backFloating}
         >
@@ -537,12 +438,6 @@ const styles = StyleSheet.create({
     paddingVertical: 36,
     justifyContent: 'center',
   },
-  leftBusiness: {
-    backgroundColor: '#020617',
-  },
-  leftDriver: {
-    backgroundColor: '#052e2b',
-  },
   leftLogo: {
     fontSize: 48,
     fontWeight: '900',
@@ -660,38 +555,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1,
     textTransform: 'uppercase',
-  },
-  stepRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  stepDots: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  stepLine: {
-    width: 24,
-    height: 4,
-    borderRadius: 999,
-    backgroundColor: Theme.border,
-  },
-  stepLineActive: {
-    backgroundColor: Theme.driverPrimary,
-  },
-  selectLike: {
-    backgroundColor: Theme.surface,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: Theme.border,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    marginBottom: 12,
-  },
-  selectText: {
-    color: Theme.textPrimaryDark,
-    fontSize: 15,
-    fontWeight: '700',
   },
   backFloating: {
     position: 'absolute',
