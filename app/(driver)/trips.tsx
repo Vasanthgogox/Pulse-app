@@ -181,10 +181,44 @@ function buildMissionLog(trip: tripsService.TripRow): MissionLogEntry[] {
   return entries;
 }
 
-function getGrossRevenue(trip: tripsService.TripRow): number | string {
-  const amount = Number(trip.supplier_rate ?? trip.client_price ?? 0);
-  if (amount <= 0 && isAggregateTrip(trip)) return "SALARY";
-  return amount;
+interface TripSettlementBreakdown {
+  fareEarnings: number;
+  partnerBonus: number;
+  taxDeductions: number;
+  netPayout: number;
+  isSalary: boolean;
+}
+
+function getTripSettlementBreakdown(
+  trip: tripsService.TripRow,
+): TripSettlementBreakdown {
+  const isSalary = isAggregateTrip(trip);
+  if (isSalary) {
+    return {
+      fareEarnings: 0,
+      partnerBonus: 0,
+      taxDeductions: 0,
+      netPayout: 0,
+      isSalary: true,
+    };
+  }
+
+  const explicitCommission = Math.max(0, Number(trip.driver_commission ?? 0));
+  const fallbackBaseFromSupplier = Math.max(
+    0,
+    Math.round((Number(trip.supplier_rate ?? 0) || 0) * 0.1),
+  );
+  const fallbackBaseFromClient = Math.max(
+    0,
+    Math.round((Number(trip.client_price ?? 0) || 0) * 0.1),
+  );
+  const fallbackBase = fallbackBaseFromSupplier || fallbackBaseFromClient;
+  const fareEarnings = explicitCommission > 0 ? explicitCommission : fallbackBase;
+  const partnerBonus = Math.max(0, explicitCommission - fallbackBase);
+  const taxDeductions = 0;
+  const netPayout = Math.max(0, fareEarnings + partnerBonus - taxDeductions);
+
+  return { fareEarnings, partnerBonus, taxDeductions, netPayout, isSalary };
 }
 
 /** Arrow with translate-x animation on press (reference: group-hover:translate-x-2) */
@@ -326,9 +360,10 @@ export default function DriverTripsScreen() {
     return `₹${Math.round(amount).toLocaleString()}`;
   };
 
-  const getEarningAmount = (trip: tripsService.TripRow) => {
-    return tripEarningsForDriver(trip);
-  };
+  const selectedTripSettlement = useMemo(
+    () => (selectedTrip ? getTripSettlementBreakdown(selectedTrip) : null),
+    [selectedTrip],
+  );
 
   const archiveMissionLog = useMemo(
     () => (selectedTrip ? buildMissionLog(selectedTrip) : []),
@@ -1148,7 +1183,11 @@ export default function DriverTripsScreen() {
                       <Text
                         style={[styles.yieldRowValueRef, { color: colors.text }]}
                       >
-                        {getGrossRevenue(selectedTrip) === "SALARY" ? "SALARY" : `₹${getGrossRevenue(selectedTrip).toLocaleString()}`}
+                        {selectedTripSettlement?.isSalary
+                          ? "SALARY"
+                          : `₹${Math.round(
+                              selectedTripSettlement?.fareEarnings ?? 0,
+                            ).toLocaleString()}`}
                       </Text>
                       <Text
                         style={[
@@ -1192,7 +1231,11 @@ export default function DriverTripsScreen() {
                           { color: colors.emerald },
                         ]}
                       >
-                        {getEarning(selectedTrip) === "SALARY" ? "—" : `+ ₹${Math.round(getEarningAmount(selectedTrip)).toLocaleString()}`}
+                        {selectedTripSettlement?.isSalary
+                          ? "—"
+                          : `+ ₹${Math.round(
+                              selectedTripSettlement?.partnerBonus ?? 0,
+                            ).toLocaleString()}`}
                       </Text>
                       <Text
                         style={[
@@ -1236,7 +1279,9 @@ export default function DriverTripsScreen() {
                           { color: Theme.negative },
                         ]}
                       >
-                        - ₹0
+                        - ₹{Math.round(
+                          selectedTripSettlement?.taxDeductions ?? 0,
+                        ).toLocaleString()}
                       </Text>
                       <Text
                         style={[
@@ -1254,11 +1299,13 @@ export default function DriverTripsScreen() {
                       Net payout
                     </Text>
                     <View style={styles.yieldPayoutHeroAmountRowRef}>
-                      {getEarning(selectedTrip) === "SALARY" ? null : <Text style={styles.yieldPayoutHeroRupeeRef}>₹</Text>}
+                      {selectedTripSettlement?.isSalary ? null : <Text style={styles.yieldPayoutHeroRupeeRef}>₹</Text>}
                       <Text style={styles.yieldPayoutHeroAmountDarkRef}>
-                        {getEarning(selectedTrip) === "SALARY" ? "SALARY" : Math.round(
-                          getEarningAmount(selectedTrip),
-                        ).toLocaleString()}
+                        {selectedTripSettlement?.isSalary
+                          ? "SALARY"
+                          : Math.round(
+                              selectedTripSettlement?.netPayout ?? 0,
+                            ).toLocaleString()}
                       </Text>
                     </View>
                   </View>
