@@ -1,61 +1,61 @@
+import { SearchBar } from '@/components/SearchBar';
+import { ThemedConfirmModal } from '@/components/ThemedConfirmModal';
+import {
+    driverBodyPrimary,
+    driverBodySecondary,
+    driverUISemiBold,
+} from '@/constants/DriverTypography';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
-import {
-  driverBodyPrimary,
-  driverBodySecondary,
-  driverUISemiBold,
-} from '@/constants/DriverTypography';
-import { SearchBar } from '@/components/SearchBar';
-import { ThemedConfirmModal } from '@/components/ThemedConfirmModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
-import { getFleetAvatarUriForOrg } from '@/lib/fleetAvatar';
 import {
-  buildBulkTripClaimWhatsappMessage,
-  buildSettlementShareMessage,
-  buildTripClaimWhatsappMessage,
+    buildBulkTripClaimWhatsappMessage,
+    buildSettlementShareMessage,
+    buildTripClaimWhatsappMessage,
 } from '@/lib/driverCommunication';
 import {
-  phonePeMetaDate
+    phonePeMetaDate
 } from '@/lib/driverGpayTransactions';
 import { isAggregateTrip, tripEarningsForDriver } from '@/lib/driverUtils';
+import { getFleetAvatarUriForOrg } from '@/lib/fleetAvatar';
 import { usePreventScreenCapture } from '@/lib/usePreventScreenCapture';
 import * as driversService from '@/services/driversService';
 import * as salaryRequestsService from '@/services/salaryRequestsService';
 import * as tripsService from '@/services/tripsService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Sparkles, Wallet } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 import { useRouter } from 'expo-router';
+import * as Sharing from 'expo-sharing';
+import { Sparkles, Wallet } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Linking,
-  Platform,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Linking,
+    Platform,
+    ScrollView,
+    Share,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
+    Easing,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withTiming,
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const isAndroid = Platform.OS === 'android';
 
@@ -98,6 +98,21 @@ function ledgerTypeLabel(type: string): string {
   return DRIVER_LEDGER_TYPE_LABELS[type] ?? type;
 }
 
+function salaryRequestTypeLabel(type: string): string {
+  if (type === 'monthly') return 'Monthly salary';
+  if (type === 'advance') return 'Advance';
+  if (type === 'trip_based') return 'Trip commission';
+  return type || 'Salary';
+}
+
+function salaryRequestStatusLabel(status: string): string {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (normalized === 'paid') return 'Paid';
+  if (normalized === 'approved') return 'Approved';
+  if (normalized === 'rejected') return 'Rejected';
+  return 'Pending';
+}
+
 /** Wallet card + credits — deeper emerald palette (aligned with Theme.driver*) */
 const EMERALD_950 = '#022c22';
 const EMERALD_900 = '#064e3b';
@@ -129,6 +144,7 @@ export default function DriverWalletScreen() {
   const [invites, setInvites] = useState<driversService.DriverInviteRow[]>([]);
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
   const [ledgerEntries, setLedgerEntries] = useState<driversService.DriverLedgerRow[]>([]);
+  const [salaryRequests, setSalaryRequests] = useState<salaryRequestsService.SalaryRequestRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
@@ -143,7 +159,7 @@ export default function DriverWalletScreen() {
 
   const [mainTab, setMainTab] = useState<'trips' | 'cash' | 'fleet'>('trips');
   const [journeySearch, setJourneySearch] = useState('');
-  const [journeyFilter, setJourneyFilter] = useState<'all' | 'pending' | 'fleet_marked' | 'settled'>('all');
+  const [journeyFilter, setJourneyFilter] = useState<'all' | 'pending' | 'salary_requested' | 'fleet_marked' | 'settled'>('all');
   const [copiedTripId, setCopiedTripId] = useState<string | null>(null);
   const [markPaidConfirmState, setMarkPaidConfirmState] = useState<{
     trip: tripsService.TripRow;
@@ -195,15 +211,18 @@ export default function DriverWalletScreen() {
         Promise.all([
           tripsService.getTripsByDriverIds(driverIds),
           driversService.getDriverLedgerByDriverIds(driverIds),
-        ]).then(([tRes, ledgerRes]) => {
+          salaryRequestsService.getSalaryRequestsByDriverIds(driverIds),
+        ]).then(([tRes, ledgerRes, salaryReqRes]) => {
           setTrips(tRes.trips ?? []);
           setLedgerEntries(ledgerRes.entries ?? []);
+          setSalaryRequests(salaryReqRes.requests ?? []);
           setLoading(false);
           initialLoadDoneRef.current = true;
           isRefreshingRef.current = false;
           setRefreshing(false);
         });
       } else {
+        setSalaryRequests([]);
         setLoading(false);
         initialLoadDoneRef.current = true;
         isRefreshingRef.current = false;
@@ -1304,6 +1323,39 @@ export default function DriverWalletScreen() {
     return bySection;
   }, [filteredCashTrips]);
 
+  const filteredSalaryRequests = useMemo(() => {
+    const search = journeySearch.trim().toLowerCase();
+    return [...salaryRequests]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .filter((req) => {
+        const orgName =
+          salaryRequestOrgOptions.find((o) => String(o.orgId ?? '') === String(req.organization_id ?? ''))?.orgName ?? 'Fleet';
+        const typeLabel = salaryRequestTypeLabel(req.request_type);
+        const statusLabel = salaryRequestStatusLabel(req.status);
+        const haystack = [
+          orgName,
+          typeLabel,
+          statusLabel,
+          req.note ?? '',
+          String(req.amount ?? ''),
+        ]
+          .join(' ')
+          .toLowerCase();
+        return search.length === 0 || haystack.includes(search);
+      });
+  }, [salaryRequests, salaryRequestOrgOptions, journeySearch]);
+
+  const filteredSalaryRequestSections = useMemo(() => {
+    const map = new Map<string, typeof filteredSalaryRequests>();
+    filteredSalaryRequests.forEach((req) => {
+      const sectionLabel = formatTransactionDateSection(req.created_at ?? '');
+      const bucket = map.get(sectionLabel) ?? [];
+      bucket.push(req);
+      map.set(sectionLabel, bucket);
+    });
+    return Array.from(map.entries()).map(([sectionLabel, requests]) => ({ sectionLabel, requests }));
+  }, [filteredSalaryRequests]);
+
   /** Request payment for this trip: route user to Salary Request screen. */
   const openSalaryRequestForTrip = useCallback(
     (trip: tripsService.TripRow) => {
@@ -1579,7 +1631,13 @@ export default function DriverWalletScreen() {
           <SearchBar
             value={journeySearch}
             onChangeText={setJourneySearch}
-            placeholder={mainTab === 'trips' ? 'Search trips...' : 'Search settlements...'}
+            placeholder={
+              mainTab === 'trips'
+                ? journeyFilter === 'salary_requested'
+                  ? 'Search salary requests...'
+                  : 'Search trips...'
+                : 'Search settlements...'
+            }
           />
 
           {mainTab === 'trips' && (
@@ -1591,6 +1649,7 @@ export default function DriverWalletScreen() {
               {[
                 { id: 'all', label: 'All' },
                 { id: 'pending', label: 'Pending' },
+                { id: 'salary_requested', label: 'Salary Requested' },
                 { id: 'fleet_marked', label: 'Fleet marked' },
                 { id: 'settled', label: 'Settled' },
               ].map((chip) => {
@@ -1598,7 +1657,7 @@ export default function DriverWalletScreen() {
                 return (
                   <TouchableOpacity
                     key={chip.id}
-                    onPress={() => setJourneyFilter(chip.id as 'all' | 'pending' | 'fleet_marked' | 'settled')}
+                    onPress={() => setJourneyFilter(chip.id as 'all' | 'pending' | 'salary_requested' | 'fleet_marked' | 'settled')}
                     style={[
                       styles.filterChip,
                       active
@@ -1769,8 +1828,107 @@ export default function DriverWalletScreen() {
         </View>
       ) : mainTab === 'trips' ? (
         <View style={[styles.ledgerSection, { paddingHorizontal: Layout.screenPaddingHorizontal }]}>
-          <Text style={[styles.transactionHistoryTitle, styles.tripsItalicText, { color: colors.text }]}>Trips</Text>
-          {filteredTripJourneySections.length === 0 ? (
+          <Text style={[styles.transactionHistoryTitle, styles.tripsItalicText, { color: colors.text }]}>
+            {journeyFilter === 'salary_requested' ? 'Salary requested' : 'Trips'}
+          </Text>
+          {journeyFilter === 'salary_requested' ? (
+            filteredSalaryRequests.length === 0 ? (
+              <View style={[styles.ledgerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={[styles.ledgerEmpty, { borderBottomWidth: 0 }]}>
+                  <FontAwesome name="file-text-o" size={32} color={colors.textMuted} />
+                  <Text style={[styles.ledgerEmptyText, { color: colors.textMuted }]}>No salary requests found</Text>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.salaryRequestList}>
+                {filteredSalaryRequestSections.map(({ sectionLabel, requests }) => (
+                  <View key={sectionLabel} style={styles.tripsPremiumSection}>
+                    <View style={styles.tripsSectionHeaderRow}>
+                      <View style={[styles.tripsSectionDot, { backgroundColor: colors.emerald }]} />
+                      <Text style={[styles.tripsPremiumSectionLabel, { color: colors.textMuted }]}>{sectionLabel}</Text>
+                    </View>
+                    {requests.map((req) => {
+                      const orgName =
+                        salaryRequestOrgOptions.find((o) => String(o.orgId ?? '') === String(req.organization_id ?? ''))?.orgName ?? 'Fleet';
+                      const status = salaryRequestStatusLabel(req.status);
+                      const type = salaryRequestTypeLabel(req.request_type);
+                      const date = phonePeMetaDate(req.created_at);
+                      return (
+                        <View
+                          key={req.id}
+                          style={[
+                            styles.tripsCard,
+                            {
+                              backgroundColor: colors.surface,
+                              borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.9)',
+                              shadowColor: isDark ? '#000' : 'rgba(15,23,42,0.10)',
+                            },
+                          ]}
+                        >
+                          <View style={styles.tripsCardTouch}>
+                            <View style={styles.tripsCardTop}>
+                              <View style={styles.tripsCardTopLeft}>
+                                <View
+                                  style={[
+                                    styles.tripsIcon,
+                                    { backgroundColor: isDark ? colors.surfaceElevated : 'rgba(248,250,252,0.92)' },
+                                  ]}
+                                >
+                                  <FontAwesome
+                                    name={status === 'Rejected' ? 'times-circle' : status === 'Pending' ? 'clock-o' : 'check-circle'}
+                                    size={18}
+                                    color={status === 'Rejected' ? Theme.negative : status === 'Pending' ? AMBER_600 : colors.emerald}
+                                  />
+                                </View>
+                                <View style={styles.tripsHeadText}>
+                                  <Text style={[styles.tripsTripId, { color: colors.text }]} numberOfLines={1}>
+                                    {orgName}
+                                  </Text>
+                                  <View style={styles.tripsMetaInline}>
+                                    <Text style={[styles.tripsMetaText, { color: colors.textMuted }]}>{type}</Text>
+                                    <Text style={[styles.tripsMetaDot, { color: colors.emerald }]}>•</Text>
+                                    <Text style={[styles.tripsMetaText, { color: colors.textMuted }]} numberOfLines={1}>
+                                      {date}
+                                    </Text>
+                                  </View>
+                                </View>
+                              </View>
+                              <View style={styles.tripsCardRight}>
+                                <Text style={[styles.tripsAmount, { color: colors.text }]}>
+                                  ₹{Math.round(Number(req.amount) || 0).toLocaleString('en-IN')}
+                                </Text>
+                                <View style={styles.tripsStatusRow}>
+                                  <Text
+                                    style={[
+                                      styles.tripsStatusPill,
+                                      status === 'Paid'
+                                        ? styles.tripsStatusSuccess
+                                        : status === 'Approved'
+                                          ? styles.tripsStatusInfo
+                                          : status === 'Rejected'
+                                            ? styles.salaryRequestStatusRejected
+                                            : styles.salaryRequestStatusPending,
+                                    ]}
+                                  >
+                                    {status}
+                                  </Text>
+                                </View>
+                              </View>
+                            </View>
+                            {req.note?.trim() ? (
+                              <Text style={[styles.salaryRequestInlineNote, { color: colors.textMuted }]} numberOfLines={1}>
+                                {req.note.trim()}
+                              </Text>
+                            ) : null}
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ))}
+              </View>
+            )
+          ) : filteredTripJourneySections.length === 0 ? (
             <View style={[styles.ledgerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={[styles.ledgerEmpty, { borderBottomWidth: 0 }]}>
                 <FontAwesome name="search" size={32} color={colors.textMuted} />
@@ -2845,6 +3003,67 @@ const styles = StyleSheet.create({
     letterSpacing: 2.2,
     marginBottom: 10,
   },
+  salaryRequestList: {
+    gap: 10,
+    paddingBottom: 24,
+  },
+  salaryRequestCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    marginBottom: 10,
+  },
+  salaryRequestTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  salaryRequestTopLeft: {
+    flex: 1,
+    minWidth: 0,
+  },
+  salaryRequestFleet: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  salaryRequestMeta: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 1.4,
+  },
+  salaryRequestAmount: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  salaryRequestBottomRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  salaryRequestStatusPill: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  salaryRequestNote: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 11,
+    fontWeight: '500',
+    textAlign: 'right',
+  },
   fleetList: {
     gap: 18,
     paddingBottom: 24,
@@ -3222,6 +3441,24 @@ const styles = StyleSheet.create({
     color: Theme.driverEmerald,
     borderWidth: 1,
     borderColor: '#a7f3d0',
+  },
+  salaryRequestStatusPending: {
+    backgroundColor: AMBER_50,
+    color: AMBER_600,
+    borderWidth: 1,
+    borderColor: 'rgba(180,83,9,0.25)',
+  },
+  salaryRequestStatusRejected: {
+    backgroundColor: 'rgba(239,68,68,0.12)',
+    color: Theme.negative,
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.35)',
+  },
+  salaryRequestInlineNote: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: '500',
+    lineHeight: 16,
   },
   tripsChevronExpanded: {
     transform: [{ rotate: '180deg' }],
