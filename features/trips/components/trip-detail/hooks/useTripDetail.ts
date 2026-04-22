@@ -19,6 +19,7 @@ import {
   getSupplierDetails,
 } from "@/features/suppliers/services/suppliers.service";
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
+import { getVehicleDocumentViewUrl } from "@/features/vehicles/services/vehicleDocuments.service";
 import type { VehicleDocuments } from "@/features/vehicles/utils/vehicleDocuments.util";
 import {
   DOCUMENT_EXPIRY_ORDER,
@@ -504,6 +505,21 @@ export function useTripDetail({
           },
     ];
   }, [tripDocuments, vehiclePreviewDocs]);
+
+  const docPreviewStoragePath = useMemo(() => {
+    if (!selectedDoc) return undefined;
+    return (
+      selectedDoc.storagePath ??
+      (selectedDoc.id === "pod" && tripDocuments[0] ? tripDocuments[0].storage_path : undefined)
+    );
+  }, [selectedDoc, tripDocuments]);
+
+  const isVehicleGalleryDoc = selectedDoc?.id === "vehicle-documents";
+
+  const activeVehiclePreviewDoc = useMemo(
+    () => vehiclePreviewDocs[vehiclePreviewIndex] ?? null,
+    [vehiclePreviewDocs, vehiclePreviewIndex],
+  );
 
   // ── Realtime ──────────────────────────────────────────────────────────────
   const handleRealtimeTripUpdate = useCallback(() => {
@@ -1176,6 +1192,96 @@ export function useTripDetail({
     else setTripDocuments([]);
   }, [trip?.id, loadTripDocuments]);
 
+  useEffect(() => {
+    if (!selectedDoc) {
+      podModalRefetchDoneRef.current = false;
+    }
+  }, [selectedDoc]);
+
+  useEffect(() => {
+    if (!selectedDoc) {
+      setDocPreviewUrl(null);
+      setDocPreviewLoading(false);
+      setDocPreviewError(false);
+      setVehiclePreviewUrls({});
+      setVehiclePreviewIndex(0);
+      return;
+    }
+    if (isVehicleGalleryDoc) return;
+    if (!docPreviewStoragePath) return;
+    let isActive = true;
+    setDocPreviewLoading(true);
+    setDocPreviewUrl(null);
+    setDocPreviewError(false);
+    const urlPromise =
+      selectedDoc.docSource === "vehicle"
+        ? getVehicleDocumentViewUrl(docPreviewStoragePath)
+        : tripDocumentsService.getDocumentViewUrl(docPreviewStoragePath);
+    urlPromise
+      .then((url) => {
+        if (isActive) {
+          setDocPreviewUrl(url);
+          setDocPreviewLoading(false);
+        }
+      })
+      .catch(() => {
+        if (isActive) {
+          setDocPreviewError(true);
+          setDocPreviewLoading(false);
+        }
+      });
+    return () => {
+      isActive = false;
+    };
+  }, [selectedDoc, docPreviewStoragePath, isVehicleGalleryDoc]);
+
+  useEffect(() => {
+    if (!selectedDoc || !isVehicleGalleryDoc) return;
+
+    const firstUploadedIndex = vehiclePreviewDocs.findIndex((doc) => !!doc.storagePath);
+    setVehiclePreviewIndex(firstUploadedIndex >= 0 ? firstUploadedIndex : 0);
+    setDocPreviewUrl(null);
+    setDocPreviewError(false);
+    setVehiclePreviewUrls({});
+
+    const docsToResolve = vehiclePreviewDocs.filter((doc) => !!doc.storagePath);
+    if (docsToResolve.length === 0) {
+      setDocPreviewLoading(false);
+      return;
+    }
+
+    let isActive = true;
+    setDocPreviewLoading(true);
+
+    Promise.all(
+      docsToResolve.map(async (doc) => [doc.id, await getVehicleDocumentViewUrl(doc.storagePath!)] as const),
+    )
+      .then((resolved) => {
+        if (!isActive) return;
+        setVehiclePreviewUrls(Object.fromEntries(resolved));
+        setDocPreviewLoading(false);
+      })
+      .catch(() => {
+        if (!isActive) return;
+        setDocPreviewError(true);
+        setDocPreviewLoading(false);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [selectedDoc, isVehicleGalleryDoc, vehiclePreviewDocs]);
+
+  useEffect(() => {
+    if (!selectedDoc) {
+      return;
+    }
+    if (selectedDoc.id !== "pod" || docPreviewStoragePath || !tripId) return;
+    if (podModalRefetchDoneRef.current) return;
+    podModalRefetchDoneRef.current = true;
+    loadTripDocuments();
+  }, [selectedDoc, docPreviewStoragePath, tripId, loadTripDocuments]);
+
   // OTP for aggregate trips
   useEffect(() => {
     if (trip?.id && isAggregateTrip(trip)) {
@@ -1361,6 +1467,8 @@ export function useTripDetail({
     vehiclePreviewUrls,
     vehiclePreviewIndex,
     setVehiclePreviewIndex,
+    activeVehiclePreviewDoc,
+    isVehicleGalleryDoc,
     selectedDoc,
     setSelectedDoc,
     docPreviewUrl,

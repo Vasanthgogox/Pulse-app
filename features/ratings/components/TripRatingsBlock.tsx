@@ -1,11 +1,18 @@
 /**
  * Trip detail — Ratings for own/asset, aggregate (OTP), and indent-based trips.
  * - Own trip (asset): Organization→Driver
- * - Aggregate (OTP): Client→Supplier, Client→Driver (when client_id), Supplier→Driver, Org→Driver (when no client_id)
+ * - Aggregate (OTP): Client→Supplier (clients.id or org when no client_id), Client→Driver (when client_id), Supplier→Driver, Org→Driver (when no client_id)
  * - Indent-based: Client→Supplier, Client→Driver, Supplier→Driver
  */
 import Theme from '@/constants/Theme';
+import { getClientById } from '@/features/clients/services/clients.service';
+import {
+  getSupplierById,
+  getSupplierDetails,
+} from '@/features/suppliers/services/suppliers.service';
+import { getSignedAvatarUrl } from '@/lib/avatarUpload';
 import { VALIDATION } from '@/lib/validation';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -18,9 +25,11 @@ import {
   Platform,
   StyleSheet,
   Text,
+  type TextStyle,
   TextInput,
   TouchableOpacity,
   View,
+  type ViewStyle,
 } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Feather from '@expo/vector-icons/Feather';
@@ -29,6 +38,8 @@ import type { TripRow } from '@/features/trips/services/trips.service';
 import {
   createRating,
   getRatingsForTrip,
+  getRatingsForDriver,
+  getRatingsForSupplier,
   averageScore,
   type RatingRow,
 } from '../services/ratings.service';
@@ -49,6 +60,11 @@ export interface TripRatingsBlockProps {
   clientName?: string | null;
   /** True when customer payment has been captured on this trip. */
   paymentCaptured?: boolean;
+  /**
+   * Web trip detail: large “workspace” ratings panel (stakeholder cards + audit list).
+   * Default keeps the compact layout used on native.
+   */
+  layoutVariant?: 'default' | 'workspace';
 }
 
 type RateFlow = { type: 'client_supplier' } | { type: 'supplier_driver' } | null;
@@ -142,6 +158,78 @@ function formatDate(s: string) {
   return `${day} ${months[Number(m) - 1]} ${y}`;
 }
 
+async function resolveAvatarUri(raw: string | null | undefined): Promise<string | null> {
+  const t = (raw ?? '').trim();
+  if (!t) return null;
+  if (t.startsWith('http://') || t.startsWith('https://')) return t;
+  return (await getSignedAvatarUrl(t)) ?? null;
+}
+
+function PartyAvatar({
+  uri,
+  name,
+  size = 40,
+  initialTextStyle,
+  containerStyle,
+}: {
+  uri?: string | null;
+  name: string;
+  size?: number;
+  initialTextStyle?: TextStyle;
+  containerStyle?: ViewStyle;
+}) {
+  const initial = (name || '—').trim().slice(0, 1).toUpperCase() || '—';
+  return (
+    <View
+      style={[
+        styles.partyAvatarWrap,
+        { width: size, height: size, borderRadius: size / 2 },
+        containerStyle,
+      ]}
+    >
+      {uri ? (
+        <Image
+          source={{ uri }}
+          style={[styles.partyAvatarImage, { width: size, height: size }]}
+          resizeMode="cover"
+        />
+      ) : (
+        <Text
+          style={[
+            styles.partyAvatarInitial,
+            { fontSize: Math.max(12, size * 0.38) },
+            initialTextStyle,
+          ]}
+        >
+          {initial}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+function isSupplierRatingForTrip(r: RatingRow, trip: TripRow): boolean {
+  if (r.rated_type !== 'supplier' || !trip.supplier_id) return false;
+  return r.rated_id === trip.supplier_id;
+}
+
+type RatedPartyKind = 'client' | 'supplier' | 'driver';
+
+function RatedPartyBadge({ kind }: { kind: RatedPartyKind }) {
+  const style =
+    kind === 'client'
+      ? styles.wsRatedTagClient
+      : kind === 'supplier'
+        ? styles.wsRatedTagSupplier
+        : styles.wsRatedTagDriver;
+  const label = kind === 'client' ? 'Client' : kind === 'supplier' ? 'Supplier' : 'Driver';
+  return (
+    <View style={[styles.wsRatedTag, style]}>
+      <Text style={styles.wsRatedTagText}>{label}</Text>
+    </View>
+  );
+}
+
 /** Pulse-style modal variant: supplier = client→supplier rating; driver = supplier/org→driver. */
 type FeedbackPresentationKind = 'DRIVER' | 'SUPPLIER';
 
@@ -188,9 +276,17 @@ export function TripRatingsBlock({
   onRatingsLoaded,
   clientName,
   paymentCaptured = false,
+  layoutVariant = 'default',
 }: TripRatingsBlockProps) {
   const insets = useSafeAreaInsets();
+  const { currentOrganization } = useOrganization();
   const [ratings, setRatings] = useState<RatingRow[]>([]);
+  const [clientAvatarUri, setClientAvatarUri] = useState<string | null>(null);
+  const [supplierAvatarUri, setSupplierAvatarUri] = useState<string | null>(null);
+  /** All-time average from `ratings` for this driver (all trips). */
+  const [histDriverAvg, setHistDriverAvg] = useState<number | null>(null);
+  /** All-time average from `ratings` for this supplier (all trips). */
+  const [histSupplierAvg, setHistSupplierAvg] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [flow, setFlow] = useState<RateFlow>(null);
   const [score, setScore] = useState(0);
@@ -217,15 +313,27 @@ export function TripRatingsBlock({
   const isCompleted =
     (trip.status || '').toLowerCase() === 'completed' ||
     !!(trip as { completed_at?: string }).completed_at;
-  /** Client→Supplier: indent or aggregate with client_id. */
+  const isClientViewer =
+    !!trip.organization_id && !!organizationId && trip.organization_id === organizationId;
+  /**
+   * Client→Supplier when a clients row exists (rater_id = clients.id), or
+   * fleet (trip owner) rates supplier when there is no client_id on the trip.
+   */
   const canRateSupplier =
     isCompleted &&
-    !!trip.client_id &&
     !!trip.supplier_id &&
-    !!organizationId;
+    !!organizationId &&
+    (!!trip.client_id || (isClientViewer && !!trip.organization_id));
 
   const hasRatedSupplier = ratings.some(
-    (r) => r.rater_type === 'client' && r.rated_type === 'supplier'
+    (r) =>
+      isSupplierRatingForTrip(r, trip) &&
+      ((r.rater_type === 'client' &&
+        !!trip.client_id &&
+        r.rater_id === trip.client_id) ||
+        (r.rater_type === 'organization' &&
+          !!trip.organization_id &&
+          r.rater_id === trip.organization_id)),
   );
   const hasRatedDriver = ratings.some(
     (r) =>
@@ -233,7 +341,6 @@ export function TripRatingsBlock({
       (r.rater_type === 'client' || r.rater_type === 'supplier' || r.rater_type === 'organization')
   );
 
-  const isClientViewer = !!trip.organization_id && !!organizationId && trip.organization_id === organizationId;
   const hasSupplier = !!trip.supplier_id;
   const hasClient = !!trip.client_id;
 
@@ -289,6 +396,38 @@ export function TripRatingsBlock({
 
   useEffect(() => {
     let cancelled = false;
+    const id = trip.driver_id?.trim();
+    if (!id) {
+      setHistDriverAvg(null);
+      return;
+    }
+    getRatingsForDriver(id).then(({ error, ratings: rows }) => {
+      if (cancelled || error) return;
+      setHistDriverAvg(averageScore(rows));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [trip.driver_id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const id = trip.supplier_id?.trim();
+    if (!id) {
+      setHistSupplierAvg(null);
+      return;
+    }
+    getRatingsForSupplier(id).then(({ error, ratings: rows }) => {
+      if (cancelled || error) return;
+      setHistSupplierAvg(averageScore(rows));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [trip.supplier_id]);
+
+  useEffect(() => {
+    let cancelled = false;
     AsyncStorage.getItem(clientFeedbackStorageKey)
       .then((raw) => {
         if (cancelled || !raw) return;
@@ -308,6 +447,44 @@ export function TripRatingsBlock({
       cancelled = true;
     };
   }, [clientFeedbackStorageKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const ownerOrg = trip.organization_id;
+    setClientAvatarUri(null);
+    setSupplierAvatarUri(null);
+    if (!ownerOrg) return;
+
+    void (async () => {
+      if (trip.client_id) {
+        const { client } = await getClientById(ownerOrg, trip.client_id);
+        if (cancelled || !client) return;
+        const u = await resolveAvatarUri(client.avatar_url);
+        if (!cancelled) setClientAvatarUri(u);
+      }
+
+      if (trip.supplier_id) {
+        let rawAvatar = '';
+        const d1 = await getSupplierDetails(trip.supplier_id);
+        if (!cancelled && d1.supplier?.avatar_url) rawAvatar = d1.supplier.avatar_url;
+        if (!rawAvatar) {
+          const s2 = await getSupplierById(ownerOrg, trip.supplier_id);
+          if (!cancelled && s2.supplier?.avatar_url) rawAvatar = s2.supplier.avatar_url ?? '';
+        }
+        const viewerId = currentOrganization?.id;
+        if (!rawAvatar && viewerId && viewerId !== ownerOrg) {
+          const s3 = await getSupplierById(viewerId, trip.supplier_id);
+          if (!cancelled && s3.supplier?.avatar_url) rawAvatar = s3.supplier.avatar_url ?? '';
+        }
+        const u = await resolveAvatarUri(rawAvatar || null);
+        if (!cancelled) setSupplierAvatarUri(u);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [trip.id, trip.client_id, trip.supplier_id, trip.organization_id, currentOrganization?.id]);
 
   useEffect(() => {
     if (!flow) {
@@ -478,8 +655,13 @@ export function TripRatingsBlock({
     let rater_type: RaterType;
     let rater_id: string;
     if (isClientSupplier) {
-      rater_type = 'client';
-      rater_id = trip.client_id!;
+      if (trip.client_id) {
+        rater_type = 'client';
+        rater_id = trip.client_id;
+      } else {
+        rater_type = 'organization';
+        rater_id = trip.organization_id!;
+      }
     } else {
       if (canRateDriverAsClient) {
         rater_type = 'client';
@@ -523,6 +705,17 @@ export function TripRatingsBlock({
   const driverAvg = averageScore(
     ratings.filter((r) => r.rated_type === 'driver')
   );
+  /** Prefer lifetime averages from `ratings` when loaded; fall back to this trip only. */
+  const displaySupplierAvg = histSupplierAvg ?? supplierAvg;
+  const displayDriverAvg = histDriverAvg ?? driverAvg;
+  const clientDisplayName = (clientName || trip.client_name || 'Client').trim();
+  const supplierDisplayName = (partnerName || 'Supplier').trim();
+  const driverDisplayName = (
+    driverName ||
+    trip.driver_display_name ||
+    'Driver'
+  ).trim();
+  const isWorkspace = layoutVariant === 'workspace';
   const activeSubjectName = flow?.type === 'client_supplier'
     ? (partnerName || 'Supplier')
     : (driverName || trip.driver_display_name || 'Driver');
@@ -538,18 +731,161 @@ export function TripRatingsBlock({
     return null;
   }
 
-  return (
-    <View style={styles.wrapper}>
-      <View style={styles.sectionHeading}>
-        <View style={styles.sectionIconWrap}>
-          <Feather name="award" size={14} color={Theme.textOnPrimary} />
+  const summaryPillsEl = (
+    <>
+      {displaySupplierAvg != null && (
+        <View style={[styles.summaryPill, isWorkspace && styles.wsSummaryPill]}>
+          <Feather name="briefcase" size={12} color={Theme.textPrimaryDark} />
+          <Text style={[styles.summaryText, isWorkspace && styles.wsSummaryPillText]}>
+            Supplier {displaySupplierAvg.toFixed(1)} ★
+          </Text>
         </View>
-        <View style={styles.sectionHeadingTextWrap}>
-          <Text style={styles.sectionTitle}>Ratings</Text>
-          <Text style={styles.sectionSubtitle}>Track service quality across completed trips</Text>
+      )}
+      {displayDriverAvg != null && (
+        <View style={[styles.summaryPill, isWorkspace && styles.wsSummaryPill]}>
+          <Feather name="truck" size={12} color={Theme.textPrimaryDark} />
+          <Text style={[styles.summaryText, isWorkspace && styles.wsSummaryPillText]}>
+            Driver {displayDriverAvg.toFixed(1)} ★
+          </Text>
         </View>
+      )}
+      {clientFeedback != null && (
+        <View style={[styles.summaryPill, isWorkspace && styles.wsSummaryPill]}>
+          <Feather name="user" size={12} color={Theme.textPrimaryDark} />
+          <Text style={[styles.summaryText, isWorkspace && styles.wsSummaryPillText]}>
+            Client {clientFeedback.score.toFixed(1)} ★
+          </Text>
+        </View>
+      )}
+    </>
+  );
+
+  const ratingsList =
+    ratings.length > 0 ? (
+    <View style={[styles.list, isWorkspace && styles.wsList]}>
+      {ratings.map((r) => {
+        const parsed = parseCommentPayload(r.comment);
+        const fromLabel =
+          r.rater_type === 'client' ? 'Client' : r.rater_type === 'organization' ? 'Fleet' : 'Supplier';
+        const toLabel =
+          r.rated_type === 'supplier' ? supplierDisplayName : driverDisplayName;
+        const ratedAvatarUri =
+          r.rated_type === 'supplier' ? supplierAvatarUri : driverAvatarUri;
+        return (
+          <View key={r.id} style={[styles.row, isWorkspace && styles.wsAuditCard]}>
+            {isWorkspace ? (
+              <View style={styles.wsAuditMainRow}>
+                <PartyAvatar uri={ratedAvatarUri} name={toLabel} size={44} />
+                <View style={styles.wsAuditLeft}>
+                  <RatedPartyBadge kind={r.rated_type === 'supplier' ? 'supplier' : 'driver'} />
+                  <Text style={styles.wsAuditFromTo}>
+                    {fromLabel} → {toLabel}
+                  </Text>
+                  <View style={styles.wsScoreRow}>
+                    <Text style={styles.wsAuditScore}>{r.score}</Text>
+                    <FontAwesome name="star" size={16} color={Theme.feedbackModalStarActive} />
+                  </View>
+                </View>
+                <Text style={styles.wsAuditDate}>{formatDate(r.created_at)}</Text>
+              </View>
+            ) : (
+              <View style={styles.rowTopWithAvatar}>
+                <PartyAvatar uri={ratedAvatarUri} name={toLabel} size={36} />
+                <View style={styles.rowTopTextCol}>
+                  <Text style={styles.rowLabel}>
+                    {fromLabel} → {toLabel}
+                  </Text>
+                  <Text style={styles.rowScore}>{r.score} ★</Text>
+                </View>
+              </View>
+            )}
+            {parsed.tags.length > 0 ? (
+              <View style={[styles.rowTags, isWorkspace && styles.wsRowTags]}>
+                {parsed.tags.map((tagId) => {
+                  const tagLabel = getQuickTagLabel(tagId, r.rated_type);
+                  return (
+                    <View key={`${r.id}-${tagId}`} style={[styles.rowTagChip, isWorkspace && styles.wsTagChip]}>
+                      <Text style={[styles.rowTagText, isWorkspace && styles.wsTagChipText]}>{tagLabel}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            ) : null}
+            {parsed.note ? (
+              <Text style={[styles.rowComment, isWorkspace && styles.wsRowComment]} numberOfLines={2}>
+                {parsed.note}
+              </Text>
+            ) : null}
+            {!isWorkspace ? <Text style={styles.rowDate}>{formatDate(r.created_at)}</Text> : null}
+          </View>
+        );
+      })}
+    </View>
+  ) : null;
+
+  const clientFeedbackList = clientFeedback != null ? (
+    <View style={[styles.list, isWorkspace && styles.wsList]}>
+      <View style={[styles.row, isWorkspace && styles.wsAuditCard]}>
+        {isWorkspace ? (
+          <View style={styles.wsAuditMainRow}>
+            <PartyAvatar uri={clientAvatarUri} name={clientDisplayName} size={44} />
+            <View style={styles.wsAuditLeft}>
+              <RatedPartyBadge kind="client" />
+              <Text style={styles.wsAuditFromTo}>Supplier → {clientDisplayName}</Text>
+              <View style={styles.wsScoreRow}>
+                <Text style={styles.wsAuditScore}>{clientFeedback.score}</Text>
+                <FontAwesome name="star" size={16} color={Theme.feedbackModalStarActive} />
+              </View>
+            </View>
+            <Text style={styles.wsAuditDate}>{formatDate(clientFeedback.created_at)}</Text>
+          </View>
+        ) : (
+          <View style={styles.rowTopWithAvatar}>
+            <PartyAvatar uri={clientAvatarUri} name={clientDisplayName} size={36} />
+            <View style={styles.rowTopTextCol}>
+              <Text style={styles.rowLabel}>Supplier → {clientDisplayName}</Text>
+              <Text style={styles.rowScore}>{clientFeedback.score} ★</Text>
+            </View>
+          </View>
+        )}
+        {clientFeedback.tags.length > 0 ? (
+          <View style={[styles.rowTags, isWorkspace && styles.wsRowTags]}>
+            {clientFeedback.tags.map((tagId) => {
+              const tagLabel = CLIENT_RATING_TAGS.find((t) => t.id === tagId)?.label || tagId;
+              return (
+                <View key={`client-${tagId}`} style={[styles.rowTagChip, isWorkspace && styles.wsTagChip]}>
+                  <Text style={[styles.rowTagText, isWorkspace && styles.wsTagChipText]}>{tagLabel}</Text>
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
+        {clientFeedback.note ? (
+          <Text style={[styles.rowComment, isWorkspace && styles.wsRowComment]} numberOfLines={2}>
+            {clientFeedback.note}
+          </Text>
+        ) : null}
+        {!isWorkspace ? (
+          <Text style={styles.rowDate}>{formatDate(clientFeedback.created_at)}</Text>
+        ) : null}
       </View>
-      <View style={styles.card}>
+    </View>
+  ) : null;
+
+  return (
+    <View style={[styles.wrapper, isWorkspace && styles.wsWrapper]}>
+      {!isWorkspace ? (
+        <View style={styles.sectionHeading}>
+          <View style={styles.sectionIconWrap}>
+            <Feather name="award" size={14} color={Theme.textOnPrimary} />
+          </View>
+          <View style={styles.sectionHeadingTextWrap}>
+            <Text style={styles.sectionTitle}>Ratings</Text>
+            <Text style={styles.sectionSubtitle}>Track service quality across completed trips</Text>
+          </View>
+        </View>
+      ) : null}
+      <View style={[styles.card, isWorkspace && styles.wsCard]}>
         {loading ? (
           <View style={styles.loading}>
             <ActivityIndicator size="small" color={Theme.textMuted} />
@@ -557,127 +893,199 @@ export function TripRatingsBlock({
           </View>
         ) : (
           <>
-            {ratings.length > 0 && (
-              <View style={styles.summary}>
-                {supplierAvg != null && (
-                  <View style={styles.summaryPill}>
-                    <Feather name="briefcase" size={12} color={Theme.textPrimaryDark} />
-                    <Text style={styles.summaryText}>Supplier {supplierAvg.toFixed(1)} ★</Text>
+            {isWorkspace ? (
+              <View style={styles.wsHeaderRow}>
+                <View style={styles.wsTitleCluster}>
+                  <View style={styles.wsAwardCircle}>
+                    <Feather name="award" size={28} color={Theme.primary} />
                   </View>
-                )}
-                {driverAvg != null && (
-                  <View style={styles.summaryPill}>
-                    <Feather name="truck" size={12} color={Theme.textPrimaryDark} />
-                    <Text style={styles.summaryText}>Driver {driverAvg.toFixed(1)} ★</Text>
+                  <View style={styles.wsTitleTextWrap}>
+                    <Text style={styles.wsTitle}>Ratings</Text>
+                    <Text style={styles.wsSubtitle}>Track service quality across completed trips</Text>
                   </View>
-                )}
-                {clientFeedback != null && (
-                  <View style={styles.summaryPill}>
-                    <Feather name="user" size={12} color={Theme.textPrimaryDark} />
-                    <Text style={styles.summaryText}>Client {clientFeedback.score.toFixed(1)} ★</Text>
-                  </View>
-                )}
-              </View>
-            )}
-            {ratings.length > 0 && (
-              <View style={styles.list}>
-                {ratings.map((r) => (
-                  (() => {
-                    const parsed = parseCommentPayload(r.comment);
-                    return (
-                      <View key={r.id} style={styles.row}>
-                        <Text style={styles.rowLabel}>
-                          {r.rater_type === 'client'
-                            ? 'Client'
-                            : r.rater_type === 'organization'
-                              ? 'Fleet'
-                              : 'Supplier'}{' '}
-                          →{' '}
-                          {r.rated_type === 'supplier'
-                            ? (partnerName || 'Supplier')
-                            : (driverName || 'Driver')}
-                        </Text>
-                        <Text style={styles.rowScore}>{r.score} ★</Text>
-                        {parsed.tags.length > 0 ? (
-                          <View style={styles.rowTags}>
-                            {parsed.tags.map((tagId) => {
-                              const tagLabel = getQuickTagLabel(tagId, r.rated_type);
-                              return (
-                                <View key={`${r.id}-${tagId}`} style={styles.rowTagChip}>
-                                  <Text style={styles.rowTagText}>{tagLabel}</Text>
-                                </View>
-                              );
-                            })}
-                          </View>
-                        ) : null}
-                        {parsed.note ? (
-                          <Text style={styles.rowComment} numberOfLines={2}>
-                            {parsed.note}
-                          </Text>
-                        ) : null}
-                        <Text style={styles.rowDate}>{formatDate(r.created_at)}</Text>
-                      </View>
-                    );
-                  })()
-                ))}
-              </View>
-            )}
-            {clientFeedback != null && (
-              <View style={styles.list}>
-                <View style={styles.row}>
-                  <Text style={styles.rowLabel}>Supplier → {clientName || 'Client'}</Text>
-                  <Text style={styles.rowScore}>{clientFeedback.score} ★</Text>
-                  {clientFeedback.tags.length > 0 ? (
-                    <View style={styles.rowTags}>
-                      {clientFeedback.tags.map((tagId) => {
-                        const tagLabel =
-                          CLIENT_RATING_TAGS.find((t) => t.id === tagId)?.label || tagId;
-                        return (
-                          <View key={`client-${tagId}`} style={styles.rowTagChip}>
-                            <Text style={styles.rowTagText}>{tagLabel}</Text>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  ) : null}
-                  {clientFeedback.note ? (
-                    <Text style={styles.rowComment} numberOfLines={2}>
-                      {clientFeedback.note}
-                    </Text>
-                  ) : null}
-                  <Text style={styles.rowDate}>{formatDate(clientFeedback.created_at)}</Text>
                 </View>
+                {(displaySupplierAvg != null ||
+                  displayDriverAvg != null ||
+                  clientFeedback != null) && (
+                  <View style={styles.wsPillRow}>{summaryPillsEl}</View>
+                )}
               </View>
+            ) : null}
+
+            {!isWorkspace && ratings.length > 0 && (
+              <View style={styles.summary}>{summaryPillsEl}</View>
             )}
-            <View style={styles.actions}>
+
+            {isWorkspace ? (
+              <View style={styles.wsPartyGrid}>
+                <TouchableOpacity
+                  style={styles.wsPartyCard}
+                  onPress={() => {
+                    if (canRateClient) setShowClientFeedbackModal(true);
+                  }}
+                  activeOpacity={canRateClient ? 0.85 : 1}
+                  disabled={!canRateClient}
+                >
+                  <View style={[styles.wsPartyIcon, styles.wsPartyIconDark]}>
+                    <PartyAvatar
+                      uri={clientAvatarUri}
+                      name={clientDisplayName}
+                      size={72}
+                      initialTextStyle={{ color: Theme.textOnPrimary }}
+                      containerStyle={{ borderWidth: 0, backgroundColor: 'rgba(255,255,255,0.12)' }}
+                    />
+                  </View>
+                  <Text style={styles.wsPartyRole}>Client</Text>
+                  <Text style={styles.wsPartyName} numberOfLines={2}>
+                    {clientDisplayName}
+                  </Text>
+                  <View style={styles.wsPartyDivider} />
+                  <View style={styles.wsPartyFooter}>
+                    <View style={styles.wsPartyScoreBlock}>
+                      <View style={styles.wsPartyScoreRow}>
+                        <Text style={styles.wsPartyScore}>
+                          {clientFeedback != null ? clientFeedback.score.toFixed(1) : '—'}
+                        </Text>
+                        <FontAwesome name="star" size={12} color={Theme.feedbackModalStarActive} />
+                      </View>
+                      {clientFeedback != null ? (
+                        <Text style={styles.wsPartyAvgCaption}>Partner feedback</Text>
+                      ) : null}
+                    </View>
+                    {canRateClient ? (
+                      <Text style={styles.wsRateCta}>Rate party</Text>
+                    ) : (
+                      <Text style={styles.wsRateCtaMuted}>—</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.wsPartyCard}
+                  onPress={() => {
+                    if (canRateSupplier && !hasRatedSupplier) openRateSupplier();
+                  }}
+                  activeOpacity={canRateSupplier && !hasRatedSupplier ? 0.85 : 1}
+                  disabled={!canRateSupplier || hasRatedSupplier}
+                >
+                  <View style={[styles.wsPartyIcon, styles.wsPartyIconMuted]}>
+                    <PartyAvatar uri={supplierAvatarUri} name={supplierDisplayName} size={72} />
+                  </View>
+                  <Text style={styles.wsPartyRole}>Supplier</Text>
+                  <Text style={styles.wsPartyName} numberOfLines={2}>
+                    {supplierDisplayName}
+                  </Text>
+                  <View style={styles.wsPartyDivider} />
+                  <View style={styles.wsPartyFooter}>
+                    <View style={styles.wsPartyScoreBlock}>
+                      <View style={styles.wsPartyScoreRow}>
+                        <Text style={styles.wsPartyScore}>
+                          {displaySupplierAvg != null ? displaySupplierAvg.toFixed(1) : '—'}
+                        </Text>
+                        <FontAwesome name="star" size={12} color={Theme.feedbackModalStarActive} />
+                      </View>
+                      {histSupplierAvg != null ? (
+                        <Text style={styles.wsPartyAvgCaption}>All trips avg</Text>
+                      ) : supplierAvg != null ? (
+                        <Text style={styles.wsPartyAvgCaption}>This trip</Text>
+                      ) : null}
+                    </View>
+                    {canRateSupplier && !hasRatedSupplier ? (
+                      <Text style={styles.wsRateCta}>Rate party</Text>
+                    ) : hasRatedSupplier ? (
+                      <Text style={styles.wsRateCtaMuted}>Recorded</Text>
+                    ) : (
+                      <Text style={styles.wsRateCtaMuted}>—</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.wsPartyCard}
+                  onPress={() => {
+                    if (canRateDriver && !hasRatedDriver) openRateDriver();
+                  }}
+                  activeOpacity={canRateDriver && !hasRatedDriver ? 0.85 : 1}
+                  disabled={!canRateDriver || hasRatedDriver}
+                >
+                  <View style={[styles.wsPartyIcon, styles.wsPartyIconDriver]}>
+                    <PartyAvatar
+                      uri={driverAvatarUri}
+                      name={driverDisplayName}
+                      size={72}
+                      initialTextStyle={{ color: Theme.primary }}
+                      containerStyle={{ borderWidth: 0, backgroundColor: 'transparent' }}
+                    />
+                  </View>
+                  <Text style={styles.wsPartyRole}>Driver</Text>
+                  <Text style={styles.wsPartyName} numberOfLines={2}>
+                    {driverDisplayName}
+                  </Text>
+                  <View style={styles.wsPartyDivider} />
+                  <View style={styles.wsPartyFooter}>
+                    <View style={styles.wsPartyScoreBlock}>
+                      <View style={styles.wsPartyScoreRow}>
+                        <Text style={styles.wsPartyScore}>
+                          {displayDriverAvg != null ? displayDriverAvg.toFixed(1) : '—'}
+                        </Text>
+                        <FontAwesome name="star" size={12} color={Theme.feedbackModalStarActive} />
+                      </View>
+                      {histDriverAvg != null ? (
+                        <Text style={styles.wsPartyAvgCaption}>All trips avg</Text>
+                      ) : driverAvg != null ? (
+                        <Text style={styles.wsPartyAvgCaption}>This trip</Text>
+                      ) : null}
+                    </View>
+                    {canRateDriver && !hasRatedDriver ? (
+                      <Text style={styles.wsRateCta}>Rate party</Text>
+                    ) : hasRatedDriver ? (
+                      <Text style={styles.wsRateCtaMuted}>Recorded</Text>
+                    ) : (
+                      <Text style={styles.wsRateCtaMuted}>—</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+
+            {ratingsList}
+            {clientFeedbackList}
+
+            {isWorkspace && (ratings.length === 0 && !clientFeedback) ? (
+              <Text style={styles.wsEmptyAudits}>No audit entries yet for this trip.</Text>
+            ) : null}
+
+            <View style={[styles.actions, isWorkspace && styles.wsActions]}>
               {canRateSupplier && !hasRatedSupplier && (
                 <TouchableOpacity
-                  style={[styles.btn, styles.btnSupplier]}
+                  style={[styles.btn, styles.btnSupplier, isWorkspace && styles.wsPrimaryCta]}
                   onPress={openRateSupplier}
                   activeOpacity={0.8}
                 >
-                  <Feather name="briefcase" size={14} color={Theme.darkGreen} />
-                  <Text style={styles.btnText}>Rate supplier</Text>
+                  <Feather name="briefcase" size={14} color={isWorkspace ? Theme.textOnPrimary : Theme.darkGreen} />
+                  <Text style={[styles.btnText, isWorkspace && styles.wsPrimaryCtaText]}>Rate supplier</Text>
                 </TouchableOpacity>
               )}
               {canRateDriver && !hasRatedDriver && (
                 <TouchableOpacity
-                  style={[styles.btn, styles.btnDriver]}
+                  style={[styles.btn, styles.btnDriver, isWorkspace && styles.wsPrimaryCta]}
                   onPress={openRateDriver}
                   activeOpacity={0.8}
                 >
-                  <Feather name="truck" size={14} color={Theme.textPrimaryDark} />
-                  <Text style={styles.btnText}>Rate driver</Text>
+                  <Feather name="truck" size={14} color={Theme.textOnPrimary} />
+                  <Text style={[styles.btnText, isWorkspace && styles.wsPrimaryCtaText]}>Rate driver</Text>
                 </TouchableOpacity>
               )}
               {canRateClient && (
                 <TouchableOpacity
-                  style={[styles.btn, styles.btnDriver]}
+                  style={[styles.btn, styles.btnDriver, isWorkspace && styles.wsOutlineCta]}
                   onPress={() => setShowClientFeedbackModal(true)}
                   activeOpacity={0.8}
                 >
                   <Feather name="user" size={14} color={Theme.textPrimaryDark} />
-                  <Text style={styles.btnText}>Rate client</Text>
+                  <Text style={[styles.btnText, isWorkspace && styles.wsOutlineCtaText]}>
+                    Rate client performance
+                  </Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -731,6 +1139,12 @@ export function TripRatingsBlock({
                       {flow?.type === 'supplier_driver' && driverAvatarUri ? (
                         <Image
                           source={{ uri: driverAvatarUri }}
+                          style={styles.avatarImagePulse}
+                          resizeMode="cover"
+                        />
+                      ) : flow?.type === 'client_supplier' && supplierAvatarUri ? (
+                        <Image
+                          source={{ uri: supplierAvatarUri }}
                           style={styles.avatarImagePulse}
                           resizeMode="cover"
                         />
@@ -1144,6 +1558,358 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Theme.textPrimary,
     textAlign: 'center',
+  },
+  // ── Workspace layout (web trip detail) ─────────────────────────────────────
+  wsWrapper: {
+    marginBottom: 20,
+  },
+  wsCard: {
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderRadius: 36,
+    padding: 24,
+    borderColor: Theme.borderLight,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 40px 100px rgba(15, 23, 42, 0.06)',
+      },
+      default: {},
+    }),
+  },
+  wsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 16,
+    marginBottom: 20,
+  },
+  wsTitleCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    flex: 1,
+    minWidth: 200,
+  },
+  wsAwardCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: Theme.primary + '18',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  wsTitleTextWrap: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  wsTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    fontStyle: 'italic',
+    color: Theme.textPrimaryDark,
+    textTransform: 'uppercase',
+    letterSpacing: -0.3,
+  },
+  wsSubtitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginTop: 2,
+  },
+  wsPillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    flexShrink: 0,
+  },
+  wsSummaryPill: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+  },
+  wsSummaryPillText: {
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
+  },
+  wsPartyGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 20,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'stretch',
+  },
+  wsPartyCard: {
+    flex: 1,
+    flexBasis: 0,
+    minWidth: 140,
+    maxWidth: 360,
+    borderWidth: 2,
+    borderColor: Theme.borderLight,
+    borderRadius: 28,
+    paddingVertical: 18,
+    paddingHorizontal: 14,
+    backgroundColor: Theme.surface,
+    alignItems: 'center',
+  },
+  wsPartyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  wsPartyIconDark: {
+    backgroundColor: Theme.textPrimaryDark,
+  },
+  wsPartyIconMuted: {
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  wsPartyIconDriver: {
+    backgroundColor: Theme.primary + '22',
+    borderWidth: 1,
+    borderColor: Theme.primary + '44',
+  },
+  wsPartyRole: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  wsPartyName: {
+    fontSize: 13,
+    fontWeight: '900',
+    fontStyle: 'italic',
+    color: Theme.textPrimaryDark,
+    textTransform: 'uppercase',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  wsPartyDivider: {
+    width: '100%',
+    height: 1,
+    backgroundColor: Theme.borderLight,
+    marginVertical: 8,
+  },
+  wsPartyFooter: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    paddingTop: 4,
+  },
+  wsPartyScoreBlock: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'flex-start',
+    gap: 2,
+  },
+  wsPartyAvgCaption: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  wsPartyScoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  wsPartyScore: {
+    fontSize: 14,
+    fontWeight: '900',
+    fontStyle: 'italic',
+    color: Theme.textPrimaryDark,
+  },
+  wsRateCta: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: Theme.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
+  },
+  wsRateCtaMuted: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+  },
+  wsList: {
+    gap: 12,
+    marginBottom: 16,
+  },
+  wsAuditCard: {
+    borderRadius: 24,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    backgroundColor: Theme.surface,
+    borderColor: Theme.borderLight,
+  },
+  wsAuditMainRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 8,
+  },
+  rowTopWithAvatar: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 4,
+  },
+  rowTopTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  partyAvatarWrap: {
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  partyAvatarImage: {
+    borderRadius: 999,
+  },
+  partyAvatarInitial: {
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+  },
+  wsAuditLeft: {
+    flex: 1,
+    minWidth: 0,
+    gap: 6,
+  },
+  wsRatedTag: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  wsRatedTagClient: {
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1.5,
+    borderColor: Theme.textPrimaryDark,
+  },
+  wsRatedTagSupplier: {
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  wsRatedTagDriver: {
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.primary + '55',
+  },
+  wsRatedTagText: {
+    fontSize: 9,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    color: Theme.textPrimaryDark,
+  },
+  wsAuditFromTo: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 6,
+  },
+  wsScoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  wsAuditScore: {
+    fontSize: 20,
+    fontWeight: '900',
+    fontStyle: 'italic',
+    color: Theme.textPrimaryDark,
+  },
+  wsAuditDate: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  wsRowTags: {
+    marginTop: 4,
+  },
+  wsTagChip: {
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 999,
+  },
+  wsTagChipText: {
+    fontSize: 9,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
+  },
+  wsRowComment: {
+    marginTop: 8,
+  },
+  wsEmptyAudits: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Theme.textMuted,
+    textAlign: 'center',
+    marginBottom: 12,
+    fontStyle: 'italic',
+  },
+  wsActions: {
+    marginTop: 8,
+    justifyContent: 'center',
+    gap: 12,
+  },
+  wsPrimaryCta: {
+    backgroundColor: Theme.textPrimaryDark,
+    borderColor: Theme.textPrimaryDark,
+    minWidth: 160,
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  wsPrimaryCtaText: {
+    color: Theme.textOnPrimary,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  wsOutlineCta: {
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 2,
+    borderColor: Theme.textPrimaryDark,
+    minWidth: 220,
+    paddingVertical: 14,
+    borderRadius: 16,
+  },
+  wsOutlineCtaText: {
+    color: Theme.textPrimaryDark,
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   modalOverlay: {
     flex: 1,
