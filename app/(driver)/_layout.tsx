@@ -48,24 +48,36 @@ function DriverTabsNavigator() {
 }
 
 export default function DriverAppLayout() {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, roleVerified, loading } = useAuth();
   const router = useRouter();
+
+  const logDriverGate = (event: string, details: Record<string, unknown>) => {
+    if (!__DEV__) return;
+    console.info('[RouteGuard:driver]', event, details);
+  };
 
   useEffect(() => {
     if (loading) return;
     if (!user) {
+      logDriverGate('redirect_sign_in_missing_user', {});
       router.replace('/sign-in');
       return;
     }
-    if (profile && profile.role !== 'driver') {
+    if (profile && (!roleVerified || profile.role !== 'driver')) {
+      logDriverGate('redirect_tabs_non_driver_or_unverified', {
+        uid: user.uid,
+        role: profile.role,
+        roleVerified,
+      });
       router.replace(ROUTES.TABS.TRIPS as '/');
     }
-  }, [loading, user, profile, router]);
+  }, [loading, user, profile, roleVerified, router]);
 
   const gate =
     loading ||
     !user ||
     !profile ||
+    !roleVerified ||
     profile.role !== 'driver';
 
   if (gate) {
