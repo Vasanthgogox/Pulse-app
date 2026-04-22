@@ -117,7 +117,7 @@ export default function DriverSignUpScreen() {
   const { width } = useWindowDimensions();
   const router = useRouter();
   const safeBack = useSafeBack('/sign-in');
-  const { signUp, signInWithGoogle } = useAuth();
+  const { signIn, signUp, signInWithGoogle } = useAuth();
   const isOnline = useIsOnline();
   const scrollRef = useRef<ScrollView>(null);
 
@@ -343,6 +343,10 @@ export default function DriverSignUpScreen() {
       if (error && !error.message.toLowerCase().includes('already registered')) {
         throw error;
       }
+      const signInResult = await signIn(email.trim(), password, true);
+      if (signInResult.error) {
+        throw signInResult.error;
+      }
       goToPage(7);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Sign up failed';
@@ -353,7 +357,7 @@ export default function DriverSignUpScreen() {
   };
 
   const initializeHub = () => {
-    router.replace('/(driver)');
+    router.replace('/');
   };
 
   const markDocumentUploaded = (doc: 'license' | 'aadhaar' | 'pan', method: 'gallery' | 'camera') => {
