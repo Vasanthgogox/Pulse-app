@@ -161,9 +161,7 @@ export default function TripDetailScreen({
           </View>
         </View>
         <View style={styles.navActions}>
-          <NavAction icon="plus" label="Add Expense" onPress={detail.handleAddAdjustment} />
-          <NavAction icon="pencil" label="Edit Trip" onPress={() => {}} />
-          <NavAction icon="trash" label="Delete Trip" onPress={() => {}} danger />
+          <NavAction icon="plus" label="Add Expense" onPress={detail.openAddExpense} />
           <NavAction icon="file-text-o" label="Generate Memo" onPress={() => {}} primary />
         </View>
       </View>
@@ -311,7 +309,7 @@ export default function TripDetailScreen({
             <ExpensesTable
               expenses={expenseRows}
               totalAmount={totalExpenses}
-              onAddExpense={detail.handleAddAdjustment}
+              onAddExpense={detail.openAddExpense}
             />
 
             <View style={styles.financeContentRow}>

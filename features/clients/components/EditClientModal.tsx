@@ -73,6 +73,9 @@ export function EditClientModal({
   const [contactPerson, setContactPerson] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [address, setAddress] = useState("");
+  const [gstin, setGstin] = useState("");
+  const [panNumber, setPanNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -84,6 +87,9 @@ export function EditClientModal({
       setContactPerson(normalizeContactDisplay(client.contact_person));
       setPhone(normalizePhoneDisplay(client.phone));
       setEmail((client.email ?? "").trim());
+      setAddress((client.address ?? "").trim());
+      setGstin((client.gstin ?? "").trim());
+      setPanNumber((client.pan_number ?? "").trim());
     }
   }, [client]);
 
@@ -172,6 +178,9 @@ export function EditClientModal({
     if (canEditPhone) {
       patch.phone = phone.trim();
     }
+    patch.address = address.trim();
+    patch.gstin = gstin.trim();
+    patch.pan_number = panNumber.trim();
     const result = onSave(patch);
     const p = result as void | Promise<unknown>;
     if (typeof p?.then === "function") {
@@ -238,7 +247,7 @@ export function EditClientModal({
                   <Text style={styles.screenStatusText}>
                     Core details like name and phone sync from the client&apos;s own
                     account and cannot be edited here. You can still update your
-                    local contact person and email.
+                    local contact person, email, and billing / tax fields.
                   </Text>
                   {onSyncLatest ? (
                     <TouchableOpacity
@@ -315,6 +324,51 @@ export function EditClientModal({
                   autoCapitalize="none"
                 />
               </Pressable>
+
+              <Pressable style={styles.screenInputCardMultiline}>
+                <Text style={styles.screenInputLabel}>Billing address</Text>
+                <TextInput
+                  style={[styles.screenInput, styles.screenInputMultiline]}
+                  placeholder="Street, city, state, PIN"
+                  placeholderTextColor={Theme.textMutedDemo}
+                  value={address}
+                  onChangeText={setAddress}
+                  multiline
+                  textAlignVertical="top"
+                />
+              </Pressable>
+
+              <View
+                style={[
+                  styles.screenTwoCol,
+                  useSingleColumnFields && styles.screenTwoColStack,
+                ]}
+              >
+                <Pressable style={styles.screenFieldCard}>
+                  <Text style={styles.screenInputLabel}>GSTIN</Text>
+                  <TextInput
+                    style={styles.screenInput}
+                    placeholder="15-character GSTIN"
+                    placeholderTextColor={Theme.textMutedDemo}
+                    value={gstin}
+                    onChangeText={(v) => setGstin(v.toUpperCase())}
+                    autoCapitalize="characters"
+                    maxLength={15}
+                  />
+                </Pressable>
+                <Pressable style={styles.screenFieldCard}>
+                  <Text style={styles.screenInputLabel}>PAN</Text>
+                  <TextInput
+                    style={styles.screenInput}
+                    placeholder="AAAAA9999A"
+                    placeholderTextColor={Theme.textMutedDemo}
+                    value={panNumber}
+                    onChangeText={(v) => setPanNumber(v.toUpperCase())}
+                    autoCapitalize="characters"
+                    maxLength={10}
+                  />
+                </Pressable>
+              </View>
 
               {error ? (
                 <View style={styles.screenErrorCard}>
@@ -409,6 +463,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
     minHeight: 88,
+  },
+  screenInputCardMultiline: {
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.06)",
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    minHeight: 120,
+  },
+  screenInputMultiline: {
+    minHeight: 72,
+    paddingTop: 4,
   },
   screenTwoCol: {
     flexDirection: "row",

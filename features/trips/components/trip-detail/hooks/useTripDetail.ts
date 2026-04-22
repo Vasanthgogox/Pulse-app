@@ -868,6 +868,42 @@ export function useTripDetail({
     router,
   ]);
 
+  /** Cash OUT / trip expense — same query shape as TripLedgerDetailScreen.onAddExpense. */
+  const openAddExpense = useCallback(() => {
+    if (!trip?.id) return;
+    const tripNumber = getTripDisplayNumber(trip);
+    const params = new URLSearchParams({
+      tripId: trip.id,
+      tripNumber,
+      defaultType: "out",
+    });
+
+    const sales = Number(trip.client_price ?? 0);
+    const received = tripLedgerEntries.reduce(
+      (s, tx) => s + Number(tx.amount_in ?? 0),
+      0,
+    );
+    const pendingAmt = Math.max(0, sales - received);
+
+    const supplierCost =
+      Number(trip.client_price ?? 0) || Number(trip.supplier_rate ?? 0);
+    const paidOut = tripLedgerEntries.reduce(
+      (s, tx) => s + Number(tx.amount_out ?? 0),
+      0,
+    );
+    const supplierDueAmt = Math.max(0, supplierCost - paidOut);
+
+    if (pendingAmt > 0) params.set("dueAmountIn", String(pendingAmt));
+    if (supplierDueAmt > 0) params.set("dueAmountOut", String(supplierDueAmt));
+
+    if (entryContext === "vehicle" && trip.vehicle_id) {
+      params.set("entityType", "VEHICLE");
+      params.set("entityId", trip.vehicle_id);
+    }
+
+    router.push(`/(modals)/ledger-sync?${params.toString()}`);
+  }, [trip, tripLedgerEntries, entryContext, router]);
+
   const handleRecordDriverPayment = useCallback(() => {
     if (!trip?.id || !trip.driver_id) return;
     const tripNumber = getTripDisplayNumber(trip);
@@ -1282,6 +1318,7 @@ export function useTripDetail({
     load,
     handleRefresh,
     openAddEntry,
+    openAddExpense,
     handleAcceptPartnerView,
     handleRaiseDispute,
     openCompareVerifyFromTrip,

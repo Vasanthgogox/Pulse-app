@@ -14,8 +14,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 
+/** After save/cancel: return to opener (e.g. client detail); fallback if no stack history. */
 function closeModal(router: ReturnType<typeof useRouter>) {
-  router.replace(ROUTES.TABS.NETWORK as '/');
+  if (router.canGoBack()) {
+    router.back();
+  } else {
+    router.replace(ROUTES.TABS.NETWORK as '/');
+  }
 }
 
 export default function EditClientScreen() {
@@ -56,10 +61,11 @@ export default function EditClientScreen() {
     if (!client?.linked_organization_id) return;
     const { profile, error } = await getLinkedOrgProfile(client.linked_organization_id);
     if (error) throw error;
+    if (!profile) return;
     return {
-      organizationName: profile?.company_name ?? "",
-      contactPerson: profile?.full_name ?? "",
-      phone: profile?.phone ?? "",
+      organizationName: profile.organizationName,
+      contactPerson: profile.contactPerson,
+      phone: profile.phone,
     };
   };
 
