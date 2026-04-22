@@ -151,17 +151,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setProfile(null);
             setSessionExpired(false);
           } else {
-            setUser(session.user);
-            setProfile(authProfileToUserProfile(session.profile));
             setSessionExpired(false);
-            
-            // Proactively refresh from server to ensure profile is not stale
-            authService.refreshSession().then((refreshed) => {
+            // Do not expose JWT-only metadata to routing before DB merge: stale
+            // `user_metadata.role` can disagree with `profiles.role` and send fleet
+            // users to the driver app until refresh completes.
+            let nextUser = session.user;
+            let nextProfile = session.profile;
+            try {
+              const refreshed = await authService.refreshSession();
               if (mounted && refreshed) {
-                setUser(refreshed.user);
-                setProfile(authProfileToUserProfile(refreshed.profile));
+                nextUser = refreshed.user;
+                nextProfile = refreshed.profile;
+              } else if (mounted) {
+                const dbProfile = await authService.getProfile(session.user.uid);
+                if (dbProfile) {
+                  nextProfile = mergeAuthProfiles(session.profile, dbProfile);
+                }
               }
-            }).catch(() => {});
+            } catch {
+              // Keep JWT-derived profile if network fails
+            }
+            if (!mounted) return;
+            setUser(nextUser);
+            setProfile(authProfileToUserProfile(nextProfile));
           }
         } else {
           setUser(null);
@@ -173,16 +185,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           unsubscribe = authService.onAuthStateChange(async (auth) => {
             if (!mounted) return;
             if (auth) {
-              // Fetch latest profile from DB for accuracy (handles updates from other devices/sessions)
-              const dbProfile = await authService.getProfile(auth.user.uid);
+              // Prefer DB role over JWT metadata (same source of truth as cold start).
+              let dbProfile = await authService.getProfile(auth.user.uid);
+              let merged = mergeAuthProfiles(auth.profile, dbProfile);
+              if (!dbProfile) {
+                const refreshed = await authService.refreshSession();
+                if (refreshed) merged = refreshed.profile;
+              }
               if (!mounted) return;
 
               setUser(auth.user);
-              setProfile(
-                authProfileToUserProfile(
-                  mergeAuthProfiles(auth.profile, dbProfile),
-                ),
-              );
+              setProfile(authProfileToUserProfile(merged));
               setSessionExpired(false);
             } else {
               if (!signOutRequestedRef.current) setSessionExpired(true);
@@ -207,14 +220,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           unsubscribe = authService.onAuthStateChange(async (auth) => {
             if (!mounted) return;
             if (auth) {
-              const dbProfile = await authService.getProfile(auth.user.uid);
+              let dbProfile = await authService.getProfile(auth.user.uid);
+              let merged = mergeAuthProfiles(auth.profile, dbProfile);
+              if (!dbProfile) {
+                const refreshed = await authService.refreshSession();
+                if (refreshed) merged = refreshed.profile;
+              }
               if (!mounted) return;
               setUser(auth.user);
-              setProfile(
-                authProfileToUserProfile(
-                  mergeAuthProfiles(auth.profile, dbProfile),
-                ),
-              );
+              setProfile(authProfileToUserProfile(merged));
               setSessionExpired(false);
             } else {
               if (!signOutRequestedRef.current) setSessionExpired(true);

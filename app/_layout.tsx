@@ -236,8 +236,8 @@ function RootLayoutNav() {
             <Stack.Screen name="index" />
             <Stack.Screen name="sign-in" />
             <Stack.Screen name="sign-up" />
-            <Stack.Screen name="(driver)" />
             <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="(driver)" />
             <Stack.Screen name="add-trip" />
             <Stack.Screen name="network" />
             <Stack.Screen name="load-board" options={{ presentation: 'fullScreenModal' }} />

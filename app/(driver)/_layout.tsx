@@ -4,6 +4,7 @@
  * Not to be confused with app/driver/ which is for dispatchers (e.g. /driver/[id] = driver detail).
  */
 import { DriverTabBar } from '@/components/driver/DriverTabBar';
+import Theme from '@/constants/Theme';
 import { DriverAvatarProvider } from '@/contexts/DriverAvatarContext';
 import { DriverThemeProvider } from '@/contexts/DriverThemeContext';
 import {
@@ -14,7 +15,11 @@ import {
   PlusJakartaSans_700Bold,
   PlusJakartaSans_800ExtraBold,
 } from '@expo-google-fonts/plus-jakarta-sans';
-import { Tabs } from 'expo-router';
+import { useAuth } from '@/contexts/AuthContext';
+import { ROUTES } from '@/lib/routes';
+import { Tabs, useRouter } from 'expo-router';
+import { useEffect } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 function DriverTabsNavigator() {
   return (
@@ -37,7 +42,7 @@ function DriverTabsNavigator() {
       <Tabs.Screen name="index" options={{ title: 'Dashboard' }} />
       {/* Keep route for internal dashboard flow, but hide from tab bar */}
       <Tabs.Screen name="control" options={{ title: 'Trip', href: null }} />
-      <Tabs.Screen name="trips" options={{ title: 'History' }} />
+      <Tabs.Screen name="trip-history" options={{ title: 'History' }} />
       <Tabs.Screen name="wallet" options={{ title: 'Transactions' }} />
       <Tabs.Screen name="notifications" options={{ title: 'Notifications', href: null }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile', href: null }} />
@@ -59,8 +64,33 @@ export default function DriverAppLayout() {
     PlusJakartaSans_800ExtraBold,
   });
 
-  if (!fontsLoaded) {
-    return null;
+  const { user, profile, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user) {
+      router.replace('/sign-in');
+      return;
+    }
+    if (profile && profile.role !== 'driver') {
+      router.replace(ROUTES.TABS.TRIPS as '/');
+    }
+  }, [loading, user, profile, router]);
+
+  const gate =
+    !fontsLoaded ||
+    loading ||
+    !user ||
+    !profile ||
+    profile.role !== 'driver';
+
+  if (gate) {
+    return (
+      <View style={styles.gate}>
+        <ActivityIndicator size="large" color={Theme.primary} />
+      </View>
+    );
   }
 
   return (
@@ -71,3 +101,12 @@ export default function DriverAppLayout() {
     </DriverThemeProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  gate: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8fafc',
+  },
+});
