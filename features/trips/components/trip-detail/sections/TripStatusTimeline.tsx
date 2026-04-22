@@ -1,11 +1,8 @@
 /**
- * Right-column Trip Status Timeline — matches reference exactly.
+ * Right-column Trip Status Timeline — matches reference design.
  * 8-stage logistics timeline: Confirmed → S-in → S-out → Intransit →
  *   D-in → D-out → POD Pending → POD Received
- *
- * Includes progress %, timestamps per stage, Revert/Next action buttons.
  */
-import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { TripRow } from "../../../services/trips.service";
@@ -58,22 +55,19 @@ export function statusToStageIndex(status: string): number {
     return 2;
   if (s === "s_in" || s === "source_in") return 1;
   if (s === "completed" || s === "delivered" || s === "done") return 7;
-  return 0; // confirmed / assigned / draft
+  return 0;
 }
 
 const PROGRESS_BY_INDEX: number[] = [6, 14, 22, 36, 44, 58, 78, 100];
 
 interface TripStatusTimelineProps {
   trip: TripRow;
-  /** Timestamps per stage — from audit log or trip fields */
   stageTimestamps?: TripStageTimestamp[];
-  /** Location labels per stage (pickup/drop or geocoded) */
   stageLocations?: Partial<Record<TripStageKey, string>>;
   lastUpdatedAt?: string | null;
   onRevert?: () => void;
   onNext?: () => void;
   canAdvance?: boolean;
-  /** Map child node (pass <LeafletMap> or <TrackingMapBlock>) */
   mapPreview?: React.ReactNode;
   distanceKm?: string | null;
 }
@@ -99,7 +93,6 @@ export function TripStatusTimeline({
   const tsMap: Partial<Record<TripStageKey, TripStageTimestamp>> = {};
   for (const ts of stageTimestamps) tsMap[ts.stageKey] = ts;
 
-  // Auto-fill from trip fields
   if (!tsMap.confirmed) {
     const d = trip.pickup_date ?? trip.created_at;
     if (d) tsMap.confirmed = { stageKey: "confirmed", timestamp: d };
@@ -122,13 +115,17 @@ export function TripStatusTimeline({
       {/* Card header */}
       <View style={styles.cardHeader}>
         <View style={styles.headerLeft}>
-          <View style={styles.activeDot} />
+          <View style={styles.activeDotWrap}>
+            <View style={styles.activeDot} />
+          </View>
           <View>
-            <Text style={styles.cardTitle}>Trip Status Timeline</Text>
-            <Text style={styles.currentLabel}>
-              Current:{" "}
-              <Text style={styles.currentValue}>{currentStage.short}</Text>
-            </Text>
+            <Text style={styles.cardTitle}>Live Status</Text>
+            <View style={styles.currentRow}>
+              <Text style={styles.currentLabel}>Currently: </Text>
+              <View style={styles.currentBadge}>
+                <Text style={styles.currentBadgeText}>{currentStage.short}</Text>
+              </View>
+            </View>
           </View>
         </View>
         <View style={styles.progressWrap}>
@@ -155,17 +152,15 @@ export function TripStatusTimeline({
 
             return (
               <View key={stage.key} style={styles.stepWrap}>
-                {/* Connector left */}
                 {idx > 0 && (
                   <View
                     style={[
                       styles.connectorLeft,
-                      isCompleted || isActive ? styles.connectorDark : styles.connectorLight,
+                      isCompleted || isActive ? styles.connectorActive : styles.connectorLight,
                     ]}
                   />
                 )}
 
-                {/* Dot */}
                 <View
                   style={[
                     styles.dot,
@@ -175,22 +170,20 @@ export function TripStatusTimeline({
                   ]}
                 >
                   {isCompleted && (
-                    <Text style={styles.checkMark}>✓</Text>
+                    <FontAwesome name="check" size={10} color="#fff" />
                   )}
                   {isActive && <View style={styles.dotActiveFill} />}
                 </View>
 
-                {/* Connector right */}
                 {idx < STAGES.length - 1 && (
                   <View
                     style={[
                       styles.connectorRight,
-                      isCompleted ? styles.connectorDark : styles.connectorLight,
+                      isCompleted ? styles.connectorActive : styles.connectorLight,
                     ]}
                   />
                 )}
 
-                {/* Label below */}
                 <View style={styles.stepLabelWrap}>
                   <Text
                     style={[
@@ -219,13 +212,13 @@ export function TripStatusTimeline({
         </View>
       </View>
 
-      {/* Footer row: last updated + action buttons */}
+      {/* Footer row */}
       <View style={styles.footerRow}>
         <View style={styles.footerLeft}>
-          <View style={styles.footerDot} />
-          {lastUpdatedStr ? (
-            <Text style={styles.lastUpdatedText}>Last updated: {lastUpdatedStr}</Text>
-          ) : null}
+          <FontAwesome name="refresh" size={11} color="#94a3b8" />
+          <Text style={styles.lastUpdatedText}>
+            {lastUpdatedStr ? `Updated: ${lastUpdatedStr}` : "Updated: Just now"}
+          </Text>
         </View>
         <View style={styles.footerActions}>
           {prevStage && onRevert ? (
@@ -234,8 +227,8 @@ export function TripStatusTimeline({
               onPress={onRevert}
               activeOpacity={0.8}
             >
-              <FontAwesome name="arrow-left" size={11} color="#374151" />
-              <Text style={styles.revertBtnText}>Revert: {prevStage.short}</Text>
+              <FontAwesome name="arrow-left" size={10} color="#374151" />
+              <Text style={styles.revertBtnText}>Revert</Text>
             </TouchableOpacity>
           ) : null}
           {nextStage && canAdvance ? (
@@ -244,7 +237,7 @@ export function TripStatusTimeline({
               onPress={onNext}
               activeOpacity={0.8}
             >
-              <Text style={styles.nextBtnText}>Next: {nextStage.short}</Text>
+              <Text style={styles.nextBtnText}>Advance Trip</Text>
               <FontAwesome name="arrow-right" size={11} color="#fff" />
             </TouchableOpacity>
           ) : null}
@@ -254,10 +247,13 @@ export function TripStatusTimeline({
       {/* Map preview */}
       <View style={styles.mapSection}>
         <View style={styles.mapHeader}>
-          <Text style={styles.mapTitle}>Live Map</Text>
+          <View style={styles.mapTitleRow}>
+            <FontAwesome name="map-marker" size={13} color="#3b82f6" />
+            <Text style={styles.mapTitle}>GPS Tracking</Text>
+          </View>
           {distanceKm ? (
             <View style={styles.mapDistanceWrap}>
-              <Text style={styles.mapDistance}>{distanceKm} km</Text>
+              <Text style={styles.mapDistance}>{distanceKm} <Text style={styles.mapDistanceUnit}>km</Text></Text>
               <Text style={styles.mapRoute}>Direct route</Text>
             </View>
           ) : null}
@@ -275,9 +271,7 @@ export function TripStatusTimeline({
 function CircularProgress({ percent }: { percent: number }) {
   return (
     <View style={styles.circleOuter}>
-      <View style={styles.circleInner}>
-        <Text style={styles.circleText}>{percent}%</Text>
-      </View>
+      <Text style={styles.circleText}>{percent}%</Text>
     </View>
   );
 }
@@ -299,7 +293,6 @@ function formatStageDate(iso: string): string {
     return d.toLocaleDateString("en-IN", {
       day: "2-digit",
       month: "short",
-      year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,
@@ -326,84 +319,117 @@ function formatLastUpdated(iso: string): string {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const DOT = 28;
+const DOT = 30;
 const CONN_H = 2;
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 12,
+    backgroundColor: "#fff",
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#f1f5f9",
     overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    elevation: 2,
   },
+
+  // Header
   cardHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 20,
   },
   headerLeft: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 10,
   },
+  activeDotWrap: {
+    marginTop: 4,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "rgba(59, 130, 246, 0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   activeDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#111827",
-    marginTop: 5,
+    backgroundColor: "#3b82f6",
   },
   cardTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
-    color: "#111827",
+    color: "#0f172a",
+    letterSpacing: -0.2,
+    marginBottom: 4,
+  },
+  currentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 4,
   },
   currentLabel: {
+    fontSize: 13,
+    color: "#64748b",
+  },
+  currentBadge: {
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  currentBadgeText: {
     fontSize: 12,
-    color: "#6b7280",
-    marginTop: 2,
+    fontWeight: "700",
+    color: "#2563eb",
   },
-  currentValue: {
-    fontWeight: "600",
-    color: "#111827",
-  },
+
   progressWrap: {
     alignItems: "flex-end",
     gap: 4,
   },
   progressLabel: {
-    fontSize: 10,
-    color: "#9ca3af",
-    fontWeight: "500",
+    fontSize: 9,
+    color: "#94a3b8",
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
     textAlign: "right",
   },
   circleOuter: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     borderWidth: 3,
-    borderColor: "#111827",
+    borderColor: "#2563eb",
     alignItems: "center",
     justifyContent: "center",
-  },
-  circleInner: {
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: "#fff",
   },
   circleText: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "800",
-    color: "#111827",
+    color: "#1e293b",
   },
-  // ── Timeline ──
+
+  // Timeline stepper
   timelineScroll: {
-    paddingVertical: 20,
+    paddingVertical: 16,
     paddingHorizontal: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
   },
   stepsRow: {
     flexDirection: "row",
@@ -413,7 +439,7 @@ const styles = StyleSheet.create({
   stepWrap: {
     flex: 1,
     alignItems: "center",
-    minWidth: 60,
+    minWidth: 64,
   },
   connectorLeft: {
     position: "absolute",
@@ -429,11 +455,11 @@ const styles = StyleSheet.create({
     right: 0,
     height: CONN_H,
   },
-  connectorDark: {
-    backgroundColor: "#111827",
+  connectorActive: {
+    backgroundColor: "#2563eb",
   },
   connectorLight: {
-    backgroundColor: "#e5e7eb",
+    backgroundColor: "#e2e8f0",
   },
   dot: {
     width: DOT,
@@ -443,30 +469,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     zIndex: 1,
+    backgroundColor: "#fff",
   },
   dotCompleted: {
-    backgroundColor: "#111827",
-    borderColor: "#111827",
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
   },
   dotActive: {
-    backgroundColor: Theme.screenBackground,
-    borderColor: "#111827",
+    borderColor: "#2563eb",
     borderWidth: 2.5,
+    backgroundColor: "#fff",
   },
   dotPending: {
-    backgroundColor: Theme.screenBackground,
-    borderColor: "#d1d5db",
+    borderColor: "#e2e8f0",
   },
   dotActiveFill: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: "#111827",
-  },
-  checkMark: {
-    fontSize: 12,
-    color: "#fff",
-    fontWeight: "700",
+    backgroundColor: "#2563eb",
   },
   stepLabelWrap: {
     alignItems: "center",
@@ -477,39 +498,44 @@ const styles = StyleSheet.create({
   stepLabel: {
     fontSize: 10,
     fontWeight: "500",
-    color: "#9ca3af",
+    color: "#94a3b8",
     textAlign: "center",
   },
   stepLabelActive: {
-    color: "#111827",
+    color: "#0f172a",
     fontWeight: "700",
   },
   stepLabelCompleted: {
-    color: "#374151",
+    color: "#475569",
     fontWeight: "600",
   },
   stepDate: {
     fontSize: 9,
-    color: "#9ca3af",
+    color: "#94a3b8",
     textAlign: "center",
     marginTop: 2,
+    backgroundColor: "#f8fafc",
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 4,
   },
   stepLocation: {
     fontSize: 9,
-    color: "#6b7280",
+    color: "#64748b",
     textAlign: "center",
-    marginTop: 1,
+    marginTop: 2,
     fontWeight: "500",
   },
-  // ── Footer ──
+
+  // Footer
   footerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
     borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
+    borderTopColor: "#f1f5f9",
     flexWrap: "wrap",
     gap: 8,
   },
@@ -517,16 +543,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-  },
-  footerDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#9ca3af",
+    backgroundColor: "#f8fafc",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
   },
   lastUpdatedText: {
     fontSize: 11,
-    color: "#6b7280",
+    color: "#64748b",
+    fontWeight: "500",
   },
   footerActions: {
     flexDirection: "row",
@@ -537,11 +562,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 6,
+    paddingVertical: 8,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: Theme.screenBackground,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#fff",
   },
   revertBtnText: {
     fontSize: 12,
@@ -551,21 +576,29 @@ const styles = StyleSheet.create({
   nextBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 6,
-    backgroundColor: "#111827",
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#0f172a",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
   },
   nextBtnText: {
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
     color: "#fff",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
-  // ── Map ──
+
+  // Map
   mapSection: {
     borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
+    borderTopColor: "#f1f5f9",
   },
   mapHeader: {
     flexDirection: "row",
@@ -575,23 +608,37 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 10,
   },
+  mapTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
   mapTitle: {
     fontSize: 13,
-    fontWeight: "600",
-    color: "#374151",
+    fontWeight: "700",
+    color: "#1e293b",
   },
   mapDistanceWrap: {
     alignItems: "flex-end",
   },
   mapDistance: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#111827",
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#0f172a",
+    letterSpacing: -0.5,
+  },
+  mapDistanceUnit: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#64748b",
   },
   mapRoute: {
-    fontSize: 10,
-    color: "#9ca3af",
+    fontSize: 9,
+    color: "#94a3b8",
     marginTop: 1,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
   },
   mapContainer: {
     minHeight: 220,
@@ -601,7 +648,7 @@ const styles = StyleSheet.create({
     height: 220,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#f8fafc",
     gap: 8,
   },
   mapPlaceholderText: {

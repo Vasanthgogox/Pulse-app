@@ -1,8 +1,4 @@
-/**
- * Left-column trip summary card — matches reference design.
- * Shows trip ID, route, stops, and a metadata grid.
- */
-import Theme from "@/constants/Theme";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { StyleSheet, Text, View } from "react-native";
 import type { TripRow } from "../../../services/trips.service";
 import { getTripDisplayNumber } from "../../../services/trips.service";
@@ -13,210 +9,328 @@ interface TripInfoCardProps {
   currentStageLabel?: string;
 }
 
-export function TripInfoCard({ trip, clientName, currentStageLabel }: TripInfoCardProps) {
+export function TripInfoCard({ trip, clientName, currentStageLabel: _currentStageLabel }: TripInfoCardProps) {
   const tripNumber = getTripDisplayNumber(trip);
   const pickup = (trip.pickup_area ?? "").trim() || "—";
   const drop = (trip.drop_location ?? "").trim() || "—";
   const displayClient = clientName ?? trip.client_name ?? "—";
-
-  const pickupDateStr = trip.pickup_date
-    ? new Date(trip.pickup_date).toLocaleDateString("en-IN", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      }).replace(",", "")
+  const billingType = (trip as any).billing_type ?? "Fixed Billing";
+  const freightAmount = trip.client_price
+    ? `₹${Number(trip.client_price).toLocaleString("en-IN")}`
     : "—";
 
   return (
     <View style={styles.card}>
-      {/* Header bar */}
+      {/* Header */}
       <View style={styles.headerBar}>
-        <Text style={styles.tripNumber}>{tripNumber}</Text>
-        {currentStageLabel ? (
-          <>
-            <View style={styles.headerDivider} />
-            <Text style={styles.stageLabel}>{currentStageLabel}</Text>
-          </>
-        ) : null}
-        <View style={styles.headerDivider} />
-        <Text style={styles.headerDate}>{pickupDateStr}</Text>
-        <View style={styles.headerDivider} />
-        <Text style={styles.stopsBadge}>0 Stop(s)</Text>
-      </View>
-
-      {/* Route */}
-      <View style={styles.routeSection}>
-        <RouteRow color="#22c55e" label={pickup} />
-        <View style={styles.routeConnector}>
-          <View style={styles.routeConnectorLine} />
+        <View style={styles.headerLeft}>
+          <Text style={styles.tripNumber}>{tripNumber}</Text>
+          <View style={styles.dot} />
+          <View style={styles.stopsBadge}>
+            <Text style={styles.stopsBadgeText}>0 Stops</Text>
+          </View>
         </View>
-        <RouteRow color="#ef4444" label={drop} />
+        <Text style={styles.billingType}>{billingType}</Text>
       </View>
 
-      <View style={styles.divider} />
+      {/* Route section */}
+      <View style={styles.routeSection}>
+        <View style={styles.routeContainer}>
+          <View style={styles.routeLine} />
+
+          <View style={styles.routeRow}>
+            <View style={styles.routeDotOuterGreen}>
+              <View style={[styles.routeDotInner, styles.routeDotGreen]} />
+            </View>
+            <View style={styles.routeTextWrap}>
+              <Text style={styles.routeRowLabel}>Origin</Text>
+              <Text style={styles.routeLabel} numberOfLines={2}>{pickup}</Text>
+            </View>
+          </View>
+
+          <View style={[styles.routeRow, styles.routeRowBottom]}>
+            <View style={styles.routeDotOuterRed}>
+              <View style={[styles.routeDotInner, styles.routeDotRed]} />
+            </View>
+            <View style={styles.routeTextWrap}>
+              <Text style={styles.routeRowLabel}>Destination</Text>
+              <Text style={styles.routeLabel} numberOfLines={2}>{drop}</Text>
+            </View>
+          </View>
+        </View>
+      </View>
 
       {/* Meta grid */}
       <View style={styles.metaGrid}>
-        <MetaCell label="CLIENT" value={displayClient} />
+        <MetaCell
+          label="CLIENT"
+          value={displayClient}
+          icon="building-o"
+        />
         <MetaCell
           label="DISTANCE"
           value={trip.distance ? `${trip.distance} Km` : "—"}
-        />
-        <MetaCell
-          label="TRUCK TYPE"
-          value={(trip as any).truck_type ?? (trip as any).vehicle_type ?? "—"}
-        />
-        <MetaCell
-          label="BILLING TYPE"
-          value={(trip as any).billing_type ?? "Fixed"}
+          icon="road"
         />
         <MetaCell
           label="MATERIAL"
           value={trip.load_type ?? "—"}
+          icon="cube"
+          italic={!trip.load_type}
         />
         <MetaCell
           label="FREIGHT AMOUNT"
-          value={
-            trip.client_price
-              ? `₹${Number(trip.client_price).toLocaleString("en-IN")}`
-              : "—"
-          }
+          value={freightAmount}
+          icon="money"
+          highlight
         />
         {(trip as any).weight ? (
-          <MetaCell label="WEIGHT" value={`${(trip as any).weight} Tons`} />
+          <MetaCell
+            label="WEIGHT"
+            value={`${(trip as any).weight} Tons`}
+            icon="balance-scale"
+          />
         ) : null}
       </View>
     </View>
   );
 }
 
-function RouteRow({ color, label }: { color: string; label: string }) {
-  return (
-    <View style={styles.routeRow}>
-      <View style={[styles.routeDot, { backgroundColor: color }]} />
-      <Text style={styles.routeLabel} numberOfLines={1}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-function MetaCell({ label, value }: { label: string; value: string }) {
+function MetaCell({
+  label,
+  value,
+  icon,
+  highlight,
+  italic,
+}: {
+  label: string;
+  value: string;
+  icon?: string;
+  highlight?: boolean;
+  italic?: boolean;
+}) {
   return (
     <View style={styles.metaCell}>
-      <Text style={styles.metaCellLabel}>{label}</Text>
-      <Text style={styles.metaCellValue} numberOfLines={2}>
-        {value}
-      </Text>
+      <View style={styles.metaCellLabelRow}>
+        {icon ? (
+          <FontAwesome name={icon as any} size={9} color="#94a3b8" />
+        ) : null}
+        <Text style={styles.metaCellLabel}>{label}</Text>
+      </View>
+      {highlight ? (
+        <View style={styles.metaCellHighlightWrap}>
+          <Text style={styles.metaCellHighlightText}>{value}</Text>
+        </View>
+      ) : (
+        <Text
+          style={[
+            styles.metaCellValue,
+            italic && styles.metaCellValueItalic,
+          ]}
+          numberOfLines={2}
+        >
+          {value}
+        </Text>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 12,
+    backgroundColor: "#fff",
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#f1f5f9",
     overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    elevation: 2,
   },
+
+  // Header
   headerBar: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingVertical: 18,
     borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
-    flexWrap: "wrap",
-    gap: 8,
+    borderBottomColor: "#f1f5f9",
   },
-  tripNumber: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#111827",
-    letterSpacing: -0.3,
-  },
-  stageLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#374151",
-  },
-  headerDate: {
-    fontSize: 12,
-    color: "#6b7280",
-    fontWeight: "500",
-  },
-  stopsBadge: {
-    fontSize: 12,
-    color: "#6b7280",
-    fontWeight: "500",
-  },
-  headerDivider: {
-    width: 1,
-    height: 14,
-    backgroundColor: "#e5e7eb",
-  },
-  routeSection: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
-  },
-  routeRow: {
+  headerLeft: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
-  routeDot: {
+  tripNumber: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0f172a",
+    letterSpacing: -0.5,
+  },
+  dot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#cbd5e1",
+  },
+  stopsBadge: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  stopsBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#64748b",
+  },
+  billingType: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#94a3b8",
+    backgroundColor: "#f8fafc",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+
+  // Route
+  routeSection: {
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 20,
+  },
+  routeContainer: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    paddingVertical: 20,
+    paddingRight: 16,
+    paddingLeft: 48,
+    position: "relative",
+  },
+  routeLine: {
+    position: "absolute",
+    left: 27,
+    top: 32,
+    bottom: 32,
+    width: 2,
+    backgroundColor: "#e2e8f0",
+    borderRadius: 1,
+  },
+  routeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    position: "relative",
+  },
+  routeRowBottom: {
+    marginTop: 28,
+  },
+  routeDotOuterGreen: {
+    position: "absolute",
+    left: -35,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "rgba(16, 185, 129, 0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  routeDotOuterRed: {
+    position: "absolute",
+    left: -35,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "rgba(244, 63, 94, 0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  routeDotInner: {
     width: 10,
     height: 10,
     borderRadius: 5,
   },
+  routeDotGreen: {
+    backgroundColor: "#10b981",
+  },
+  routeDotRed: {
+    backgroundColor: "#f43f5e",
+  },
+  routeTextWrap: {
+    flex: 1,
+  },
+  routeRowLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+    marginBottom: 2,
+  },
   routeLabel: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#111827",
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1e293b",
+    lineHeight: 22,
   },
-  routeConnector: {
-    paddingLeft: 4,
-    paddingVertical: 4,
-  },
-  routeConnectorLine: {
-    width: 2,
-    height: 16,
-    backgroundColor: "#d1d5db",
-    marginLeft: 3,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: "#f3f4f6",
-    marginHorizontal: 20,
-  },
+
+  // Meta grid
   metaGrid: {
-    padding: 20,
+    paddingHorizontal: 24,
+    paddingBottom: 20,
+    paddingTop: 4,
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 0,
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
   },
   metaCell: {
     width: "50%",
-    paddingBottom: 16,
-    paddingRight: 8,
+    paddingTop: 16,
+    paddingRight: 12,
+  },
+  metaCellLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginBottom: 5,
   },
   metaCellLabel: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#9ca3af",
+    color: "#94a3b8",
     textTransform: "uppercase",
-    letterSpacing: 0.8,
-    marginBottom: 3,
+    letterSpacing: 1.2,
   },
   metaCellValue: {
     fontSize: 13,
-    fontWeight: "500",
-    color: "#111827",
+    fontWeight: "600",
+    color: "#1e293b",
     lineHeight: 18,
+  },
+  metaCellValueItalic: {
+    color: "#94a3b8",
+    fontStyle: "italic",
+    fontWeight: "400",
+  },
+  metaCellHighlightWrap: {
+    backgroundColor: "#f1f5f9",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+  },
+  metaCellHighlightText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0f172a",
   },
 });

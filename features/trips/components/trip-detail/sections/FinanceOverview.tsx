@@ -40,7 +40,7 @@ export function FinanceOverview({
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Finance Overview</Text>
-          <Text style={styles.headerSub}>Trip Financial Summary</Text>
+          <Text style={styles.headerSub}>Real-time profitability analysis</Text>
         </View>
         <View style={styles.headerActions}>
           <ActionChip label="+ Income" color="#16a34a" bg="#dcfce7" onPress={onAddIncome} />
@@ -424,14 +424,12 @@ const styles = StyleSheet.create({
 
   // ── Net result section ──
   netSection: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+    flexDirection: "column",
     gap: 12,
     paddingHorizontal: 16,
     paddingBottom: 16,
   },
   netCard: {
-    flex: 1,
     minWidth: 200,
     borderRadius: 12,
     padding: 16,
@@ -502,7 +500,6 @@ const styles = StyleSheet.create({
 
   // ── Breakdown card ──
   breakdownCard: {
-    flex: 1,
     minWidth: 200,
     backgroundColor: "#fafafa",
     borderRadius: 12,
