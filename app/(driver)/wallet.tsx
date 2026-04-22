@@ -1548,7 +1548,15 @@ export default function DriverWalletScreen() {
           activeOpacity={0.92}
         >
           <FontAwesome name="history" size={14} color={mainTab === 'trips' ? colors.emerald : colors.textMuted} />
-          <Text style={[styles.mainTabText, mainTab === 'trips' ? { color: colors.emerald } : { color: colors.textMuted }]}>Trips</Text>
+          <Text
+            style={[
+              styles.mainTabText,
+              styles.tripsItalicText,
+              mainTab === 'trips' ? { color: colors.emerald } : { color: colors.textMuted },
+            ]}
+          >
+            Trips
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[
@@ -1761,7 +1769,7 @@ export default function DriverWalletScreen() {
         </View>
       ) : mainTab === 'trips' ? (
         <View style={[styles.ledgerSection, { paddingHorizontal: Layout.screenPaddingHorizontal }]}>
-          <Text style={[styles.transactionHistoryTitle, { color: colors.text }]}>Trips</Text>
+          <Text style={[styles.transactionHistoryTitle, styles.tripsItalicText, { color: colors.text }]}>Trips</Text>
           {filteredTripJourneySections.length === 0 ? (
             <View style={[styles.ledgerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={[styles.ledgerEmpty, { borderBottomWidth: 0 }]}>
@@ -2617,9 +2625,10 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
   },
   creditsTitle: {
-    fontSize: 32,
-    fontWeight: '800',
-    letterSpacing: -0.3,
+    fontSize: 42,
+    fontWeight: '900',
+    letterSpacing: -2,
+    lineHeight: 44,
     fontStyle: 'italic',
     textTransform: 'uppercase',
   },
@@ -2781,6 +2790,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 2,
     textTransform: 'uppercase',
+  },
+  tripsItalicText: {
+    fontStyle: 'italic',
   },
   searchSection: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
