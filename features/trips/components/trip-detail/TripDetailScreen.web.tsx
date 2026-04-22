@@ -392,62 +392,63 @@ export default function TripDetailScreen({
                       const normalized = formatIndianVehicleNumber(value ?? "");
                       detail.setDisplayVehicleFromInput(normalized);
                     }}
+                    inlineSection={
+                      isAggregate && aggregateOtpState !== "not_required" ? (
+                        <View style={styles.otpStateCardInline}>
+                          <View style={styles.otpStateHeader}>
+                            {aggregateOtpState === "verified" ? (
+                              <View style={[styles.otpStateBadge, styles.otpStateBadgeVerified]}>
+                                <Text
+                                  style={[
+                                    styles.otpStateBadgeText,
+                                    styles.otpStateBadgeTextVerified,
+                                  ]}
+                                >
+                                  Driver verified
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
+                          <View style={styles.otpStateBodyRow}>
+                            <View style={styles.otpStateBodyLeft}>
+                              <Text style={styles.otpStateSub}>
+                                {aggregateOtpState === "verified"
+                                  ? "Driver has verified assignment from the driver app."
+                                  : detail.tripOtp?.expires_at
+                                    ? `OTP generated. Expires at ${new Date(
+                                        detail.tripOtp.expires_at,
+                                      ).toLocaleString("en-IN")}`
+                                    : "OTP will be generated during assignment confirmation flow."}
+                              </Text>
+                              {aggregateOtpState !== "verified" && detail.tripOtp?.code ? (
+                                <View style={styles.otpCodeRow}>
+                                  <Text style={styles.otpCodeLabel}>OTP</Text>
+                                  <Text style={styles.otpCodeValue}>{detail.tripOtp.code}</Text>
+                                </View>
+                              ) : null}
+                            </View>
+                            <View style={styles.otpStateBodyRight}>
+                              {aggregateOtpState === "verified" ? (
+                                <Text style={styles.otpActionStatus}>Status: Verified</Text>
+                              ) : null}
+                              {aggregateOtpState !== "verified" ? (
+                                <TouchableOpacity
+                                  style={styles.otpResendBtn}
+                                  onPress={handleResendOtp}
+                                  disabled={otpResending}
+                                  activeOpacity={0.8}
+                                >
+                                  <Text style={styles.otpResendBtnText}>
+                                    {otpResending ? "Resending..." : "Resend OTP"}
+                                  </Text>
+                                </TouchableOpacity>
+                              ) : null}
+                            </View>
+                          </View>
+                        </View>
+                      ) : null
+                    }
                   />
-                ) : null}
-                {isAggregate && aggregateOtpState !== "not_required" ? (
-                  <View style={styles.otpStateCard}>
-                    <View style={styles.otpStateHeader}>
-                      <Text style={styles.otpStateTitle}>Assignment Verification</Text>
-                      <View
-                        style={[
-                          styles.otpStateBadge,
-                          aggregateOtpState === "verified"
-                            ? styles.otpStateBadgeVerified
-                            : styles.otpStateBadgePending,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.otpStateBadgeText,
-                            aggregateOtpState === "verified"
-                              ? styles.otpStateBadgeTextVerified
-                              : styles.otpStateBadgeTextPending,
-                          ]}
-                        >
-                          {aggregateOtpState === "verified"
-                            ? "Driver verified"
-                            : "OTP pending"}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={styles.otpStateSub}>
-                      {aggregateOtpState === "verified"
-                        ? "Driver has verified assignment from the driver app."
-                        : detail.tripOtp?.expires_at
-                          ? `OTP generated. Expires at ${new Date(
-                              detail.tripOtp.expires_at,
-                            ).toLocaleString("en-IN")}`
-                          : "OTP will be generated during assignment confirmation flow."}
-                    </Text>
-                    {aggregateOtpState !== "verified" && detail.tripOtp?.code ? (
-                      <View style={styles.otpCodeRow}>
-                        <Text style={styles.otpCodeLabel}>OTP</Text>
-                        <Text style={styles.otpCodeValue}>{detail.tripOtp.code}</Text>
-                      </View>
-                    ) : null}
-                    {aggregateOtpState !== "verified" ? (
-                      <TouchableOpacity
-                        style={styles.otpResendBtn}
-                        onPress={handleResendOtp}
-                        disabled={otpResending}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.otpResendBtnText}>
-                          {otpResending ? "Resending..." : "Resend OTP"}
-                        </Text>
-                      </TouchableOpacity>
-                    ) : null}
-                  </View>
                 ) : null}
                 <View style={styles.lrGrow}>
                   <LRDocumentsSection
@@ -1169,14 +1170,33 @@ const styles = StyleSheet.create({
   lrGrow: {
     flex: 1,
   },
-  otpStateCard: {
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+  otpStateCardInline: {
+    backgroundColor: "transparent",
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    gap: 4,
+  },
+  otpStateBodyRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  otpStateBodyLeft: {
+    flex: 1,
+    minWidth: 0,
+  },
+  otpStateBodyRight: {
+    alignItems: "flex-end",
     gap: 6,
+  },
+  otpActionStatus: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: "#111827",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
   },
   otpStateHeader: {
     flexDirection: "row",
@@ -1185,54 +1205,54 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   otpStateTitle: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "600",
     color: "#111827",
   },
   otpStateSub: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#6b7280",
     lineHeight: 16,
   },
   otpCodeRow: {
-    marginTop: 8,
+    marginTop: 6,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
   otpCodeLabel: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "600",
     color: "#64748b",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   otpCodeValue: {
-    fontSize: 16,
-    fontWeight: "800",
+    fontSize: 14,
+    fontWeight: "700",
     color: "#0f172a",
-    letterSpacing: 1.2,
+    letterSpacing: 0.8,
   },
   otpResendBtn: {
-    marginTop: 8,
-    alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    marginTop: 0,
+    alignSelf: "flex-end",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 7,
     borderWidth: 1,
-    borderColor: "#fed7aa",
-    backgroundColor: "#fff7ed",
+    borderColor: "#111827",
+    backgroundColor: "#111827",
   },
   otpResendBtnText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#c2410c",
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#ffffff",
     textTransform: "uppercase",
-    letterSpacing: 0.6,
+    letterSpacing: 0.4,
   },
   otpStateBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     borderRadius: 999,
     borderWidth: 1,
   },
@@ -1245,8 +1265,8 @@ const styles = StyleSheet.create({
     borderColor: "#a7f3d0",
   },
   otpStateBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9,
+    fontWeight: "600",
     textTransform: "uppercase",
   },
   otpStateBadgeTextPending: {
