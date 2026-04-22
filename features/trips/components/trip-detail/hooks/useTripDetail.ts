@@ -878,41 +878,6 @@ export function useTripDetail({
     router,
   ]);
 
-  /** Add Income → full ledger entry (cash IN), same flow as Finance / trip “record payment”. */
-  const openLedgerSyncForTripIncome = useCallback(() => {
-    if (!trip?.id) return;
-    const tripNumber = getTripDisplayNumber(trip);
-    const params = new URLSearchParams({
-      tripId: trip.id,
-      tripNumber,
-      defaultType: "in",
-    });
-    const clientId = clientIdFromContext ?? trip.client_id ?? "";
-    if (clientId) {
-      params.set("partyContext", "customers");
-      params.set("partyId", clientId);
-      const name =
-        clientNameFromContext ?? displayClientName ?? trip.client_name ?? "";
-      if (name) params.set("partyName", name);
-    }
-    const received = tripLedgerEntries.reduce(
-      (s, r) => s + Number(r.amount_in ?? 0),
-      0,
-    );
-    const sale = Number(trip.client_price ?? 0);
-    const due = Math.max(0, sale - received);
-    if (due > 0) params.set("dueAmountIn", String(due));
-
-    router.push(`/(modals)/ledger-sync?${params.toString()}`);
-  }, [
-    trip,
-    clientIdFromContext,
-    clientNameFromContext,
-    displayClientName,
-    tripLedgerEntries,
-    router,
-  ]);
-
   /** Cash OUT / trip expense — same query shape as TripLedgerDetailScreen.onAddExpense. */
   const openAddExpense = useCallback(() => {
     if (!trip?.id) return;
@@ -930,8 +895,7 @@ export function useTripDetail({
     );
     const pendingAmt = Math.max(0, sales - received);
 
-    const supplierCost =
-      Number(trip.client_price ?? 0) || Number(trip.supplier_rate ?? 0);
+    const supplierCost = Number(trip.supplier_rate ?? 0);
     const paidOut = tripLedgerEntries.reduce(
       (s, tx) => s + Number(tx.amount_out ?? 0),
       0,
@@ -941,13 +905,31 @@ export function useTripDetail({
     if (pendingAmt > 0) params.set("dueAmountIn", String(pendingAmt));
     if (supplierDueAmt > 0) params.set("dueAmountOut", String(supplierDueAmt));
 
-    if (entryContext === "vehicle" && trip.vehicle_id) {
+    if (entryContext === "supplier" && trip.supplier_id) {
+      params.set("partyContext", "suppliers");
+      params.set("partyId", trip.supplier_id);
+      if (partnerName) params.set("partyName", partnerName);
+    } else if (entryContext === "client" && (clientIdFromContext ?? trip.client_id)) {
+      params.set("partyContext", "customers");
+      params.set("partyId", clientIdFromContext ?? trip.client_id ?? "");
+      const name = clientNameFromContext ?? displayClientName ?? trip.client_name ?? "";
+      if (name) params.set("partyName", name);
+    } else if (entryContext === "vehicle" && trip.vehicle_id) {
       params.set("entityType", "VEHICLE");
       params.set("entityId", trip.vehicle_id);
     }
 
     router.push(`/(modals)/ledger-sync?${params.toString()}`);
-  }, [trip, tripLedgerEntries, entryContext, router]);
+  }, [
+    trip,
+    tripLedgerEntries,
+    entryContext,
+    partnerName,
+    clientIdFromContext,
+    clientNameFromContext,
+    displayClientName,
+    router,
+  ]);
 
   const handleRecordDriverPayment = useCallback(() => {
     if (!trip?.id || !trip.driver_id) return;
@@ -1401,7 +1383,6 @@ export function useTripDetail({
     load,
     handleRefresh,
     openAddEntry,
-    openLedgerSyncForTripIncome,
     openAddExpense,
     handleAcceptPartnerView,
     handleRaiseDispute,

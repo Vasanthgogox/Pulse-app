@@ -8,14 +8,21 @@ import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { LeafletMap } from "@/components/driver/LeafletMap.web";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatINR } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { LedgerRow } from "@/features/finance/services/finance.service";
 import type { TripAdjustment } from "../../services/tripAdjustments";
 import { getTripDisplayNumber } from "../../services/trips.service";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
@@ -25,7 +32,10 @@ import type { ExpenseRow } from "./sections/ExpensesTable";
 import { FinanceOverview } from "./sections/FinanceOverview";
 import { LRDocumentsSection } from "./sections/LRDocumentsSection";
 import { TripInfoCard } from "./sections/TripInfoCard";
-import { TripStatusTimeline, type TripStageTimestamp } from "./sections/TripStatusTimeline";
+import {
+  TripStatusTimeline,
+  type TripStageTimestamp,
+} from "./sections/TripStatusTimeline";
 import { TruckAssignmentCard } from "./sections/TruckAssignmentCard";
 
 type Tab = "tracking" | "finance";
@@ -103,8 +113,17 @@ export default function TripDetailScreen({
     return (
       <View style={styles.errorWrap}>
         <Text style={styles.errorText}>{detail.error ?? "Trip not found"}</Text>
-        <TouchableOpacity style={styles.retryBtn} onPress={detail.load} activeOpacity={0.8}>
-          <FontAwesome name="refresh" size={14} color="#fff" style={{ marginRight: 8 }} />
+        <TouchableOpacity
+          style={styles.retryBtn}
+          onPress={detail.load}
+          activeOpacity={0.8}
+        >
+          <FontAwesome
+            name="refresh"
+            size={14}
+            color="#fff"
+            style={{ marginRight: 8 }}
+          />
           <Text style={styles.retryBtnText}>Try Again</Text>
         </TouchableOpacity>
       </View>
@@ -117,11 +136,17 @@ export default function TripDetailScreen({
   // ── Stage timestamps ──────────────────────────────────────────────────────────
   const stageTimestamps: TripStageTimestamp[] = [];
   if (trip.pickup_date)
-    stageTimestamps.push({ stageKey: "confirmed", timestamp: trip.pickup_date });
+    stageTimestamps.push({
+      stageKey: "confirmed",
+      timestamp: trip.pickup_date,
+    });
   if (trip.started_at)
     stageTimestamps.push({ stageKey: "intransit", timestamp: trip.started_at });
   if (trip.completed_at)
-    stageTimestamps.push({ stageKey: "pod_received", timestamp: trip.completed_at });
+    stageTimestamps.push({
+      stageKey: "pod_received",
+      timestamp: trip.completed_at,
+    });
 
   const stageLocations: Partial<Record<string, string>> = {
     confirmed: trip.pickup_area?.trim() || undefined,
@@ -146,21 +171,24 @@ export default function TripDetailScreen({
       type: e.contact_type ?? e.party_name ?? "—",
       description: e.description ?? "—",
       amount: Number(e.amount_out),
-      status: (
-        e.reconciliation_status === "reconciled"
-          ? "Paid"
-          : e.reconciliation_status === "mismatch"
-            ? "Requested"
-            : "Pending"
-      ) as ExpenseRow["status"],
+      status: (e.reconciliation_status === "reconciled"
+        ? "Paid"
+        : e.reconciliation_status === "mismatch"
+          ? "Requested"
+          : "Pending") as ExpenseRow["status"],
     }));
 
   // ── Finance numbers ───────────────────────────────────────────────────────────
   const baseFreight = Number(trip.client_price ?? 0);
   const totalExpenses = expenseRows.reduce((s, r) => s + r.amount, 0);
   const incomeAdjustmentRows = adjustmentsCountingAsIncome(detail.adjustments);
-  const deductionAdjustmentRows = adjustmentsCountingAsDeductions(detail.adjustments);
-  const additionalIncome = incomeAdjustmentRows.reduce((s, a) => s + a.amount, 0);
+  const deductionAdjustmentRows = adjustmentsCountingAsDeductions(
+    detail.adjustments,
+  );
+  const additionalIncome = incomeAdjustmentRows.reduce(
+    (s, a) => s + a.amount,
+    0,
+  );
   const deductions = deductionAdjustmentRows.reduce((s, a) => s + a.amount, 0);
 
   const sales = Number(trip.client_price ?? 0);
@@ -176,14 +204,21 @@ export default function TripDetailScreen({
   );
   const supplierDue = Math.max(0, totalExpenses - supplierPaid);
 
-  type FinanceHistoryRow = { key: string; tx: LedgerRow; isIn: boolean; amount: number };
+  type FinanceHistoryRow = {
+    key: string;
+    tx: LedgerRow;
+    isIn: boolean;
+    amount: number;
+  };
   const financeHistoryRows: FinanceHistoryRow[] = (() => {
     const rows: FinanceHistoryRow[] = [];
     for (const tx of detail.tripLedgerEntries) {
       const inAmt = Number(tx.amount_in ?? 0);
       const outAmt = Number(tx.amount_out ?? 0);
-      if (inAmt > 0) rows.push({ key: `${tx.id}-in`, tx, isIn: true, amount: inAmt });
-      if (outAmt > 0) rows.push({ key: `${tx.id}-out`, tx, isIn: false, amount: outAmt });
+      if (inAmt > 0)
+        rows.push({ key: `${tx.id}-in`, tx, isIn: true, amount: inAmt });
+      if (outAmt > 0)
+        rows.push({ key: `${tx.id}-out`, tx, isIn: false, amount: outAmt });
     }
     rows.sort((a, b) => {
       const da = new Date(a.tx.transaction_date || a.tx.created_at).getTime();
@@ -205,11 +240,14 @@ export default function TripDetailScreen({
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-
       {/* ── Dark navigation bar ─────────────────────────────────────────────── */}
       <View style={styles.navBar}>
         <View style={styles.navLeft}>
-          <TouchableOpacity onPress={onBack} style={styles.navBackBtn} activeOpacity={0.8}>
+          <TouchableOpacity
+            onPress={onBack}
+            style={styles.navBackBtn}
+            activeOpacity={0.8}
+          >
             <FontAwesome name="chevron-left" size={11} color="#94a3b8" />
             <Text style={styles.navBackText}>Back</Text>
           </TouchableOpacity>
@@ -218,16 +256,30 @@ export default function TripDetailScreen({
               <FontAwesome name="truck" size={12} color="#fff" />
             </View>
             <Text style={styles.navTitle}>{getTripDisplayNumber(trip)}</Text>
-            <View style={[styles.navPill, isAggregate ? styles.navPillAggregate : styles.navPillAsset]}>
-              <Text style={styles.navPillText}>{isAggregate ? "AGGREGATE" : "ASSET"}</Text>
+            <View
+              style={[
+                styles.navPill,
+                isAggregate ? styles.navPillAggregate : styles.navPillAsset,
+              ]}
+            >
+              <Text style={styles.navPillText}>
+                {isAggregate ? "AGGREGATE" : "ASSET"}
+              </Text>
             </View>
           </View>
         </View>
         <View style={styles.navActions}>
-          <NavAction icon="plus" label="Add Expense" onPress={detail.openAddExpense} />
-          <NavAction icon="pencil" label="Edit Trip" onPress={() => {}} />
-          <NavAction icon="trash" label="Delete" onPress={() => {}} danger />
-          <NavAction icon="file-text-o" label="Generate Memo" onPress={() => {}} primary />
+          <NavAction
+            icon="plus"
+            label="Add Expense"
+            onPress={detail.openAddExpense}
+          />
+          <NavAction
+            icon="file-text-o"
+            label="Generate Memo"
+            onPress={() => {}}
+            primary
+          />
         </View>
       </View>
 
@@ -253,15 +305,16 @@ export default function TripDetailScreen({
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={detail.refreshing} onRefresh={detail.handleRefresh} />
+          <RefreshControl
+            refreshing={detail.refreshing}
+            onRefresh={detail.handleRefresh}
+          />
         }
       >
-
         {/* ════════════════════ TRACKING TAB ════════════════════ */}
         {activeTab === "tracking" && (
           <>
             <View style={styles.trackingTopRow}>
-
               {/* Left col: TripInfoCard + TruckAssignment + LR Docs */}
               <View style={styles.infoCol}>
                 <TripInfoCard
@@ -273,7 +326,8 @@ export default function TripDetailScreen({
                   trip={trip}
                   vehicleLabel={
                     isAggregate
-                      ? detail.displayVehicleFromInput.trim() || detail.vehicleLabel
+                      ? detail.displayVehicleFromInput.trim() ||
+                        detail.vehicleLabel
                       : detail.vehicleLabel
                   }
                   driverName={detail.driverName}
@@ -291,7 +345,9 @@ export default function TripDetailScreen({
                         label: d.label,
                         type: d.type,
                         status: "Uploaded" as const,
-                        onView: d.storagePath ? () => detail.setSelectedDoc(d) : undefined,
+                        onView: d.storagePath
+                          ? () => detail.setSelectedDoc(d)
+                          : undefined,
                       }))}
                   />
                 </View>
@@ -311,14 +367,18 @@ export default function TripDetailScreen({
                       style={{ width: "100%", height: 600 }}
                       center={mapCenter}
                       zoom={6}
-                      markers={(
+                      markers={
                         [
                           hasOrigin
                             ? {
                                 id: "origin",
                                 coordinate: {
-                                  latitude: detail.trackingMapOriginCoordinate!.latitude,
-                                  longitude: detail.trackingMapOriginCoordinate!.longitude,
+                                  latitude:
+                                    detail.trackingMapOriginCoordinate!
+                                      .latitude,
+                                  longitude:
+                                    detail.trackingMapOriginCoordinate!
+                                      .longitude,
                                 },
                                 label: trip.pickup_area ?? "Origin",
                               }
@@ -327,14 +387,18 @@ export default function TripDetailScreen({
                             ? {
                                 id: "dest",
                                 coordinate: {
-                                  latitude: detail.trackingMapDestinationCoordinate!.latitude,
-                                  longitude: detail.trackingMapDestinationCoordinate!.longitude,
+                                  latitude:
+                                    detail.trackingMapDestinationCoordinate!
+                                      .latitude,
+                                  longitude:
+                                    detail.trackingMapDestinationCoordinate!
+                                      .longitude,
                                 },
                                 label: trip.drop_location ?? "Destination",
                               }
                             : null,
-                        ].filter(Boolean)
-                      ) as any}
+                        ].filter(Boolean) as any
+                      }
                     />
                   }
                 />
@@ -351,9 +415,13 @@ export default function TripDetailScreen({
                     partnerName={detail.partnerName}
                     driverName={detail.driverName}
                     driverAvatarUri={detail.driverAvatarUri}
-                    clientName={detail.displayClientName ?? trip.client_name ?? null}
+                    clientName={
+                      detail.displayClientName ?? trip.client_name ?? null
+                    }
                     paymentCaptured={detail.tripLedgerEntries.some(
-                      (row) => row.contact_type === "client" && Number(row.amount_in ?? 0) > 0,
+                      (row) =>
+                        row.contact_type === "client" &&
+                        Number(row.amount_in ?? 0) > 0,
                     )}
                   />
                 ) : (
@@ -367,7 +435,6 @@ export default function TripDetailScreen({
         {/* ════════════════════ FINANCE TAB ════════════════════ */}
         {activeTab === "finance" && (
           <View style={styles.financeColsRow}>
-
             {/* Left col: Finance Overview */}
             <View style={styles.financeLeftCol}>
               <FinanceOverview
@@ -375,7 +442,10 @@ export default function TripDetailScreen({
                 totalExpenses={totalExpenses}
                 additionalIncome={additionalIncome}
                 deductions={deductions}
-                expenseDetails={expenseRows.map((e) => ({ label: e.description, amount: e.amount }))}
+                expenseDetails={expenseRows.map((e) => ({
+                  label: e.description,
+                  amount: e.amount,
+                }))}
                 incomeDetails={incomeAdjustmentRows.map((a) => ({
                   label: adjustmentIncomeLineLabel(a),
                   amount: a.amount,
@@ -384,14 +454,13 @@ export default function TripDetailScreen({
                   label: adjustmentDeductionLineLabel(a),
                   amount: a.amount,
                 }))}
-                onAddIncome={detail.openLedgerSyncForTripIncome}
+                onAddIncome={detail.openClientIncomeAdjustment}
                 onAddDeduction={detail.openClientDeductionAdjustment}
               />
             </View>
 
             {/* Right col: Dark Ledger + Expense List */}
             <View style={styles.financeRightCol}>
-
               {/* Financial Ledger dark card */}
               <LedgerCard
                 sales={sales}
@@ -404,7 +473,10 @@ export default function TripDetailScreen({
               />
 
               {/* Expense List card */}
-              <ExpenseListCard expenses={expenseRows} onAddExpense={detail.openAddExpense} />
+              <ExpenseListCard
+                expenses={expenseRows}
+                onAddExpense={detail.openAddExpense}
+              />
             </View>
           </View>
         )}
@@ -432,7 +504,12 @@ export default function TripDetailScreen({
 
 // ── Financial Ledger Card (dark) ───────────────────────────────────────────────
 
-type FinanceHistoryRow = { key: string; tx: LedgerRow; isIn: boolean; amount: number };
+type FinanceHistoryRow = {
+  key: string;
+  tx: LedgerRow;
+  isIn: boolean;
+  amount: number;
+};
 
 function LedgerCard({
   sales,
@@ -474,9 +551,13 @@ function LedgerCard({
         <View style={ldStyles.statGroup}>
           <View style={ldStyles.statLabelRow}>
             <View style={ldStyles.greenDot} />
-            <Text style={[ldStyles.statLabel, ldStyles.statLabelGreen]}>Received</Text>
+            <Text style={[ldStyles.statLabel, ldStyles.statLabelGreen]}>
+              Received
+            </Text>
           </View>
-          <Text style={[ldStyles.statValue, ldStyles.statValueGreen]}>{formatINR(received)}</Text>
+          <Text style={[ldStyles.statValue, ldStyles.statValueGreen]}>
+            {formatINR(received)}
+          </Text>
         </View>
         <View style={ldStyles.statDivider} />
         <View style={ldStyles.statGroup}>
@@ -494,12 +575,18 @@ function LedgerCard({
         <View style={ldStyles.statDivider} />
         <View style={ldStyles.statGroup}>
           <Text style={[ldStyles.statLabel, ldStyles.statLabelRed]}>Paid</Text>
-          <Text style={[ldStyles.statValue, ldStyles.statValueRed]}>{formatINR(supplierPaid)}</Text>
+          <Text style={[ldStyles.statValue, ldStyles.statValueRed]}>
+            {formatINR(supplierPaid)}
+          </Text>
         </View>
         <View style={ldStyles.statDivider} />
         <View style={ldStyles.statGroup}>
-          <Text style={[ldStyles.statLabel, ldStyles.statLabelOrange]}>Payable</Text>
-          <Text style={[ldStyles.statValue, ldStyles.statValueOrange]}>{formatINR(supplierDue)}</Text>
+          <Text style={[ldStyles.statLabel, ldStyles.statLabelOrange]}>
+            Payable
+          </Text>
+          <Text style={[ldStyles.statValue, ldStyles.statValueOrange]}>
+            {formatINR(supplierDue)}
+          </Text>
         </View>
       </View>
 
@@ -513,11 +600,18 @@ function LedgerCard({
         </View>
 
         {financeHistoryRows.length === 0 ? (
-          <Text style={ldStyles.txEmpty}>No transactions for this trip yet</Text>
+          <Text style={ldStyles.txEmpty}>
+            No transactions for this trip yet
+          </Text>
         ) : (
           financeHistoryRows.slice(0, 5).map(({ key, tx, isIn, amount }) => (
             <View key={key} style={ldStyles.txRow}>
-              <View style={[ldStyles.txIcon, isIn ? ldStyles.txIconIn : ldStyles.txIconOut]}>
+              <View
+                style={[
+                  ldStyles.txIcon,
+                  isIn ? ldStyles.txIconIn : ldStyles.txIconOut,
+                ]}
+              >
                 <FontAwesome
                   name={isIn ? "arrow-down" : "arrow-up"}
                   size={11}
@@ -533,7 +627,12 @@ function LedgerCard({
                   {tx.party_name?.trim() || "—"}
                 </Text>
               </View>
-              <Text style={[ldStyles.txAmount, isIn ? ldStyles.txAmountIn : ldStyles.txAmountOut]}>
+              <Text
+                style={[
+                  ldStyles.txAmount,
+                  isIn ? ldStyles.txAmountIn : ldStyles.txAmountOut,
+                ]}
+              >
                 {isIn ? "+ " : "− "}
                 {formatINR(amount)}
               </Text>
@@ -556,9 +655,12 @@ function ExpenseListCard({
 }) {
   const total = expenses.reduce((s, e) => s + e.amount, 0);
 
-  function getCategoryIcon(category: string): React.ComponentProps<typeof FontAwesome>["name"] {
+  function getCategoryIcon(
+    category: string,
+  ): React.ComponentProps<typeof FontAwesome>["name"] {
     const c = category.toLowerCase();
-    if (c.includes("fuel") || c.includes("diesel") || c.includes("petrol")) return "tint";
+    if (c.includes("fuel") || c.includes("diesel") || c.includes("petrol"))
+      return "tint";
     if (c.includes("toll") || c.includes("road")) return "road";
     if (c.includes("driver") || c.includes("labour")) return "user";
     if (c.includes("maintenance") || c.includes("repair")) return "wrench";
@@ -568,7 +670,8 @@ function ExpenseListCard({
 
   function getCategoryColor(category: string): string {
     const c = category.toLowerCase();
-    if (c.includes("fuel") || c.includes("diesel") || c.includes("petrol")) return "#f97316";
+    if (c.includes("fuel") || c.includes("diesel") || c.includes("petrol"))
+      return "#f97316";
     if (c.includes("toll") || c.includes("road")) return "#3b82f6";
     if (c.includes("driver") || c.includes("labour")) return "#8b5cf6";
     if (c.includes("maintenance") || c.includes("repair")) return "#ef4444";
@@ -589,7 +692,11 @@ function ExpenseListCard({
         <View style={elStyles.headerRight}>
           <Text style={elStyles.total}>{formatINR(total)}</Text>
           {onAddExpense && (
-            <TouchableOpacity style={elStyles.addBtn} onPress={onAddExpense} activeOpacity={0.8}>
+            <TouchableOpacity
+              style={elStyles.addBtn}
+              onPress={onAddExpense}
+              activeOpacity={0.8}
+            >
               <FontAwesome name="plus" size={10} color="#fff" />
               <Text style={elStyles.addBtnText}>Add</Text>
             </TouchableOpacity>
@@ -669,9 +776,12 @@ function FeedbackPlaceholder() {
       </View>
       <View style={fbStyles.body}>
         <FontAwesome name="clock-o" size={28} color="#d1d5db" />
-        <Text style={fbStyles.message}>Feedback available once the trip is completed</Text>
+        <Text style={fbStyles.message}>
+          Feedback available once the trip is completed
+        </Text>
         <Text style={fbStyles.sub}>
-          Ratings for driver performance, client satisfaction, and trip quality will appear here.
+          Ratings for driver performance, client satisfaction, and trip quality
+          will appear here.
         </Text>
       </View>
     </View>
@@ -697,8 +807,14 @@ function TabButton({
       onPress={onPress}
       activeOpacity={0.8}
     >
-      <FontAwesome name={icon} size={13} color={active ? "#2563eb" : "#6b7280"} />
-      <Text style={[styles.tabBtnText, active && styles.tabBtnTextActive]}>{label}</Text>
+      <FontAwesome
+        name={icon}
+        size={13}
+        color={active ? "#2563eb" : "#6b7280"}
+      />
+      <Text style={[styles.tabBtnText, active && styles.tabBtnTextActive]}>
+        {label}
+      </Text>
     </TouchableOpacity>
   );
 }
