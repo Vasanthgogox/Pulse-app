@@ -1,3 +1,8 @@
+/**
+ * Middle-column Truck Assignment card — matches reference design.
+ * Shows truck and driver with Change / Remove actions.
+ */
+import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { TripRow } from "../../../services/trips.service";
@@ -33,30 +38,30 @@ export function TruckAssignmentCard({
 }: TruckAssignmentCardProps) {
   const vehicleDisplay =
     vehicleLabel ?? trip.vehicle_display_number ?? trip.vehicle_id ?? null;
-  const driverDisplay =
-    driverName ?? trip.driver_display_name ?? trip.driver_id ?? null;
+  const driverDisplay = driverName ?? trip.driver_display_name ?? trip.driver_id ?? null;
 
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
-        <View>
-          <Text style={styles.cardTitle}>Assignments</Text>
-          <Text style={styles.cardSubtitle}>Manage vehicle and personnel</Text>
-        </View>
+        <Text style={styles.cardTitle}>Truck Assignment</Text>
+        <Text style={styles.cardSubtitle}>Manage truck and driver details</Text>
       </View>
 
       <View style={styles.body}>
-        {/* Vehicle row */}
+        {/* Truck row */}
         <AssignmentRow
           icon="truck"
-          typeLabel="Vehicle"
+          typeLabel="Truck"
           valueLabel={vehicleDisplay}
           isOnline={isVehicleOnline}
-          canAssign={canAssign}
+          unassignedText="No truck assigned"
+          canChange={canAssign}
           onChangePress={onChangeVehicle}
           onRemovePress={vehicleDisplay ? onRemoveVehicle : undefined}
           onViewDetails={vehicleDisplay ? onViewVehicleDetails : undefined}
         />
+
+        <View style={styles.separator} />
 
         {/* Driver row */}
         <AssignmentRow
@@ -64,7 +69,8 @@ export function TruckAssignmentCard({
           typeLabel="Driver"
           valueLabel={driverDisplay}
           isOnline={isDriverOnline}
-          canAssign={canAssign}
+          unassignedText="No driver assigned"
+          canChange={canAssign}
           onChangePress={onChangeDriver}
           onRemovePress={driverDisplay ? onRemoveDriver : undefined}
           onViewDetails={driverDisplay ? onViewDriverDetails : undefined}
@@ -79,7 +85,8 @@ interface AssignmentRowProps {
   typeLabel: string;
   valueLabel: string | null;
   isOnline: boolean;
-  canAssign: boolean;
+  unassignedText: string;
+  canChange: boolean;
   onChangePress?: () => void;
   onRemovePress?: () => void;
   onViewDetails?: () => void;
@@ -90,194 +97,194 @@ function AssignmentRow({
   typeLabel,
   valueLabel,
   isOnline,
-  canAssign,
+  unassignedText,
+  canChange,
   onChangePress,
-  onRemovePress: _onRemovePress,
-  onViewDetails: _onViewDetails,
+  onRemovePress,
+  onViewDetails,
 }: AssignmentRowProps) {
-  const isAssigned = !!valueLabel;
-
   return (
-    <View style={[styles.row, isAssigned ? styles.rowAssigned : styles.rowUnassigned]}>
-      <View style={[styles.rowIconWrap, isAssigned ? styles.rowIconAssigned : styles.rowIconEmpty]}>
-        <FontAwesome
-          name={icon}
-          size={isAssigned ? 20 : 18}
-          color={isAssigned ? "#2563eb" : "#9ca3af"}
-        />
+    <View style={styles.row}>
+      {/* Icon */}
+      <View style={styles.rowIconWrap}>
+        <FontAwesome name={icon} size={20} color="#374151" />
       </View>
 
+      {/* Info */}
       <View style={styles.rowInfo}>
         <Text style={styles.rowTypeLabel}>{typeLabel}</Text>
         <View style={styles.rowValueRow}>
-          <Text
-            style={[
-              styles.rowValue,
-              !isAssigned && styles.rowValueEmpty,
-              !isAssigned && styles.rowValueItalic,
-            ]}
-          >
-            {valueLabel ?? "Unassigned"}
+          <Text style={[styles.rowValue, !valueLabel && styles.rowValueEmpty]}>
+            {valueLabel ?? unassignedText}
           </Text>
-          {isAssigned ? (
+          {valueLabel ? (
             <View
               style={[
                 styles.onlineDot,
-                { backgroundColor: isOnline ? "#10b981" : "#e2e8f0" },
+                { backgroundColor: isOnline ? "#22c55e" : "#d1d5db" },
               ]}
             />
           ) : null}
         </View>
       </View>
 
-      {canAssign ? (
-        <TouchableOpacity
-          style={isAssigned ? styles.changeBtn : styles.assignBtn}
-          onPress={onChangePress}
-          activeOpacity={0.8}
-        >
-          <Text style={isAssigned ? styles.changeBtnText : styles.assignBtnText}>
-            {isAssigned ? "Change" : "Assign"}
-          </Text>
+      {/* Actions */}
+      <View style={styles.rowActions}>
+        {canChange ? (
+          <>
+            <ActionButton label="Change" onPress={onChangePress} variant="outline" />
+            {onRemovePress ? (
+              <ActionButton label="Remove" onPress={onRemovePress} variant="outline-danger" />
+            ) : null}
+          </>
+        ) : null}
+      </View>
+
+      {/* View Details link */}
+      {onViewDetails ? (
+        <TouchableOpacity onPress={onViewDetails} style={styles.viewDetailsBtn} activeOpacity={0.7}>
+          <Text style={styles.viewDetailsText}>View Details</Text>
         </TouchableOpacity>
       ) : null}
     </View>
   );
 }
 
+function ActionButton({
+  label,
+  onPress,
+  variant,
+}: {
+  label: string;
+  onPress?: () => void;
+  variant: "outline" | "outline-danger";
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={[styles.actionBtn, variant === "outline-danger" && styles.actionBtnDanger]}
+      activeOpacity={0.8}
+    >
+      <Text
+        style={[
+          styles.actionBtnText,
+          variant === "outline-danger" && styles.actionBtnTextDanger,
+        ]}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#f1f5f9",
+    borderColor: "#e5e7eb",
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 16,
-    elevation: 2,
   },
   cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
+    borderBottomColor: "#f3f4f6",
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
-    color: "#0f172a",
-    letterSpacing: -0.2,
+    color: "#111827",
   },
   cardSubtitle: {
     fontSize: 12,
-    color: "#94a3b8",
+    color: "#9ca3af",
     marginTop: 2,
   },
   body: {
-    padding: 16,
-    gap: 10,
+    paddingHorizontal: 20,
   },
-
-  // Row cards
+  separator: {
+    height: 1,
+    backgroundColor: "#f3f4f6",
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",
+    paddingVertical: 16,
     gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  rowAssigned: {
-    backgroundColor: "#fff",
-    borderColor: "#e2e8f0",
-  },
-  rowUnassigned: {
-    backgroundColor: "#fafafa",
-    borderColor: "#e2e8f0",
-    borderStyle: "dashed",
   },
   rowIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: "#f9fafb",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
     alignItems: "center",
     justifyContent: "center",
-  },
-  rowIconAssigned: {
-    backgroundColor: "#eff6ff",
-  },
-  rowIconEmpty: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
   },
   rowInfo: {
     flex: 1,
     minWidth: 0,
   },
   rowTypeLabel: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: "#94a3b8",
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#9ca3af",
     textTransform: "uppercase",
-    letterSpacing: 1.2,
+    letterSpacing: 0.5,
     marginBottom: 3,
   },
   rowValueRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
+    gap: 6,
   },
   rowValue: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#1e293b",
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#111827",
   },
   rowValueEmpty: {
-    color: "#94a3b8",
-  },
-  rowValueItalic: {
+    color: "#9ca3af",
     fontStyle: "italic",
-    fontWeight: "500",
   },
   onlineDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
   },
-
-  // Buttons
-  changeBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "#eff6ff",
+  rowActions: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  actionBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
+    borderColor: "#d1d5db",
+    backgroundColor: Theme.screenBackground,
   },
-  changeBtnText: {
+  actionBtnDanger: {
+    borderColor: "#fca5a5",
+  },
+  actionBtnText: {
     fontSize: 11,
-    fontWeight: "700",
-    color: "#2563eb",
-  },
-  assignBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  assignBtnText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "600",
     color: "#374151",
+  },
+  actionBtnTextDanger: {
+    color: "#ef4444",
+  },
+  viewDetailsBtn: {
+    paddingLeft: 4,
+  },
+  viewDetailsText: {
+    fontSize: 11,
+    color: "#6b7280",
+    textDecorationLine: "underline",
   },
 });
