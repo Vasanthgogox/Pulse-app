@@ -11,8 +11,9 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
 import { isAggregateTrip } from "@/lib/driverUtils";
-import { formatINR } from "@/lib/format";
+import { formatINR, formatIndianVehicleNumber } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
   RefreshControl,
@@ -24,11 +25,13 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { TripAdjustment } from "../../services/tripAdjustments";
+import { regenerateTripOtp } from "../../services/tripOtp.service";
 import { getTripDisplayNumber } from "../../services/trips.service";
+import { TripAssignmentBlock } from "../TripAssignmentBlock";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import type { TripDetailScreenProps } from "./TripDetailScreen";
 import { useTripDetail } from "./hooks/useTripDetail";
-import { ExpensesTable, type ExpenseRow } from "./sections/ExpensesTable";
+import { type ExpenseRow } from "./sections/ExpensesTable";
 import { FinanceOverview } from "./sections/FinanceOverview";
 import { LRDocumentsSection } from "./sections/LRDocumentsSection";
 import { TripInfoCard } from "./sections/TripInfoCard";
@@ -36,7 +39,6 @@ import {
   TripStatusTimeline,
   type TripStageTimestamp,
 } from "./sections/TripStatusTimeline";
-import { TruckAssignmentCard } from "./sections/TruckAssignmentCard";
 
 type Tab = "tracking" | "finance";
 
@@ -95,9 +97,11 @@ export default function TripDetailScreen({
   onBack,
 }: TripDetailScreenProps) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { currentOrganization } = useOrganization();
   const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<Tab>("tracking");
+  const [otpResending, setOtpResending] = useState(false);
 
   const detail = useTripDetail({
     tripId,
@@ -201,7 +205,8 @@ export default function TripDetailScreen({
   const pending = Math.max(0, sales - received);
 
   // For supplier, we assume client_price is our cost, supplier_rate is what we owe our supplier
-  const supplierCost = Number(trip.client_price ?? 0) || Number(trip.supplier_rate ?? 0);
+  const supplierCost =
+    Number(trip.client_price ?? 0) || Number(trip.supplier_rate ?? 0);
   const supplierPaid = detail.tripLedgerEntries.reduce(
     (s, tx) => s + Number(tx.amount_out ?? 0),
     0,
@@ -241,6 +246,39 @@ export default function TripDetailScreen({
         longitude: detail.trackingMapOriginCoordinate!.longitude,
       }
     : { latitude: 20.5937, longitude: 78.9629 };
+
+  const openDriverDetails = () => {
+    if (!trip.driver_id) return;
+    router.push(`/driver/${trip.driver_id}` as any);
+  };
+
+  const openVehicleDetails = () => {
+    if (!trip.vehicle_id) return;
+    router.push(`/vehicle/${trip.vehicle_id}` as any);
+  };
+
+  const openTripDocumentsFlow = () => {
+    router.push("/log-incoming-pods" as any);
+  };
+
+  const aggregateOtpState = (() => {
+    if (!isAggregate) return null;
+    const status = String(trip.status ?? "").toLowerCase();
+    if (status === "assigned") return "otp_pending";
+    if (status === "in_progress" || status === "in_transit") return "verified";
+    return "not_required";
+  })();
+
+  const handleResendOtp = async () => {
+    if (!trip?.id || otpResending) return;
+    setOtpResending(true);
+    try {
+      await regenerateTripOtp(trip.id);
+      detail.handleAssignmentUpdated();
+    } finally {
+      setOtpResending(false);
+    }
+  };
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -324,33 +362,104 @@ export default function TripDetailScreen({
                   clientName={detail.displayClientName}
                   currentStageLabel={isAggregate ? "AGGREGATE" : undefined}
                 />
-                <TruckAssignmentCard
-                  trip={trip}
-                  vehicleLabel={
-                    isAggregate
-                      ? detail.displayVehicleFromInput.trim() ||
-                        detail.vehicleLabel
-                      : detail.vehicleLabel
-                  }
-                  driverName={detail.driverName}
-                  isDriverOnline={!detail.isDriverOffline}
-                  canAssign={detail.canAssign}
-                  onChangeDriver={() => setActiveTab("finance")}
-                  onViewVehicleDetails={() => setActiveTab("finance")}
-                />
+                {trip.organization_id ? (
+                  <TripAssignmentBlock
+                    trip={trip}
+                    organizationId={currentOrganization?.id ?? ""}
+                    canAssign={detail.canAssign}
+                    onUpdated={detail.handleAssignmentUpdated}
+                    partnerName={detail.partnerName}
+                    driverName={detail.driverName}
+                    vehicleLabel={
+                      isAggregate
+                        ? detail.displayVehicleFromInput.trim() ||
+                          detail.vehicleLabel ||
+                          null
+                        : detail.vehicleLabel
+                    }
+                    driverAvatarUri={detail.driverAvatarUri}
+                    showAssignByPhone={detail.showAssignByPhone}
+                    assignmentSource={detail.assignmentSource}
+                    currentUserId={detail.currentUserId}
+                    previousDriverName={detail.previousDriverName}
+                    latestReassignmentSummary={detail.latestReassignmentSummary}
+                    driverAssignOrgId={
+                      detail.showAssignByPhone && currentOrganization?.id
+                        ? currentOrganization.id
+                        : null
+                    }
+                    onVehicleDisplayChange={(value) => {
+                      const normalized = formatIndianVehicleNumber(value ?? "");
+                      detail.setDisplayVehicleFromInput(normalized);
+                    }}
+                  />
+                ) : null}
+                {isAggregate && aggregateOtpState !== "not_required" ? (
+                  <View style={styles.otpStateCard}>
+                    <View style={styles.otpStateHeader}>
+                      <Text style={styles.otpStateTitle}>Assignment Verification</Text>
+                      <View
+                        style={[
+                          styles.otpStateBadge,
+                          aggregateOtpState === "verified"
+                            ? styles.otpStateBadgeVerified
+                            : styles.otpStateBadgePending,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.otpStateBadgeText,
+                            aggregateOtpState === "verified"
+                              ? styles.otpStateBadgeTextVerified
+                              : styles.otpStateBadgeTextPending,
+                          ]}
+                        >
+                          {aggregateOtpState === "verified"
+                            ? "Driver verified"
+                            : "OTP pending"}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.otpStateSub}>
+                      {aggregateOtpState === "verified"
+                        ? "Driver has verified assignment from the driver app."
+                        : detail.tripOtp?.expires_at
+                          ? `OTP generated. Expires at ${new Date(
+                              detail.tripOtp.expires_at,
+                            ).toLocaleString("en-IN")}`
+                          : "OTP will be generated during assignment confirmation flow."}
+                    </Text>
+                    {aggregateOtpState !== "verified" && detail.tripOtp?.code ? (
+                      <View style={styles.otpCodeRow}>
+                        <Text style={styles.otpCodeLabel}>OTP</Text>
+                        <Text style={styles.otpCodeValue}>{detail.tripOtp.code}</Text>
+                      </View>
+                    ) : null}
+                    {aggregateOtpState !== "verified" ? (
+                      <TouchableOpacity
+                        style={styles.otpResendBtn}
+                        onPress={handleResendOtp}
+                        disabled={otpResending}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.otpResendBtnText}>
+                          {otpResending ? "Resending..." : "Resend OTP"}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                ) : null}
                 <View style={styles.lrGrow}>
                   <LRDocumentsSection
-                    docs={detail.computedTripDocs
-                      .filter((d) => d?.status === "Uploaded")
-                      .map((d) => ({
-                        id: d.id,
-                        label: d.label,
-                        type: d.type,
-                        status: "Uploaded" as const,
-                        onView: d.storagePath
-                          ? () => detail.setSelectedDoc(d)
-                          : undefined,
-                      }))}
+                    docs={detail.computedTripDocs.map((d) => ({
+                      id: d.id,
+                      label: d.label,
+                      type: d.type,
+                      status: d.status === "Verified" ? "Uploaded" : d.status,
+                      onView: () => openTripDocumentsFlow(),
+                    }))}
+                    onUpdateLR={openTripDocumentsFlow}
+                    onAddDocument={openTripDocumentsFlow}
                   />
                 </View>
               </View>
@@ -1060,6 +1169,92 @@ const styles = StyleSheet.create({
   lrGrow: {
     flex: 1,
   },
+  otpStateCard: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 6,
+  },
+  otpStateHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  otpStateTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  otpStateSub: {
+    fontSize: 12,
+    color: "#6b7280",
+    lineHeight: 16,
+  },
+  otpCodeRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  otpCodeLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  otpCodeValue: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0f172a",
+    letterSpacing: 1.2,
+  },
+  otpResendBtn: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#fed7aa",
+    backgroundColor: "#fff7ed",
+  },
+  otpResendBtnText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#c2410c",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  otpStateBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  otpStateBadgePending: {
+    backgroundColor: "#fff7ed",
+    borderColor: "#fed7aa",
+  },
+  otpStateBadgeVerified: {
+    backgroundColor: "#ecfdf5",
+    borderColor: "#a7f3d0",
+  },
+  otpStateBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  otpStateBadgeTextPending: {
+    color: "#b45309",
+  },
+  otpStateBadgeTextVerified: {
+    color: "#047857",
+  },
   trackingRightCol: {
     flex: 1,
     minWidth: 0,
@@ -1141,7 +1336,12 @@ const styles = StyleSheet.create({
   },
   detailValue: { fontSize: 10, fontWeight: "600", color: "#111827" },
   detailValueRed: { color: "#ef4444" },
-  detailValueBoldItalic: { fontSize: 10, fontWeight: "700", color: "#111827", fontStyle: "italic" },
+  detailValueBoldItalic: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#111827",
+    fontStyle: "italic",
+  },
   detailValueBold: { fontSize: 10, fontWeight: "700", color: "#111827" },
   detailValueGreen: { color: "#15803d" },
   twoColRow: {
@@ -1159,7 +1359,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#334155",
   },
-  summaryCardRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
+  summaryCardRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
   summaryCardItem: { flex: 1, alignItems: "flex-start" },
   summaryCardLabel: {
     fontSize: 8,

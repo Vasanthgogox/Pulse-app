@@ -82,6 +82,10 @@ export interface TripAssignmentBlockProps {
   driverAssignOrgId?: string | null;
   driverAvatarUri?: string | null;
   onRatingsLoaded?: (ratings: { rated_type: string; score: number }[]) => void;
+  /** Request opening a specific picker modal from parent shell UI. */
+  autoOpenPickerMode?: "driver" | "vehicle" | null;
+  /** Bump this value to re-trigger auto-open for same mode. */
+  autoOpenPickerNonce?: number;
 }
 
 export function TripAssignmentBlock({
@@ -100,6 +104,8 @@ export function TripAssignmentBlock({
   latestReassignmentSummary,
   viewOnly = false,
   driverAssignOrgId,
+  autoOpenPickerMode = null,
+  autoOpenPickerNonce = 0,
 }: TripAssignmentBlockProps) {
   /** No assign/reassign when trip is completed or when view-only (e.g. load creator monitoring). */
   const effectiveCanAssign = canAssign && !isTripCompleted(trip) && !viewOnly;
@@ -390,23 +396,13 @@ export function TripAssignmentBlock({
         if (vehicleErr) setPhoneError(vehicleErr.message);
       }
     }
-    // Ensure OTP exists so driver app shows "Trip waiting for OTP" (get_pending_otp_claim_count).
-    // Aggregate: always generate after assign; non-aggregate: refresh when replacing a driver or
-    // when modal was opened as reassign (e.g. after reject trip.driver_id is already null in props).
-    if (trip.supplier_id) {
-      const { error: otpErr, code: newCode, expires_at: newExpires } =
-        await generateTripOtp(trip.id);
-      if (!otpErr && newCode != null) {
-        setOtpCode(newCode);
-        setOtpExpiresAt(newExpires ?? null);
-      }
-    } else if (phoneModalIsReassign || trip.driver_id != null) {
-      const { error: otpErr, code: newCode, expires_at: newExpires } =
-        await regenerateTripOtp(trip.id);
-      if (!otpErr && newCode != null) {
-        setOtpCode(newCode);
-        setOtpExpiresAt(newExpires ?? null);
-      }
+    // Always ensure a fresh OTP exists right after assignment/reassignment.
+    // regenerate_trip_otp upserts internally, so this also covers first-time assignment.
+    const { error: otpErr, code: newCode, expires_at: newExpires } =
+      await regenerateTripOtp(trip.id);
+    if (!otpErr && newCode != null) {
+      setOtpCode(newCode);
+      setOtpExpiresAt(newExpires ?? null);
     }
     setPhoneSaving(false);
     setShowPhoneModal(false);
@@ -554,6 +550,21 @@ export function TripAssignmentBlock({
       setVehicles(r.error ? [] : (r.vehicles ?? [])),
     );
   }, [organizationId, trip.vehicle_id, trip.vehicle_display_number, propsVehicleLabel]);
+
+  useEffect(() => {
+    if (!effectiveCanAssign || !autoOpenPickerMode) return;
+    if (autoOpenPickerMode === "driver") {
+      openDriverPicker();
+      return;
+    }
+    openVehiclePicker();
+  }, [
+    autoOpenPickerMode,
+    autoOpenPickerNonce,
+    effectiveCanAssign,
+    openDriverPicker,
+    openVehiclePicker,
+  ]);
 
   const saveDriverOnly = useCallback(
     async (driverId: string | null) => {
@@ -809,61 +820,6 @@ export function TripAssignmentBlock({
           </View>
         ) : null}
 
-        {/* Aggregate OTP (only for aggregate flows that use assign-by-phone) */}
-        {showAssignByPhone && (
-          <View style={styles.otpInline}>
-            {otpLoading && !otpCode ? (
-              <Text style={styles.otpInlineMuted}>Loading OTP…</Text>
-            ) : otpCode ? (
-              <>
-                <View style={styles.otpInlineRow}>
-                  <Text style={styles.otpInlineLabel}>Share OTP</Text>
-                  <Text style={styles.otpInlineCode}>{otpCode}</Text>
-                </View>
-                {otpExpiresAt ? (
-                  <Text style={styles.otpInlineMuted}>
-                    Valid until{" "}
-                    {new Date(otpExpiresAt).toLocaleTimeString(undefined, {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </Text>
-                ) : null}
-                {effectiveCanAssign ? (
-                  <TouchableOpacity
-                    style={styles.otpInlineBtn}
-                    onPress={handleRegenerateOtp}
-                    disabled={otpRegenerating || otpLoading}
-                    activeOpacity={0.8}
-                  >
-                    <FontAwesome name="refresh" size={12} color={Theme.primary} />
-                    <Text style={styles.otpInlineBtnText}>
-                      {otpRegenerating || otpLoading ? "Regenerating…" : "Regenerate OTP"}
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-                {otpError ? <Text style={styles.otpInlineError}>{otpError}</Text> : null}
-              </>
-            ) : (
-              <View style={styles.otpInlineRow}>
-                <Text style={styles.otpInlineMuted}>No active OTP (expired or claimed)</Text>
-                {effectiveCanAssign ? (
-                  <TouchableOpacity
-                    style={styles.otpInlineBtn}
-                    onPress={handleGenerateOtp}
-                    disabled={otpRegenerating || otpLoading}
-                    activeOpacity={0.8}
-                  >
-                    <FontAwesome name="key" size={12} color={Theme.primary} />
-                    <Text style={styles.otpInlineBtnText}>
-                      {otpRegenerating || otpLoading ? "Generating…" : "Generate OTP"}
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-            )}
-          </View>
-        )}
         {previousDriverName ? (
           <View style={styles.previousDriverRow}>
             <Text style={styles.label}>PREVIOUS DRIVER</Text>
@@ -885,10 +841,12 @@ export function TripAssignmentBlock({
       {/* Assignment selection overlay — driver or vehicle only, tap to assign */}
       <Modal
         visible={assignMode !== null}
-        animationType="slide"
-        presentationStyle="pageSheet"
+        animationType={Platform.OS === "web" ? "fade" : "slide"}
+        presentationStyle={Platform.OS === "web" ? "overFullScreen" : "pageSheet"}
+        transparent={Platform.OS === "web"}
         onRequestClose={() => setAssignMode(null)}
       >
+        <View style={styles.webModalBackdrop}>
         <View style={[styles.assignModalWrap, { paddingTop: insets.top }]}>
           <View style={styles.assignModalHeader}>
             <View style={styles.assignModalHeaderText}>
@@ -1102,14 +1060,17 @@ export function TripAssignmentBlock({
             </TouchableOpacity>
           </View>
         </View>
+        </View>
       </Modal>
 
       <Modal
         visible={showPhoneModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
+        animationType={Platform.OS === "web" ? "fade" : "slide"}
+        presentationStyle={Platform.OS === "web" ? "overFullScreen" : "pageSheet"}
+        transparent={Platform.OS === "web"}
         onRequestClose={() => setShowPhoneModal(false)}
       >
+        <View style={styles.webModalBackdrop}>
         <View style={styles.assignModalWrap}>
           <View style={styles.assignModalHeader}>
             <View style={styles.assignModalHeaderText}>
@@ -1195,6 +1156,18 @@ export function TripAssignmentBlock({
               autoCorrect={false}
               autoCapitalize="characters"
             />
+            <View style={styles.phoneProtocolCard}>
+              <View style={styles.phoneProtocolIconWrap}>
+                <FontAwesome name="mobile" size={18} color="#4f46e5" />
+              </View>
+              <View style={styles.phoneProtocolBody}>
+                <Text style={styles.phoneProtocolTitle}>Assignment Security Protocol</Text>
+                <Text style={styles.phoneProtocolText}>
+                  Assigning an external driver triggers OTP verification. Share
+                  the OTP with the driver after assignment.
+                </Text>
+              </View>
+            </View>
           </ScrollView>
 
           <View
@@ -1215,7 +1188,7 @@ export function TripAssignmentBlock({
               <FontAwesome
                 name="user-plus"
                 size={20}
-                color={Theme.textOnPrimary}
+                color="#111827"
               />
               <Text style={styles.assignConfirmBtnText}>
                 {phoneSaving
@@ -1230,6 +1203,7 @@ export function TripAssignmentBlock({
               </Text>
             </TouchableOpacity>
           </View>
+        </View>
         </View>
       </Modal>
     </View>
@@ -1676,29 +1650,38 @@ const styles = StyleSheet.create({
   // Premium assignment picker modal
   assignModalWrap: {
     flex: 1,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: "#f8fafc",
+    borderRadius: Platform.OS === "web" ? 24 : 0,
+    overflow: "hidden",
+  },
+  webModalBackdrop: {
+    flex: 1,
+    backgroundColor: Platform.OS === "web" ? "rgba(2,6,23,0.58)" : Theme.surfaceGray,
+    padding: Platform.OS === "web" ? 18 : 0,
   },
   assignModalHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 18,
-    backgroundColor: Theme.screenBackground,
+    paddingHorizontal: 24,
+    paddingVertical: 22,
+    backgroundColor: "#ffffff",
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
   assignModalHeaderText: { flex: 1, minWidth: 0 },
   assignModalTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#0f172a",
   },
   assignModalSubtitle: {
     fontSize: 11,
-    fontWeight: "600",
-    color: Theme.textMuted,
-    marginTop: 4,
+    fontWeight: "800",
+    color: "#64748b",
+    marginTop: 6,
+    textTransform: "uppercase",
+    letterSpacing: 1,
   },
   assignModalCloseBtn: {
     width: 32,
@@ -1711,8 +1694,8 @@ const styles = StyleSheet.create({
   },
   assignModalScroll: { flex: 1 },
   assignModalScrollContent: {
-    padding: 20,
-    paddingBottom: 24,
+    padding: 24,
+    paddingBottom: 28,
   },
   assignStepLabel: {
     fontSize: 11,
@@ -1732,12 +1715,12 @@ const styles = StyleSheet.create({
   },
   assignAdhocVehicleWrap: {
     marginBottom: 20,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    backgroundColor: Theme.surface,
-    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: "#e2e8f0",
   },
   assignAdhocVehicleLabel: {
     fontSize: 12,
@@ -1753,14 +1736,14 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   assignAdhocVehicleInput: {
-    fontSize: 14,
-    color: Theme.textPrimaryDark,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 8,
+    fontSize: 16,
+    color: "#0f172a",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: "#f8fafc",
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: "#e2e8f0",
     marginBottom: 10,
     ...Platform.select({
       web: {
@@ -1769,11 +1752,11 @@ const styles = StyleSheet.create({
     }),
   },
   assignAdhocVehicleBtn: {
-    paddingVertical: 12,
-    borderRadius: 8,
-    backgroundColor: Theme.primary,
+    paddingVertical: 13,
+    borderRadius: 10,
+    backgroundColor: "#6366f1",
     alignItems: "center",
-    },
+  },
   assignAdhocVehicleBtnDisabled: {
     opacity: 0.5,
   },
@@ -1896,9 +1879,9 @@ const styles = StyleSheet.create({
   assignModalFooter: {
     paddingHorizontal: 20,
     paddingTop: 16,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: "#020617",
     borderTopWidth: 1,
-    borderTopColor: Theme.borderLight,
+    borderTopColor: "#111827",
   },
   assignSearchWrap: {
     flexDirection: "row",
@@ -1935,11 +1918,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 14,
     paddingHorizontal: 14,
-    borderRadius: 12,
+    borderRadius: 16,
     marginBottom: 10,
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: "#e2e8f0",
   },
   assignRegistryCardLeft: {
     flexDirection: "row",
@@ -2059,16 +2042,16 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
   },
   assignCancelBtn: {
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: "rgba(255,255,255,0.1)",
     alignItems: "center",
     justifyContent: "center",
   },
   assignCancelBtnText: {
     fontSize: 11,
-    fontWeight: "800",
-    color: Theme.textMuted,
+    fontWeight: "900",
+    color: "rgba(255,255,255,0.8)",
     letterSpacing: 1.2,
     textTransform: "uppercase",
   },
@@ -2077,8 +2060,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    backgroundColor: Theme.textPrimaryDark,
-    paddingVertical: 16,
+    backgroundColor: "#ffffff",
+    paddingVertical: 14,
     borderRadius: 12,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 6 },
@@ -2088,20 +2071,22 @@ const styles = StyleSheet.create({
   },
   assignConfirmBtnDisabled: { opacity: 0.7 },
   assignConfirmBtnText: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: Theme.textOnPrimary,
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#0f172a",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
   },
   phoneModalInput: {
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: "#dbe4ef",
     borderRadius: 12,
-    paddingVertical: 12,
+    paddingVertical: 13,
     paddingHorizontal: 14,
-    fontSize: 14,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
-    backgroundColor: Theme.screenBackground,
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0f172a",
+    backgroundColor: "#ffffff",
     marginBottom: 10,
     ...Platform.select({
       web: {
@@ -2120,6 +2105,37 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textMuted,
     marginTop: 4,
+  },
+  phoneProtocolCard: {
+    marginTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+    paddingTop: 16,
+    flexDirection: "row",
+    gap: 10,
+  },
+  phoneProtocolIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#eef2ff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  phoneProtocolBody: {
+    flex: 1,
+  },
+  phoneProtocolTitle: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#0f172a",
+    marginBottom: 2,
+  },
+  phoneProtocolText: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "600",
+    color: "#64748b",
   },
   phoneModalError: {
     fontSize: 12,
