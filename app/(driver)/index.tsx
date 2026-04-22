@@ -2921,7 +2921,7 @@ export default function DriverRadarScreen() {
         id: "pickup",
         coordinate: pickup,
         label: "Pickup",
-        color: "#10b981",
+        color: Theme.driverEmerald,
       });
     }
     if (drop) {

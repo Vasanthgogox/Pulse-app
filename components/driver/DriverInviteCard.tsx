@@ -1,4 +1,5 @@
 import Theme from '@/constants/Theme';
+import { getFleetAvatarUriForOrg } from '@/lib/fleetAvatar';
 import type { DriverInviteRow } from '@/services/driversService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import React from 'react';
@@ -42,6 +43,10 @@ export function DriverInviteCard({
     invite.from_org_avatar_url ??
     fallbackAvatarUri ??
     null;
+  const presetFleetUri = getFleetAvatarUriForOrg(
+    invite.from_organization_id ?? '',
+    invite.from_org_name ?? '',
+  );
 
   return (
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -58,11 +63,7 @@ export function DriverInviteCard({
 
       <View style={styles.header}>
         <View style={styles.avatarWrap}>
-          {orgLogo ? (
-            <Image source={{ uri: orgLogo }} style={styles.avatarImage} />
-          ) : (
-            <FontAwesome name="building" size={20} color={colors.emerald} />
-          )}
+          <Image source={{ uri: orgLogo ?? presetFleetUri }} style={styles.avatarImage} resizeMode="cover" />
         </View>
         <View style={styles.orgInfo}>
           <View style={styles.nameRow}>

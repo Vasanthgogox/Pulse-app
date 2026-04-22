@@ -5,7 +5,7 @@ import React from "react";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-export type ThemedConfirmModalVariant = "neutral" | "warning";
+export type ThemedConfirmModalVariant = "neutral" | "warning" | "positive";
 
 export interface ThemedConfirmModalProps {
   visible: boolean;
@@ -19,6 +19,17 @@ export interface ThemedConfirmModalProps {
   variant?: ThemedConfirmModalVariant;
   confirmVariant?: "primary" | "secondary" | "destructive";
 }
+
+type VariantConfig = {
+  accentColor: string;
+  iconName: string;
+  iconInnerBg: string;
+  iconBg: string;
+  /** Filled primary / proceed button (driver app: emerald) */
+  confirmButtonBg: string;
+  /** Icon glyph in inner circle (use full white for green on light) */
+  iconColor: string;
+};
 
 export function ThemedConfirmModal({
   visible,
@@ -34,13 +45,25 @@ export function ThemedConfirmModal({
 }: ThemedConfirmModalProps) {
   const insets = useSafeAreaInsets();
 
-  const variantConfig = React.useMemo(() => {
+  const variantConfig = React.useMemo((): VariantConfig => {
     if (variant === "warning") {
       return {
         accentColor: Theme.negative,
         iconName: "exclamation",
         iconInnerBg: Theme.negative,
         iconBg: Theme.negativeMuted || "rgba(239, 68, 68, 0.12)",
+        confirmButtonBg: Theme.primary,
+        iconColor: "#FFFFFF",
+      };
+    }
+    if (variant === "positive") {
+      return {
+        accentColor: Theme.driverEmerald,
+        iconName: "check",
+        iconInnerBg: Theme.driverEmerald,
+        iconBg: Theme.driverEmeraldMuted,
+        confirmButtonBg: Theme.driverEmerald,
+        iconColor: "#FFFFFF",
       };
     }
     return {
@@ -48,15 +71,11 @@ export function ThemedConfirmModal({
       iconName: "question",
       iconInnerBg: Theme.primary,
       iconBg: "rgba(26, 35, 126, 0.08)",
+      confirmButtonBg: Theme.primary,
+      iconColor: "#FFFFFF",
     };
   }, [variant]);
 
-  const confirmButtonStyle =
-    confirmVariant === "destructive"
-      ? styles.buttonDestructive
-      : confirmVariant === "secondary"
-      ? styles.buttonSecondary
-      : styles.buttonPrimary;
   const confirmTextStyle =
     confirmVariant === "secondary" ? styles.textSecondary : styles.textPrimary;
 
@@ -82,7 +101,7 @@ export function ThemedConfirmModal({
 
           <View style={[styles.iconCircle, { backgroundColor: variantConfig.iconBg }]}>
             <View style={[styles.iconInnerCircle, { backgroundColor: variantConfig.iconInnerBg }]}>
-              <FontAwesome name={variantConfig.iconName as any} size={20} color="#FFFFFF" />
+              <FontAwesome name={variantConfig.iconName as any} size={20} color={variantConfig.iconColor} />
             </View>
           </View>
 
@@ -101,7 +120,12 @@ export function ThemedConfirmModal({
 
             <TouchableOpacity
               onPress={onConfirm}
-              style={[styles.buttonBase, confirmButtonStyle]}
+              style={[
+                styles.buttonBase,
+                confirmVariant === "destructive" && styles.buttonDestructive,
+                confirmVariant === "secondary" && styles.buttonSecondary,
+                confirmVariant === "primary" && { backgroundColor: variantConfig.confirmButtonBg },
+              ]}
               activeOpacity={0.85}
               accessibilityRole="button"
             >
@@ -191,9 +215,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 16,
-  },
-  buttonPrimary: {
-    backgroundColor: Theme.primary,
   },
   buttonSecondary: {
     backgroundColor: Theme.surfaceGray,

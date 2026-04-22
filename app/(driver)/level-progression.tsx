@@ -3,15 +3,18 @@
  * Dark Elite Evolution card, 2x2 stats grid, Next Mile Objectives with VERIFIED and progress bars.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import Theme from '@/constants/Theme';
-import Layout from '@/constants/Layout';
-import Typography from '@/constants/Typography';
 import { LEVELS_CONFIG } from '@/constants/DriverLevels';
-import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import {
+  DRIVER_DETAIL_HORIZONTAL_PAD,
+  DriverSubScreenHeader,
+  driverDetailPageBackground,
+} from '@/components/driver/DriverSubScreenHeader';
+import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import * as driversService from '@/services/driversService';
@@ -37,11 +40,16 @@ function isCompleted(status: string) {
 export default function LevelProgressionScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { theme } = useDriverTheme();
+  const isDark = theme === 'dark';
   const colors = useDriverThemeColors();
+  const pageBg = driverDetailPageBackground(isDark, colors.background);
 
-  const goToProfile = () => router.replace('/(driver)/profile');
+  const handleBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(driver)/profile');
+  };
   const { profile } = useAuth();
-  const [driver, setDriver] = useState<driversService.DriverRow | null>(null);
   const [tripsCount, setTripsCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
@@ -54,7 +62,6 @@ export default function LevelProgressionScreen() {
     driversService.getLinkedDriversForCurrentUser(profile.uid).then((res) => {
       const drivers = (res.drivers ?? []).filter((d) => !d.left_at);
       if (drivers.length > 0) {
-        setDriver(drivers[0]);
         tripsService.getTripsByDriverIds(drivers.map((d) => d.id)).then((tRes) => {
           const list = tRes.trips ?? [];
           setTripsCount(list.filter((t) => isCompleted(t.status)).length);
@@ -90,27 +97,21 @@ export default function LevelProgressionScreen() {
   }
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={[
-        styles.scrollContent,
-        { paddingTop: 0, paddingHorizontal: Layout.screenPaddingHorizontal, paddingBottom: insets.bottom + 80 },
-      ]}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={[styles.header, { paddingTop: insets.top + Layout.driverHeaderTopOffset, paddingBottom: Layout.driverHeaderBottomPadding, backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <TouchableOpacity
-          onPress={goToProfile}
-          style={[styles.backBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          activeOpacity={0.8}
-          accessibilityLabel="Back to profile"
-        >
-          <FontAwesome name="chevron-left" size={18} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Your level</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+    <View style={[styles.root, { backgroundColor: pageBg }]}>
+      <DriverSubScreenHeader title="Your level" onBack={handleBack} backAccessibilityLabel="Back to profile" />
 
+      <ScrollView
+        style={[styles.container, { backgroundColor: pageBg }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: 16,
+            paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
+            paddingBottom: insets.bottom + 80,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
       {/* Elite Evolution — dark card (same as user profile) */}
       <View style={[styles.eliteCard, Platform.OS === 'ios' ? styles.eliteCardShadowIos : styles.eliteCardShadowAndroid]}>
         <View style={[styles.cardDeco, { pointerEvents: 'none' }]}>
@@ -245,35 +246,19 @@ export default function LevelProgressionScreen() {
           );
         })}
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   container: { flex: 1 },
-  scrollContent: { paddingTop: 16 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Layout.driverHeaderHorizontalPadding,
-    borderBottomWidth: 1,
-    marginBottom: 16,
-  },
-  backBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: { flex: 1, ...Typography.headerTitle, textAlign: 'center' },
-  headerSpacer: { width: 44 },
-
+  scrollContent: {},
   // Elite Evolution (dark card — same as user profile)
   eliteCard: {
     backgroundColor: DARK_HERO_BG,
-    borderRadius: 16,
+    borderRadius: 28,
     padding: 20,
     marginBottom: 24,
     overflow: 'hidden',
@@ -423,7 +408,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: 20,
     marginBottom: 10,
     overflow: 'hidden',
     position: 'relative',

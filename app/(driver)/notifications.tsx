@@ -2,11 +2,14 @@
  * Lists trips awaiting accept / OTP (same sources as dashboard incoming list).
  * Tapping a row returns to the dashboard with that trip selected.
  */
-import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
-import Typography from '@/constants/Typography';
 import { useAuth } from '@/contexts/AuthContext';
-import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import {
+  DRIVER_DETAIL_HORIZONTAL_PAD,
+  DriverSubScreenHeader,
+  driverDetailPageBackground,
+} from '@/components/driver/DriverSubScreenHeader';
+import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { getPendingOtpTrips } from '@/features/trips';
 import { getLatestAssignmentAuditByTripIds } from '@/features/trips/services/trip-assignment-audit.service';
 import { computeDriverCommissionForTrip } from '@/features/finance/aggregation/aggregateDrivers';
@@ -85,7 +88,10 @@ function humanizeAssignerDisplayName(raw: string | null | undefined): string {
 export default function DriverNotificationsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { theme } = useDriverTheme();
+  const isDark = theme === 'dark';
   const colors = useDriverThemeColors();
+  const pageBg = driverDetailPageBackground(isDark, colors.background);
   const { profile } = useAuth();
 
   const [allTrips, setAllTrips] = useState<tripsService.TripRow[]>([]);
@@ -438,34 +444,8 @@ export default function DriverNotificationsScreen() {
   );
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <View
-        style={[
-          styles.header,
-          {
-            paddingTop: insets.top + Layout.driverHeaderTopOffset,
-            paddingBottom: Layout.driverHeaderBottomPadding,
-            backgroundColor: colors.surface,
-            borderBottomColor: colors.border,
-          },
-        ]}
-      >
-        <TouchableOpacity
-          onPress={goBack}
-          style={[
-            styles.backBtn,
-            { backgroundColor: colors.surface, borderColor: colors.border },
-          ]}
-          activeOpacity={0.8}
-          accessibilityLabel="Back"
-        >
-          <FontAwesome name="chevron-left" size={18} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>
-          Notifications
-        </Text>
-        <View style={styles.headerSpacer} />
-      </View>
+    <View style={[styles.root, { backgroundColor: pageBg }]}>
+      <DriverSubScreenHeader title="Notifications" subtitle="Accept or verify with OTP" onBack={goBack} />
 
       {loading ? (
         <View style={styles.loadingWrap}>
@@ -473,10 +453,11 @@ export default function DriverNotificationsScreen() {
         </View>
       ) : (
         <ScrollView
+          style={{ backgroundColor: pageBg }}
           contentContainerStyle={[
             styles.scrollContent,
             {
-              paddingHorizontal: Layout.screenPaddingHorizontal,
+              paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
               paddingBottom: insets.bottom + 88,
             },
           ]}
@@ -608,26 +589,6 @@ export default function DriverNotificationsScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Layout.driverHeaderHorizontalPadding,
-    borderBottomWidth: 1,
-  },
-  backBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    flex: 1,
-    ...Typography.headerTitle,
-    textAlign: 'center',
-  },
-  headerSpacer: { width: 44 },
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scrollContent: { paddingTop: 16, gap: 12 },
   intro: {
@@ -636,7 +597,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   emptyCard: {
-    borderRadius: 16,
+    borderRadius: 28,
     borderWidth: 1,
     padding: 24,
     alignItems: 'center',
@@ -652,7 +613,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   card: {
-    borderRadius: 16,
+    borderRadius: 24,
     borderWidth: 1,
     padding: 16,
   },

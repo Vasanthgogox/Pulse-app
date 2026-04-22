@@ -141,7 +141,7 @@ export const Theme = {
   buttonPrimary: "#1a237e",
   buttonPrimaryText: "#ffffff",
   buttonSecondaryBackground: "#4b5563", // Temporary comment to force refresh
-  buttonSecondary: "#10b981",
+  buttonSecondary: "#047857",
   buttonSecondaryText: "#ffffff",
   buttonMatteBlack: "#151515",
   buttonMatteBlackText: "#ffffff",
@@ -171,7 +171,8 @@ export const Theme = {
   tabBarActiveIconBorder: "#E82127",
 
   // ---- Driver app (reference: Qu Neural Link) ----
-  driverPrimary: "#22C55E",
+  /** CTAs / filled pills — emerald-600 (deeper than legacy neon green) */
+  driverPrimary: "#059669",
   driverSuccess: "#15803D",
   driverBackground: "#000000",
   driverSurface: "#0A0A0A",
@@ -188,9 +189,9 @@ export const Theme = {
   driverTextMuted: "#9ca3af",
   /** Placeholder text on dark inputs */
   driverPlaceholder: "#52525b",
-  /** Updated reference: emerald accent */
-  driverEmerald: "#10B981",
-  driverEmeraldDark: "#0B8F62",
+  /** Accents, amounts, dots — emerald-700/800 (modern / restrained) */
+  driverEmerald: "#047857",
+  driverEmeraldDark: "#065f46",
   /** Updated reference: gold for ETA, rank */
   driverGold: "#F59E0B",
   /** Overlay on driver screens */
@@ -200,12 +201,12 @@ export const Theme = {
   /** Muted white surfaces on dark */
   driverWhiteMuted: "rgba(255,255,255,0.05)",
   driverWhiteMutedStrong: "rgba(255,255,255,0.1)",
-  /** Emerald tint borders/backgrounds on dark */
-  driverEmeraldBorder: "rgba(16,185,129,0.4)",
-  driverEmeraldMuted: "rgba(16,185,129,0.1)",
-  driverEmeraldMutedText: "rgba(16,185,129,0.5)",
-  driverEmeraldMutedText2: "rgba(16,185,129,0.6)",
-  driverEmeraldBorderSoft: "rgba(16,185,129,0.3)",
+  /** Emerald tint borders/backgrounds on dark — based on #047857 */
+  driverEmeraldBorder: "rgba(4,120,87,0.38)",
+  driverEmeraldMuted: "rgba(4,120,87,0.12)",
+  driverEmeraldMutedText: "rgba(4,120,87,0.52)",
+  driverEmeraldMutedText2: "rgba(4,120,87,0.62)",
+  driverEmeraldBorderSoft: "rgba(4,120,87,0.28)",
   /** Negative (red) muted background */
   negativeMuted: "rgba(220,38,38,0.15)",
   /** Positive (green) muted on dark */

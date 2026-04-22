@@ -9,11 +9,11 @@ import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
-import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import { tripEarningsForDriver } from '@/lib/driverUtils';
-import { getInitials } from '@/lib/stringUtils';
+import { getFleetAvatarUriForOrg } from '@/lib/fleetAvatar';
 import { showAppAlert } from '@/lib/appAlert';
 import { VALIDATION } from '@/lib/validation';
 import * as driversService from '@/services/driversService';
@@ -21,6 +21,7 @@ import * as salaryRequestsService from '@/services/salaryRequestsService';
 import * as tripsService from '@/services/tripsService';
 import { NeededByCalendar } from '@/components/driver/NeededByCalendar';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { ArrowRight, CalendarDays, ChevronDown, ShieldCheck } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -94,6 +95,7 @@ const REQUEST_TYPES: { type: salaryRequestsService.SalaryRequestType; label: str
 export default function SalaryRequestScreen() {
   const insets = useSafeAreaInsets();
   const colors = useDriverThemeColors();
+  const { isDark } = useDriverTheme();
   const router = useRouter();
   const { profile } = useAuth();
   const isOnline = useIsOnline();
@@ -282,6 +284,16 @@ export default function SalaryRequestScreen() {
   }, [linkedDrivers, invites]);
 
   const effectiveSalaryOrg = salaryRequestOrg ?? (salaryRequestOrgOptions.length === 1 ? salaryRequestOrgOptions[0] : null);
+
+  const fleetHeroAvatarUri = useMemo(() => {
+    if (!effectiveSalaryOrg) return '';
+    return (
+      effectiveSalaryOrg.avatarUrl ??
+      getFleetAvatarUriForOrg(String(effectiveSalaryOrg.orgId ?? ''), effectiveSalaryOrg.orgName)
+    );
+  }, [effectiveSalaryOrg]);
+
+  const premiumCardBorder = isDark ? colors.emeraldBorder : 'rgba(16, 185, 129, 0.14)';
 
   const completedTrips = useMemo(() => {
     const list = trips.filter((t) => tripsService.isTripCompleted(t));
@@ -596,7 +608,20 @@ export default function SalaryRequestScreen() {
         style={styles.keyboardView}
       >
         {/* Header — clean MNC-style */}
-        <View style={[styles.header, { paddingTop: insets.top + Layout.driverHeaderTopOffset, paddingHorizontal: Layout.driverHeaderHorizontalPadding, backgroundColor: colors.background, borderBottomColor: colors.border }]}>
+        <View
+          style={[
+            styles.header,
+            {
+              paddingTop: insets.top + Layout.driverHeaderTopOffset,
+              paddingLeft: Math.max(insets.left, Layout.driverHeaderHorizontalPadding),
+              paddingRight: Math.max(insets.right, Layout.driverHeaderHorizontalPadding),
+              backgroundColor: colors.background,
+              borderBottomColor: colors.border,
+              zIndex: 20,
+              elevation: 20,
+            },
+          ]}
+        >
           <View style={styles.headerSide}>
             <TouchableOpacity
               onPress={goBack}
@@ -609,7 +634,7 @@ export default function SalaryRequestScreen() {
             </TouchableOpacity>
           </View>
           <View style={styles.headerCenter}>
-            <Text style={[styles.headerTitle, { color: colors.text }]}>Salary Request</Text>
+            <Text style={[styles.headerTitle, styles.headerTitlePremium, { color: colors.text }]}>Salary request</Text>
           </View>
           <View style={[styles.headerSide, styles.headerSideAlignEnd]}>
             <View
@@ -673,78 +698,129 @@ export default function SalaryRequestScreen() {
             </View>
           ) : (
             <>
-              {/* Fleet owner profile chips */}
-              <View style={[styles.section, styles.fleetProfilesSection, { borderBottomColor: colors.border }]}>
-                <View style={[styles.fleetProfilesRow, { paddingHorizontal: contentPadding }]}>
-                  {salaryRequestOrgOptions.map((opt) => {
-                    const active = effectiveSalaryOrg?.orgId === opt.orgId;
-                    return (
-                      <TouchableOpacity
-                        key={opt.orgId}
-                        style={styles.fleetProfileChip}
-                        onPress={() => setSalaryRequestOrg(opt)}
-                        activeOpacity={0.85}
-                      >
-                        <View style={[styles.fleetAvatarRing, { borderColor: active ? colors.emerald : 'transparent' }]}>
-                          {opt.avatarUrl ? (
-                            <Image source={{ uri: opt.avatarUrl }} style={styles.fleetAvatar} resizeMode="cover" />
-                          ) : (
-                            <View style={[styles.fleetAvatar, { backgroundColor: colors.surface, borderColor: colors.text, borderWidth: 1 }]}>
-                              <Text style={[styles.fleetAvatarText, { color: colors.text }]}>
-                                {getInitials(opt.orgName)}
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-                        <Text style={[styles.fleetProfileName, { color: active ? colors.emerald : colors.text }]} numberOfLines={2}>
-                          {opt.orgName}
-                        </Text>
-                        {active ? <View style={[styles.fleetProfileUnderline, { backgroundColor: colors.emerald }]} /> : null}
-                      </TouchableOpacity>
-                    );
-                  })}
+              {/* Fleet picker: only when multiple fleets (single fleet uses hero below — avoids duplicate avatar + name). */}
+              {salaryRequestOrgOptions.length > 1 ? (
+                <View style={[styles.section, styles.fleetProfilesSection, { borderBottomColor: colors.border }]}>
+                  <View style={[styles.fleetProfilesRow, { paddingHorizontal: contentPadding }]}>
+                    {salaryRequestOrgOptions.map((opt) => {
+                      const active = effectiveSalaryOrg?.orgId === opt.orgId;
+                      return (
+                        <TouchableOpacity
+                          key={opt.orgId}
+                          style={styles.fleetProfileChip}
+                          onPress={() => setSalaryRequestOrg(opt)}
+                          activeOpacity={0.85}
+                        >
+                          <View style={[styles.fleetAvatarRing, { borderColor: active ? colors.emerald : 'transparent' }]}>
+                            <Image
+                              source={{
+                                uri: opt.avatarUrl ?? getFleetAvatarUriForOrg(String(opt.orgId ?? ''), opt.orgName),
+                              }}
+                              style={styles.fleetAvatar}
+                              resizeMode="cover"
+                            />
+                          </View>
+                          <Text style={[styles.fleetProfileName, { color: active ? colors.emerald : colors.text }]} numberOfLines={2}>
+                            {opt.orgName}
+                          </Text>
+                          {active ? <View style={[styles.fleetProfileUnderline, { backgroundColor: colors.emerald }]} /> : null}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 </View>
-              </View>
+              ) : null}
 
-              <View style={[styles.section, { paddingHorizontal: contentPadding, marginBottom: 8 }]}>
-                <Text style={[styles.requestTypeSelectedText, { color: colors.textMuted }]}>
-                  Fill the form below to request salary from {effectiveSalaryOrg?.orgName ?? 'your fleet'}.
-                </Text>
-              </View>
+              {effectiveSalaryOrg ? (
+                <View
+                  style={[
+                    styles.fleetHeroSection,
+                    salaryRequestOrgOptions.length > 1 && styles.fleetHeroSectionAfterChips,
+                    { paddingHorizontal: contentPadding },
+                  ]}
+                >
+                  <View style={styles.fleetHeroAlign}>
+                    {salaryRequestOrgOptions.length === 1 ? (
+                      <>
+                        <View
+                          style={[
+                            styles.fleetHeroAvatarOuter,
+                            {
+                              borderColor: colors.emerald,
+                              backgroundColor: colors.surface,
+                              shadowColor: isDark ? '#000' : 'rgba(16, 185, 129, 0.35)',
+                            },
+                          ]}
+                        >
+                          <Image source={{ uri: fleetHeroAvatarUri }} style={styles.fleetHeroAvatarImg} resizeMode="cover" />
+                        </View>
+                        <Text
+                          style={[
+                            styles.fleetHeroOrgName,
+                            {
+                              color: Theme.driverEmeraldDark,
+                              textDecorationColor: 'rgba(16, 185, 129, 0.35)',
+                            },
+                          ]}
+                          numberOfLines={2}
+                        >
+                          {effectiveSalaryOrg.orgName}
+                        </Text>
+                      </>
+                    ) : null}
+                    <Text style={[styles.fleetHeroBlurb, { color: colors.textMuted }]}>
+                      Fill the form below to request salary from{' '}
+                      <Text style={[styles.fleetHeroBlurbAccent, { color: colors.text }]}>{effectiveSalaryOrg.orgName}</Text>.
+                    </Text>
+                  </View>
+                </View>
+              ) : salaryRequestOrgOptions.length > 1 ? (
+                <View style={[styles.section, { paddingHorizontal: contentPadding, marginBottom: 8 }]}>
+                  <Text style={[styles.fleetSelectHint, { color: colors.textMuted }]}>
+                    Select a fleet above to continue.
+                  </Text>
+                </View>
+              ) : null}
 
               {/* 2-widget flow replaces the continuous form */}
 
               {/* Widget Page 1: Details */}
               {widgetPage === 0 ? (
                 <View style={[styles.section, { paddingHorizontal: contentPadding }]}>
-                  <View style={[styles.widgetCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                    <Text style={[styles.widgetTitle, { color: colors.text }]}>Details</Text>
-                    <Text style={[styles.widgetSubtitle, { color: colors.textMuted }]}>
+                  <View
+                    style={[
+                      styles.widgetCard,
+                      styles.premiumDetailCard,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: premiumCardBorder,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.widgetTitlePremium, { color: colors.text }]}>Details</Text>
+                    <Text style={[styles.widgetSubtitlePremium, { color: colors.textMuted }]}>
                       Choose request type and amount.
                     </Text>
 
-                    <View style={{ marginTop: 14 }}>
+                    <View style={styles.premiumFormGap}>
                       <View style={styles.formRow}>
                         <View style={styles.formCol}>
-                          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Request type</Text>
+                          <Text style={[styles.fieldLabelCaps, { color: colors.textMuted }]}>Request type</Text>
                           <TouchableOpacity
-                            style={[styles.inputShell, { borderColor: colors.border, backgroundColor: colors.background }]}
+                            style={[styles.inputShellPremium, { borderColor: colors.borderSubtle, backgroundColor: colors.inputBg }]}
                             onPress={() => setShowRequestTypeMenu(true)}
                             activeOpacity={0.85}
                           >
                             <Text style={[styles.inputText, { color: colors.text }]}>
                               {REQUEST_TYPES.find((t) => t.type === salaryRequestType)?.label ?? 'Select'}
                             </Text>
-                            <FontAwesome name="chevron-down" size={14} color={colors.textMuted} />
+                            <ChevronDown size={18} color={colors.textMuted} strokeWidth={2.4} />
                           </TouchableOpacity>
                         </View>
                         <View style={styles.formCol}>
-                          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Amount</Text>
+                          <Text style={[styles.fieldLabelCaps, { color: colors.textMuted }]}>Amount</Text>
                           <View
-                            style={[
-                              styles.inputShell,
-                              { borderColor: colors.border, backgroundColor: colors.background },
-                            ]}
+                            style={[styles.inputShellPremium, { borderColor: colors.borderSubtle, backgroundColor: colors.inputBg }]}
                           >
                             <Text style={[styles.currencyPrefix, { color: colors.textMuted }]}>₹</Text>
                             <TextInput
@@ -754,7 +830,7 @@ export default function SalaryRequestScreen() {
                               placeholder="0.00"
                               placeholderTextColor={colors.placeholder}
                               keyboardType="number-pad"
-                              editable={!salaryRequestSubmitting}
+                              editable={!salaryRequestSubmitting && salaryRequestType !== 'trip_based'}
                             />
                           </View>
                           {salaryRequestType === 'trip_based' ? (
@@ -766,10 +842,10 @@ export default function SalaryRequestScreen() {
                       </View>
 
                       {salaryRequestType === 'trip_based' ? (
-                        <View style={{ marginTop: 14 }}>
-                          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Trips to be paid</Text>
+                        <View style={{ marginTop: 4 }}>
+                          <Text style={[styles.fieldLabelCaps, { color: colors.textMuted }]}>Trips to be paid</Text>
                           <TouchableOpacity
-                            style={[styles.inputShell, { borderColor: colors.border, backgroundColor: colors.background }]}
+                            style={[styles.inputShellPremium, { borderColor: colors.borderSubtle, backgroundColor: colors.inputBg }]}
                             onPress={() => setShowTripsDropdown(true)}
                             activeOpacity={0.85}
                           >
@@ -778,7 +854,7 @@ export default function SalaryRequestScreen() {
                                 ? `Selected: ${selectedSalaryTripIds.length} trip${selectedSalaryTripIds.length === 1 ? '' : 's'}`
                                 : 'Select trips'}
                             </Text>
-                            <FontAwesome name="chevron-down" size={14} color={colors.textMuted} />
+                            <ChevronDown size={18} color={colors.textMuted} strokeWidth={2.4} />
                           </TouchableOpacity>
                           {effectiveSalaryOrg ? (
                             <Text style={[styles.hint, { color: colors.textMuted, marginTop: 8 }]}>
@@ -788,10 +864,10 @@ export default function SalaryRequestScreen() {
                         </View>
                       ) : null}
 
-                      <View style={{ marginTop: 14 }}>
-                        <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Needed by</Text>
+                      <View style={{ marginTop: 4 }}>
+                        <Text style={[styles.fieldLabelCaps, { color: colors.textMuted }]}>Needed by</Text>
                         <TouchableOpacity
-                          style={[styles.inputShell, { borderColor: colors.border, backgroundColor: colors.background }]}
+                          style={[styles.inputShellPremium, { borderColor: colors.borderSubtle, backgroundColor: colors.inputBg }]}
                           onPress={() => {
                             if (Platform.OS === 'android') openNeededByAndroid();
                             else setShowNeededByPicker(true);
@@ -801,7 +877,7 @@ export default function SalaryRequestScreen() {
                           <Text style={[styles.inputText, { color: neededByDate ? colors.text : colors.placeholder }]}>
                             {neededByDate ? neededByDate.toLocaleDateString('en-IN') : 'dd/mm/yyyy'}
                           </Text>
-                          <FontAwesome name="calendar" size={14} color={colors.textMuted} />
+                          <CalendarDays size={18} color={colors.textMuted} strokeWidth={2.2} />
                         </TouchableOpacity>
                         {salaryRequestType === 'trip_based' ? (
                           <Text style={[styles.hint, { color: colors.textMuted, marginTop: 10 }]}>
@@ -822,14 +898,26 @@ export default function SalaryRequestScreen() {
               {widgetPage === 1 ? (
                 <>
                   <View style={[styles.section, { paddingHorizontal: contentPadding }]}>
-                    <View style={[styles.widgetCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <View
+                      style={[
+                        styles.widgetCard,
+                        styles.premiumDetailCard,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: premiumCardBorder,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.reviewEyebrow, { color: colors.emerald }]}>Review</Text>
                       <View style={styles.reasonHeaderRow}>
-                        <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>Reason for request</Text>
+                        <Text style={[styles.fieldLabelCaps, { color: colors.textMuted, marginBottom: 0 }]}>Reason for request</Text>
                         <Text style={[styles.reasonCounter, { color: colors.textMuted }]}>
                           {salaryRequestReason.length} / {reasonMax}
                         </Text>
                       </View>
-                      <View style={[styles.multilineShell, { borderColor: colors.border, backgroundColor: colors.background }]}>
+                      <View
+                        style={[styles.multilineShell, styles.multilinePremium, { borderColor: colors.borderSubtle, backgroundColor: colors.inputBg }]}
+                      >
                         <TextInput
                           style={[styles.reasonInput, { color: colors.text }]}
                           placeholder="Explain the context of this request..."
@@ -845,12 +933,18 @@ export default function SalaryRequestScreen() {
                   </View>
 
                   <View style={[styles.section, { paddingHorizontal: contentPadding }]}>
-                    <View style={[styles.rulesCardV2, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <View
+                      style={[
+                        styles.rulesCardV2,
+                        styles.premiumDetailCard,
+                        { backgroundColor: colors.surface, borderColor: premiumCardBorder },
+                      ]}
+                    >
                       <View style={styles.rulesHeaderV2}>
-                        <View style={[styles.rulesInfoIconWrap, { borderColor: colors.text }]}>
-                          <FontAwesome name="info" size={12} color={colors.text} />
+                        <View style={[styles.rulesShieldWrap, { backgroundColor: colors.emeraldMuted }]}>
+                          <ShieldCheck size={20} color={colors.emerald} strokeWidth={2.2} />
                         </View>
-                        <Text style={[styles.rulesTitleV2, { color: colors.text }]}>Submission Rules</Text>
+                        <Text style={[styles.rulesTitleV2, { color: colors.text }]}>Submission rules</Text>
                       </View>
 
                       <View style={styles.rulesItemsV2}>
@@ -1159,18 +1253,18 @@ export default function SalaryRequestScreen() {
                     <Text style={[styles.submitBtnText, { color: Theme.textOnPrimary }]}>
                       {widgetPage === 0 ? 'NEXT' : 'SUBMIT REQUEST'}
                     </Text>
-                    <FontAwesome
-                      name={widgetPage === 0 ? 'arrow-right' : 'send'}
-                      size={16}
-                      color={Theme.textOnPrimary}
-                    />
+                    {widgetPage === 0 ? (
+                      <ArrowRight size={20} color={Theme.textOnPrimary} strokeWidth={2.6} />
+                    ) : (
+                      <FontAwesome name="send" size={17} color={Theme.textOnPrimary} />
+                    )}
                   </>
                 )}
               </View>
             </TouchableOpacity>
             {/* Save as Draft removed */}
             <Text style={[styles.footerHint, { color: colors.textMuted }]}>
-              Usually processed within 24–48 business hours.
+              Usually processed within 24–48 business hours after your fleet reviews the request.
             </Text>
           </View>
         )}
@@ -1293,6 +1387,70 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     ...Typography.headerTitle,
+  },
+  headerTitlePremium: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 2.8,
+    textTransform: 'uppercase',
+  },
+  fleetHeroSection: {
+    marginTop: 0,
+    marginBottom: 22,
+    alignItems: 'center',
+  },
+  /** When fleet chips are shown above, only the blurb remains here — keep vertical rhythm without a second hero. */
+  fleetHeroSectionAfterChips: {
+    marginTop: 4,
+    marginBottom: 20,
+  },
+  fleetHeroAlign: {
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
+  },
+  fleetHeroAvatarOuter: {
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+    borderWidth: 2,
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.2,
+    shadowRadius: 28,
+    elevation: 8,
+  },
+  fleetHeroAvatarImg: {
+    width: '100%',
+    height: '100%',
+  },
+  fleetHeroOrgName: {
+    marginTop: 14,
+    fontSize: 17,
+    fontWeight: '900',
+    letterSpacing: -0.35,
+    textAlign: 'center',
+    paddingHorizontal: 12,
+    textDecorationLine: 'underline',
+    textDecorationStyle: 'solid',
+  },
+  fleetHeroBlurb: {
+    marginTop: 12,
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 21,
+    textAlign: 'center',
+    paddingHorizontal: 14,
+  },
+  fleetHeroBlurbAccent: {
+    fontWeight: '900',
+  },
+  fleetSelectHint: {
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
+    letterSpacing: 0.2,
   },
   headerAvatarRing: {
     width: Layout.driverHeaderAvatarSize,
@@ -1482,16 +1640,69 @@ const styles = StyleSheet.create({
     shadowRadius: CARD_SHADOW_RADIUS,
     elevation: CARD_ELEVATION,
   },
+  premiumDetailCard: {
+    borderRadius: 28,
+    paddingVertical: 26,
+    paddingHorizontal: 22,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.09,
+    shadowRadius: 24,
+    elevation: 6,
+  },
   widgetTitle: {
     fontSize: 14,
     fontWeight: '900',
     letterSpacing: 0.3,
+  },
+  widgetTitlePremium: {
+    fontSize: 19,
+    fontWeight: '900',
+    letterSpacing: -0.35,
   },
   widgetSubtitle: {
     marginTop: 6,
     fontSize: 12,
     fontWeight: '600',
     lineHeight: 16,
+  },
+  widgetSubtitlePremium: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
+  },
+  premiumFormGap: {
+    marginTop: 18,
+    gap: 18,
+  },
+  fieldLabelCaps: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.8,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  },
+  inputShellPremium: {
+    minHeight: 52,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 10,
+  },
+  multilinePremium: {
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginTop: 10,
+  },
+  reviewEyebrow: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 2.6,
+    textTransform: 'uppercase',
+    marginBottom: 8,
   },
   reasonHeaderRow: {
     flexDirection: 'row',
@@ -1527,8 +1738,15 @@ const styles = StyleSheet.create({
   rulesHeaderV2: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
     marginBottom: 14,
+  },
+  rulesShieldWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   rulesInfoIconWrap: {
     width: 24,
@@ -1713,11 +1931,8 @@ const styles = StyleSheet.create({
     borderRadius: 27,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  fleetAvatarText: {
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: 0.2,
+    overflow: 'hidden',
+    backgroundColor: 'transparent',
   },
   fleetProfileName: {
     marginTop: 6,
@@ -2010,8 +2225,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 12,
     paddingVertical: 18,
-    borderRadius: BUTTON_RADIUS,
-    minHeight: MIN_TOUCH,
+    borderRadius: 26,
+    minHeight: 56,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12,
@@ -2025,7 +2240,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 10,
   },
-  submitBtnText: { fontSize: 14, fontWeight: '900', letterSpacing: 1.1 },
+  submitBtnText: { fontSize: 13, fontWeight: '900', letterSpacing: 2 },
   draftBtn: {
     marginTop: 10,
     borderRadius: BUTTON_RADIUS,
@@ -2043,10 +2258,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   footerHint: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.25,
     textAlign: 'center',
     marginTop: 14,
+    lineHeight: 16,
+    paddingHorizontal: 8,
   },
   modalDoneBtn: {
     marginTop: 12,

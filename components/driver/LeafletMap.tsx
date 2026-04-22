@@ -1,3 +1,4 @@
+import Theme from "@/constants/Theme";
 import MapLibreGL from "@maplibre/maplibre-react-native";
 import React, { useImperativeHandle, useMemo, useRef } from "react";
 import {
@@ -151,7 +152,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
               <View
                 style={[
                   styles.markerDot,
-                  { backgroundColor: m.color ?? "#10b981" },
+                  { backgroundColor: m.color ?? Theme.driverEmerald },
                 ]}
               />
             </MapLibreGL.PointAnnotation>

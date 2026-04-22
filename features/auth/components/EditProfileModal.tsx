@@ -21,6 +21,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Check, ChevronLeft, Edit3, Mail, Phone, Sparkles } from 'lucide-react-native';
 import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
 import Typography from '@/constants/Typography';
@@ -40,12 +42,14 @@ import * as authService from '../services/auth.service';
 /** Default preset seed when no uploaded avatar (same as driver — assets/drivers/driver-1.png etc.). */
 const DEFAULT_AVATAR_SEED = 'driver-1';
 
-/** Driver reference screen — background and forest accent (Theme tokens). */
-const DRIVER_SCREEN_BG = Theme.surface;
-const DRIVER_FOREST = Theme.darkGreen;
+/** Driver edit screen — cool white page (reference: #FDFEFF). */
+const DRIVER_EDIT_PAGE_BG = '#F6FAFC';
+const DRIVER_SCREEN_BG = DRIVER_EDIT_PAGE_BG;
+/** Legacy alias — use Theme.driverEmerald for accents */
+const DRIVER_FOREST = Theme.driverEmerald;
 const DRIVER_INPUT_BG = Theme.liquidPillBg;
-const DRIVER_AVATAR_SIZE = 152;
-const DRIVER_EDIT_FAB = 44;
+const DRIVER_AVATAR_SIZE = 144;
+const DRIVER_EDIT_FAB = 48;
 
 export interface EditProfileModalProps {
   visible: boolean;
@@ -111,9 +115,6 @@ export function EditProfileModal({
   const [selectedPresetSeed, setSelectedPresetSeed] = useState<string>(initialAvatarSeed);
   const [showAvatarDropdown, setShowAvatarDropdown] = useState(false);
   const [showAvatarActions, setShowAvatarActions] = useState(false);
-  const [bioSuggestions, setBioSuggestions] = useState<string[]>([]);
-  const [selectedSuggestion, setSelectedSuggestion] = useState<string | null>(null);
-  const [generateRound, setGenerateRound] = useState(0);
 
   const heroRoleLine = (heroSubtitle?.trim() || 'DRIVER').toUpperCase();
   const emailTrimmed = email?.trim() ?? '';
@@ -129,9 +130,6 @@ export function EditProfileModal({
       setSelectedPresetSeed(initialAvatarSeed);
       setShowAvatarDropdown(false);
       setShowAvatarActions(false);
-      setBioSuggestions([]);
-      setSelectedSuggestion(null);
-      setGenerateRound(0);
     }
   }, [visible, initialFullName, initialPhone, initialCompanyName, initialStatusText, initialAvatarSeed]);
 
@@ -315,49 +313,33 @@ export function EditProfileModal({
     );
   };
 
-  const bioSuggestionLibrary = useMemo(
-    () => [
-      "Safety-focused driver committed to on-time delivery, careful handling, and clear communication throughout each trip.",
-      "Reliable route driver with disciplined execution, punctual pickups, and secure end-to-end cargo movement.",
-      "Professional transport driver known for smooth coordination, proactive updates, and responsible road behavior.",
-      "Dependable delivery driver focused on trip accuracy, clean documentation, and respectful customer interaction.",
-      "Experienced fleet driver who prioritizes safety, route efficiency, and consistent delivery performance.",
-      "Detail-oriented commercial driver dedicated to timely dispatch, careful load handling, and service reliability.",
-      "Operations-first driver ensuring secure transit, transparent trip updates, and professional handovers.",
-    ],
-    []
-  );
+  /** One-tap random bio for driver edit (reference UI — Sparkles Generate). */
+  const driverOneTapBios = useMemo(() => {
+    const name = fullName.trim() || 'Driver';
+    const comp = companyName.trim();
+    const lines = [
+      `Professional long-haul specialist — safety-first deliveries and clear updates on every trip.`,
+      `Reliable fleet driver committed to punctual pickups and secure cargo handling${comp ? `, supporting ${comp}` : ''}.`,
+      `${name}: disciplined routes, proactive communication, and professional handovers you can trust.`,
+      `Experienced transport pilot focused on route efficiency, documentation discipline, and on-time fulfillment.`,
+      `Detail-oriented operations — careful loading, steady transit, and dependable delivery execution.`,
+    ];
+    return lines.map((s) => s.slice(0, VALIDATION.STATUS_TEXT_MAX_LENGTH));
+  }, [companyName, fullName]);
 
-  const buildBioSuggestions = useCallback((round: number) => {
-    const cleanName = fullName.trim();
-    const cleanCompany = companyName.trim();
-    const seed = `${cleanName}|${cleanCompany}|${round}`;
-    const baseValue = seed.split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
-    const pool = [...bioSuggestionLibrary];
-    const suggestions: string[] = [];
+  const phoneVerified = useMemo(() => {
+    const t = phone.trim();
+    if (!t) return false;
+    return validatePhone(t) === null;
+  }, [phone]);
 
-    for (let i = 0; i < 3; i += 1) {
-      if (pool.length === 0) break;
-      const index = (baseValue + i * 7) % pool.length;
-      const template = pool.splice(index, 1)[0];
-      const withCompany = cleanCompany
-        ? `${template} Supporting ${cleanCompany} operations with accountability and delivery discipline.`
-        : template;
-      suggestions.push(
-        withCompany.replace(/\s+/g, " ").trim().slice(0, VALIDATION.STATUS_TEXT_MAX_LENGTH)
-      );
-    }
-
-    return suggestions;
-  }, [bioSuggestionLibrary, companyName, fullName]);
-
-  const handleAutoGenerateBio = useCallback(() => {
-    const nextRound = generateRound + 1;
-    const nextSuggestions = buildBioSuggestions(nextRound);
-    setGenerateRound(nextRound);
-    setBioSuggestions(nextSuggestions);
-    setSelectedSuggestion(null);
-  }, [buildBioSuggestions, generateRound]);
+  const handleGenerateBioTap = useCallback(() => {
+    if (!driverRefLayout) return;
+    const list = driverOneTapBios;
+    const pick =
+      list.length > 0 ? list[Math.floor(Math.random() * list.length)]! : '';
+    setStatusText(pick);
+  }, [driverOneTapBios, driverRefLayout]);
 
   const showEmailOnboardingHint = () => {
     Alert.alert(
@@ -430,43 +412,42 @@ export function EditProfileModal({
       }}
     >
       <KeyboardAvoidingView
-        style={[styles.outer, driverRefLayout && { backgroundColor: DRIVER_SCREEN_BG }]}
+        style={[styles.outer, driverRefLayout && { backgroundColor: DRIVER_EDIT_PAGE_BG }]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
         keyboardVerticalOffset={0}
       >
         {driverRefLayout ? (
           <View
             style={[
-              styles.driverHeader,
+              styles.driverHeaderBar,
               {
-                paddingTop: insets.top + Layout.spacingLarge,
-                paddingBottom: Layout.spacingLarge,
-                borderBottomColor: 'rgba(21, 128, 61, 0.08)',
+                paddingTop: insets.top + 8,
+                paddingBottom: 14,
+                borderBottomColor: 'rgba(167,243,208,0.35)',
               },
             ]}
           >
-            <View style={styles.driverHeaderLeft}>
-              <TouchableOpacity
-                onPress={onClose}
-                style={styles.driverBackBtn}
-                hitSlop={12}
-                accessibilityLabel="Go back"
-                disabled={saving}
-              >
-                <FontAwesome name="arrow-left" size={22} color={Theme.iconSlate} />
-              </TouchableOpacity>
-              <Text style={styles.driverHeaderTitle}>Edit Profile</Text>
-            </View>
             <TouchableOpacity
+              onPress={onClose}
+              style={styles.driverHeaderBackRound}
+              hitSlop={12}
+              accessibilityLabel="Go back"
+              disabled={saving}
+            >
+              <ChevronLeft size={24} color={Theme.textMuted} strokeWidth={2.4} />
+            </TouchableOpacity>
+            <Text style={styles.driverHeaderTitleCenter}>EDIT PROFILE</Text>
+            <TouchableOpacity
+              style={styles.driverHeaderSavePill}
               onPress={handleSave}
               disabled={saving}
               hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
               accessibilityLabel="Save profile"
             >
               {saving ? (
-                <ActivityIndicator size="small" color={DRIVER_FOREST} />
+                <ActivityIndicator size="small" color={Theme.driverEmerald} />
               ) : (
-                <Text style={styles.driverHeaderSave}>Save</Text>
+                <Text style={styles.driverHeaderSavePillText}>Save</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -509,43 +490,49 @@ export function EditProfileModal({
           {driverRefLayout ? (
             <>
               <View style={styles.driverHeroBlock}>
-                <View style={styles.driverAvatarWrap}>
-                  <TouchableOpacity
-                    activeOpacity={0.92}
-                    onPress={openAvatarActions}
-                    disabled={saving || photoUploading}
-                    accessibilityLabel="Change profile photo"
-                    accessibilityRole="button"
-                  >
-                    <View style={styles.driverAvatarRing}>
-                      <Image
-                        source={{ uri: avatarUri }}
-                        style={styles.driverAvatarImage}
-                      />
-                      {photoUploading ? (
-                        <View style={styles.driverAvatarLoading}>
-                          <ActivityIndicator color={Theme.textOnPrimary} size="large" />
+                <View style={styles.driverAvatarGlowWrap}>
+                  <LinearGradient
+                    colors={['rgba(52,211,153,0.35)', 'rgba(16,185,129,0.08)', 'transparent']}
+                    style={styles.driverAvatarGlowBlob}
+                  />
+                  <View style={styles.driverAvatarRelative}>
+                    <TouchableOpacity
+                      activeOpacity={0.92}
+                      onPress={openAvatarActions}
+                      disabled={saving || photoUploading}
+                      accessibilityLabel="Change profile photo"
+                      accessibilityRole="button"
+                    >
+                      <LinearGradient
+                        colors={[Theme.driverEmerald, Theme.driverPrimary]}
+                        style={styles.driverSquircleGradient}
+                      >
+                        <View style={styles.driverSquircleInner}>
+                          <Image source={{ uri: avatarUri }} style={styles.driverAvatarImageSq} resizeMode="cover" />
+                          {photoUploading ? (
+                            <View style={styles.driverAvatarLoading}>
+                              <ActivityIndicator color={Theme.textOnPrimary} size="large" />
+                            </View>
+                          ) : null}
                         </View>
-                      ) : null}
-                    </View>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.driverEditFab}
-                    onPress={openAvatarActions}
-                    disabled={saving || photoUploading}
-                    activeOpacity={0.85}
-                    accessibilityLabel="Edit profile photo"
-                    accessibilityRole="button"
-                  >
-                    <FontAwesome name="pencil" size={16} color={Theme.textOnPrimary} />
-                  </TouchableOpacity>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.driverEditFab, styles.driverEditFabElevated]}
+                      onPress={openAvatarActions}
+                      disabled={saving || photoUploading}
+                      activeOpacity={0.85}
+                      accessibilityLabel="Edit profile photo"
+                      accessibilityRole="button"
+                    >
+                      <Edit3 size={22} color={Theme.textOnPrimary} strokeWidth={2.5} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
-                <Text style={styles.driverHeroName} numberOfLines={1}>
+                <Text style={styles.driverHeroNameNew} numberOfLines={2}>
                   {fullName.trim() || 'Your name'}
                 </Text>
-                <Text style={styles.driverHeroSubtitle} numberOfLines={1}>
-                  {heroRoleLine}
-                </Text>
+                <Text style={styles.driverHeroEyebrowSmall}>Driver profile · {heroRoleLine}</Text>
               </View>
 
               {showAvatarDropdown ? (
@@ -577,158 +564,16 @@ export function EditProfileModal({
                 </TouchableOpacity>
               ) : null}
 
-              <Text style={styles.driverSectionLegend}>Personal information</Text>
-
-              <Text style={styles.driverFieldLabel}>Full Name</Text>
-              <TextInput
-                style={styles.driverInput}
-                placeholder="Your name"
-                placeholderTextColor={Theme.textMuted}
-                value={fullName}
-                onChangeText={setFullName}
-                autoCapitalize="words"
-                autoCorrect={false}
-                spellCheck={false}
-                autoComplete="off"
-                editable={!saving}
-                underlineColorAndroid="transparent"
-              />
-
-              <View style={styles.driverFieldLabelRow}>
-                <Text style={styles.driverFieldLabel}>Bio / Status</Text>
-                <TouchableOpacity
-                  style={styles.autoGenerateBioBtn}
-                  onPress={handleAutoGenerateBio}
-                  activeOpacity={0.85}
-                  disabled={saving}
-                  accessibilityRole="button"
-                  accessibilityLabel="Auto generate bio"
-                >
-                  <FontAwesome name="magic" size={12} color={DRIVER_FOREST} />
-                  <Text style={styles.autoGenerateBioBtnText}>Generate</Text>
-                </TouchableOpacity>
-              </View>
-              {bioSuggestions.length > 0 ? (
-                <View style={styles.bioSuggestionBlock}>
-                  <Text style={styles.bioSuggestionTitle}>Suggested bios</Text>
-                  {bioSuggestions.map((suggestion) => {
-                    const isSelected = selectedSuggestion === suggestion;
-                    return (
-                      <TouchableOpacity
-                        key={suggestion}
-                        style={[
-                          styles.bioSuggestionCard,
-                          isSelected && styles.bioSuggestionCardSelected,
-                        ]}
-                        onPress={() => {
-                          setSelectedSuggestion(suggestion);
-                          setStatusText(suggestion);
-                        }}
-                        activeOpacity={0.9}
-                        accessibilityRole="button"
-                        accessibilityLabel="Use this bio suggestion"
-                      >
-                        <Text
-                          style={[
-                            styles.bioSuggestionText,
-                            isSelected && styles.bioSuggestionTextSelected,
-                          ]}
-                        >
-                          {suggestion}
-                        </Text>
-                        <View style={styles.bioSuggestionFooter}>
-                          <Text style={styles.bioSuggestionUseText}>
-                            {isSelected ? 'Applied' : 'Tap to use'}
-                          </Text>
-                          {isSelected ? (
-                            <FontAwesome name="check-circle" size={14} color={DRIVER_FOREST} />
-                          ) : null}
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              ) : null}
-              <TextInput
-                style={[styles.driverInput, styles.driverInputMultiline]}
-                placeholder="e.g. Trust your feelings, be a good human being"
-                placeholderTextColor={Theme.textMuted}
-                value={statusText}
-                onChangeText={setStatusText}
-                multiline
-                numberOfLines={3}
-                maxLength={VALIDATION.STATUS_TEXT_MAX_LENGTH}
-                autoCorrect
-                spellCheck
-                editable={!saving}
-                textAlignVertical="top"
-                underlineColorAndroid="transparent"
-              />
-              <Text style={styles.driverBioHint}>
-                Visible to passengers and fleet managers
-              </Text>
-
-              <Text style={[styles.driverSectionLegend, styles.driverSectionLegendSpaced]}>
-                Contact details
-              </Text>
-
-              <Text style={styles.driverFieldLabel}>Email Address</Text>
-              {hasEmail ? (
-                <>
-                  <View style={styles.driverEmailShell}>
-                    <Text style={styles.driverEmailReadonlyText} numberOfLines={1}>
-                      {emailTrimmed}
-                    </Text>
-                    <FontAwesome name="lock" size={14} color={Theme.textMuted} />
-                  </View>
-                  <Text style={styles.driverEmailAdminHint}>
-                    Managed by corporate administrator.
-                  </Text>
-                </>
-              ) : (
-                <>
-                  <TouchableOpacity
-                    style={styles.driverEmailEmptyCard}
-                    onPress={showEmailOnboardingHint}
-                    activeOpacity={0.85}
-                    accessibilityRole="button"
-                    accessibilityLabel="Add email, more information"
-                  >
-                    <View style={styles.driverEmailEmptyRow}>
-                      <FontAwesome name="envelope-o" size={16} color={DRIVER_FOREST} />
-                      <Text style={styles.driverEmailEmptyCta}>Add email</Text>
-                      <FontAwesome name="chevron-right" size={12} color={Theme.textMuted} />
-                    </View>
-                    <Text style={styles.driverEmailEmptySub}>
-                      Tap for how email is added to your driver account
-                    </Text>
-                  </TouchableOpacity>
-                  <Text style={styles.driverEmailAdminHint}>
-                    No email on file yet. Your administrator can help if needed.
-                  </Text>
-                </>
-              )}
-
-              <Text style={styles.driverFieldLabel}>Phone Number</Text>
-              <View style={styles.driverPhoneRow}>
-                <TouchableOpacity
-                  style={styles.driverPhonePrefix}
-                  activeOpacity={0.85}
-                  onPress={() =>
-                    Alert.alert('Country code', 'Country code is set by your organization (+1).')
-                  }
-                  accessibilityLabel="Country code, plus one"
-                >
-                  <Text style={styles.driverPhonePrefixText}>+1</Text>
-                  <FontAwesome name="chevron-down" size={14} color={Theme.textMuted} />
-                </TouchableOpacity>
+              <Text style={styles.driverSectionLegendTop}>Personal information</Text>
+              <View style={styles.driverCardWhite}>
+                <Text style={styles.driverCardMicroLabel}>Full name</Text>
                 <TextInput
-                  style={[styles.driverInput, styles.driverPhoneInput]}
-                  placeholder="555-012-3456"
+                  style={styles.driverCardTextInput}
+                  placeholder="Enter your name"
                   placeholderTextColor={Theme.textMuted}
-                  value={phone}
-                  onChangeText={(v) => setPhone(formatMobileNumber(v))}
-                  keyboardType="phone-pad"
+                  value={fullName}
+                  onChangeText={setFullName}
+                  autoCapitalize="words"
                   autoCorrect={false}
                   spellCheck={false}
                   autoComplete="off"
@@ -737,24 +582,116 @@ export function EditProfileModal({
                 />
               </View>
 
-              <Text style={[styles.driverSectionLegend, styles.driverSectionLegendSpaced]}>
-                Account details
-              </Text>
+              <View style={styles.driverBioHeaderRow}>
+                <Text style={styles.driverSectionLegendInline}>Bio / status</Text>
+                <TouchableOpacity
+                  style={styles.driverGeneratePill}
+                  onPress={handleGenerateBioTap}
+                  activeOpacity={0.85}
+                  disabled={saving}
+                  accessibilityRole="button"
+                  accessibilityLabel="Generate bio"
+                >
+                  <Sparkles size={14} color={Theme.driverEmerald} strokeWidth={2.4} />
+                  <Text style={styles.driverGeneratePillText}>Generate</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.driverCardWhiteBio}>
+                <TextInput
+                  style={styles.driverBioTextarea}
+                  placeholder="e.g. Trust your feelings, be a good human being"
+                  placeholderTextColor={Theme.textMuted}
+                  value={statusText}
+                  onChangeText={setStatusText}
+                  multiline
+                  maxLength={VALIDATION.STATUS_TEXT_MAX_LENGTH}
+                  autoCorrect
+                  spellCheck
+                  editable={!saving}
+                  textAlignVertical="top"
+                  underlineColorAndroid="transparent"
+                />
+                <Text style={styles.driverBioHintItalic}>
+                  Visible to passengers and fleet managers
+                </Text>
+              </View>
 
-              <Text style={styles.driverFieldLabel}>Registered Company Name</Text>
-              <TextInput
-                style={styles.driverInput}
-                placeholder="Company name"
-                placeholderTextColor={Theme.textMuted}
-                value={companyName}
-                onChangeText={setCompanyName}
-                autoCapitalize="words"
-                autoCorrect={false}
-                spellCheck={false}
-                autoComplete="off"
-                editable={!saving}
-                underlineColorAndroid="transparent"
-              />
+              <Text style={[styles.driverSectionLegendTop, styles.driverSectionAfterBio]}>
+                Contact details
+              </Text>
+              <View style={styles.driverContactCard}>
+                <TouchableOpacity
+                  style={[styles.driverContactRow, styles.driverContactRowBorder]}
+                  onPress={showEmailOnboardingHint}
+                  activeOpacity={hasEmail ? 1 : 0.85}
+                  disabled={Boolean(hasEmail)}
+                  accessibilityRole="button"
+                  accessibilityLabel={hasEmail ? 'Email address (read-only)' : 'Add email'}
+                >
+                  <View style={[styles.driverContactIconMail, styles.driverContactIconBg]}>
+                    <Mail size={22} color={Theme.driverEmerald} strokeWidth={2.2} />
+                  </View>
+                  <View style={styles.driverContactMid}>
+                    <Text style={styles.driverContactEyebrow}>Email address</Text>
+                    <Text style={styles.driverContactValue} numberOfLines={2}>
+                      {hasEmail ? emailTrimmed : 'Add email'}
+                    </Text>
+                  </View>
+                  {hasEmail ? (
+                    <FontAwesome name="chevron-right" size={14} color={Theme.textMuted} />
+                  ) : (
+                    <FontAwesome name="chevron-right" size={14} color={Theme.textMuted} />
+                  )}
+                </TouchableOpacity>
+
+                <View style={styles.driverContactRow}>
+                  <View style={[styles.driverContactIconPhone, styles.driverContactIconBgBlue]}>
+                    <Phone size={22} color="#2563eb" strokeWidth={2.2} />
+                  </View>
+                  <View style={styles.driverContactMid}>
+                    <Text style={styles.driverContactEyebrow}>Mobile number</Text>
+                    <TextInput
+                      style={styles.driverContactPhoneInput}
+                      placeholder="+91 98765 43210"
+                      placeholderTextColor={Theme.textMuted}
+                      value={phone}
+                      onChangeText={(v) => setPhone(formatMobileNumber(v))}
+                      keyboardType="phone-pad"
+                      autoCorrect={false}
+                      spellCheck={false}
+                      autoComplete="off"
+                      editable={!saving}
+                      underlineColorAndroid="transparent"
+                    />
+                  </View>
+                  {phoneVerified ? (
+                    <View style={styles.driverVerifiedChip}>
+                      <Check size={12} color={Theme.driverEmerald} strokeWidth={3} />
+                      <Text style={styles.driverVerifiedChipText}>Verified</Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+
+              <Text style={[styles.driverSectionLegendTop, styles.driverSectionAfterBio]}>
+                Fleet / account
+              </Text>
+              <View style={styles.driverCardWhite}>
+                <Text style={styles.driverCardMicroLabel}>Registered company name</Text>
+                <TextInput
+                  style={styles.driverCardTextInput}
+                  placeholder="Company name"
+                  placeholderTextColor={Theme.textMuted}
+                  value={companyName}
+                  onChangeText={setCompanyName}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  autoComplete="off"
+                  editable={!saving}
+                  underlineColorAndroid="transparent"
+                />
+              </View>
 
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -768,7 +705,7 @@ export function EditProfileModal({
                 {saving ? (
                   <ActivityIndicator size="small" color={Theme.textOnPrimary} />
                 ) : (
-                  <Text style={styles.driverSaveChangesBtnText}>Save Changes</Text>
+                  <Text style={styles.driverSaveChangesBtnText}>UPDATE PROFILE INFORMATION</Text>
                 )}
               </TouchableOpacity>
 
@@ -1027,72 +964,303 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Theme.screenBackground,
   },
-  driverHeader: {
+  driverHeaderBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    backgroundColor: Theme.screenBackground,
+    paddingHorizontal: Layout.screenPaddingHorizontal - 4,
+    backgroundColor: 'rgba(253,254,255,0.92)',
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  driverHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flex: 1,
-    minWidth: 0,
-  },
-  driverBackBtn: {
+  driverHeaderBackRound: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Theme.surfaceBorder,
+    backgroundColor: '#f1f5f9',
   },
-  driverHeaderTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: DRIVER_FOREST,
-    letterSpacing: -0.2,
-    flexShrink: 1,
+  driverHeaderTitleCenter: {
+    position: 'absolute',
+    left: 72,
+    right: 72,
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    color: Theme.textPrimaryDark,
   },
-  driverHeaderSave: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: DRIVER_FOREST,
+  driverHeaderSavePill: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: 'rgba(167,243,208,0.35)',
+    minWidth: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  driverHeaderSavePillText: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    color: Theme.driverEmerald,
+    textTransform: 'uppercase',
   },
   driverHeroBlock: {
     alignItems: 'center',
-    marginBottom: Layout.sectionSpacing + 8,
+    marginBottom: Layout.sectionSpacing + 6,
+    marginTop: 8,
   },
-  driverAvatarWrap: {
-    width: DRIVER_AVATAR_SIZE + 8,
-    height: DRIVER_AVATAR_SIZE + 8,
-    marginBottom: 16,
+  driverAvatarGlowWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+    width: DRIVER_AVATAR_SIZE + 48,
+    height: DRIVER_AVATAR_SIZE + 48,
   },
-  driverAvatarRing: {
+  driverAvatarGlowBlob: {
+    position: 'absolute',
+    width: DRIVER_AVATAR_SIZE + 36,
+    height: DRIVER_AVATAR_SIZE + 36,
+    borderRadius: 999,
+    opacity: 0.85,
+  },
+  driverAvatarRelative: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  driverSquircleGradient: {
+    width: DRIVER_AVATAR_SIZE + 10,
+    height: DRIVER_AVATAR_SIZE + 10,
+    borderRadius: 36,
+    padding: 5,
+    overflow: 'hidden',
+  },
+  driverSquircleInner: {
     width: DRIVER_AVATAR_SIZE,
     height: DRIVER_AVATAR_SIZE,
-    borderRadius: DRIVER_AVATAR_SIZE / 2,
-    borderWidth: 4,
-    borderColor: Theme.screenBackground,
+    borderRadius: 32,
     overflow: 'hidden',
-    backgroundColor: Theme.surfaceLight,
-    alignSelf: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: DRIVER_FOREST,
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.12,
-        shadowRadius: 16,
-      },
-      android: { elevation: 6 },
-    }),
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  driverAvatarImage: {
+  driverAvatarImageSq: {
     width: '100%',
     height: '100%',
+  },
+  driverHeroNameNew: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.4,
+    textAlign: 'center',
+    maxWidth: '100%',
+    paddingHorizontal: 12,
+  },
+  driverHeroEyebrowSmall: {
+    marginTop: 8,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 2,
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+    textAlign: 'center',
+  },
+  driverSectionLegendTop: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 2,
+    color: Theme.textMuted,
+    marginBottom: 12,
+    marginLeft: 6,
+    textTransform: 'uppercase',
+  },
+  driverSectionAfterBio: {
+    marginTop: 22,
+  },
+  driverCardWhite: {
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(167,243,208,0.45)',
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    marginBottom: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  driverCardMicroLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1,
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  driverCardTextInput: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+    paddingVertical: 2,
+    paddingHorizontal: 0,
+  },
+  driverBioHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingHorizontal: 6,
+    marginTop: 18,
+  },
+  driverSectionLegendInline: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 2,
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+  },
+  driverGeneratePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: 'rgba(167,243,208,0.35)',
+  },
+  driverGeneratePillText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    color: Theme.driverEmerald,
+    textTransform: 'uppercase',
+  },
+  driverCardWhiteBio: {
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(167,243,208,0.45)',
+    paddingHorizontal: 22,
+    paddingTop: 20,
+    paddingBottom: 16,
+    marginBottom: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  driverBioTextarea: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Theme.textSecondary,
+    minHeight: 120,
+    lineHeight: 22,
+    paddingVertical: 0,
+  },
+  driverBioHintItalic: {
+    fontSize: 9,
+    fontStyle: 'italic',
+    fontWeight: '700',
+    color: Theme.textMuted,
+    marginTop: 14,
+  },
+  driverContactCard: {
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 32,
+    borderWidth: 1,
+    borderColor: 'rgba(167,243,208,0.45)',
+    overflow: 'hidden',
+    marginBottom: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  driverContactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    gap: 14,
+  },
+  driverContactRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(167,243,208,0.45)',
+  },
+  driverContactIconBg: {
+    width: 48,
+    height: 48,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(167,243,208,0.35)',
+  },
+  driverContactIconBgBlue: {
+    width: 48,
+    height: 48,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(219,234,254,0.9)',
+  },
+  driverContactMid: {
+    flex: 1,
+    minWidth: 0,
+  },
+  driverContactEyebrow: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1,
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  driverContactValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+  },
+  driverContactPhoneInput: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+  },
+  driverVerifiedChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: 'rgba(167,243,208,0.35)',
+  },
+  driverVerifiedChipText: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1,
+    color: Theme.driverEmerald,
+    textTransform: 'uppercase',
   },
   driverAvatarLoading: {
     ...StyleSheet.absoluteFillObject,
@@ -1122,23 +1290,10 @@ const styles = StyleSheet.create({
       android: { elevation: 4 },
     }),
   },
-  driverHeroName: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.3,
-    textAlign: 'center',
-    maxWidth: '100%',
-    paddingHorizontal: 8,
-  },
-  driverHeroSubtitle: {
-    marginTop: 6,
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 1,
-    color: Theme.textMuted,
-    textTransform: 'uppercase',
-    textAlign: 'center',
+  driverEditFabElevated: {
+    borderRadius: 20,
+    right: -6,
+    bottom: -6,
   },
   driverSectionLegend: {
     ...Typography.headerTitle,
@@ -1343,9 +1498,9 @@ const styles = StyleSheet.create({
   },
   driverSaveChangesBtn: {
     marginTop: 12,
-    backgroundColor: DRIVER_FOREST,
-    borderRadius: 16,
-    paddingVertical: 18,
+    backgroundColor: Theme.driverEmerald,
+    borderRadius: 26,
+    paddingVertical: 20,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 56,
@@ -1360,10 +1515,11 @@ const styles = StyleSheet.create({
     }),
   },
   driverSaveChangesBtnText: {
-    fontSize: 17,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '900',
     color: Theme.textOnPrimary,
-    letterSpacing: 0.2,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
   },
   driverDeactivateBtn: {
     marginTop: 16,

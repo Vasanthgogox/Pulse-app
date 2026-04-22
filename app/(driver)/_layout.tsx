@@ -6,6 +6,14 @@
 import { DriverTabBar } from '@/components/driver/DriverTabBar';
 import { DriverAvatarProvider } from '@/contexts/DriverAvatarContext';
 import { DriverThemeProvider } from '@/contexts/DriverThemeContext';
+import {
+  useFonts as usePlusJakartaFonts,
+  PlusJakartaSans_400Regular,
+  PlusJakartaSans_500Medium,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+  PlusJakartaSans_800ExtraBold,
+} from '@expo-google-fonts/plus-jakarta-sans';
 import { Tabs } from 'expo-router';
 
 function DriverTabsNavigator() {
@@ -43,6 +51,18 @@ function DriverTabsNavigator() {
 }
 
 export default function DriverAppLayout() {
+  const [fontsLoaded] = usePlusJakartaFonts({
+    PlusJakartaSans_400Regular,
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+    PlusJakartaSans_800ExtraBold,
+  });
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
     <DriverThemeProvider>
       <DriverAvatarProvider>
