@@ -2,6 +2,7 @@ import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { DatePresetPillBar } from "@/components/DatePresetPillBar";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
 import { PartyAvatar } from "@/components/PartyAvatar";
+import { CounterpartyProfileSystemCard } from "@/components/CounterpartyProfileSystemCard";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -1115,6 +1116,52 @@ export default function ClientDetailScreen({
   const paid = sales - totalPendingConsolidated;
   const due = totalPendingConsolidated;
   const health = sales > 0 ? Math.round((paid / sales) * 100) : 0;
+  const profileWarehouses = (() => {
+    const byPickup = new Map<string, { id: string; name: string; address: string }>();
+    for (const trip of trips) {
+      const pickup = (trip.pickup_area ?? "").trim();
+      if (!pickup) continue;
+      const key = pickup.toLowerCase();
+      if (byPickup.has(key)) continue;
+      byPickup.set(key, {
+        id: key,
+        name: pickup,
+        address: pickup,
+      });
+    }
+    return Array.from(byPickup.values()).slice(0, 8);
+  })();
+  const profileContracts = (() => {
+    const laneMap = new Map<string, { id: string; pickup: string; destination: string; price: number; count: number }>();
+    for (const trip of trips) {
+      const pickup = (trip.pickup_area ?? "").trim();
+      const destination = (trip.drop_location ?? "").trim();
+      if (!pickup || !destination) continue;
+      const laneKey = `${pickup.toLowerCase()}|${destination.toLowerCase()}`;
+      const existing = laneMap.get(laneKey);
+      if (existing) {
+        existing.price += Number(trip.client_price ?? 0);
+        existing.count += 1;
+      } else {
+        laneMap.set(laneKey, {
+          id: laneKey,
+          pickup,
+          destination,
+          price: Number(trip.client_price ?? 0),
+          count: 1,
+        });
+      }
+    }
+    return Array.from(laneMap.values())
+      .map((row) => ({
+        id: row.id,
+        pickup: row.pickup,
+        destination: row.destination,
+        price: row.count > 0 ? row.price / row.count : row.price,
+        pricingType: "per_trip" as const,
+      }))
+      .slice(0, 10);
+  })();
 
   const tabConfig = [
     { id: "trips" as const, label: "Trips" },
@@ -1744,132 +1791,37 @@ export default function ClientDetailScreen({
         presentationStyle="pageSheet"
         onRequestClose={() => setShowProfileModal(false)}
       >
-        <View style={[styles.profileModalWrap, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-            <View style={styles.profileModalHeader}>
-              <Text style={styles.profileModalTitle}>Client Profile</Text>
-              <TouchableOpacity
-                onPress={() => setShowProfileModal(false)}
-                style={styles.profileModalCloseBtn}
-                hitSlop={12}
-              >
-                <FontAwesome name="times" size={18} color={Theme.textPrimaryDark} />
-              </TouchableOpacity>
-            </View>
-          <ScrollView
-            style={styles.profileModalScroll}
-            contentContainerStyle={styles.profileModalContent}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.profileCard}>
-              <View style={styles.profileCardTop}>
-                <View style={styles.profileAvatarWrap}>
-                  {profileAvatarUri ? (
-                    <Image source={{ uri: profileAvatarUri }} style={styles.profileAvatarImage} />
-                  ) : (
-                    <FontAwesome name="building" size={30} color={Theme.primary} />
-                  )}
-                </View>
-                <View style={styles.profileCardTopText}>
-                  <Text style={styles.profileEntityName} numberOfLines={2}>
-                    {client?.name || client?.contact_person || "—"}
-                  </Text>
-                  {client?.contact_person ? (
-                    <Text style={styles.profileEntitySub} numberOfLines={1}>
-                      {client.contact_person}
-                    </Text>
-                  ) : null}
-                  <View style={styles.profileBadges}>
-                    <View style={styles.profileBadge}>
-                      <Text style={styles.profileBadgeText}>Verified</Text>
-                    </View>
-                    {client?.is_integrated || client?.linked_organization_id || isInApp ? (
-                      <View style={[styles.profileBadge, { backgroundColor: Theme.positive + '20', borderColor: Theme.positive }]}>
-                        <Text style={[styles.profileBadgeCoreText, { color: Theme.positive }]}>Integrated</Text>
-                      </View>
-                    ) : (
-                      <View style={[styles.profileBadge, styles.profileBadgeCore]}>
-                        <Text style={styles.profileBadgeCoreText}>Core Node</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              </View>
-              <View style={styles.profileGrid}>
-                <View style={styles.profileGridItem}>
-                  <Text style={styles.profileGridLabel}>Avg Payment</Text>
-                  <Text style={styles.profileGridValue}>—</Text>
-                </View>
-                <View style={styles.profileGridItem}>
-                  <Text style={styles.profileGridLabel}>Grid Volume</Text>
-                  <Text style={styles.profileGridValue}>{formatINR(sales)}</Text>
-                </View>
-              </View>
-              <Text style={styles.profileSectionTitle}>Contact Protocol</Text>
-              <View style={styles.profileContactRow}>
-                <View style={styles.profileContactIcon}>
-                  <FontAwesome name="phone" size={14} color={Theme.textMuted} />
-                </View>
-                <View style={styles.profileContactText}>
-                  <Text style={styles.profileContactLabel}>Phone Registry</Text>
-                  <Text style={styles.profileContactValue}>
-                    {(client?.phone ?? "").trim() || "—"}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.profileContactRow}>
-                <View style={styles.profileContactIcon}>
-                  <FontAwesome name="envelope" size={14} color={Theme.textMuted} />
-                </View>
-                <View style={styles.profileContactText}>
-                  <Text style={styles.profileContactLabel}>Email Link</Text>
-                  <Text style={styles.profileContactValue}>
-                    {(client?.email ?? "").trim() || "—"}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.profileContactRow}>
-                <View style={styles.profileContactIcon}>
-                  <FontAwesome name="map-marker" size={14} color={Theme.textMuted} />
-                </View>
-                <View style={styles.profileContactText}>
-                  <Text style={styles.profileContactLabel}>Billing Node</Text>
-                  <Text style={styles.profileContactValue} numberOfLines={2}>
-                    {(client?.address ?? "").trim() || "—"}
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.profileSectionTitle}>Fiscal Identity</Text>
-              <View style={styles.profileFiscalRow}>
-                <Text style={styles.profileFiscalLabel}>GSTIN Registry</Text>
-                <Text style={styles.profileFiscalValue}>
-                  {(client?.gstin ?? "").trim() || "—"}
-                </Text>
-              </View>
-              <View style={styles.profileFiscalRow}>
-                <Text style={styles.profileFiscalLabel}>PAN Registry</Text>
-                <Text style={styles.profileFiscalValue}>
-                  {(client?.pan_number ?? "").trim() || "—"}
-                </Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              style={styles.profileEditBtn}
-              onPress={() => {
-                setShowProfileModal(false);
-                if (!client?.id) return;
-                router.push({
-                  pathname: "/(modals)/edit-client",
-                  params: { clientId: client.id },
-                });
-              }}
-              activeOpacity={0.8}
-            >
-              <FontAwesome name="refresh" size={14} color={Theme.textOnPrimary} />
-              <Text style={styles.profileEditBtnText}>Edit Node Profile</Text>
-            </TouchableOpacity>
+        <View style={[styles.profileModalWrap, { paddingBottom: insets.bottom }]}>
+          <CounterpartyProfileSystemCard
+            visible={showProfileModal}
+            type="client"
+            organizationName={client?.name || client?.contact_person || "—"}
+            adminName={client?.contact_person}
+            email={client?.email}
+            phone={client?.phone}
+            gstNumber={client?.gstin}
+            panNumber={client?.pan_number}
+            billingAddress={client?.address}
+            gridVolumeLabel={formatINR(sales)}
+            networkTrustLabel="94.2%"
+            isIntegrated={Boolean(client?.is_integrated || client?.linked_organization_id || isInApp)}
+            entityDisplayId={client?.display_id ?? client?.id?.slice(0, 8) ?? null}
+            warehouses={profileWarehouses}
+            contracts={profileContracts}
+            onClose={() => setShowProfileModal(false)}
+            onEditPress={() => {
+              setShowProfileModal(false);
+              if (!client?.id) return;
+              router.push({
+                pathname: "/(modals)/edit-client",
+                params: { clientId: client.id },
+              });
+            }}
+          />
+          <View style={styles.profileModalFooter}>
             {!client?.linked_organization_id && isInApp && !isLinked && (
               <TouchableOpacity
-                style={[styles.profileSecondaryBtn, { marginTop: 12 }]}
+                style={styles.profileSecondaryBtn}
                 onPress={() => void handleSendInvitation()}
                 activeOpacity={0.8}
                 disabled={sendingInvitation}
@@ -1881,7 +1833,7 @@ export default function ClientDetailScreen({
               </TouchableOpacity>
             )}
             {!client?.linked_organization_id && isInApp && isLinked && (
-              <View style={[styles.profileSecondaryBtn, { marginTop: 12, opacity: 0.7 }]}>
+              <View style={[styles.profileSecondaryBtn, { opacity: 0.7 }]}>
                 <FontAwesome name="check" size={14} color={Theme.primary} />
                 <Text style={styles.profileSecondaryBtnText}>Invitation sent</Text>
               </View>
@@ -1890,7 +1842,7 @@ export default function ClientDetailScreen({
               <TouchableOpacity
                 style={[
                   styles.profileEditBtn,
-                  { backgroundColor: Theme.surface, borderWidth: 1, borderColor: Theme.borderLight, marginTop: 12 }
+                  { backgroundColor: Theme.surface, borderWidth: 1, borderColor: Theme.borderLight },
                 ]}
                 onPress={() => {
                   const message = `Join me on Q to sync our ledger and compare books with ${clientName}. Download the Q app to get started.`;
@@ -1899,10 +1851,12 @@ export default function ClientDetailScreen({
                 activeOpacity={0.8}
               >
                 <FontAwesome name="link" size={14} color={Theme.textPrimaryDark} />
-                <Text style={[styles.profileEditBtnText, { color: Theme.textPrimaryDark }]}>{t("linkToAppAccount")}</Text>
+                <Text style={[styles.profileEditBtnText, { color: Theme.textPrimaryDark }]}>
+                  {t("linkToAppAccount")}
+                </Text>
               </TouchableOpacity>
             )}
-          </ScrollView>
+          </View>
         </View>
       </Modal>
     </View>
@@ -2000,7 +1954,15 @@ const styles = StyleSheet.create({
   },
   profileModalWrap: {
     flex: 1,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.surface,
+  },
+  profileModalFooter: {
+    borderTopWidth: 1,
+    borderTopColor: Theme.surfaceBorder,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 10,
+    paddingBottom: 4,
+    backgroundColor: Theme.surface,
   },
   profileModalHeader: {
     flexDirection: "row",

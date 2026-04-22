@@ -2,6 +2,7 @@ import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { DatePresetPillBar } from "@/components/DatePresetPillBar";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
 import { PartyAvatar } from "@/components/PartyAvatar";
+import { CounterpartyProfileSystemCard } from "@/components/CounterpartyProfileSystemCard";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1343,132 +1344,56 @@ export default function SupplierDetailScreen({
         presentationStyle="pageSheet"
         onRequestClose={() => setShowProfileModal(false)}
       >
-        <View style={[styles.profileModalWrap, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-          <View style={styles.profileModalHeader}>
-            <Text style={styles.profileModalTitle}>Supplier Profile</Text>
-            <TouchableOpacity
-              onPress={() => setShowProfileModal(false)}
-              style={styles.profileModalCloseBtn}
-              hitSlop={12}
-            >
-              <FontAwesome name="times" size={18} color={Theme.textPrimaryDark} />
-            </TouchableOpacity>
-          </View>
-          <ScrollView
-            style={styles.profileModalScroll}
-            contentContainerStyle={styles.profileModalContent}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.profileCard}>
-              <View style={styles.profileCardTop}>
-                <View style={styles.profileAvatarWrap}>
-                  {profileAvatarUri ? (
-                    <Image source={{ uri: profileAvatarUri }} style={styles.profileAvatarImage} />
-                  ) : (
-                    <FontAwesome name="truck" size={30} color={Theme.primary} />
-                  )}
-                </View>
-                <View style={styles.profileCardTopText}>
-                  <Text style={styles.profileEntityName} numberOfLines={2}>
-                    {(supplier?.company_name ?? supplier?.name ?? supplier?.contact_person ?? "—") as string}
-                  </Text>
-                  <View style={styles.profileBadges}>
-                    {supplier?.is_verified ? (
-                      <View style={styles.profileBadge}>
-                        <Text style={styles.profileBadgeText}>Verified</Text>
-                      </View>
-                    ) : null}
-                    {supplier?.supplier_type === 'integrated' || supplier?.linked_organization_id || isInApp ? (
-                      <View style={[styles.profileBadge, { backgroundColor: Theme.positive + '20', borderColor: Theme.positive }]}>
-                        <Text style={[styles.profileBadgeCoreText, { color: Theme.positive }]}>Integrated</Text>
-                      </View>
-                    ) : (
-                      <View style={[styles.profileBadge, styles.profileBadgeCore]}>
-                        <Text style={styles.profileBadgeCoreText}>Core Node</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              </View>
-              <View style={styles.profileGrid}>
-                <View style={styles.profileGridItem}>
-                  <Text style={styles.profileGridLabel}>Contract</Text>
-                  <Text style={styles.profileGridValue}>{formatINR(contractValue)}</Text>
-                </View>
-                <View style={styles.profileGridItem}>
-                  <Text style={styles.profileGridLabel}>Paid</Text>
-                  <Text style={styles.profileGridValue}>{formatINR(paid)}</Text>
-                </View>
-                <View style={styles.profileGridItem}>
-                  <Text style={styles.profileGridLabel}>Due</Text>
-                  <Text style={styles.profileGridValue}>{formatINR(due)}</Text>
-                </View>
-              </View>
-              <View style={styles.profileHealthRow}>
-                <Text style={styles.profileHealthLabel}>Node health</Text>
-                <View style={styles.profileHealthPill}>
-                  <Text style={styles.profileHealthValue}>{health}%</Text>
-                </View>
-              </View>
-              <Text style={styles.profileSectionTitle}>Contact Protocol</Text>
-              <View style={styles.profileContactRow}>
-                <View style={styles.profileContactIcon}>
-                  <FontAwesome name="phone" size={14} color={Theme.textMuted} />
-                </View>
-                <View style={styles.profileContactText}>
-                  <Text style={styles.profileContactLabel}>Phone Registry</Text>
-                  <Text style={styles.profileContactValue}>
-                    {normalizePhoneDisplay(supplier?.phone) || "—"}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.profileContactRow}>
-                <View style={styles.profileContactIcon}>
-                  <FontAwesome name="envelope" size={14} color={Theme.textMuted} />
-                </View>
-                <View style={styles.profileContactText}>
-                  <Text style={styles.profileContactLabel}>Email Link</Text>
-                  <Text style={styles.profileContactValue}>
-                    {normalizeContactDisplay(supplier?.email) || "—"}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.profileContactRow}>
-                <View style={styles.profileContactIcon}>
-                  <FontAwesome name="map-marker" size={14} color={Theme.textMuted} />
-                </View>
-                <View style={styles.profileContactText}>
-                  <Text style={styles.profileContactLabel}>Billing Node</Text>
-                  <Text style={styles.profileContactValue} numberOfLines={2}>
-                    {normalizeContactDisplay(supplier?.address) || "—"}
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.profileSectionTitle}>Fiscal Identity</Text>
-              <View style={styles.profileFiscalRow}>
-                <Text style={styles.profileFiscalLabel}>GST Registry</Text>
-                <Text style={styles.profileFiscalValue}>
-                    {normalizeContactDisplay(supplier?.gst_number) || "—"}
-                </Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              style={styles.profileEditBtn}
-              onPress={() => {
-                setShowProfileModal(false);
-                setShowEditModal(true);
-              }}
-              activeOpacity={0.8}
-            >
-              <FontAwesome name="refresh" size={14} color={Theme.primary} />
-              <Text style={styles.profileEditBtnText}>Edit Node Profile</Text>
-            </TouchableOpacity>
+        <View style={[styles.profileModalWrap, { paddingBottom: insets.bottom }]}>
+          <CounterpartyProfileSystemCard
+            visible={showProfileModal}
+            type="supplier"
+            organizationName={
+              (supplier?.company_name ?? supplier?.name ?? supplier?.contact_person ?? "—") as string
+            }
+            adminName={normalizeContactDisplay(supplier?.contact_person)}
+            email={normalizeContactDisplay(supplier?.email)}
+            phone={normalizePhoneDisplay(supplier?.phone)}
+            gstNumber={normalizeContactDisplay(supplier?.gst_number)}
+            billingAddress={normalizeContactDisplay(supplier?.address)}
+            gridVolumeLabel={formatINR(contractValue)}
+            networkTrustLabel="94.2%"
+            isIntegrated={Boolean(
+              supplier?.supplier_type === "integrated" ||
+                supplier?.linked_organization_id ||
+                isInApp,
+            )}
+            entityDisplayId={supplier?.id?.slice(0, 8) ?? null}
+            kycDocs={[
+              {
+                id: "gst",
+                documentType: "GST REGISTRATION",
+                status: normalizeContactDisplay(supplier?.gst_number) ? "Verified" : "Pending",
+                dateLabel: "—",
+              },
+              {
+                id: "pan",
+                documentType: "PAN IDENTITY",
+                status: supplier?.is_verified ? "Verified" : "Pending",
+                dateLabel: "—",
+              },
+              {
+                id: "bank",
+                documentType: "BANK PROOF",
+                status: supplier?.is_verified ? "Verified" : "Pending",
+                dateLabel: "—",
+              },
+            ]}
+            onClose={() => setShowProfileModal(false)}
+            onEditPress={() => {
+              setShowProfileModal(false);
+              setShowEditModal(true);
+            }}
+          />
+          <View style={styles.profileModalFooter}>
             {!supplier?.linked_organization_id && isInApp && !isLinked && (
               <TouchableOpacity
-                style={[
-                  styles.profileSecondaryBtn,
-                  { marginTop: 12 },
-                ]}
+                style={styles.profileSecondaryBtn}
                 onPress={() => void handleSendInvitation()}
                 activeOpacity={0.8}
                 disabled={sendingInvitation}
@@ -1480,22 +1405,14 @@ export default function SupplierDetailScreen({
               </TouchableOpacity>
             )}
             {!supplier?.linked_organization_id && isInApp && isLinked && (
-              <View
-                style={[
-                  styles.profileSecondaryBtn,
-                  { marginTop: 12, opacity: 0.7 },
-                ]}
-              >
+              <View style={[styles.profileSecondaryBtn, { opacity: 0.7 }]}>
                 <FontAwesome name="check" size={14} color={Theme.primary} />
                 <Text style={styles.profileSecondaryBtnText}>Invitation sent</Text>
               </View>
             )}
             {!supplier?.linked_organization_id && !isInApp && (
               <TouchableOpacity
-                style={[
-                  styles.profileSecondaryBtn,
-                  { marginTop: 12 }
-                ]}
+                style={styles.profileSecondaryBtn}
                 onPress={() => {
                   const message = `Join me on Q to sync our ledger and compare books with ${supplierName}. Download the Q app to get started.`;
                   Share.share({ message, title: "Invite to Q" });
@@ -1506,7 +1423,7 @@ export default function SupplierDetailScreen({
                 <Text style={styles.profileSecondaryBtnText}>{t("linkToAppAccount")}</Text>
               </TouchableOpacity>
             )}
-          </ScrollView>
+          </View>
         </View>
       </Modal>
 
@@ -1616,7 +1533,15 @@ const styles = StyleSheet.create({
   },
   profileModalWrap: {
     flex: 1,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.surface,
+  },
+  profileModalFooter: {
+    borderTopWidth: 1,
+    borderTopColor: Theme.surfaceBorder,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 10,
+    paddingBottom: 4,
+    backgroundColor: Theme.surface,
   },
   profileModalHeader: {
     flexDirection: "row",
