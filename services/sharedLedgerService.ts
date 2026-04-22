@@ -4,6 +4,7 @@
  * See docs/SHARED_LEDGER_BACKEND_CONTRACT.md for backend contract.
  */
 import { supabase } from '@/lib/supabase';
+import type { TripAdjustment } from '@/features/trips/services/tripAdjustments';
 
 export interface VerifiedBalance {
   partnerKey: string;
@@ -195,6 +196,68 @@ export async function getSharedLedgerTripSummary(
     partner_paid: Number(r.partner_paid ?? 0),
   }));
   return { error: null, rows };
+}
+
+/**
+ * Trip adjustments for Compare & Verify from both orgs (shared trips + mission_key match). RPC: get_shared_trip_finance_adjustments.
+ */
+export async function getSharedTripFinanceAdjustments(
+  orgId: string,
+  partnerKey: string,
+): Promise<{ error: Error | null; adjustments: TripAdjustment[] }> {
+  const { data, error } = await supabase().rpc('get_shared_trip_finance_adjustments', {
+    org_id: orgId,
+    partner_key: partnerKey,
+  });
+  if (error) return { error: new Error(error.message), adjustments: [] };
+  const raw = (Array.isArray(data) ? data : []) as Array<{
+    id: string;
+    trip_id: string;
+    organization_id: string;
+    type: string;
+    impact: string;
+    amount: number | string;
+    reason: string;
+    mission_key?: string | null;
+    created_at?: string;
+  }>;
+  const adjustments: TripAdjustment[] = raw.map((r) => ({
+    id: r.id,
+    trip_id: r.trip_id,
+    organization_id: r.organization_id,
+    type: r.type === 'cost' ? 'cost' : 'revenue',
+    impact: r.impact === 'minus' ? 'minus' : 'plus',
+    amount: Number(r.amount ?? 0),
+    reason: String(r.reason ?? ''),
+    created_at: r.created_at,
+    mission_key: r.mission_key ?? null,
+  }));
+  return { error: null, adjustments };
+}
+
+/**
+ * Partner-org trip UUIDs that share the same indent as the viewer's trip (TRP labels differ per org).
+ * RPC: get_partner_trip_ids_for_shared_ledger_focus.
+ */
+export async function getPartnerTripIdsForSharedLedgerFocus(
+  orgId: string,
+  partnerKey: string,
+  viewerTripId: string,
+): Promise<{ error: Error | null; tripIds: string[] }> {
+  const { data, error } = await supabase().rpc(
+    'get_partner_trip_ids_for_shared_ledger_focus',
+    {
+      org_id: orgId,
+      partner_key: partnerKey,
+      viewer_trip_id: viewerTripId,
+    },
+  );
+  if (error) return { error: new Error(error.message), tripIds: [] };
+  const raw = Array.isArray(data) ? data : [];
+  const tripIds = raw
+    .map((u) => (u == null ? '' : String(u)))
+    .filter((s) => s.length > 0);
+  return { error: null, tripIds };
 }
 
 /**

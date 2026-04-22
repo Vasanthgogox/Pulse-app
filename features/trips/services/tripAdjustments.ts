@@ -1,9 +1,9 @@
 /**
- * Trip Adjustment Registry — adjusts revenue (sales) or cost (supplier), not in/out ledger.
- * Examples: Loading charges, Unloading, Late delivery, Damages/Missing, Fuel escalation, Detention.
- * Persisted locally via AsyncStorage until backend trip_adjustments table exists.
+ * Trip Adjustment Registry — revenue (sales) or cost (supplier), not cash ledger.
+ * Stored in Supabase `trip_finance_adjustments` when online; AsyncStorage fallback.
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { supabase } from "@/lib/supabase";
 
 const STORAGE_KEY_PREFIX = "q_mobile_trip_adjustments:";
 
@@ -13,17 +13,21 @@ export type TripAdjustmentImpact = "plus" | "minus";
 export interface TripAdjustment {
   id: string;
   trip_id: string;
-  /** Revenue (sale) or Cost (supplier/aggregate) */
   type: TripAdjustmentType;
-  /** Addition or deduction */
   impact: TripAdjustmentImpact;
-  /** Always positive; sign implied by impact */
   amount: number;
   reason: string;
   created_at?: string;
+  /** Owning org — used to split You vs They in Shared Ledger */
+  organization_id?: string;
+  mission_key?: string | null;
 }
 
-/** Preset reasons for revenue adjustments (client/sale side). */
+export interface TripAdjustmentPersistContext {
+  organizationId: string;
+  missionKey: string | null;
+}
+
 export const REVENUE_REASON_OPTIONS = [
   "Loading Charges",
   "Unloading Charges",
@@ -32,7 +36,6 @@ export const REVENUE_REASON_OPTIONS = [
   "Other",
 ] as const;
 
-/** Preset reasons for cost adjustments (supplier/aggregate side). */
 export const COST_REASON_OPTIONS = [
   "Fuel Escalation",
   "Detention",
@@ -47,14 +50,70 @@ function storageKey(tripId: string): string {
   return `${STORAGE_KEY_PREFIX}${tripId}`;
 }
 
-export async function getTripAdjustments(tripId: string): Promise<TripAdjustment[]> {
+function normalizeMissionKey(raw: string | null | undefined): string | null {
+  const s = String(raw ?? "").trim();
+  return s.length ? s.toUpperCase() : null;
+}
+
+type TripFinanceAdjustmentRowDb = {
+  id: string;
+  trip_id: string;
+  organization_id: string;
+  type: string;
+  impact: string;
+  amount: number | string;
+  reason: string;
+  mission_key?: string | null;
+  created_at?: string;
+};
+
+function rowFromRemote(row: TripFinanceAdjustmentRowDb): TripAdjustment {
+  return {
+    id: row.id,
+    trip_id: row.trip_id,
+    organization_id: row.organization_id,
+    type: row.type === "cost" ? "cost" : "revenue",
+    impact: row.impact === "minus" ? "minus" : "plus",
+    amount: Number(row.amount ?? 0),
+    reason: row.reason ?? "",
+    created_at: row.created_at,
+    mission_key: row.mission_key ?? null,
+  };
+}
+
+async function loadRemoteForTrip(tripId: string): Promise<TripAdjustment[]> {
   try {
-    const raw = await AsyncStorage.getItem(storageKey(tripId));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as TripAdjustment[];
-    return Array.isArray(parsed) ? parsed : [];
+    const { data, error } = await supabase()
+      .from("trip_finance_adjustments")
+      .select(
+        "id, trip_id, organization_id, type, impact, amount, reason, mission_key, created_at",
+      )
+      .eq("trip_id", tripId)
+      .order("created_at", { ascending: true });
+    if (error || !data?.length) return [];
+    return (data as TripFinanceAdjustmentRowDb[]).map(rowFromRemote);
   } catch {
     return [];
+  }
+}
+
+export async function getTripAdjustments(tripId: string): Promise<TripAdjustment[]> {
+  const remote = await loadRemoteForTrip(tripId);
+  try {
+    const raw = await AsyncStorage.getItem(storageKey(tripId));
+    const parsed = raw ? (JSON.parse(raw) as TripAdjustment[]) : [];
+    const local = Array.isArray(parsed) ? parsed : [];
+    const remoteIds = new Set(remote.map((r) => r.id));
+    const merged = [...remote];
+    for (const a of local) {
+      if (!remoteIds.has(a.id)) merged.push(a);
+    }
+    merged.sort((x, y) =>
+      String(x.created_at ?? "").localeCompare(String(y.created_at ?? "")),
+    );
+    return merged;
+  } catch {
+    return remote;
   }
 }
 
@@ -68,15 +127,47 @@ export async function setTripAdjustments(
 export async function addTripAdjustment(
   tripId: string,
   adjustment: Omit<TripAdjustment, "id" | "trip_id" | "created_at">,
+  ctx?: TripAdjustmentPersistContext,
 ): Promise<TripAdjustment> {
-  const list = await getTripAdjustments(tripId);
   const created_at = new Date().toISOString();
+
+  if (ctx?.organizationId) {
+    try {
+      const mission_key = normalizeMissionKey(ctx.missionKey);
+      const { data, error } = await supabase()
+        .from("trip_finance_adjustments")
+        .insert({
+          trip_id: tripId,
+          organization_id: ctx.organizationId,
+          type: adjustment.type,
+          impact: adjustment.impact,
+          amount: adjustment.amount,
+          reason: adjustment.reason,
+          mission_key,
+        })
+        .select(
+          "id, trip_id, organization_id, type, impact, amount, reason, mission_key, created_at",
+        )
+        .single();
+      if (!error && data) {
+        return rowFromRemote(data as TripFinanceAdjustmentRowDb);
+      }
+    } catch {
+      /* local fallback */
+    }
+  }
+
+  const raw = await AsyncStorage.getItem(storageKey(tripId));
+  const parsed = raw ? (JSON.parse(raw) as TripAdjustment[]) : [];
+  const list = Array.isArray(parsed) ? parsed : [];
   const id = `adj_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   const newRow: TripAdjustment = {
     ...adjustment,
     id,
     trip_id: tripId,
     created_at,
+    mission_key: ctx?.missionKey != null ? normalizeMissionKey(ctx.missionKey) : undefined,
+    organization_id: ctx?.organizationId,
   };
   list.push(newRow);
   await setTripAdjustments(tripId, list);
@@ -84,12 +175,24 @@ export async function addTripAdjustment(
 }
 
 export async function removeTripAdjustment(tripId: string, adjustmentId: string): Promise<void> {
-  const list = await getTripAdjustments(tripId);
-  const next = list.filter((a) => a.id !== adjustmentId);
-  await setTripAdjustments(tripId, next);
+  try {
+    await supabase().from("trip_finance_adjustments").delete().eq("id", adjustmentId);
+  } catch {
+    /* ignore */
+  }
+  try {
+    const raw = await AsyncStorage.getItem(storageKey(tripId));
+    const parsed = raw ? (JSON.parse(raw) as TripAdjustment[]) : [];
+    const local = Array.isArray(parsed) ? parsed : [];
+    await AsyncStorage.setItem(
+      storageKey(tripId),
+      JSON.stringify(local.filter((a) => a.id !== adjustmentId)),
+    );
+  } catch {
+    /* ignore */
+  }
 }
 
-/** Compute adjusted revenue: base + (revenue plus) - (revenue minus). */
 export function adjustedRevenue(baseSales: number, adjustments: TripAdjustment[]): number {
   const revenueAdj = adjustments.filter((a) => a.type === "revenue");
   const delta = revenueAdj.reduce(
@@ -99,7 +202,6 @@ export function adjustedRevenue(baseSales: number, adjustments: TripAdjustment[]
   return Math.max(0, baseSales + delta);
 }
 
-/** Compute adjusted cost: base + (cost plus) - (cost minus). */
 export function adjustedCost(baseCost: number, adjustments: TripAdjustment[]): number {
   const costAdj = adjustments.filter((a) => a.type === "cost");
   const delta = costAdj.reduce(

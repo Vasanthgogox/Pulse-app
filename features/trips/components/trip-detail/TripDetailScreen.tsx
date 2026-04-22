@@ -2653,10 +2653,23 @@ export default function TripDetailScreen({
     }) => {
       if (!trip?.id) return;
       const tripId = trip.id;
-      await addTripAdjustment(tripId, params);
+      const orgId =
+        currentOrganization?.id ?? trip.organization_id ?? null;
+      const missionRaw =
+        trip.display_trip_id != null &&
+        String(trip.display_trip_id).trim() !== ""
+          ? String(trip.display_trip_id).trim()
+          : trip.trip_number ?? null;
+      await addTripAdjustment(
+        tripId,
+        params,
+        orgId
+          ? { organizationId: orgId, missionKey: missionRaw }
+          : undefined,
+      );
       loadAdjustments();
     },
-    [trip?.id, loadAdjustments],
+    [trip, currentOrganization?.id, loadAdjustments],
   );
   const handleRemoveAdjustment = useCallback(
     async (adjustmentId: string) => {

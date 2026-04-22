@@ -5,10 +5,15 @@
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { useOrganization } from "@/contexts/OrganizationContext";
 import {
     getTripAdjustments,
     type TripAdjustment,
 } from "@/features/trips/services/tripAdjustments";
+import {
+    getPartnerTripIdsForSharedLedgerFocus,
+    getSharedTripFinanceAdjustments,
+} from "@/services/sharedLedgerService";
 import {
     isBlankOrPlaceholderPartyName,
     partyAvatarBackgroundColor,
@@ -470,6 +475,14 @@ export interface SharedLedgerCommandCenterProps {
   openReceivedDisputeCount?: number;
   /** Opens existing received-dispute review flow for a trip. */
   onReviewReceivedDispute?: (tripId: string) => void;
+  /** Logged-in org — splits adjustments into You vs They. */
+  viewerOrganizationId?: string | null;
+  /** Integrated contact id (shared-ledger partner_key). */
+  partnerContactId?: string | null;
+  /** Load cross-org adjustments via RPC when true. */
+  integratedPartner?: boolean;
+  /** Linked partner org id — used to keep partner-authored rows in this trip drill (They record). */
+  partnerOrganizationId?: string | null;
 }
 
 /** Tighter type and cards on large browser windows — closer to other Finance screens. */
@@ -593,8 +606,16 @@ export function SharedLedgerCommandCenter({
   receivedDisputeMissions = [],
   openReceivedDisputeCount = 0,
   onReviewReceivedDispute,
+  viewerOrganizationId = null,
+  partnerContactId = null,
+  integratedPartner = false,
+  partnerOrganizationId = null,
 }: SharedLedgerCommandCenterProps) {
   const insets = useSafeAreaInsets();
+  const { currentOrganization } = useOrganization();
+  /** Prefer prop; fallback so “You vs They” never treats all rows as yours when the parent omits org id. */
+  const effectiveViewerOrgId =
+    viewerOrganizationId ?? currentOrganization?.id ?? null;
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   /** Large browser window: tighter type and cards to match other finance pages. */
   const isWebDesktop = Platform.OS === "web" && windowWidth >= 1024;
@@ -679,17 +700,126 @@ export function SharedLedgerCommandCenter({
   useEffect(() => {
     let cancelled = false;
     const id = tripFocus?.tripId?.trim();
+    const mission = tripFocus?.missionId?.trim();
     if (!id) {
       setTripAdjustments([]);
       return;
     }
+
+    const norm = (s: string) => s.trim().toLowerCase();
+    const normMission = (s: string | null | undefined) =>
+      String(s ?? "")
+        .trim()
+        .replace(/\s+/g, "")
+        .toUpperCase();
+    /** Align TRP-003 vs TRP003 / minor formatting differences */
+    const missionLoose = (s: string | null | undefined) =>
+      String(s ?? "").replace(/[^0-9A-Za-z]/g, "").toUpperCase();
+    const normOrg = (o: string | null | undefined) =>
+      String(o ?? "").trim().toLowerCase();
+
+    const mergeFilter = (list: TripAdjustment[]) =>
+      list.filter((a) => {
+        if (norm(a.trip_id) === norm(id)) return true;
+        if (!mission) return false;
+        const mS = normMission(mission);
+        const mkS = normMission(a.mission_key);
+        if (mkS && mkS === mS) return true;
+        const mL = missionLoose(mission);
+        const mkL = missionLoose(a.mission_key);
+        return !!(mkL && mL && mkL === mL);
+      });
+
+    /**
+     * RPC returns partner rows on *their* trip UUIDs. Same mission, different id — keep them
+     * for this drill so They record can list integrated partner adjustments.
+     */
+    const mergeFilterRpc = (
+      list: TripAdjustment[],
+      linkedPartnerTripIds: Set<string>,
+    ) =>
+      list.filter((a) => {
+        if (mergeFilter([a]).length > 0) return true;
+        if (!integratedPartner || !effectiveViewerOrgId) return false;
+        const vid = normOrg(effectiveViewerOrgId);
+        const aid = normOrg(a.organization_id);
+        const partnerOid = normOrg(partnerOrganizationId);
+        const isPartnerAuthor =
+          !!aid &&
+          !!vid &&
+          aid !== vid &&
+          (!!partnerOid ? aid === partnerOid : true);
+        if (!isPartnerAuthor) return false;
+        /** Same indent as focused trip — partner TRP label often differs from ours. */
+        const tid = norm(String(a.trip_id ?? ""));
+        if (tid && linkedPartnerTripIds.has(tid)) return true;
+        if (!mission) return false;
+        const mL = missionLoose(mission);
+        const mkL = missionLoose(a.mission_key);
+        if (mkL && mL && mkL === mL) return true;
+        if (mkL && mL && mL.length >= 4 && mkL.length >= 4) {
+          if (mkL.includes(mL) || mL.includes(mkL)) return true;
+        }
+        return false;
+      });
+
+    const dedupeById = (lists: TripAdjustment[]) => {
+      const map = new Map<string, TripAdjustment>();
+      for (const a of lists) {
+        if (!map.has(a.id)) map.set(a.id, a);
+      }
+      return Array.from(map.values()).sort((a, b) =>
+        String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")),
+      );
+    };
+
+    const viewerOrgId = effectiveViewerOrgId;
+
+    if (integratedPartner && viewerOrgId && partnerContactId) {
+      void (async () => {
+        const linked = await getPartnerTripIdsForSharedLedgerFocus(
+          viewerOrgId,
+          partnerContactId,
+          id,
+        );
+        const linkedPartnerTripIds = new Set<string>();
+        if (!linked.error) {
+          for (const u of linked.tripIds) {
+            linkedPartnerTripIds.add(norm(u));
+          }
+        }
+        const [shared, local] = await Promise.all([
+          getSharedTripFinanceAdjustments(viewerOrgId, partnerContactId),
+          getTripAdjustments(id),
+        ]);
+        if (cancelled) return;
+        const fromRpc = shared.error ? [] : (shared.adjustments ?? []);
+        const merged = dedupeById([
+          ...mergeFilterRpc(fromRpc, linkedPartnerTripIds),
+          ...mergeFilter(Array.isArray(local) ? local : []),
+        ]);
+        setTripAdjustments(merged);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
     void getTripAdjustments(id).then((list) => {
-      if (!cancelled) setTripAdjustments(Array.isArray(list) ? list : []);
+      if (cancelled) return;
+      setTripAdjustments(mergeFilter(Array.isArray(list) ? list : []));
     });
     return () => {
       cancelled = true;
     };
-  }, [tripFocus?.tripId]);
+  }, [
+    tripFocus?.tripId,
+    tripFocus?.missionId,
+    integratedPartner,
+    effectiveViewerOrgId,
+    partnerContactId,
+    partnerOrganizationId,
+  ]);
 
   const activeCounts = viewMode === "trip" ? tripCounts : txnCounts;
 
@@ -2325,6 +2455,41 @@ export function SharedLedgerCommandCenter({
     const hasTaggedLedgerLines = tripTxns.some((x) => !!x.lineKind);
     const showAdjustmentsCallout =
       tripAdjustments.length > 0 || hasTaggedLedgerLines;
+    const sortAdj = (a: TripAdjustment, b: TripAdjustment) =>
+      String(a.created_at ?? "").localeCompare(String(b.created_at ?? ""));
+    const normOrgId = (o: string | null | undefined) =>
+      String(o ?? "").trim().toLowerCase();
+    const viewerOid = normOrgId(effectiveViewerOrgId);
+    /**
+     * Integrated books: never treat missing organization_id as “mine” (that hid partner rows
+     * under You when AsyncStorage merged with RPC). Non‑integrated: legacy local rows without org.
+     */
+    const myAdjustments = tripAdjustments.filter((a) => {
+      const aid = normOrgId(a.organization_id);
+      if (!viewerOid) {
+        if (integratedPartner) return false;
+        return true;
+      }
+      if (!aid) {
+        return !integratedPartner;
+      }
+      return aid === viewerOid;
+    });
+    const partnerAdjustments = tripAdjustments.filter((a) => {
+      const aid = normOrgId(a.organization_id);
+      if (!viewerOid || !aid) return false;
+      return aid !== viewerOid;
+    });
+    const myRev = myAdjustments
+      .filter((a) => a.type === "revenue")
+      .sort(sortAdj);
+    const partnerRev = partnerAdjustments
+      .filter((a) => a.type === "revenue")
+      .sort(sortAdj);
+    const myCost = myAdjustments.filter((a) => a.type === "cost").sort(sortAdj);
+    const partnerCost = partnerAdjustments
+      .filter((a) => a.type === "cost")
+      .sort(sortAdj);
     return (
       <View style={[styles.subScreen, detailShellLayoutStyle]}>
         <View style={[styles.subHeader, { paddingTop: 8 + insets.top }]}>
@@ -2412,12 +2577,48 @@ export function SharedLedgerCommandCenter({
                   <Text style={styles.tripDashBig}>
                     {r.internal ? formatINR(r.intSales) : "—"}
                   </Text>
+                  {myRev.length > 0 ? (
+                    <View style={styles.tripDashYouAdjList}>
+                      {myRev.map((a) => (
+                        <View key={a.id} style={styles.tripDashYouAdjRow}>
+                          <Text
+                            style={styles.tripDashYouAdjReason}
+                            numberOfLines={3}
+                          >
+                            {a.reason}
+                          </Text>
+                          <Text style={styles.tripDashYouAdjAmt}>
+                            {a.impact === "plus" ? "+" : "−"}
+                            {formatINR(a.amount)}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
                 </View>
                 <View style={styles.tripDashColRight}>
                   <Text style={styles.tripDashMicroPartner}>They record</Text>
                   <Text style={styles.tripDashBigPartner}>
                     {r.external ? formatINR(r.extSales) : "—"}
                   </Text>
+                  {partnerRev.length > 0 ? (
+                    <View style={styles.tripDashTheyAdjList}>
+                      {partnerRev.map((a) => (
+                        <View key={a.id} style={styles.tripDashTheyAdjRow}>
+                          <Text
+                            style={styles.tripDashTheyAdjReason}
+                            numberOfLines={3}
+                          >
+                            {a.reason}
+                          </Text>
+                          <Text style={styles.tripDashTheyAdjAmt}>
+                            {a.impact === "plus" ? "+" : "−"}
+                            {formatINR(a.amount)}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
                   {r.external != null &&
                   netDelta != null &&
                   Math.abs(netDelta) >= 0.5 ? (
@@ -2438,12 +2639,48 @@ export function SharedLedgerCommandCenter({
                 <View style={{ flex: 1 }}>
                   <Text style={styles.tripDashMicro}>You record</Text>
                   <Text style={styles.tripDashBig}>{formatINR(intPaidR)}</Text>
+                  {myCost.length > 0 ? (
+                    <View style={styles.tripDashYouAdjList}>
+                      {myCost.map((a) => (
+                        <View key={a.id} style={styles.tripDashYouAdjRow}>
+                          <Text
+                            style={styles.tripDashYouAdjReason}
+                            numberOfLines={3}
+                          >
+                            {a.reason}
+                          </Text>
+                          <Text style={styles.tripDashYouAdjAmt}>
+                            {a.impact === "plus" ? "+" : "−"}
+                            {formatINR(a.amount)}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
                 </View>
                 <View style={styles.tripDashColRight}>
                   <Text style={styles.tripDashMicroPartner}>They record</Text>
                   <Text style={styles.tripDashBigPartner}>
                     {r.external ? formatINR(r.extPaid) : "—"}
                   </Text>
+                  {partnerCost.length > 0 ? (
+                    <View style={styles.tripDashTheyAdjList}>
+                      {partnerCost.map((a) => (
+                        <View key={a.id} style={styles.tripDashTheyAdjRow}>
+                          <Text
+                            style={styles.tripDashTheyAdjReason}
+                            numberOfLines={3}
+                          >
+                            {a.reason}
+                          </Text>
+                          <Text style={styles.tripDashTheyAdjAmt}>
+                            {a.impact === "plus" ? "+" : "−"}
+                            {formatINR(a.amount)}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
                   {r.external != null &&
                   netPaidDelta != null &&
                   Math.abs(netPaidDelta) >= 0.5 ? (
@@ -2471,31 +2708,9 @@ export function SharedLedgerCommandCenter({
                 </Text>
                 <Text style={styles.tripDashAdjustSub}>
                   {tripAdjustments.length > 0
-                    ? "Trip adjustment registry entries below change how sale/cost compares to individual payment lines."
+                    ? "Your adjustments appear under You record; your partner’s under They record. Tagged payment lines below may further explain totals."
                     : "Some lines in the table are tagged as add-ons, deductions, or adjustments — totals may not match a single payment."}
                 </Text>
-                {tripAdjustments.length > 0 ? (
-                  <View style={styles.tripDashAdjustList}>
-                    {tripAdjustments.map((a) => (
-                      <View key={a.id} style={styles.tripDashAdjustRow}>
-                        <Text
-                          style={styles.tripDashAdjustReason}
-                          numberOfLines={2}
-                        >
-                          {a.reason}
-                        </Text>
-                        <Text
-                          style={styles.tripDashAdjustAmt}
-                          numberOfLines={1}
-                        >
-                          {a.type === "revenue" ? "Sale" : "Cost"} ·{" "}
-                          {a.impact === "plus" ? "+" : "−"}
-                          {formatINR(a.amount)}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
               </View>
             </View>
           ) : null}
@@ -4709,6 +4924,72 @@ const styles = StyleSheet.create({
     color: "rgba(248,250,252,0.92)",
     fontStyle: "italic",
     textAlign: "right",
+  },
+  tripDashYouAdjList: {
+    marginTop: 10,
+    gap: 6,
+    width: "100%",
+    maxWidth: "100%",
+  },
+  tripDashTheyAdjList: {
+    marginTop: 10,
+    gap: 6,
+    width: "100%",
+    maxWidth: "100%",
+    alignSelf: "stretch",
+  },
+  tripDashYouAdjRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: "rgba(15,23,42,0.65)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(148,163,184,0.25)",
+  },
+  tripDashTheyAdjRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "flex-end",
+    gap: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: "rgba(15,23,42,0.65)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(148,163,184,0.25)",
+  },
+  tripDashYouAdjReason: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 10,
+    fontWeight: "600",
+    color: "rgba(226,232,240,0.95)",
+    lineHeight: 14,
+  },
+  tripDashTheyAdjReason: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 10,
+    fontWeight: "600",
+    color: "rgba(226,232,240,0.95)",
+    lineHeight: 14,
+    textAlign: "right",
+  },
+  tripDashYouAdjAmt: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#e2e8f0",
+    flexShrink: 0,
+  },
+  tripDashTheyAdjAmt: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#e2e8f0",
+    flexShrink: 0,
   },
   tripDashTableCard: {
     borderRadius: 28,

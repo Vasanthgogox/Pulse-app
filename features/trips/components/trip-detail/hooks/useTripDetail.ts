@@ -961,10 +961,23 @@ export function useTripDetail({
       reason: string;
     }) => {
       if (!trip?.id) return;
-      await addTripAdjustment(trip.id, params);
+      const orgId =
+        currentOrganization?.id ?? trip.organization_id ?? null;
+      const missionRaw =
+        trip.display_trip_id != null &&
+        String(trip.display_trip_id).trim() !== ""
+          ? String(trip.display_trip_id).trim()
+          : trip.trip_number ?? null;
+      await addTripAdjustment(
+        trip.id,
+        params,
+        orgId
+          ? { organizationId: orgId, missionKey: missionRaw }
+          : undefined,
+      );
       await loadAdjustments();
     },
-    [trip?.id, loadAdjustments],
+    [trip, currentOrganization?.id, loadAdjustments],
   );
 
   const handleRemoveAdjustment = useCallback(

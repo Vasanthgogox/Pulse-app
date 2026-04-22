@@ -2097,6 +2097,12 @@ export function SharedLedgerContent({
             openReceivedDisputeCount={openReceivedDisputesForView.length}
             onReviewReceivedDispute={reviewReceivedDisputeForTrip}
             onPressDownload={embeddedInOverlay ? undefined : openSharedReport}
+            viewerOrganizationId={organizationId ?? null}
+            partnerContactId={entity.id ?? null}
+            integratedPartner={!!integrated}
+            partnerOrganizationId={
+              partnerOrgId ?? entity.linked_organization_id ?? null
+            }
           />
             </>
           )}
