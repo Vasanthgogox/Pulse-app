@@ -14,6 +14,7 @@ import {
   Alert,
   ScrollView,
   UIManager,
+  useWindowDimensions,
 } from 'react-native';
 
 // Layout animation: no-op in New Architecture; only enable on Android when using old arch to avoid warning.
@@ -81,6 +82,8 @@ export default function SignUp() {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const fieldYRef = useRef({ fullName: 0, company: 0, phone: 0, email: 0, password: 0, confirmPassword: 0 });
+  const { width } = useWindowDimensions();
+  const isDesktopLayout = width >= 1024;
 
   /** Extra scroll offset so focused field stays above keyboard. Use larger offset on iOS when focusing password so the field stays above the "Strong Password" / autofill bar. */
   const SCROLL_OFFSET_DEFAULT = 100;
@@ -333,240 +336,265 @@ export default function SignUp() {
     },
   ];
 
+  const form = (
+    <View style={[styles.formCard, isDesktopLayout && styles.formCardDesktop]}>
+      <Text style={[styles.title, isDesktopLayout && styles.titleDesktop]}>Create Account</Text>
+      <Text style={[styles.subtitle, isDesktopLayout && styles.subtitleDesktop]}>Enter your details to get started.</Text>
+
+      {errorMsg ? (
+        <View style={styles.errorAlert}>
+          <FontAwesome name="exclamation-circle" size={18} color={Theme.negative} style={styles.errorIcon} />
+          <Text style={styles.errorText}>{errorMsg}</Text>
+        </View>
+      ) : null}
+
+      <View
+        style={styles.inputWrap}
+        onLayout={(e) => { fieldYRef.current.fullName = e.nativeEvent.layout.y; }}
+      >
+        <TextInput
+          style={[styles.input, isDesktopLayout && styles.inputDesktop, styles.inputNoMargin]}
+          placeholder="Full Name"
+          placeholderTextColor={Theme.textMuted}
+          value={fullName}
+          onChangeText={setFullName}
+          onFocus={() => scrollToField('fullName')}
+          autoCapitalize="words"
+          autoCorrect={false}
+          spellCheck={false}
+          autoComplete="name"
+          editable={!loading}
+        />
+      </View>
+
+      <View
+        style={styles.inputWrap}
+        onLayout={(e) => { fieldYRef.current.company = e.nativeEvent.layout.y; }}
+      >
+        <TextInput
+          style={[styles.input, isDesktopLayout && styles.inputDesktop, styles.inputNoMargin]}
+          placeholder="Company Name"
+          placeholderTextColor={Theme.textMuted}
+          value={companyName}
+          onChangeText={setCompanyName}
+          onFocus={() => scrollToField('company')}
+          autoCapitalize="words"
+          autoCorrect={false}
+          spellCheck={false}
+          autoComplete="organization"
+          editable={!loading}
+        />
+      </View>
+      {companyName.trim().length > 0 ? (
+        companyNameTakenCheck?.loading ? (
+          <Text style={styles.phoneExistsHint}>Checking company name...</Text>
+        ) : companyNameTakenCheck?.taken ? (
+          <Text style={[styles.phoneExistsText, styles.companyTakenHint]}>
+            Company name already exists.
+          </Text>
+        ) : null
+      ) : null}
+
+      <View
+        style={styles.inputWrap}
+        onLayout={(e) => { fieldYRef.current.phone = e.nativeEvent.layout.y; }}
+      >
+        <TextInput
+          style={[styles.input, isDesktopLayout && styles.inputDesktop, styles.inputNoMargin]}
+          placeholder="10-digit Phone"
+          placeholderTextColor={Theme.textMuted}
+          value={phone}
+          onChangeText={(text) => setPhone(formatMobileNumber(text))}
+          maxLength={10}
+          onFocus={() => scrollToField('phone')}
+          keyboardType="phone-pad"
+          autoCorrect={false}
+          spellCheck={false}
+          autoComplete="tel"
+          editable={!loading}
+        />
+      </View>
+      {phoneExistsCheck?.loading ? (
+        <Text style={styles.phoneExistsHint}>Checking...</Text>
+      ) : phoneExistsCheck?.exists ? (
+        <View style={styles.phoneExistsRow}>
+          <Text style={styles.phoneExistsText}>This number is already registered.</Text>
+        </View>
+      ) : null}
+
+      <Text style={[styles.label, isDesktopLayout && styles.labelDesktop]}>Business model</Text>
+      <View style={styles.modelRow}>
+        {OPERATING_MODELS.map(({ value, label }) => {
+          const isActive = operatingModel === value;
+          return (
+            <TouchableOpacity
+              key={value}
+              style={[styles.modelChip, isActive && styles.modelChipActive]}
+              onPress={() => setOperatingModel(value)}
+              disabled={loading}
+            >
+              <Text style={[styles.modelChipText, isDesktopLayout && styles.modelChipTextDesktop, isActive && styles.modelChipTextActive]}>
+                {label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <View
+        style={styles.inputWrap}
+        onLayout={(e) => { fieldYRef.current.email = e.nativeEvent.layout.y; }}
+      >
+        <TextInput
+          style={[styles.input, isDesktopLayout && styles.inputDesktop, styles.inputNoMargin]}
+          placeholder="Email Address"
+          placeholderTextColor={Theme.textMuted}
+          value={email}
+          onChangeText={setEmail}
+          onFocus={() => scrollToField('email')}
+          autoCapitalize="none"
+          autoCorrect={false}
+          spellCheck={false}
+          keyboardType="email-address"
+          autoComplete="email"
+          editable={!loading}
+        />
+      </View>
+
+      <View
+        style={[styles.passwordRow, styles.inputWrap]}
+        onLayout={(e) => { fieldYRef.current.password = e.nativeEvent.layout.y; }}
+      >
+        <TextInput
+          style={[styles.inputPassword, isDesktopLayout && styles.inputPasswordDesktop]}
+          placeholder="Password"
+          placeholderTextColor={Theme.textMuted}
+          value={password}
+          onChangeText={setPassword}
+          onFocus={() => scrollToField('password')}
+          secureTextEntry={!showPassword}
+          autoCorrect={false}
+          spellCheck={false}
+          autoComplete="new-password"
+          textContentType="newPassword"
+          editable={!loading}
+        />
+        <TouchableOpacity
+          style={styles.eyeButton}
+          onPress={() => setShowPassword((p) => !p)}
+          disabled={loading}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <FontAwesome name={showPassword ? 'eye-slash' : 'eye'} size={18} color={isDesktopLayout ? 'rgba(148,163,184,0.8)' : Theme.textMuted} />
+        </TouchableOpacity>
+      </View>
+
+      <View
+        style={[styles.passwordRow, styles.inputWrap]}
+        onLayout={(e) => { fieldYRef.current.confirmPassword = e.nativeEvent.layout.y; }}
+      >
+        <TextInput
+          style={[styles.inputPassword, isDesktopLayout && styles.inputPasswordDesktop]}
+          placeholder="Confirm Password"
+          placeholderTextColor={Theme.textMuted}
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          onFocus={() => scrollToField('confirmPassword')}
+          secureTextEntry={!showPassword}
+          autoCorrect={false}
+          spellCheck={false}
+          autoComplete="new-password"
+          textContentType="newPassword"
+          editable={!loading}
+        />
+        <TouchableOpacity
+          style={styles.eyeButton}
+          onPress={() => setShowPassword((p) => !p)}
+          disabled={loading}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <FontAwesome name={showPassword ? 'eye-slash' : 'eye'} size={18} color={isDesktopLayout ? 'rgba(148,163,184,0.8)' : Theme.textMuted} />
+        </TouchableOpacity>
+      </View>
+
+      <TouchableOpacity
+        style={[styles.button, (loading || !isOnline) && styles.buttonDisabled]}
+        onPress={handleSignUp}
+        disabled={loading || !isOnline}
+      >
+        {loading ? (
+          <ActivityIndicator color={Theme.textOnPrimary} />
+        ) : (
+          <Text style={styles.buttonText}>Create Account</Text>
+        )}
+      </TouchableOpacity>
+
+      <View style={styles.footer}>
+        <Text style={styles.footerMuted}>Already have an account? </Text>
+        <Link href="/sign-in" asChild>
+          <TouchableOpacity disabled={loading} activeOpacity={0.8}>
+            <Text style={styles.footerLink}>Sign In</Text>
+          </TouchableOpacity>
+        </Link>
+      </View>
+      <View style={styles.footer}>
+        <Text style={styles.footerMuted}>Driver? </Text>
+        <Link href="/driver-signup" asChild>
+          <TouchableOpacity disabled={loading} activeOpacity={0.8}>
+            <Text style={styles.footerLink}>Sign up as driver</Text>
+          </TouchableOpacity>
+        </Link>
+      </View>
+    </View>
+  );
+
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+      style={[
+        styles.container,
+        isDesktopLayout && styles.containerDesktop,
+        { paddingTop: insets.top, paddingBottom: insets.bottom },
+      ]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
     >
-      {!isOnline && (
-        <View style={[styles.offlineBanner, { paddingTop: insets.top + 12 }]}>
+      {!isOnline ? (
+        <View style={[styles.offlineBanner, { paddingTop: insets.top + 10 }]}>
           <Text style={styles.offlineText}>No internet connection. Connect to create an account.</Text>
         </View>
-      )}
-      <ScrollView
-        ref={scrollRef}
-        contentContainerStyle={scrollContentStyle}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        showsVerticalScrollIndicator={keyboardVisible}
-      >
-        <View style={styles.inner}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Enter your details to get started.</Text>
+      ) : null}
+      {isDesktopLayout ? (
+        <View style={styles.desktopShell}>
+          <View style={styles.desktopBrandPane}>
+            <Text style={styles.brandLogo}>PULSE.</Text>
+            <Text style={styles.brandTag}>Business Hub Onboarding</Text>
+            <Text style={styles.brandTitle}>Build your workspace.</Text>
+            <Text style={styles.brandDescription}>
+              Organize your fleet and logistics manifest with Pulse intelligence.
+            </Text>
           </View>
-
-          {errorMsg ? (
-            <View style={styles.errorAlert}>
-              <FontAwesome name="exclamation-circle" size={20} color={Theme.authPrimary} style={styles.errorIcon} />
-              <Text style={styles.errorText}>{errorMsg}</Text>
-            </View>
-          ) : null}
-
-          <View
-            style={styles.inputWrap}
-            onLayout={(e) => { fieldYRef.current.fullName = e.nativeEvent.layout.y; }}
-          >
-            <TextInput
-              style={[styles.input, styles.inputNoMargin]}
-              placeholder="Full Name"
-              placeholderTextColor={Theme.authTextMuted}
-              value={fullName}
-              onChangeText={setFullName}
-              onFocus={() => scrollToField('fullName')}
-              autoCapitalize="words"
-              autoCorrect={false}
-              spellCheck={false}
-              autoComplete="name"
-              editable={!loading}
-            />
-          </View>
-          <View
-            style={styles.inputWrap}
-            onLayout={(e) => { fieldYRef.current.company = e.nativeEvent.layout.y; }}
-          >
-            <TextInput
-              style={[styles.input, styles.inputNoMargin]}
-              placeholder="Company Name"
-              placeholderTextColor={Theme.authTextMuted}
-              value={companyName}
-              onChangeText={setCompanyName}
-              onFocus={() => scrollToField('company')}
-              autoCapitalize="words"
-              autoCorrect={false}
-              spellCheck={false}
-              autoComplete="organization"
-              editable={!loading}
-            />
-          </View>
-          {companyName.trim().length > 0 ? (
-            companyNameTakenCheck?.loading ? (
-              <Text style={styles.phoneExistsHint}>Checking company name…</Text>
-            ) : companyNameTakenCheck?.taken ? (
-              <Text style={[styles.phoneExistsText, styles.companyTakenHint]}>
-                Company name already exists.
-              </Text>
-            ) : null
-          ) : null}
-          <View
-            style={styles.inputWrap}
-            onLayout={(e) => { fieldYRef.current.phone = e.nativeEvent.layout.y; }}
-          >
-            <TextInput
-              style={[styles.input, styles.inputNoMargin]}
-              placeholder="10-digit Phone"
-              placeholderTextColor={Theme.authTextMuted}
-              value={phone}
-              onChangeText={(text) => setPhone(formatMobileNumber(text))}
-              maxLength={10}
-              onFocus={() => scrollToField('phone')}
-              keyboardType="phone-pad"
-              autoCorrect={false}
-              spellCheck={false}
-              autoComplete="tel"
-              editable={!loading}
-            />
-          </View>
-          {phoneExistsCheck?.loading ? (
-            <Text style={styles.phoneExistsHint}>Checking…</Text>
-          ) : phoneExistsCheck?.exists ? (
-            <View style={styles.phoneExistsRow}>
-              <Text style={styles.phoneExistsText}>This number is already registered.</Text>
-            </View>
-          ) : null}
-
-          <Text style={styles.label}>Business Model</Text>
-          <View style={styles.modelRow}>
-            {OPERATING_MODELS.map(({ value, label }) => {
-              const isActive = operatingModel === value;
-              return (
-                <TouchableOpacity
-                  key={value}
-                  style={[styles.modelChip, isActive && styles.modelChipActive]}
-                  onPress={() => setOperatingModel(value)}
-                  disabled={loading}
-                >
-                  <Text style={[styles.modelChipText, isActive && styles.modelChipTextActive]}>
-                    {label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          <View
-            style={styles.inputWrap}
-            onLayout={(e) => { fieldYRef.current.email = e.nativeEvent.layout.y; }}
-          >
-            <TextInput
-              style={[styles.input, styles.inputNoMargin]}
-              placeholder="Email Address"
-              placeholderTextColor={Theme.authTextMuted}
-              value={email}
-              onChangeText={setEmail}
-              onFocus={() => scrollToField('email')}
-              autoCapitalize="none"
-              autoCorrect={false}
-              spellCheck={false}
-              keyboardType="email-address"
-              autoComplete="email"
-              editable={!loading}
-            />
-          </View>
-          <View
-            style={[styles.passwordRow, styles.inputWrap]}
-            onLayout={(e) => { fieldYRef.current.password = e.nativeEvent.layout.y; }}
-          >
-            <TextInput
-              style={styles.inputPassword}
-              placeholder="Password"
-              placeholderTextColor={Theme.authTextMuted}
-              value={password}
-              onChangeText={setPassword}
-              onFocus={() => scrollToField('password')}
-              secureTextEntry={!showPassword}
-              autoCorrect={false}
-              spellCheck={false}
-              autoComplete="new-password"
-              textContentType="newPassword"
-              editable={!loading}
-            />
-            <TouchableOpacity
-              style={styles.eyeButton}
-              onPress={() => setShowPassword((p) => !p)}
-              disabled={loading}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          <View style={styles.desktopFormPane}>
+            <ScrollView
+              ref={scrollRef}
+              contentContainerStyle={styles.desktopScroll}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
             >
-              <FontAwesome
-                name={showPassword ? 'eye-slash' : 'eye'}
-                size={20}
-                color={Theme.authTextMuted}
-              />
-            </TouchableOpacity>
-          </View>
-          <View
-            style={[styles.passwordRow, styles.inputWrap]}
-            onLayout={(e) => { fieldYRef.current.confirmPassword = e.nativeEvent.layout.y; }}
-          >
-            <TextInput
-              style={styles.inputPassword}
-              placeholder="Confirm Password"
-              placeholderTextColor={Theme.authTextMuted}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              onFocus={() => scrollToField('confirmPassword')}
-              secureTextEntry={!showPassword}
-              autoCorrect={false}
-              spellCheck={false}
-              autoComplete="new-password"
-              textContentType="newPassword"
-              editable={!loading}
-            />
-            <TouchableOpacity
-              style={styles.eyeButton}
-              onPress={() => setShowPassword((p) => !p)}
-              disabled={loading}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            >
-              <FontAwesome
-                name={showPassword ? 'eye-slash' : 'eye'}
-                size={20}
-                color={Theme.authTextMuted}
-              />
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity
-            style={[styles.button, (loading || !isOnline) && styles.buttonDisabled]}
-            onPress={handleSignUp}
-            disabled={loading || !isOnline}
-          >
-            {loading ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text style={styles.buttonText}>Create Account</Text>
-            )}
-          </TouchableOpacity>
-
-          <View style={styles.footer}>
-            <Text style={styles.footerMuted}>Already have an account? </Text>
-            <Link href="/sign-in" asChild>
-              <TouchableOpacity disabled={loading} activeOpacity={0.8}>
-                <Text style={styles.footerLink}>Sign In</Text>
-              </TouchableOpacity>
-            </Link>
-          </View>
-          <View style={styles.footer}>
-            <Text style={styles.footerMuted}>Driver? </Text>
-            <Link href="/driver-signup" asChild>
-              <TouchableOpacity disabled={loading} activeOpacity={0.8}>
-                <Text style={styles.footerLink}>Sign up as driver</Text>
-              </TouchableOpacity>
-            </Link>
+              {form}
+            </ScrollView>
           </View>
         </View>
-      </ScrollView>
+      ) : (
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={scrollContentStyle}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={keyboardVisible}
+        >
+          <View style={styles.mobileWrap}>{form}</View>
+        </ScrollView>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -574,16 +602,87 @@ export default function SignUp() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Theme.screenBackground,
-    padding: Layout.screenPaddingHorizontal + 8,
+    backgroundColor: '#020617',
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+  },
+  containerDesktop: {
+    paddingHorizontal: 0,
   },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    alignItems: 'center',
     paddingTop: 24,
     paddingBottom: 24,
+  },
+  mobileWrap: {
     width: '100%',
+    alignItems: 'center',
+  },
+  desktopShell: {
+    flex: 1,
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 0,
+    overflow: 'hidden',
+    marginVertical: 0,
+    backgroundColor: '#020617',
+  },
+  desktopBrandPane: {
+    flex: 1,
+    backgroundColor: '#000000',
+    paddingHorizontal: 52,
+    paddingVertical: 48,
+    justifyContent: 'center',
+  },
+  desktopFormPane: {
+    flex: 1,
+    backgroundColor: '#0f172a',
+  },
+  desktopScroll: {
+    paddingHorizontal: 40,
+    paddingVertical: 36,
+  },
+  brandLogo: {
+    fontSize: 44,
+    fontWeight: '900',
+    color: Theme.textOnDark,
+    marginBottom: 14,
+  },
+  brandTag: {
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    fontWeight: '700',
+    color: 'rgba(148,163,184,0.75)',
+    marginBottom: 18,
+  },
+  brandTitle: {
+    fontSize: 40,
+    fontWeight: '900',
+    color: Theme.textOnDark,
+    letterSpacing: -0.8,
+    marginBottom: 12,
+  },
+  brandDescription: {
+    fontSize: 15,
+    lineHeight: 24,
+    color: 'rgba(148,163,184,0.75)',
+    maxWidth: 420,
+  },
+  formCard: {
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    borderRadius: 24,
+    padding: 22,
+  },
+  formCardDesktop: {
+    backgroundColor: '#020617',
+    borderColor: 'rgba(255,255,255,0.12)',
   },
   offlineBanner: {
     position: 'absolute',
@@ -603,32 +702,39 @@ const styles = StyleSheet.create({
   },
   inner: {
     width: '100%',
-    maxWidth: 420,
-  },
-  header: {
-    marginBottom: 32,
   },
   title: {
-    fontSize: 34,
-    fontWeight: '800',
+    fontSize: 36,
+    fontWeight: '900',
     color: Theme.textPrimaryDark,
-    marginBottom: 8,
-    letterSpacing: -0.5,
+    marginBottom: 6,
+    letterSpacing: -0.8,
+  },
+  titleDesktop: {
+    color: Theme.textOnDark,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: Theme.textMuted,
-    letterSpacing: 0.5,
+    marginBottom: 14,
+  },
+  subtitleDesktop: {
+    color: 'rgba(148,163,184,0.9)',
+  },
+  inputDesktop: {
+    backgroundColor: '#020617',
+    borderColor: 'rgba(255,255,255,0.14)',
+    color: Theme.textOnDark,
   },
   errorAlert: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.negativeMuted,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.authPrimary + '80',
-    padding: 16,
-    marginBottom: 24,
+    borderColor: Theme.negative,
+    padding: 12,
+    marginBottom: 14,
   },
   errorIcon: {
     marginRight: 12,
@@ -636,39 +742,45 @@ const styles = StyleSheet.create({
   },
   errorText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
-    color: Theme.authPrimary,
+    color: Theme.negative,
   },
   label: {
     fontSize: 12,
     fontWeight: '700',
     color: Theme.textMuted,
-    marginBottom: 12,
+    marginBottom: 8,
     letterSpacing: 1,
+  },
+  labelDesktop: {
+    color: 'rgba(148,163,184,0.9)',
   },
   modelRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 24,
+    gap: 10,
+    marginBottom: 14,
   },
   modelChip: {
     flex: 1,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: Theme.border,
     backgroundColor: Theme.surface,
     alignItems: 'center',
   },
   modelChipActive: {
-    backgroundColor: Theme.authPrimary,
-    borderColor: Theme.authPrimary,
+    backgroundColor: Theme.driverPrimary,
+    borderColor: Theme.driverPrimary,
   },
   modelChipText: {
     fontSize: 14,
     fontWeight: '600',
     color: Theme.textMuted,
+  },
+  modelChipTextDesktop: {
+    color: 'rgba(148,163,184,0.85)',
   },
   modelChipTextActive: {
     color: '#ffffff',
@@ -684,20 +796,20 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   inputWrap: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   inputNoMargin: {
     marginBottom: 0,
   },
   companyTakenHint: {
-    marginTop: -8,
-    marginBottom: 12,
+    marginTop: -4,
+    marginBottom: 8,
   },
   phoneExistsHint: {
     fontSize: 13,
     color: Theme.textMuted,
-    marginTop: -8,
-    marginBottom: 12,
+    marginTop: -4,
+    marginBottom: 8,
   },
   phoneExistsRow: {
     flexDirection: 'row',
@@ -708,7 +820,7 @@ const styles = StyleSheet.create({
   },
   phoneExistsText: {
     fontSize: 13,
-    color: Theme.authPrimary,
+    color: Theme.driverEmerald,
   },
   phoneExistsLink: {
     fontSize: 13,
@@ -718,17 +830,23 @@ const styles = StyleSheet.create({
   },
   passwordRow: {
     position: 'relative',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   inputPassword: {
     backgroundColor: Theme.surface,
-    borderRadius: 12,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: Theme.border,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
     paddingRight: 48,
     fontSize: 16,
     color: Theme.textPrimaryDark,
+  },
+  inputPasswordDesktop: {
+    backgroundColor: '#020617',
+    borderColor: 'rgba(255,255,255,0.14)',
+    color: Theme.textOnDark,
   },
   eyeButton: {
     position: 'absolute',
@@ -738,12 +856,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   button: {
-    backgroundColor: Theme.authPrimary,
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: Theme.driverPrimary,
+    borderRadius: 999,
+    paddingVertical: 16,
     alignItems: 'center',
     marginTop: 8,
-    shadowColor: Theme.authPrimary,
+    shadowColor: Theme.driverPrimary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 14,
@@ -753,27 +871,27 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   buttonText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    color: Theme.textOnPrimary,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
   footer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 24,
-    paddingTop: 16,
+    marginTop: 14,
   },
   footerMuted: {
-    fontSize: 14,
+    fontSize: 13,
     color: Theme.textMuted,
     fontWeight: '500',
   },
   footerLink: {
-    fontSize: 14,
-    color: Theme.textPrimaryDark,
+    fontSize: 13,
+    color: Theme.driverEmerald,
     fontWeight: '700',
   },
 });

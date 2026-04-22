@@ -5,18 +5,18 @@
  */
 import { DriverTabBar } from '@/components/driver/DriverTabBar';
 import Theme from '@/constants/Theme';
+import { useAuth } from '@/contexts/AuthContext';
 import { DriverAvatarProvider } from '@/contexts/DriverAvatarContext';
 import { DriverThemeProvider } from '@/contexts/DriverThemeContext';
+import { ROUTES } from '@/lib/routes';
 import {
-  useFonts as usePlusJakartaFonts,
   PlusJakartaSans_400Regular,
   PlusJakartaSans_500Medium,
   PlusJakartaSans_600SemiBold,
   PlusJakartaSans_700Bold,
   PlusJakartaSans_800ExtraBold,
+  useFonts as usePlusJakartaFonts,
 } from '@expo-google-fonts/plus-jakarta-sans';
-import { useAuth } from '@/contexts/AuthContext';
-import { ROUTES } from '@/lib/routes';
 import { Tabs, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
@@ -40,10 +40,11 @@ function DriverTabsNavigator() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Dashboard' }} />
-      {/* Keep route for internal dashboard flow, but hide from tab bar */}
       <Tabs.Screen name="control" options={{ title: 'Trip', href: null }} />
       <Tabs.Screen name="trip-history" options={{ title: 'History' }} />
       <Tabs.Screen name="wallet" options={{ title: 'Transactions' }} />
+
+      {/* Hidden routes */}
       <Tabs.Screen name="notifications" options={{ title: 'Notifications', href: null }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile', href: null }} />
       <Tabs.Screen name="level-progression" options={{ title: 'Level progression', href: null }} />
@@ -56,6 +57,7 @@ function DriverTabsNavigator() {
 }
 
 export default function DriverAppLayout() {
+  // ✅ Keep fonts from HEAD
   const [fontsLoaded] = usePlusJakartaFonts({
     PlusJakartaSans_400Regular,
     PlusJakartaSans_500Medium,
@@ -64,25 +66,42 @@ export default function DriverAppLayout() {
     PlusJakartaSans_800ExtraBold,
   });
 
-  const { user, profile, loading } = useAuth();
+  // ✅ Keep roleVerified from deepak/main
+  const { user, profile, roleVerified, loading } = useAuth();
+
   const router = useRouter();
+
+  const logDriverGate = (event: string, details: Record<string, unknown>) => {
+    if (!__DEV__) return;
+    console.info('[RouteGuard:driver]', event, details);
+  };
 
   useEffect(() => {
     if (loading) return;
+
     if (!user) {
+      logDriverGate('redirect_sign_in_missing_user', {});
       router.replace('/sign-in');
       return;
     }
-    if (profile && profile.role !== 'driver') {
+
+    if (profile && (!roleVerified || profile.role !== 'driver')) {
+      logDriverGate('redirect_tabs_non_driver_or_unverified', {
+        uid: user.uid,
+        role: profile.role,
+        roleVerified,
+      });
       router.replace(ROUTES.TABS.TRIPS as '/');
     }
-  }, [loading, user, profile, router]);
+  }, [loading, user, profile, roleVerified, router]);
 
+  // ✅ Gate includes fonts + auth checks
   const gate =
     !fontsLoaded ||
     loading ||
     !user ||
     !profile ||
+    !roleVerified ||
     profile.role !== 'driver';
 
   if (gate) {

@@ -10,7 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function Index() {
   const insets = useSafeAreaInsets();
-  const { user, profile, loading } = useAuth();
+  const { user, profile, roleVerified, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   // React Navigation mounts this screen in the background when deep-linking to
@@ -19,11 +19,17 @@ export default function Index() {
   // the intended deep-link destination.
   const isFocused = useIsFocused();
 
+  const logRouteDecision = (event: string, details: Record<string, unknown>) => {
+    if (!__DEV__) return;
+    console.info('[RouteGuard:index]', event, details);
+  };
+
   useEffect(() => {
     if (!isFocused) return;
     if (loading) return;
     if (!user) {
-      router.replace('/sign-in');
+      logRouteDecision('redirect_sign_in', { pathname });
+      router.replace(Platform.OS === 'web' ? '/terminal-website' : '/sign-in');
       return;
     }
     if (!profile) return;
@@ -32,15 +38,30 @@ export default function Index() {
       if (pathname !== '/') return;
     }
     if (profile.role === 'driver') {
+      // Security-first: only enter driver app after server-backed role verification.
+      if (!roleVerified) {
+        logRouteDecision('block_driver_redirect_unverified_role', {
+          uid: user.uid,
+          pathname,
+          role: profile.role,
+        });
+        return;
+      }
+      logRouteDecision('redirect_driver_root', { uid: user.uid, pathname });
       router.replace(DEFAULT_DRIVER_ROUTE as '/');
       return;
     }
     // Restore the last visited tab so cold-start lands where the user left off,
     // rather than always defaulting to the Cash/Finance tab.
     getLastTabRoute().then((route) => {
+      logRouteDecision('redirect_dispatcher_last_tab', {
+        uid: user.uid,
+        pathname,
+        route,
+      });
       router.replace(route as '/');
     });
-  }, [user, profile, loading, pathname, router, isFocused]);
+  }, [user, profile, roleVerified, loading, pathname, router, isFocused]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>

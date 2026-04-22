@@ -5,49 +5,56 @@
  */
 import Theme from "@/constants/Theme";
 import {
-  getDriversByOrganization,
-  searchExistingDriversByPhone,
-  type DriverRow,
+    getDriversByOrganization,
+    searchExistingDriversByPhone,
+    type DriverRow,
 } from "@/features/drivers/services/drivers.service";
 import {
-  generateTripOtp,
-  getTripOtpForDisplay,
-  regenerateTripOtp,
+    generateTripOtp,
+    getTripOtpForDisplay,
+    regenerateTripOtp,
 } from "@/features/trips/services/tripOtp.service";
 import {
-  assignAggregateTripDriverByPhone,
-  assignTripDriverByPhone,
-  getDriverAvailabilityByPhone,
-  getActiveDriverIds,
-  getTripDisplayNumber,
-  isTripCompleted,
-  updateTripAssignment,
-  type TripRow,
+    assignAggregateTripDriverByPhone,
+    assignTripDriverByPhone,
+    getActiveDriverIds,
+    getDriverAvailabilityByPhone,
+    getTripDisplayNumber,
+    isTripCompleted,
+    updateTripAssignment,
+    type TripRow,
 } from "@/features/trips/services/trips.service";
 import {
-  getVehiclesByOrganization,
-  type VehicleRow,
+    getVehiclesByOrganization,
+    type VehicleRow,
 } from "@/features/vehicles/services/vehicles.service";
 import {
-  formatIndianVehicleNumber,
-  formatIndianVehicleNumberInput,
-  formatMobileNumber,
+    formatIndianVehicleNumber,
+    formatIndianVehicleNumberInput,
+    formatMobileNumber,
 } from "@/lib/format";
 import { validatePhone } from "@/lib/phoneValidation";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
-  Image,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-  useWindowDimensions,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type ReactNode,
+} from "react";
+import {
+    Alert,
+    Image,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+    useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -82,6 +89,12 @@ export interface TripAssignmentBlockProps {
   driverAssignOrgId?: string | null;
   driverAvatarUri?: string | null;
   onRatingsLoaded?: (ratings: { rated_type: string; score: number }[]) => void;
+  /** Request opening a specific picker modal from parent shell UI. */
+  autoOpenPickerMode?: "driver" | "vehicle" | null;
+  /** Bump this value to re-trigger auto-open for same mode. */
+  autoOpenPickerNonce?: number;
+  /** Optional extra content rendered inside this assignment card. */
+  inlineSection?: ReactNode;
 }
 
 export function TripAssignmentBlock({
@@ -100,12 +113,17 @@ export function TripAssignmentBlock({
   latestReassignmentSummary,
   viewOnly = false,
   driverAssignOrgId,
+  autoOpenPickerMode = null,
+  autoOpenPickerNonce = 0,
+  inlineSection,
 }: TripAssignmentBlockProps) {
   /** No assign/reassign when trip is completed or when view-only (e.g. load creator monitoring). */
   const effectiveCanAssign = canAssign && !isTripCompleted(trip) && !viewOnly;
 
   const [showPicker, setShowPicker] = useState(false);
-  const [assignMode, setAssignMode] = useState<"driver" | "vehicle" | null>(null);
+  const [assignMode, setAssignMode] = useState<"driver" | "vehicle" | null>(
+    null,
+  );
   const [assignSearch, setAssignSearch] = useState("");
   const [showPhoneModal, setShowPhoneModal] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -114,7 +132,9 @@ export function TripAssignmentBlock({
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [phoneName, setPhoneName] = useState<string | null>(null);
   const [phoneDriverBusy, setPhoneDriverBusy] = useState(false);
-  const [phoneBusyTripLabel, setPhoneBusyTripLabel] = useState<string | null>(null);
+  const [phoneBusyTripLabel, setPhoneBusyTripLabel] = useState<string | null>(
+    null,
+  );
   const [pickPhoneVehicleId, setPickPhoneVehicleId] = useState<string | null>(
     null,
   );
@@ -137,7 +157,9 @@ export function TripAssignmentBlock({
     [],
   );
   const [drivers, setDrivers] = useState<DriverRow[]>([]);
-  const [activeDriverIds, setActiveDriverIds] = useState<Set<string>>(new Set());
+  const [activeDriverIds, setActiveDriverIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
   const [pickDriverId, setPickDriverId] = useState<string | null>(
     trip.driver_id,
@@ -151,7 +173,7 @@ export function TripAssignmentBlock({
   const [phoneModalIsReassign, setPhoneModalIsReassign] = useState(false);
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
-  const isDesktop = Platform.OS === 'web' && windowWidth >= 768;
+  const isDesktop = Platform.OS === "web" && windowWidth >= 768;
 
   useEffect(() => {
     setPickDriverId(trip.driver_id);
@@ -213,7 +235,6 @@ export function TripAssignmentBlock({
     },
     [normalizeVehicleNumber],
   );
-
 
   const handleCardVehicleBlur = useCallback(async () => {
     if (!showAssignByPhone || !effectiveCanAssign) return;
@@ -300,18 +321,19 @@ export function TripAssignmentBlock({
       setPhoneError(err);
       return;
     }
-    const orgForDriver = (driverAssignOrgId ?? organizationId).trim() || organizationId;
-    const { error: availabilityError, result: availability } = await getDriverAvailabilityByPhone(
-      orgForDriver,
-      trimmed,
-      { excludeTripId: trip.id },
-    );
+    const orgForDriver =
+      (driverAssignOrgId ?? organizationId).trim() || organizationId;
+    const { error: availabilityError, result: availability } =
+      await getDriverAvailabilityByPhone(orgForDriver, trimmed, {
+        excludeTripId: trip.id,
+      });
     if (availabilityError) {
       setPhoneError(availabilityError.message);
       return;
     }
     if (availability.isBusy) {
-      const conflictTripLabel = availability.ongoingTripLabel ?? "another ongoing trip";
+      const conflictTripLabel =
+        availability.ongoingTripLabel ?? "another ongoing trip";
       setPhoneDriverBusy(true);
       setPhoneBusyTripLabel(conflictTripLabel);
       setPhoneError(
@@ -347,7 +369,7 @@ export function TripAssignmentBlock({
         trip.id,
         orgForDriver,
         trimmed,
-        matchedVehicle ? null : (phoneVehicleInput.trim() || null),
+        matchedVehicle ? null : phoneVehicleInput.trim() || null,
       );
       if (rpcErr) {
         setPhoneSaving(false);
@@ -384,29 +406,25 @@ export function TripAssignmentBlock({
       } else if (phoneVehicleInput.trim()) {
         const { error: vehicleErr } = await updateTripAssignment(
           trip.id,
-          { vehicle_id: null, vehicle_display_number: phoneVehicleInput.trim() },
+          {
+            vehicle_id: null,
+            vehicle_display_number: phoneVehicleInput.trim(),
+          },
           auditOpts,
         );
         if (vehicleErr) setPhoneError(vehicleErr.message);
       }
     }
-    // Ensure OTP exists so driver app shows "Trip waiting for OTP" (get_pending_otp_claim_count).
-    // Aggregate: always generate after assign; non-aggregate: refresh when replacing a driver or
-    // when modal was opened as reassign (e.g. after reject trip.driver_id is already null in props).
-    if (trip.supplier_id) {
-      const { error: otpErr, code: newCode, expires_at: newExpires } =
-        await generateTripOtp(trip.id);
-      if (!otpErr && newCode != null) {
-        setOtpCode(newCode);
-        setOtpExpiresAt(newExpires ?? null);
-      }
-    } else if (phoneModalIsReassign || trip.driver_id != null) {
-      const { error: otpErr, code: newCode, expires_at: newExpires } =
-        await regenerateTripOtp(trip.id);
-      if (!otpErr && newCode != null) {
-        setOtpCode(newCode);
-        setOtpExpiresAt(newExpires ?? null);
-      }
+    // Always ensure a fresh OTP exists right after assignment/reassignment.
+    // regenerate_trip_otp upserts internally, so this also covers first-time assignment.
+    const {
+      error: otpErr,
+      code: newCode,
+      expires_at: newExpires,
+    } = await regenerateTripOtp(trip.id);
+    if (!otpErr && newCode != null) {
+      setOtpCode(newCode);
+      setOtpExpiresAt(newExpires ?? null);
     }
     setPhoneSaving(false);
     setShowPhoneModal(false);
@@ -474,7 +492,10 @@ export function TripAssignmentBlock({
       setPhoneName(null);
       const vehiclePrefill =
         initialVehicle != null && initialVehicle.trim() !== ""
-          ? formatIndianVehicleNumber(initialVehicle.trim().split("·")[0]?.trim() ?? initialVehicle.trim())
+          ? formatIndianVehicleNumber(
+              initialVehicle.trim().split("·")[0]?.trim() ??
+                initialVehicle.trim(),
+            )
           : "";
       setPhoneVehicleInput(vehiclePrefill);
       setShowPhoneModal(true);
@@ -515,7 +536,9 @@ export function TripAssignmentBlock({
     assignmentSource === "private" || assignmentSource === "shared"
       ? styles.badgePrivate
       : styles.badgeUnassigned;
-  const hasDriver = !!(trip.driver_id || (trip.driver_display_name ?? "").trim());
+  const hasDriver = !!(
+    trip.driver_id || (trip.driver_display_name ?? "").trim()
+  );
   const hasVehicle = !!(
     trip.vehicle_id ||
     (trip.vehicle_display_number ?? "").trim() ||
@@ -546,14 +569,36 @@ export function TripAssignmentBlock({
       const raw = (propsVehicleLabel ?? "").split("·")[0]?.trim() ?? "";
       setPickerVehicleInput(raw ? formatIndianVehicleNumber(raw) : "");
     } else if (trip.vehicle_display_number?.trim()) {
-      setPickerVehicleInput(formatIndianVehicleNumber(trip.vehicle_display_number.trim()));
+      setPickerVehicleInput(
+        formatIndianVehicleNumber(trip.vehicle_display_number.trim()),
+      );
     } else {
       setPickerVehicleInput("");
     }
     getVehiclesByOrganization(organizationId).then((r) =>
       setVehicles(r.error ? [] : (r.vehicles ?? [])),
     );
-  }, [organizationId, trip.vehicle_id, trip.vehicle_display_number, propsVehicleLabel]);
+  }, [
+    organizationId,
+    trip.vehicle_id,
+    trip.vehicle_display_number,
+    propsVehicleLabel,
+  ]);
+
+  useEffect(() => {
+    if (!effectiveCanAssign || !autoOpenPickerMode) return;
+    if (autoOpenPickerMode === "driver") {
+      openDriverPicker();
+      return;
+    }
+    openVehiclePicker();
+  }, [
+    autoOpenPickerMode,
+    autoOpenPickerNonce,
+    effectiveCanAssign,
+    openDriverPicker,
+    openVehiclePicker,
+  ]);
 
   const saveDriverOnly = useCallback(
     async (driverId: string | null) => {
@@ -584,11 +629,17 @@ export function TripAssignmentBlock({
   );
 
   const saveVehicleOnly = useCallback(
-    async (vehicleId: string | null, vehicleDisplayNumber: string | null = null) => {
+    async (
+      vehicleId: string | null,
+      vehicleDisplayNumber: string | null = null,
+    ) => {
       setSaving(true);
       try {
-        const payload: Parameters<typeof updateTripAssignment>[1] = { vehicle_id: vehicleId };
-        if (vehicleDisplayNumber != null) payload.vehicle_display_number = vehicleDisplayNumber;
+        const payload: Parameters<typeof updateTripAssignment>[1] = {
+          vehicle_id: vehicleId,
+        };
+        if (vehicleDisplayNumber != null)
+          payload.vehicle_display_number = vehicleDisplayNumber;
         const { error } = await updateTripAssignment(
           trip.id,
           payload,
@@ -652,7 +703,13 @@ export function TripAssignmentBlock({
     }
 
     return withoutCurrent;
-  }, [drivers, assignSearch, showAssignByPhone, activeDriverIds, trip.driver_id]);
+  }, [
+    drivers,
+    assignSearch,
+    showAssignByPhone,
+    activeDriverIds,
+    trip.driver_id,
+  ]);
 
   const filteredVehicles = useMemo(() => {
     const withoutCurrent = vehicles.filter((v) => v.id !== trip.vehicle_id);
@@ -713,7 +770,8 @@ export function TripAssignmentBlock({
                 style={[
                   styles.sourceBadgeText,
                   assignmentSource === "shared" && styles.sourceBadgeTextShared,
-                  assignmentSource === "private" && styles.sourceBadgeTextPrivate,
+                  assignmentSource === "private" &&
+                    styles.sourceBadgeTextPrivate,
                 ]}
               >
                 {sourceLabel}
@@ -727,12 +785,25 @@ export function TripAssignmentBlock({
           {/* Driver row — reference: Driver Node, + Assign / Change */}
           <View style={[styles.assignRow, isDesktop && styles.webAssignRow]}>
             <View style={styles.assignRowLeft}>
-              <View style={[styles.assignIcon, hasDriver ? styles.assignIconDriverActive : styles.assignIconInactive]}>
+              <View
+                style={[
+                  styles.assignIcon,
+                  hasDriver
+                    ? styles.assignIconDriverActive
+                    : styles.assignIconInactive,
+                ]}
+              >
                 <FontAwesome name="user" size={16} color={Theme.textMuted} />
               </View>
               <View style={styles.assignRowText}>
                 <Text style={styles.assignRowLabel}>Driver</Text>
-                <Text style={[styles.assignRowValue, !hasDriver && styles.assignRowValueEmpty]} numberOfLines={1}>
+                <Text
+                  style={[
+                    styles.assignRowValue,
+                    !hasDriver && styles.assignRowValueEmpty,
+                  ]}
+                  numberOfLines={1}
+                >
                   {hasDriver ? pilotText : "No assigned node"}
                 </Text>
               </View>
@@ -740,27 +811,50 @@ export function TripAssignmentBlock({
             {effectiveCanAssign ? (
               showAssignByPhone ? (
                 <TouchableOpacity
-                  style={[styles.actionBtn, hasDriver ? styles.actionBtnSecondary : styles.actionBtnPrimary]}
+                  style={[
+                    styles.actionBtn,
+                    hasDriver
+                      ? styles.actionBtnSecondary
+                      : styles.actionBtnPrimary,
+                  ]}
                   onPress={() =>
                     openPhoneModal(
-                      hasDriver ||
-                        !!(previousDriverName ?? "").trim(),
+                      hasDriver || !!(previousDriverName ?? "").trim(),
                       propsVehicleLabel ?? trip.vehicle_display_number ?? "",
                     )
                   }
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.actionBtnText, hasDriver ? styles.actionBtnTextSecondary : styles.actionBtnTextPrimary]}>
+                  <Text
+                    style={[
+                      styles.actionBtnText,
+                      hasDriver
+                        ? styles.actionBtnTextSecondary
+                        : styles.actionBtnTextPrimary,
+                    ]}
+                  >
                     {hasDriver ? "Change" : "+ Assign"}
                   </Text>
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
-                  style={[styles.actionBtn, hasDriver ? styles.actionBtnSecondary : styles.actionBtnPrimary]}
+                  style={[
+                    styles.actionBtn,
+                    hasDriver
+                      ? styles.actionBtnSecondary
+                      : styles.actionBtnPrimary,
+                  ]}
                   onPress={openDriverPicker}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.actionBtnText, hasDriver ? styles.actionBtnTextSecondary : styles.actionBtnTextPrimary]}>
+                  <Text
+                    style={[
+                      styles.actionBtnText,
+                      hasDriver
+                        ? styles.actionBtnTextSecondary
+                        : styles.actionBtnTextPrimary,
+                    ]}
+                  >
                     {hasDriver ? "Change" : "+ Assign"}
                   </Text>
                 </TouchableOpacity>
@@ -771,12 +865,25 @@ export function TripAssignmentBlock({
           {/* Vehicle row — reference: Vehicle Registry, Change */}
           <View style={[styles.assignRow, isDesktop && styles.webAssignRow]}>
             <View style={styles.assignRowLeft}>
-              <View style={[styles.assignIcon, hasVehicle ? styles.assignIconVehicleActive : styles.assignIconVehicleInactive]}>
+              <View
+                style={[
+                  styles.assignIcon,
+                  hasVehicle
+                    ? styles.assignIconVehicleActive
+                    : styles.assignIconVehicleInactive,
+                ]}
+              >
                 <FontAwesome name="truck" size={14} color={Theme.textMuted} />
               </View>
               <View style={styles.assignRowText}>
                 <Text style={styles.assignRowLabel}>Vehicle</Text>
-                <Text style={[styles.assignRowValue, !hasVehicle && styles.assignRowValueEmpty]} numberOfLines={1}>
+                <Text
+                  style={[
+                    styles.assignRowValue,
+                    !hasVehicle && styles.assignRowValueEmpty,
+                  ]}
+                  numberOfLines={1}
+                >
                   {hasVehicle
                     ? vehicleText
                         .split(" • ")
@@ -788,14 +895,26 @@ export function TripAssignmentBlock({
             </View>
             {effectiveCanAssign ? (
               <TouchableOpacity
-                  style={[styles.actionBtn, hasVehicle ? styles.actionBtnSecondary : styles.actionBtnPrimary]}
-                  onPress={openVehiclePicker}
-                  activeOpacity={0.8}
+                style={[
+                  styles.actionBtn,
+                  hasVehicle
+                    ? styles.actionBtnSecondary
+                    : styles.actionBtnPrimary,
+                ]}
+                onPress={openVehiclePicker}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.actionBtnText,
+                    hasVehicle
+                      ? styles.actionBtnTextSecondary
+                      : styles.actionBtnTextPrimary,
+                  ]}
                 >
-                  <Text style={[styles.actionBtnText, hasVehicle ? styles.actionBtnTextSecondary : styles.actionBtnTextPrimary]}>
-                    {hasVehicle ? "Change" : "+ Assign"}
-                  </Text>
-                </TouchableOpacity>
+                  {hasVehicle ? "Change" : "+ Assign"}
+                </Text>
+              </TouchableOpacity>
             ) : null}
           </View>
         </View>
@@ -809,61 +928,6 @@ export function TripAssignmentBlock({
           </View>
         ) : null}
 
-        {/* Aggregate OTP (only for aggregate flows that use assign-by-phone) */}
-        {showAssignByPhone && (
-          <View style={styles.otpInline}>
-            {otpLoading && !otpCode ? (
-              <Text style={styles.otpInlineMuted}>Loading OTP…</Text>
-            ) : otpCode ? (
-              <>
-                <View style={styles.otpInlineRow}>
-                  <Text style={styles.otpInlineLabel}>Share OTP</Text>
-                  <Text style={styles.otpInlineCode}>{otpCode}</Text>
-                </View>
-                {otpExpiresAt ? (
-                  <Text style={styles.otpInlineMuted}>
-                    Valid until{" "}
-                    {new Date(otpExpiresAt).toLocaleTimeString(undefined, {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </Text>
-                ) : null}
-                {effectiveCanAssign ? (
-                  <TouchableOpacity
-                    style={styles.otpInlineBtn}
-                    onPress={handleRegenerateOtp}
-                    disabled={otpRegenerating || otpLoading}
-                    activeOpacity={0.8}
-                  >
-                    <FontAwesome name="refresh" size={12} color={Theme.primary} />
-                    <Text style={styles.otpInlineBtnText}>
-                      {otpRegenerating || otpLoading ? "Regenerating…" : "Regenerate OTP"}
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-                {otpError ? <Text style={styles.otpInlineError}>{otpError}</Text> : null}
-              </>
-            ) : (
-              <View style={styles.otpInlineRow}>
-                <Text style={styles.otpInlineMuted}>No active OTP (expired or claimed)</Text>
-                {effectiveCanAssign ? (
-                  <TouchableOpacity
-                    style={styles.otpInlineBtn}
-                    onPress={handleGenerateOtp}
-                    disabled={otpRegenerating || otpLoading}
-                    activeOpacity={0.8}
-                  >
-                    <FontAwesome name="key" size={12} color={Theme.primary} />
-                    <Text style={styles.otpInlineBtnText}>
-                      {otpRegenerating || otpLoading ? "Generating…" : "Generate OTP"}
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-            )}
-          </View>
-        )}
         {previousDriverName ? (
           <View style={styles.previousDriverRow}>
             <Text style={styles.label}>PREVIOUS DRIVER</Text>
@@ -880,355 +944,437 @@ export function TripAssignmentBlock({
             </Text>
           </View>
         ) : null}
+        {inlineSection ? (
+          <View style={styles.inlineSectionWrap}>{inlineSection}</View>
+        ) : null}
       </View>
 
       {/* Assignment selection overlay — driver or vehicle only, tap to assign */}
       <Modal
         visible={assignMode !== null}
-        animationType="slide"
-        presentationStyle="pageSheet"
+        animationType={Platform.OS === "web" ? "fade" : "slide"}
+        presentationStyle={
+          Platform.OS === "web" ? "overFullScreen" : "pageSheet"
+        }
+        transparent={Platform.OS === "web"}
         onRequestClose={() => setAssignMode(null)}
       >
-        <View style={[styles.assignModalWrap, { paddingTop: insets.top }]}>
-          <View style={styles.assignModalHeader}>
-            <View style={styles.assignModalHeaderText}>
-              <Text style={styles.assignModalTitle}>
-                {assignMode === "driver" ? "Assign Driver" : "Select Vehicle"}
-              </Text>
-              <Text style={styles.assignModalSubtitle}>
-                {assignMode === "driver" ? "Choose a driver" : "Choose a vehicle"}
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => setAssignMode(null)}
-              style={styles.assignModalCloseBtn}
-              hitSlop={8}
-              accessibilityLabel="Close"
-            >
-              <FontAwesome name="times" size={18} color={Theme.textMuted} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.assignSearchWrap}>
-            <FontAwesome name="search" size={14} color={Theme.textMuted} style={styles.assignSearchIcon} />
-            <TextInput
-              style={styles.assignSearchInput}
-              value={assignSearch}
-              onChangeText={setAssignSearch}
-              placeholder={assignMode === "driver" ? "Search driver..." : "Search vehicle..."}
-              placeholderTextColor={Theme.textMuted}
-            />
-          </View>
-
-          <ScrollView
-            style={styles.assignModalScroll}
-            contentContainerStyle={[styles.assignModalScrollContent, { paddingBottom: 24 + insets.bottom }]}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            {assignMode === "driver" ? (
-              filteredDrivers.length === 0 ? (
-                <Text style={styles.assignEmptyHint}>
-                  No drivers. Add from Resources.
+        <View style={styles.webModalBackdrop}>
+          <View style={[styles.assignModalWrap, { paddingTop: insets.top }]}>
+            <View style={styles.assignModalHeader}>
+              <View style={styles.assignModalHeaderText}>
+                <Text style={styles.assignModalTitle}>
+                  {assignMode === "driver" ? "Assign Driver" : "Select Vehicle"}
                 </Text>
-              ) : (
-                filteredDrivers.map((d) => {
-                  // A driver is "on trip" if they're in an active trip that isn't this one.
-                  const isOnTrip = activeDriverIds.has(d.id) && d.id !== trip.driver_id;
-                  const isAvailable = !d.left_at && !isOnTrip;
-                  const initial = (d.name ?? "D").trim().charAt(0).toUpperCase();
-                  const ratingMeta = getDriverRatingMeta(d);
-                  const hasAvatar = !!(d.avatar_url && d.avatar_url.trim());
-                  const statusText = isOnTrip
-                    ? "On trip"
-                    : isAvailable
-                      ? "Available"
-                      : "On leave";
-                  return (
-                    <TouchableOpacity
-                      key={d.id}
-                      style={[
-                        styles.assignRegistryCard,
-                        isOnTrip && styles.assignRegistryCardBusy,
-                      ]}
-                      onPress={() => !isOnTrip && saveDriverOnly(d.id)}
-                      disabled={saving || isOnTrip}
-                      activeOpacity={isOnTrip ? 1 : 0.98}
-                    >
-                      <View style={styles.assignRegistryCardLeft}>
-                        {hasAvatar ? (
-                          <Image
-                            source={{ uri: d.avatar_url!.trim() }}
-                            style={[
-                              styles.assignDriverAvatarImage,
-                              isOnTrip && styles.assignDriverAvatarBusy,
-                            ]}
-                          />
-                        ) : (
-                          <View style={[
-                            styles.assignDriverAvatarRegistry,
-                            isOnTrip && styles.assignDriverAvatarBusy,
-                          ]}>
-                            <Text style={[
-                              styles.assignDriverInitialRegistry,
-                              isOnTrip && styles.assignDriverInitialBusy,
-                            ]}>{initial}</Text>
-                          </View>
-                        )}
-                        <View style={styles.assignCardBody}>
-                          <Text style={[
-                            styles.assignCardTitle,
-                            isOnTrip && styles.assignCardTitleMuted,
-                          ]} numberOfLines={1}>
-                            {d.name ?? "—"}
-                          </Text>
-                          <Text style={[
-                            styles.assignRegistrySubtext,
-                            isOnTrip && styles.assignRegistrySubtextBusy,
-                          ]}>
-                            {statusText}
-                          </Text>
-                          {ratingMeta ? (
-                            <View style={styles.assignRatingRow}>
-                              <FontAwesome name="star" size={10} color={Theme.driverGold} />
-                              <Text style={styles.assignRatingText}>
-                                Rating {ratingMeta.ratingLabel}
-                                {ratingMeta.countLabel ? ` ${ratingMeta.countLabel}` : ""}
-                              </Text>
-                            </View>
-                          ) : null}
-                        </View>
-                      </View>
-                      {isOnTrip ? (
-                        <View style={styles.assignBusyBadge}>
-                          <Text style={styles.assignBusyBadgeText}>On Trip</Text>
-                        </View>
-                      ) : (
-                        <View style={styles.assignSyncBadge}>
-                          <Text style={styles.assignSyncBadgeText}>Assign</Text>
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })
-              )
-            ) : (
-              <>
-                {showAssignByPhone ? (
-                  <View style={styles.assignAdhocVehicleWrap}>
-                    <Text style={styles.assignAdhocVehicleLabel}>
-                      Vehicle registration (ad-hoc)
-                    </Text>
-                    <Text style={styles.assignAdhocVehicleHint}>
-                      Partner vehicle not in your fleet — enter number to save on trip.
-                    </Text>
-                    <TextInput
-                      style={styles.assignAdhocVehicleInput}
-                      value={pickerVehicleInput}
-                      onChangeText={setPickerVehicleInput}
-                      placeholder="e.g. TN 23 AB 1234"
-                      placeholderTextColor={Theme.textMuted}
-                    />
-                    <TouchableOpacity
-                      style={[
-                        styles.assignAdhocVehicleBtn,
-                        !pickerVehicleInput.trim() && styles.assignAdhocVehicleBtnDisabled,
-                      ]}
-                      onPress={() =>
-                        saveVehicleOnly(null, pickerVehicleInput.trim() || null)
-                      }
-                      disabled={saving || !pickerVehicleInput.trim()}
-                      activeOpacity={0.9}
-                    >
-                      <Text style={styles.assignAdhocVehicleBtnText}>
-                        {saving ? "Saving…" : "Save registration"}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
-                {filteredVehicles.length === 0 ? (
-                  showAssignByPhone ? null : (
-                    <Text style={styles.assignEmptyHint}>
-                      No vehicles. Add from Resources.
-                    </Text>
-                  )
+                <Text style={styles.assignModalSubtitle}>
+                  {assignMode === "driver"
+                    ? "Choose a driver"
+                    : "Choose a vehicle"}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setAssignMode(null)}
+                style={styles.assignModalCloseBtn}
+                hitSlop={8}
+                accessibilityLabel="Close"
+              >
+                <FontAwesome name="times" size={18} color={Theme.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.assignSearchWrap}>
+              <FontAwesome
+                name="search"
+                size={14}
+                color={Theme.textMuted}
+                style={styles.assignSearchIcon}
+              />
+              <TextInput
+                style={styles.assignSearchInput}
+                value={assignSearch}
+                onChangeText={setAssignSearch}
+                placeholder={
+                  assignMode === "driver"
+                    ? "Search driver..."
+                    : "Search vehicle..."
+                }
+                placeholderTextColor={Theme.textMuted}
+              />
+            </View>
+
+            <ScrollView
+              style={styles.assignModalScroll}
+              contentContainerStyle={[
+                styles.assignModalScrollContent,
+                { paddingBottom: 24 + insets.bottom },
+              ]}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {assignMode === "driver" ? (
+                filteredDrivers.length === 0 ? (
+                  <Text style={styles.assignEmptyHint}>
+                    No drivers. Add from Resources.
+                  </Text>
                 ) : (
-                  filteredVehicles.map((v) => {
-                    const plate = formatIndianVehicleNumber(v.vehicle_number);
-                    const typeLabel = v.vehicle_type ?? "Vehicle";
+                  filteredDrivers.map((d) => {
+                    // A driver is "on trip" if they're in an active trip that isn't this one.
+                    const isOnTrip =
+                      activeDriverIds.has(d.id) && d.id !== trip.driver_id;
+                    const isAvailable = !d.left_at && !isOnTrip;
+                    const initial = (d.name ?? "D")
+                      .trim()
+                      .charAt(0)
+                      .toUpperCase();
+                    const ratingMeta = getDriverRatingMeta(d);
+                    const hasAvatar = !!(d.avatar_url && d.avatar_url.trim());
+                    const statusText = isOnTrip
+                      ? "On trip"
+                      : isAvailable
+                        ? "Available"
+                        : "On leave";
                     return (
                       <TouchableOpacity
-                        key={v.id}
-                        style={styles.assignRegistryCard}
-                        onPress={() => saveVehicleOnly(v.id)}
-                        disabled={saving}
-                        activeOpacity={0.98}
+                        key={d.id}
+                        style={[
+                          styles.assignRegistryCard,
+                          isOnTrip && styles.assignRegistryCardBusy,
+                        ]}
+                        onPress={() => !isOnTrip && saveDriverOnly(d.id)}
+                        disabled={saving || isOnTrip}
+                        activeOpacity={isOnTrip ? 1 : 0.98}
                       >
-                      <View style={styles.assignRegistryCardLeft}>
-                        <View style={styles.assignVehicleIconWrapRegistry}>
-                          <FontAwesome name="truck" size={16} color={Theme.textPrimaryDark} />
+                        <View style={styles.assignRegistryCardLeft}>
+                          {hasAvatar ? (
+                            <Image
+                              source={{ uri: d.avatar_url!.trim() }}
+                              style={[
+                                styles.assignDriverAvatarImage,
+                                isOnTrip && styles.assignDriverAvatarBusy,
+                              ]}
+                            />
+                          ) : (
+                            <View
+                              style={[
+                                styles.assignDriverAvatarRegistry,
+                                isOnTrip && styles.assignDriverAvatarBusy,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.assignDriverInitialRegistry,
+                                  isOnTrip && styles.assignDriverInitialBusy,
+                                ]}
+                              >
+                                {initial}
+                              </Text>
+                            </View>
+                          )}
+                          <View style={styles.assignCardBody}>
+                            <Text
+                              style={[
+                                styles.assignCardTitle,
+                                isOnTrip && styles.assignCardTitleMuted,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {d.name ?? "—"}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.assignRegistrySubtext,
+                                isOnTrip && styles.assignRegistrySubtextBusy,
+                              ]}
+                            >
+                              {statusText}
+                            </Text>
+                            {ratingMeta ? (
+                              <View style={styles.assignRatingRow}>
+                                <FontAwesome
+                                  name="star"
+                                  size={10}
+                                  color={Theme.driverGold}
+                                />
+                                <Text style={styles.assignRatingText}>
+                                  Rating {ratingMeta.ratingLabel}
+                                  {ratingMeta.countLabel
+                                    ? ` ${ratingMeta.countLabel}`
+                                    : ""}
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
                         </View>
-                        <View style={styles.assignCardBody}>
-                          <Text style={styles.assignCardTitle} numberOfLines={1}>
-                            {plate}
-                          </Text>
-                          <Text style={styles.assignRegistrySubtext}>{typeLabel}</Text>
-                        </View>
-                      </View>
-                      <View style={styles.assignUpdateLinkBadge}>
-                        <Text style={styles.assignUpdateLinkBadgeText}>Select</Text>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })
-              )
-            }
-            </>
-            )}
-          </ScrollView>
+                        {isOnTrip ? (
+                          <View style={styles.assignBusyBadge}>
+                            <Text style={styles.assignBusyBadgeText}>
+                              On Trip
+                            </Text>
+                          </View>
+                        ) : (
+                          <View style={styles.assignSyncBadge}>
+                            <Text style={styles.assignSyncBadgeText}>
+                              Assign
+                            </Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })
+                )
+              ) : (
+                <>
+                  {showAssignByPhone ? (
+                    <View style={styles.assignAdhocVehicleWrap}>
+                      <Text style={styles.assignAdhocVehicleLabel}>
+                        Vehicle registration (ad-hoc)
+                      </Text>
+                      <Text style={styles.assignAdhocVehicleHint}>
+                        Partner vehicle not in your fleet — enter number to save
+                        on trip.
+                      </Text>
+                      <TextInput
+                        style={styles.assignAdhocVehicleInput}
+                        value={pickerVehicleInput}
+                        onChangeText={setPickerVehicleInput}
+                        placeholder="e.g. TN 23 AB 1234"
+                        placeholderTextColor={Theme.textMuted}
+                      />
+                      <TouchableOpacity
+                        style={[
+                          styles.assignAdhocVehicleBtn,
+                          !pickerVehicleInput.trim() &&
+                            styles.assignAdhocVehicleBtnDisabled,
+                        ]}
+                        onPress={() =>
+                          saveVehicleOnly(
+                            null,
+                            pickerVehicleInput.trim() || null,
+                          )
+                        }
+                        disabled={saving || !pickerVehicleInput.trim()}
+                        activeOpacity={0.9}
+                      >
+                        <Text style={styles.assignAdhocVehicleBtnText}>
+                          {saving ? "Saving…" : "Save registration"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
+                  {filteredVehicles.length === 0 ? (
+                    showAssignByPhone ? null : (
+                      <Text style={styles.assignEmptyHint}>
+                        No vehicles. Add from Resources.
+                      </Text>
+                    )
+                  ) : (
+                    filteredVehicles.map((v) => {
+                      const plate = formatIndianVehicleNumber(v.vehicle_number);
+                      const typeLabel = v.vehicle_type ?? "Vehicle";
+                      return (
+                        <TouchableOpacity
+                          key={v.id}
+                          style={styles.assignRegistryCard}
+                          onPress={() => saveVehicleOnly(v.id)}
+                          disabled={saving}
+                          activeOpacity={0.98}
+                        >
+                          <View style={styles.assignRegistryCardLeft}>
+                            <View style={styles.assignVehicleIconWrapRegistry}>
+                              <FontAwesome
+                                name="truck"
+                                size={16}
+                                color={Theme.textPrimaryDark}
+                              />
+                            </View>
+                            <View style={styles.assignCardBody}>
+                              <Text
+                                style={styles.assignCardTitle}
+                                numberOfLines={1}
+                              >
+                                {plate}
+                              </Text>
+                              <Text style={styles.assignRegistrySubtext}>
+                                {typeLabel}
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={styles.assignUpdateLinkBadge}>
+                            <Text style={styles.assignUpdateLinkBadgeText}>
+                              Select
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })
+                  )}
+                </>
+              )}
+            </ScrollView>
 
-          <View
-            style={[
-              styles.assignModalFooter,
-              { paddingBottom: Math.max(24, insets.bottom) },
-            ]}
-          >
-            <TouchableOpacity
-              style={styles.assignCancelBtn}
-              onPress={() => setAssignMode(null)}
-              activeOpacity={0.9}
+            <View
+              style={[
+                styles.assignModalFooter,
+                { paddingBottom: Math.max(24, insets.bottom) },
+              ]}
             >
-              <Text style={styles.assignCancelBtnText}>Close</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.assignCancelBtn}
+                onPress={() => setAssignMode(null)}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.assignCancelBtnText}>Close</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
 
       <Modal
         visible={showPhoneModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
+        animationType={Platform.OS === "web" ? "fade" : "slide"}
+        presentationStyle={
+          Platform.OS === "web" ? "overFullScreen" : "pageSheet"
+        }
+        transparent={Platform.OS === "web"}
         onRequestClose={() => setShowPhoneModal(false)}
       >
-        <View style={styles.assignModalWrap}>
-          <View style={styles.assignModalHeader}>
-            <View style={styles.assignModalHeaderText}>
-              <Text style={styles.assignModalTitle}>
-                {phoneModalIsReassign
-                  ? "Reassign driver by phone"
-                  : "Assign driver by phone"}
-              </Text>
-              <Text style={styles.assignModalSubtitle}>
-                {phoneModalIsReassign
-                  ? "New driver for " + getTripDisplayNumber(trip)
-                  : "Enter driver phone for " + getTripDisplayNumber(trip)}
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => setShowPhoneModal(false)}
-              style={styles.assignModalCloseBtn}
-              hitSlop={8}
-              accessibilityLabel="Close"
-            >
-              <FontAwesome name="times" size={18} color={Theme.textMuted} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView
-            style={styles.assignModalScroll}
-            contentContainerStyle={styles.assignModalScrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            <Text style={styles.assignStepLabel}>Driver phone</Text>
-            <TextInput
-              style={styles.phoneModalInput}
-              placeholder="e.g. +91 98765 43210"
-              placeholderTextColor={Theme.textMuted}
-              value={phoneInput}
-              onChangeText={(v) => {
-                setPhoneInput(formatMobileNumber(v));
-                setPhoneError(null);
-                setPhoneDriverBusy(false);
-                setPhoneBusyTripLabel(null);
-              }}
-              keyboardType="phone-pad"
-              autoCorrect={false}
-              autoComplete="tel"
-            />
-            {phoneName ? (
-              <View style={styles.phoneModalFoundWrap}>
-                <Text style={styles.phoneModalFound}>Found: {phoneName}</Text>
-                <Text style={styles.phoneModalHint}>
+        <View style={styles.webModalBackdrop}>
+          <View style={styles.assignModalWrap}>
+            <View style={styles.assignModalHeader}>
+              <View style={styles.assignModalHeaderText}>
+                <Text style={styles.assignModalTitle}>
                   {phoneModalIsReassign
-                    ? "Tap Reassign below, then share the new OTP with the driver."
-                    : "Tap Assign below to confirm."}
+                    ? "Reassign driver by phone"
+                    : "Assign driver by phone"}
+                </Text>
+                <Text style={styles.assignModalSubtitle}>
+                  {phoneModalIsReassign
+                    ? "New driver for " + getTripDisplayNumber(trip)
+                    : "Enter driver phone for " + getTripDisplayNumber(trip)}
                 </Text>
               </View>
-            ) : null}
-            {phoneDriverBusy ? (
-              <View style={styles.phoneModalBusyWrap}>
-                <Text style={styles.phoneModalInTrip}>
-                  Driver currently on {phoneBusyTripLabel ?? "another ongoing trip"}
-                </Text>
-                <Text style={styles.phoneModalBusyHint}>
-                  Reach out to {phoneName ?? "this driver"} on {phoneInput.trim() || "their phone"}
-                  {" "}to confirm availability. If they are offline/unreachable, plan with another
-                  {" "}driver and assign this trip there.
-                </Text>
-              </View>
-            ) : null}
-            {phoneError ? (
-              <Text style={styles.phoneModalError}>{phoneError}</Text>
-            ) : null}
+              <TouchableOpacity
+                onPress={() => setShowPhoneModal(false)}
+                style={styles.assignModalCloseBtn}
+                hitSlop={8}
+                accessibilityLabel="Close"
+              >
+                <FontAwesome name="times" size={18} color={Theme.textMuted} />
+              </TouchableOpacity>
+            </View>
 
-            <Text style={[styles.assignStepLabel, styles.assignStepLabelSecond]}>
-              Vehicle (optional)
-            </Text>
-            <TextInput
-              style={styles.phoneModalInput}
-              placeholder="e.g. TN 01 AB 1234"
-              placeholderTextColor={Theme.textMuted}
-              value={phoneVehicleInput}
-              onChangeText={(text) =>
-                setPhoneVehicleInput(formatIndianVehicleNumberInput(text))
-              }
-              autoCorrect={false}
-              autoCapitalize="characters"
-            />
-          </ScrollView>
-
-          <View
-            style={[
-              styles.assignModalFooter,
-              { paddingBottom: Math.max(24, insets.bottom) },
-            ]}
-          >
-            <TouchableOpacity
-              style={[
-                styles.assignConfirmBtn,
-                (phoneSaving || phoneDriverBusy) && styles.assignConfirmBtnDisabled,
-              ]}
-              onPress={assignByPhone}
-              disabled={phoneSaving || phoneDriverBusy}
-              activeOpacity={0.9}
+            <ScrollView
+              style={styles.assignModalScroll}
+              contentContainerStyle={styles.assignModalScrollContent}
+              showsVerticalScrollIndicator={false}
             >
-              <FontAwesome
-                name="user-plus"
-                size={20}
-                color={Theme.textOnPrimary}
+              <Text style={styles.assignStepLabel}>Driver phone</Text>
+              <TextInput
+                style={styles.phoneModalInput}
+                placeholder="e.g. +91 98765 43210"
+                placeholderTextColor={Theme.textMuted}
+                value={phoneInput}
+                onChangeText={(v) => {
+                  setPhoneInput(formatMobileNumber(v));
+                  setPhoneError(null);
+                  setPhoneDriverBusy(false);
+                  setPhoneBusyTripLabel(null);
+                }}
+                keyboardType="phone-pad"
+                autoCorrect={false}
+                autoComplete="tel"
               />
-              <Text style={styles.assignConfirmBtnText}>
-                {phoneSaving
-                  ? phoneModalIsReassign
-                    ? "Reassigning…"
-                    : "Assigning…"
-                  : phoneDriverBusy
-                    ? "Driver Busy"
-                  : phoneModalIsReassign
-                    ? "Reassign"
-                    : "Assign"}
+              {phoneName ? (
+                <View style={styles.phoneModalFoundWrap}>
+                  <Text style={styles.phoneModalFound}>Found: {phoneName}</Text>
+                  <Text style={styles.phoneModalHint}>
+                    {phoneModalIsReassign
+                      ? "Tap Reassign below, then share the new OTP with the driver."
+                      : "Tap Assign below to confirm."}
+                  </Text>
+                </View>
+              ) : null}
+              {phoneDriverBusy ? (
+                <View style={styles.phoneModalBusyWrap}>
+                  <Text style={styles.phoneModalInTrip}>
+                    Driver currently on{" "}
+                    {phoneBusyTripLabel ?? "another ongoing trip"}
+                  </Text>
+                  <Text style={styles.phoneModalBusyHint}>
+                    Reach out to {phoneName ?? "this driver"} on{" "}
+                    {phoneInput.trim() || "their phone"} to confirm
+                    availability. If they are offline/unreachable, plan with
+                    another driver and assign this trip there.
+                  </Text>
+                </View>
+              ) : null}
+              {phoneError ? (
+                <Text style={styles.phoneModalError}>{phoneError}</Text>
+              ) : null}
+
+              <Text
+                style={[styles.assignStepLabel, styles.assignStepLabelSecond]}
+              >
+                Vehicle (optional)
               </Text>
-            </TouchableOpacity>
+              <TextInput
+                style={styles.phoneModalInput}
+                placeholder="e.g. TN 01 AB 1234"
+                placeholderTextColor={Theme.textMuted}
+                value={phoneVehicleInput}
+                onChangeText={(text) =>
+                  setPhoneVehicleInput(formatIndianVehicleNumberInput(text))
+                }
+                autoCorrect={false}
+                autoCapitalize="characters"
+              />
+              <View style={styles.phoneProtocolCard}>
+                <View style={styles.phoneProtocolIconWrap}>
+                  <FontAwesome name="mobile" size={18} color="#4f46e5" />
+                </View>
+                <View style={styles.phoneProtocolBody}>
+                  <Text style={styles.phoneProtocolTitle}>
+                    Assignment Security Protocol
+                  </Text>
+                  <Text style={styles.phoneProtocolText}>
+                    Assigning an external driver triggers OTP verification.
+                    Share the OTP with the driver after assignment.
+                  </Text>
+                </View>
+              </View>
+            </ScrollView>
+
+            <View
+              style={[
+                styles.assignModalFooter,
+                { paddingBottom: Math.max(24, insets.bottom) },
+              ]}
+            >
+              <TouchableOpacity
+                style={[
+                  styles.assignConfirmBtn,
+                  (phoneSaving || phoneDriverBusy) &&
+                    styles.assignConfirmBtnDisabled,
+                ]}
+                onPress={assignByPhone}
+                disabled={phoneSaving || phoneDriverBusy}
+                activeOpacity={0.9}
+              >
+                <FontAwesome name="user-plus" size={20} color="#111827" />
+                <Text style={styles.assignConfirmBtnText}>
+                  {phoneSaving
+                    ? phoneModalIsReassign
+                      ? "Reassigning…"
+                      : "Assigning…"
+                    : phoneDriverBusy
+                      ? "Driver Busy"
+                      : phoneModalIsReassign
+                        ? "Reassign"
+                        : "Assign"}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1243,8 +1389,8 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    borderRadius: 20,
-    padding: 16,
+    borderRadius: 14,
+    padding: 12,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
@@ -1261,8 +1407,8 @@ const styles = StyleSheet.create({
     borderBottomColor: Theme.borderLight,
   },
   currentHeaderTitle: {
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
   currentHeaderRight: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -1293,14 +1439,16 @@ const styles = StyleSheet.create({
     borderColor: Theme.darkGreen,
   },
   statusPillTextUnassigned: { color: Theme.textMuted },
-  statusPillTextPartial: { color: (Theme as any).warning ?? Theme.textPrimaryDark },
+  statusPillTextPartial: {
+    color: (Theme as any).warning ?? Theme.textPrimaryDark,
+  },
   statusPillTextAssigned: { color: Theme.darkGreen },
 
   assignRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 8,
+    paddingVertical: 6,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
@@ -1313,9 +1461,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   assignIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -1338,29 +1486,29 @@ const styles = StyleSheet.create({
   },
   assignRowText: { flex: 1, minWidth: 0 },
   assignRowLabel: {
-    fontSize: 9,
-    fontWeight: "700",
+    fontSize: 8,
+    fontWeight: "600",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.8,
     marginBottom: 2,
   },
   assignRowValue: {
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
   },
   assignRowValueEmpty: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "500",
     color: Theme.textMuted,
     fontStyle: "italic",
   },
   actionBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    minWidth: 80,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 7,
+    minWidth: 70,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1374,8 +1522,8 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
   },
   actionBtnText: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 9,
+    fontWeight: "700",
     letterSpacing: 0.5,
     textTransform: "uppercase",
   },
@@ -1443,7 +1591,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.textMutedDemo,
     letterSpacing: 1.2,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     flex: 1,
     minWidth: 120,
   },
@@ -1538,6 +1686,12 @@ const styles = StyleSheet.create({
   },
   assignmentLogRow: {
     marginTop: 8,
+  },
+  inlineSectionWrap: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
   },
   assignmentLogText: {
     fontSize: 12,
@@ -1675,30 +1829,54 @@ const styles = StyleSheet.create({
   },
   // Premium assignment picker modal
   assignModalWrap: {
+    flex: Platform.OS === "web" ? 0 : 1,
+    backgroundColor: "#f8fafc",
+    borderRadius: Platform.OS === "web" ? 14 : 0,
+    overflow: "hidden",
+    ...Platform.select({
+      web: {
+        width: "100%",
+        maxWidth: 760,
+        maxHeight: "86%",
+        minHeight: 420,
+        borderWidth: 1,
+        borderColor: Theme.borderLight,
+      } as any,
+    }),
+  },
+  webModalBackdrop: {
     flex: 1,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor:
+      Platform.OS === "web" ? "rgba(2,6,23,0.58)" : Theme.surfaceGray,
+    padding: Platform.OS === "web" ? 18 : 0,
+    ...Platform.select({
+      web: {
+        justifyContent: "center",
+        alignItems: "center",
+      } as any,
+    }),
   },
   assignModalHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 18,
-    backgroundColor: Theme.screenBackground,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: "#ffffff",
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
   assignModalHeaderText: { flex: 1, minWidth: 0 },
   assignModalTitle: {
     fontSize: 18,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
+    fontWeight: "700",
+    color: "#0f172a",
   },
   assignModalSubtitle: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
-    color: Theme.textMuted,
-    marginTop: 4,
+    color: "#64748b",
+    marginTop: 2,
   },
   assignModalCloseBtn: {
     width: 32,
@@ -1711,19 +1889,19 @@ const styles = StyleSheet.create({
   },
   assignModalScroll: { flex: 1 },
   assignModalScrollContent: {
-    padding: 20,
-    paddingBottom: 24,
+    padding: 14,
+    paddingBottom: 18,
   },
   assignStepLabel: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 9,
+    fontWeight: "700",
     color: Theme.textMuted,
     letterSpacing: 1.2,
     textTransform: "uppercase",
-    marginBottom: 12,
+    marginBottom: 8,
     marginLeft: 4,
   },
-  assignStepLabelSecond: { marginTop: 28 },
+  assignStepLabelSecond: { marginTop: 18 },
   assignEmptyHint: {
     fontSize: 13,
     color: Theme.textMuted,
@@ -1731,16 +1909,16 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   assignAdhocVehicleWrap: {
-    marginBottom: 20,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    backgroundColor: Theme.surface,
+    marginBottom: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "#ffffff",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: "#e2e8f0",
   },
   assignAdhocVehicleLabel: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
@@ -1748,19 +1926,19 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   assignAdhocVehicleHint: {
-    fontSize: 11,
+    fontSize: 10,
     color: Theme.textMuted,
     marginBottom: 10,
   },
   assignAdhocVehicleInput: {
-    fontSize: 14,
-    color: Theme.textPrimaryDark,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: Theme.screenBackground,
+    fontSize: 13,
+    color: "#0f172a",
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    backgroundColor: "#f8fafc",
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: "#e2e8f0",
     marginBottom: 10,
     ...Platform.select({
       web: {
@@ -1769,29 +1947,32 @@ const styles = StyleSheet.create({
     }),
   },
   assignAdhocVehicleBtn: {
-    paddingVertical: 12,
+    alignSelf: "flex-start",
+    minHeight: 44,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     borderRadius: 8,
-    backgroundColor: Theme.primary,
+    backgroundColor: "#6366f1",
     alignItems: "center",
-    },
+    justifyContent: "center",
+  },
   assignAdhocVehicleBtnDisabled: {
     opacity: 0.5,
   },
   assignAdhocVehicleBtnText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     color: Theme.textOnPrimary,
-    textTransform: "uppercase",
   },
   assignCard: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    marginBottom: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    marginBottom: 8,
     backgroundColor: Theme.screenBackground,
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: "transparent",
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 2 },
@@ -1804,9 +1985,9 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.fiscalTabActiveBg,
   },
   assignDriverAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
@@ -1815,8 +1996,8 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.primary,
   },
   assignDriverInitial: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "700",
     color: Theme.textMuted,
   },
   assignDriverInitialSelected: {
@@ -1824,16 +2005,16 @@ const styles = StyleSheet.create({
   },
   assignCardBody: {
     flex: 1,
-    marginLeft: 14,
+    marginLeft: 10,
     minWidth: 0,
   },
   assignCardTitle: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
   assignCardSubtitle: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
     color: Theme.textMuted,
     marginTop: 2,
@@ -1851,14 +2032,14 @@ const styles = StyleSheet.create({
   },
   assignStatusDotAvailable: { backgroundColor: Theme.darkGreen },
   assignStatusDotLeave: { backgroundColor: Theme.driverGold },
-  assignStatusText: { fontSize: 11, fontWeight: "700" },
+  assignStatusText: { fontSize: 10, fontWeight: "600" },
   assignStatusTextAvailable: { color: Theme.darkGreen },
   assignStatusTextLeave: { color: "#B45309" },
   assignCheckWrap: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1,
     borderColor: Theme.borderInput,
     alignItems: "center",
     justifyContent: "center",
@@ -1868,9 +2049,9 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.primary,
   },
   assignVehicleIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
@@ -1879,10 +2060,10 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.primary,
   },
   assignVehicleInput: {
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    fontSize: 14,
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    fontSize: 12,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
     backgroundColor: Theme.screenBackground,
@@ -1894,21 +2075,21 @@ const styles = StyleSheet.create({
     }),
   },
   assignModalFooter: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    backgroundColor: Theme.screenBackground,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    backgroundColor: "#020617",
     borderTopWidth: 1,
-    borderTopColor: Theme.borderLight,
+    borderTopColor: "#111827",
   },
   assignSearchWrap: {
     flexDirection: "row",
     alignItems: "center",
-    marginHorizontal: 24,
-    marginVertical: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    marginHorizontal: 14,
+    marginVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: Theme.borderLight,
   },
@@ -1918,8 +2099,8 @@ const styles = StyleSheet.create({
   },
   assignSearchInput: {
     flex: 1,
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
     paddingLeft: 28,
     paddingVertical: 0,
@@ -1933,25 +2114,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 14,
-    paddingHorizontal: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
     borderRadius: 12,
-    marginBottom: 10,
+    marginBottom: 8,
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: "#e2e8f0",
   },
   assignRegistryCardLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
     flex: 1,
     minWidth: 0,
   },
   assignDriverAvatarRegistry: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: "transparent",
     borderWidth: 1,
     borderColor: Theme.textPrimaryDark,
@@ -1959,28 +2140,28 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   assignDriverAvatarImage: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     borderWidth: 1,
     borderColor: Theme.borderLight,
   },
   assignDriverInitialRegistry: {
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
   assignSyncBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
     backgroundColor: "transparent",
     borderWidth: 1,
     borderColor: Theme.darkGreen,
   },
   assignSyncBadgeText: {
-    fontSize: 8,
-    fontWeight: "800",
+    fontSize: 7,
+    fontWeight: "700",
     color: Theme.darkGreen,
     textTransform: "uppercase",
   },
@@ -2002,23 +2183,23 @@ const styles = StyleSheet.create({
     color: (Theme as any).warning ?? "#B45309",
   },
   assignBusyBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
     backgroundColor: "transparent",
     borderWidth: 1,
     borderColor: (Theme as any).warning ?? "#D97706",
   },
   assignBusyBadgeText: {
-    fontSize: 8,
-    fontWeight: "800",
+    fontSize: 7,
+    fontWeight: "700",
     color: (Theme as any).warning ?? "#B45309",
     textTransform: "uppercase",
   },
   assignVehicleIconWrapRegistry: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: "transparent",
     borderWidth: 1,
     borderColor: Theme.textPrimaryDark,
@@ -2026,21 +2207,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   assignUpdateLinkBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 6,
     backgroundColor: "transparent",
     borderWidth: 1,
     borderColor: Theme.textPrimaryDark,
   },
   assignUpdateLinkBadgeText: {
-    fontSize: 8,
-    fontWeight: "800",
+    fontSize: 7,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
   },
   assignRegistrySubtext: {
-    fontSize: 7,
+    fontSize: 8,
     fontWeight: "700",
     color: Theme.textMuted,
     textTransform: "uppercase",
@@ -2059,27 +2240,27 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
   },
   assignCancelBtn: {
-    paddingVertical: 16,
-    borderRadius: 12,
-    backgroundColor: Theme.surfaceGray,
+    paddingVertical: 10,
+    borderRadius: 9,
+    backgroundColor: "rgba(255,255,255,0.1)",
     alignItems: "center",
     justifyContent: "center",
   },
   assignCancelBtnText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    letterSpacing: 1.2,
+    fontSize: 9,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.8)",
+    letterSpacing: 0.6,
     textTransform: "uppercase",
   },
   assignConfirmBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
-    backgroundColor: Theme.textPrimaryDark,
-    paddingVertical: 16,
-    borderRadius: 12,
+    gap: 8,
+    backgroundColor: "#ffffff",
+    paddingVertical: 10,
+    borderRadius: 9,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.15,
@@ -2088,20 +2269,22 @@ const styles = StyleSheet.create({
   },
   assignConfirmBtnDisabled: { opacity: 0.7 },
   assignConfirmBtnText: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: Theme.textOnPrimary,
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#0f172a",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
   phoneModalInput: {
     borderWidth: 1,
-    borderColor: Theme.borderInput,
-    borderRadius: 12,
-    paddingVertical: 12,
+    borderColor: "#dbe4ef",
+    borderRadius: 10,
+    paddingVertical: 10,
     paddingHorizontal: 14,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
-    color: Theme.textPrimaryDark,
-    backgroundColor: Theme.screenBackground,
+    color: "#0f172a",
+    backgroundColor: "#ffffff",
     marginBottom: 10,
     ...Platform.select({
       web: {
@@ -2111,15 +2294,46 @@ const styles = StyleSheet.create({
   },
   phoneModalFoundWrap: { marginBottom: 10 },
   phoneModalFound: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
   },
   phoneModalHint: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
     color: Theme.textMuted,
     marginTop: 4,
+  },
+  phoneProtocolCard: {
+    marginTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+    paddingTop: 12,
+    flexDirection: "row",
+    gap: 8,
+  },
+  phoneProtocolIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: "#eef2ff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  phoneProtocolBody: {
+    flex: 1,
+  },
+  phoneProtocolTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#0f172a",
+    marginBottom: 2,
+  },
+  phoneProtocolText: {
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "600",
+    color: "#64748b",
   },
   phoneModalError: {
     fontSize: 12,

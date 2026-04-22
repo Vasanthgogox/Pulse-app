@@ -23,7 +23,6 @@ import { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    Dimensions,
     Image,
     KeyboardAvoidingView,
     NativeSyntheticEvent,
@@ -34,12 +33,12 @@ import {
     TextInput,
     TextInputKeyPressEventData,
     TouchableOpacity,
+    useWindowDimensions,
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const DRIVER_AVATAR_STORAGE_KEY = 'driver_avatar_seed';
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Professional wording per step (title + subtitle), no "Step 1/2" labels
 const STEP_CONTENT = [
@@ -74,6 +73,7 @@ const LIGHT = {
 const NAME_MIN_LENGTH = 2;
 const NAME_MAX_LENGTH = 100;
 const EMAIL_MAX_LENGTH = 255;
+const DRIVER_EMAIL_DOMAIN = 'driver.pulse.local';
 
 /** Normalize phone: strip spaces, allow optional leading +, then digits only. */
 function normalizePhone(raw: string): string {
@@ -113,8 +113,14 @@ function isStep2Valid(callsign: string, email: string, pwd: string): boolean {
   return true;
 }
 
+function buildDriverEmailFromPhone(fullPhone: string): string {
+  const digits = fullPhone.replace(/\D/g, '');
+  return `driver.${digits}@${DRIVER_EMAIL_DOMAIN}`;
+}
+
 export default function DriverSignUpScreen() {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const router = useRouter();
   const safeBack = useSafeBack('/sign-in');
   const { signUp, signInWithGoogle } = useAuth();
@@ -145,6 +151,8 @@ export default function DriverSignUpScreen() {
   const phoneCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const otpInputRef = useRef<TextInput>(null);
   const fieldYRef = useRef({ callsign: 0, email: 0, password: 0 });
+  const isDesktop = width >= 1024;
+  const pageWidth = isDesktop ? Math.min(560, width - 120) : width;
 
   /** Extra scroll offset so focused field stays above keyboard. Use larger offset on iOS when focusing password so the field stays above the "Strong Password" / autofill bar. */
   const SCROLL_OFFSET_DEFAULT = 100;
@@ -156,7 +164,7 @@ export default function DriverSignUpScreen() {
     setTimeout(() => {
       const y = fieldYRef.current[name];
       scrollRef.current?.scrollTo({
-        x: step * SCREEN_WIDTH,
+        x: step * pageWidth,
         y: Math.max(0, y - offset),
         animated: true,
       });
@@ -202,7 +210,7 @@ export default function DriverSignUpScreen() {
 
   const goToPage = (index: number) => {
     setStep(index);
-    scrollRef.current?.scrollTo({ x: index * SCREEN_WIDTH, animated: true });
+    scrollRef.current?.scrollTo({ x: index * pageWidth, animated: true });
   };
 
   const validatePhoneStep = async () => {
@@ -273,7 +281,7 @@ export default function DriverSignUpScreen() {
 
   const verifyOtpStep = () => {
     if (otpValue.length !== OTP_LENGTH) return;
-    goToPage(2);
+    void establishLink();
   };
 
   const handleOtpChange = (text: string) => {
@@ -323,19 +331,29 @@ export default function DriverSignUpScreen() {
       Alert.alert('No internet', 'Connect to the internet to complete sign up.');
       return;
     }
+    if (!fullPhoneForApi) {
+      Alert.alert('Invalid', 'Enter a valid phone number to continue.');
+      return;
+    }
     setLoading(true);
     try {
+      const generatedEmail = buildDriverEmailFromPhone(fullPhoneForApi);
+      const generatedPassword = `${fullPhoneForApi.replace(/\D/g, '')}#Pulse!`;
+      const generatedName = `Driver ${fullPhoneForApi.slice(-4)}`;
+
       await AsyncStorage.setItem(DRIVER_AVATAR_STORAGE_KEY, avatarSeed);
       const { error } = await signUp(
-        email.trim(),
-        password,
-        callsign.trim(),
+        generatedEmail,
+        generatedPassword,
+        generatedName,
         'driver',
         'ASSET_BASED',
         fullPhoneForApi || undefined
       );
-      if (error) throw error;
-      goToPage(7);
+      if (error && !error.message.toLowerCase().includes('already registered')) {
+        throw error;
+      }
+      initializeHub();
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Sign up failed';
       Alert.alert('Error', msg.includes('Cannot reach server') ? 'Cannot reach server. Check your connection.' : msg);
@@ -378,25 +396,29 @@ export default function DriverSignUpScreen() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 20 : 0}
     >
       <TouchableOpacity
-        style={[styles.backLink, { paddingTop: insets.top + 8 }]}
+        style={[styles.backLink, isDesktop && styles.backLinkDesktop, { paddingTop: insets.top + 8 }]}
         onPress={handleBack}
         hitSlop={12}
       >
         <FontAwesome name="chevron-left" size={20} color={LIGHT.textMuted} />
         <Text style={styles.backLinkText}>{step === 0 ? 'Back to sign up' : 'Back'}</Text>
       </TouchableOpacity>
+      <View style={[styles.brandRow, isDesktop && styles.brandRowDesktop]}>
+        <Text style={styles.brandText}>PULSE.</Text>
+      </View>
       <ScrollView
         ref={scrollRef}
         horizontal
         pagingEnabled
         scrollEnabled={false}
         showsHorizontalScrollIndicator={false}
+        style={[styles.pagesScroller, isDesktop && styles.pagesScrollerDesktop]}
         contentContainerStyle={styles.pagesWrap}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >
         {/* Step 1: Welcome – India phone only */}
-        <View style={[styles.page, { width: SCREEN_WIDTH }]}>
+        <View style={[styles.page, { width: pageWidth }]}>
           <View style={styles.pageContent}>
             <Text style={styles.mainTitle}>{STEP_CONTENT[0].title}</Text>
             <Text style={styles.subTitle}>{STEP_CONTENT[0].subtitle}</Text>
@@ -460,7 +482,7 @@ export default function DriverSignUpScreen() {
         </View>
 
         {/* Step 2: OTP entry */}
-        <View style={[styles.page, { width: SCREEN_WIDTH }]}>
+        <View style={[styles.page, { width: pageWidth }]}>
           <View style={styles.pageContent}>
             <Text style={styles.mainTitle}>{STEP_CONTENT[1].title}</Text>
             <Text style={styles.subTitle}>
@@ -512,7 +534,7 @@ export default function DriverSignUpScreen() {
         </View>
 
         {/* Step 3: Your details */}
-        <View style={[styles.page, { width: SCREEN_WIDTH }]}>
+        <View style={[styles.page, { width: pageWidth }]}>
           <View style={styles.pageContent}>
             <Text style={styles.mainTitle}>{STEP_CONTENT[2].title}</Text>
             <Text style={styles.subTitle}>{STEP_CONTENT[2].subtitle}</Text>
@@ -614,7 +636,7 @@ export default function DriverSignUpScreen() {
         </View>
 
         {/* Step 4: Driving license */}
-        <View style={[styles.page, { width: SCREEN_WIDTH }]}>
+        <View style={[styles.page, { width: pageWidth }]}>
           <View style={styles.pageContent}>
             <Text style={styles.mainTitle}>{STEP_CONTENT[3].title}</Text>
             <Text style={styles.subTitle}>{STEP_CONTENT[3].subtitle}</Text>
@@ -653,7 +675,7 @@ export default function DriverSignUpScreen() {
         </View>
 
         {/* Step 5: Aadhaar */}
-        <View style={[styles.page, { width: SCREEN_WIDTH }]}>
+        <View style={[styles.page, { width: pageWidth }]}>
           <View style={styles.pageContent}>
             <Text style={styles.mainTitle}>{STEP_CONTENT[4].title}</Text>
             <Text style={styles.subTitle}>{STEP_CONTENT[4].subtitle}</Text>
@@ -692,7 +714,7 @@ export default function DriverSignUpScreen() {
         </View>
 
         {/* Step 6: PAN */}
-        <View style={[styles.page, { width: SCREEN_WIDTH }]}>
+        <View style={[styles.page, { width: pageWidth }]}>
           <View style={styles.pageContent}>
             <Text style={styles.mainTitle}>{STEP_CONTENT[5].title}</Text>
             <Text style={styles.subTitle}>{STEP_CONTENT[5].subtitle}</Text>
@@ -731,7 +753,7 @@ export default function DriverSignUpScreen() {
         </View>
 
         {/* Step 7: Avatar */}
-        <View style={[styles.page, { width: SCREEN_WIDTH }]}>
+        <View style={[styles.page, { width: pageWidth }]}>
           <View style={styles.pageContent}>
             <Text style={styles.mainTitle}>{STEP_CONTENT[6].title}</Text>
             <Text style={styles.subTitle}>{STEP_CONTENT[6].subtitle}</Text>
@@ -767,7 +789,7 @@ export default function DriverSignUpScreen() {
         </View>
 
         {/* Step 8: Success */}
-        <View style={[styles.page, { width: SCREEN_WIDTH }]}>
+        <View style={[styles.page, { width: pageWidth }]}>
           <View style={styles.pageContent}>
             <View style={styles.crownWrap}>
               <FontAwesome name="trophy" size={48} color={LIGHT.accent} />
@@ -810,13 +832,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 8,
   },
+  backLinkDesktop: {
+    paddingHorizontal: 0,
+    alignSelf: 'center',
+    width: 560,
+  },
   backLinkText: {
     fontSize: 14,
     color: LIGHT.textMuted,
     fontWeight: '600',
   },
+  brandRow: {
+    paddingHorizontal: 24,
+    paddingBottom: 4,
+  },
+  brandRowDesktop: {
+    paddingHorizontal: 0,
+    alignSelf: 'center',
+    width: 560,
+  },
+  brandText: {
+    fontSize: 28,
+    fontWeight: '900',
+    letterSpacing: -0.8,
+    color: Theme.driverPrimary,
+  },
   pagesWrap: {
     flexGrow: 1,
+  },
+  pagesScroller: {
+    flex: 1,
+  },
+  pagesScrollerDesktop: {
+    width: 560,
+    alignSelf: 'center',
   },
   page: {
     flex: 1,
