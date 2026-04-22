@@ -73,7 +73,6 @@ const LIGHT = {
 const NAME_MIN_LENGTH = 2;
 const NAME_MAX_LENGTH = 100;
 const EMAIL_MAX_LENGTH = 255;
-const DRIVER_EMAIL_DOMAIN = 'driver.pulse.local';
 
 /** Normalize phone: strip spaces, allow optional leading +, then digits only. */
 function normalizePhone(raw: string): string {
@@ -111,11 +110,6 @@ function isStep2Valid(callsign: string, email: string, pwd: string): boolean {
   if (validateEmail(email) !== null) return false;
   if (validatePassword(pwd) !== null) return false;
   return true;
-}
-
-function buildDriverEmailFromPhone(fullPhone: string): string {
-  const digits = fullPhone.replace(/\D/g, '');
-  return `driver.${digits}@${DRIVER_EMAIL_DOMAIN}`;
 }
 
 export default function DriverSignUpScreen() {
@@ -281,7 +275,7 @@ export default function DriverSignUpScreen() {
 
   const verifyOtpStep = () => {
     if (otpValue.length !== OTP_LENGTH) return;
-    void establishLink();
+    goToPage(2);
   };
 
   const handleOtpChange = (text: string) => {
@@ -337,15 +331,11 @@ export default function DriverSignUpScreen() {
     }
     setLoading(true);
     try {
-      const generatedEmail = buildDriverEmailFromPhone(fullPhoneForApi);
-      const generatedPassword = `${fullPhoneForApi.replace(/\D/g, '')}#Pulse!`;
-      const generatedName = `Driver ${fullPhoneForApi.slice(-4)}`;
-
       await AsyncStorage.setItem(DRIVER_AVATAR_STORAGE_KEY, avatarSeed);
       const { error } = await signUp(
-        generatedEmail,
-        generatedPassword,
-        generatedName,
+        email.trim(),
+        password,
+        callsign.trim(),
         'driver',
         'ASSET_BASED',
         fullPhoneForApi || undefined
@@ -353,7 +343,7 @@ export default function DriverSignUpScreen() {
       if (error && !error.message.toLowerCase().includes('already registered')) {
         throw error;
       }
-      initializeHub();
+      goToPage(7);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Sign up failed';
       Alert.alert('Error', msg.includes('Cannot reach server') ? 'Cannot reach server. Check your connection.' : msg);
