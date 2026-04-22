@@ -666,15 +666,16 @@ export default function SalaryRequestScreen() {
           </View>
         ) : null}
 
-        <View
-          style={[
-            styles.scroll,
-            {
-              paddingTop: Layout.spacingLarge,
-              paddingBottom:
-                widgetPage === 1 ? tabBarClearance + 150 : tabBarClearance + 200,
-            },
-          ]}
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={{
+            paddingTop: Layout.spacingLarge,
+            paddingBottom:
+              widgetPage === 1 ? tabBarClearance + 150 : tabBarClearance + 200,
+          }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           <View style={styles.canvas}>
           {salaryRequestOrgOptions.length === 0 ? (
@@ -978,7 +979,7 @@ export default function SalaryRequestScreen() {
             </>
           )}
           </View>
-        </View>
+        </ScrollView>
 
         {/* Request type modal */}
         <Modal
