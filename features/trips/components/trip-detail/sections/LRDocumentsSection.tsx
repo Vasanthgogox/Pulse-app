@@ -69,8 +69,14 @@ export function LRDocumentsSection({
 }
 
 function DocRow({ doc }: { doc: DocItem }) {
+  const canOpen = !!doc.onView;
   return (
-    <View style={styles.docRow}>
+    <TouchableOpacity
+      style={styles.docRow}
+      onPress={doc.onView}
+      disabled={!canOpen}
+      activeOpacity={canOpen ? 0.75 : 1}
+    >
       <View style={styles.docIconWrap}>
         <FontAwesome name="file-text-o" size={18} color="#9ca3af" />
       </View>
@@ -99,7 +105,12 @@ function DocRow({ doc }: { doc: DocItem }) {
       </View>
       <View style={styles.docRowActions}>
         {doc.onView ? (
-          <TouchableOpacity onPress={doc.onView} style={styles.docActionBtn} activeOpacity={0.7}>
+          <TouchableOpacity
+            onPress={doc.onView}
+            style={styles.docActionBtn}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
             <FontAwesome name="eye" size={14} color="#6b7280" />
           </TouchableOpacity>
         ) : null}
@@ -109,7 +120,7 @@ function DocRow({ doc }: { doc: DocItem }) {
           </TouchableOpacity>
         ) : null}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 

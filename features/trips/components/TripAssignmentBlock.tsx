@@ -174,6 +174,13 @@ export function TripAssignmentBlock({
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const isDesktop = Platform.OS === "web" && windowWidth >= 768;
+  const hasDriverAssigned = !!trip.driver_id;
+  const hasVehicleAssigned =
+    !!trip.vehicle_id || !!String(trip.vehicle_display_number ?? "").trim();
+  const canGenerateOtpNow = hasDriverAssigned && hasVehicleAssigned;
+  const otpLockedByTripProgress = ["in_progress", "in_transit"].includes(
+    String(trip.status ?? "").toLowerCase(),
+  );
 
   useEffect(() => {
     setPickDriverId(trip.driver_id);
@@ -181,7 +188,7 @@ export function TripAssignmentBlock({
   }, [trip.driver_id, trip.vehicle_id]);
 
   useEffect(() => {
-    if (!showAssignByPhone || !trip?.id) {
+    if (!showAssignByPhone || !trip?.id || !canGenerateOtpNow) {
       setOtpCode(null);
       setOtpExpiresAt(null);
       setOtpError(null);
@@ -201,7 +208,7 @@ export function TripAssignmentBlock({
         }
       })
       .finally(() => setOtpLoading(false));
-  }, [showAssignByPhone, trip?.id]);
+  }, [showAssignByPhone, trip?.id, canGenerateOtpNow]);
 
   useEffect(() => {
     if (showAssignByPhone && (propsVehicleLabel ?? "").trim() !== "") {
@@ -415,16 +422,23 @@ export function TripAssignmentBlock({
         if (vehicleErr) setPhoneError(vehicleErr.message);
       }
     }
-    // Always ensure a fresh OTP exists right after assignment/reassignment.
-    // regenerate_trip_otp upserts internally, so this also covers first-time assignment.
-    const {
-      error: otpErr,
-      code: newCode,
-      expires_at: newExpires,
-    } = await regenerateTripOtp(trip.id);
-    if (!otpErr && newCode != null) {
-      setOtpCode(newCode);
-      setOtpExpiresAt(newExpires ?? null);
+    const willHaveVehicleAssigned =
+      !!matchedVehicle ||
+      !!phoneVehicleInput.trim() ||
+      !!trip.vehicle_id ||
+      !!String(trip.vehicle_display_number ?? "").trim();
+
+    // OTP is allowed only after both driver and vehicle are assigned.
+    if (willHaveVehicleAssigned && !otpLockedByTripProgress) {
+      const {
+        error: otpErr,
+        code: newCode,
+        expires_at: newExpires,
+      } = await regenerateTripOtp(trip.id);
+      if (!otpErr && newCode != null) {
+        setOtpCode(newCode);
+        setOtpExpiresAt(newExpires ?? null);
+      }
     }
     setPhoneSaving(false);
     setShowPhoneModal(false);
@@ -451,7 +465,7 @@ export function TripAssignmentBlock({
   ]);
 
   const handleRegenerateOtp = useCallback(async () => {
-    if (!trip?.id || otpRegenerating) return;
+    if (!trip?.id || otpRegenerating || !canGenerateOtpNow || otpLockedByTripProgress) return;
     setOtpError(null);
     setOtpRegenerating(true);
     try {
@@ -465,10 +479,10 @@ export function TripAssignmentBlock({
     } finally {
       setOtpRegenerating(false);
     }
-  }, [trip?.id, otpRegenerating]);
+  }, [trip?.id, otpRegenerating, canGenerateOtpNow, otpLockedByTripProgress]);
 
   const handleGenerateOtp = useCallback(async () => {
-    if (!trip?.id || otpRegenerating) return;
+    if (!trip?.id || otpRegenerating || !canGenerateOtpNow || otpLockedByTripProgress) return;
     setOtpError(null);
     setOtpRegenerating(true);
     try {
@@ -482,7 +496,7 @@ export function TripAssignmentBlock({
     } finally {
       setOtpRegenerating(false);
     }
-  }, [trip?.id, otpRegenerating]);
+  }, [trip?.id, otpRegenerating, canGenerateOtpNow, otpLockedByTripProgress]);
 
   const openPhoneModal = useCallback(
     (isReassign?: boolean, initialVehicle?: string) => {

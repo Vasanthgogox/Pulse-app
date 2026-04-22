@@ -72,8 +72,8 @@ export function AddTripModalLayout({
           style={[
             styles.footer,
             {
-              paddingBottom: Layout.fabBottomOffset + insets.bottom,
-              paddingTop: Layout.headerPaddingBelowInset,
+              paddingBottom: insets.bottom + 12,
+              paddingTop: 8,
             },
           ]}
         >
@@ -100,7 +100,7 @@ export function AddTripModalLayout({
                 <FontAwesome
                   name="check-circle"
                   size={18}
-                  color={Theme.buttonPrimaryText}
+                  color={Theme.buttonMatteBlackText}
                   style={styles.submitIcon}
                 />
                 <Text style={styles.submitBtnText}>{submitLabel}</Text>
@@ -142,27 +142,29 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: Layout.sectionSpacing,
+    paddingTop: 16,
   },
   footer: {
-    backgroundColor: Theme.screenBackground,
+    marginTop: 8,
+    backgroundColor: Theme.surface,
     borderTopWidth: 1,
     borderTopColor: Theme.borderLight,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
+    borderRadius: 16,
+    paddingHorizontal: 8,
   },
   submitBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.buttonPrimary,
-    paddingVertical: 16,
-    borderRadius: 12,
-    minHeight: Layout.minTouchTargetSize,
-    shadowColor: Theme.shadow,
+    backgroundColor: Theme.buttonMatteBlack,
+    paddingVertical: 12,
+    borderRadius: 16,
+    minHeight: Layout.minTouchTargetSize + 12,
+    shadowColor: Theme.buttonMatteBlack,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    elevation: 3,
   },
   submitBtnDisabled: {
     opacity: 0.5,
@@ -171,11 +173,11 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   submitBtnText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: Theme.buttonPrimaryText,
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.buttonMatteBlackText,
     textTransform: "uppercase",
-    letterSpacing: 1.2,
+    letterSpacing: 1,
   },
   footerHint: {
     fontSize: 11,

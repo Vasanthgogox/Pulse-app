@@ -751,6 +751,43 @@ export default function CreateIndentScreen() {
                 </View>
                 <Text style={styles.stepCardTitle}>Route & Vehicle</Text>
               </View>
+              <View style={styles.routeCard}>
+                <View style={styles.routeRow}>
+                  <View style={[styles.routeDot, styles.routeDotFirst]}>
+                    <Text style={styles.routeDotLabel}>Origin</Text>
+                    <Text
+                      style={
+                        form.pickup_area.trim()
+                          ? styles.routeDotValue
+                          : styles.routeDotPlaceholder
+                      }
+                      numberOfLines={1}
+                    >
+                      {form.pickup_area.trim() || "Origin node"}
+                    </Text>
+                  </View>
+                  <View style={styles.routeArrow}>
+                    <FontAwesome
+                      name="long-arrow-right"
+                      size={14}
+                      color={Theme.textMuted}
+                    />
+                  </View>
+                  <View style={[styles.routeDot, styles.routeDotLast]}>
+                    <Text style={styles.routeDotLabel}>Destination</Text>
+                    <Text
+                      style={
+                        form.drop_location.trim()
+                          ? styles.routeDotValue
+                          : styles.routeDotPlaceholder
+                      }
+                      numberOfLines={1}
+                    >
+                      {form.drop_location.trim() || "Destination node"}
+                    </Text>
+                  </View>
+                </View>
+              </View>
               <View
                 style={[
                   styles.sheetGrid,
@@ -1838,6 +1875,51 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.separatorDark,
     gap: 10,
+  },
+  routeCard: {
+    backgroundColor: Theme.darkSurface,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: Theme.separatorDark,
+  },
+  routeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  routeDot: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: Theme.darkInputBg,
+    borderRadius: 8,
+    marginHorizontal: 6,
+  },
+  routeDotFirst: { marginLeft: 0 },
+  routeDotLast: { marginRight: 0 },
+  routeDotLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+    letterSpacing: 1,
+    marginBottom: 4,
+    textTransform: "uppercase",
+  },
+  routeDotValue: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.textOnDark,
+  },
+  routeDotPlaceholder: {
+    fontSize: 13,
+    color: Theme.textMuted,
+    fontStyle: "italic",
+  },
+  routeArrow: {
+    paddingHorizontal: 4,
   },
   routeStat: {
     flex: 1,

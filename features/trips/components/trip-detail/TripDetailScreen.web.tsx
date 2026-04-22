@@ -12,6 +12,7 @@ import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatINR, formatIndianVehicleNumber } from "@/lib/format";
+import { getDocumentViewUrl } from "@/services/tripDocumentsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -261,8 +262,39 @@ export default function TripDetailScreen({
     router.push("/log-incoming-pods" as any);
   };
 
+  const handleDocOpen = async (doc: (typeof detail.computedTripDocs)[number]) => {
+    if (doc.id === "vehicle-documents") {
+      if (trip.vehicle_id) router.push(`/vehicle/${trip.vehicle_id}` as any);
+      else openTripDocumentsFlow();
+      return;
+    }
+
+    if (doc.id === "pod" && doc.storagePath) {
+      try {
+        const url = await getDocumentViewUrl(doc.storagePath);
+        if (typeof window !== "undefined") {
+          window.open(url, "_blank", "noopener,noreferrer");
+        }
+      } catch {
+        openTripDocumentsFlow();
+      }
+      return;
+    }
+
+    openTripDocumentsFlow();
+  };
+
+  const hasDriverAssigned = !!trip.driver_id;
+  const hasVehicleAssigned =
+    !!trip.vehicle_id || !!String(trip.vehicle_display_number ?? "").trim();
+  const canGenerateAggregateOtp = hasDriverAssigned && hasVehicleAssigned;
+  const otpLockedByTripProgress = ["in_progress", "in_transit"].includes(
+    String(trip.status ?? "").toLowerCase(),
+  );
+
   const aggregateOtpState = (() => {
     if (!isAggregate) return null;
+    if (!canGenerateAggregateOtp) return "not_required";
     const status = String(trip.status ?? "").toLowerCase();
     if (status === "assigned") return "otp_pending";
     if (status === "in_progress" || status === "in_transit") return "verified";
@@ -270,7 +302,7 @@ export default function TripDetailScreen({
   })();
 
   const handleResendOtp = async () => {
-    if (!trip?.id || otpResending) return;
+    if (!trip?.id || otpResending || !canGenerateAggregateOtp || otpLockedByTripProgress) return;
     setOtpResending(true);
     try {
       await regenerateTripOtp(trip.id);
@@ -393,7 +425,7 @@ export default function TripDetailScreen({
                       detail.setDisplayVehicleFromInput(normalized);
                     }}
                     inlineSection={
-                      isAggregate && aggregateOtpState !== "not_required" ? (
+                      isAggregate ? (
                         <View style={styles.otpStateCardInline}>
                           <View style={styles.otpStateHeader}>
                             {aggregateOtpState === "verified" ? (
@@ -412,7 +444,9 @@ export default function TripDetailScreen({
                           <View style={styles.otpStateBodyRow}>
                             <View style={styles.otpStateBodyLeft}>
                               <Text style={styles.otpStateSub}>
-                                {aggregateOtpState === "verified"
+                                {!canGenerateAggregateOtp
+                                  ? "OTP will unlock after assigning both driver and vehicle."
+                                  : aggregateOtpState === "verified"
                                   ? "Driver has verified assignment from the driver app."
                                   : detail.tripOtp?.expires_at
                                     ? `OTP generated. Expires at ${new Date(
@@ -431,7 +465,7 @@ export default function TripDetailScreen({
                               {aggregateOtpState === "verified" ? (
                                 <Text style={styles.otpActionStatus}>Status: Verified</Text>
                               ) : null}
-                              {aggregateOtpState !== "verified" ? (
+                              {canGenerateAggregateOtp && aggregateOtpState !== "verified" ? (
                                 <TouchableOpacity
                                   style={styles.otpResendBtn}
                                   onPress={handleResendOtp}
@@ -442,6 +476,11 @@ export default function TripDetailScreen({
                                     {otpResending ? "Resending..." : "Resend OTP"}
                                   </Text>
                                 </TouchableOpacity>
+                              ) : null}
+                              {!canGenerateAggregateOtp ? (
+                                <View style={styles.otpDisabledBtn}>
+                                  <Text style={styles.otpDisabledBtnText}>Assign to enable OTP</Text>
+                                </View>
                               ) : null}
                             </View>
                           </View>
@@ -457,7 +496,9 @@ export default function TripDetailScreen({
                       label: d.label,
                       type: d.type,
                       status: d.status === "Verified" ? "Uploaded" : d.status,
-                      onView: () => openTripDocumentsFlow(),
+                      onView: () => {
+                        void handleDocOpen(d);
+                      },
                     }))}
                     onUpdateLR={openTripDocumentsFlow}
                     onAddDocument={openTripDocumentsFlow}
@@ -1244,6 +1285,24 @@ const styles = StyleSheet.create({
     backgroundColor: "#111827",
   },
   otpResendBtnText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#ffffff",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  otpDisabledBtn: {
+    marginTop: 0,
+    alignSelf: "flex-end",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: "#111827",
+    backgroundColor: "#111827",
+    opacity: 0.72,
+  },
+  otpDisabledBtnText: {
     fontSize: 9,
     fontWeight: "700",
     color: "#ffffff",

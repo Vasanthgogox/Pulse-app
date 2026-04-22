@@ -59,10 +59,10 @@ const styles = StyleSheet.create({
   },
   sectionCard: {
     backgroundColor: Theme.surface,
-    borderRadius: 12,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    padding: Layout.screenPaddingHorizontal + 2,
+    padding: 16,
     marginBottom: Layout.sectionSpacing,
     overflow: "hidden",
     shadowColor: Theme.shadow,
@@ -74,21 +74,28 @@ const styles = StyleSheet.create({
   sectionCardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: Layout.headerPaddingBelowInset,
-    paddingLeft: Layout.screenPaddingHorizontal - 4,
-    borderLeftWidth: 4,
-    borderLeftColor: Theme.primaryText,
+    gap: 10,
+    marginBottom: 10,
   },
-  sectionCardIcon: {
-    marginRight: 10,
-    opacity: 0.9,
+  stepChip: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: Theme.darkSurface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepChipText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
   },
   sectionTitle: {
-    fontSize: 10,
+    fontSize: 15,
     fontWeight: "800",
-    color: Theme.textMutedDemo,
-    textTransform: "uppercase",
-    letterSpacing: 1,
+    color: Theme.textPrimaryDark,
   },
   routeCard: {
     backgroundColor: Theme.darkSurface,
@@ -199,19 +206,20 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   label: {
-    fontSize: 10,
-    fontWeight: "800",
-    marginBottom: 6,
+    fontSize: 12,
+    fontWeight: "700",
+    marginBottom: 8,
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
   input: {
-    borderRadius: 10,
-    paddingHorizontal: Layout.screenPaddingHorizontal - 2,
+    borderRadius: 12,
+    paddingHorizontal: 14,
     paddingVertical: 12,
-    fontSize: 14,
-    minHeight: Layout.minTouchTargetSize,
-    marginBottom: Layout.screenPaddingHorizontal - 2,
+    fontSize: 16,
+    fontWeight: "600",
+    minHeight: 52,
+    marginBottom: 12,
     ...Platform.select({
       web: {
         outlineStyle: "none",
@@ -224,13 +232,13 @@ const styles = StyleSheet.create({
   },
   pickerFieldWrap: {
     position: "relative",
-    marginBottom: Layout.sectionSpacing,
+    marginBottom: 8,
   },
   pickerWrap: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginBottom: Layout.screenPaddingHorizontal - 2,
+    marginBottom: 12,
   },
   pickerBtn: {
     flex: 1,
@@ -746,13 +754,47 @@ export function AddTripFormFields({
       {/* 01 — Route first, then client & price */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionCardHeader}>
-          <FontAwesome
-            name="map-marker"
-            size={14}
-            color={Theme.primaryText}
-            style={styles.sectionCardIcon}
-          />
-          <Text style={styles.sectionTitle}>01 — Route</Text>
+          <View style={styles.stepChip}>
+            <Text style={styles.stepChipText}>01</Text>
+          </View>
+          <Text style={styles.sectionTitle}>Route</Text>
+        </View>
+        <View style={styles.routeCard}>
+          <View style={styles.routeRow}>
+            <View style={[styles.routeDot, styles.routeDotFirst]}>
+              <Text style={styles.routeDotLabel}>Origin</Text>
+              <Text
+                style={
+                  state.pickupArea.trim()
+                    ? styles.routeDotValue
+                    : styles.routeDotPlaceholder
+                }
+                numberOfLines={1}
+              >
+                {state.pickupArea.trim() || "Pickup area"}
+              </Text>
+            </View>
+            <View style={styles.routeArrow}>
+              <FontAwesome
+                name="long-arrow-right"
+                size={14}
+                color={Theme.textMuted}
+              />
+            </View>
+            <View style={[styles.routeDot, styles.routeDotLast]}>
+              <Text style={styles.routeDotLabel}>Destination</Text>
+              <Text
+                style={
+                  state.dropLocation.trim()
+                    ? styles.routeDotValue
+                    : styles.routeDotPlaceholder
+                }
+                numberOfLines={1}
+              >
+                {state.dropLocation.trim() || "Drop location"}
+              </Text>
+            </View>
+          </View>
         </View>
         <LocationSearchField
           label="Pickup area *"
@@ -801,13 +843,10 @@ export function AddTripFormFields({
         ) : null}
 
         <View style={styles.sectionCardHeader}>
-          <FontAwesome
-            name="user"
-            size={14}
-            color={Theme.primaryText}
-            style={styles.sectionCardIcon}
-          />
-          <Text style={styles.sectionTitle}>02 — Client & price</Text>
+          <View style={styles.stepChip}>
+            <Text style={styles.stepChipText}>02</Text>
+          </View>
+          <Text style={styles.sectionTitle}>Client & Price</Text>
         </View>
         <ClientSearchField
           clients={clients}
@@ -838,13 +877,10 @@ export function AddTripFormFields({
 
       <View style={styles.sectionCard}>
         <View style={styles.sectionCardHeader}>
-          <FontAwesome
-            name="cube"
-            size={14}
-            color={Theme.primaryText}
-            style={styles.sectionCardIcon}
-          />
-          <Text style={styles.sectionTitle}>03 — Source of supply</Text>
+          <View style={styles.stepChip}>
+            <Text style={styles.stepChipText}>03</Text>
+          </View>
+          <Text style={styles.sectionTitle}>Source of Supply</Text>
         </View>
         <View style={styles.sourceRow}>
           <TouchableOpacity
@@ -926,13 +962,10 @@ export function AddTripFormFields({
       {state.supplySource === "asset" && (
         <View style={styles.sectionCard}>
           <View style={styles.sectionCardHeader}>
-            <FontAwesome
-              name="truck"
-              size={14}
-              color={Theme.primaryText}
-              style={styles.sectionCardIcon}
-            />
-            <Text style={styles.sectionTitle}>04 — Asset allocation</Text>
+            <View style={styles.stepChip}>
+              <Text style={styles.stepChipText}>04</Text>
+            </View>
+            <Text style={styles.sectionTitle}>Asset Allocation</Text>
           </View>
           <View style={styles.checkRow}>
             <Switch
@@ -1139,13 +1172,10 @@ export function AddTripFormFields({
       {state.supplySource === "aggregate" && (
         <View style={styles.sectionCard}>
           <View style={styles.sectionCardHeader}>
-            <FontAwesome
-              name="users"
-              size={14}
-              color={Theme.primaryText}
-              style={styles.sectionCardIcon}
-            />
-            <Text style={styles.sectionTitle}>04 — Associated partner</Text>
+            <View style={styles.stepChip}>
+              <Text style={styles.stepChipText}>04</Text>
+            </View>
+            <Text style={styles.sectionTitle}>Associated Partner</Text>
           </View>
           <Text style={label}>Associated Partner *</Text>
           <View style={styles.pickerWrap}>
@@ -1418,12 +1448,9 @@ export function AddTripFormFields({
 
       <View style={styles.sectionCard}>
         <View style={styles.sectionCardHeader}>
-          <FontAwesome
-            name="sticky-note-o"
-            size={14}
-            color={Theme.primaryText}
-            style={styles.sectionCardIcon}
-          />
+          <View style={styles.stepChip}>
+            <Text style={styles.stepChipText}>05</Text>
+          </View>
           <Text style={styles.sectionTitle}>Notes</Text>
         </View>
         <Text style={label}>Notes</Text>

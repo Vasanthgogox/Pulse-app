@@ -586,7 +586,10 @@ export function useTripDetail({
   }, [tripId]);
 
   const loadTripOtp = useCallback(() => {
-    if (!trip?.id || !isAggregateTrip(trip)) {
+    const hasDriverAssigned = !!trip?.driver_id;
+    const hasVehicleAssigned =
+      !!trip?.vehicle_id || !!String(trip?.vehicle_display_number ?? "").trim();
+    if (!trip?.id || !isAggregateTrip(trip) || !hasDriverAssigned || !hasVehicleAssigned) {
       setTripOtp(null);
       return;
     }
@@ -594,7 +597,7 @@ export function useTripDetail({
       if (error) setTripOtp(null);
       else setTripOtp({ code: code ?? null, expires_at: expires_at ?? null });
     });
-  }, [trip?.id, trip?.supplier_id]);
+  }, [trip?.id, trip?.supplier_id, trip?.driver_id, trip?.vehicle_id, trip?.vehicle_display_number]);
 
   const loadTripDocuments = useCallback(() => {
     if (!tripId) return;
@@ -639,19 +642,21 @@ export function useTripDetail({
     load();
     loadAdjustments();
     loadAssignmentAudit();
+    loadTripDocuments();
     setFinanceRefreshKey((k) => k + 1);
     refetchTransactionsRef.current();
-  }, [load, loadAdjustments, loadAssignmentAudit]);
+  }, [load, loadAdjustments, loadAssignmentAudit, loadTripDocuments]);
 
   /** Immediate refresh after assignment/reassignment actions. */
   const handleAssignmentUpdated = useCallback(() => {
     load();
     loadAssignmentAudit();
     loadAdjustments();
+    loadTripDocuments();
     setFinanceRefreshKey((k) => k + 1);
     refetchTransactionsRef.current();
     loadTripOtp();
-  }, [load, loadAssignmentAudit, loadAdjustments, loadTripOtp]);
+  }, [load, loadAssignmentAudit, loadAdjustments, loadTripDocuments, loadTripOtp]);
 
   // ── Reconciliation actions ────────────────────────────────────────────────
   const refreshTripDispute = useCallback(async () => {
