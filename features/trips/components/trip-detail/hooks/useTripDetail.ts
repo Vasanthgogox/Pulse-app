@@ -297,7 +297,9 @@ export function useTripDetail({
 
   const showAssignByPhone = useMemo(() => {
     if (!trip) return false;
-    return isAggregateTrip(trip) && !trip.driver_id;
+    // Aggregate assignments should keep phone + OTP workflow visible
+    // even after driver assignment, so dispatch can re-share OTP when needed.
+    return isAggregateTrip(trip);
   }, [trip]);
 
   const assignmentSource = useMemo<AssignmentSource>(() => {
@@ -640,6 +642,16 @@ export function useTripDetail({
     setFinanceRefreshKey((k) => k + 1);
     refetchTransactionsRef.current();
   }, [load, loadAdjustments, loadAssignmentAudit]);
+
+  /** Immediate refresh after assignment/reassignment actions. */
+  const handleAssignmentUpdated = useCallback(() => {
+    load();
+    loadAssignmentAudit();
+    loadAdjustments();
+    setFinanceRefreshKey((k) => k + 1);
+    refetchTransactionsRef.current();
+    loadTripOtp();
+  }, [load, loadAssignmentAudit, loadAdjustments, loadTripOtp]);
 
   // ── Reconciliation actions ────────────────────────────────────────────────
   const refreshTripDispute = useCallback(async () => {
@@ -1166,14 +1178,14 @@ export function useTripDetail({
 
   // OTP for aggregate trips
   useEffect(() => {
-    const isRosterFromLoadHub =
-      trip?.source === "direct_quote" && trip?.driver_id != null && trip?.vehicle_id != null;
-    if (trip?.id && isAggregateTrip(trip) && !isRosterFromLoadHub) {
+    if (trip?.id && isAggregateTrip(trip)) {
+      // Keep OTP visible for aggregate trips even after assignment,
+      // so dispatch can share/verify immediately.
       loadTripOtp();
     } else {
       setTripOtp(null);
     }
-  }, [trip?.id, trip?.supplier_id, trip?.source, trip?.driver_id, trip?.vehicle_id, loadTripOtp]);
+  }, [trip?.id, trip?.supplier_id, loadTripOtp]);
 
   // Counterparty entries
   useEffect(() => {
@@ -1382,6 +1394,7 @@ export function useTripDetail({
     // Actions
     load,
     handleRefresh,
+    handleAssignmentUpdated,
     openAddEntry,
     openAddExpense,
     handleAcceptPartnerView,
