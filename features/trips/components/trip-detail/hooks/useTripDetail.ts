@@ -862,7 +862,7 @@ export function useTripDetail({
       params.set("tripId", trip.id);
     } else if (entryContext === "client" && (clientIdFromContext ?? trip.client_id)) {
       params.set("defaultType", "in");
-      params.set("partyContext", "clients");
+      params.set("partyContext", "customers");
       params.set("partyId", clientIdFromContext ?? trip.client_id ?? "");
       const name = clientNameFromContext ?? displayClientName ?? trip.client_name ?? "";
       if (name) params.set("partyName", name);
@@ -889,7 +889,7 @@ export function useTripDetail({
     });
     const clientId = clientIdFromContext ?? trip.client_id ?? "";
     if (clientId) {
-      params.set("partyContext", "clients");
+      params.set("partyContext", "customers");
       params.set("partyId", clientId);
       const name =
         clientNameFromContext ?? displayClientName ?? trip.client_name ?? "";

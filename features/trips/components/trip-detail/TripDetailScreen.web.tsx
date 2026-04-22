@@ -392,7 +392,7 @@ export default function TripDetailScreen({
                     label: adjustmentDeductionLineLabel(a),
                     amount: a.amount,
                   }))}
-                  onAddIncome={detail.openClientIncomeAdjustment}
+                  onAddIncome={detail.openLedgerSyncForTripIncome}
                   onAddDeduction={detail.openClientDeductionAdjustment}
                 />
               </View>
