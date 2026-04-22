@@ -1,5 +1,4 @@
 import Theme from "@/constants/Theme";
-import MapLibreGL from "@maplibre/maplibre-react-native";
 import React, { useImperativeHandle, useMemo, useRef } from "react";
 import {
     Platform,
@@ -9,6 +8,29 @@ import {
     type ViewStyle,
 } from "react-native";
 import { LeafletMap as LeafletMapWeb } from "./LeafletMap.web";
+
+type MapLibreModuleLike = {
+  MapView: React.ComponentType<Record<string, unknown>>;
+  Camera: React.ComponentType<Record<string, unknown>>;
+  ShapeSource: React.ComponentType<Record<string, unknown>>;
+  LineLayer: React.ComponentType<Record<string, unknown>>;
+  PointAnnotation: React.ComponentType<Record<string, unknown>>;
+};
+
+let NativeMapLibreGL: MapLibreModuleLike | null = null;
+if (Platform.OS !== "web") {
+  try {
+    const mapLibreModule = require("@maplibre/maplibre-react-native") as {
+      default?: MapLibreModuleLike;
+    };
+    NativeMapLibreGL = mapLibreModule.default ?? (mapLibreModule as MapLibreModuleLike);
+  } catch (error) {
+    console.warn(
+      "[LeafletMap] MapLibre native module unavailable. Use a development build for map rendering.",
+      error,
+    );
+  }
+}
 
 export type LeafletLatLng = { latitude: number; longitude: number };
 
@@ -93,6 +115,10 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
       );
     }
 
+    if (!NativeMapLibreGL) {
+      return <View style={style} />;
+    }
+
     const safePolyline = useMemo(
       () =>
         (polyline ?? []).filter(
@@ -103,7 +129,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
 
     return (
       <View style={style}>
-        <MapLibreGL.MapView
+        <NativeMapLibreGL.MapView
           style={StyleSheet.absoluteFill}
           styleURL={MAP_STYLE}
           logoEnabled={false}
@@ -111,7 +137,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
           compassEnabled={false}
           scaleBarEnabled={false}
         >
-          <MapLibreGL.Camera
+          <NativeMapLibreGL.Camera
             ref={cameraRef}
             defaultSettings={{
               centerCoordinate: toLngLat(center),
@@ -120,7 +146,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
           />
 
           {safePolyline.length >= 2 ? (
-            <MapLibreGL.ShapeSource
+            <NativeMapLibreGL.ShapeSource
               id="leaflet-polyline-source"
               shape={{
                 type: "Feature",
@@ -131,7 +157,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
                 properties: {},
               }}
             >
-              <MapLibreGL.LineLayer
+              <NativeMapLibreGL.LineLayer
                 id="leaflet-polyline-layer"
                 style={{
                   lineColor: polylineColor,
@@ -140,11 +166,11 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
                   lineJoin: "round",
                 }}
               />
-            </MapLibreGL.ShapeSource>
+            </NativeMapLibreGL.ShapeSource>
           ) : null}
 
           {(markers ?? []).map((m) => (
-            <MapLibreGL.PointAnnotation
+            <NativeMapLibreGL.PointAnnotation
               key={m.id}
               id={`leaflet-marker-${m.id}`}
               coordinate={toLngLat(m.coordinate)}
@@ -155,9 +181,9 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
                   { backgroundColor: m.color ?? Theme.driverEmerald },
                 ]}
               />
-            </MapLibreGL.PointAnnotation>
+            </NativeMapLibreGL.PointAnnotation>
           ))}
-        </MapLibreGL.MapView>
+        </NativeMapLibreGL.MapView>
       </View>
     );
   },
