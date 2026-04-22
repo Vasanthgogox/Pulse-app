@@ -265,7 +265,7 @@ interface TripSettlementBreakdown {
   isSalary: boolean;
 }
 
-function getTripSettlementBreakdown(
+function _getTripSettlementBreakdown(
   trip: tripsService.TripRow,
 ): TripSettlementBreakdown {
   const isSalary = isAggregateTrip(trip);
@@ -368,10 +368,10 @@ export default function DriverTripsScreen() {
   const { profile } = useAuth();
   const { avatarSeed: _avatarSeed } = useDriverAvatar();
   const { avatarUri } = useDriverAvatarUri();
-  const [driver, setDriver] = useState<driversService.DriverRow | null>(null);
+  const [_driver, setDriver] = useState<driversService.DriverRow | null>(null);
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [_refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
   const [selectedTrip, setSelectedTrip] = useState<tripsService.TripRow | null>(
@@ -450,10 +450,6 @@ export default function DriverTripsScreen() {
     return Number(trip.client_price ?? 0) || 0;
   };
 
-  const selectedTripSettlement = useMemo(
-    () => (selectedTrip ? getTripSettlementBreakdown(selectedTrip) : null),
-    [selectedTrip],
-  );
 
   const archiveMissionLog = useMemo(
     () => (selectedTrip ? buildMissionLog(selectedTrip) : []),
