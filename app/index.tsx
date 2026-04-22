@@ -29,7 +29,7 @@ export default function Index() {
     if (loading) return;
     if (!user) {
       logRouteDecision('redirect_sign_in', { pathname });
-      router.replace('/sign-in');
+      router.replace(Platform.OS === 'web' ? '/terminal-website' : '/sign-in');
       return;
     }
     if (!profile) return;

@@ -40,7 +40,7 @@ export default function SignIn() {
   const { user, signIn } = useAuth();
   const { locale, localeOptions } = useLanguage();
 
-  const [screen, setScreen] = useState<ScreenState>('LANDING');
+  const [screen, setScreen] = useState<ScreenState>('SIGNIN');
 
   const [email, setEmail] = useState(() => getEmailFromParams(params));
   const [password, setPassword] = useState('');
