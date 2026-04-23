@@ -194,7 +194,20 @@ export default function TripDetailScreen({
     }));
 
   // ── Finance numbers ───────────────────────────────────────────────────────────
-  const baseFreight = Number(trip.client_price ?? 0);
+  // Keep POV parity with TripDetailFinanceView: supplier-side indent view should
+  // use supplier settlement amounts, not client billing amounts.
+  const isTripOwner =
+    currentOrganization?.id != null &&
+    trip.organization_id != null &&
+    trip.organization_id === currentOrganization.id;
+  const isPartnerSettlementView = trip.indent_id != null && !isTripOwner;
+  const customerSales = Number(trip.client_price ?? 0);
+  const supplierCost = Number(trip.supplier_rate ?? 0);
+  const sales = isPartnerSettlementView ? supplierCost : customerSales;
+  const cost = isPartnerSettlementView
+    ? (detail.subcontractRate ?? supplierCost)
+    : supplierCost;
+  const baseFreight = sales;
   const totalExpenses = expenseRows.reduce((s, r) => s + r.amount, 0);
   const incomeAdjustmentRows = adjustmentsCountingAsIncome(detail.adjustments);
   const deductionAdjustmentRows = adjustmentsCountingAsDeductions(
@@ -206,21 +219,17 @@ export default function TripDetailScreen({
   );
   const deductions = deductionAdjustmentRows.reduce((s, a) => s + a.amount, 0);
 
-  const sales = Number(trip.client_price ?? 0);
   const received = detail.tripLedgerEntries.reduce(
     (s, tx) => s + Number(tx.amount_in ?? 0),
     0,
   );
   const pending = Math.max(0, sales - received);
 
-  // For supplier, we assume client_price is our cost, supplier_rate is what we owe our supplier
-  const supplierCost =
-    Number(trip.client_price ?? 0) || Number(trip.supplier_rate ?? 0);
   const supplierPaid = detail.tripLedgerEntries.reduce(
     (s, tx) => s + Number(tx.amount_out ?? 0),
     0,
   );
-  const supplierDue = Math.max(0, supplierCost - supplierPaid);
+  const supplierDue = Math.max(0, cost - supplierPaid);
 
   type FinanceHistoryRow = {
     key: string;
