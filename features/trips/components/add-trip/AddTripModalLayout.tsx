@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 16,
+    paddingTop: 12,
   },
   footer: {
     marginTop: 8,

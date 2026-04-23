@@ -5,7 +5,7 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { addToPlacesCache, getPopularPlacesInIndia, searchPlacesInIndia, type PlaceResult } from "@/lib/placesService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -31,6 +31,8 @@ export interface LocationSearchFieldProps {
   onChangeText: (val: string) => void;
   /** When user selects a place from API results, called with display name and coords. */
   onSelectPlace?: (displayName: string, coords: PlaceCoords) => void;
+  /** Optional icon inside the field (e.g. MapPin / Navigation), left-aligned like other form rows. */
+  leadingIcon?: ReactNode;
   inputStyle?: object;
   labelStyle?: object;
   onDropdownOpenChange?: (open: boolean) => void;
@@ -45,6 +47,7 @@ export function LocationSearchField({
   value,
   onChangeText,
   onSelectPlace,
+  leadingIcon,
   inputStyle,
   labelStyle,
   onDropdownOpenChange,
@@ -202,10 +205,20 @@ export function LocationSearchField({
     <View style={styles.wrapper} collapsable={false}>
       <Text style={labelStyle}>{label}</Text>
       <View style={styles.inputRow}>
+        {leadingIcon ? (
+          <View style={styles.leadingIconWrap} pointerEvents="none">
+            {leadingIcon}
+          </View>
+        ) : null}
         <TouchableOpacity
           activeOpacity={0.85}
           onPress={openDropdown}
-          style={[styles.input, inputStyle, styles.inputPressable]}
+          style={[
+            styles.input,
+            inputStyle,
+            styles.inputPressable,
+            leadingIcon ? styles.inputWithLeadingIcon : null,
+          ]}
         >
           <Text
             style={[
@@ -306,6 +319,17 @@ const styles = StyleSheet.create({
   inputRow: {
     position: "relative",
     marginBottom: 4,
+  },
+  leadingIconWrap: {
+    position: "absolute",
+    left: 14,
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
+    zIndex: 1,
+  },
+  inputWithLeadingIcon: {
+    paddingLeft: 44,
   },
   input: {
     borderRadius: 12,

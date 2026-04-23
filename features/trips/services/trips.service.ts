@@ -695,7 +695,9 @@ export async function createTrip(
     driver_commission: 0,
     payment_status: "pending",
     amount_paid: 0,
-    status: "assigned",
+    // Fleet trips need both IDs to be truly assigned; otherwise stay unassigned (e.g. "Assign later" from create-trip).
+    status:
+      data.driver_id && data.vehicle_id ? "assigned" : "unassigned",
     notes: (data.notes ?? "").trim() || null,
     pickup_date: data.pickup_date ?? null,
     supplier_id: data.supplier_id ?? null,

@@ -34,6 +34,7 @@ import {
     FileText,
     IndianRupee,
     Info,
+    ListChecks,
     MapPin,
     Navigation,
     Phone,
@@ -44,8 +45,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ViewStyle } from "react-native";
 import {
     ActivityIndicator,
-    Dimensions,
-    FlatList,
     Modal,
     Platform,
     ScrollView,
@@ -59,15 +58,14 @@ import {
     useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { FleetEntityPickerModal } from "./FleetEntityPickerModal";
 import { LocationSearchField } from "./LocationSearchField";
 import type { AddTripFormState } from "./types";
 import type { useAddTripForm } from "./useAddTripForm";
 
-function joinRoutePreview(city: string, detail: string): string {
-  const c = city.trim();
-  const d = detail.trim();
-  if (c && d) return `${c} · ${d}`;
-  return d || c || "—";
+function routePreviewLine(s: string): string {
+  const t = s.trim();
+  return t || "—";
 }
 
 const inputStyle = {
@@ -109,12 +107,6 @@ export function AddTripFormFields({
   const [pickerType, setPickerType] = useState<"driver" | "vehicle" | null>(
     null,
   );
-  const [pickerLayout, setPickerLayout] = useState<{
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  } | null>(null);
   const [supplierDropdownOpen, setSupplierDropdownOpen] = useState(false);
   const [drivers, setDrivers] = useState<DriverRow[]>([]);
   const [driverIdsOnActiveTrip, setDriverIdsOnActiveTrip] = useState<string[]>(
@@ -127,29 +119,6 @@ export function AddTripFormFields({
   const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
   const [fleetLoading, setFleetLoading] = useState(false);
   const [suppliersLoading, setSuppliersLoading] = useState(false);
-  const driverWrapRef = useRef<View>(null);
-  const vehicleWrapRef = useRef<View>(null);
-
-  useEffect(() => {
-    if (!pickerType) {
-      setPickerLayout(null);
-      return;
-    }
-    setPickerLayout(null);
-    const id = setTimeout(() => {
-      const ref =
-        pickerType === "driver"
-          ? driverWrapRef.current
-          : vehicleWrapRef.current;
-      if (ref) {
-        ref.measureInWindow((x, y, width, height) => {
-          setPickerLayout({ x, y, width, height });
-        });
-      }
-    }, 50);
-    return () => clearTimeout(id);
-  }, [pickerType]);
-
   const fetchFleet = useCallback(() => {
     if (!organizationId) return;
     setFleetLoading(true);
@@ -228,7 +197,7 @@ export function AddTripFormFields({
   > | null>(null);
   const lastDriverPhoneNameRef = useRef<string | null>(null);
   useEffect(() => {
-    if (state.supplySource !== "aggregate") return;
+    if (state.supplySource !== "aggregate" || state.assignLater) return;
     const trimmed = state.driverPhone.trim();
     if (!trimmed) {
       setters.setDriverPhoneName(null);
@@ -266,7 +235,7 @@ export function AddTripFormFields({
       if (driverPhoneLookupTimeoutRef.current)
         clearTimeout(driverPhoneLookupTimeoutRef.current);
     };
-  }, [state.supplySource, state.driverPhone, setters]);
+  }, [state.supplySource, state.assignLater, state.driverPhone, setters]);
 
   const handleSelectClient = (c: ClientRow) => {
     setters.setClientSelection(c.id, c.name);
@@ -280,12 +249,6 @@ export function AddTripFormFields({
   const availableVehicles = vehicles.filter(
     (v) => !vehicleIdsOnActiveTrip.includes(v.id),
   );
-  const pickerData =
-    pickerType === "driver"
-      ? availableDrivers
-      : pickerType === "vehicle"
-        ? availableVehicles
-        : [];
   const selectedId =
     pickerType === "driver"
       ? state.driverId
@@ -322,7 +285,7 @@ export function AddTripFormFields({
           styles.scrollContent,
           {
             paddingBottom:
-              Layout.sectionSpacing + insets.bottom + (isWide ? 140 : 200),
+              Layout.sectionSpacing + insets.bottom + (isWide ? 100 : 140),
           },
         ]}
         showsVerticalScrollIndicator
@@ -348,29 +311,16 @@ export function AddTripFormFields({
 
             <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
               <View style={styles.gridCol}>
-                <Text style={[styles.label, labelStyle]}>Origin & Pickup</Text>
-                <View style={styles.iconField}>
-                  <MapPin
-                    size={18}
-                    color={Theme.iconMuted}
-                    style={styles.iconInField}
-                  />
-                  <TextInput
-                    style={[styles.iconInput, inputStyle]}
-                    placeholder="Origin city (optional)"
-                    placeholderTextColor={Theme.placeholder}
-                    value={state.pickupCity}
-                    onChangeText={setters.setPickupCity}
-                    autoCorrect={false}
-                  />
-                </View>
                 <LocationSearchField
-                  label="Specific pickup area *"
-                  placeholder="e.g. Mumbai, BKC"
+                  label="Pickup *"
+                  placeholder="Search or pick pickup location"
                   value={state.pickupArea}
                   onChangeText={setters.setPickupArea}
                   onSelectPlace={(_name, coords) =>
                     setters.setPickupCoords(coords.lat, coords.lon)
+                  }
+                  leadingIcon={
+                    <MapPin size={18} color={Theme.iconMuted} />
                   }
                   inputStyle={baseInputArr}
                   labelStyle={[styles.label, labelStyle]}
@@ -378,31 +328,16 @@ export function AddTripFormFields({
                 />
               </View>
               <View style={styles.gridCol}>
-                <Text style={[styles.label, labelStyle]}>
-                  Destination & Drop
-                </Text>
-                <View style={styles.iconField}>
-                  <Navigation
-                    size={18}
-                    color={Theme.iconMuted}
-                    style={styles.iconInField}
-                  />
-                  <TextInput
-                    style={[styles.iconInput, inputStyle]}
-                    placeholder="Destination city (optional)"
-                    placeholderTextColor={Theme.placeholder}
-                    value={state.dropCity}
-                    onChangeText={setters.setDropCity}
-                    autoCorrect={false}
-                  />
-                </View>
                 <LocationSearchField
-                  label="Specific drop location *"
-                  placeholder="e.g. Pune, Hinjewadi"
+                  label="Drop *"
+                  placeholder="Search or pick drop location"
                   value={state.dropLocation}
                   onChangeText={setters.setDropLocation}
                   onSelectPlace={(_name, coords) =>
                     setters.setDropCoords(coords.lat, coords.lon)
+                  }
+                  leadingIcon={
+                    <Navigation size={18} color={Theme.iconMuted} />
                   }
                   inputStyle={baseInputArr}
                   labelStyle={[styles.label, labelStyle]}
@@ -420,8 +355,8 @@ export function AddTripFormFields({
                   style={{ marginRight: 8 }}
                 />
                 <Text style={styles.routeSummaryText} numberOfLines={2}>
-                  {joinRoutePreview(state.pickupCity, state.pickupArea)} →{" "}
-                  {joinRoutePreview(state.dropCity, state.dropLocation)}
+                  {routePreviewLine(state.pickupArea)} →{" "}
+                  {routePreviewLine(state.dropLocation)}
                 </Text>
               </View>
             ) : null}
@@ -626,7 +561,20 @@ export function AddTripFormFields({
               </TouchableOpacity>
             </View>
 
-            <View style={[styles.checkRow, { marginBottom: 16 }]}>
+            <View style={[styles.assignLaterCard, { marginBottom: 16 }]}>
+              <View style={styles.assignLaterCardLeft}>
+                <View style={styles.assignLaterIconCircle}>
+                  <ListChecks size={18} color={Theme.iconPrimary} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.assignLaterTitle}>Assign later</Text>
+                  <Text style={styles.assignLaterSub}>
+                    {supplyIsAsset
+                      ? "(vehicle & driver from trip detail)"
+                      : "(vehicle & driver phone from trip detail)"}
+                  </Text>
+                </View>
+              </View>
               <Switch
                 value={state.assignLater}
                 onValueChange={setters.setAssignLater}
@@ -636,15 +584,12 @@ export function AddTripFormFields({
                 }}
                 thumbColor={Theme.screenBackground}
               />
-              <Text style={styles.checkLabel}>
-                {supplyIsAsset
-                  ? "Assign later (vehicle & driver from trip detail)"
-                  : "Assign later (vehicle & driver phone from trip detail)"}
-              </Text>
             </View>
             {state.assignLater ? (
               <Text style={styles.warningText}>
-                Vehicle & driver must be assigned before trip start.
+                {supplyIsAsset
+                  ? "Assign vehicle and driver on the trip screen before the trip starts."
+                  : "Add vehicle number and driver phone on the trip screen before the trip starts."}
               </Text>
             ) : null}
 
@@ -673,117 +618,115 @@ export function AddTripFormFields({
                   </View>
                 ) : null}
 
-                <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
-                  <View style={styles.gridCol}>
-                    <Text style={[styles.label, labelStyle]}>
-                      Assign driver {!state.assignLater ? "*" : ""}
-                    </Text>
-                    <View style={styles.iconField}>
-                      <User
-                        size={18}
-                        color={Theme.iconMuted}
-                        style={styles.iconInField}
-                      />
-                      <View ref={driverWrapRef} collapsable={false}>
-                        <TouchableOpacity
-                          style={[
-                            styles.fakeInput,
-                            inputStyle,
-                            styles.pickerInner,
-                          ]}
-                          onPress={() =>
-                            !fleetLoading &&
-                            !state.assignLater &&
-                            setPickerType((t) =>
-                              t === "driver" ? null : "driver",
-                            )
-                          }
-                          disabled={fleetLoading}
-                          activeOpacity={0.75}
-                        >
-                          <Text
-                            style={
-                              state.driverId || state.assignLater
-                                ? styles.pickerText
-                                : styles.pickerPh
+                {!state.assignLater ? (
+                  <View
+                    style={[styles.gridRow, isWide && styles.gridRowWide]}
+                  >
+                    <View style={styles.gridCol}>
+                      <Text style={[styles.label, labelStyle]}>
+                        Assign driver *
+                      </Text>
+                      <View style={styles.iconField}>
+                        <User
+                          size={18}
+                          color={Theme.iconMuted}
+                          style={styles.iconInField}
+                        />
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <TouchableOpacity
+                            style={[
+                              styles.fakeInput,
+                              inputStyle,
+                              styles.pickerInner,
+                            ]}
+                            onPress={() =>
+                              !fleetLoading &&
+                              setPickerType((t) =>
+                                t === "driver" ? null : "driver",
+                              )
                             }
-                            numberOfLines={1}
+                            disabled={fleetLoading}
+                            activeOpacity={0.75}
                           >
-                            {fleetLoading
-                              ? "Loading…"
-                              : state.driverId
-                                ? (drivers.find((d) => d.id === state.driverId)
-                                    ?.name ?? "Selected")
-                                : state.assignLater
-                                  ? "Assign from trip detail"
+                            <Text
+                              style={
+                                state.driverId
+                                  ? styles.pickerText
+                                  : styles.pickerPh
+                              }
+                              numberOfLines={1}
+                            >
+                              {fleetLoading
+                                ? "Loading…"
+                                : state.driverId
+                                  ? (drivers.find((d) => d.id === state.driverId)
+                                      ?.name ?? "Selected")
                                   : "Select driver"}
-                          </Text>
-                          <FontAwesome
-                            name="chevron-down"
-                            size={12}
-                            color={Theme.textMuted}
-                          />
-                        </TouchableOpacity>
+                            </Text>
+                            <FontAwesome
+                              name="chevron-down"
+                              size={12}
+                              color={Theme.textMuted}
+                            />
+                          </TouchableOpacity>
+                        </View>
                       </View>
                     </View>
-                  </View>
-                  <View style={styles.gridCol}>
-                    <Text style={[styles.label, labelStyle]}>
-                      Vehicle {!state.assignLater ? "*" : ""}
-                    </Text>
-                    <View style={styles.iconField}>
-                      <Truck
-                        size={18}
-                        color={Theme.iconMuted}
-                        style={styles.iconInField}
-                      />
-                      <View ref={vehicleWrapRef} collapsable={false}>
-                        <TouchableOpacity
-                          style={[
-                            styles.fakeInput,
-                            inputStyle,
-                            styles.pickerInner,
-                          ]}
-                          onPress={() =>
-                            !fleetLoading &&
-                            !state.assignLater &&
-                            setPickerType((t) =>
-                              t === "vehicle" ? null : "vehicle",
-                            )
-                          }
-                          disabled={fleetLoading}
-                          activeOpacity={0.75}
-                        >
-                          <Text
-                            style={
-                              state.vehicleId || state.assignLater
-                                ? styles.pickerText
-                                : styles.pickerPh
+                    <View style={styles.gridCol}>
+                      <Text style={[styles.label, labelStyle]}>
+                        Vehicle *
+                      </Text>
+                      <View style={styles.iconField}>
+                        <Truck
+                          size={18}
+                          color={Theme.iconMuted}
+                          style={styles.iconInField}
+                        />
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <TouchableOpacity
+                            style={[
+                              styles.fakeInput,
+                              inputStyle,
+                              styles.pickerInner,
+                            ]}
+                            onPress={() =>
+                              !fleetLoading &&
+                              setPickerType((t) =>
+                                t === "vehicle" ? null : "vehicle",
+                              )
                             }
-                            numberOfLines={1}
+                            disabled={fleetLoading}
+                            activeOpacity={0.75}
                           >
-                            {fleetLoading
-                              ? "Loading…"
-                              : state.vehicleId
-                                ? formatIndianVehicleNumber(
-                                    vehicles.find(
-                                      (v) => v.id === state.vehicleId,
-                                    )?.vehicle_number ?? "",
-                                  ) || "Selected"
-                                : state.assignLater
-                                  ? "Assign from trip detail"
+                            <Text
+                              style={
+                                state.vehicleId
+                                  ? styles.pickerText
+                                  : styles.pickerPh
+                              }
+                              numberOfLines={1}
+                            >
+                              {fleetLoading
+                                ? "Loading…"
+                                : state.vehicleId
+                                  ? formatIndianVehicleNumber(
+                                      vehicles.find(
+                                        (v) => v.id === state.vehicleId,
+                                      )?.vehicle_number ?? "",
+                                    ) || "Selected"
                                   : "Select vehicle"}
-                          </Text>
-                          <FontAwesome
-                            name="chevron-down"
-                            size={12}
-                            color={Theme.textMuted}
-                          />
-                        </TouchableOpacity>
+                            </Text>
+                            <FontAwesome
+                              name="chevron-down"
+                              size={12}
+                              color={Theme.textMuted}
+                            />
+                          </TouchableOpacity>
+                        </View>
                       </View>
                     </View>
                   </View>
-                </View>
+                ) : null}
               </>
             ) : (
               <>
@@ -853,167 +796,142 @@ export function AddTripFormFields({
                   </View>
                 </View>
 
-                <Text style={[styles.label, labelStyle, { marginTop: 8 }]}>
-                  Driver phone (tracking) {!state.assignLater ? "*" : ""}
-                </Text>
-                <View style={styles.iconField}>
-                  <Phone
-                    size={18}
-                    color={Theme.iconMuted}
-                    style={styles.iconInField}
-                  />
-                  <TextInput
-                    style={[styles.iconInput, inputStyle]}
-                    placeholder={
-                      state.assignLater ? "Optional" : "e.g. +91 98765 43210"
-                    }
-                    placeholderTextColor={Theme.placeholder}
-                    value={state.driverPhone}
-                    onChangeText={(v) =>
-                      setters.setDriverPhone(formatMobileNumber(v))
-                    }
-                    keyboardType="phone-pad"
-                  />
-                </View>
-                {state.driverPhoneName ? (
-                  <TouchableOpacity
-                    onPress={() =>
-                      setters.setDriverPhoneConfirmed(
-                        !state.driverPhoneConfirmed,
-                      )
-                    }
-                    style={[
-                      styles.driverConfirmCard,
-                      state.driverPhoneConfirmed &&
-                        styles.driverConfirmCardConfirmed,
-                    ]}
-                  >
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text
-                        style={[
-                          styles.driverConfirmMain,
-                          state.driverPhoneConfirmed && {
-                            color: Theme.darkGreen,
-                          },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {state.driverPhoneConfirmed
-                          ? `Confirmed: ${state.driverPhoneName}`
-                          : `Found: ${state.driverPhoneName}`}
-                      </Text>
-                      <Text style={styles.driverConfirmSub}>
-                        {state.driverPhoneConfirmed
-                          ? "Tap again to change"
-                          : "Tap to confirm before creating the trip"}
-                      </Text>
+                {!state.assignLater ? (
+                  <>
+                    <View
+                      style={[
+                        styles.gridRow,
+                        isWide && styles.gridRowWide,
+                        { marginTop: 8 },
+                      ]}
+                    >
+                      <View style={styles.gridCol}>
+                        <Text style={[styles.label, labelStyle]}>
+                          Driver phone (tracking) *
+                        </Text>
+                        <View style={styles.iconField}>
+                          <Phone
+                            size={18}
+                            color={Theme.iconMuted}
+                            style={styles.iconInField}
+                          />
+                          <TextInput
+                            style={[styles.iconInput, inputStyle]}
+                            placeholder="e.g. +91 98765 43210"
+                            placeholderTextColor={Theme.placeholder}
+                            value={state.driverPhone}
+                            onChangeText={(v) =>
+                              setters.setDriverPhone(formatMobileNumber(v))
+                            }
+                            keyboardType="phone-pad"
+                          />
+                        </View>
+                      </View>
+                      <View style={styles.gridCol}>
+                        <Text style={[styles.label, labelStyle]}>
+                          Vehicle number *
+                        </Text>
+                        <View style={styles.iconField}>
+                          <Truck
+                            size={18}
+                            color={Theme.iconMuted}
+                            style={styles.iconInField}
+                          />
+                          <TextInput
+                            style={[
+                              styles.iconInput,
+                              inputStyle,
+                              {
+                                fontFamily:
+                                  Platform.OS === "ios"
+                                    ? "Menlo"
+                                    : "monospace",
+                              },
+                            ]}
+                            placeholder="e.g. TN 67 GH 7654"
+                            placeholderTextColor={Theme.placeholder}
+                            value={state.aggregateVehicleText}
+                            onChangeText={(v) =>
+                              setters.setAggregateVehicleText(
+                                formatIndianVehicleNumberInput(v),
+                              )
+                            }
+                            autoCapitalize="characters"
+                          />
+                        </View>
+                      </View>
                     </View>
-                    <CheckCircle2
-                      size={18}
-                      color={
-                        state.driverPhoneConfirmed
-                          ? Theme.darkGreen
-                          : Theme.iconPrimary
-                      }
-                    />
-                  </TouchableOpacity>
-                ) : null}
-                {state.driverPhone.trim() &&
-                validatePhone(state.driverPhone.trim()) ? (
-                  <Text style={[styles.warningText, { marginTop: 4 }]}>
-                    {validatePhone(state.driverPhone.trim())}
-                  </Text>
-                ) : null}
-
-                <Text style={[styles.label, labelStyle, { marginTop: 12 }]}>
-                  Vehicle number {!state.assignLater ? "*" : ""}
-                </Text>
-                <TextInput
-                  style={[
-                    styles.input,
-                    inputStyle,
-                    {
-                      fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-                    },
-                  ]}
-                  placeholder={
-                    state.assignLater ? "Optional" : "e.g. TN 67 GH 7654"
-                  }
-                  placeholderTextColor={Theme.placeholder}
-                  value={state.aggregateVehicleText}
-                  onChangeText={(v) =>
-                    setters.setAggregateVehicleText(
-                      formatIndianVehicleNumberInput(v),
-                    )
-                  }
-                  autoCapitalize="characters"
-                />
+                    {state.driverPhoneName ? (
+                      <TouchableOpacity
+                        onPress={() =>
+                          setters.setDriverPhoneConfirmed(
+                            !state.driverPhoneConfirmed,
+                          )
+                        }
+                        style={[
+                          styles.driverConfirmCard,
+                          state.driverPhoneConfirmed &&
+                            styles.driverConfirmCardConfirmed,
+                        ]}
+                      >
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text
+                            style={[
+                              styles.driverConfirmMain,
+                              state.driverPhoneConfirmed && {
+                                color: Theme.darkGreen,
+                              },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {state.driverPhoneConfirmed
+                              ? `Confirmed: ${state.driverPhoneName}`
+                              : `Found: ${state.driverPhoneName}`}
+                          </Text>
+                          <Text style={styles.driverConfirmSub}>
+                            {state.driverPhoneConfirmed
+                              ? "Tap again to change"
+                              : "Tap to confirm before creating the trip"}
+                          </Text>
+                        </View>
+                        <CheckCircle2
+                          size={18}
+                          color={
+                            state.driverPhoneConfirmed
+                              ? Theme.darkGreen
+                              : Theme.iconPrimary
+                          }
+                        />
+                      </TouchableOpacity>
+                    ) : null}
+                    {state.driverPhone.trim() &&
+                    validatePhone(state.driverPhone.trim()) ? (
+                      <Text style={[styles.warningText, { marginTop: 4 }]}>
+                        {validatePhone(state.driverPhone.trim())}
+                      </Text>
+                    ) : null}
+                  </>
+                ) : (
+                  <View style={styles.assignLaterPartnerHint}>
+                    <Info size={16} color={Theme.textMuted} />
+                    <Text style={styles.assignLaterPartnerHintText}>
+                      Driver phone and vehicle number are entered on the trip
+                      screen.
+                    </Text>
+                  </View>
+                )}
               </>
             )}
 
-            {pickerOpen && pickerLayout ? (
-              <Modal
-                visible
-                transparent
-                animationType="fade"
-                onRequestClose={closePicker}
-              >
-                <View style={styles.dropdownModalOverlay}>
-                  <TouchableWithoutFeedback onPress={closePicker}>
-                    <View style={StyleSheet.absoluteFill} />
-                  </TouchableWithoutFeedback>
-                  <View
-                    style={[
-                      styles.dropdownModalPositioned,
-                      {
-                        top: pickerLayout.y + pickerLayout.height + 4,
-                        left: Layout.screenPaddingHorizontal,
-                        width:
-                          Dimensions.get("window").width -
-                          2 * Layout.screenPaddingHorizontal,
-                      },
-                    ]}
-                  >
-                    <FlatList
-                      data={pickerData}
-                      keyExtractor={(item) => item.id}
-                      style={styles.pickerFlatList}
-                      keyboardShouldPersistTaps="handled"
-                      renderItem={({ item }) => {
-                        const isSelected = item.id === selectedId;
-                        const itemLabel =
-                          pickerType === "driver"
-                            ? (item as DriverRow).name
-                            : `${formatIndianVehicleNumber((item as VehicleRow).vehicle_number)}${(item as VehicleRow).vehicle_type ? ` · ${(item as VehicleRow).vehicle_type}` : ""}`;
-                        return (
-                          <TouchableOpacity
-                            style={[
-                              styles.optionRow,
-                              isSelected && styles.optionRowActive,
-                            ]}
-                            onPress={() => {
-                              setSelectedId(isSelected ? null : item.id);
-                              closePicker();
-                            }}
-                          >
-                            <Text style={styles.optionText} numberOfLines={1}>
-                              {itemLabel}
-                            </Text>
-                            {isSelected ? (
-                              <FontAwesome
-                                name="check"
-                                size={12}
-                                color={Theme.darkGreen}
-                              />
-                            ) : null}
-                          </TouchableOpacity>
-                        );
-                      }}
-                    />
-                  </View>
-                </View>
-              </Modal>
-            ) : null}
+            <FleetEntityPickerModal
+              visible={pickerOpen}
+              mode={pickerType ?? "vehicle"}
+              drivers={availableDrivers}
+              vehicles={availableVehicles}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onClose={closePicker}
+            />
 
             {supplierDropdownOpen ? (
               <Modal
@@ -1022,7 +940,7 @@ export function AddTripFormFields({
                 animationType="fade"
                 onRequestClose={() => setSupplierDropdownOpen(false)}
               >
-                <View style={styles.dropdownModalOverlay}>
+                <View style={styles.dropdownModalOverlayCentered}>
                   <TouchableWithoutFeedback
                     onPress={() => setSupplierDropdownOpen(false)}
                   >
@@ -1161,13 +1079,13 @@ export function AddTripFormFields({
             <View style={styles.previewLine}>
               <Text style={styles.previewLab}>Pickup</Text>
               <Text style={styles.previewVal} numberOfLines={2}>
-                {joinRoutePreview(state.pickupCity, state.pickupArea)}
+                {routePreviewLine(state.pickupArea)}
               </Text>
             </View>
             <View style={styles.previewLine}>
               <Text style={styles.previewLab}>Drop</Text>
               <Text style={styles.previewVal} numberOfLines={2}>
-                {joinRoutePreview(state.dropCity, state.dropLocation)}
+                {routePreviewLine(state.dropLocation)}
               </Text>
             </View>
             <View style={styles.previewDivider} />
@@ -1220,7 +1138,7 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, minHeight: 0 },
   scrollContent: {
     flexGrow: 1,
-    paddingTop: 8,
+    paddingTop: 4,
   },
   contentMax: {
     width: "100%",
@@ -1229,11 +1147,11 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: Theme.cardWhite,
-    borderRadius: 24,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    padding: 24,
-    marginBottom: 24,
+    padding: 16,
+    marginBottom: 16,
     ...Platform.select<ViewStyle>({
       web: {
         boxShadow: "0 1px 3px rgba(15,23,42,0.06)",
@@ -1250,11 +1168,11 @@ const styles = StyleSheet.create({
   cardHead: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
-    paddingBottom: 14,
-    marginBottom: 20,
+    paddingBottom: 10,
+    marginBottom: 14,
   },
   stepBadge: {
     width: 32,
@@ -1270,12 +1188,12 @@ const styles = StyleSheet.create({
     color: Theme.iconPrimary,
   },
   cardTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
   },
-  gridRow: { gap: 20 },
-  gridRowWide: { flexDirection: "row", alignItems: "flex-start", gap: 32 },
+  gridRow: { gap: 14 },
+  gridRowWide: { flexDirection: "row", alignItems: "flex-start", gap: 20 },
   gridCol: { flex: 1, minWidth: 0 },
   label: {
     fontSize: 11,
@@ -1475,21 +1393,39 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     lineHeight: 16,
   },
+  assignLaterPartnerHint: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  assignLaterPartnerHintText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    lineHeight: 17,
+  },
   segment: {
     flexDirection: "row",
     alignSelf: "center",
     backgroundColor: Theme.surfaceGray,
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 4,
-    marginBottom: 24,
+    marginBottom: 14,
     gap: 4,
   },
   segmentBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 22,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
     borderRadius: 12,
   },
   segmentBtnOn: {
@@ -1513,22 +1449,51 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   segmentLabOn: { color: Theme.iconPrimary },
-  checkRow: {
+  assignLaterCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceForm,
   },
-  checkLabel: {
+  assignLaterCardLeft: {
     flex: 1,
-    fontSize: 13,
-    fontWeight: "600",
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    minWidth: 0,
+  },
+  assignLaterIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: Theme.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  assignLaterTitle: {
+    fontSize: 14,
+    fontWeight: "800",
     color: Theme.textPrimary,
+    marginBottom: 4,
+  },
+  assignLaterSub: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    lineHeight: 17,
   },
   warningText: {
     fontSize: 12,
     fontWeight: "600",
     color: Theme.teslaRed,
-    marginBottom: 10,
+    marginBottom: 6,
   },
   warnBanner: {
     flexDirection: "row",
@@ -1549,7 +1514,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   notesInput: {
-    minHeight: 120,
+    minHeight: 96,
     textAlignVertical: "top",
     paddingTop: 14,
     borderRadius: 20,
@@ -1559,8 +1524,8 @@ const styles = StyleSheet.create({
   },
   ctaBlock: {
     alignItems: "center",
-    paddingVertical: 24,
-    marginBottom: 32,
+    paddingVertical: 16,
+    marginBottom: 20,
   },
   primaryCta: {
     width: "100%",
@@ -1570,9 +1535,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 10,
     backgroundColor: Theme.darkBackground,
-    paddingVertical: 18,
-    borderRadius: 16,
-    minHeight: 56,
+    paddingVertical: 14,
+    borderRadius: 14,
+    minHeight: 52,
     ...Platform.select<ViewStyle>({
       web: { boxShadow: "0 8px 24px rgba(0,0,0,0.35)" },
       default: {
@@ -1627,8 +1592,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: Theme.darkSurface,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   previewHeadTitle: {
     fontSize: 10,
@@ -1649,7 +1614,7 @@ const styles = StyleSheet.create({
     color: Theme.textOnPrimary,
     textTransform: "uppercase",
   },
-  previewBody: { padding: 16, gap: 10 },
+  previewBody: { padding: 12, gap: 8 },
   previewLine: { gap: 4 },
   previewLab: {
     fontSize: 9,
@@ -1720,48 +1685,12 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     fontSize: 14,
   },
-  dropdownModalOverlay: {
+  /** Centered card (e.g. supplier list). */
+  dropdownModalOverlayCentered: {
     flex: 1,
     backgroundColor: Theme.overlayBackdrop,
     justifyContent: "center",
     paddingHorizontal: Layout.screenPaddingHorizontal,
-  },
-  dropdownModalPositioned: {
-    position: "absolute",
-    height: 200,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
-    backgroundColor: Theme.surfaceForm,
-    overflow: "hidden",
-    elevation: 12,
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-  },
-  pickerFlatList: {
-    flex: 1,
-    maxHeight: 198,
-  },
-  optionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-    minHeight: Layout.minTouchTargetSize,
-  },
-  optionRowActive: {
-    backgroundColor: Theme.surfaceLight,
-  },
-  optionText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Theme.textPrimary,
-    flex: 1,
   },
   dropdownModalCard: {
     alignSelf: "stretch",

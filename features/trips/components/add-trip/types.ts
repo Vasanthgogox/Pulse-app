@@ -35,10 +35,6 @@ export interface AddTripFormData {
 }
 
 export interface AddTripFormState {
-  /** Optional city/region label (combined with pickupArea for API). */
-  pickupCity: string;
-  /** Optional city/region label (combined with dropLocation for API). */
-  dropCity: string;
   pickupArea: string;
   dropLocation: string;
   pickupLat: number | null;

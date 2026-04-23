@@ -16,16 +16,7 @@ import { getOptimalRoute } from '@/services/routingService';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AddTripFormData, AddTripFormState } from './types';
 
-function joinRoutePart(city: string, detail: string): string {
-  const c = city.trim();
-  const d = detail.trim();
-  if (c && d) return `${c} · ${d}`;
-  return d || c;
-}
-
 const initialState: AddTripFormState = {
-  pickupCity: '',
-  dropCity: '',
   pickupArea: '',
   dropLocation: '',
   pickupLat: null,
@@ -56,8 +47,6 @@ const initialState: AddTripFormState = {
 export function useAddTripForm() {
   const [state, setState] = useState<AddTripFormState>(initialState);
 
-  const setPickupCity = useCallback((v: string) => setState((s) => ({ ...s, pickupCity: v })), []);
-  const setDropCity = useCallback((v: string) => setState((s) => ({ ...s, dropCity: v })), []);
   const setPickupArea = useCallback((v: string) => setState((s) => ({
     ...s,
     pickupArea: v,
@@ -88,7 +77,23 @@ export function useAddTripForm() {
   })), []);
   const setSupplierId = useCallback((v: string | null) => setState((s) => ({ ...s, supplierId: v })), []);
   const setAdvancePaid = useCallback((v: string) => setState((s) => ({ ...s, advancePaid: v })), []);
-  const setAssignLater = useCallback((v: boolean) => setState((s) => ({ ...s, assignLater: v })), []);
+  const setAssignLater = useCallback((v: boolean) =>
+    setState((s) => ({
+      ...s,
+      assignLater: v,
+      ...(v && s.supplySource === 'asset'
+        ? { driverId: null as string | null, vehicleId: null as string | null }
+        : {}),
+      ...(v && s.supplySource === 'aggregate'
+        ? {
+            driverPhone: '',
+            driverPhoneName: null as string | null,
+            driverPhoneConfirmed: false,
+            aggregateVehicleText: '',
+          }
+        : {}),
+    })),
+  []);
   const setNotes = useCallback((v: string) => setState((s) => ({ ...s, notes: v })), []);
   const setDriverId = useCallback((v: string | null) => setState((s) => ({ ...s, driverId: v })), []);
   const setVehicleId = useCallback((v: string | null) => setState((s) => ({ ...s, vehicleId: v })), []);
@@ -109,9 +114,7 @@ export function useAddTripForm() {
   const clearClientSelection = useCallback(() => setState((s) => ({ ...s, clientId: null, clientName: '' })), []);
 
   const canSubmit = (() => {
-    const pickupJoined = joinRoutePart(state.pickupCity, state.pickupArea);
-    const dropJoined = joinRoutePart(state.dropCity, state.dropLocation);
-    if (!pickupJoined.trim() || !dropJoined.trim()) return false;
+    if (!state.pickupArea.trim() || !state.dropLocation.trim()) return false;
     // Manual trips can be created with just a typed client name (client_id optional).
     if (!state.clientName.trim()) return false;
     const cp = parseFloat(state.clientPrice) || 0;
@@ -270,11 +273,9 @@ export function useAddTripForm() {
 
   /** Single-pass validation; returns first error message or null. */
   const getValidationError = useCallback((): string | null => {
-    const pickupJoined = joinRoutePart(state.pickupCity, state.pickupArea);
-    const dropJoined = joinRoutePart(state.dropCity, state.dropLocation);
-    const err = runValidators(pickupJoined, [required(), maxLength(255)]);
+    const err = runValidators(state.pickupArea, [required(), maxLength(255)]);
     if (err) return `Pickup area: ${err}`;
-    const err2 = runValidators(dropJoined, [required(), maxLength(255)]);
+    const err2 = runValidators(state.dropLocation, [required(), maxLength(255)]);
     if (err2) return `Drop location: ${err2}`;
     const err3 = runValidators(state.clientName, [required(), maxLength(VALIDATION.CLIENT_SUPPLIER_NAME_MAX_LENGTH)]);
     if (err3) return `Client: ${err3}`;
@@ -326,8 +327,8 @@ export function useAddTripForm() {
       notes = (notes ? notes + '\n' : '') + 'Vehicle: ' + state.aggregateVehicleText.trim();
     }
     return {
-      pickup_area: joinRoutePart(state.pickupCity, state.pickupArea).trim(),
-      drop_location: joinRoutePart(state.dropCity, state.dropLocation).trim(),
+      pickup_area: state.pickupArea.trim(),
+      drop_location: state.dropLocation.trim(),
       pickup_lat: state.pickupLat ?? undefined,
       pickup_lon: state.pickupLon ?? undefined,
       drop_lat: state.dropLat ?? undefined,
@@ -341,8 +342,14 @@ export function useAddTripForm() {
       supplier_id: state.supplySource === 'aggregate' ? state.supplierId || null : null,
       advance_paid: state.supplySource === 'aggregate' && advancePaid > 0 ? advancePaid : undefined,
       notes: notes || null,
-      driver_id: state.supplySource === 'asset' ? state.driverId || null : null,
-      vehicle_id: state.supplySource === 'asset' ? state.vehicleId || null : null,
+      driver_id:
+        state.supplySource === 'asset' && !state.assignLater
+          ? state.driverId || null
+          : null,
+      vehicle_id:
+        state.supplySource === 'asset' && !state.assignLater
+          ? state.vehicleId || null
+          : null,
       vehicle_display_number:
         state.supplySource === 'aggregate' && state.aggregateVehicleText.trim()
           ? state.aggregateVehicleText.trim()
@@ -352,8 +359,6 @@ export function useAddTripForm() {
 
   const setters = useMemo(
     () => ({
-      setPickupCity,
-      setDropCity,
       setPickupArea,
       setDropLocation,
       setPickupCoords,
@@ -377,8 +382,6 @@ export function useAddTripForm() {
       clearClientSelection,
     }),
     [
-      setPickupCity,
-      setDropCity,
       setPickupArea,
       setDropLocation,
       setPickupCoords,
