@@ -1,6 +1,6 @@
 /**
- * Global floating Ops Agent button — visible on all pages except Ops Agent and auth.
- * Tapping opens the Ops Agent (/(tabs)/index). Uses agent icon with subtle pulse animation.
+ * Global floating Ops Agent button — visible on home list screens.
+ * Tapping opens the dedicated Ops Agent route.
  */
 import { useEffect } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
@@ -69,7 +69,7 @@ export function FloatingOpsAgentButton() {
     >
       <TouchableOpacity
         activeOpacity={0.85}
-        onPress={() => router.navigate('/')}
+        onPress={() => router.push('/(tabs)/ops-agent')}
         style={styles.touchable}
         accessibilityLabel="Open Ops Agent"
       >
