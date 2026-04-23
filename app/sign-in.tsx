@@ -214,6 +214,13 @@ export default function SignIn() {
             <Text style={styles.primaryBtnText}>Enter Dashboard</Text>
           )}
         </TouchableOpacity>
+
+        <View style={styles.signUpRow}>
+          <Text style={styles.signUpMuted}>New to Pulse? </Text>
+          <TouchableOpacity onPress={() => router.push('/sign-up')} activeOpacity={0.8}>
+            <Text style={styles.signUpLink}>Create account</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -255,7 +262,11 @@ export default function SignIn() {
       {screen !== 'LANDING' ? (
         <TouchableOpacity
           onPress={() => {
-            setScreen('LANDING');
+            if (Platform.OS === 'web') {
+              router.replace('/terminal-website');
+            } else {
+              setScreen('LANDING');
+            }
           }}
           style={styles.backFloating}
         >
@@ -573,6 +584,22 @@ const styles = StyleSheet.create({
   backFloatingText: {
     color: Theme.textMuted,
     fontSize: 12,
+    fontWeight: '700',
+  },
+  signUpRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  signUpMuted: {
+    fontSize: 13,
+    color: Theme.textMuted,
+    fontWeight: '500',
+  },
+  signUpLink: {
+    fontSize: 13,
+    color: Theme.driverPrimary,
     fontWeight: '700',
   },
 });

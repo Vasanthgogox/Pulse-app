@@ -545,6 +545,15 @@ export default function SignUp() {
           </TouchableOpacity>
         </Link>
       </View>
+      {Platform.OS === 'web' ? (
+        <View style={styles.footer}>
+          <Link href="/terminal-website" asChild>
+            <TouchableOpacity disabled={loading} activeOpacity={0.8}>
+              <Text style={styles.footerLink}>← Back to website</Text>
+            </TouchableOpacity>
+          </Link>
+        </View>
+      ) : null}
     </View>
   );
 
