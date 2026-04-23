@@ -298,6 +298,22 @@ export default function CreateIndentScreen() {
     [cancelActionHintBlurTimer],
   );
 
+  const isWide = windowWidth >= 720;
+  const isDesktopPreview = windowWidth >= 1180;
+  const showFloatingPreview = windowWidth >= 480 && !isDesktopPreview;
+  const floatingPreviewWidth = Math.min(336, Math.max(280, windowWidth - 24));
+  const collapsePreviewByDefault = windowWidth < 560;
+  const stackActionButtons = windowWidth < 760;
+  const [mobilePreviewExpanded, setMobilePreviewExpanded] = useState(
+    !collapsePreviewByDefault,
+  );
+
+  useEffect(() => {
+    if (!showFloatingPreview) return;
+    // On compact phones, keep form-first UX by default.
+    setMobilePreviewExpanded(!collapsePreviewByDefault);
+  }, [showFloatingPreview, collapsePreviewByDefault]);
+
   const webCursor =
     Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
   const pickerCardMaxW = Math.min(windowWidth - 48, 520);
@@ -838,10 +854,6 @@ export default function CreateIndentScreen() {
   const canSaveDraft =
     Boolean(orgId) && !submitting && hasIndentDraftProgress(form);
 
-  const isWide = windowWidth >= 720;
-  const isDesktopPreview = windowWidth >= 1180;
-  const stackActionButtons = windowWidth < 760;
-  const [mobilePreviewExpanded, setMobilePreviewExpanded] = useState(true);
   const baseInputArr = [styles.tripInput, inputStyle];
   const webPointer =
     Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
@@ -2103,12 +2115,13 @@ export default function CreateIndentScreen() {
             </View>
           </ScrollView>
 
-          {windowWidth >= 420 && !isDesktopPreview ? (
+          {showFloatingPreview ? (
             mobilePreviewExpanded ? (
             <View
               style={[
                 styles.previewCard,
                 {
+                  width: floatingPreviewWidth,
                   bottom: insets.bottom + 16,
                   right: Math.max(16, insets.right + 8),
                 },
@@ -2145,7 +2158,7 @@ export default function CreateIndentScreen() {
                 </View>
                 {form.pickup_area.trim() && form.drop_location.trim() ? (
                   <View style={styles.previewRow2}>
-                    <View style={{ flex: 1 }}>
+                    <View style={styles.previewCell}>
                       <Text style={styles.previewLab}>Distance</Text>
                       <Text style={styles.previewVal}>
                         {routeLoading
@@ -2155,7 +2168,7 @@ export default function CreateIndentScreen() {
                             : "—"}
                       </Text>
                     </View>
-                    <View style={{ flex: 1 }}>
+                    <View style={styles.previewCell}>
                       <Text style={styles.previewLab}>ETA</Text>
                       <Text style={styles.previewVal}>
                         {routeLoading ? "…" : (routeEtaLabel ?? "—")}

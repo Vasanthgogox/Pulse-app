@@ -143,8 +143,13 @@ export function AddTripFormFields({
   const { width: winW } = useWindowDimensions();
   const isWide = winW >= 720;
   const isDesktopPreview = winW >= 1180;
+  const showFloatingPreview = winW >= 480 && !isDesktopPreview;
+  const floatingPreviewWidth = Math.min(336, Math.max(280, winW - 24));
+  const collapsePreviewByDefault = winW < 560;
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
-  const [mobilePreviewExpanded, setMobilePreviewExpanded] = useState(true);
+  const [mobilePreviewExpanded, setMobilePreviewExpanded] = useState(
+    !collapsePreviewByDefault,
+  );
   const [clientListExpanded, setClientListExpanded] = useState(true);
   const [partnerListExpanded, setPartnerListExpanded] = useState(true);
   const [pickupDropdownOpen, setPickupDropdownOpen] = useState(false);
@@ -236,6 +241,12 @@ export function AddTripFormFields({
   useEffect(() => {
     if (organizationId) fetchFleet();
   }, [organizationId, fetchFleet]);
+
+  useEffect(() => {
+    if (!showFloatingPreview) return;
+    // On compact phones, keep form-first UX by default.
+    setMobilePreviewExpanded(!collapsePreviewByDefault);
+  }, [showFloatingPreview, collapsePreviewByDefault]);
 
   useEffect(() => {
     if (
@@ -1532,12 +1543,13 @@ export function AddTripFormFields({
       </ScrollView>
 
       {/* Floating preview — hidden on very narrow widths to avoid blocking the form */}
-      {winW >= 420 && !isDesktopPreview ? (
+      {showFloatingPreview ? (
         mobilePreviewExpanded ? (
           <View
             style={[
               styles.previewCard,
               {
+                width: floatingPreviewWidth,
                 bottom: insets.bottom + 16,
                 right: Math.max(16, insets.right + 8),
               },
