@@ -2,27 +2,29 @@
  * Create Trip — matches app layout and theme (TreasuryDetailLayout pattern).
  * TeslaHeader (dark) + scroll body + sticky CTA. Layout + Theme only.
  */
-import type { ReactNode } from "react";
-import {
-  View,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  Text,
-  KeyboardAvoidingView,
-  Platform,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { TeslaHeader } from "@/components/TeslaHeader";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { TeslaHeader } from "@/components/TeslaHeader";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
+import type { ReactNode } from "react";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export interface AddTripModalLayoutProps {
   title: string;
   submitLabel: string;
   canSubmit: boolean;
   submitting?: boolean;
+  /** When false, the page puts the primary action inside the form (e.g. centered CTA). */
+  showFooter?: boolean;
   onClose: () => void;
   onSubmit: () => void;
   children: ReactNode;
@@ -33,6 +35,7 @@ export function AddTripModalLayout({
   submitLabel,
   canSubmit,
   submitting = false,
+  showFooter = true,
   onClose,
   onSubmit,
   children,
@@ -45,7 +48,7 @@ export function AddTripModalLayout({
       <View style={[styles.darkBlock, { paddingTop: insets.top }]}>
         <TeslaHeader
           title={title}
-          subtitle="Route · Client · Allocation"
+          subtitle="Route · Client & Price · Allocation"
           variant="dark"
           showBack
           onBack={onClose}
@@ -59,60 +62,60 @@ export function AddTripModalLayout({
         behavior={Platform.OS === "ios" ? "padding" : "padding"}
         keyboardVerticalOffset={0}
       >
-        <View
-          style={[
-            styles.body,
-            { paddingBottom: Layout.sectionSpacing },
-          ]}
-        >
+        <View style={[styles.body, { paddingBottom: Layout.sectionSpacing }]}>
           {children}
         </View>
 
-        <View
-          style={[
-            styles.footer,
-            {
-              paddingBottom: insets.bottom + 12,
-              paddingTop: 8,
-            },
-          ]}
-        >
-          <TouchableOpacity
-            style={[styles.submitBtn, submitDisabled && styles.submitBtnDisabled]}
-            onPress={onSubmit}
-            disabled={submitDisabled}
-            activeOpacity={0.9}
-            accessibilityRole="button"
-            accessibilityLabel={submitLabel}
-            accessibilityHint={
-              submitDisabled && !submitting
-                ? "Fill required fields first"
-                : undefined
-            }
+        {showFooter ? (
+          <View
+            style={[
+              styles.footer,
+              {
+                paddingBottom: insets.bottom + 12,
+                paddingTop: 8,
+              },
+            ]}
           >
-            {submitting ? (
-              <ActivityIndicator
-                size="small"
-                color={Theme.buttonPrimaryText}
-              />
-            ) : (
-              <>
-                <FontAwesome
-                  name="check-circle"
-                  size={18}
-                  color={Theme.buttonMatteBlackText}
-                  style={styles.submitIcon}
+            <TouchableOpacity
+              style={[
+                styles.submitBtn,
+                submitDisabled && styles.submitBtnDisabled,
+              ]}
+              onPress={onSubmit}
+              disabled={submitDisabled}
+              activeOpacity={0.9}
+              accessibilityRole="button"
+              accessibilityLabel={submitLabel}
+              accessibilityHint={
+                submitDisabled && !submitting
+                  ? "Fill required fields first"
+                  : undefined
+              }
+            >
+              {submitting ? (
+                <ActivityIndicator
+                  size="small"
+                  color={Theme.buttonPrimaryText}
                 />
-                <Text style={styles.submitBtnText}>{submitLabel}</Text>
-              </>
+              ) : (
+                <>
+                  <FontAwesome
+                    name="check-circle"
+                    size={18}
+                    color={Theme.buttonMatteBlackText}
+                    style={styles.submitIcon}
+                  />
+                  <Text style={styles.submitBtnText}>{submitLabel}</Text>
+                </>
+              )}
+            </TouchableOpacity>
+            {submitDisabled && !submitting && (
+              <Text style={styles.footerHint}>
+                Fill client, route, price and allocation to continue
+              </Text>
             )}
-          </TouchableOpacity>
-          {submitDisabled && !submitting && (
-            <Text style={styles.footerHint}>
-              Fill client, route, price and allocation to continue
-            </Text>
-          )}
-        </View>
+          </View>
+        ) : null}
       </KeyboardAvoidingView>
     </View>
   );
