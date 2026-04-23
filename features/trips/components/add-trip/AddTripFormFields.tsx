@@ -45,7 +45,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ViewStyle } from "react-native";
 import {
     ActivityIndicator,
-    Modal,
     Platform,
     ScrollView,
     StyleSheet,
@@ -53,13 +52,13 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    TouchableWithoutFeedback,
     View,
     useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FleetEntityPickerModal } from "./FleetEntityPickerModal";
 import { LocationSearchField } from "./LocationSearchField";
+import { PartnerSupplierPickerModal } from "./PartnerSupplierPickerModal";
 import type { AddTripFormState } from "./types";
 import type { useAddTripForm } from "./useAddTripForm";
 
@@ -269,6 +268,8 @@ export function AddTripFormFields({
     dropDropdownOpen;
 
   const supplyIsAsset = state.supplySource === "asset";
+  const selectedPartnerName =
+    suppliers.find((s) => s.id === state.supplierId)?.name?.trim() ?? "";
   const busyFleetHintAsset =
     supplyIsAsset &&
     !state.assignLater &&
@@ -933,71 +934,14 @@ export function AddTripFormFields({
               onClose={closePicker}
             />
 
-            {supplierDropdownOpen ? (
-              <Modal
-                visible
-                transparent
-                animationType="fade"
-                onRequestClose={() => setSupplierDropdownOpen(false)}
-              >
-                <View style={styles.dropdownModalOverlayCentered}>
-                  <TouchableWithoutFeedback
-                    onPress={() => setSupplierDropdownOpen(false)}
-                  >
-                    <View style={StyleSheet.absoluteFill} />
-                  </TouchableWithoutFeedback>
-                  <View style={styles.dropdownModalCard}>
-                    <Text style={styles.dropdownModalTitle}>
-                      Select partner
-                    </Text>
-                    <ScrollView
-                      style={styles.dropdownModalScroll}
-                      keyboardShouldPersistTaps="handled"
-                    >
-                      {suppliers.length === 0 ? (
-                        <Text style={styles.mutedPad}>
-                          No partners yet. Add suppliers first.
-                        </Text>
-                      ) : (
-                        suppliers.map((s) => (
-                          <TouchableOpacity
-                            key={s.id}
-                            style={[
-                              styles.dropdownOptionRow,
-                              state.supplierId === s.id &&
-                                styles.dropdownOptionRowActive,
-                            ]}
-                            onPress={() => {
-                              setters.setSupplierId(
-                                state.supplierId === s.id ? null : s.id,
-                              );
-                              setSupplierDropdownOpen(false);
-                            }}
-                          >
-                            <Text
-                              style={styles.dropdownOptionText}
-                              numberOfLines={1}
-                            >
-                              {s.company_name ||
-                                s.name ||
-                                s.contact_person ||
-                                "—"}
-                            </Text>
-                            {state.supplierId === s.id ? (
-                              <FontAwesome
-                                name="check"
-                                size={14}
-                                color={Theme.darkGreen}
-                              />
-                            ) : null}
-                          </TouchableOpacity>
-                        ))
-                      )}
-                    </ScrollView>
-                  </View>
-                </View>
-              </Modal>
-            ) : null}
+            <PartnerSupplierPickerModal
+              visible={supplierDropdownOpen}
+              suppliers={suppliers}
+              loading={suppliersLoading}
+              selectedId={state.supplierId}
+              onSelect={setters.setSupplierId}
+              onClose={() => setSupplierDropdownOpen(false)}
+            />
           </View>
 
           {/* 04 Notes */}
@@ -1089,6 +1033,24 @@ export function AddTripFormFields({
               </Text>
             </View>
             <View style={styles.previewDivider} />
+            {!supplyIsAsset ? (
+              <View style={styles.previewRow2}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.previewLab}>Partner</Text>
+                  <Text style={styles.previewVal} numberOfLines={1}>
+                    {selectedPartnerName || "—"}
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.previewLab}>Partner rate</Text>
+                  <Text
+                    style={[styles.previewVal, { color: Theme.negative }]}
+                  >
+                    ₹{state.supplierRate.trim() || "0"}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
             <View style={styles.previewRow2}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.previewLab}>Client</Text>
@@ -1105,7 +1067,7 @@ export function AddTripFormFields({
             </View>
             <View style={styles.previewFoot}>
               <Text style={styles.previewFootLeft}>
-                {supplyIsAsset ? "Internal" : "Partner"}
+                {supplyIsAsset ? "Internal" : "Aggregate"}
               </Text>
               <Text style={styles.previewFootRight} numberOfLines={1}>
                 {supplyIsAsset
@@ -1117,7 +1079,9 @@ export function AddTripFormFields({
                     : state.assignLater
                       ? "Assign later"
                       : "—"
-                  : state.aggregateVehicleText.trim() || "—"}
+                  : state.assignLater
+                    ? "Assign later"
+                    : state.aggregateVehicleText.trim() || "—"}
               </Text>
             </View>
           </View>
@@ -1679,64 +1643,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Theme.textMuted,
     marginBottom: 8,
-  },
-  mutedPad: {
-    padding: Layout.screenPaddingHorizontal,
-    color: Theme.textMuted,
-    fontSize: 14,
-  },
-  /** Centered card (e.g. supplier list). */
-  dropdownModalOverlayCentered: {
-    flex: 1,
-    backgroundColor: Theme.overlayBackdrop,
-    justifyContent: "center",
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-  },
-  dropdownModalCard: {
-    alignSelf: "stretch",
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 12,
-    maxHeight: 340,
-    overflow: "hidden",
-    elevation: 12,
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-  },
-  dropdownModalTitle: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: Theme.textMutedDemo,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 12,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-  },
-  dropdownModalScroll: {
-    maxHeight: 260,
-  },
-  dropdownOptionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 14,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-    minHeight: Layout.minTouchTargetSize,
-  },
-  dropdownOptionRowActive: {
-    backgroundColor: Theme.surfaceLight,
-  },
-  dropdownOptionText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: Theme.textPrimary,
-    flex: 1,
   },
   driverConfirmCard: {
     marginTop: 8,

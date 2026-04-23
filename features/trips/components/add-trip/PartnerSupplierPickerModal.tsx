@@ -1,15 +1,15 @@
 /**
- * Centered fleet picker — reference layout: title, search, rich rows.
+ * Transport partner (supplier) picker — same sheet pattern as FleetEntityPickerModal +
+ * shared CreateTripSheetSearchInput.
  */
 import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchInput";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import type { DriverRow } from "@/features/drivers/services/drivers.service";
-import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
-import { formatIndianVehicleNumber } from "@/lib/format";
-import { Truck, User, X } from "lucide-react-native";
+import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
+import { Building2, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Modal,
   Platform,
@@ -22,39 +22,53 @@ import {
   type ViewStyle,
 } from "react-native";
 
-export type FleetPickerMode = "driver" | "vehicle";
-
-export interface FleetEntityPickerModalProps {
-  visible: boolean;
-  mode: FleetPickerMode;
-  drivers: DriverRow[];
-  vehicles: VehicleRow[];
-  selectedId: string | null;
-  onSelect: (id: string | null) => void;
-  onClose: () => void;
+function supplierPrimary(s: SupplierRow): string {
+  return (
+    (s.company_name && s.company_name.trim()) ||
+    (s.name && s.name.trim()) ||
+    (s.contact_person && s.contact_person.trim()) ||
+    "—"
+  );
 }
 
-function vehicleSubtitle(v: VehicleRow): string {
-  const parts = [
-    v.vehicle_body_type || v.vehicle_type,
-    [v.vehicle_size, v.vehicle_axle].filter(Boolean).join(" "),
-  ].filter(Boolean) as string[];
-  return parts.join(" • ").toUpperCase();
+function supplierTypeLabel(t?: string | null): string {
+  if (!t) return "";
+  const map: Record<string, string> = {
+    integrated: "Integrated",
+    offline: "Offline",
+    marketplace: "Marketplace",
+  };
+  return map[t] ?? t;
+}
+
+function supplierSecondary(s: SupplierRow): string {
+  const bits = [supplierTypeLabel(s.supplier_type), s.phone, s.email].filter(
+    Boolean,
+  ) as string[];
+  return bits.join(" · ");
 }
 
 function normalizeSearch(s: string): string {
   return s.trim().toLowerCase();
 }
 
-export function FleetEntityPickerModal({
+export interface PartnerSupplierPickerModalProps {
+  visible: boolean;
+  suppliers: SupplierRow[];
+  loading: boolean;
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+  onClose: () => void;
+}
+
+export function PartnerSupplierPickerModal({
   visible,
-  mode,
-  drivers,
-  vehicles,
+  suppliers,
+  loading,
   selectedId,
   onSelect,
   onClose,
-}: FleetEntityPickerModalProps) {
+}: PartnerSupplierPickerModalProps) {
   const { width: winW } = useWindowDimensions();
   const [query, setQuery] = useState("");
 
@@ -62,64 +76,42 @@ export function FleetEntityPickerModal({
     if (visible) setQuery("");
   }, [visible]);
 
-  const filteredDrivers = useMemo(() => {
+  const filtered = useMemo(() => {
     const q = normalizeSearch(query);
-    if (!q) return drivers;
-    return drivers.filter((d) => {
-      const name = (d.name || "").toLowerCase();
-      const phone = (d.phone || "").replace(/\s/g, "");
-      const email = (d.email || "").toLowerCase();
-      return (
-        name.includes(q) ||
-        phone.includes(q.replace(/\s/g, "")) ||
-        email.includes(q)
-      );
-    });
-  }, [drivers, query]);
-
-  const filteredVehicles = useMemo(() => {
-    const q = normalizeSearch(query);
-    if (!q) return vehicles;
-    return vehicles.filter((v) => {
-      const reg = formatIndianVehicleNumber(v.vehicle_number || "")
-        .toLowerCase()
-        .replace(/\s/g, "");
+    if (!q) return suppliers;
+    return suppliers.filter((s) => {
       const blob = [
-        v.vehicle_number,
-        v.vehicle_type,
-        v.vehicle_body_type,
-        v.vehicle_size,
-        v.vehicle_axle,
+        s.company_name,
+        s.name,
+        s.contact_person,
+        s.phone,
+        s.email,
+        s.address,
       ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
       return (
         blob.includes(q) ||
-        reg.includes(q.replace(/\s/g, "")) ||
-        (v.vehicle_number || "").toLowerCase().includes(q)
+        supplierPrimary(s).toLowerCase().includes(q)
       );
     });
-  }, [vehicles, query]);
-
-  const title = mode === "driver" ? "Select driver" : "Select Vehicle";
-  const subtitle =
-    mode === "driver"
-      ? "Choose a driver from your fleet"
-      : "Choose a vehicle";
-  const searchPh =
-    mode === "driver" ? "Search driver…" : "Search vehicle…";
+  }, [suppliers, query]);
 
   const cardMaxW = Math.min(winW - 48, 520);
-  const listRows: (DriverRow | VehicleRow)[] =
-    mode === "driver" ? filteredDrivers : filteredVehicles;
+  const webCursor =
+    Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
 
-  const emptyCopy =
-    mode === "driver"
-      ? "No drivers match your search."
-      : "No vehicles match your search.";
-
-  const webCursor = Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
+  const emptyMessage = (() => {
+    if (loading && suppliers.length === 0) return "";
+    if (suppliers.length === 0) {
+      return "No partners yet. Add suppliers from your network first.";
+    }
+    if (filtered.length === 0) {
+      return "No partners match your search.";
+    }
+    return "";
+  })();
 
   return (
     <Modal
@@ -137,8 +129,10 @@ export function FleetEntityPickerModal({
           <View style={[styles.sheet, { maxWidth: cardMaxW }]}>
             <View style={styles.sheetHead}>
               <View style={styles.sheetTitles}>
-                <Text style={styles.sheetTitle}>{title}</Text>
-                <Text style={styles.sheetSubtitle}>{subtitle}</Text>
+                <Text style={styles.sheetTitle}>Select partner</Text>
+                <Text style={styles.sheetSubtitle}>
+                  Choose a transport partner for this trip
+                </Text>
               </View>
               <TouchableOpacity
                 onPress={onClose}
@@ -154,43 +148,39 @@ export function FleetEntityPickerModal({
             <CreateTripSheetSearchInput
               value={query}
               onChangeText={setQuery}
-              placeholder={searchPh}
+              placeholder="Search partner by name, phone, or email…"
               shellStyle={styles.searchShell}
-              accessibilityLabel={
-                mode === "driver" ? "Search drivers" : "Search vehicles"
-              }
+              accessibilityLabel="Search partners"
             />
 
-            <FlatList<DriverRow | VehicleRow>
-              data={listRows}
+            <FlatList
+              data={filtered}
               keyExtractor={(item) => item.id}
               style={styles.list}
               contentContainerStyle={styles.listContent}
               keyboardShouldPersistTaps="handled"
               ListEmptyComponent={
-                <Text style={styles.emptyText}>{emptyCopy}</Text>
+                loading && suppliers.length === 0 ? (
+                  <View style={styles.loadingState}>
+                    <ActivityIndicator size="small" color={Theme.primary} />
+                    <Text style={[styles.loadingHint, { marginTop: 12 }]}>
+                      Loading partners…
+                    </Text>
+                  </View>
+                ) : emptyMessage ? (
+                  <Text style={styles.emptyText}>{emptyMessage}</Text>
+                ) : null
               }
-              renderItem={({ item }) =>
-                mode === "driver" ? (
-                  <DriverPickerRow
-                    driver={item as DriverRow}
-                    selected={selectedId === item.id}
-                    onSelect={() => {
-                      onSelect(selectedId === item.id ? null : item.id);
-                      onClose();
-                    }}
-                  />
-                ) : (
-                  <VehiclePickerRow
-                    vehicle={item as VehicleRow}
-                    selected={selectedId === item.id}
-                    onSelect={() => {
-                      onSelect(selectedId === item.id ? null : item.id);
-                      onClose();
-                    }}
-                  />
-                )
-              }
+              renderItem={({ item }) => (
+                <SupplierPickerRow
+                  supplier={item}
+                  selected={selectedId === item.id}
+                  onSelect={() => {
+                    onSelect(selectedId === item.id ? null : item.id);
+                    onClose();
+                  }}
+                />
+              )}
             />
           </View>
         </View>
@@ -199,71 +189,31 @@ export function FleetEntityPickerModal({
   );
 }
 
-function DriverPickerRow({
-  driver,
+function SupplierPickerRow({
+  supplier,
   selected,
   onSelect,
 }: {
-  driver: DriverRow;
+  supplier: SupplierRow;
   selected: boolean;
   onSelect: () => void;
 }) {
   const webCursor =
     Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
-  const sub = [driver.phone, driver.email].filter(Boolean).join(" · ");
+  const primary = supplierPrimary(supplier);
+  const secondary = supplierSecondary(supplier);
   return (
     <View style={[styles.row, selected && styles.rowSelected]}>
       <View style={styles.rowIconCircle}>
-        <User size={18} color={Theme.iconPrimary} />
+        <Building2 size={18} color={Theme.iconPrimary} />
       </View>
       <View style={styles.rowTextBlock}>
-        <Text style={styles.rowPrimary} numberOfLines={1}>
-          {driver.name || "—"}
-        </Text>
-        {sub ? (
-          <Text style={styles.rowSecondary} numberOfLines={1}>
-            {sub}
-          </Text>
-        ) : null}
-      </View>
-      <TouchableOpacity
-        style={[styles.selectPill, selected && styles.selectPillSelected, webCursor]}
-        onPress={onSelect}
-        activeOpacity={0.8}
-      >
-        <Text style={[styles.selectPillText, selected && styles.selectPillTextSelected]}>
-          {selected ? "Selected" : "Select"}
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-function VehiclePickerRow({
-  vehicle,
-  selected,
-  onSelect,
-}: {
-  vehicle: VehicleRow;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  const webCursor =
-    Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
-  const primary = formatIndianVehicleNumber(vehicle.vehicle_number || "") || "—";
-  const secondary = vehicleSubtitle(vehicle);
-  return (
-    <View style={[styles.row, selected && styles.rowSelected]}>
-      <View style={styles.rowIconCircle}>
-        <Truck size={18} color={Theme.iconPrimary} />
-      </View>
-      <View style={styles.rowTextBlock}>
-        <Text style={styles.rowPrimary} numberOfLines={1}>
+        <Text style={styles.rowPrimary} numberOfLines={2}>
           {primary}
         </Text>
         {secondary ? (
           <Text style={styles.rowSecondary} numberOfLines={2}>
-            {secondary}
+            {secondary.toUpperCase()}
           </Text>
         ) : null}
       </View>
@@ -272,7 +222,9 @@ function VehiclePickerRow({
         onPress={onSelect}
         activeOpacity={0.8}
       >
-        <Text style={[styles.selectPillText, selected && styles.selectPillTextSelected]}>
+        <Text
+          style={[styles.selectPillText, selected && styles.selectPillTextSelected]}
+        >
           {selected ? "Selected" : "Select"}
         </Text>
       </TouchableOpacity>
@@ -353,6 +305,15 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 16,
+  },
+  loadingState: {
+    alignItems: "center",
+    paddingVertical: 36,
+  },
+  loadingHint: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Theme.textMuted,
   },
   emptyText: {
     textAlign: "center",
