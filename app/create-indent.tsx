@@ -3,6 +3,7 @@
  * Layout aligned with Create Trip (AddTripModalLayout + section cards + floating summary).
  */
 import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchInput";
+import { PartyAvatar } from "@/components/PartyAvatar";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { ThemedConfirmModal } from "@/components/ThemedConfirmModal";
 import Layout from "@/constants/Layout";
@@ -61,6 +62,7 @@ import {
     MapPin,
     Navigation,
     Package,
+    PlusCircle,
     Share2,
     Truck,
     X,
@@ -837,7 +839,9 @@ export default function CreateIndentScreen() {
     Boolean(orgId) && !submitting && hasIndentDraftProgress(form);
 
   const isWide = windowWidth >= 720;
+  const isDesktopPreview = windowWidth >= 1180;
   const stackActionButtons = windowWidth < 760;
+  const [mobilePreviewExpanded, setMobilePreviewExpanded] = useState(true);
   const baseInputArr = [styles.tripInput, inputStyle];
   const webPointer =
     Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
@@ -884,6 +888,13 @@ export default function CreateIndentScreen() {
                 },
               ]}
             >
+              <View
+                style={[
+                  styles.mainGrid,
+                  isDesktopPreview && styles.mainGridDesktop,
+                ]}
+              >
+                <View style={styles.formColumn}>
               {/* 01 Route */}
               <View style={styles.card}>
                 <View style={styles.cardHead}>
@@ -958,6 +969,172 @@ export default function CreateIndentScreen() {
                   </View>
                 </View>
 
+                <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
+                  <View style={styles.gridCol}>
+                    <Text style={[styles.fieldLabel, labelStyle]}>
+                      Trip start date
+                    </Text>
+                    <View style={styles.quickDateRow}>
+                      {[
+                        { label: "Today", get: getToday },
+                        { label: "Tomorrow", get: getTomorrow },
+                        { label: "Day after", get: getDayAfter },
+                      ].map(({ label, get }) => {
+                        const iso = get();
+                        const isActive = form.pickup_date === iso;
+                        return (
+                          <TouchableOpacity
+                            key={label}
+                            style={[
+                              styles.quickDateChip,
+                              isActive && styles.quickDateChipActive,
+                            ]}
+                            onPress={() => update({ pickup_date: iso })}
+                            activeOpacity={0.8}
+                          >
+                            <Text
+                              style={[
+                                styles.quickDateChipText,
+                                isActive && styles.quickDateChipTextActive,
+                              ]}
+                            >
+                              {label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    {Platform.OS === "web" ? (
+                      <TextInput
+                        style={[
+                          styles.tripInput,
+                          errors.pickup_date && styles.inputError,
+                        ]}
+                        placeholder="YYYY-MM-DD"
+                        placeholderTextColor={Theme.placeholder}
+                        value={form.pickup_date}
+                        onChangeText={(t) => update({ pickup_date: t })}
+                        autoCorrect={false}
+                      />
+                    ) : (
+                      <>
+                        <TouchableOpacity
+                          style={[
+                            styles.tripInput,
+                            styles.dateTouchable,
+                            errors.pickup_date && styles.inputError,
+                          ]}
+                          onPress={() => setShowDatePicker(true)}
+                          activeOpacity={0.85}
+                        >
+                          <Text
+                            style={
+                              form.pickup_date
+                                ? styles.dateTouchableText
+                                : styles.dateTouchablePlaceholder
+                            }
+                          >
+                            {form.pickup_date
+                              ? new Date(
+                                  form.pickup_date + "T12:00:00",
+                                ).toLocaleDateString("en-IN", {
+                                  weekday: "short",
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                })
+                              : "Tap to pick date"}
+                          </Text>
+                        </TouchableOpacity>
+                        {showDatePicker &&
+                          (Platform.OS === "android" ? (
+                            <DateTimePicker
+                              value={
+                                form.pickup_date
+                                  ? new Date(form.pickup_date + "T12:00:00")
+                                  : new Date()
+                              }
+                              mode="date"
+                              display="default"
+                              minimumDate={new Date()}
+                              onChange={(e, date) => {
+                                setShowDatePicker(false);
+                                if (e.type === "set" && date)
+                                  update({ pickup_date: toISODate(date) });
+                              }}
+                            />
+                          ) : (
+                            <Modal visible transparent animationType="slide">
+                              <TouchableOpacity
+                                style={styles.datePickerBackdrop}
+                                activeOpacity={1}
+                                onPress={() => setShowDatePicker(false)}
+                              >
+                                <View
+                                  style={styles.datePickerSheet}
+                                  onStartShouldSetResponder={() => true}
+                                >
+                                  <View style={styles.datePickerHeader}>
+                                    <Text style={styles.datePickerTitle}>
+                                      Pick date
+                                    </Text>
+                                    <TouchableOpacity
+                                      onPress={() => setShowDatePicker(false)}
+                                      hitSlop={12}
+                                    >
+                                      <Text style={styles.datePickerDone}>
+                                        Done
+                                      </Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                  <DateTimePicker
+                                    value={
+                                      form.pickup_date
+                                        ? new Date(form.pickup_date + "T12:00:00")
+                                        : new Date()
+                                    }
+                                    mode="date"
+                                    display="spinner"
+                                    minimumDate={new Date()}
+                                    onChange={(_, date) =>
+                                      date &&
+                                      update({ pickup_date: toISODate(date) })
+                                    }
+                                  />
+                                </View>
+                              </TouchableOpacity>
+                            </Modal>
+                          ))}
+                      </>
+                    )}
+                    {errors.pickup_date ? (
+                      <Text style={styles.errorText}>{errors.pickup_date}</Text>
+                    ) : null}
+                  </View>
+                  <View style={styles.gridCol}>
+                    <Text style={[styles.fieldLabel, labelStyle]}>Tons</Text>
+                    <TextInput
+                      style={[
+                        styles.tripInput,
+                        errors.weight && styles.inputError,
+                      ]}
+                      value={form.weight}
+                      onChangeText={(t) =>
+                        update({ weight: t.replace(/[^\d.]/g, "").slice(0, 12) })
+                      }
+                      ref={weightInputRef}
+                      placeholder="Enter load weight in tons"
+                      placeholderTextColor={Theme.placeholder}
+                      keyboardType="decimal-pad"
+                      returnKeyType="done"
+                      onSubmitEditing={openPickupDateNext}
+                    />
+                    {errors.weight ? (
+                      <Text style={styles.errorText}>{errors.weight}</Text>
+                    ) : null}
+                  </View>
+                </View>
+
                 {form.pickup_area.trim() && form.drop_location.trim() ? (
                   <View style={styles.routePreviewPanel}>
                     <View style={styles.routePreviewHero}>
@@ -966,7 +1143,10 @@ export default function CreateIndentScreen() {
                         color={Theme.teslaRed}
                         strokeWidth={2.5}
                       />
-                      <Text style={styles.routePreviewHeroText} numberOfLines={2}>
+                      <Text
+                        style={styles.routePreviewHeroText}
+                        numberOfLines={2}
+                      >
                         {compactLocationLabel(form.pickup_area)} →{" "}
                         {compactLocationLabel(form.drop_location)}
                       </Text>
@@ -1038,7 +1218,30 @@ export default function CreateIndentScreen() {
                               onPress={() => handleSelectClient(client)}
                               activeOpacity={0.85}
                             >
-                              <View style={{ flex: 1, minWidth: 0 }}>
+                              <View style={styles.clientMain}>
+                                <PartyAvatar
+                                  name={
+                                    client.name ??
+                                    client.contact_person ??
+                                    "Client"
+                                  }
+                                  avatarUrl={
+                                    (client as { avatar_url?: string | null })
+                                      .avatar_url ?? null
+                                  }
+                                  avatarSeed={
+                                    (client as { avatar_seed?: string | null })
+                                      .avatar_seed ?? null
+                                  }
+                                  entityType="client"
+                                  size={38}
+                                  borderStyle={
+                                    selected
+                                      ? styles.clientAvatarOn
+                                      : styles.clientAvatar
+                                  }
+                                />
+                                <View style={{ flex: 1, minWidth: 0 }}>
                                 <Text
                                   style={[
                                     styles.clientName,
@@ -1060,6 +1263,7 @@ export default function CreateIndentScreen() {
                                   </View>
                                 ) : null}
                               </View>
+                              </View>
                               <View
                                 style={[
                                   styles.radioOuter,
@@ -1079,12 +1283,13 @@ export default function CreateIndentScreen() {
                       </ScrollView>
                     )}
                     <TouchableOpacity
-                      style={styles.addClientBtn}
+                      style={[styles.addClientBtn, webPointer]}
                       onPress={() => setShowAddClientModal(true)}
                       activeOpacity={0.8}
                     >
+                      <PlusCircle size={14} color={Theme.iconPrimary} />
                       <Text style={styles.addClientBtnText}>
-                        Add new client
+                        Add client
                       </Text>
                     </TouchableOpacity>
                     {errors.client_name ? (
@@ -1115,7 +1320,9 @@ export default function CreateIndentScreen() {
                         keyboardType="decimal-pad"
                         autoCorrect={false}
                         returnKeyType="next"
-                        onSubmitEditing={() => focusField(supplierTargetInputRef)}
+                        onSubmitEditing={() =>
+                          focusField(supplierTargetInputRef)
+                        }
                       />
                     </View>
                     {errors.client_price ? (
@@ -1310,150 +1517,6 @@ export default function CreateIndentScreen() {
                   </View>
                 </View>
 
-                <View style={styles.sheetSection}>
-                  <Text style={styles.sheetLabel}>Weight (Tons)</Text>
-                  <TextInput
-                    style={[
-                      styles.sheetInput,
-                      errors.weight && styles.inputError,
-                    ]}
-                    value={form.weight}
-                    onChangeText={(t) =>
-                      update({ weight: t.replace(/[^\d.]/g, "").slice(0, 12) })
-                    }
-                    ref={weightInputRef}
-                    placeholder="e.g. 10 (tons)"
-                    placeholderTextColor={Theme.textMuted}
-                    keyboardType="decimal-pad"
-                    returnKeyType="done"
-                    onSubmitEditing={openPickupDateNext}
-                  />
-                  {errors.weight ? (
-                    <Text style={styles.errorText}>{errors.weight}</Text>
-                  ) : null}
-                </View>
-
-                <View style={styles.sheetSection}>
-                  <Text style={styles.sheetLabel}>Pickup date</Text>
-                  <View style={styles.quickDateRow}>
-                    {[
-                      { label: "Today", get: getToday },
-                      { label: "Tomorrow", get: getTomorrow },
-                      { label: "Day after", get: getDayAfter },
-                    ].map(({ label, get }) => {
-                      const iso = get();
-                      const isActive = form.pickup_date === iso;
-                      return (
-                        <TouchableOpacity
-                          key={label}
-                          style={[
-                            styles.quickDateChip,
-                            isActive && styles.quickDateChipActive,
-                          ]}
-                          onPress={() => update({ pickup_date: iso })}
-                          activeOpacity={0.8}
-                        >
-                          <Text
-                            style={[
-                              styles.quickDateChipText,
-                              isActive && styles.quickDateChipTextActive,
-                            ]}
-                          >
-                            {label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                  <TouchableOpacity
-                    style={[
-                      styles.sheetInput,
-                      styles.dateTouchable,
-                      errors.pickup_date && styles.inputError,
-                    ]}
-                    onPress={() => setShowDatePicker(true)}
-                    activeOpacity={0.8}
-                  >
-                    <Text
-                      style={
-                        form.pickup_date
-                          ? styles.dateTouchableText
-                          : styles.dateTouchablePlaceholder
-                      }
-                    >
-                      {form.pickup_date
-                        ? new Date(
-                            form.pickup_date + "T12:00:00",
-                          ).toLocaleDateString("en-IN", {
-                            weekday: "short",
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
-                          })
-                        : "Tap to pick date"}
-                    </Text>
-                  </TouchableOpacity>
-                  {errors.pickup_date ? (
-                    <Text style={styles.errorText}>{errors.pickup_date}</Text>
-                  ) : null}
-
-                  {showDatePicker &&
-                    (Platform.OS === "android" ? (
-                      <DateTimePicker
-                        value={
-                          form.pickup_date
-                            ? new Date(form.pickup_date + "T12:00:00")
-                            : new Date()
-                        }
-                        mode="date"
-                        display="default"
-                        minimumDate={new Date()}
-                        onChange={(e, date) => {
-                          setShowDatePicker(false);
-                          if (e.type === "set" && date)
-                            update({ pickup_date: toISODate(date) });
-                        }}
-                      />
-                    ) : (
-                      <Modal visible transparent animationType="slide">
-                        <TouchableOpacity
-                          style={styles.datePickerBackdrop}
-                          activeOpacity={1}
-                          onPress={() => setShowDatePicker(false)}
-                        >
-                          <View
-                            style={styles.datePickerSheet}
-                            onStartShouldSetResponder={() => true}
-                          >
-                            <View style={styles.datePickerHeader}>
-                              <Text style={styles.datePickerTitle}>
-                                Pick date
-                              </Text>
-                              <TouchableOpacity
-                                onPress={() => setShowDatePicker(false)}
-                                hitSlop={12}
-                              >
-                                <Text style={styles.datePickerDone}>Done</Text>
-                              </TouchableOpacity>
-                            </View>
-                            <DateTimePicker
-                              value={
-                                form.pickup_date
-                                  ? new Date(form.pickup_date + "T12:00:00")
-                                  : new Date()
-                              }
-                              mode="date"
-                              display="spinner"
-                              minimumDate={new Date()}
-                              onChange={(_, date) =>
-                                date && update({ pickup_date: toISODate(date) })
-                              }
-                            />
-                          </View>
-                        </TouchableOpacity>
-                      </Modal>
-                    ))}
-                </View>
               </View>
 
               {vehicleTypePickerOpen ? (
@@ -1939,10 +2002,109 @@ export default function CreateIndentScreen() {
                   </View>
                 </View>
               </View>
+                </View>
+
+                {isDesktopPreview ? (
+                  <View style={styles.previewColumn}>
+                    <View style={[styles.previewCard, styles.previewCardDesktop]}>
+                      <View style={styles.previewHead}>
+                        <Text style={styles.previewHeadTitle}>
+                          Indent Preview
+                        </Text>
+                        <View style={styles.livePill}>
+                          <Text style={styles.livePillText}>Live</Text>
+                        </View>
+                      </View>
+                      <View style={styles.previewBody}>
+                        <View style={styles.previewLine}>
+                          <Text style={styles.previewLab}>Pickup</Text>
+                          <Text style={styles.previewVal} numberOfLines={2}>
+                            {(form.pickup_area ?? "").trim() || "—"}
+                          </Text>
+                        </View>
+                        <View style={styles.previewLine}>
+                          <Text style={styles.previewLab}>Drop</Text>
+                          <Text style={styles.previewVal} numberOfLines={2}>
+                            {(form.drop_location ?? "").trim() || "—"}
+                          </Text>
+                        </View>
+                        {form.pickup_area.trim() && form.drop_location.trim() ? (
+                          <View style={styles.previewRow2}>
+                            <View style={styles.previewCell}>
+                              <Text style={styles.previewLab}>Distance</Text>
+                              <Text style={styles.previewVal}>
+                                {routeLoading
+                                  ? "…"
+                                  : routeDistanceKm != null
+                                    ? `${routeDistanceKm} km`
+                                    : "—"}
+                              </Text>
+                            </View>
+                            <View style={styles.previewCell}>
+                              <Text style={styles.previewLab}>ETA</Text>
+                              <Text style={styles.previewVal}>
+                                {routeLoading ? "…" : (routeEtaLabel ?? "—")}
+                              </Text>
+                            </View>
+                          </View>
+                        ) : null}
+                        <View style={styles.previewDivider} />
+                        <View style={styles.previewRow2}>
+                          <View style={styles.previewCell}>
+                            <Text style={styles.previewLab}>Client</Text>
+                            <Text style={styles.previewVal} numberOfLines={1}>
+                              {(form.client_name ?? "").trim() || "—"}
+                            </Text>
+                          </View>
+                          <View style={styles.previewCell}>
+                            <Text style={styles.previewLab}>Revenue</Text>
+                            <Text
+                              style={[
+                                styles.previewValStrong,
+                                { color: Theme.darkGreen },
+                              ]}
+                            >
+                              ₹{form.client_price.trim() || "0"}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.previewRow2}>
+                          <View style={styles.previewCell}>
+                            <Text style={styles.previewLab}>Target pay</Text>
+                            <Text
+                              style={[
+                                styles.previewValStrong,
+                                { color: Theme.negative },
+                              ]}
+                            >
+                              ₹{form.supplier_target.trim() || "0"}
+                            </Text>
+                          </View>
+                          <View style={styles.previewCell}>
+                            <Text style={styles.previewLab}>Vehicle</Text>
+                            <Text style={styles.previewVal} numberOfLines={1}>
+                              {form.vehicle_type.trim() || "—"}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.previewFoot}>
+                          <Text style={styles.previewFootLeft}>
+                            {(form.load_type ?? "").trim() || "Load"}
+                          </Text>
+                          <Text style={styles.previewFootRight} numberOfLines={1}>
+                            {form.weight.trim() ? `${form.weight.trim()} T` : "—"}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                ) : null}
+              </View>
             </View>
           </ScrollView>
 
-          {windowWidth >= 420 ? (
+          {windowWidth >= 420 && !isDesktopPreview ? (
+            mobilePreviewExpanded ? (
             <View
               style={[
                 styles.previewCard,
@@ -1954,9 +2116,18 @@ export default function CreateIndentScreen() {
               pointerEvents="box-none"
             >
               <View style={styles.previewHead}>
-                <Text style={styles.previewHeadTitle}>Indent summary</Text>
-                <View style={styles.livePill}>
-                  <Text style={styles.livePillText}>Live</Text>
+                <Text style={styles.previewHeadTitle}>Indent Preview</Text>
+                <View style={styles.previewHeadRight}>
+                  <View style={styles.livePill}>
+                    <Text style={styles.livePillText}>Live</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setMobilePreviewExpanded(false)}
+                    style={styles.previewCollapseBtn}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.previewCollapseBtnText}>˅</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
               <View style={styles.previewBody}>
@@ -1967,7 +2138,7 @@ export default function CreateIndentScreen() {
                   </Text>
                 </View>
                 <View style={styles.previewLine}>
-                  <Text style={styles.previewLab}>Delivery</Text>
+                  <Text style={styles.previewLab}>Drop</Text>
                   <Text style={styles.previewVal} numberOfLines={2}>
                     {(form.drop_location ?? "").trim() || "—"}
                   </Text>
@@ -1994,13 +2165,27 @@ export default function CreateIndentScreen() {
                 ) : null}
                 <View style={styles.previewDivider} />
                 <View style={styles.previewRow2}>
-                  <View style={{ flex: 1 }}>
+                  <View style={styles.previewCell}>
+                    <Text style={styles.previewLab}>Client</Text>
+                    <Text style={styles.previewVal} numberOfLines={1}>
+                      {(form.client_name ?? "").trim() || "—"}
+                    </Text>
+                  </View>
+                  <View style={styles.previewCell}>
+                    <Text style={styles.previewLab}>Revenue</Text>
+                    <Text style={[styles.previewValStrong, { color: Theme.darkGreen }]}>
+                      ₹{form.client_price.trim() || "0"}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.previewRow2}>
+                  <View style={styles.previewCell}>
                     <Text style={styles.previewLab}>Target pay</Text>
-                    <Text style={[styles.previewVal, { color: Theme.primary }]}>
+                    <Text style={[styles.previewValStrong, { color: Theme.negative }]}>
                       ₹{form.supplier_target.trim() || "0"}
                     </Text>
                   </View>
-                  <View style={{ flex: 1 }}>
+                  <View style={styles.previewCell}>
                     <Text style={styles.previewLab}>Vehicle</Text>
                     <Text style={styles.previewVal} numberOfLines={1}>
                       {form.vehicle_type.trim() || "—"}
@@ -2017,6 +2202,23 @@ export default function CreateIndentScreen() {
                 </View>
               </View>
             </View>
+            ) : (
+              <TouchableOpacity
+                style={[
+                  styles.previewCollapsedChip,
+                  {
+                    bottom: insets.bottom + 16,
+                    right: Math.max(16, insets.right + 8),
+                  },
+                ]}
+                onPress={() => setMobilePreviewExpanded(true)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.previewCollapsedChipText}>
+                  Indent Preview
+                </Text>
+              </TouchableOpacity>
+            )
           ) : null}
 
           <View style={styles.blobA} pointerEvents="none" />
@@ -2121,29 +2323,27 @@ const styles = StyleSheet.create({
   hiddenLabel: { height: 0, margin: 0, padding: 0, opacity: 0 },
   sheetSection: { marginBottom: 8 },
   sheetLabel: {
-    fontSize: 12,
+    fontSize: 9,
     fontWeight: "700",
     color: Theme.textMutedDemo,
     textTransform: "uppercase",
-    letterSpacing: 0.6,
+    letterSpacing: 1.1,
     marginBottom: 8,
   },
   sheetInput: {
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.surfaceForm,
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-    borderRadius: 12,
+    borderColor: Theme.borderInput,
+    borderRadius: 14,
     paddingVertical: 12,
     paddingHorizontal: 14,
-    fontSize: 16,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
+    fontSize: 14,
+    fontWeight: "500",
+    color: Theme.textPrimary,
     minHeight: 52,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 1,
+    ...Platform.select<ViewStyle>({
+      web: { outlineStyle: "none" },
+    }),
   },
   commercialHighlight: {
     backgroundColor: Theme.surfaceLight,
@@ -2199,19 +2399,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    gap: 6,
     minHeight: Layout.minTouchTargetSize,
-    paddingVertical: 11,
-    paddingHorizontal: 14,
-    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
     marginTop: 6,
   },
   addClientBtnText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: Theme.iconPrimary,
   },
   partnersWrap: {
     minHeight: 42,
@@ -2626,8 +2829,25 @@ const styles = StyleSheet.create({
   },
   contentMax: {
     width: "100%",
-    maxWidth: 960,
+    maxWidth: 1400,
     alignSelf: "center",
+  },
+  mainGrid: {
+    width: "100%",
+  },
+  mainGridDesktop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 24,
+  },
+  formColumn: {
+    flex: 1,
+    minWidth: 0,
+  },
+  previewColumn: {
+    width: 360,
+    paddingTop: 4,
+    alignSelf: "stretch",
   },
   card: {
     backgroundColor: Theme.cardWhite,
@@ -2652,16 +2872,19 @@ const styles = StyleSheet.create({
   cardHead: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
-    paddingBottom: 10,
+    paddingBottom: 11,
     marginBottom: 14,
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: 21,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
+    letterSpacing: -0.45,
+    fontStyle: "italic",
+    textTransform: "uppercase",
   },
   stepBadge: {
     width: 32,
@@ -2672,27 +2895,27 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   stepBadgeText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "800",
     color: Theme.iconPrimary,
   },
   fieldLabel: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 9,
+    fontWeight: "700",
     marginBottom: 8,
-    letterSpacing: 1,
+    letterSpacing: 1.1,
     textTransform: "uppercase",
   },
   tripInput: {
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "500",
     minHeight: 52,
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: Theme.borderLight,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
     backgroundColor: Theme.surfaceForm,
     color: Theme.textPrimary,
     ...Platform.select<ViewStyle>({
@@ -2736,8 +2959,9 @@ const styles = StyleSheet.create({
   routePreviewHeroText: {
     flex: 1,
     minWidth: 0,
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "500",
+    fontStyle: "italic",
     letterSpacing: -0.25,
     lineHeight: 20,
     color: Theme.textPrimaryDark,
@@ -2781,23 +3005,41 @@ const styles = StyleSheet.create({
   clientCard: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 2,
+    minHeight: 70,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 15,
+    borderWidth: 1.5,
     borderColor: Theme.borderLight,
     marginBottom: 10,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.cardWhite,
   },
   clientCardOn: {
-    borderColor: Theme.darkBackground,
-    backgroundColor: "rgba(0, 0, 0, 0.05)",
+    borderColor: Theme.textPrimaryDark,
+    backgroundColor: Theme.cardWhite,
+  },
+  clientMain: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingRight: 8,
   },
   clientName: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
   },
   clientNameOn: { color: Theme.iconPrimary },
+  clientAvatar: {
+    borderWidth: 1.5,
+    borderColor: Theme.borderLight,
+  },
+  clientAvatarOn: {
+    borderWidth: 2,
+    borderColor: Theme.textPrimaryDark,
+  },
   clientMetaRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -2805,7 +3047,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   clientSub: {
-    fontSize: 11,
+    fontSize: 10,
+    fontWeight: "500",
     color: Theme.textMuted,
     flex: 1,
   },
@@ -2894,7 +3137,7 @@ const styles = StyleSheet.create({
   },
   previewCard: {
     position: "absolute",
-    width: 300,
+    width: 336,
     backgroundColor: Theme.cardWhite,
     borderRadius: 20,
     borderWidth: 1,
@@ -2914,6 +3157,20 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  previewCardDesktop: {
+    position: "relative",
+    width: "100%",
+    right: undefined,
+    bottom: undefined,
+    marginTop: 4,
+    ...Platform.select<ViewStyle>({
+      web: {
+        position: "sticky" as const,
+        top: 20,
+      },
+      default: {},
+    }),
+  },
   previewHead: {
     flexDirection: "row",
     alignItems: "center",
@@ -2921,6 +3178,11 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.darkSurface,
     paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  previewHeadRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   previewHeadTitle: {
     fontSize: 10,
@@ -2941,6 +3203,22 @@ const styles = StyleSheet.create({
     color: Theme.textOnPrimary,
     textTransform: "uppercase",
   },
+  previewCollapseBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.24)",
+  },
+  previewCollapseBtnText: {
+    fontSize: 13,
+    color: Theme.textOnPrimary,
+    fontWeight: "700",
+    lineHeight: 14,
+  },
   previewBody: { padding: 12, gap: 8 },
   previewLine: { gap: 4 },
   previewLab: {
@@ -2960,6 +3238,17 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
   previewRow2: { flexDirection: "row", gap: 12 },
+  previewCell: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  previewValStrong: {
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: -0.2,
+    color: Theme.textPrimaryDark,
+  },
   previewFoot: {
     flexDirection: "row",
     alignItems: "center",
@@ -2981,6 +3270,36 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     maxWidth: 140,
     textAlign: "right",
+  },
+  previewCollapsedChip: {
+    position: "absolute",
+    zIndex: 60,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: Theme.darkSurface,
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    ...Platform.select<ViewStyle>({
+      web: { boxShadow: "0 10px 24px rgba(15,23,42,0.2)" },
+      default: {
+        shadowColor: Theme.shadow,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.16,
+        shadowRadius: 10,
+        elevation: 4,
+      },
+    }),
+  },
+  previewCollapsedChipText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textOnPrimary,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
   },
   blobA: {
     position: "absolute",
