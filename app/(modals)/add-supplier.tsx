@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import {
   AddSupplierModal,
@@ -16,10 +16,21 @@ import { useQueryClient } from '@tanstack/react-query';
 
 export default function AddSupplierScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ returnTo?: string | string[] }>();
   const queryClient = useQueryClient();
   const { currentOrganization } = useOrganization();
+  const returnToParam = Array.isArray(params.returnTo) ? params.returnTo[0] : params.returnTo;
+  const returnTo = returnToParam?.startsWith('/') ? returnToParam : undefined;
 
   const closeModal = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    if (returnTo) {
+      router.replace(returnTo as Parameters<typeof router.replace>[0]);
+      return;
+    }
     router.replace(ROUTES.TABS.NETWORK as '/');
   };
 

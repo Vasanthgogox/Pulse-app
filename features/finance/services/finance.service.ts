@@ -96,20 +96,94 @@ export interface CreateLedgerEntryData {
   driver_name?: string | null;
 }
 
+type LedgerDescriptionMeta = {
+  trip_number?: string | null;
+  indent_id?: string | null;
+  vehicle_number?: string | null;
+  driver_name?: string | null;
+  payment_mode?: string | null;
+  payment_reference?: string | null;
+  category?: string | null;
+};
+
+const LEDGER_META_PREFIX = '[[QMETA:';
+const LEDGER_META_SUFFIX = ']]';
+
+function cleanTextValue(raw: string | null | undefined): string | null {
+  const normalized = String(raw ?? '').trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeLedgerMeta(meta: LedgerDescriptionMeta): LedgerDescriptionMeta | null {
+  const normalized: LedgerDescriptionMeta = {
+    trip_number: cleanTextValue(meta.trip_number),
+    indent_id: cleanTextValue(meta.indent_id),
+    vehicle_number: cleanTextValue(meta.vehicle_number),
+    driver_name: cleanTextValue(meta.driver_name),
+    payment_mode: cleanTextValue(meta.payment_mode),
+    payment_reference: cleanTextValue(meta.payment_reference),
+    category: cleanTextValue(meta.category),
+  };
+  const hasAnyValue = Object.values(normalized).some((v) => v != null);
+  return hasAnyValue ? normalized : null;
+}
+
+function stripLedgerMeta(description: string | null | undefined): string {
+  const raw = String(description ?? '');
+  const idx = raw.lastIndexOf(LEDGER_META_PREFIX);
+  if (idx < 0) return raw.trim();
+  return raw.slice(0, idx).trim();
+}
+
+function extractLedgerMeta(description: string | null | undefined): LedgerDescriptionMeta {
+  const raw = String(description ?? '');
+  const idx = raw.lastIndexOf(LEDGER_META_PREFIX);
+  if (idx < 0) return {};
+  const start = idx + LEDGER_META_PREFIX.length;
+  const end = raw.indexOf(LEDGER_META_SUFFIX, start);
+  if (end < 0) return {};
+  const encoded = raw.slice(start, end);
+  try {
+    const parsed = JSON.parse(encoded) as LedgerDescriptionMeta;
+    return normalizeLedgerMeta(parsed) ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function buildDescriptionWithMeta(
+  baseDescription: string,
+  meta: LedgerDescriptionMeta,
+  maxLength?: number,
+): string {
+  const normalizedMeta = normalizeLedgerMeta(meta);
+  const cleanDescription = stripLedgerMeta(baseDescription);
+  if (!normalizedMeta) return cleanDescription;
+  const metaSuffix = ` ${LEDGER_META_PREFIX}${JSON.stringify(normalizedMeta)}${LEDGER_META_SUFFIX}`;
+  if (!maxLength || maxLength <= 0) return `${cleanDescription}${metaSuffix}`;
+  if (metaSuffix.length >= maxLength) return cleanDescription.slice(0, maxLength);
+  const baseAllowed = Math.max(0, maxLength - metaSuffix.length);
+  return `${cleanDescription.slice(0, baseAllowed)}${metaSuffix}`;
+}
+
 function normalizePrimaryCategory(raw: string | null | undefined): string {
-  const firstPart = String(raw ?? '')
+  const firstPart = stripLedgerMeta(raw)
     .split('|')[0]
     ?.trim();
   return firstPart || 'ENTRY';
 }
 
 function parsePaymentMode(raw: string | null | undefined): string | null {
-  const match = String(raw ?? '').match(/(?:^|\|)\s*Mode:\s*([^|]+)/i);
+  const meta = extractLedgerMeta(raw);
+  if (meta.payment_mode) return meta.payment_mode;
+  const match = stripLedgerMeta(raw).match(/(?:^|\|)\s*Mode:\s*([^|]+)/i);
   return match?.[1]?.trim() || null;
 }
 
 function parsePaymentReference(raw: string | null | undefined): string | null {
-  const match = String(raw ?? '').match(/(?:^|\|)\s*UTR:\s*([^|]+)/i);
+  const meta = extractLedgerMeta(raw);
+  if (meta.payment_reference) return meta.payment_reference;
+  const match = stripLedgerMeta(raw).match(/(?:^|\|)\s*UTR:\s*([^|]+)/i);
   return match?.[1]?.trim() || null;
 }
 
@@ -161,6 +235,7 @@ function toLedgerRow(row: {
   id: string;
   organization_id: string;
   trip_id: string | null;
+  trip_number?: string | null;
   party_name: string | null;
   description: string | null;
   amount_in: number;
@@ -171,10 +246,12 @@ function toLedgerRow(row: {
   contact_type: string | null;
   vehicle_number?: string | null;
   driver_name?: string | null;
-  trips?: { trip_number: string } | null;
+  trips?: { trip_number: string; display_trip_id?: string | null } | null;
 }): LedgerRow {
-  const tripNumber = row.trips?.trip_number ?? null;
-  const description = row.description ?? 'ENTRY';
+  const descriptionRaw = row.description ?? 'ENTRY';
+  const description = stripLedgerMeta(descriptionRaw) || 'ENTRY';
+  const meta = extractLedgerMeta(descriptionRaw);
+  const tripNumber = row.trips?.display_trip_id ?? row.trips?.trip_number ?? row.trip_number ?? meta.trip_number ?? null;
   return {
     id: row.id,
     organization_id: row.organization_id,
@@ -188,13 +265,13 @@ function toLedgerRow(row: {
     created_at: row.created_at,
     contact_id: row.contact_id ?? null,
     contact_type: (row.contact_type as LedgerRow['contact_type']) ?? null,
-    vehicle_number: row.vehicle_number ?? null,
-    driver_name: row.driver_name ?? null,
-    trips: row.trips ? { trip_number: row.trips.trip_number, display_trip_id: row.trips.trip_number } : null,
+    vehicle_number: row.vehicle_number ?? meta.vehicle_number ?? null,
+    driver_name: row.driver_name ?? meta.driver_name ?? null,
+    trips: row.trips ? { trip_number: row.trips.trip_number, display_trip_id: row.trips.display_trip_id ?? row.trips.trip_number } : null,
     profileImageUrl: null,
-    primary_category: normalizePrimaryCategory(description),
-    payment_mode: parsePaymentMode(description),
-    payment_reference: parsePaymentReference(description),
+    primary_category: normalizePrimaryCategory(descriptionRaw),
+    payment_mode: parsePaymentMode(descriptionRaw),
+    payment_reference: parsePaymentReference(descriptionRaw),
     ...deriveReconciliationMeta({
       description,
       trip_id: row.trip_id,
@@ -212,7 +289,7 @@ export async function getTransactionsByOrganization(
 ): Promise<{ error: Error | null; transactions: LedgerRow[]; hasMore?: boolean }> {
   const q = supabase()
     .from('transactions')
-    .select('*')
+    .select('*, trips(trip_number, display_trip_id)')
     .eq('organization_id', orgId)
     .order('transaction_date', { ascending: false })
     .order('created_at', { ascending: false });
@@ -236,7 +313,7 @@ export async function getTransactionsByOrganization(
       contact_type: string | null;
       vehicle_number?: string | null;
       driver_name?: string | null;
-      trips?: { trip_number: string } | null;
+      trips?: { trip_number: string; display_trip_id?: string | null } | null;
     }>;
     const transactions: LedgerRow[] = rows.slice(0, limit).map(toLedgerRow);
     return { error: null, transactions, hasMore: rows.length > limit };
@@ -259,7 +336,7 @@ export async function getTransactionsByOrganization(
     contact_type: string | null;
     vehicle_number?: string | null;
     driver_name?: string | null;
-    trips?: { trip_number: string } | null;
+    trips?: { trip_number: string; display_trip_id?: string | null } | null;
   }>;
 
   const transactions: LedgerRow[] = rows.map(toLedgerRow);
@@ -275,7 +352,7 @@ export async function getTransactionsByOrganizationAndParty(
   if (!partyName?.trim()) return getTransactionsByOrganization(orgId);
   const { data, error } = await supabase()
     .from('transactions')
-    .select('*, trips(trip_number)')
+    .select('*, trips(trip_number, display_trip_id)')
     .eq('organization_id', orgId)
     .ilike('party_name', `%${partyName.trim()}%`)
     .order('transaction_date', { ascending: false })
@@ -294,7 +371,7 @@ export async function getTransactionsByOrganizationAndContactId(
   if (!contactId?.trim()) return { error: null, transactions: [] };
   const { data, error } = await supabase()
     .from('transactions')
-    .select('*, trips(trip_number)')
+    .select('*, trips(trip_number, display_trip_id)')
     .eq('organization_id', orgId)
     .eq('contact_id', contactId)
     .order('transaction_date', { ascending: false })
@@ -313,7 +390,7 @@ export async function getTransactionsByOrganizationAndDriver(
   if (!driverId?.trim()) return { error: null, transactions: [] };
   const { data, error } = await supabase()
     .from('transactions')
-    .select('*, trips(trip_number)')
+    .select('*, trips(trip_number, display_trip_id)')
     .eq('organization_id', orgId)
     .eq('contact_type', 'driver')
     .eq('contact_id', driverId.trim())
@@ -351,7 +428,19 @@ export async function createLedgerEntry(
   const dateErr = dateISO()(rawDate);
   const date = dateErr ? new Date().toISOString().slice(0, 10) : rawDate;
   const partyName = ((entry.party_name || '—').trim() || '—').slice(0, VALIDATION.PARTY_NAME_MAX_LENGTH);
-  const description = (entry.description ?? 'ENTRY').slice(0, VALIDATION.DESCRIPTION_MAX_LENGTH);
+  const description = buildDescriptionWithMeta(
+    entry.description ?? 'ENTRY',
+    {
+      trip_number: entry.trip_number,
+      indent_id: entry.indent_id,
+      vehicle_number: entry.vehicle_number,
+      driver_name: entry.driver_name,
+      payment_mode: parsePaymentMode(entry.description),
+      payment_reference: parsePaymentReference(entry.description),
+      category: normalizePrimaryCategory(entry.description),
+    },
+    VALIDATION.DESCRIPTION_MAX_LENGTH,
+  );
   // DB CHECK: exactly one of amount_in or amount_out must be positive
   const isCashIn = amountIn > 0;
 
@@ -370,7 +459,7 @@ export async function createLedgerEntry(
   const { data, error } = await supabase()
     .from('transactions')
     .insert(payload)
-    .select('*, trips(trip_number)')
+    .select('*, trips(trip_number, display_trip_id)')
     .single();
 
   if (error) return { error: new Error(error.message), row: null };
@@ -389,7 +478,7 @@ export async function createLedgerEntry(
     contact_type: string | null;
     vehicle_number?: string | null;
     driver_name?: string | null;
-    trips?: { trip_number: string } | null;
+    trips?: { trip_number: string; display_trip_id?: string | null } | null;
   };
 
   return { error: null, row: toLedgerRow(row) };
@@ -406,7 +495,19 @@ export async function updateLedgerEntry(
   const date = dateISO()(rawDate) ? new Date().toISOString().slice(0, 10) : rawDate;
   const isCashIn = amountIn > 0;
   const partyName = ((entry.party_name || '—').trim() || '—').slice(0, VALIDATION.PARTY_NAME_MAX_LENGTH);
-  const description = (entry.description ?? 'ENTRY').slice(0, VALIDATION.DESCRIPTION_MAX_LENGTH);
+  const description = buildDescriptionWithMeta(
+    entry.description ?? 'ENTRY',
+    {
+      trip_number: entry.trip_number,
+      indent_id: entry.indent_id,
+      vehicle_number: entry.vehicle_number,
+      driver_name: entry.driver_name,
+      payment_mode: parsePaymentMode(entry.description),
+      payment_reference: parsePaymentReference(entry.description),
+      category: normalizePrimaryCategory(entry.description),
+    },
+    VALIDATION.DESCRIPTION_MAX_LENGTH,
+  );
 
   const payload = {
     trip_id: entry.trip_id ?? null,
@@ -424,7 +525,7 @@ export async function updateLedgerEntry(
     .update(payload)
     .eq('id', entryId)
     .eq('organization_id', orgId)
-    .select('*, trips(trip_number)')
+    .select('*, trips(trip_number, display_trip_id)')
     .single();
 
   if (error) return { error: new Error(error.message), row: null };
@@ -444,7 +545,7 @@ export async function updateLedgerEntry(
     contact_type: string | null;
     vehicle_number?: string | null;
     driver_name?: string | null;
-    trips?: { trip_number: string } | null;
+    trips?: { trip_number: string; display_trip_id?: string | null } | null;
   };
 
   return { error: null, row: toLedgerRow(row) };

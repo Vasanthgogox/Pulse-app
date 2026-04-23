@@ -39,6 +39,19 @@ export default function AddTripPage() {
 
   const handleComplete = async (data: AddTripFormData, options?: { supplySource: string; driverPhone?: string }) => {
     const { orgId, userId } = ensureSessionReady();
+    const loadTonsRaw =
+      data.tons != null && String(data.tons).trim() !== ""
+        ? Number(data.tons)
+        : NaN;
+    const loadTons =
+      Number.isFinite(loadTonsRaw) && loadTonsRaw >= 0
+        ? loadTonsRaw
+        : undefined;
+    const advancePaidRaw = Number(data.advance_paid ?? 0);
+    const normalizedAdvancePaid =
+      Number.isFinite(advancePaidRaw) && advancePaidRaw >= 0
+        ? advancePaidRaw
+        : 0;
     const isAggregate = options?.supplySource === 'aggregate' && !!data.supplier_id;
     if (isAggregate) {
       const { error, trip, otp } = await createTripWithOtp(orgId, userId, {
@@ -55,13 +68,16 @@ export default function AddTripPage() {
         client_price: data.client_price,
         supplier_rate: data.supplier_rate,
         supplier_id: data.supplier_id ?? undefined,
+        pickup_date: data.pickup_date ?? undefined,
+        load_tons: loadTons,
+        advance_paid: normalizedAdvancePaid,
         notes: data.notes ?? undefined,
         vehicle_display_number: data.vehicle_display_number?.trim() || undefined,
         owner_user_id: profile?.uid ?? userId,
         created_by_user_id: profile?.uid ?? userId,
       });
       if (error) throw error;
-      const advancePaidAgg = Number(data.advance_paid ?? 0);
+      const advancePaidAgg = normalizedAdvancePaid;
       const supplierIdAgg = data.supplier_id ?? null;
       if (trip && advancePaidAgg > 0 && supplierIdAgg) {
         const { error: ledgerErr } = await createLedgerEntry(orgId, {
@@ -100,6 +116,9 @@ export default function AddTripPage() {
       client_price: data.client_price,
       supplier_rate: data.supplier_rate,
       supplier_id: data.supplier_id ?? undefined,
+      pickup_date: data.pickup_date ?? undefined,
+      load_tons: loadTons,
+      advance_paid: normalizedAdvancePaid,
       notes: data.notes ?? undefined,
       driver_id: data.driver_id ?? undefined,
       vehicle_id: data.vehicle_id ?? undefined,
@@ -111,7 +130,7 @@ export default function AddTripPage() {
       const { error: assignErr } = await assignTripDriverByPhone(trip.id, orgId, options.driverPhone.trim(), { trackingOnly: true });
       if (assignErr) console.warn('Trip created but driver assign by phone failed:', assignErr.message);
     }
-    const advancePaid = Number(data.advance_paid ?? 0);
+    const advancePaid = normalizedAdvancePaid;
     const supplierId = data.supplier_id ?? null;
     if (trip && advancePaid > 0 && supplierId) {
       const { error: ledgerErr } = await createLedgerEntry(orgId, {

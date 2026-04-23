@@ -34,13 +34,15 @@ function getEmailFromParams(params: { email?: string | string[] }): string {
 export default function SignIn() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const params = useLocalSearchParams<{ email?: string | string[] }>();
+  const params = useLocalSearchParams<{ email?: string | string[]; direct?: string }>();
   const { width } = useWindowDimensions();
   const isOnline = useIsOnline();
   const { user, signIn } = useAuth();
   const { locale, localeOptions } = useLanguage();
 
-  const [screen, setScreen] = useState<ScreenState>('SIGNIN');
+  const [screen, setScreen] = useState<ScreenState>(
+    Platform.OS === 'web' && !params.direct ? 'LANDING' : 'SIGNIN'
+  );
 
   const [email, setEmail] = useState(() => getEmailFromParams(params));
   const [password, setPassword] = useState('');
@@ -148,7 +150,7 @@ export default function SignIn() {
     <View style={[styles.panelShell, isDesktop && styles.panelShellDesktop]}>
       {isDesktop ? (
         <View style={styles.leftPanel}>
-          <Text style={styles.leftLogo}>PULSE.</Text>
+          <Text style={styles.leftLogo}>PULSE<Text style={styles.logoDot}>.</Text></Text>
           <Text style={styles.leftTag}>System Access</Text>
           <Text style={styles.leftTitle}>Welcome Back Commander.</Text>
           <Text style={styles.leftSubtitle}>
@@ -157,15 +159,17 @@ export default function SignIn() {
         </View>
       ) : null}
       <View style={[styles.rightPanel, isDesktop && styles.rightPanelDesktop]}>
-        <Text style={styles.formTitle}>Sign in.</Text>
-        <Text style={styles.formSubtitle}>Access your Pulse account dashboard.</Text>
+        <Text style={[styles.formTitle, isDesktop && styles.formTitleDesktop]}>Sign in.</Text>
+        <Text style={[styles.formSubtitle, isDesktop && styles.formSubtitleDesktop]}>
+          Access your Pulse account dashboard.
+        </Text>
 
         <TextInput
           value={email}
           onChangeText={setEmail}
           placeholder="Email Address"
-          placeholderTextColor={Theme.textMuted}
-          style={styles.input}
+          placeholderTextColor={isDesktop ? 'rgba(148,163,184,0.5)' : Theme.textMuted}
+          style={[styles.input, isDesktop && styles.inputDesktop]}
           autoCapitalize="none"
         />
         <View style={styles.passwordWrap}>
@@ -173,8 +177,8 @@ export default function SignIn() {
             value={password}
             onChangeText={setPassword}
             placeholder="Your Password"
-            placeholderTextColor={Theme.textMuted}
-            style={styles.input}
+            placeholderTextColor={isDesktop ? 'rgba(148,163,184,0.5)' : Theme.textMuted}
+            style={[styles.input, isDesktop && styles.inputDesktop]}
             secureTextEntry={!showPass}
             autoCapitalize="none"
           />
@@ -198,7 +202,7 @@ export default function SignIn() {
               size={18}
               color={keepSignedIn ? Theme.driverPrimary : Theme.textMuted}
             />
-            <Text style={styles.keepText}>Remember Me</Text>
+            <Text style={[styles.keepText, isDesktop && styles.keepTextDesktop]}>Remember Me</Text>
           </TouchableOpacity>
           <Text style={styles.forgotText}>Forgot password?</Text>
         </View>
@@ -214,6 +218,13 @@ export default function SignIn() {
             <Text style={styles.primaryBtnText}>Enter Dashboard</Text>
           )}
         </TouchableOpacity>
+
+        <View style={styles.signUpRow}>
+          <Text style={[styles.signUpMuted, isDesktop && styles.signUpMutedDesktop]}>New to Pulse? </Text>
+          <TouchableOpacity onPress={() => router.push('/sign-up')} activeOpacity={0.8}>
+            <Text style={styles.signUpLink}>Create account</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -222,7 +233,7 @@ export default function SignIn() {
     <KeyboardAvoidingView
       style={[
         styles.container,
-        screen === 'LANDING' && isDesktop ? styles.containerLandingDesktop : null,
+        isDesktop ? styles.containerDesktop : null,
         { paddingTop: insets.top, paddingBottom: insets.bottom },
       ]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -236,7 +247,7 @@ export default function SignIn() {
 
       {screen === 'LANDING' ? (
         <View style={styles.topBar}>
-          <Text style={[styles.brand, styles.brandOnDark]}>PULSE.</Text>
+          <Text style={[styles.brand, styles.brandOnDark]}>PULSE<Text style={styles.logoDot}>.</Text></Text>
           <View style={styles.topActions}>
             <TouchableOpacity onPress={() => setScreen('SIGNIN')} style={[styles.topBtn, styles.topBtnOnDark]}>
               <Text style={styles.topBtnText}>Sign In</Text>
@@ -252,15 +263,21 @@ export default function SignIn() {
       {screen === 'LANDING' ? renderLanding() : null}
       {screen === 'SIGNIN' ? renderSignIn() : null}
 
-      {screen !== 'LANDING' ? (
+      {(screen !== 'LANDING' || Platform.OS === 'web') ? (
         <TouchableOpacity
           onPress={() => {
-            setScreen('LANDING');
+            if (screen !== 'LANDING') {
+              setScreen('LANDING');
+            } else {
+              router.replace('/terminal-website');
+            }
           }}
           style={styles.backFloating}
         >
           <FontAwesome name="chevron-left" size={14} color={Theme.textMuted} />
-          <Text style={styles.backFloatingText}>Back</Text>
+          <Text style={styles.backFloatingText}>
+            {screen === 'LANDING' ? 'Website' : 'Back'}
+          </Text>
         </TouchableOpacity>
       ) : null}
     </KeyboardAvoidingView>
@@ -272,6 +289,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Theme.screenBackground,
     paddingHorizontal: Layout.screenPaddingHorizontal,
+  },
+  containerDesktop: {
+    backgroundColor: '#020617',
+    paddingHorizontal: 0,
   },
   containerLandingDesktop: {
     backgroundColor: '#020617',
@@ -430,40 +451,41 @@ const styles = StyleSheet.create({
   panelShellDesktop: {
     borderRadius: 0,
     borderWidth: 0,
+    backgroundColor: '#020617',
   },
   leftPanel: {
     flex: 1,
-    backgroundColor: Theme.textPrimaryDark,
-    paddingHorizontal: 36,
-    paddingVertical: 36,
+    backgroundColor: '#000000',
+    paddingHorizontal: 52,
+    paddingVertical: 48,
     justifyContent: 'center',
   },
   leftLogo: {
-    fontSize: 48,
+    fontSize: 44,
     fontWeight: '900',
-    color: Theme.driverPrimary,
-    marginBottom: 10,
-  },
-  leftTag: {
-    fontSize: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 2.5,
-    fontWeight: '700',
-    color: Theme.textOnDarkMuted,
+    color: Theme.textOnDark,
     marginBottom: 14,
   },
+  leftTag: {
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    fontWeight: '700',
+    color: 'rgba(148,163,184,0.75)',
+    marginBottom: 18,
+  },
   leftTitle: {
-    fontSize: 34,
+    fontSize: 40,
     fontWeight: '900',
     color: Theme.textOnDark,
     letterSpacing: -0.8,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   leftSubtitle: {
-    fontSize: 14,
-    lineHeight: 22,
-    color: Theme.textOnDarkMuted,
-    maxWidth: 360,
+    fontSize: 15,
+    lineHeight: 24,
+    color: 'rgba(148,163,184,0.75)',
+    maxWidth: 420,
   },
   rightPanel: {
     flex: 1,
@@ -475,6 +497,7 @@ const styles = StyleSheet.create({
   rightPanelDesktop: {
     paddingHorizontal: 48,
     paddingVertical: 48,
+    backgroundColor: '#0f172a',
   },
   formTitle: {
     fontSize: 44,
@@ -482,15 +505,21 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     letterSpacing: -0.8,
   },
+  formTitleDesktop: {
+    color: Theme.textOnDark,
+  },
   formSubtitle: {
     marginTop: 6,
     marginBottom: 18,
     fontSize: 14,
     color: Theme.textMuted,
   },
+  formSubtitleDesktop: {
+    color: 'rgba(148,163,184,0.9)',
+  },
   input: {
     backgroundColor: Theme.surface,
-    borderRadius: 18,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.border,
     paddingHorizontal: 16,
@@ -498,6 +527,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Theme.textPrimaryDark,
     marginBottom: 12,
+  },
+  inputDesktop: {
+    backgroundColor: '#020617',
+    borderColor: 'rgba(255,255,255,0.14)',
+    color: Theme.textOnDark,
   },
   passwordWrap: {
     position: 'relative',
@@ -532,6 +566,9 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
+  keepTextDesktop: {
+    color: 'rgba(148,163,184,0.75)',
+  },
   forgotText: {
     fontSize: 12,
     color: Theme.driverPrimary,
@@ -556,6 +593,9 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
+  logoDot: {
+    color: Theme.driverPrimary,
+  },
   backFloating: {
     position: 'absolute',
     left: 18,
@@ -573,6 +613,25 @@ const styles = StyleSheet.create({
   backFloatingText: {
     color: Theme.textMuted,
     fontSize: 12,
+    fontWeight: '700',
+  },
+  signUpRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  signUpMuted: {
+    fontSize: 13,
+    color: Theme.textMuted,
+    fontWeight: '500',
+  },
+  signUpMutedDesktop: {
+    color: 'rgba(148,163,184,0.75)',
+  },
+  signUpLink: {
+    fontSize: 13,
+    color: Theme.driverPrimary,
     fontWeight: '700',
   },
 });

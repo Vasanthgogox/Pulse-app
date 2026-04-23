@@ -1,5 +1,9 @@
+import { Redirect } from "expo-router";
+
 /**
- * Home tab: Ops Agent (Autopilot Interface).
- * Screen implementation lives in features/ops-agent/OpsAgentScreen.tsx.
+ * Tabs root should always land on a primary list tab.
+ * Keep Ops Agent on its own hidden route to avoid accidental fallback.
  */
-export { default } from "@/features/ops-agent/OpsAgentScreen";
+export default function TabsIndexRedirect() {
+  return <Redirect href="/(tabs)/trips" />;
+}

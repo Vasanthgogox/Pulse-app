@@ -9,7 +9,7 @@ import {
 import { queryKeys } from "@/lib/queryKeys";
 import { useInvalidateClients } from "@/lib/queries/useClientsQuery";
 import { ROUTES } from "@/lib/routes";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getConnectionInviteeByPhone,
@@ -19,16 +19,32 @@ import {
 const NO_ORG_MESSAGE =
   "No organization loaded. Sign out and sign in again to refresh, or ensure you are added as a member of an organization in the dashboard.";
 
-/** Close modal: go back to network. */
-function closeModal(router: ReturnType<typeof useRouter>) {
-  router.replace(ROUTES.TABS.NETWORK as '/');
+/** Close modal: go back to opener, else fallback route. */
+function closeModal(
+  router: ReturnType<typeof useRouter>,
+  returnTo?: string,
+) {
+  if (router.canGoBack()) {
+    router.back();
+    return;
+  }
+  if (returnTo) {
+    router.replace(returnTo as Parameters<typeof router.replace>[0]);
+    return;
+  }
+  router.replace(ROUTES.TABS.NETWORK as "/");
 }
 
 export default function AddClientScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ returnTo?: string | string[] }>();
   const queryClient = useQueryClient();
   const invalidateClients = useInvalidateClients();
   const { currentOrganization, isLoading, refreshOrganization } = useOrganization();
+  const returnToParam = Array.isArray(params.returnTo)
+    ? params.returnTo[0]
+    : params.returnTo;
+  const returnTo = returnToParam?.startsWith("/") ? returnToParam : undefined;
 
   const handleComplete = async (data: AddClientFormData) => {
     if (!currentOrganization?.id) {
@@ -46,7 +62,7 @@ export default function AddClientScreen() {
     if (error) throw error;
     invalidateClients(orgId);
     await queryClient.refetchQueries({ queryKey: queryKeys.clients.all(orgId) });
-    closeModal(router);
+    closeModal(router, returnTo);
   };
 
   const searchInviteeByPhone = async (
@@ -76,7 +92,7 @@ export default function AddClientScreen() {
     if (alreadyInvited) {
       // Still close; they can see in Network > Requests
     }
-    closeModal(router);
+    closeModal(router, returnTo);
   };
 
   if (isLoading) {
@@ -85,7 +101,7 @@ export default function AddClientScreen() {
 
   return (
     <AddClientModal
-      onClose={() => closeModal(router)}
+      onClose={() => closeModal(router, returnTo)}
       onComplete={handleComplete}
       organizationId={currentOrganization?.id ?? null}
       noOrganizationMessage={currentOrganization ? null : NO_ORG_MESSAGE}

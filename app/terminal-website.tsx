@@ -44,6 +44,71 @@ const WEBSITE_HTML = `<!doctype html>
     @keyframes pulseSoft { 0%,100% { opacity: .2; transform: scale(1); } 50% { opacity: .35; transform: scale(1.05); } }
     .bg-glow { animation: pulseSoft 5s ease-in-out infinite; }
     section[id], div[id] { scroll-margin-top: 96px; }
+    .mobile-tabbar { display: none; }
+    @media (max-width: 1024px) {
+      html { scroll-padding-top: 78px; }
+      section[id], div[id] { scroll-margin-top: 78px; }
+      .page-pad { padding-left: 14px; padding-right: 14px; }
+      .glass-nav { backdrop-filter: blur(12px); }
+      .hero-title { font-size: clamp(38px, 13vw, 74px); line-height: 0.9; letter-spacing: -0.045em; }
+      .final-title { font-size: clamp(38px, 12vw, 82px); line-height: 0.9; letter-spacing: -0.045em; }
+      .support-copy { font-size: 15px; line-height: 1.45; }
+      .section-copy { font-size: 14px; line-height: 1.45; }
+      #trips, .final-cta { border-radius: 2.2rem !important; }
+      .hero-shell { border-radius: 2.4rem !important; padding: 24px !important; }
+      .ledger-card, .contract-card, .pricing-card { border-radius: 2.1rem !important; padding: 26px !important; }
+      .compact-card { border-radius: 1.5rem !important; padding: 20px !important; }
+      .trip-feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 12px !important; }
+      .steps-grid { gap: 14px !important; }
+      body { padding-bottom: 90px; }
+      .mobile-tabbar {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 8px;
+        position: fixed;
+        left: 12px;
+        right: 12px;
+        bottom: max(10px, env(safe-area-inset-bottom));
+        z-index: 120;
+        background: rgba(2, 6, 23, 0.9);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 18px;
+        padding: 8px;
+        backdrop-filter: blur(14px);
+        box-shadow: 0 16px 36px rgba(2, 6, 23, 0.35);
+      }
+      .mobile-tabbar a {
+        color: #cbd5e1;
+        text-decoration: none;
+        text-align: center;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-weight: 800;
+        font-size: 9px;
+        padding: 10px 6px;
+        border-radius: 12px;
+      }
+      .mobile-tabbar a:active,
+      .mobile-tabbar a:hover {
+        background: rgba(16, 185, 129, 0.2);
+        color: #ffffff;
+      }
+      .driver-phone {
+        width: min(100%, 320px) !important;
+        height: 520px !important;
+      }
+    }
+    @media (max-width: 767px) {
+      nav .brand-wordmark { font-size: 1.2rem; }
+      .nav-cta { padding: 10px 14px !important; font-size: 9px !important; }
+      .hero-section { padding-top: 106px !important; padding-bottom: 60px !important; }
+      .hero-badges { margin-bottom: 20px !important; }
+      .hero-actions a { width: 100%; padding: 15px 18px !important; font-size: 11px !important; }
+      .trip-feature-grid, .driver-feature-grid, .steps-grid, .ledger-grid, .contracts-grid { grid-template-columns: minmax(0, 1fr) !important; }
+      .section-stack { padding-top: 56px !important; padding-bottom: 56px !important; }
+      .headline-lg { font-size: clamp(30px, 11vw, 46px) !important; }
+      .footer-copy { letter-spacing: 0.08em !important; font-size: 10px !important; }
+    }
   </style>
 </head>
 <body class="min-h-screen bg-white font-sans selection:bg-emerald-100 overflow-x-hidden">
@@ -51,7 +116,7 @@ const WEBSITE_HTML = `<!doctype html>
     <div class="wide-shell max-w-7xl mx-auto flex items-center justify-between">
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 rounded-2xl bg-slate-950 flex items-center justify-center font-black text-emerald-500 shadow-xl ring-2 ring-emerald-500/10">P.</div>
-        <span class="font-black text-2xl tracking-tighter italic text-slate-950 uppercase">Pulse<span class="brand-dot">.</span></span>
+        <span class="brand-wordmark font-black text-2xl tracking-tighter italic text-slate-950 uppercase">Pulse<span class="brand-dot">.</span></span>
       </div>
       <div class="hidden lg:flex items-center gap-12">
         <a href="#network" class="nav-link font-black uppercase text-slate-400 hover:text-emerald-600 transition-colors">Network</a>
@@ -59,15 +124,16 @@ const WEBSITE_HTML = `<!doctype html>
         <a href="#ledger" class="nav-link font-black uppercase text-slate-400 hover:text-emerald-600 transition-colors">Ledger</a>
         <a href="#drivers" class="nav-link font-black uppercase text-slate-400 hover:text-emerald-600 transition-colors">Drivers</a>
         <a href="#contracts" class="nav-link font-black uppercase text-slate-400 hover:text-emerald-600 transition-colors">Contracts</a>
+        <a href="#steps" class="nav-link font-black uppercase text-slate-400 hover:text-emerald-600 transition-colors">Steps</a>
       </div>
-      <a href="/sign-in" target="_top" class="px-10 py-3 bg-slate-950 text-white rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 shadow-2xl transition-all">Enter OS</a>
+      <a href="/sign-in" target="_top" class="nav-cta px-10 py-3 bg-slate-950 text-white rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 shadow-2xl transition-all">Enter OS</a>
     </div>
   </nav>
 
-  <section class="relative pt-44 pb-40 page-pad bg-slate-50 overflow-hidden">
+  <section class="hero-section relative pt-44 pb-40 page-pad bg-slate-50 overflow-hidden">
     <div class="max-w-7xl mx-auto wide-shell grid lg:grid-cols-2 gap-16 xl:gap-24 items-center">
       <div class="relative z-10 reveal">
-        <div class="inline-flex items-center gap-3 bg-white px-5 py-2.5 rounded-full mb-10 border border-slate-100 shadow-sm hover-float">
+        <div class="hero-badges inline-flex items-center gap-3 bg-white px-5 py-2.5 rounded-full mb-10 border border-slate-100 shadow-sm hover-float">
           <i data-lucide="sparkles" class="w-4 h-4 text-emerald-600"></i>
           <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Global Logistics Hub v4.0</span>
         </div>
@@ -77,13 +143,13 @@ const WEBSITE_HTML = `<!doctype html>
         <p class="support-copy text-slate-500 font-medium max-w-xl mb-14">
           Run your entire transport business on one platform. From loads to payments — manage everything in one simple, unified flow.
         </p>
-        <div class="flex flex-col sm:flex-row gap-6">
+        <div class="hero-actions flex flex-col sm:flex-row gap-6">
           <a href="/sign-in" target="_top" class="px-16 py-8 bg-emerald-600 text-white rounded-[4rem] font-black text-sm uppercase tight-btn shadow-[0_20px_50px_-10px_rgba(16,185,129,0.5)] hover:bg-emerald-700 transition-all text-center hover-float">Get Started</a>
           <a href="#network" class="px-16 py-8 bg-white border border-slate-200 rounded-[4rem] font-black text-sm uppercase tight-btn hover:bg-slate-50 transition-all text-center hover-float">See Features</a>
         </div>
       </div>
       <div class="relative reveal">
-        <div class="relative z-10 bg-slate-950 rounded-[4.5rem] p-14 shadow-[0_60px_120px_-20px_rgba(0,0,0,0.35)] border border-white/10 hover-float">
+        <div class="hero-shell relative z-10 bg-slate-950 rounded-[4.5rem] p-14 shadow-[0_60px_120px_-20px_rgba(0,0,0,0.35)] border border-white/10 hover-float">
           <div class="flex justify-between items-center mb-12">
             <div class="flex gap-2"><div class="w-3 h-3 rounded-full bg-rose-500"></div><div class="w-3 h-3 rounded-full bg-amber-500"></div><div class="w-3 h-3 rounded-full bg-emerald-500"></div></div>
             <span class="text-[10px] font-black text-emerald-400 uppercase tracking-[0.5em] italic">Pulse_Active</span>
@@ -101,10 +167,10 @@ const WEBSITE_HTML = `<!doctype html>
     </div>
   </section>
 
-  <section id="network" class="py-28 page-pad max-w-7xl mx-auto wide-shell overflow-hidden">
+  <section id="network" class="section-stack py-28 page-pad max-w-7xl mx-auto wide-shell overflow-hidden">
     <div class="grid lg:grid-cols-[1fr_1.05fr] gap-10 xl:gap-12 items-start">
       <div class="reveal">
-        <h2 class="text-5xl md:text-7xl font-black tracking-tighter uppercase italic leading-none mb-6">Your Network. Fully Connected.<span class="text-emerald-500">.</span></h2>
+        <h2 class="headline-lg text-5xl md:text-7xl font-black tracking-tighter uppercase italic leading-none mb-6">Your Network. Fully Connected.<span class="text-emerald-500">.</span></h2>
         <p class="section-copy font-bold max-w-[44rem] text-slate-500 mb-10">Pulse connects you seamlessly with trusted clients and suppliers. Post requirements like social posts and get bids instantly.</p>
         <div class="space-y-4">
           <div class="flex items-center gap-5 p-6 rounded-[2.2rem] bg-slate-50 border border-slate-100 hover:border-emerald-200 transition-all">
@@ -141,22 +207,22 @@ const WEBSITE_HTML = `<!doctype html>
     </div>
   </section>
 
-  <section id="trips" class="py-32 page-pad bg-slate-950 text-white rounded-[5rem] mx-4 relative overflow-hidden reveal">
+  <section id="trips" class="section-stack py-32 page-pad bg-slate-950 text-white rounded-[5rem] mx-4 relative overflow-hidden reveal">
     <div class="max-w-6xl mx-auto wide-shell">
-      <h2 class="text-5xl md:text-7xl font-black tracking-tighter uppercase italic leading-none mb-6 text-center">End to End Trip Management<span class="text-emerald-500">.</span></h2>
+      <h2 class="headline-lg text-5xl md:text-7xl font-black tracking-tighter uppercase italic leading-none mb-6 text-center">End to End Trip Management<span class="text-emerald-500">.</span></h2>
       <p class="text-lg md:text-xl font-bold max-w-3xl leading-relaxed text-slate-400 mb-16 mx-auto text-center">Track live manifests from warehouse to destination. Link kilometers directly to payments.</p>
-      <div class="grid md:grid-cols-3 gap-8">
-        <div class="p-10 rounded-[3rem] bg-white/5 border border-white/10 text-center">
+      <div class="trip-feature-grid grid md:grid-cols-3 gap-8">
+        <div class="compact-card p-10 rounded-[3rem] bg-white/5 border border-white/10 text-center">
           <div class="w-16 h-16 bg-emerald-500/10 rounded-[1.5rem] flex items-center justify-center mx-auto mb-8"><i data-lucide="mouse-pointer-2" class="w-8 h-8 text-emerald-500"></i></div>
           <h4 class="font-black uppercase text-lg mb-3 tracking-tighter italic">Instant Assign</h4>
           <p class="text-slate-400 leading-relaxed font-medium">Push job details to driver apps in one tap.</p>
         </div>
-        <div class="p-10 rounded-[3rem] bg-white/5 border border-white/10 text-center">
+        <div class="compact-card p-10 rounded-[3rem] bg-white/5 border border-white/10 text-center">
           <div class="w-16 h-16 bg-emerald-500/10 rounded-[1.5rem] flex items-center justify-center mx-auto mb-8"><i data-lucide="map-pinned" class="w-8 h-8 text-emerald-500"></i></div>
           <h4 class="font-black uppercase text-lg mb-3 tracking-tighter italic">Route Mapping</h4>
           <p class="text-slate-400 leading-relaxed font-medium">Live GPS updates with route optimization.</p>
         </div>
-        <div class="p-10 rounded-[3rem] bg-white/5 border border-white/10 text-center">
+        <div class="compact-card p-10 rounded-[3rem] bg-white/5 border border-white/10 text-center">
           <div class="w-16 h-16 bg-emerald-500/10 rounded-[1.5rem] flex items-center justify-center mx-auto mb-8"><i data-lucide="check-circle-2" class="w-8 h-8 text-emerald-500"></i></div>
           <h4 class="font-black uppercase text-lg mb-3 tracking-tighter italic">Auto-Settlement</h4>
           <p class="text-slate-400 leading-relaxed font-medium">Completion auto-logs entries into your ledger.</p>
@@ -165,15 +231,15 @@ const WEBSITE_HTML = `<!doctype html>
     </div>
   </section>
 
-  <section id="ledger" class="py-40 page-pad max-w-7xl mx-auto wide-shell">
-    <h2 class="text-5xl md:text-7xl font-black tracking-tighter uppercase italic leading-none mb-6 reveal">Know Exactly Who Paid What<span class="text-emerald-500">.</span></h2>
+  <section id="ledger" class="section-stack py-40 page-pad max-w-7xl mx-auto wide-shell">
+    <h2 class="headline-lg text-5xl md:text-7xl font-black tracking-tighter uppercase italic leading-none mb-6 reveal">Know Exactly Who Paid What<span class="text-emerald-500">.</span></h2>
     <p class="text-lg md:text-xl font-bold max-w-xl leading-relaxed text-slate-500 mb-16 reveal">A shared ledger between you and your partners.</p>
-    <div class="grid lg:grid-cols-2 gap-12">
-      <div class="p-16 rounded-[4.5rem] bg-white border border-slate-100 shadow-[0_50px_120px_-30px_rgba(0,0,0,0.1)] reveal hover-float">
+    <div class="ledger-grid grid lg:grid-cols-2 gap-12">
+      <div class="ledger-card p-16 rounded-[4.5rem] bg-white border border-slate-100 shadow-[0_50px_120px_-30px_rgba(0,0,0,0.1)] reveal hover-float">
         <div class="flex justify-between items-center p-8 bg-slate-50 rounded-[2.5rem] mb-6"><span class="font-black text-slate-400 uppercase text-xs tracking-widest">My Ledger</span><span class="font-black text-4xl text-slate-900 tracking-tighter italic">₹5,839.00</span></div>
         <div class="flex justify-between items-center p-8 bg-emerald-50 rounded-[2.5rem] border border-emerald-100"><span class="font-black text-emerald-600 uppercase text-xs tracking-widest">Partner Side</span><span class="font-black text-4xl text-emerald-600 tracking-tighter italic">₹5,839.00</span></div>
       </div>
-      <div class="p-16 rounded-[4.5rem] bg-emerald-600 text-white shadow-3xl reveal hover-float">
+      <div class="pricing-card p-16 rounded-[4.5rem] bg-emerald-600 text-white shadow-3xl reveal hover-float">
         <h4 class="text-4xl font-black italic uppercase mb-6 leading-tight">No Payment Confusion<span class="dot-on-green">.</span></h4>
         <p class="text-emerald-100 text-xl font-medium leading-relaxed">Pulse OS enforces pricing rules before manifest lock.</p>
         <a href="/sign-in" target="_top" class="block w-full py-8 bg-slate-950 text-white rounded-[3rem] font-black text-sm uppercase tracking-[0.4em] shadow-2xl mt-16 text-center">Configure My Pricing</a>
@@ -181,12 +247,12 @@ const WEBSITE_HTML = `<!doctype html>
     </div>
   </section>
 
-  <section id="drivers" class="py-32 page-pad bg-slate-50">
+  <section id="drivers" class="section-stack py-32 page-pad bg-slate-50">
     <div class="max-w-7xl mx-auto wide-shell grid lg:grid-cols-2 gap-20 items-center">
       <div class="reveal">
-        <h2 class="text-5xl md:text-7xl font-black tracking-tighter uppercase italic leading-none mb-6">Built for Drivers Too<span class="text-emerald-500">.</span></h2>
+        <h2 class="headline-lg text-5xl md:text-7xl font-black tracking-tighter uppercase italic leading-none mb-6">Built for Drivers Too<span class="text-emerald-500">.</span></h2>
         <p class="text-lg md:text-xl font-bold max-w-xl leading-relaxed text-slate-500 mb-12">Empower your pilots with a mobile app for trip updates, digital PODs, and expense tracking.</p>
-        <div class="grid grid-cols-2 gap-5">
+        <div class="driver-feature-grid grid grid-cols-2 gap-5">
           <div class="p-7 bg-white rounded-[2rem] border border-slate-100 shadow-sm flex flex-col items-center text-center gap-3"><i data-lucide="smartphone" class="w-8 h-8 text-emerald-500"></i><span class="font-black uppercase text-xs tracking-widest text-slate-800">Pilot App</span></div>
           <div class="p-7 bg-white rounded-[2rem] border border-slate-100 shadow-sm flex flex-col items-center text-center gap-3"><i data-lucide="camera" class="w-8 h-8 text-emerald-500"></i><span class="font-black uppercase text-xs tracking-widest text-slate-800">Instant POD</span></div>
           <div class="p-7 bg-white rounded-[2rem] border border-slate-100 shadow-sm flex flex-col items-center text-center gap-3"><i data-lucide="fuel" class="w-8 h-8 text-emerald-500"></i><span class="font-black uppercase text-xs tracking-widest text-slate-800">Expense Logs</span></div>
@@ -194,7 +260,7 @@ const WEBSITE_HTML = `<!doctype html>
         </div>
       </div>
       <div class="reveal flex justify-center">
-        <div class="w-72 h-[560px] bg-slate-950 rounded-[4rem] border-[14px] border-slate-900 shadow-[0_80px_160px_-40px_rgba(0,0,0,0.4)] p-10 relative overflow-hidden">
+        <div class="driver-phone w-72 h-[560px] bg-slate-950 rounded-[4rem] border-[14px] border-slate-900 shadow-[0_80px_160px_-40px_rgba(0,0,0,0.4)] p-10 relative overflow-hidden">
           <div class="absolute top-0 left-1/2 -translate-x-1/2 w-16 h-8 bg-slate-900 rounded-b-2xl"></div>
           <div class="mt-10 space-y-8">
             <div class="flex items-center gap-3"><div class="w-2.5 h-2.5 rounded-full bg-emerald-500"></div><span class="text-[10px] font-black text-white/40 uppercase tracking-widest">Active_Trip</span></div>
@@ -213,13 +279,13 @@ const WEBSITE_HTML = `<!doctype html>
     </div>
   </section>
 
-  <section id="contracts" class="py-40 page-pad max-w-7xl mx-auto wide-shell">
+  <section id="contracts" class="section-stack py-40 page-pad max-w-7xl mx-auto wide-shell">
     <div class="text-center mb-20 reveal">
-      <h2 class="text-5xl md:text-7xl font-black tracking-tighter uppercase italic leading-none mb-6">Standardize Your Business<span class="text-emerald-500">.</span></h2>
+      <h2 class="headline-lg text-5xl md:text-7xl font-black tracking-tighter uppercase italic leading-none mb-6">Standardize Your Business<span class="text-emerald-500">.</span></h2>
       <p class="text-lg md:text-xl font-bold max-w-3xl mx-auto leading-relaxed text-slate-500">Define your lane pricing and unloading rules once. Automated contracts ensure everyone agrees before the wheel turns.</p>
     </div>
-    <div class="grid lg:grid-cols-2 gap-12">
-      <div class="p-16 rounded-[4rem] bg-slate-950 text-white shadow-3xl relative overflow-hidden reveal">
+    <div class="contracts-grid grid lg:grid-cols-2 gap-12">
+      <div class="contract-card p-16 rounded-[4rem] bg-slate-950 text-white shadow-3xl relative overflow-hidden reveal">
         <h4 class="text-3xl font-black italic uppercase mb-10">Standard Rules</h4>
         <div class="space-y-8">
           <div class="flex justify-between items-center py-5 border-b border-white/5"><span class="text-sm font-bold text-slate-500 uppercase tracking-widest">Lane Pricing</span><span class="font-black text-emerald-500 uppercase text-sm tracking-[0.2em]">Fixed System Rate</span></div>
@@ -227,7 +293,7 @@ const WEBSITE_HTML = `<!doctype html>
           <div class="flex justify-between items-center py-5 border-b border-white/5"><span class="text-sm font-bold text-slate-500 uppercase tracking-widest">Loading Policy</span><span class="font-black text-emerald-500 uppercase text-sm tracking-[0.2em]">Verified Manual Audit</span></div>
         </div>
       </div>
-      <div id="pricing" class="p-16 rounded-[4rem] bg-emerald-600 text-white shadow-3xl reveal flex flex-col justify-between hover-float">
+      <div id="pricing" class="pricing-card p-16 rounded-[4rem] bg-emerald-600 text-white shadow-3xl reveal flex flex-col justify-between hover-float">
         <div>
           <h4 class="text-4xl font-black italic uppercase mb-6 leading-tight">No Payment<br/>Confusion<span class="dot-on-green">.</span></h4>
           <p class="text-emerald-100 text-xl font-medium leading-relaxed">Pulse OS enforces your pricing rules at the start, ensuring every partner agrees on the price before the manifest is locked.</p>
@@ -237,9 +303,9 @@ const WEBSITE_HTML = `<!doctype html>
     </div>
   </section>
 
-  <section class="py-40 page-pad max-w-5xl mx-auto wide-shell text-center reveal">
-    <h2 class="text-6xl font-black tracking-tighter italic uppercase mb-20">3 Steps To Start<span class="text-emerald-500">.</span></h2>
-    <div class="grid sm:grid-cols-3 gap-12 relative">
+  <section id="steps" class="section-stack py-40 page-pad max-w-5xl mx-auto wide-shell text-center reveal">
+    <h2 class="headline-lg text-6xl font-black tracking-tighter italic uppercase mb-20">3 Steps To Start<span class="text-emerald-500">.</span></h2>
+    <div class="steps-grid grid sm:grid-cols-3 gap-12 relative">
       <div class="absolute top-10 left-0 right-0 h-px bg-slate-100 hidden sm:block"></div>
       <div class="relative z-10 space-y-6">
         <div class="w-20 h-20 rounded-full bg-slate-950 text-white flex items-center justify-center mx-auto text-2xl font-black italic shadow-2xl border-4 border-white">01</div>
@@ -256,7 +322,7 @@ const WEBSITE_HTML = `<!doctype html>
     </div>
   </section>
 
-  <section class="py-56 page-pad bg-slate-950 text-white text-center relative overflow-hidden rounded-t-[6rem]">
+  <section class="final-cta py-56 page-pad bg-slate-950 text-white text-center relative overflow-hidden rounded-t-[6rem]">
     <div class="max-w-5xl mx-auto relative z-10 reveal">
       <h2 class="final-title font-black italic mb-16 uppercase">
         <span id="final-typewriter" data-text="CONNECT YOUR BUSINESS"></span><span class="text-emerald-500">.</span>
@@ -267,8 +333,16 @@ const WEBSITE_HTML = `<!doctype html>
   </section>
 
   <footer class="py-16 page-pad bg-slate-950 border-t border-white/5 text-center">
-    <p class="text-[11px] font-black text-slate-600 uppercase tracking-widest leading-relaxed italic">GoGoX pulse • All rights reserved 2024</p>
+    <p class="footer-copy text-[11px] font-black text-slate-600 uppercase tracking-widest leading-relaxed italic">GoGoX pulse • All rights reserved 2026</p>
   </footer>
+  <div class="mobile-tabbar">
+    <a href="#network">Network</a>
+    <a href="#trips">Trips</a>
+    <a href="#ledger">Ledger</a>
+    <a href="#drivers">Drivers</a>
+    <a href="#contracts">Rules</a>
+    <a href="#steps">Steps</a>
+  </div>
   <script>
     lucide.createIcons();
     const typeEl = document.getElementById('typewriter');

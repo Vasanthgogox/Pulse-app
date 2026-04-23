@@ -3,11 +3,12 @@
  * Dropdown is always in a Modal so the list scrolls reliably on both iOS and Android.
  * Includes "Create new client" at bottom (opens sub-modal).
  */
+import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchInput";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useCallback, useMemo, useRef, useState, useEffect } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Modal,
@@ -16,6 +17,7 @@ import {
     StyleSheet,
     Text,
     TextInput,
+    type TextStyle,
     TouchableOpacity,
     TouchableWithoutFeedback,
     View,
@@ -205,34 +207,20 @@ export function ClientSearchField({
               onStartShouldSetResponder={() => true}
             >
               <Text style={styles.dropdownModalTitle}>Select client</Text>
-              <View style={styles.modalSearchRow}>
-                <FontAwesome name="search" size={14} color={Theme.textMuted} />
-                <TextInput
+              <View style={styles.modalSearchSection}>
+                <CreateTripSheetSearchInput
                   ref={modalInputRef}
-                  style={styles.modalSearchInput}
                   value={draft}
                   onChangeText={(t) => {
                     setDraft(t);
                     onClientNameChange(t);
                   }}
                   placeholder="Search client name..."
-                  placeholderTextColor={Theme.placeholder}
                   autoCapitalize="words"
-                  autoCorrect={false}
                   spellCheck={false}
                   autoComplete="off"
+                  shellStyle={styles.modalSearchShellInset}
                 />
-                {draft.trim().length > 0 ? (
-                  <TouchableOpacity
-                    onPress={() => {
-                      setDraft("");
-                      onClientNameChange("");
-                    }}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <FontAwesome name="times-circle" size={18} color={Theme.textMuted} />
-                  </TouchableOpacity>
-                ) : null}
               </View>
               <ScrollView
                 style={styles.dropdownScroll}
@@ -274,9 +262,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingRight: 44,
     ...Platform.select({
-      web: {
-        outlineStyle: "none",
-      } as any,
+      web: { outlineStyle: "none" } as TextStyle,
     }),
   },
   inputPressable: {
@@ -330,27 +316,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
   },
-  modalSearchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+  modalSearchSection: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
     backgroundColor: Theme.surface,
   },
-  modalSearchInput: {
-    flex: 1,
-    minWidth: 0,
-    paddingVertical: 8,
-    fontSize: 16,
-    color: Theme.textPrimary,
-    ...Platform.select({
-      web: {
-        outlineStyle: "none",
-      } as any,
-    }),
+  modalSearchShellInset: {
+    width: "100%",
   },
   dropdownScroll: {
     maxHeight: 260,

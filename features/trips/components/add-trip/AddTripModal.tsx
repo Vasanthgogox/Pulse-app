@@ -119,6 +119,7 @@ export function AddTripModal({
       submitLabel="Create Trip"
       canSubmit={form.canSubmit}
       submitting={submitting}
+      showFooter={false}
       onClose={onClose}
       onSubmit={handleSubmit}
     >
@@ -129,6 +130,9 @@ export function AddTripModal({
         clientsLoading={clientsLoading}
         organizationId={organizationId}
         refetchClients={refetchClients}
+        onSubmit={handleSubmit}
+        canSubmit={form.canSubmit}
+        submitting={submitting}
       />
     </AddTripModalLayout>
   );

@@ -53,6 +53,10 @@ export interface TripRow {
   started_at: string | null;
   completed_at: string | null;
   load_type: string | null;
+  /** Optional load weight in tons from Add Trip form. */
+  load_tons?: number | null;
+  /** Optional advance amount paid to supplier for this trip. */
+  advance_paid?: number | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -314,6 +318,10 @@ export interface CreateTripData {
   supplier_rate?: number;
   notes?: string | null;
   pickup_date?: string | null;
+  /** Optional load weight in tons (stored in trips.load_tons). */
+  load_tons?: number | null;
+  /** Optional advance paid to supplier (stored in trips.advance_paid). */
+  advance_paid?: number | null;
   supplier_id?: string | null;
   driver_id?: string | null;
   vehicle_id?: string | null;
@@ -323,6 +331,48 @@ export interface CreateTripData {
   owner_user_id?: string | null;
   /** User who created this row. */
   created_by_user_id?: string | null;
+}
+
+type PostgrestLikeError = {
+  message: string;
+  details?: string | null;
+  hint?: string | null;
+  code?: string | null;
+};
+
+function buildPostgrestErrorMessage(error: PostgrestLikeError): string {
+  const parts = [error.message, error.details ?? "", error.hint ?? ""].filter(
+    Boolean,
+  );
+  const joined = parts.join(" — ");
+  const code = (error.code ?? "").trim();
+  return code ? `${joined} [${code}]` : joined;
+}
+
+async function ensurePublicUserRecord(userId?: string | null): Promise<void> {
+  const id = (userId ?? "").trim();
+  if (!id) return;
+
+  const { error } = await supabase().from("users").upsert(
+    {
+      id,
+      name: "User",
+    },
+    { onConflict: "id" },
+  );
+
+  if (error) {
+    const msg = (error.message ?? "").toLowerCase();
+    // Keep compatibility with DBs where users table is not writable/readable from client.
+    if (
+      msg.includes("relation") ||
+      msg.includes("permission denied") ||
+      msg.includes("policy")
+    ) {
+      return;
+    }
+    throw new Error(error.message);
+  }
 }
 
 const ONGOING_TRIP_TERMINAL_STATUSES = [
@@ -474,6 +524,12 @@ function isUuidString(value: string): boolean {
   );
 }
 
+function normalizeNullableUuid(value: string | null | undefined): string | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  return isUuidString(raw) ? raw : null;
+}
+
 function shouldRetryCreateWithFallbackTripNumber(
   errorMessage: string,
   errorCode?: string | null,
@@ -537,6 +593,32 @@ function buildFallbackTripNumber(): string {
   const stamp = Date.now().toString().slice(-10);
   const rand = Math.floor(Math.random() * 900000 + 100000).toString();
   return `TRP${stamp}${rand}`;
+}
+
+function isTripUserForeignKeyError(
+  errorMessage: string,
+  errorCode?: string | null,
+): boolean {
+  const msg = (errorMessage ?? "").toLowerCase();
+  const code = (errorCode ?? "").trim();
+  if (code !== "23503") return false;
+  return (
+    msg.includes("owner_user_id") ||
+    msg.includes("created_by_user_id") ||
+    msg.includes("public.users") ||
+    msg.includes("users")
+  );
+}
+
+async function getOrganizationOwnerId(orgId: string): Promise<string | null> {
+  const { data, error } = await supabase()
+    .from("organizations")
+    .select("owner_id")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (error) return null;
+  const row = data as { owner_id?: string | null } | null;
+  return normalizeNullableUuid(row?.owner_id);
 }
 
 function parseTripNumberSequence(value: string | null | undefined): number | null {
@@ -654,13 +736,34 @@ export async function createTrip(
 
   const clientPrice = Number(data.client_price) || 0;
   const supplierRate = Number(data.supplier_rate) || 0;
-  const explicitId =
-    data.id && isUuidString(data.id) ? data.id.trim() : undefined;
+  const loadTonsRaw = Number(data.load_tons);
+  const loadTons =
+    Number.isFinite(loadTonsRaw) && loadTonsRaw >= 0 ? loadTonsRaw : null;
+  const advancePaidRaw = Number(data.advance_paid);
+  const advancePaid =
+    Number.isFinite(advancePaidRaw) && advancePaidRaw >= 0
+      ? advancePaidRaw
+      : 0;
+  const explicitId = normalizeNullableUuid(data.id) ?? undefined;
+  const ownerUserId =
+    normalizeNullableUuid(data.owner_user_id) ??
+    normalizeNullableUuid(userId);
+  const creatorUserId =
+    normalizeNullableUuid(data.created_by_user_id) ??
+    normalizeNullableUuid(userId);
+
+  // Sequential trip trigger writes user_counters(user_id) with FK -> public.users(id).
+  // Ensure referenced users exist to avoid 400/409 on environments with stricter FK checks.
+  await ensurePublicUserRecord(ownerUserId);
+  if (creatorUserId && creatorUserId !== ownerUserId) {
+    await ensurePublicUserRecord(creatorUserId);
+  }
+
   const insertData = {
     ...(explicitId ? { id: explicitId } : {}),
     organization_id: orgId,
-    owner_user_id: data.owner_user_id ?? null,
-    created_by_user_id: data.created_by_user_id ?? null,
+    owner_user_id: ownerUserId,
+    created_by_user_id: creatorUserId,
     trip_number: null as string | null,
     source: "manual",
     pickup_area: (data.pickup_area ?? "").trim(),
@@ -688,27 +791,62 @@ export async function createTrip(
     estimated_duration:
       data.estimated_duration != null ? data.estimated_duration : null,
     client_name: (data.client_name ?? "").trim() || "—",
-    client_id: data.client_id ?? null,
+    client_id: normalizeNullableUuid(data.client_id),
     client_price: clientPrice,
     supplier_rate: supplierRate,
     platform_fee: 0,
     driver_commission: 0,
     payment_status: "pending",
     amount_paid: 0,
+    // Cross-schema compatibility:
+    // - legacy DB allows: draft/assigned/in_progress/completed/cancelled
+    // - newer DB allows: pending_acceptance/assigned/in_progress/... etc
+    // "assigned" is accepted in both and hub metrics still bucket rows without driver as "unassigned".
     status: "assigned",
     notes: (data.notes ?? "").trim() || null,
     pickup_date: data.pickup_date ?? null,
-    supplier_id: data.supplier_id ?? null,
-    driver_id: data.driver_id ?? null,
-    vehicle_id: data.vehicle_id ?? null,
+    load_tons: loadTons,
+    advance_paid: advancePaid,
+    supplier_id: normalizeNullableUuid(data.supplier_id),
+    driver_id: normalizeNullableUuid(data.driver_id),
+    vehicle_id: normalizeNullableUuid(data.vehicle_id),
     vehicle_display_number: (data.vehicle_display_number ?? "").trim() || null,
   };
-  const { data: row, error } = await supabase()
+  let { data: row, error } = await supabase()
     .from("trips")
     .insert(insertData as Record<string, unknown>)
     .select()
     .single();
+  if (error && isTripUserForeignKeyError(error.message, error.code)) {
+    // Fallback for environments where public.users is read-only from client and auth user
+    // was not backfilled yet. Use org owner (usually seeded) to keep sequential numbering safe.
+    const orgOwnerId = await getOrganizationOwnerId(orgId);
+    if (orgOwnerId != null) {
+      await ensurePublicUserRecord(orgOwnerId);
+      const retryPayload = {
+        ...insertData,
+        owner_user_id: orgOwnerId,
+        created_by_user_id: creatorUserId,
+      };
+      const retry = await supabase()
+        .from("trips")
+        .insert(retryPayload as Record<string, unknown>)
+        .select()
+        .single();
+      row = retry.data;
+      error = retry.error;
+    }
+  }
   if (error) {
+    if (__DEV__) {
+      console.error("[createTrip] insert failed", {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        payload: insertData,
+      });
+    }
     if (isTripIdentityUniqueConflict(error.message, error.code)) {
       // Keep sequential IDs DB-generated: retry with trip_number=NULL and let trigger assign next sequence.
       let lastError: Error | null = null;
@@ -719,7 +857,7 @@ export async function createTrip(
           .select()
           .single();
         if (!retryError) return { error: null, trip: retryRow as TripRow };
-        lastError = new Error(retryError.message);
+        lastError = new Error(buildPostgrestErrorMessage(retryError));
         if (!isTripIdentityUniqueConflict(retryError.message, retryError.code)) {
           return { error: lastError, trip: null };
         }
@@ -751,7 +889,7 @@ export async function createTrip(
             .select()
             .single();
           if (!minimalError) return { error: null, trip: minimalRow as TripRow };
-          lastError = new Error(minimalError.message);
+          lastError = new Error(buildPostgrestErrorMessage(minimalError));
           if (
             !isTripIdentityUniqueConflict(minimalError.message, minimalError.code)
           ) {
@@ -760,7 +898,7 @@ export async function createTrip(
           candidateSeq += 1;
           continue;
         }
-        lastError = new Error(explicitError.message);
+        lastError = new Error(buildPostgrestErrorMessage(explicitError));
         if (!isTripIdentityUniqueConflict(explicitError.message, explicitError.code)) {
           return { error: lastError, trip: null };
         }
@@ -775,7 +913,7 @@ export async function createTrip(
     }
 
     if (!shouldRetryCreateWithFallbackTripNumber(error.message, error.code)) {
-      return { error: new Error(error.message), trip: null };
+      return { error: new Error(buildPostgrestErrorMessage(error)), trip: null };
     }
 
     let lastError: Error | null = null;
@@ -790,7 +928,7 @@ export async function createTrip(
         .select()
         .single();
       if (!retryError) return { error: null, trip: retryRow as TripRow };
-      lastError = new Error(retryError.message);
+      lastError = new Error(buildPostgrestErrorMessage(retryError));
       if (!shouldRetryCreateWithFallbackTripNumber(retryError.message, retryError.code)) {
         return { error: lastError, trip: null };
       }

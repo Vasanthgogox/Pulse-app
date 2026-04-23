@@ -1,12 +1,12 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { IndentDetailScreen } from '@/features/indents';
-import { useSafeBack } from '@/lib/useSafeBack';
+import { IndentDetailScreen } from "@/features/indents";
+import { useSafeBack } from "@/lib/useSafeBack";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 export default function IndentDetailRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const safeBack = useSafeBack();
-  const indentId = typeof id === 'string' ? id : id?.[0] ?? '';
+  const indentId = typeof id === "string" ? id : (id?.[0] ?? "");
 
   return (
     <IndentDetailScreen
@@ -14,7 +14,7 @@ export default function IndentDetailRoute() {
       onBack={safeBack}
       onEditPress={(indent) =>
         router.push(
-          `/create-indent?draftId=${encodeURIComponent(indent.id)}` as import('expo-router').Href
+          `/create-indent?draftId=${encodeURIComponent(indent.id)}` as import("expo-router").Href,
         )
       }
     />

@@ -27,16 +27,16 @@ export default function Index() {
   useEffect(() => {
     if (!isFocused) return;
     if (loading) return;
+    if (Platform.OS === 'web' && pathname !== '/') {
+      // On web deep links (e.g. /network), do not let the index guard hijack refresh.
+      return;
+    }
     if (!user) {
       logRouteDecision('redirect_sign_in', { pathname });
       router.replace(Platform.OS === 'web' ? '/terminal-website' : '/sign-in');
       return;
     }
     if (!profile) return;
-    if (Platform.OS === 'web') {
-      // Preserve deep links on web, but avoid an infinite spinner when landing on root ("/").
-      if (pathname !== '/') return;
-    }
     if (profile.role === 'driver') {
       // Security-first: only enter driver app after server-backed role verification.
       if (!roleVerified) {

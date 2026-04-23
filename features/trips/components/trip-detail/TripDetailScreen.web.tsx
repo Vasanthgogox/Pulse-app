@@ -11,17 +11,25 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
 import { isAggregateTrip } from "@/lib/driverUtils";
+import { Theme } from "@/constants/Theme";
 import { formatINR, formatIndianVehicleNumber } from "@/lib/format";
+import { getDocumentViewUrl } from "@/services/tripDocumentsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import Feather from "@expo/vector-icons/Feather";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
+  ActivityIndicator,
+  Image,
+  Linking,
+  Modal,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { TripAdjustment } from "../../services/tripAdjustments";
@@ -32,9 +40,7 @@ import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import type { TripDetailScreenProps } from "./TripDetailScreen";
 import { useTripDetail } from "./hooks/useTripDetail";
 import { type ExpenseRow } from "./sections/ExpensesTable";
-import { FinanceOverview } from "./sections/FinanceOverview";
 import { LRDocumentsSection } from "./sections/LRDocumentsSection";
-import { TripInfoCard } from "./sections/TripInfoCard";
 import {
   TripStatusTimeline,
   type TripStageTimestamp,
@@ -79,16 +85,6 @@ function adjustmentsCountingAsDeductions(adjustments: TripAdjustment[]) {
   );
 }
 
-function adjustmentIncomeLineLabel(a: TripAdjustment) {
-  if (a.type === "cost") return `${a.reason} (supplier credit)`;
-  return a.reason;
-}
-
-function adjustmentDeductionLineLabel(a: TripAdjustment) {
-  if (a.type === "cost") return `${a.reason} (supplier charge)`;
-  return a.reason;
-}
-
 export default function TripDetailScreen({
   tripId,
   entryContext,
@@ -100,8 +96,15 @@ export default function TripDetailScreen({
   const router = useRouter();
   const { currentOrganization } = useOrganization();
   const { t } = useLanguage();
+  const { width: screenWidth } = useWindowDimensions();
   const [activeTab, setActiveTab] = useState<Tab>("tracking");
   const [otpResending, setOtpResending] = useState(false);
+
+  const isMobile = screenWidth < 640;
+  const isTablet = screenWidth >= 640 && screenWidth < 1024;
+  const isDesktop = screenWidth >= 1024;
+  const hPad = isMobile ? 12 : isTablet ? 16 : 24;
+  const mapHeight = isMobile ? 220 : isTablet ? 380 : 600;
 
   const detail = useTripDetail({
     tripId,
@@ -138,6 +141,23 @@ export default function TripDetailScreen({
 
   const { trip } = detail;
   const isAggregate = isAggregateTrip(trip);
+
+  const driverSummaryText = (() => {
+    const name = detail.driverName?.trim();
+    const r = detail.driverRatingAvg;
+    const hasScore = r != null && Number.isFinite(Number(r));
+    if (!name && !hasScore) return null;
+    const score = hasScore ? Number(r).toFixed(1) : "—";
+    return `${name || "Driver"} — ${score} \u2605`;
+  })();
+
+  const openTripDirectionsInMaps = () => {
+    const o = detail.trackingMapOriginCoordinate;
+    const d = detail.trackingMapDestinationCoordinate;
+    if (!o || !d) return;
+    const url = `https://www.google.com/maps/dir/${o.latitude},${o.longitude}/${d.latitude},${d.longitude}`;
+    void Linking.openURL(url);
+  };
 
   // ── Stage timestamps ──────────────────────────────────────────────────────────
   const stageTimestamps: TripStageTimestamp[] = [];
@@ -185,7 +205,20 @@ export default function TripDetailScreen({
     }));
 
   // ── Finance numbers ───────────────────────────────────────────────────────────
-  const baseFreight = Number(trip.client_price ?? 0);
+  // Keep POV parity with TripDetailFinanceView: supplier-side indent view should
+  // use supplier settlement amounts, not client billing amounts.
+  const isTripOwner =
+    currentOrganization?.id != null &&
+    trip.organization_id != null &&
+    trip.organization_id === currentOrganization.id;
+  const isPartnerSettlementView = trip.indent_id != null && !isTripOwner;
+  const customerSales = Number(trip.client_price ?? 0);
+  const supplierCost = Number(trip.supplier_rate ?? 0);
+  const sales = isPartnerSettlementView ? supplierCost : customerSales;
+  const cost = isPartnerSettlementView
+    ? (detail.subcontractRate ?? supplierCost)
+    : supplierCost;
+  const baseFreight = sales;
   const totalExpenses = expenseRows.reduce((s, r) => s + r.amount, 0);
   const incomeAdjustmentRows = adjustmentsCountingAsIncome(detail.adjustments);
   const deductionAdjustmentRows = adjustmentsCountingAsDeductions(
@@ -197,21 +230,17 @@ export default function TripDetailScreen({
   );
   const deductions = deductionAdjustmentRows.reduce((s, a) => s + a.amount, 0);
 
-  const sales = Number(trip.client_price ?? 0);
   const received = detail.tripLedgerEntries.reduce(
     (s, tx) => s + Number(tx.amount_in ?? 0),
     0,
   );
   const pending = Math.max(0, sales - received);
 
-  // For supplier, we assume client_price is our cost, supplier_rate is what we owe our supplier
-  const supplierCost =
-    Number(trip.client_price ?? 0) || Number(trip.supplier_rate ?? 0);
   const supplierPaid = detail.tripLedgerEntries.reduce(
     (s, tx) => s + Number(tx.amount_out ?? 0),
     0,
   );
-  const supplierDue = Math.max(0, supplierCost - supplierPaid);
+  const supplierDue = Math.max(0, cost - supplierPaid);
 
   type FinanceHistoryRow = {
     key: string;
@@ -258,11 +287,42 @@ export default function TripDetailScreen({
   };
 
   const openTripDocumentsFlow = () => {
-    router.push("/log-incoming-pods" as any);
+    router.push(`/log-incoming-pods?tripId=${encodeURIComponent(trip.id)}` as any);
   };
+
+  const handleDocOpen = async (doc: (typeof detail.computedTripDocs)[number]) => {
+    if (doc.id === "vehicle-documents") {
+      if (trip.vehicle_id) router.push(`/vehicle/${trip.vehicle_id}` as any);
+      else openTripDocumentsFlow();
+      return;
+    }
+
+    if (doc.id === "pod" && doc.storagePath) {
+      try {
+        const url = await getDocumentViewUrl(doc.storagePath);
+        if (typeof window !== "undefined") {
+          window.open(url, "_blank", "noopener,noreferrer");
+        }
+      } catch {
+        openTripDocumentsFlow();
+      }
+      return;
+    }
+
+    openTripDocumentsFlow();
+  };
+
+  const hasDriverAssigned = !!trip.driver_id;
+  const hasVehicleAssigned =
+    !!trip.vehicle_id || !!String(trip.vehicle_display_number ?? "").trim();
+  const canGenerateAggregateOtp = hasDriverAssigned && hasVehicleAssigned;
+  const otpLockedByTripProgress = ["in_progress", "in_transit"].includes(
+    String(trip.status ?? "").toLowerCase(),
+  );
 
   const aggregateOtpState = (() => {
     if (!isAggregate) return null;
+    if (!canGenerateAggregateOtp) return "not_required";
     const status = String(trip.status ?? "").toLowerCase();
     if (status === "assigned") return "otp_pending";
     if (status === "in_progress" || status === "in_transit") return "verified";
@@ -270,7 +330,7 @@ export default function TripDetailScreen({
   })();
 
   const handleResendOtp = async () => {
-    if (!trip?.id || otpResending) return;
+    if (!trip?.id || otpResending || !canGenerateAggregateOtp || otpLockedByTripProgress) return;
     setOtpResending(true);
     try {
       await regenerateTripOtp(trip.id);
@@ -283,7 +343,7 @@ export default function TripDetailScreen({
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       {/* ── Dark navigation bar ─────────────────────────────────────────────── */}
-      <View style={styles.navBar}>
+      <View style={[styles.navBar, { paddingHorizontal: hPad }]}>
         <View style={styles.navLeft}>
           <TouchableOpacity
             onPress={onBack}
@@ -291,31 +351,35 @@ export default function TripDetailScreen({
             activeOpacity={0.8}
           >
             <FontAwesome name="chevron-left" size={11} color="#94a3b8" />
-            <Text style={styles.navBackText}>Back</Text>
+            {!isMobile && <Text style={styles.navBackText}>Back</Text>}
           </TouchableOpacity>
           <View style={styles.navTitleWrap}>
-            <Text style={styles.navTitle}>{getTripDisplayNumber(trip)}</Text>
-            <View
-              style={[
-                styles.navPill,
-                isAggregate ? styles.navPillAggregate : styles.navPillAsset,
-              ]}
-            >
-              <Text style={styles.navPillText}>
-                {isAggregate ? "AGGREGATE" : "ASSET"}
-              </Text>
-            </View>
+            <Text style={[styles.navTitle, isMobile && { fontSize: 13 }]} numberOfLines={1}>
+              {getTripDisplayNumber(trip)}
+            </Text>
+            {!isMobile && (
+              <View
+                style={[
+                  styles.navPill,
+                  isAggregate ? styles.navPillAggregate : styles.navPillAsset,
+                ]}
+              >
+                <Text style={styles.navPillText}>
+                  {isAggregate ? "AGGREGATE" : "ASSET"}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
         <View style={styles.navActions}>
           <NavAction
             icon="plus"
-            label="Add Expense"
+            label={isMobile ? "" : "Add Expense"}
             onPress={detail.openAddExpense}
           />
           <NavAction
             icon="file-text-o"
-            label="Generate Memo"
+            label={isMobile ? "" : "Generate Memo"}
             onPress={() => {}}
             primary
           />
@@ -323,7 +387,7 @@ export default function TripDetailScreen({
       </View>
 
       {/* ── Tab bar ───────────────────────────────────────────────────────────── */}
-      <View style={styles.tabBar}>
+      <View style={[styles.tabBar, { paddingHorizontal: hPad }]}>
         <TabButton
           label="Tracking"
           icon="map-marker"
@@ -341,7 +405,7 @@ export default function TripDetailScreen({
       {/* ── Scrollable content ────────────────────────────────────────────────── */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { padding: isMobile ? 12 : 20 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -353,15 +417,50 @@ export default function TripDetailScreen({
         {/* ════════════════════ TRACKING TAB ════════════════════ */}
         {activeTab === "tracking" && (
           <>
-            {/* Main row — stretch so left and right reach equal height */}
-            <View style={styles.trackingTopRow}>
-              {/* Left col: TripInfoCard + TruckAssignment + LR Docs */}
-              <View style={styles.infoCol}>
-                <TripInfoCard
-                  trip={trip}
-                  clientName={detail.displayClientName}
-                  currentStageLabel={isAggregate ? "AGGREGATE" : undefined}
-                />
+            <View style={styles.workspaceRow}>
+              <View style={styles.workspaceLeftCol}>
+                <View style={styles.voyageCard}>
+                  <View style={styles.sectionKickerRow}>
+                    <View style={styles.sectionKickerBar} />
+                    <Text style={styles.sectionKicker}>Voyage Manifest</Text>
+                  </View>
+                  <View style={styles.routeLineWrap}>
+                    <View style={styles.routeDotsCol}>
+                      <View style={[styles.routeDot, styles.routeDotStart]} />
+                      <View style={styles.routeDashedLine} />
+                      <View style={[styles.routeDot, styles.routeDotEnd]} />
+                    </View>
+                    <View style={styles.routeTextCol}>
+                      <Text style={styles.routePlace}>{trip.pickup_area || "Pickup"}</Text>
+                      <Text style={styles.routePlace}>{trip.drop_location || "Destination"}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.voyageMetaGrid}>
+                    <View style={styles.voyageMetaCell}>
+                      <Text style={styles.voyageMetaLabel}>Client</Text>
+                      <Text style={styles.voyageMetaValue}>{detail.displayClientName || "—"}</Text>
+                    </View>
+                    <View style={styles.voyageMetaCell}>
+                      <Text style={styles.voyageMetaLabel}>Material</Text>
+                      <Text style={styles.voyageMetaValue}>{trip.load_type || "General Load"}</Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.operatorCard}>
+                  <View style={styles.operatorBadge}>
+                    <FontAwesome name="user" size={16} color="#64748b" />
+                    <View>
+                      <Text style={styles.operatorLabel}>Operator</Text>
+                      <Text style={styles.operatorValue}>{detail.driverName || "Unassigned"}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.operatorSub}>
+                    {detail.vehicleLabel || detail.displayVehicleFromInput || "Vehicle pending assignment"}
+                  </Text>
+                </View>
+
+
                 {trip.organization_id ? (
                   <TripAssignmentBlock
                     trip={trip}
@@ -393,7 +492,7 @@ export default function TripDetailScreen({
                       detail.setDisplayVehicleFromInput(normalized);
                     }}
                     inlineSection={
-                      isAggregate && aggregateOtpState !== "not_required" ? (
+                      isAggregate ? (
                         <View style={styles.otpStateCardInline}>
                           <View style={styles.otpStateHeader}>
                             {aggregateOtpState === "verified" ? (
@@ -412,7 +511,9 @@ export default function TripDetailScreen({
                           <View style={styles.otpStateBodyRow}>
                             <View style={styles.otpStateBodyLeft}>
                               <Text style={styles.otpStateSub}>
-                                {aggregateOtpState === "verified"
+                                {!canGenerateAggregateOtp
+                                  ? "OTP will unlock after assigning both driver and vehicle."
+                                  : aggregateOtpState === "verified"
                                   ? "Driver has verified assignment from the driver app."
                                   : detail.tripOtp?.expires_at
                                     ? `OTP generated. Expires at ${new Date(
@@ -431,7 +532,7 @@ export default function TripDetailScreen({
                               {aggregateOtpState === "verified" ? (
                                 <Text style={styles.otpActionStatus}>Status: Verified</Text>
                               ) : null}
-                              {aggregateOtpState !== "verified" ? (
+                              {canGenerateAggregateOtp && aggregateOtpState !== "verified" ? (
                                 <TouchableOpacity
                                   style={styles.otpResendBtn}
                                   onPress={handleResendOtp}
@@ -443,6 +544,11 @@ export default function TripDetailScreen({
                                   </Text>
                                 </TouchableOpacity>
                               ) : null}
+                              {!canGenerateAggregateOtp ? (
+                                <View style={styles.otpDisabledBtn}>
+                                  <Text style={styles.otpDisabledBtnText}>Assign to enable OTP</Text>
+                                </View>
+                              ) : null}
                             </View>
                           </View>
                         </View>
@@ -450,68 +556,108 @@ export default function TripDetailScreen({
                     }
                   />
                 ) : null}
+
                 <View style={styles.lrGrow}>
                   <LRDocumentsSection
-                    docs={detail.computedTripDocs.map((d) => ({
-                      id: d.id,
-                      label: d.label,
-                      type: d.type,
-                      status: d.status === "Verified" ? "Uploaded" : d.status,
-                      onView: () => openTripDocumentsFlow(),
-                    }))}
+                    presentation="gallery"
+                    docs={detail.computedTripDocs.map((d) => {
+                      const openable =
+                        d.status !== "Pending" ||
+                        !!d.storagePath ||
+                        d.id === "vehicle-documents";
+                      return {
+                        id: d.id,
+                        label: d.label,
+                        type: d.type,
+                        status: d.status === "Verified" ? "Uploaded" : d.status,
+                        onView: openable ? () => detail.setSelectedDoc(d) : undefined,
+                      };
+                    })}
                     onUpdateLR={openTripDocumentsFlow}
                     onAddDocument={openTripDocumentsFlow}
                   />
                 </View>
               </View>
 
-              {/* Right col: Timeline with Live Map embedded */}
-              <View style={styles.trackingRightCol}>
+              <View style={styles.workspaceRightCol}>
                 <TripStatusTimeline
+                  variant="journey"
                   trip={trip}
                   stageTimestamps={stageTimestamps}
                   stageLocations={stageLocations}
                   lastUpdatedAt={trip.updated_at}
                   canAdvance={detail.canAssign}
                   distanceKm={trip.distance ? String(trip.distance) : undefined}
+                  driverSummaryText={driverSummaryText}
+                  onOpenMaps={
+                    detail.trackingMapOriginCoordinate &&
+                    detail.trackingMapDestinationCoordinate
+                      ? openTripDirectionsInMaps
+                      : undefined
+                  }
                   mapPreview={
-                    <LeafletMap
-                      style={{ width: "100%", height: 600 }}
-                      center={mapCenter}
-                      zoom={6}
-                      markers={
-                        [
-                          hasOrigin
-                            ? {
-                                id: "origin",
-                                coordinate: {
+                    <View style={styles.telemetryWrap}>
+                      <LeafletMap
+                        style={{ width: "100%", height: 520, minHeight: 520 }}
+                        center={mapCenter}
+                        zoom={hasOrigin && hasDest ? 6 : 5}
+                        polyline={
+                          hasOrigin && hasDest
+                            ? [
+                                {
                                   latitude:
-                                    detail.trackingMapOriginCoordinate!
-                                      .latitude,
+                                    detail.trackingMapOriginCoordinate!.latitude,
                                   longitude:
-                                    detail.trackingMapOriginCoordinate!
-                                      .longitude,
+                                    detail.trackingMapOriginCoordinate!.longitude,
                                 },
-                                label: trip.pickup_area ?? "Origin",
-                              }
-                            : null,
-                          hasDest
-                            ? {
-                                id: "dest",
-                                coordinate: {
+                                {
                                   latitude:
-                                    detail.trackingMapDestinationCoordinate!
-                                      .latitude,
+                                    detail.trackingMapDestinationCoordinate!.latitude,
                                   longitude:
-                                    detail.trackingMapDestinationCoordinate!
-                                      .longitude,
+                                    detail.trackingMapDestinationCoordinate!.longitude,
                                 },
-                                label: trip.drop_location ?? "Destination",
-                              }
-                            : null,
-                        ].filter(Boolean) as any
-                      }
-                    />
+                              ]
+                            : []
+                        }
+                        markers={
+                          [
+                            hasOrigin
+                              ? {
+                                  id: "origin",
+                                  coordinate: {
+                                    latitude:
+                                      detail.trackingMapOriginCoordinate!
+                                        .latitude,
+                                    longitude:
+                                      detail.trackingMapOriginCoordinate!
+                                        .longitude,
+                                  },
+                                  label: trip.pickup_area ?? "Origin",
+                                }
+                              : null,
+                            hasDest
+                              ? {
+                                  id: "dest",
+                                  coordinate: {
+                                    latitude:
+                                      detail.trackingMapDestinationCoordinate!
+                                        .latitude,
+                                    longitude:
+                                      detail.trackingMapDestinationCoordinate!
+                                        .longitude,
+                                  },
+                                  label: trip.drop_location ?? "Destination",
+                                }
+                              : null,
+                          ].filter(Boolean) as any
+                        }
+                      />
+                      <View style={styles.telemetryOverlay}>
+                        <FontAwesome name="compass" size={20} color="#60a5fa" />
+                        <Text style={styles.telemetryTitle}>Telemetry Link Secured</Text>
+                        <Text style={styles.telemetrySub}>Protocol v4.2 synchronized live</Text>
+                      </View>
+                    </View>
                   }
                 />
               </View>
@@ -535,6 +681,7 @@ export default function TripDetailScreen({
                         row.contact_type === "client" &&
                         Number(row.amount_in ?? 0) > 0,
                     )}
+                    layoutVariant="workspace"
                   />
                 ) : (
                   <FeedbackPlaceholder />
@@ -547,33 +694,79 @@ export default function TripDetailScreen({
         {/* ════════════════════ FINANCE TAB ════════════════════ */}
         {activeTab === "finance" && (
           <View style={styles.financeColsRow}>
-            {/* Left col: Finance Overview */}
             <View style={styles.financeLeftCol}>
-              <FinanceOverview
-                baseFreight={baseFreight}
-                totalExpenses={totalExpenses}
-                additionalIncome={additionalIncome}
-                deductions={deductions}
-                expenseDetails={expenseRows.map((e) => ({
-                  label: e.description,
-                  amount: e.amount,
-                }))}
-                incomeDetails={incomeAdjustmentRows.map((a) => ({
-                  label: adjustmentIncomeLineLabel(a),
-                  amount: a.amount,
-                }))}
-                deductionDetails={deductionAdjustmentRows.map((a) => ({
-                  label: adjustmentDeductionLineLabel(a),
-                  amount: a.amount,
-                }))}
-                onAddIncome={detail.openClientIncomeAdjustment}
-                onAddDeduction={detail.openClientDeductionAdjustment}
-              />
+              <View style={styles.yieldCard}>
+                <View style={styles.yieldHeader}>
+                  <Text style={styles.yieldTitle}>Yield Analysis</Text>
+                  <Text style={styles.yieldSub}>Consolidated ledger manifest</Text>
+                </View>
+                <View style={styles.yieldStatsGrid}>
+                  <View style={[styles.yieldStatItem, styles.yieldStatPositive]}>
+                    <FontAwesome name="line-chart" size={20} color="#16a34a" />
+                    <Text style={styles.yieldStatAmount}>{formatINR(baseFreight)}</Text>
+                    <Text style={styles.yieldStatLabel}>Gross Revenue</Text>
+                  </View>
+                  <View style={[styles.yieldStatItem, styles.yieldStatNegative]}>
+                    <FontAwesome name="arrow-down" size={20} color="#dc2626" />
+                    <Text style={styles.yieldStatAmount}>{formatINR(totalExpenses)}</Text>
+                    <Text style={styles.yieldStatLabel}>Voyage Cost</Text>
+                  </View>
+                </View>
+                <View style={styles.netResultCard}>
+                  <Text style={styles.netResultLabel}>Operational Net Result</Text>
+                  <Text style={styles.netResultValue}>
+                    {formatINR(baseFreight + additionalIncome - deductions - totalExpenses)}
+                  </Text>
+                  <View style={styles.netResultTrend}>
+                    <FontAwesome name="arrow-up" size={12} color="#34d399" />
+                    <Text style={styles.netResultTrendText}>Live profitability snapshot</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.financeAdjustmentsCard}>
+                <View style={styles.financeAdjustmentsHeader}>
+                  <Text style={styles.financeAdjustmentsTitle}>Adjustments</Text>
+                  <Text style={styles.financeAdjustmentsSub}>Revenue and deduction controls</Text>
+                </View>
+                <View style={styles.financeAdjustmentsRow}>
+                  <View style={styles.financeAdjustmentsMetric}>
+                    <Text style={styles.financeAdjustmentsMetricLabel}>Additional Income</Text>
+                    <Text style={[styles.financeAdjustmentsMetricValue, styles.financeAdjustmentsMetricValuePositive]}>
+                      {formatINR(additionalIncome)}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={detail.openClientIncomeAdjustment}
+                    style={styles.financeAdjustmentsBtn}
+                    activeOpacity={0.8}
+                  >
+                    <FontAwesome name="plus" size={12} color="#fff" />
+                    <Text style={styles.financeAdjustmentsBtnText}>Add Income</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.financeAdjustmentsRow}>
+                  <View style={styles.financeAdjustmentsMetric}>
+                    <Text style={styles.financeAdjustmentsMetricLabel}>Deductions</Text>
+                    <Text style={[styles.financeAdjustmentsMetricValue, styles.financeAdjustmentsMetricValueNegative]}>
+                      {formatINR(deductions)}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={detail.openClientDeductionAdjustment}
+                    style={[styles.financeAdjustmentsBtn, styles.financeAdjustmentsBtnAlt]}
+                    activeOpacity={0.8}
+                  >
+                    <FontAwesome name="minus" size={12} color="#334155" />
+                    <Text style={[styles.financeAdjustmentsBtnText, styles.financeAdjustmentsBtnTextAlt]}>
+                      Add Deduction
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
 
-            {/* Right col: Dark Ledger + Expense List */}
             <View style={styles.financeRightCol}>
-              {/* Financial Ledger dark card */}
               <LedgerCard
                 sales={sales}
                 received={received}
@@ -582,9 +775,9 @@ export default function TripDetailScreen({
                 supplierPaid={supplierPaid}
                 supplierDue={supplierDue}
                 financeHistoryRows={financeHistoryRows}
+                compact={isMobile}
               />
 
-              {/* Expense List card */}
               <ExpenseListCard
                 expenses={expenseRows}
                 onAddExpense={detail.openAddExpense}
@@ -610,6 +803,119 @@ export default function TripDetailScreen({
         onOk={() => detail.setShowDriverRejectedModal(false)}
         variant="warning"
       />
+
+      <Modal
+        visible={!!detail.selectedDoc}
+        animationType="fade"
+        transparent
+        onRequestClose={() => detail.setSelectedDoc(null)}
+      >
+        <View style={styles.docModalBackdrop}>
+          <View
+            style={[
+              styles.docModalCard,
+              { marginTop: insets.top + 12, marginBottom: insets.bottom + 12 },
+            ]}
+          >
+            <View style={styles.docModalHeader}>
+              <TouchableOpacity
+                onPress={() => detail.setSelectedDoc(null)}
+                style={styles.docModalCloseIcon}
+                activeOpacity={0.8}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <FontAwesome name="times" size={18} color="#0f172a" />
+              </TouchableOpacity>
+              <View style={styles.docModalTitleBlock}>
+                <Text style={styles.docModalTitle} numberOfLines={2}>
+                  {detail.isVehicleGalleryDoc
+                    ? "Vehicle documents"
+                    : detail.selectedDoc?.label ?? "Document"}
+                </Text>
+                <Text style={styles.docModalSubtitle} numberOfLines={1}>
+                  {detail.isVehicleGalleryDoc && detail.activeVehiclePreviewDoc
+                    ? `${detail.vehiclePreviewIndex + 1}/${detail.vehiclePreviewDocs.length} · ${detail.activeVehiclePreviewDoc.label}`
+                    : "Preview"}
+                </Text>
+              </View>
+              <View style={{ width: 36 }} />
+            </View>
+
+            <View style={styles.docModalBody}>
+              {detail.docPreviewLoading ? (
+                <View style={styles.docModalCenter}>
+                  <ActivityIndicator size="large" color={Theme.primary} />
+                  <Text style={styles.docModalHint}>Loading preview…</Text>
+                </View>
+              ) : detail.isVehicleGalleryDoc ? (
+                <View style={styles.docModalCenter}>
+                  {detail.activeVehiclePreviewDoc?.storagePath ? (
+                    (() => {
+                      const vDoc = detail.activeVehiclePreviewDoc;
+                      const url = vDoc ? detail.vehiclePreviewUrls[vDoc.id] : null;
+                      const isPdf = vDoc?.type === "PDF";
+                      if (url && !isPdf) {
+                        return (
+                          <Image
+                            source={{ uri: url }}
+                            style={styles.docModalImage}
+                            resizeMode="contain"
+                          />
+                        );
+                      }
+                      return (
+                        <>
+                          <FontAwesome name="file-pdf-o" size={48} color={Theme.primary} />
+                          <Text style={styles.docModalHint}>
+                            {url
+                              ? "PDF preview may be limited in the browser."
+                              : "Generating secure link…"}
+                          </Text>
+                        </>
+                      );
+                    })()
+                  ) : (
+                    <>
+                      <FontAwesome name="file-o" size={48} color="#94a3b8" />
+                      <Text style={styles.docModalHint}>No vehicle document on file yet.</Text>
+                    </>
+                  )}
+                </View>
+              ) : detail.docPreviewUrl ? (
+                <Image
+                  source={{ uri: detail.docPreviewUrl }}
+                  style={styles.docModalImage}
+                  resizeMode="contain"
+                />
+              ) : detail.docPreviewError ? (
+                <View style={styles.docModalCenter}>
+                  <FontAwesome name="exclamation-triangle" size={40} color="#94a3b8" />
+                  <Text style={styles.docModalHint}>Could not load this document.</Text>
+                </View>
+              ) : (
+                <View style={styles.docModalCenter}>
+                  <FontAwesome name="file-o" size={48} color="#94a3b8" />
+                  <Text style={styles.docModalHint}>
+                    {detail.selectedDoc?.status === "Pending"
+                      ? "This document has not been uploaded yet."
+                      : "No preview available."}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.docModalFooter}>
+              <TouchableOpacity
+                style={styles.docModalFooterBtn}
+                onPress={() => detail.setSelectedDoc(null)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.docModalFooterBtnText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -631,6 +937,7 @@ function LedgerCard({
   supplierPaid,
   supplierDue,
   financeHistoryRows,
+  compact,
 }: {
   sales: number;
   received: number;
@@ -639,6 +946,7 @@ function LedgerCard({
   supplierPaid: number;
   supplierDue: number;
   financeHistoryRows: FinanceHistoryRow[];
+  compact?: boolean;
 }) {
   return (
     <View style={ldStyles.card}>
@@ -654,49 +962,49 @@ function LedgerCard({
       </View>
 
       {/* Sale / Received / Due */}
-      <View style={ldStyles.statRow}>
+      <View style={[ldStyles.statRow, compact && { flexWrap: "wrap", gap: 8 }]}>
         <View style={ldStyles.statGroup}>
-          <Text style={ldStyles.statLabel}>Sale</Text>
-          <Text style={ldStyles.statValue}>{formatINR(sales)}</Text>
+          <Text style={ldStyles.statLabel} numberOfLines={1}>Sale</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={[ldStyles.statValue, compact && { fontSize: 13 }]}>{formatINR(sales)}</Text>
         </View>
         <View style={ldStyles.statDivider} />
         <View style={ldStyles.statGroup}>
           <View style={ldStyles.statLabelRow}>
             <View style={ldStyles.greenDot} />
-            <Text style={[ldStyles.statLabel, ldStyles.statLabelGreen]}>
+            <Text style={[ldStyles.statLabel, ldStyles.statLabelGreen]} numberOfLines={1}>
               Received
             </Text>
           </View>
-          <Text style={[ldStyles.statValue, ldStyles.statValueGreen]}>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={[ldStyles.statValue, ldStyles.statValueGreen, compact && { fontSize: 13 }]}>
             {formatINR(received)}
           </Text>
         </View>
         <View style={ldStyles.statDivider} />
         <View style={ldStyles.statGroup}>
-          <Text style={ldStyles.statLabel}>Due</Text>
-          <Text style={ldStyles.statValue}>{formatINR(pending)}</Text>
+          <Text style={ldStyles.statLabel} numberOfLines={1}>Due</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={[ldStyles.statValue, compact && { fontSize: 13 }]}>{formatINR(pending)}</Text>
         </View>
       </View>
 
       {/* Asset Expenses / Paid / Payable */}
-      <View style={ldStyles.statRow}>
+      <View style={[ldStyles.statRow, compact && { flexWrap: "wrap", gap: 8 }]}>
         <View style={ldStyles.statGroup}>
-          <Text style={ldStyles.statLabel}>Asset Expenses</Text>
-          <Text style={ldStyles.statValue}>{formatINR(totalExpenses)}</Text>
+          <Text style={ldStyles.statLabel} numberOfLines={1}>Asset Exp.</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={[ldStyles.statValue, compact && { fontSize: 13 }]}>{formatINR(totalExpenses)}</Text>
         </View>
         <View style={ldStyles.statDivider} />
         <View style={ldStyles.statGroup}>
-          <Text style={[ldStyles.statLabel, ldStyles.statLabelRed]}>Paid</Text>
-          <Text style={[ldStyles.statValue, ldStyles.statValueRed]}>
+          <Text style={[ldStyles.statLabel, ldStyles.statLabelRed]} numberOfLines={1}>Paid</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={[ldStyles.statValue, ldStyles.statValueRed, compact && { fontSize: 13 }]}>
             {formatINR(supplierPaid)}
           </Text>
         </View>
         <View style={ldStyles.statDivider} />
         <View style={ldStyles.statGroup}>
-          <Text style={[ldStyles.statLabel, ldStyles.statLabelOrange]}>
+          <Text style={[ldStyles.statLabel, ldStyles.statLabelOrange]} numberOfLines={1}>
             Payable
           </Text>
-          <Text style={[ldStyles.statValue, ldStyles.statValueOrange]}>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={[ldStyles.statValue, ldStyles.statValueOrange, compact && { fontSize: 13 }]}>
             {formatINR(supplierDue)}
           </Text>
         </View>
@@ -882,18 +1190,27 @@ function ExpenseListCard({
 function FeedbackPlaceholder() {
   return (
     <View style={fbStyles.card}>
-      <View style={fbStyles.header}>
-        <FontAwesome name="star" size={14} color="#f59e0b" />
-        <Text style={fbStyles.title}>Trip Feedback & Ratings</Text>
+      <View style={fbStyles.headerRow}>
+        <View style={fbStyles.titleCluster}>
+          <View style={fbStyles.awardCircle}>
+            <Feather name="award" size={22} color={Theme.primary} />
+          </View>
+          <View style={fbStyles.titleTextWrap}>
+            <Text style={fbStyles.title}>Ratings</Text>
+            <Text style={fbStyles.subtitle}>
+              Track service quality across completed trips
+            </Text>
+          </View>
+        </View>
       </View>
       <View style={fbStyles.body}>
-        <FontAwesome name="clock-o" size={28} color="#d1d5db" />
+        <Feather name="clock" size={32} color={Theme.borderLight} />
         <Text style={fbStyles.message}>
           Feedback available once the trip is completed
         </Text>
         <Text style={fbStyles.sub}>
-          Ratings for driver performance, client satisfaction, and trip quality
-          will appear here.
+          Driver, supplier, and client ratings will appear here with audit-style
+          entries when this voyage is closed.
         </Text>
       </View>
     </View>
@@ -902,43 +1219,73 @@ function FeedbackPlaceholder() {
 
 const fbStyles = StyleSheet.create({
   card: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 36,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: Theme.borderLight,
     overflow: "hidden",
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    marginBottom: 4,
   },
-  header: {
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 8,
+  },
+  titleCluster: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
+    gap: 14,
+  },
+  awardCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: Theme.primary + "18",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  titleTextWrap: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
   },
   title: {
-    fontSize: 15,
+    fontSize: 18,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+    letterSpacing: -0.3,
+  },
+  subtitle: {
+    fontSize: 10,
     fontWeight: "700",
-    color: "#111827",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginTop: 2,
   },
   body: {
-    paddingVertical: 36,
-    paddingHorizontal: 20,
+    paddingVertical: 28,
+    paddingHorizontal: 8,
     alignItems: "center",
-    gap: 10,
+    gap: 12,
   },
   message: {
     fontSize: 14,
-    fontWeight: "600",
-    color: "#374151",
+    fontWeight: "700",
+    color: Theme.textSecondary,
     textAlign: "center",
   },
   sub: {
     fontSize: 12,
-    color: "#9ca3af",
+    fontWeight: "600",
+    color: Theme.textMuted,
     textAlign: "center",
-    maxWidth: 420,
+    maxWidth: 440,
+    lineHeight: 18,
   },
 });
 
@@ -1022,6 +1369,7 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: "#f1f5f9",
+    overflow: "hidden",
   },
 
   // ── Dark nav ──
@@ -1029,7 +1377,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 24,
     paddingVertical: 14,
     backgroundColor: "#0f141a",
     flexWrap: "wrap",
@@ -1117,7 +1464,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderBottomWidth: 1,
     borderBottomColor: "#e5e7eb",
-    paddingHorizontal: 24,
   },
   tabBtn: {
     flexDirection: "row",
@@ -1150,22 +1496,192 @@ const styles = StyleSheet.create({
   // ── Scroll ──
   scroll: { flex: 1 },
   scrollContent: {
-    padding: 20,
+    width: "100%",
+    maxWidth: 1680,
+    alignSelf: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 20,
     gap: 20,
   },
 
   // ── Tracking tab layout ──
-  trackingTopRow: {
+  workspaceRow: {
     flexDirection: "row",
     gap: 20,
-    alignItems: "stretch",
-    minHeight: 620,
+    alignItems: "flex-start",
     flexWrap: "wrap",
   },
-  infoCol: {
-    flex: 1,
-    flexShrink: 0,
+  workspaceLeftCol: {
+    flex: 0.95,
+    minWidth: 360,
     gap: 16,
+  },
+  workspaceRightCol: {
+    flex: 1.05,
+    minWidth: 420,
+    gap: 16,
+  },
+  voyageCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 20,
+    gap: 16,
+  },
+  sectionKickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  sectionKickerBar: {
+    width: 4,
+    height: 18,
+    borderRadius: 999,
+    backgroundColor: "#2563eb",
+  },
+  sectionKicker: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+  },
+  routeLineWrap: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "stretch",
+  },
+  routeDotsCol: {
+    width: 14,
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 2,
+  },
+  routeDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+  routeDotStart: {
+    backgroundColor: "#10b981",
+  },
+  routeDotEnd: {
+    backgroundColor: "#ef4444",
+  },
+  routeDashedLine: {
+    flex: 1,
+    borderLeftWidth: 1,
+    borderLeftColor: "#cbd5e1",
+    borderStyle: "dashed",
+    marginVertical: 4,
+  },
+  routeTextCol: {
+    flex: 1,
+    justifyContent: "space-between",
+    minHeight: 62,
+  },
+  routePlace: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  voyageMetaGrid: {
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+    paddingTop: 12,
+    flexDirection: "row",
+    gap: 12,
+  },
+  voyageMetaCell: {
+    flex: 1,
+    minWidth: 0,
+  },
+  voyageMetaLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  voyageMetaValue: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#334155",
+  },
+  operatorCard: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 16,
+    gap: 8,
+  },
+  operatorBadge: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+  },
+  operatorLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
+  },
+  operatorValue: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  operatorSub: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  telemetryWrap: {
+    borderRadius: 18,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#1e293b",
+    position: "relative",
+  },
+  telemetryOverlay: {
+    position: "absolute",
+    bottom: 16,
+    right: 16,
+    left: 16,
+    borderRadius: 16,
+    backgroundColor: "rgba(15, 23, 42, 0.88)",
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.3)",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+    gap: 4,
+  },
+  telemetryTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#f8fafc",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  telemetrySub: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
   },
   lrGrow: {
     flex: 1,
@@ -1244,6 +1760,24 @@ const styles = StyleSheet.create({
     backgroundColor: "#111827",
   },
   otpResendBtnText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#ffffff",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  otpDisabledBtn: {
+    marginTop: 0,
+    alignSelf: "flex-end",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: "#111827",
+    backgroundColor: "#111827",
+    opacity: 0.72,
+  },
+  otpDisabledBtnText: {
     fontSize: 9,
     fontWeight: "700",
     color: "#ffffff",
@@ -1486,14 +2020,282 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   financeLeftCol: {
-    flex: 1,
-    minWidth: 320,
+    flex: 0.95,
+    minWidth: 380,
+    gap: 16,
   },
   financeRightCol: {
-    flex: 1,
-    minWidth: 320,
+    flex: 1.05,
+    minWidth: 420,
     flexDirection: "column",
     gap: 20,
+  },
+  yieldCard: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 20,
+    gap: 16,
+  },
+  yieldHeader: {
+    gap: 4,
+  },
+  yieldTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#0f172a",
+    letterSpacing: -0.4,
+  },
+  yieldSub: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
+  yieldStatsGrid: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  yieldStatItem: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    gap: 8,
+  },
+  yieldStatPositive: {
+    backgroundColor: "#ecfdf5",
+    borderColor: "#a7f3d0",
+  },
+  yieldStatNegative: {
+    backgroundColor: "#fff1f2",
+    borderColor: "#fecdd3",
+  },
+  yieldStatAmount: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#0f172a",
+    letterSpacing: -0.3,
+  },
+  yieldStatLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
+  },
+  netResultCard: {
+    backgroundColor: "#0f172a",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#1e293b",
+    padding: 16,
+    gap: 8,
+  },
+  netResultLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
+  netResultValue: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: "#f8fafc",
+    letterSpacing: -0.8,
+  },
+  netResultTrend: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  netResultTrendText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#34d399",
+  },
+  financeAdjustmentsCard: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 18,
+    gap: 12,
+  },
+  financeAdjustmentsHeader: {
+    gap: 3,
+    marginBottom: 4,
+  },
+  financeAdjustmentsTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  financeAdjustmentsSub: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
+  },
+  financeAdjustmentsRow: {
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    backgroundColor: "#f8fafc",
+  },
+  financeAdjustmentsMetric: {
+    flex: 1,
+    minWidth: 0,
+  },
+  financeAdjustmentsMetricLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+    marginBottom: 3,
+  },
+  financeAdjustmentsMetricValue: {
+    fontSize: 16,
+    fontWeight: "800",
+    letterSpacing: -0.2,
+  },
+  financeAdjustmentsMetricValuePositive: {
+    color: "#16a34a",
+  },
+  financeAdjustmentsMetricValueNegative: {
+    color: "#dc2626",
+  },
+  financeAdjustmentsBtn: {
+    borderRadius: 10,
+    backgroundColor: "#0f172a",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: "#0f172a",
+  },
+  financeAdjustmentsBtnAlt: {
+    backgroundColor: "#e2e8f0",
+    borderColor: "#cbd5e1",
+  },
+  financeAdjustmentsBtnText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#fff",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  financeAdjustmentsBtnTextAlt: {
+    color: "#334155",
+  },
+
+  // ── Document preview modal (web) ──
+  docModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 16,
+  },
+  docModalCard: {
+    width: "100%",
+    maxWidth: 920,
+    maxHeight: "90%",
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  docModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+    gap: 10,
+  },
+  docModalCloseIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f8fafc",
+  },
+  docModalTitleBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  docModalTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  docModalSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748b",
+  },
+  docModalBody: {
+    minHeight: 280,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  docModalCenter: {
+    flex: 1,
+    minHeight: 260,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    paddingVertical: 24,
+  },
+  docModalImage: {
+    width: "100%",
+    height: 420,
+    minHeight: 280,
+    backgroundColor: "#f8fafc",
+  },
+  docModalHint: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#64748b",
+    textAlign: "center",
+    paddingHorizontal: 20,
+  },
+  docModalFooter: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+    alignItems: "flex-end",
+  },
+  docModalFooterBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#0f172a",
+  },
+  docModalFooterBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#fff",
   },
 });
 
@@ -1551,6 +2353,7 @@ const ldStyles = StyleSheet.create({
   statRow: {
     flexDirection: "row",
     alignItems: "stretch",
+    flexShrink: 1,
     marginHorizontal: 16,
     marginTop: 14,
     backgroundColor: "rgba(30, 41, 59, 0.4)",
@@ -1560,7 +2363,7 @@ const ldStyles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
   },
-  statGroup: { flex: 1, alignItems: "flex-start" },
+  statGroup: { flex: 1, minWidth: 0, alignItems: "flex-start" },
   statLabelRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1589,6 +2392,7 @@ const ldStyles = StyleSheet.create({
     fontWeight: "800",
     color: "#f8fafc",
     letterSpacing: -0.3,
+    flexShrink: 1,
   },
   statValueGreen: { color: "#34d399" },
   statValueRed: { color: "#f43f5e" },

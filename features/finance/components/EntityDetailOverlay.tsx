@@ -709,6 +709,8 @@ export function EntityDetailOverlay({
   const [showDriverPicker, setShowDriverPicker] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successTitle, setSuccessTitle] = useState("NODE_SYNCED");
+  const [fabHovered, setFabHovered] = useState(false);
+  const [isActionHubOpen, setIsActionHubOpen] = useState(false);
 
   const triggerSuccess = useCallback((title = "NODE_SYNCED") => {
     setSuccessTitle(title);
@@ -4172,11 +4174,67 @@ export function EntityDetailOverlay({
               { bottom: Layout.fabBottomOffset + insets.bottom },
             ]}
           >
-            <FinanceFAB
-              onPress={onAddTransaction}
-              accessibilityLabel={t("addTransaction")}
-              icon="receipt-text"
-            />
+            {isActionHubOpen ? (
+              <View style={styles.entityActionHubMenu}>
+                <TouchableOpacity
+                  style={styles.entityActionHubItem}
+                  onPress={() => {
+                    setIsActionHubOpen(false);
+                    onAddTransaction();
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.entityActionHubItemIconWrap}>
+                    <FontAwesome name="exchange" size={16} color={Theme.textOnDark} />
+                  </View>
+                  <Text style={styles.entityActionHubItemText}>Sync ledger</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.entityActionHubItem}
+                  onPress={() => {
+                    setIsActionHubOpen(false);
+                    handleReportPress();
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.entityActionHubItemIconWrap}>
+                    <FontAwesome name="file-text-o" size={16} color={Theme.textOnDark} />
+                  </View>
+                  <Text style={styles.entityActionHubItemText}>Ledger report</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+            <View
+              style={[
+                styles.entityFabActionRow,
+                styles.entityFabIslandRail,
+                !(fabHovered || isActionHubOpen) && styles.entityFabIslandRailCollapsed,
+              ]}
+            >
+              <View
+                style={[
+                  styles.entityFabLabelWrap,
+                  !(fabHovered || isActionHubOpen) && styles.entityFabLabelWrapCollapsed,
+                ]}
+              >
+                <Text style={styles.entityFabLabelTitle}>Action Hub</Text>
+                <Text style={styles.entityFabLabelSub}>Trip + ledger controls</Text>
+              </View>
+              <Pressable
+                onHoverIn={() => setFabHovered(true)}
+                onHoverOut={() => setFabHovered(false)}
+                onPressIn={() => setFabHovered(true)}
+                onPressOut={() => setFabHovered(false)}
+                style={styles.entityFabPressArea}
+              >
+                <FinanceFAB
+                  onPress={() => setIsActionHubOpen((v) => !v)}
+                  accessibilityLabel={isActionHubOpen ? "Close action hub" : "Open action hub"}
+                  icon={isActionHubOpen ? "plus" : "credit-card"}
+                  size={80}
+                />
+              </Pressable>
+            </View>
           </View>
         )}
 
@@ -4553,6 +4611,114 @@ const styles = StyleSheet.create({
     right: Layout.fabRightOffset,
     zIndex: 210,
     elevation: 10,
+  },
+  entityFabActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  entityFabIslandRail: {
+    backgroundColor: "rgba(15,23,42,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    borderRadius: 999,
+    paddingLeft: 10,
+    paddingRight: 6,
+    paddingVertical: 6,
+    ...Platform.select({
+      web: {
+        transitionProperty: "transform, opacity",
+        transitionDuration: "280ms",
+      } as any,
+    }),
+  },
+  entityFabIslandRailCollapsed: {
+    transform: [{ translateX: 44 }],
+  },
+  entityFabPressArea: {
+    borderRadius: 40,
+  },
+  entityActionHubMenu: {
+    alignSelf: "flex-end",
+    backgroundColor: "#0B1220",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    borderRadius: 22,
+    padding: 10,
+    marginBottom: 10,
+    minWidth: 210,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.3,
+    shadowRadius: 24,
+    elevation: 14,
+  },
+  entityActionHubItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    marginBottom: 6,
+  },
+  entityActionHubItemIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  entityActionHubItemText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: Theme.textOnDark,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  entityFabLabelWrap: {
+    backgroundColor: "transparent",
+    borderColor: "transparent",
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    ...Platform.select({
+      web: {
+        transitionProperty: "opacity, transform",
+        transitionDuration: "220ms",
+      } as any,
+    }),
+  },
+  entityFabLabelWrapCollapsed: {
+    opacity: 0,
+    transform: [{ translateX: 20 }, { scale: 0.92 }],
+  },
+  entityFabLabelTitle: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: Theme.textOnDark,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  entityFabLabelSub: {
+    marginTop: 2,
+    fontSize: 8,
+    fontWeight: "700",
+    color: "rgba(199,210,254,0.9)",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
   },
   scroll: { flex: 1 },
   scrollContent: {},

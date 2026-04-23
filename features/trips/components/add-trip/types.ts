@@ -8,6 +8,8 @@ export type SupplySource = 'asset' | 'aggregate';
 export interface AddTripFormData {
   pickup_area: string;
   drop_location: string;
+  /** Planned trip start date (YYYY-MM-DD). Stored in trips.pickup_date. */
+  pickup_date?: string | null;
   /** Optional coordinates from place search (for maps/distance when backend supports). */
   pickup_lat?: number | null;
   pickup_lon?: number | null;
@@ -32,11 +34,17 @@ export interface AddTripFormData {
   vehicle_id?: string | null;
   /** Aggregate only: vehicle number for display (persisted as trip.vehicle_display_number). */
   vehicle_display_number?: string | null;
+  /** Optional load weight in tons; stored in notes as metadata text. */
+  tons?: string | null;
 }
 
 export interface AddTripFormState {
   pickupArea: string;
   dropLocation: string;
+  /** Planned trip start date (YYYY-MM-DD). */
+  tripStartDate: string;
+  /** Optional load weight in tons as text input. */
+  tons: string;
   pickupLat: number | null;
   pickupLon: number | null;
   dropLat: number | null;

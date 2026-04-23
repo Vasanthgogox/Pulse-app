@@ -170,13 +170,22 @@ export default function SupplierDetailScreen({
   }, [autoOpenProfile]);
 
   useEffect(() => {
-    const phone = supplier?.phone;
-    if (!phone) return;
-    import("@/services/connectionRequestsService").then(({ getConnectionInviteeByPhone }) => {
-      getConnectionInviteeByPhone(phone).then(({ invitee }) => {
-        if (invitee) setIsInApp(true);
+    const phone = supplier?.phone?.trim();
+    if (!phone) {
+      setIsInApp(false);
+      return;
+    }
+    import("@/services/connectionRequestsService")
+      .then(({ getConnectionInviteeByPhone }) =>
+        getConnectionInviteeByPhone(phone),
+      )
+      .then(({ invitee }) => {
+        setIsInApp(Boolean(invitee));
+      })
+      .catch(() => {
+        // Avoid unhandled promise rejections on transient lookup timeouts.
+        setIsInApp(false);
       });
-    });
   }, [supplier?.phone]);
 
   const handleSendInvitation = useCallback(async () => {
@@ -218,6 +227,9 @@ export default function SupplierDetailScreen({
       );
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 1500);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Please try again.";
+      Alert.alert("Unable to send invitation", message);
     } finally {
       setSendingInvitation(false);
     }
@@ -1400,7 +1412,7 @@ export default function SupplierDetailScreen({
               >
                 <FontAwesome name="paper-plane" size={14} color={Theme.primary} />
                 <Text style={styles.profileSecondaryBtnText}>
-                  {sendingInvitation ? "Sending..." : "Send invitation"}
+                  {sendingInvitation ? "Sending..." : "Send request"}
                 </Text>
               </TouchableOpacity>
             )}

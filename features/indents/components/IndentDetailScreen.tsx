@@ -16,16 +16,21 @@ import {
   type IndentRow,
 } from '@/features/indents/services/indents.service';
 import {
+  createDirectQuote,
   updateDirectQuoteStatus,
   type DirectQuoteRow,
 } from '@/features/indents/services/direct-quotes.service';
 import { formatINR } from '@/lib/format';
-import { useIndentDirectQuotesQuery, useInvalidateIndents } from '@/lib/queries/useIndentsQuery';
+import {
+  useIndentDirectQuotesQuery,
+  useInvalidateIndents,
+  useMyDirectQuotesQuery,
+} from '@/lib/queries/useIndentsQuery';
 import { BidReceivedHammer } from '@/features/indents/components/BidReceivedHammer';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -36,6 +41,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -74,6 +80,14 @@ const LOCKED_INDENT_STATUSES = new Set([
   'closed',
   'expired',
   'broadcast',
+]);
+
+const SUPPLIER_BID_ENABLED_STATUSES = new Set([
+  'open',
+  'pending',
+  'broadcast',
+  'draft',
+  'quoted',
 ]);
 
 function formatIndentDate(pickupDate: string | null, createdAt: string): string {
@@ -123,10 +137,14 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
   const [broadcastError, setBroadcastError] = useState<string | null>(null);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
   const [awarding, setAwarding] = useState(false);
+  const [quoteAmount, setQuoteAmount] = useState('');
+  const [quoteModalVisible, setQuoteModalVisible] = useState(false);
+  const [submittingQuote, setSubmittingQuote] = useState(false);
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
 
   const { data: quotes = [], refetch: refetchQuotes } = useIndentDirectQuotesQuery(indentId);
+  const { data: myQuotes = [], refetch: refetchMyQuotes } = useMyDirectQuotesQuery(orgId);
 
   const load = useCallback(async () => {
     if (!indentId) {
@@ -258,9 +276,39 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
     }
   }, [indentId, indent, selectedQuoteId, quotes, orgId, invalidateIndents, queryClient, load, refetchQuotes]);
 
+  const handleSubmitQuote = useCallback(async () => {
+    if (!indent || !orgId) return;
+    const amount = Number(quoteAmount.replace(/,/g, '').trim());
+    if (!Number.isFinite(amount) || amount <= 0) {
+      Alert.alert('Enter valid quote', 'Please enter a quote amount greater than 0.');
+      return;
+    }
+    try {
+      setSubmittingQuote(true);
+      const { error: quoteError } = await createDirectQuote(indent.id, orgId, amount);
+      if (quoteError) {
+        Alert.alert('Could not submit quote', quoteError.message);
+        return;
+      }
+      setQuoteModalVisible(false);
+      await Promise.allSettled([refetchMyQuotes(), refetchQuotes(), load()]);
+      Alert.alert('Quote submitted', 'Your quote was sent for this load.');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error.';
+      Alert.alert('Could not submit quote', msg);
+    } finally {
+      setSubmittingQuote(false);
+    }
+  }, [indent, orgId, quoteAmount, refetchMyQuotes, refetchQuotes, load]);
+
   useEffect(() => {
     load();
   }, [load]);
+
+  const myQuote = useMemo(
+    () => (indent ? myQuotes.find((q) => q.indent_id === indent.id) ?? null : null),
+    [myQuotes, indent],
+  );
 
   if (loading && !indent) {
     return <CenteredLoadingView message="Loading indent…" />;
@@ -316,11 +364,36 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
       ? Math.round(((clientPriceNum - supplierNum) / clientPriceNum) * 100)
       : null;
   const isOwner = !!orgId && indent.organization_id === orgId;
+  const myQuoteStatus = normalizeStatus(myQuote?.status);
+  const hasMyPendingQuote = myQuoteStatus === 'pending';
+  const canSupplierBid = !isOwner && SUPPLIER_BID_ENABLED_STATUSES.has(statusLower);
+  const canOpenQuoteModal = canSupplierBid && statusLower !== 'awarded' && statusLower !== 'completed';
   const isLockedStatus = LOCKED_INDENT_STATUSES.has(statusLower);
   const canCancelLoad = isOwner && !isLockedStatus;
   const canEditLoad = isOwner && !isLockedStatus;
   const canBroadcast = isOwner && statusLower === 'draft';
   const canAward = statusLower !== 'awarded' && statusLower !== 'completed' && statusLower !== 'deployed';
+  const liveBidsCount = isOwner ? quotes.length : myQuote ? 1 : 0;
+  const supplierQuoteTitle = myQuote ? 'Your Quote' : 'No Quote Sent Yet';
+  const supplierQuoteMessage = myQuote
+    ? myQuoteStatus === 'accepted'
+      ? 'Your quote is awarded. Continue from Claimed to assign and deploy.'
+      : myQuoteStatus === 'rejected'
+        ? 'Your quote was not selected for this load.'
+        : 'Your quote is submitted. You can update it while this load remains open.'
+    : 'Place your bid to participate in this load.';
+  const supplierLockedMessage =
+    myQuoteStatus === 'accepted'
+      ? 'Bid accepted. Continue from Claimed.'
+      : myQuoteStatus === 'rejected'
+        ? 'Bidding closed for this load.'
+        : 'Bidding unavailable for current status';
+  const supplierFooterStatus =
+    myQuoteStatus === 'accepted'
+      ? 'BID AWARDED'
+      : myQuoteStatus === 'rejected'
+        ? 'BID REJECTED'
+        : 'BIDDING LOCKED';
 
   return (
     <View style={styles.container}>
@@ -414,14 +487,20 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
           </Text>
           <View style={styles.indentSummarySpecsHeader}>
             <Text style={styles.indentSummarySpecsTitle}>SHIPMENT PROFILE</Text>
-            {canEditLoad ? (
+            {isOwner && canEditLoad ? (
               <TouchableOpacity onPress={handleEditAll} hitSlop={Layout.touchTargetHitSlop}>
                 <Text style={styles.editAllText}>Edit All</Text>
               </TouchableOpacity>
-            ) : (
+            ) : isOwner ? (
               <Text style={styles.editAllTextDisabled}>Locked</Text>
-            )}
+            ) : null}
           </View>
+          {!isOwner && (
+            <View style={styles.supplierReadOnlyPill}>
+              <FontAwesome name="eye" size={11} color={Theme.textMuted} />
+              <Text style={styles.supplierReadOnlyText}>Read only load details</Text>
+            </View>
+          )}
           <View style={styles.indentSummarySpecsPanel}>
             <View style={styles.indentSummarySpecsGrid}>
               <View style={styles.indentSummarySpecsLabelsRow}>
@@ -503,19 +582,19 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
         {/* Live Bids */}
         <View style={styles.sectionHeader}>
           <View style={styles.liveBidsTitleRow}>
-            <Text style={styles.sectionTitle}>LIVE BIDS</Text>
+            <Text style={styles.sectionTitle}>{isOwner ? 'LIVE BIDS' : 'QUOTE STATUS'}</Text>
             {statusLower === 'awarded' || statusLower === 'completed' || statusLower === 'deployed' ? (
               <FontAwesome name="trophy" size={14} color={Theme.driverGold} />
             ) : (
-              <BidReceivedHammer visible={quotes.length > 0} />
+              <BidReceivedHammer visible={liveBidsCount > 0} />
             )}
             <View style={styles.bidsCountBadge}>
-              <Text style={styles.bidsCountText}>{quotes.length}</Text>
+              <Text style={styles.bidsCountText}>{liveBidsCount}</Text>
             </View>
           </View>
         </View>
 
-        {quotes.length === 0 ? (
+        {isOwner && quotes.length === 0 ? (
           <View style={styles.bidsEmptyCard}>
             <View style={styles.bidsEmptyIconWrap}>
               <FontAwesome name="inbox" size={22} color={Theme.textMuted} />
@@ -554,7 +633,7 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
               <Text style={styles.broadcastErrorText}>{broadcastError}</Text>
             ) : null}
           </View>
-        ) : (
+        ) : isOwner ? (
           <View style={styles.offersListWrap}>
             {quotes.map((q: DirectQuoteRow) => {
               const isPending = (q.status || '').toLowerCase() === 'pending';
@@ -611,6 +690,38 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
                 </TouchableOpacity>
               )}
           </View>
+        ) : (
+          <View style={styles.bidsEmptyCard}>
+            <View style={styles.bidsEmptyIconWrap}>
+              <FontAwesome name={myQuote ? 'paper-plane' : 'inbox'} size={22} color={Theme.textMuted} />
+            </View>
+            <Text style={styles.bidsEmptyTitle}>{supplierQuoteTitle}</Text>
+            <Text style={styles.bidsEmptyBody}>
+              {myQuote
+                ? `Status: ${(myQuote.status || 'pending').toUpperCase()} • ${formatINR(Number(myQuote.amount ?? 0))}`
+                : supplierQuoteMessage}
+            </Text>
+            {myQuote ? <Text style={styles.supplierQuoteSubtext}>{supplierQuoteMessage}</Text> : null}
+            {canOpenQuoteModal ? (
+              <TouchableOpacity
+                style={styles.broadcastBtn}
+                onPress={() => {
+                  setQuoteAmount(myQuote?.amount ? String(myQuote.amount) : '');
+                  setQuoteModalVisible(true);
+                }}
+                activeOpacity={0.9}
+                disabled={submittingQuote}
+              >
+                <FontAwesome name="gavel" size={14} color={Theme.textOnPrimary} style={styles.broadcastBtnIcon} />
+                <Text style={styles.broadcastBtnText}>{hasMyPendingQuote ? 'UPDATE BID' : 'BID NOW'}</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.broadcastLockedPill}>
+                <FontAwesome name="lock" size={12} color={Theme.textMuted} />
+                <Text style={styles.broadcastLockedText}>{supplierLockedMessage}</Text>
+              </View>
+            )}
+          </View>
         )}
       </ScrollView>
 
@@ -623,62 +734,88 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
           },
         ]}
       >
-        <TouchableOpacity
-          style={styles.footerEditBtn}
-          onPress={canEditLoad ? handleEditAll : undefined}
-          activeOpacity={0.85}
-          accessibilityLabel="Edit indent"
-          hitSlop={Layout.touchTargetHitSlop}
-          disabled={!canEditLoad}
-        >
-          <FontAwesome name="pencil" size={18} color={canEditLoad ? Theme.textSecondary : Theme.textMuted} />
-        </TouchableOpacity>
-        {canCancelLoad ? (
+        {isOwner ? (
+          <>
+            <TouchableOpacity
+              style={styles.footerEditBtn}
+              onPress={canEditLoad ? handleEditAll : undefined}
+              activeOpacity={0.85}
+              accessibilityLabel="Edit indent"
+              hitSlop={Layout.touchTargetHitSlop}
+              disabled={!canEditLoad}
+            >
+              <FontAwesome name="pencil" size={18} color={canEditLoad ? Theme.textSecondary : Theme.textMuted} />
+            </TouchableOpacity>
+            {canCancelLoad ? (
+              <TouchableOpacity
+                style={styles.footerCancelBtn}
+                onPress={() => {
+                  if (cancelling) return;
+                  Alert.alert(
+                    'Cancel load',
+                    'Are you sure you want to cancel this load? Connected suppliers will no longer see it under Find Work.',
+                    [
+                      { text: 'Keep load', style: 'cancel' },
+                      {
+                        text: 'Cancel load',
+                        style: 'destructive',
+                        onPress: async () => {
+                          try {
+                            setCancelling(true);
+                            const { error: cancelError } = await cancelIndent(indent.id);
+                            setCancelling(false);
+                            if (cancelError) {
+                              Alert.alert('Could not cancel', cancelError.message);
+                              return;
+                            }
+                            await load();
+                          } catch (e) {
+                            setCancelling(false);
+                            const msg = e instanceof Error ? e.message : 'Unknown error';
+                            Alert.alert('Could not cancel', msg);
+                          }
+                        },
+                      },
+                    ],
+                  );
+                }}
+                activeOpacity={0.9}
+                accessibilityLabel="Cancel load"
+                hitSlop={Layout.touchTargetHitSlop}
+              >
+                <FontAwesome name="ban" size={16} color={Theme.buttonDestructiveText} />
+                <Text style={styles.footerCancelText}>
+                  {cancelling ? 'CANCELLING…' : 'CANCEL LOAD'}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.footerLockedPill}>
+                <FontAwesome name="lock" size={14} color={Theme.textMuted} />
+                <Text style={styles.footerLockedText}>LOAD LOCKED</Text>
+              </View>
+            )}
+          </>
+        ) : canOpenQuoteModal ? (
           <TouchableOpacity
-            style={styles.footerCancelBtn}
+            style={styles.footerBidBtn}
             onPress={() => {
-              if (cancelling) return;
-              Alert.alert(
-                'Cancel load',
-                'Are you sure you want to cancel this load? Connected suppliers will no longer see it under Find Work.',
-                [
-                  { text: 'Keep load', style: 'cancel' },
-                  {
-                    text: 'Cancel load',
-                    style: 'destructive',
-                    onPress: async () => {
-                      try {
-                        setCancelling(true);
-                        const { error: cancelError } = await cancelIndent(indent.id);
-                        setCancelling(false);
-                        if (cancelError) {
-                          Alert.alert('Could not cancel', cancelError.message);
-                          return;
-                        }
-                        await load();
-                      } catch (e) {
-                        setCancelling(false);
-                        const msg = e instanceof Error ? e.message : 'Unknown error';
-                        Alert.alert('Could not cancel', msg);
-                      }
-                    },
-                  },
-                ],
-              );
+              setQuoteAmount(myQuote?.amount ? String(myQuote.amount) : '');
+              setQuoteModalVisible(true);
             }}
             activeOpacity={0.9}
-            accessibilityLabel="Cancel load"
+            accessibilityLabel="Submit bid"
             hitSlop={Layout.touchTargetHitSlop}
+            disabled={submittingQuote}
           >
-            <FontAwesome name="ban" size={16} color={Theme.buttonDestructiveText} />
+            <FontAwesome name="gavel" size={16} color={Theme.textOnDark} />
             <Text style={styles.footerCancelText}>
-              {cancelling ? 'CANCELLING…' : 'CANCEL LOAD'}
+              {submittingQuote ? 'SUBMITTING…' : hasMyPendingQuote ? 'UPDATE BID' : 'BID NOW'}
             </Text>
           </TouchableOpacity>
         ) : (
           <View style={styles.footerLockedPill}>
             <FontAwesome name="lock" size={14} color={Theme.textMuted} />
-            <Text style={styles.footerLockedText}>LOAD LOCKED</Text>
+            <Text style={styles.footerLockedText}>{supplierFooterStatus}</Text>
           </View>
         )}
       </View>
@@ -751,6 +888,56 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
                 activeOpacity={0.9}
               >
                 <Text style={styles.modalDoneText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={quoteModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setQuoteModalVisible(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setQuoteModalVisible(false)}>
+          <Pressable style={styles.shareConfirmCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.shareConfirmTitle}>{hasMyPendingQuote ? 'Update Your Bid' : 'Place Your Bid'}</Text>
+            <Text style={styles.shareConfirmSubtitle}>
+              Enter your quoted supplier rate for {displayNumber}.
+            </Text>
+            <View style={styles.quoteInputShell}>
+              <Text style={styles.quoteInputPrefix}>INR</Text>
+              <TextInput
+                value={quoteAmount}
+                onChangeText={setQuoteAmount}
+                placeholder="Enter amount"
+                placeholderTextColor={Theme.textMuted}
+                keyboardType={Platform.OS === 'web' ? 'numeric' : 'number-pad'}
+                style={styles.quoteInput}
+                autoFocus
+              />
+            </View>
+            <View style={styles.shareConfirmActions}>
+              <TouchableOpacity
+                style={styles.shareConfirmCancelBtn}
+                onPress={() => setQuoteModalVisible(false)}
+                activeOpacity={0.9}
+                disabled={submittingQuote}
+              >
+                <Text style={styles.shareConfirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.shareConfirmShareBtn}
+                onPress={handleSubmitQuote}
+                activeOpacity={0.9}
+                disabled={submittingQuote}
+              >
+                {submittingQuote ? (
+                  <ActivityIndicator size="small" color={Theme.textOnDark} />
+                ) : (
+                  <Text style={styles.shareConfirmShareText}>{hasMyPendingQuote ? 'Update bid' : 'Submit bid'}</Text>
+                )}
               </TouchableOpacity>
             </View>
           </Pressable>
@@ -1156,6 +1343,26 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     textTransform: 'uppercase',
   },
+  supplierReadOnlyPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: Theme.surfaceLight,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    marginBottom: 8,
+  },
+  supplierReadOnlyText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
   // Live Bids
   liveBidsTitleRow: {
     flexDirection: 'row',
@@ -1215,11 +1422,20 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     lineHeight: 16,
   },
+  supplierQuoteSubtext: {
+    fontSize: 11,
+    color: Theme.textSecondary,
+    textAlign: 'center',
+    marginTop: -6,
+    marginBottom: 12,
+    lineHeight: 16,
+    fontWeight: '600',
+  },
   broadcastBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Theme.buttonPrimary,
+    backgroundColor: Theme.darkBackground,
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 10,
@@ -1231,7 +1447,7 @@ const styles = StyleSheet.create({
   broadcastBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: Theme.buttonPrimaryText,
+    color: Theme.textOnDark,
     letterSpacing: 1,
   },
   broadcastLockedPill: {
@@ -1360,11 +1576,26 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
+  footerBidBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: Theme.darkBackground,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
   footerCancelText: {
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.8,
-    color: Theme.buttonDestructiveText,
+    color: Theme.textOnDark,
     textTransform: 'uppercase',
   },
   footerLockedPill: {
@@ -1416,6 +1647,29 @@ const styles = StyleSheet.create({
   shareConfirmActions: {
     flexDirection: 'row',
     gap: 10,
+  },
+  quoteInputShell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
+    borderRadius: 10,
+    backgroundColor: Theme.surface,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  quoteInputPrefix: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Theme.textSecondary,
+    marginRight: 8,
+  },
+  quoteInput: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
   },
   shareConfirmCancelBtn: {
     flex: 1,

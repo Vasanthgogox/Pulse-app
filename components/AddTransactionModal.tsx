@@ -142,6 +142,50 @@ export const PAYMENT_MODES = [
   { id: 'CREDIT', name: 'Credit' },
 ] as const;
 
+const PAYMENT_MODE_ICON: Record<string, string> = {
+  CASH: "money",
+  UPI: "mobile",
+  BANK: "bank",
+  CHEQUE: "file-text-o",
+  FUEL_CARD: "credit-card",
+  FASTAG: "ticket",
+  CREDIT: "clock-o",
+};
+
+const PAYMENT_TYPE_ICON: Record<string, string> = {
+  "Trip Payment": "truck",
+  "Advance Payment": "arrow-up",
+  "Advance from Client": "arrow-up",
+  Advance: "arrow-up",
+  "Partial Payment": "exchange",
+  "Balance Payment": "check-circle-o",
+  "Extra Charges": "plus-circle",
+  "Detention Charges": "clock-o",
+  "Cancellation Charges": "ban",
+  Commission: "line-chart",
+  Penalty: "exclamation-triangle",
+  "Permit / Tax": "file-text-o",
+  Fuel: "tint",
+  Toll: "road",
+  Maintenance: "wrench",
+  Repair: "wrench",
+  Insurance: "shield",
+  Parking: "car",
+  Cleaning: "magic",
+  Adjustment: "sliders",
+  Reimbursement: "undo",
+  Bonus: "star",
+  Deduction: "minus-circle",
+  salary: "user",
+  settlement: "check",
+  advance: "arrow-up",
+  reimbursement: "undo",
+  bonus: "star",
+  deduction: "minus-circle",
+  adjustment: "sliders",
+  Other: "ellipsis-h",
+};
+
 /** Vehicle expense "parties" — vehicle cannot be party; user selects expense type. id = name = stored in description. */
 export const VEHICLE_EXPENSE_PARTIES: PartyOption[] = [
   ...VEHICLE_CATEGORIES,
@@ -359,6 +403,8 @@ export function AddTransactionModal({
   const [selectedVehicleIdForExpense, setSelectedVehicleIdForExpense] =
     useState<string | null>(null);
   const [showVehiclePicker, setShowVehiclePicker] = useState(false);
+  const [paymentModeExpanded, setPaymentModeExpanded] = useState(true);
+  const [paymentTypeExpanded, setPaymentTypeExpanded] = useState(true);
   const [entryDate, setEntryDate] = useState<string>(
     () =>
       initialEntry?.transaction_date?.slice(0, 10) ??
@@ -745,6 +791,21 @@ export function AddTransactionModal({
     hasValidTrip &&
     !supplierNeedsTrip &&
     !entryDateError;
+
+  useEffect(() => {
+    if (!paymentModeId) {
+      setPaymentModeExpanded(true);
+    }
+  }, [paymentModeId]);
+
+  useEffect(() => {
+    const hasSelection = isDriverPayment
+      ? driverPaymentType != null
+      : category != null;
+    if (!hasSelection) {
+      setPaymentTypeExpanded(true);
+    }
+  }, [category, driverPaymentType, isDriverPayment]);
 
   // When modal opens: prefill from initialEntry (edit) or defaultPartyId (add); on close, hide pickers.
   // Do not depend on partyOptions here: selecting a trip changes partyOptions and would re-run this effect and reset tripId.
@@ -1269,6 +1330,27 @@ export function AddTransactionModal({
       </Text>
     </TouchableOpacity>
   );
+  const selectedPaymentModeName =
+    PAYMENT_MODES.find((p) => p.id === paymentModeId)?.name ?? "Cash";
+  const selectedPaymentModeIcon =
+    PAYMENT_MODE_ICON[paymentModeId] ?? "circle-o";
+  const selectedPaymentTypeLabel = isDriverPayment
+    ? (driverPaymentType != null
+        ? (DRIVER_PAYMENT_TYPES.find((t) => t.type === driverPaymentType)?.label ??
+          driverPaymentType)
+        : null)
+    : (category ?? null);
+  const selectedPaymentTypeIcon = selectedPaymentTypeLabel
+    ? (PAYMENT_TYPE_ICON[selectedPaymentTypeLabel] ?? "circle-o")
+    : "circle-o";
+  const previewAmountText =
+    amountStr.trim().length > 0 && Number.isFinite(amount) && amount > 0
+      ? amount.toLocaleString("en-IN", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })
+      : amountPlaceholder;
+  const previewDirectionLabel = type === "in" ? "Cash In" : "Cash Out";
 
   const formContent = (
     <KeyboardAvoidingView
@@ -1320,114 +1402,236 @@ export function AddTransactionModal({
           ]}
         >
           <View style={styles.panelScrollInner}>
-            {/* Header: LEDGER SYNC + optional "Entry for [name]" + IN/OUT toggle */}
-            <View style={styles.headerRow}>
-              <View style={styles.titleBlock}>
-                <Text style={[styles.tagLabel, styles.title]}>
-                  {isEditMode ? "EDIT ENTRY" : "LEDGER SYNC"}
-                </Text>
-                {entryContextLabel && !isPartyLocked && !tripLocked ? (
-                  <Text style={[styles.tagLabel, styles.entryContextLabel]} numberOfLines={1}>
-                    Entry for {entryContextLabel}
-                  </Text>
-                ) : null}
-              </View>
-              <View style={styles.toggleWrap}>
-                <TouchableOpacity
+            <View style={styles.flowCard}>
+              <View style={styles.flowCardHead}>
+                <View
                   style={[
-                    styles.toggleBtn,
-                    type === "in" && styles.toggleBtnIn,
+                    styles.flowStepBadge,
+                    type === "in" ? styles.flowStepBadgeIn : styles.flowStepBadgeOut,
                   ]}
-                  onPress={() => setType("in")}
-                  activeOpacity={0.8}
-                  accessibilityLabel={
-                    type === "in"
-                      ? "Money in — selected"
-                      : "Money in — tap to record cash received"
-                  }
-                  accessibilityRole="button"
                 >
-                  <Text
-                    style={[
-                      styles.toggleBtnText,
-                      type === "in" && styles.toggleBtnTextActive,
-                    ]}
-                  >
-                    IN
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.toggleBtn,
-                    type === "out" && styles.toggleBtnOut,
-                  ]}
-                  onPress={() => setType("out")}
-                  activeOpacity={0.8}
-                  accessibilityLabel={
-                    type === "out"
-                      ? "Money out — selected"
-                      : "Money out — tap to record cash paid"
-                  }
-                  accessibilityRole="button"
-                >
-                  <Text
-                    style={[
-                      styles.toggleBtnText,
-                      type === "out" && styles.toggleBtnTextActive,
-                    ]}
-                  >
-                    OUT
-                  </Text>
-                </TouchableOpacity>
+                  <Text style={styles.flowStepBadgeText}>01</Text>
+                </View>
+                <Text style={styles.flowCardTitle}>Entry Details</Text>
               </View>
-            </View>
-
-            {/* Tiny tag when opened from client (party locked): show party name. Trip + date are in form below. */}
-            {isPartyLocked && effectivePartyName ? (
-              <View style={styles.tagsRow}>
-                <View style={styles.tinyTag}>
-                  <Text style={styles.tinyTagText}>{effectivePartyName}</Text>
+              {/* Header: LEDGER SYNC + optional "Entry for [name]" + IN/OUT toggle */}
+              <View style={styles.headerRow}>
+                <View style={styles.titleBlock}>
+                  <Text style={[styles.tagLabel, styles.title]}>
+                    {isEditMode ? "EDIT ENTRY" : "ADD ENTRY"}
+                  </Text>
+                  {entryContextLabel && !isPartyLocked && !tripLocked ? (
+                    <Text style={[styles.tagLabel, styles.entryContextLabel]} numberOfLines={1}>
+                      Entry for {entryContextLabel}
+                    </Text>
+                  ) : null}
+                </View>
+                <View style={styles.toggleWrap}>
+                  <TouchableOpacity
+                    style={[
+                      styles.toggleBtn,
+                      type === "in" && styles.toggleBtnIn,
+                    ]}
+                    onPress={() => setType("in")}
+                    activeOpacity={0.8}
+                    accessibilityLabel={
+                      type === "in"
+                        ? "Money in — selected"
+                        : "Money in — tap to record cash received"
+                    }
+                    accessibilityRole="button"
+                  >
+                    <Text
+                      style={[
+                        styles.toggleBtnText,
+                        type === "in" && styles.toggleBtnTextActive,
+                      ]}
+                    >
+                      IN
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.toggleBtn,
+                      type === "out" && styles.toggleBtnOut,
+                    ]}
+                    onPress={() => setType("out")}
+                    activeOpacity={0.8}
+                    accessibilityLabel={
+                      type === "out"
+                        ? "Money out — selected"
+                        : "Money out — tap to record cash paid"
+                    }
+                    accessibilityRole="button"
+                  >
+                    <Text
+                      style={[
+                        styles.toggleBtnText,
+                        type === "out" && styles.toggleBtnTextActive,
+                      ]}
+                    >
+                      OUT
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </View>
-            ) : null}
 
-            {/* Amount: pre-filled from entity detail (e.g. Salary Due) when lockedAmount is set; always editable. */}
-            <View style={styles.amountBlock}>
-              <Text style={[styles.tagLabel, styles.amountLabel]}>AMOUNT (INR)</Text>
-              <View style={styles.amountRow}>
-                <Text
+              {/* Tiny tag when opened from client (party locked): show party name. Trip + date are in form below. */}
+              {isPartyLocked && effectivePartyName ? (
+                <View style={styles.tagsRow}>
+                  <View style={styles.tinyTag}>
+                    <Text style={styles.tinyTagText}>{effectivePartyName}</Text>
+                  </View>
+                </View>
+              ) : null}
+
+              {/* Amount: pre-filled from entity detail (e.g. Salary Due) when lockedAmount is set; always editable. */}
+              <View style={styles.amountBlock}>
+                <Text style={[styles.tagLabel, styles.amountLabel]}>SETTLEMENT AMOUNT (INR)</Text>
+                <View style={styles.amountRow}>
+                  <Text
+                    style={[
+                      styles.amountSymbol,
+                      type === "in"
+                        ? styles.amountSymbolIn
+                        : styles.amountSymbolOut,
+                    ]}
+                  >
+                    ₹
+                  </Text>
+                  <TextInput
+                    style={styles.amountInput}
+                    placeholder={amountPlaceholder}
+                    placeholderTextColor={Theme.textMutedDemo}
+                    value={amountStr}
+                    onChangeText={setAmountStr}
+                    keyboardType="decimal-pad"
+                    autoCorrect={false}
+                    spellCheck={false}
+                    autoComplete="off"
+                    editable={visible || fullPage}
+                    onFocus={() => {
+                      if (fullPage && scrollRef.current) {
+                        setTimeout(() => scrollRef.current?.scrollTo({ y: 0, animated: true }), 100);
+                      }
+                    }}
+                  />
+                </View>
+                {amountStr.trim().length > 0 &&
+                (amount <= 0 || !Number.isFinite(parseFloat(amountStr.replace(/,/g, "")))) ? (
+                  <Text style={styles.fieldErrorText}>Enter a valid amount.</Text>
+                ) : null}
+              </View>
+
+              <View style={styles.paymentModeBlock}>
+                <View style={styles.selectorHeaderRow}>
+                  <Text style={[styles.tagLabel, styles.fieldLabelNoMargin]}>MODE OF PAYMENT</Text>
+                  {!paymentModeExpanded ? (
+                    <TouchableOpacity
+                      style={styles.selectorChangeBtn}
+                      onPress={() => setPaymentModeExpanded(true)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.selectorChangeBtnText}>Change</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+                {!paymentModeExpanded ? (
+                  <TouchableOpacity
+                    style={styles.selectorSummaryCard}
+                    onPress={() => setPaymentModeExpanded(true)}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.selectorSummaryMain}>
+                      <View style={styles.selectorSummaryIcon}>
+                        <FontAwesome name={selectedPaymentModeIcon as any} size={12} color={Theme.textPrimaryDark} />
+                      </View>
+                      <Text style={styles.selectorSummaryText}>{selectedPaymentModeName}</Text>
+                    </View>
+                    <FontAwesome name="chevron-down" size={11} color={Theme.textMutedDemo} />
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.paymentModeGrid}>
+                    {PAYMENT_MODES.map((opt) => {
+                      const selected = paymentModeId === opt.id;
+                      const isIn = type === "in";
+                      const accentColor = isIn ? Theme.darkGreen : Theme.teslaRed;
+                      return (
+                        <TouchableOpacity
+                          key={opt.id}
+                          style={[
+                            styles.paymentModeChip,
+                            selected && styles.paymentModeChipSelected,
+                            selected && { borderColor: accentColor, backgroundColor: `${accentColor}12` },
+                          ]}
+                          onPress={() => {
+                            setPaymentModeId(opt.id);
+                            setPaymentModeExpanded(false);
+                          }}
+                          activeOpacity={0.85}
+                        >
+                          <View
+                            style={[
+                              styles.paymentModeIconWrap,
+                              selected && { backgroundColor: accentColor },
+                            ]}
+                          >
+                            <FontAwesome
+                              name={PAYMENT_MODE_ICON[opt.id] ?? "circle-o"}
+                              size={11}
+                              color={selected ? Theme.textOnPrimary : Theme.textMutedDemo}
+                            />
+                          </View>
+                          <Text
+                            style={[
+                              styles.paymentModeChipText,
+                              selected && { color: accentColor },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {opt.name}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+
+              {paymentModeId !== "CASH" && (
+                <View style={[styles.fieldBlockFull, { marginTop: 0, borderTopWidth: 0 }]}>
+                  <Text style={[styles.tagLabel, styles.fieldLabel]}>REFERENCE NO / UTR</Text>
+                  <TextInput
+                    style={styles.fieldInput}
+                    value={paymentReference}
+                    onChangeText={setPaymentReference}
+                    placeholder="Refer the bank to validate"
+                    placeholderTextColor={Theme.textMutedDemo}
+                    autoCorrect={false}
+                    autoCapitalize="characters"
+                    accessibilityLabel="Reference Number or UTR"
+                    onFocus={() => {
+                      if (fullPage && scrollRef.current) {
+                        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+                      }
+                    }}
+                  />
+                </View>
+              )}
+            </View>
+
+            <View style={styles.flowCard}>
+              <View style={styles.flowCardHead}>
+                <View
                   style={[
-                    styles.amountSymbol,
-                    type === "in"
-                      ? styles.amountSymbolIn
-                      : styles.amountSymbolOut,
+                    styles.flowStepBadge,
+                    type === "in" ? styles.flowStepBadgeIn : styles.flowStepBadgeOut,
                   ]}
                 >
-                  ₹
-                </Text>
-                <TextInput
-                  style={styles.amountInput}
-                  placeholder={amountPlaceholder}
-                  placeholderTextColor={Theme.textMutedDemo}
-                  value={amountStr}
-                  onChangeText={setAmountStr}
-                  keyboardType="decimal-pad"
-                  autoCorrect={false}
-                  spellCheck={false}
-                  autoComplete="off"
-                  editable={visible || fullPage}
-                  onFocus={() => {
-                    if (fullPage && scrollRef.current) {
-                      setTimeout(() => scrollRef.current?.scrollTo({ y: 0, animated: true }), 100);
-                    }
-                  }}
-                />
+                  <Text style={styles.flowStepBadgeText}>02</Text>
+                </View>
+                <Text style={styles.flowCardTitle}>Links & Classification</Text>
               </View>
-              {amountStr.trim().length > 0 &&
-              (amount <= 0 || !Number.isFinite(parseFloat(amountStr.replace(/,/g, "")))) ? (
-                <Text style={styles.fieldErrorText}>Enter a valid amount.</Text>
-              ) : null}
-            </View>
 
             {/* Entry date + Trip: show date and trip in same row (trip near date). */}
             <View style={styles.twoCol}>
@@ -1466,7 +1670,7 @@ export function AddTransactionModal({
                 </View>
               ) : (
                 <TouchableOpacity
-                  style={styles.fieldBlock}
+                  style={[styles.fieldBlock, showTripPicker && styles.fieldBlockOpen]}
                   onPress={() => {
                     setShowPartyPicker(false);
                     setShowCategoryPicker(false);
@@ -1481,8 +1685,8 @@ export function AddTransactionModal({
                   <FontAwesome
                     name="chevron-down"
                     size={10}
-                    color={Theme.textMutedDemo}
-                    style={styles.fieldChevron}
+                    color={showTripPicker ? Theme.primary : Theme.textMutedDemo}
+                    style={[styles.fieldChevron, showTripPicker && styles.fieldChevronOpen]}
                   />
                 </TouchableOpacity>
               )}
@@ -1491,7 +1695,7 @@ export function AddTransactionModal({
             {/* Party: hidden when tripLocked (party derived from trip). */}
             {!tripLocked && !isPartyLocked ? (
               <TouchableOpacity
-                style={styles.fieldBlockFull}
+                style={[styles.fieldBlockFull, showPartyPicker && styles.fieldBlockOpen]}
                 onPress={() => {
                   setShowTripPicker(false);
                   setShowCategoryPicker(false);
@@ -1506,8 +1710,8 @@ export function AddTransactionModal({
                 <FontAwesome
                   name="chevron-down"
                   size={10}
-                  color={Theme.textMutedDemo}
-                  style={styles.fieldChevron}
+                  color={showPartyPicker ? Theme.primary : Theme.textMutedDemo}
+                  style={[styles.fieldChevron, showPartyPicker && styles.fieldChevronOpen]}
                 />
               </TouchableOpacity>
             ) : null}
@@ -1520,7 +1724,7 @@ export function AddTransactionModal({
 
             {type === "out" && isDriverSalaryParty && (
               <TouchableOpacity
-                style={styles.fieldBlockFull}
+                style={[styles.fieldBlockFull, showDriverForSalaryPicker && styles.fieldBlockOpen]}
                 onPress={() => {
                   setShowPartyPicker(false);
                   setShowTripPicker(false);
@@ -1540,115 +1744,176 @@ export function AddTransactionModal({
                 <FontAwesome
                   name="chevron-down"
                   size={10}
-                  color={Theme.textMutedDemo}
-                  style={styles.fieldChevron}
+                  color={showDriverForSalaryPicker ? Theme.primary : Theme.textMutedDemo}
+                  style={[styles.fieldChevron, showDriverForSalaryPicker && styles.fieldChevronOpen]}
                 />
               </TouchableOpacity>
             )}
             {type === "in" && (
-              <TouchableOpacity
-                style={styles.fieldBlockFull}
-                onPress={() => {
-                  setShowPartyPicker(false);
-                  setShowTripPicker(false);
-                  setShowCategoryPicker((v) => !v);
-                  setShowDriverPaymentTypePicker(false);
-                  setShowDriverForSalaryPicker(false);
-                }}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.tagLabel, styles.fieldLabel]}>PAYMENT TYPE</Text>
-                <Text style={styles.fieldValue} numberOfLines={1}>
-                  {category || "SELECT PAYMENT TYPE..."}
-                </Text>
-                <FontAwesome
-                  name="chevron-down"
-                  size={10}
-                  color={Theme.textMutedDemo}
-                  style={styles.fieldChevron}
-                />
-              </TouchableOpacity>
+              <View style={styles.categoryBlock}>
+                <View style={styles.selectorHeaderRow}>
+                  <Text style={[styles.tagLabel, styles.fieldLabelNoMargin]}>
+                    PAYMENT TYPE
+                  </Text>
+                  {!paymentTypeExpanded && selectedPaymentTypeLabel ? (
+                    <TouchableOpacity
+                      style={styles.selectorChangeBtn}
+                      onPress={() => setPaymentTypeExpanded(true)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.selectorChangeBtnText}>Change</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+                {!paymentTypeExpanded && selectedPaymentTypeLabel ? (
+                  <TouchableOpacity
+                    style={styles.selectorSummaryCard}
+                    onPress={() => setPaymentTypeExpanded(true)}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.selectorSummaryMain}>
+                      <View style={styles.selectorSummaryIcon}>
+                        <FontAwesome name={selectedPaymentTypeIcon as any} size={12} color={Theme.textPrimaryDark} />
+                      </View>
+                      <Text style={styles.selectorSummaryText}>{selectedPaymentTypeLabel}</Text>
+                    </View>
+                    <FontAwesome name="chevron-down" size={11} color={Theme.textMutedDemo} />
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.categoryChipGrid}>
+                    {categoriesForPicker.map((cat) => {
+                      const selected = category === cat;
+                      return (
+                        <TouchableOpacity
+                          key={cat}
+                          style={[
+                            styles.categoryChip,
+                            selected && styles.categoryChipSelected,
+                            selected && styles.categoryChipIn,
+                          ]}
+                          onPress={() => {
+                            setCategory(cat);
+                            setPaymentTypeExpanded(false);
+                          }}
+                          activeOpacity={0.85}
+                        >
+                          <View
+                            style={[
+                              styles.categoryChipIconWrap,
+                              selected && styles.categoryChipIconWrapIn,
+                            ]}
+                          >
+                            <FontAwesome
+                              name={PAYMENT_TYPE_ICON[cat] ?? "circle-o"}
+                              size={11}
+                              color={selected ? Theme.textOnPrimary : Theme.textMutedDemo}
+                            />
+                          </View>
+                          <Text
+                            style={[
+                              styles.categoryChipText,
+                              selected && styles.categoryChipTextIn,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {cat}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
             )}
             {type === "out" && !isVehicleExpenseOut && !isDriverSalaryParty && (
-              <TouchableOpacity
-                style={styles.fieldBlockFull}
-                onPress={() => {
-                  setShowPartyPicker(false);
-                  setShowTripPicker(false);
-                  if (isDriverPayment) {
-                    setShowCategoryPicker(false);
-                    setShowDriverPaymentTypePicker((v) => !v);
-                  } else {
-                    setShowDriverPaymentTypePicker(false);
-                    setShowCategoryPicker((v) => !v);
-                  }
-                  setShowDriverForSalaryPicker(false);
-                }}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.tagLabel, styles.fieldLabel]}>
-                  {isDriverPayment ? "PAYMENT TYPE" : "CATEGORY"}
-                </Text>
-                <Text style={styles.fieldValue} numberOfLines={1}>
-                  {isDriverPayment
-                    ? driverPaymentType != null
-                      ? (DRIVER_PAYMENT_TYPES.find(
-                          (t) => t.type === driverPaymentType,
-                        )?.label ?? driverPaymentType)
-                      : "SELECT PAYMENT TYPE..."
-                    : (category ?? "SELECT CATEGORY...")}
-                </Text>
-                <FontAwesome
-                  name="chevron-down"
-                  size={10}
-                  color={Theme.textMutedDemo}
-                  style={styles.fieldChevron}
-                />
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              style={styles.fieldBlockFull}
-              onPress={() => {
-                setShowPartyPicker(false);
-                setShowTripPicker(false);
-                setShowCategoryPicker(false);
-                setShowDriverPaymentTypePicker(false);
-                setShowDriverForSalaryPicker(false);
-                setShowPaymentPicker((v) => !v);
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.tagLabel, styles.fieldLabel]}>PAYMENT MODE</Text>
-              <Text style={styles.fieldValue} numberOfLines={1}>
-                {PAYMENT_MODES.find((p) => p.id === paymentModeId)?.name ?? "Cash"}
-              </Text>
-              <FontAwesome
-                name="chevron-down"
-                size={10}
-                color={Theme.textMutedDemo}
-                style={styles.fieldChevron}
-              />
-            </TouchableOpacity>
-
-            {paymentModeId !== 'CASH' && (
-              <View style={[styles.fieldBlockFull, { marginTop: 0, borderTopWidth: 0 }]}>
-                <Text style={[styles.tagLabel, styles.fieldLabel]}>REFERENCE NO / UTR</Text>
-                <TextInput
-                  style={styles.fieldInput}
-                  value={paymentReference}
-                  onChangeText={setPaymentReference}
-                  placeholder="Refer the bank to validate"
-                  placeholderTextColor={Theme.textMutedDemo}
-                  autoCorrect={false}
-                  autoCapitalize="characters"
-                  accessibilityLabel="Reference Number or UTR"
-                  onFocus={() => {
-                    if (fullPage && scrollRef.current) {
-                      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-                    }
-                  }}
-                />
+              <View style={styles.categoryBlock}>
+                <View style={styles.selectorHeaderRow}>
+                  <Text style={[styles.tagLabel, styles.fieldLabelNoMargin]}>
+                    {isDriverPayment ? "PAYMENT TYPE" : "CATEGORY"}
+                  </Text>
+                  {!paymentTypeExpanded && selectedPaymentTypeLabel ? (
+                    <TouchableOpacity
+                      style={styles.selectorChangeBtn}
+                      onPress={() => setPaymentTypeExpanded(true)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.selectorChangeBtnText}>Change</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+                {!paymentTypeExpanded && selectedPaymentTypeLabel ? (
+                  <TouchableOpacity
+                    style={styles.selectorSummaryCard}
+                    onPress={() => setPaymentTypeExpanded(true)}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.selectorSummaryMain}>
+                      <View style={styles.selectorSummaryIcon}>
+                        <FontAwesome name={selectedPaymentTypeIcon as any} size={12} color={Theme.textPrimaryDark} />
+                      </View>
+                      <Text style={styles.selectorSummaryText}>{selectedPaymentTypeLabel}</Text>
+                    </View>
+                    <FontAwesome name="chevron-down" size={11} color={Theme.textMutedDemo} />
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.categoryChipGrid}>
+                    {(isDriverPayment
+                      ? DRIVER_PAYMENT_TYPES.map((opt) => ({
+                          key: opt.type,
+                          label: opt.label,
+                          selected: driverPaymentType === opt.type,
+                          onPress: () => {
+                            setDriverPaymentType(opt.type);
+                            setPaymentTypeExpanded(false);
+                          },
+                          iconName: PAYMENT_TYPE_ICON[opt.type] ?? PAYMENT_TYPE_ICON[opt.label] ?? "circle-o",
+                        }))
+                      : categoriesForPicker.map((cat) => ({
+                          key: cat,
+                          label: cat,
+                          selected: category === cat,
+                          onPress: () => {
+                            setCategory(cat);
+                            setPaymentTypeExpanded(false);
+                          },
+                          iconName: PAYMENT_TYPE_ICON[cat] ?? "circle-o",
+                        }))
+                    ).map((item) => (
+                      <TouchableOpacity
+                        key={item.key}
+                        style={[
+                          styles.categoryChip,
+                          item.selected && styles.categoryChipSelected,
+                          item.selected && styles.categoryChipOut,
+                        ]}
+                        onPress={item.onPress}
+                        activeOpacity={0.85}
+                      >
+                        <View
+                          style={[
+                            styles.categoryChipIconWrap,
+                            item.selected && styles.categoryChipIconWrapOut,
+                          ]}
+                        >
+                          <FontAwesome
+                            name={item.iconName as any}
+                            size={11}
+                            color={item.selected ? Theme.textOnPrimary : Theme.textMutedDemo}
+                          />
+                        </View>
+                        <Text
+                          style={[
+                            styles.categoryChipText,
+                            item.selected && styles.categoryChipTextOut,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {item.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
               </View>
             )}
 
@@ -1807,7 +2072,7 @@ export function AddTransactionModal({
             {type === "out" && (isVehicleExpenseOut || isVehicleExpenseCategory) && (
               <>
                 <TouchableOpacity
-                  style={styles.vehicleRow}
+                  style={[styles.vehicleRow, showVehiclePicker && styles.fieldBlockOpen]}
                   onPress={() => {
                     if (safeVehicles.length > 0) {
                       setShowPartyPicker(false);
@@ -1833,8 +2098,8 @@ export function AddTransactionModal({
                     <FontAwesome
                       name="chevron-down"
                       size={10}
-                      color={Theme.textMutedDemo}
-                      style={styles.fieldChevron}
+                      color={showVehiclePicker ? Theme.primary : Theme.textMutedDemo}
+                      style={[styles.fieldChevron, showVehiclePicker && styles.fieldChevronOpen]}
                     />
                   ) : null}
                 </TouchableOpacity>
@@ -1997,6 +2262,71 @@ export function AddTransactionModal({
               </View>
             )}
 
+            <View style={styles.ledgerPreviewCard}>
+              <View style={styles.ledgerPreviewHead}>
+                <Text style={styles.ledgerPreviewHeadText}>Ledger Preview</Text>
+                <Text
+                  style={[
+                    styles.ledgerPreviewStatus,
+                    type === "in" ? styles.ledgerPreviewStatusIn : styles.ledgerPreviewStatusOut,
+                  ]}
+                >
+                  LIVE
+                </Text>
+              </View>
+              <View style={styles.ledgerPreviewBody}>
+                <View style={styles.ledgerPreviewRow}>
+                  <Text style={styles.ledgerPreviewLabel}>Direction</Text>
+                  <Text
+                    style={[
+                      styles.ledgerPreviewValue,
+                      type === "in" ? styles.ledgerPreviewValueIn : styles.ledgerPreviewValueOut,
+                    ]}
+                  >
+                    {previewDirectionLabel}
+                  </Text>
+                </View>
+                <View style={styles.ledgerPreviewRow}>
+                  <Text style={styles.ledgerPreviewLabel}>Amount</Text>
+                  <Text
+                    style={[
+                      styles.ledgerPreviewAmount,
+                      type === "in" ? styles.ledgerPreviewAmountIn : styles.ledgerPreviewAmountOut,
+                    ]}
+                  >
+                    ₹{previewAmountText}
+                  </Text>
+                </View>
+                <View style={styles.ledgerPreviewRow}>
+                  <Text style={styles.ledgerPreviewLabel}>Party</Text>
+                  <Text style={styles.ledgerPreviewValue} numberOfLines={1}>
+                    {effectivePartyName || "—"}
+                  </Text>
+                </View>
+                <View style={styles.ledgerPreviewRow}>
+                  <Text style={styles.ledgerPreviewLabel}>Trip</Text>
+                  <Text style={styles.ledgerPreviewValue} numberOfLines={1}>
+                    {tripNumber || lockedTripDisplay || "General"}
+                  </Text>
+                </View>
+                <View style={styles.ledgerPreviewRow}>
+                  <Text style={styles.ledgerPreviewLabel}>Date</Text>
+                  <Text style={styles.ledgerPreviewValue}>{entryDate || "—"}</Text>
+                </View>
+                <View style={styles.ledgerPreviewRow}>
+                  <Text style={styles.ledgerPreviewLabel}>Mode</Text>
+                  <Text style={styles.ledgerPreviewValue}>{selectedPaymentModeName}</Text>
+                </View>
+                <View style={styles.ledgerPreviewRow}>
+                  <Text style={styles.ledgerPreviewLabel}>Type</Text>
+                  <Text style={styles.ledgerPreviewValue} numberOfLines={1}>
+                    {category || "General"}
+                  </Text>
+                </View>
+              </View>
+            </View>
+            </View>
+
             {!fullPage && submitButton}
           </View>
         </ScrollView>
@@ -2016,6 +2346,21 @@ export function AddTransactionModal({
   );
 
   const pickerModalScrollStyle = [styles.pickerScroll, styles.pickerModalScroll];
+  const activePickerTitle = showTripPicker
+    ? "Select Trip"
+    : showCategoryPicker
+      ? (type === "in" ? "Select Payment Type" : "Select Category")
+      : showPartyPicker
+        ? "Select Party"
+        : showDriverPaymentTypePicker
+          ? "Select Payment Type"
+          : showDriverForSalaryPicker
+            ? "Select Driver"
+            : showPaymentPicker
+              ? "Select Payment Mode"
+              : showVehiclePicker
+                ? "Select Vehicle"
+                : "Select";
 
   const renderPickerModalContent = () => {
     if (showTripPicker) {
@@ -2135,6 +2480,10 @@ export function AddTransactionModal({
             <View style={[styles.pickerModalContainer, { paddingBottom: insets.bottom + 16, pointerEvents: 'box-none' }]}>
               <TouchableOpacity style={StyleSheet.absoluteFill} onPress={closeAllPickers} activeOpacity={1} />
               <View style={[styles.pickerModalPanel, { height: Math.min(windowHeight * 0.5, 380), pointerEvents: 'auto' }]}>
+                <View style={styles.pickerModalHeader}>
+                  <View style={styles.pickerModalHandle} />
+                  <Text style={styles.pickerModalTitle}>{activePickerTitle}</Text>
+                </View>
                 {renderPickerModalContent()}
               </View>
             </View>
@@ -2200,13 +2549,13 @@ const styles = StyleSheet.create({
   panelFullPage: {
     flex: 1,
     borderTopWidth: 0,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingTop: 20,
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.screenBackground,
   },
   fullPageFooter: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingHorizontal: 20,
+    paddingTop: 14,
     backgroundColor: Theme.screenBackground,
     borderTopWidth: 1,
     borderTopColor: "rgba(0,0,0,0.06)",
@@ -2225,7 +2574,57 @@ const styles = StyleSheet.create({
   panelScroll: { flex: 1, minHeight: 0 },
   panelScrollInner: { gap: 28 },
   panelScrollContent: { gap: 28, paddingBottom: 8 },
-  panelScrollContentFullPage: { gap: 24, paddingBottom: 8, paddingTop: 4 },
+  panelScrollContentFullPage: { gap: 24, paddingBottom: 8, paddingTop: 8 },
+  flowCard: {
+    backgroundColor: Theme.surface,
+    borderRadius: 28,
+    borderWidth: 1.2,
+    borderColor: Theme.borderLight,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    gap: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    elevation: 3,
+  },
+  flowCardHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
+  flowStepBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: Theme.buttonMatteBlack,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.08)",
+  },
+  flowStepBadgeIn: {
+    backgroundColor: Theme.darkGreen,
+  },
+  flowStepBadgeOut: {
+    backgroundColor: Theme.teslaRed,
+  },
+  flowStepBadgeText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: Theme.buttonPrimaryText,
+    letterSpacing: 0.8,
+  },
+  flowCardTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.2,
+  },
   /** Non-editable labels shown as small tags above/beside inputs. */
   tagLabel: {
     fontSize: 9,
@@ -2238,7 +2637,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 4,
+    marginBottom: 8,
   },
   titleBlock: {
     flex: 1,
@@ -2246,15 +2645,16 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   title: {
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1.2,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+    color: Theme.textPrimaryDark,
   },
   toggleWrap: {
     flexDirection: "row",
-    backgroundColor: Theme.surface,
-    padding: 4,
-    borderRadius: 14,
+    backgroundColor: Theme.surfaceGray,
+    padding: 5,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "rgba(0,0,0,0.06)",
     shadowColor: "#000",
@@ -2264,9 +2664,9 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   toggleBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 11,
+    borderRadius: 12,
   },
   toggleBtnIn: {
     backgroundColor: Theme.darkGreen,
@@ -2299,20 +2699,22 @@ const styles = StyleSheet.create({
   },
 
   amountBlock: {
-    backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-    borderRadius: 16,
-    padding: 20,
-    minHeight: 72,
+    backgroundColor: Theme.surface,
+    borderWidth: 1.5,
+    borderColor: Theme.borderLight,
+    borderRadius: 26,
+    paddingVertical: 26,
+    paddingHorizontal: 22,
+    minHeight: 110,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 20,
+    elevation: 3,
   },
   amountLabel: {
-    marginBottom: 10,
+    marginBottom: 14,
+    letterSpacing: 1.4,
   },
   amountRow: {
     flexDirection: "row",
@@ -2321,17 +2723,18 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   amountSymbol: {
-    fontSize: 22,
-    fontWeight: "800",
-    width: 16,
+    fontSize: 34,
+    fontWeight: "900",
+    width: 24,
     textAlign: "center",
   },
   amountSymbolIn: { color: Theme.darkGreen },
   amountSymbolOut: { color: Theme.teslaRed },
   amountInput: {
     flex: 1,
-    fontSize: 24,
-    fontWeight: "800",
+    fontSize: 42,
+    fontWeight: "900",
+    fontStyle: "italic",
     color: Theme.textPrimaryDark,
     paddingVertical: 0,
     minWidth: 0,
@@ -2362,16 +2765,16 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: Theme.textPrimaryDark,
   },
-  twoCol: { flexDirection: "row", gap: 12 },
+  twoCol: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   twoColSingle: {},
   fieldBlock: {
     flex: 1,
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: "rgba(0,0,0,0.06)",
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
+    borderRadius: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     minHeight: Layout.minTouchTargetSize + 8,
     flexDirection: "row",
     alignItems: "center",
@@ -2380,15 +2783,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.02,
     shadowRadius: 3,
     elevation: 1,
+    minWidth: 220,
   },
   fieldBlockFull: {
     flex: 1,
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: "rgba(0,0,0,0.06)",
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
+    borderRadius: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     minHeight: Layout.minTouchTargetSize + 8,
     flexDirection: "row",
     alignItems: "center",
@@ -2399,12 +2803,20 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   fieldLabel: {
-    marginRight: 8,
+    marginRight: 10,
+    fontWeight: "800",
+    letterSpacing: 1.1,
+  },
+  fieldLabelNoMargin: {
+    marginRight: 0,
+    fontWeight: "800",
+    letterSpacing: 1.1,
+    marginBottom: 0,
   },
   fieldValue: {
     flex: 1,
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 13,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
   fieldInputDateWrap: { flex: 1, minWidth: 0 },
@@ -2439,7 +2851,194 @@ const styles = StyleSheet.create({
     color: Theme.negative,
     marginTop: 6,
   },
-  fieldChevron: { marginLeft: 6 },
+  fieldChevron: {
+    marginLeft: 6,
+    transform: [{ rotate: "0deg" }],
+    ...Platform.select({
+      web: {
+        transitionDuration: "160ms",
+      } as any,
+    }),
+  },
+  fieldChevronOpen: {
+    transform: [{ rotate: "180deg" }],
+  },
+  fieldBlockOpen: {
+    borderColor: Theme.primary + "66",
+    backgroundColor: Theme.primary + "0D",
+  },
+  paymentModeBlock: {
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.06)",
+    borderRadius: 20,
+    backgroundColor: Theme.screenBackground,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  selectorHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+    gap: 10,
+  },
+  selectorChangeBtn: {
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  selectorChangeBtnText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  selectorSummaryCard: {
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  selectorSummaryMain: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
+  },
+  selectorSummaryIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: Theme.surfaceGray,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  selectorSummaryText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  paymentModeGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  paymentModeChip: {
+    minHeight: 54,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    width: "48.6%",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  paymentModeChipSelected: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  paymentModeIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Theme.surfaceGray,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  paymentModeChipText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    textAlign: "center",
+  },
+  categoryBlock: {
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.06)",
+    borderRadius: 20,
+    backgroundColor: Theme.screenBackground,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  categoryChipGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  categoryChip: {
+    minHeight: 54,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+    width: "48.6%",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 4,
+  },
+  categoryChipSelected: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  categoryChipIn: {
+    borderColor: Theme.darkGreen,
+    backgroundColor: `${Theme.darkGreen}12`,
+  },
+  categoryChipOut: {
+    borderColor: Theme.teslaRed,
+    backgroundColor: `${Theme.teslaRed}12`,
+  },
+  categoryChipText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    textAlign: "center",
+  },
+  categoryChipTextIn: {
+    color: Theme.darkGreen,
+  },
+  categoryChipTextOut: {
+    color: Theme.teslaRed,
+  },
+  categoryChipIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Theme.surfaceGray,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  categoryChipIconWrapIn: {
+    backgroundColor: Theme.darkGreen,
+  },
+  categoryChipIconWrapOut: {
+    backgroundColor: Theme.teslaRed,
+  },
   vehicleRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -2460,8 +3059,8 @@ const styles = StyleSheet.create({
   },
 
   pickerList: {
-    height: 220,
-    borderRadius: 14,
+    height: 240,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(0,0,0,0.08)",
     backgroundColor: Theme.screenBackground,
@@ -2478,8 +3077,8 @@ const styles = StyleSheet.create({
   },
   pickerModalPanel: {
     backgroundColor: Theme.screenBackground,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     borderWidth: 1,
     borderBottomWidth: 0,
     borderColor: "rgba(0,0,0,0.08)",
@@ -2490,9 +3089,31 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
   },
+  pickerModalHeader: {
+    paddingTop: 8,
+    paddingBottom: 10,
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+  },
+  pickerModalHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: Theme.borderLight,
+    marginBottom: 8,
+  },
+  pickerModalTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+  },
   pickerScroll: {
     flex: 1,
-    height: 220,
+    height: 240,
   },
   pickerModalScroll: {
     flex: 1,
@@ -2501,18 +3122,20 @@ const styles = StyleSheet.create({
   pickerItem: {
     paddingVertical: 14,
     paddingHorizontal: 16,
-    minHeight: 48,
+    minHeight: 50,
     justifyContent: "center",
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
   },
   pickerItemActive: {
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.primary + "14",
+    borderLeftWidth: 3,
+    borderLeftColor: Theme.primary,
   },
   pickerItemTripContent: { flex: 1 },
   pickerItemText: {
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
   pickerItemSubtext: {
@@ -2528,8 +3151,8 @@ const styles = StyleSheet.create({
   },
 
   submitBtn: {
-    paddingVertical: 18,
-    borderRadius: 14,
+    paddingVertical: 19,
+    borderRadius: 20,
     minHeight: Layout.minTouchTargetSize + 28,
     justifyContent: "center",
     alignItems: "center",
@@ -2550,9 +3173,76 @@ const styles = StyleSheet.create({
   submitBtnDisabled: { opacity: 0.5 },
   submitBtnText: {
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "900",
     color: Theme.buttonPrimaryText,
     textTransform: "uppercase",
-    letterSpacing: 1.4,
+    letterSpacing: 2.2,
   },
+  ledgerPreviewCard: {
+    backgroundColor: Theme.surface,
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    overflow: "hidden",
+    marginTop: 2,
+  },
+  ledgerPreviewHead: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  ledgerPreviewHeadText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
+  ledgerPreviewStatus: {
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  ledgerPreviewStatusIn: { color: Theme.darkGreen },
+  ledgerPreviewStatusOut: { color: Theme.teslaRed },
+  ledgerPreviewBody: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  ledgerPreviewRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  ledgerPreviewLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMutedDemo,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  ledgerPreviewValue: {
+    flex: 1,
+    textAlign: "right",
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  ledgerPreviewValueIn: { color: Theme.darkGreen },
+  ledgerPreviewValueOut: { color: Theme.teslaRed },
+  ledgerPreviewAmount: {
+    flex: 1,
+    textAlign: "right",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  ledgerPreviewAmountIn: { color: Theme.darkGreen },
+  ledgerPreviewAmountOut: { color: Theme.teslaRed },
 });

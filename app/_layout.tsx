@@ -234,8 +234,8 @@ function RootLayoutNav() {
         <View style={{ flex: 1 }}>
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="index" />
-            <Stack.Screen name="sign-in" />
-            <Stack.Screen name="sign-up" />
+            <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
+            <Stack.Screen name="sign-up" options={{ animation: 'fade' }} />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="(driver)" />
             <Stack.Screen name="add-trip" />
