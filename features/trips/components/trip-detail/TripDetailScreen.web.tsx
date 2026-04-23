@@ -23,6 +23,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { TripAdjustment } from "../../services/tripAdjustments";
@@ -101,8 +102,15 @@ export default function TripDetailScreen({
   const router = useRouter();
   const { currentOrganization } = useOrganization();
   const { t } = useLanguage();
+  const { width: screenWidth } = useWindowDimensions();
   const [activeTab, setActiveTab] = useState<Tab>("tracking");
   const [otpResending, setOtpResending] = useState(false);
+
+  const isMobile = screenWidth < 640;
+  const isTablet = screenWidth >= 640 && screenWidth < 1024;
+  const isDesktop = screenWidth >= 1024;
+  const hPad = isMobile ? 12 : isTablet ? 16 : 24;
+  const mapHeight = isMobile ? 220 : isTablet ? 380 : 600;
 
   const detail = useTripDetail({
     tripId,
@@ -315,7 +323,7 @@ export default function TripDetailScreen({
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       {/* ── Dark navigation bar ─────────────────────────────────────────────── */}
-      <View style={styles.navBar}>
+      <View style={[styles.navBar, { paddingHorizontal: hPad }]}>
         <View style={styles.navLeft}>
           <TouchableOpacity
             onPress={onBack}
@@ -323,31 +331,35 @@ export default function TripDetailScreen({
             activeOpacity={0.8}
           >
             <FontAwesome name="chevron-left" size={11} color="#94a3b8" />
-            <Text style={styles.navBackText}>Back</Text>
+            {!isMobile && <Text style={styles.navBackText}>Back</Text>}
           </TouchableOpacity>
           <View style={styles.navTitleWrap}>
-            <Text style={styles.navTitle}>{getTripDisplayNumber(trip)}</Text>
-            <View
-              style={[
-                styles.navPill,
-                isAggregate ? styles.navPillAggregate : styles.navPillAsset,
-              ]}
-            >
-              <Text style={styles.navPillText}>
-                {isAggregate ? "AGGREGATE" : "ASSET"}
-              </Text>
-            </View>
+            <Text style={[styles.navTitle, isMobile && { fontSize: 13 }]} numberOfLines={1}>
+              {getTripDisplayNumber(trip)}
+            </Text>
+            {!isMobile && (
+              <View
+                style={[
+                  styles.navPill,
+                  isAggregate ? styles.navPillAggregate : styles.navPillAsset,
+                ]}
+              >
+                <Text style={styles.navPillText}>
+                  {isAggregate ? "AGGREGATE" : "ASSET"}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
         <View style={styles.navActions}>
           <NavAction
             icon="plus"
-            label="Add Expense"
+            label={isMobile ? "" : "Add Expense"}
             onPress={detail.openAddExpense}
           />
           <NavAction
             icon="file-text-o"
-            label="Generate Memo"
+            label={isMobile ? "" : "Generate Memo"}
             onPress={() => {}}
             primary
           />
@@ -355,7 +367,7 @@ export default function TripDetailScreen({
       </View>
 
       {/* ── Tab bar ───────────────────────────────────────────────────────────── */}
-      <View style={styles.tabBar}>
+      <View style={[styles.tabBar, { paddingHorizontal: hPad }]}>
         <TabButton
           label="Tracking"
           icon="map-marker"
@@ -373,7 +385,7 @@ export default function TripDetailScreen({
       {/* ── Scrollable content ────────────────────────────────────────────────── */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { padding: isMobile ? 12 : 20 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -386,9 +398,9 @@ export default function TripDetailScreen({
         {activeTab === "tracking" && (
           <>
             {/* Main row — stretch so left and right reach equal height */}
-            <View style={styles.trackingTopRow}>
+            <View style={[styles.trackingTopRow, !isDesktop && { flexDirection: "column", minHeight: undefined }]}>
               {/* Left col: TripInfoCard + TruckAssignment + LR Docs */}
-              <View style={styles.infoCol}>
+              <View style={[styles.infoCol, !isDesktop && { flexShrink: 1 }]}>
                 <TripInfoCard
                   trip={trip}
                   clientName={detail.displayClientName}
@@ -517,7 +529,7 @@ export default function TripDetailScreen({
                   distanceKm={trip.distance ? String(trip.distance) : undefined}
                   mapPreview={
                     <LeafletMap
-                      style={{ width: "100%", height: 600 }}
+                      style={{ width: "100%", height: mapHeight }}
                       center={mapCenter}
                       zoom={6}
                       markers={
@@ -587,9 +599,9 @@ export default function TripDetailScreen({
 
         {/* ════════════════════ FINANCE TAB ════════════════════ */}
         {activeTab === "finance" && (
-          <View style={styles.financeColsRow}>
+          <View style={[styles.financeColsRow, isMobile && { flexDirection: "column" }]}>
             {/* Left col: Finance Overview */}
-            <View style={styles.financeLeftCol}>
+            <View style={[styles.financeLeftCol, isMobile && { minWidth: 0 }]}>
               <FinanceOverview
                 baseFreight={baseFreight}
                 totalExpenses={totalExpenses}
@@ -613,7 +625,7 @@ export default function TripDetailScreen({
             </View>
 
             {/* Right col: Dark Ledger + Expense List */}
-            <View style={styles.financeRightCol}>
+            <View style={[styles.financeRightCol, isMobile && { minWidth: 0 }]}>
               {/* Financial Ledger dark card */}
               <LedgerCard
                 sales={sales}
@@ -623,6 +635,7 @@ export default function TripDetailScreen({
                 supplierPaid={supplierPaid}
                 supplierDue={supplierDue}
                 financeHistoryRows={financeHistoryRows}
+                compact={isMobile}
               />
 
               {/* Expense List card */}
@@ -672,6 +685,7 @@ function LedgerCard({
   supplierPaid,
   supplierDue,
   financeHistoryRows,
+  compact,
 }: {
   sales: number;
   received: number;
@@ -680,6 +694,7 @@ function LedgerCard({
   supplierPaid: number;
   supplierDue: number;
   financeHistoryRows: FinanceHistoryRow[];
+  compact?: boolean;
 }) {
   return (
     <View style={ldStyles.card}>
@@ -695,49 +710,49 @@ function LedgerCard({
       </View>
 
       {/* Sale / Received / Due */}
-      <View style={ldStyles.statRow}>
+      <View style={[ldStyles.statRow, compact && { flexWrap: "wrap", gap: 8 }]}>
         <View style={ldStyles.statGroup}>
-          <Text style={ldStyles.statLabel}>Sale</Text>
-          <Text style={ldStyles.statValue}>{formatINR(sales)}</Text>
+          <Text style={ldStyles.statLabel} numberOfLines={1}>Sale</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={[ldStyles.statValue, compact && { fontSize: 13 }]}>{formatINR(sales)}</Text>
         </View>
         <View style={ldStyles.statDivider} />
         <View style={ldStyles.statGroup}>
           <View style={ldStyles.statLabelRow}>
             <View style={ldStyles.greenDot} />
-            <Text style={[ldStyles.statLabel, ldStyles.statLabelGreen]}>
+            <Text style={[ldStyles.statLabel, ldStyles.statLabelGreen]} numberOfLines={1}>
               Received
             </Text>
           </View>
-          <Text style={[ldStyles.statValue, ldStyles.statValueGreen]}>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={[ldStyles.statValue, ldStyles.statValueGreen, compact && { fontSize: 13 }]}>
             {formatINR(received)}
           </Text>
         </View>
         <View style={ldStyles.statDivider} />
         <View style={ldStyles.statGroup}>
-          <Text style={ldStyles.statLabel}>Due</Text>
-          <Text style={ldStyles.statValue}>{formatINR(pending)}</Text>
+          <Text style={ldStyles.statLabel} numberOfLines={1}>Due</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={[ldStyles.statValue, compact && { fontSize: 13 }]}>{formatINR(pending)}</Text>
         </View>
       </View>
 
       {/* Asset Expenses / Paid / Payable */}
-      <View style={ldStyles.statRow}>
+      <View style={[ldStyles.statRow, compact && { flexWrap: "wrap", gap: 8 }]}>
         <View style={ldStyles.statGroup}>
-          <Text style={ldStyles.statLabel}>Asset Expenses</Text>
-          <Text style={ldStyles.statValue}>{formatINR(totalExpenses)}</Text>
+          <Text style={ldStyles.statLabel} numberOfLines={1}>Asset Exp.</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={[ldStyles.statValue, compact && { fontSize: 13 }]}>{formatINR(totalExpenses)}</Text>
         </View>
         <View style={ldStyles.statDivider} />
         <View style={ldStyles.statGroup}>
-          <Text style={[ldStyles.statLabel, ldStyles.statLabelRed]}>Paid</Text>
-          <Text style={[ldStyles.statValue, ldStyles.statValueRed]}>
+          <Text style={[ldStyles.statLabel, ldStyles.statLabelRed]} numberOfLines={1}>Paid</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={[ldStyles.statValue, ldStyles.statValueRed, compact && { fontSize: 13 }]}>
             {formatINR(supplierPaid)}
           </Text>
         </View>
         <View style={ldStyles.statDivider} />
         <View style={ldStyles.statGroup}>
-          <Text style={[ldStyles.statLabel, ldStyles.statLabelOrange]}>
+          <Text style={[ldStyles.statLabel, ldStyles.statLabelOrange]} numberOfLines={1}>
             Payable
           </Text>
-          <Text style={[ldStyles.statValue, ldStyles.statValueOrange]}>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={[ldStyles.statValue, ldStyles.statValueOrange, compact && { fontSize: 13 }]}>
             {formatINR(supplierDue)}
           </Text>
         </View>
@@ -1063,6 +1078,7 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: "#f1f5f9",
+    overflow: "hidden",
   },
 
   // ── Dark nav ──
@@ -1070,7 +1086,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 24,
     paddingVertical: 14,
     backgroundColor: "#0f141a",
     flexWrap: "wrap",
@@ -1158,7 +1173,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderBottomWidth: 1,
     borderBottomColor: "#e5e7eb",
-    paddingHorizontal: 24,
   },
   tabBtn: {
     flexDirection: "row",
@@ -1205,7 +1219,8 @@ const styles = StyleSheet.create({
   },
   infoCol: {
     flex: 1,
-    flexShrink: 0,
+    flexShrink: 1,
+    minWidth: 0,
     gap: 16,
   },
   lrGrow: {
@@ -1610,6 +1625,7 @@ const ldStyles = StyleSheet.create({
   statRow: {
     flexDirection: "row",
     alignItems: "stretch",
+    flexShrink: 1,
     marginHorizontal: 16,
     marginTop: 14,
     backgroundColor: "rgba(30, 41, 59, 0.4)",
@@ -1619,7 +1635,7 @@ const ldStyles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
   },
-  statGroup: { flex: 1, alignItems: "flex-start" },
+  statGroup: { flex: 1, minWidth: 0, alignItems: "flex-start" },
   statLabelRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1648,6 +1664,7 @@ const ldStyles = StyleSheet.create({
     fontWeight: "800",
     color: "#f8fafc",
     letterSpacing: -0.3,
+    flexShrink: 1,
   },
   statValueGreen: { color: "#34d399" },
   statValueRed: { color: "#f43f5e" },

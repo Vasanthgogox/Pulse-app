@@ -4,7 +4,7 @@
  */
 import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
 
 export interface DocItem {
   id: string;
@@ -28,27 +28,29 @@ export function LRDocumentsSection({
   onAddDocument,
 }: LRDocumentsSectionProps) {
   const hasDocs = docs.length > 0;
+  const { width } = useWindowDimensions();
+  const isMobile = width < 640;
 
   return (
     <View style={styles.section}>
-      <View style={styles.sectionHeader}>
+      <View style={[styles.sectionHeader, isMobile && styles.sectionHeaderMobile]}>
         <Text style={styles.sectionTitle}>LR & Documents</Text>
-        <View style={styles.sectionActions}>
+        <View style={[styles.sectionActions, isMobile && styles.sectionActionsMobile]}>
           <TouchableOpacity
-            style={styles.actionBtnPrimary}
+            style={[styles.actionBtnPrimary, isMobile && styles.actionBtnFlex]}
             onPress={onUpdateLR}
             activeOpacity={0.85}
           >
             <FontAwesome name="plus" size={11} color="#fff" />
-            <Text style={styles.actionBtnPrimaryText}>UPDATE LR</Text>
+            <Text style={styles.actionBtnPrimaryText} numberOfLines={1}>Update LR</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.actionBtnSecondary}
+            style={[styles.actionBtnSecondary, isMobile && styles.actionBtnFlex]}
             onPress={onAddDocument}
             activeOpacity={0.85}
           >
             <FontAwesome name="plus" size={11} color="#fff" />
-            <Text style={styles.actionBtnSecondaryText}>Add Document</Text>
+            <Text style={styles.actionBtnSecondaryText} numberOfLines={1}>Add Doc</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -149,12 +151,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    flexWrap: "wrap",
     gap: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#e5e7eb",
+  },
+  sectionHeaderMobile: {
+    flexDirection: "column",
+    alignItems: "stretch",
   },
   sectionTitle: {
     fontSize: 16,
@@ -164,7 +169,15 @@ const styles = StyleSheet.create({
   sectionActions: {
     flexDirection: "row",
     gap: 8,
-    flexWrap: "wrap",
+    minWidth: 0,
+    flexShrink: 1,
+  },
+  sectionActionsMobile: {
+    width: "100%",
+  },
+  actionBtnFlex: {
+    flex: 1,
+    justifyContent: "center",
   },
   actionBtnPrimary: {
     flexDirection: "row",
