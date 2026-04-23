@@ -73,7 +73,6 @@ const LIGHT = {
 const NAME_MIN_LENGTH = 2;
 const NAME_MAX_LENGTH = 100;
 const EMAIL_MAX_LENGTH = 255;
-const DRIVER_EMAIL_DOMAIN = 'driver.pulse.local';
 
 /** Normalize phone: strip spaces, allow optional leading +, then digits only. */
 function normalizePhone(raw: string): string {
@@ -113,17 +112,12 @@ function isStep2Valid(callsign: string, email: string, pwd: string): boolean {
   return true;
 }
 
-function buildDriverEmailFromPhone(fullPhone: string): string {
-  const digits = fullPhone.replace(/\D/g, '');
-  return `driver.${digits}@${DRIVER_EMAIL_DOMAIN}`;
-}
-
 export default function DriverSignUpScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const router = useRouter();
   const safeBack = useSafeBack('/sign-in');
-  const { signUp, signInWithGoogle } = useAuth();
+  const { signIn, signUp, signInWithGoogle } = useAuth();
   const isOnline = useIsOnline();
   const scrollRef = useRef<ScrollView>(null);
 
@@ -281,7 +275,7 @@ export default function DriverSignUpScreen() {
 
   const verifyOtpStep = () => {
     if (otpValue.length !== OTP_LENGTH) return;
-    void establishLink();
+    goToPage(2);
   };
 
   const handleOtpChange = (text: string) => {
@@ -337,15 +331,11 @@ export default function DriverSignUpScreen() {
     }
     setLoading(true);
     try {
-      const generatedEmail = buildDriverEmailFromPhone(fullPhoneForApi);
-      const generatedPassword = `${fullPhoneForApi.replace(/\D/g, '')}#Pulse!`;
-      const generatedName = `Driver ${fullPhoneForApi.slice(-4)}`;
-
       await AsyncStorage.setItem(DRIVER_AVATAR_STORAGE_KEY, avatarSeed);
       const { error } = await signUp(
-        generatedEmail,
-        generatedPassword,
-        generatedName,
+        email.trim(),
+        password,
+        callsign.trim(),
         'driver',
         'ASSET_BASED',
         fullPhoneForApi || undefined
@@ -353,7 +343,11 @@ export default function DriverSignUpScreen() {
       if (error && !error.message.toLowerCase().includes('already registered')) {
         throw error;
       }
-      initializeHub();
+      const signInResult = await signIn(email.trim(), password, true);
+      if (signInResult.error) {
+        throw signInResult.error;
+      }
+      goToPage(7);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Sign up failed';
       Alert.alert('Error', msg.includes('Cannot reach server') ? 'Cannot reach server. Check your connection.' : msg);
@@ -363,7 +357,7 @@ export default function DriverSignUpScreen() {
   };
 
   const initializeHub = () => {
-    router.replace('/(driver)');
+    router.replace('/');
   };
 
   const markDocumentUploaded = (doc: 'license' | 'aadhaar' | 'pan', method: 'gallery' | 'camera') => {
