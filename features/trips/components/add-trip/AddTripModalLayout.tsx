@@ -2,7 +2,6 @@
  * Create Trip — matches app layout and theme (TreasuryDetailLayout pattern).
  * TeslaHeader (dark) + scroll body + sticky CTA. Layout + Theme only.
  */
-import { TeslaHeader } from "@/components/TeslaHeader";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -45,21 +44,43 @@ export function AddTripModalLayout({
 }: AddTripModalLayoutProps) {
   const insets = useSafeAreaInsets();
   const submitDisabled = !canSubmit || submitting;
+  const showHeaderActions = !showFooter;
 
   return (
     <View style={styles.container}>
-      <View style={[styles.darkBlock, { paddingTop: insets.top }]}>
-        <TeslaHeader
-          title={title}
-          subtitle={subtitle}
-          variant="dark"
-          showBack
-          onBack={onClose}
-          skipSafeAreaTop
-          hideRightIcons
-        />
+      <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
+        <View style={styles.topBarMain}>
+          <View style={styles.topBarLeft}>
+            <TouchableOpacity style={styles.topBarBackBtn} onPress={onClose} activeOpacity={0.85}>
+              <FontAwesome name="chevron-left" size={16} color={Theme.textPrimaryDark} />
+            </TouchableOpacity>
+            <View style={styles.topBarTextWrap}>
+              <Text style={styles.topBarTitle}>{title}</Text>
+              <Text style={styles.topBarSubtitle}>{subtitle}</Text>
+            </View>
+          </View>
+          {showHeaderActions ? (
+            <View style={styles.topBarActions}>
+              <TouchableOpacity style={styles.topBarCancelBtn} onPress={onClose} activeOpacity={0.85}>
+                <Text style={styles.topBarCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.topBarSaveBtn, submitDisabled && styles.topBarSaveBtnDisabled]}
+                onPress={onSubmit}
+                disabled={submitDisabled}
+                activeOpacity={0.9}
+              >
+                {submitting ? (
+                  <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                ) : (
+                  <Text style={styles.topBarSaveText}>{submitLabel}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </View>
       </View>
-
+      
       <KeyboardAvoidingView
         style={styles.keyboardWrap}
         behavior={Platform.OS === "ios" ? "padding" : "padding"}
@@ -129,16 +150,99 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Theme.screenBackground,
   },
-  darkBlock: {
-    backgroundColor: Theme.darkBackground,
+  topBar: {
     width: "100%",
-    paddingBottom: 4,
+    paddingBottom: 10,
+    paddingHorizontal: 14,
+    backgroundColor: Theme.screenBackground,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
     shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
     shadowRadius: 8,
-    elevation: 4,
-    zIndex: 10,
+    elevation: 3,
+  },
+  topBarMain: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  topBarLeft: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  topBarBackBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.surfaceForm,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    marginRight: 10,
+  },
+  topBarTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  topBarTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.45,
+    textTransform: "uppercase",
+    fontStyle: "italic",
+  },
+  topBarSubtitle: {
+    marginTop: 3,
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+  },
+  topBarActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 8,
+  },
+  topBarCancelBtn: {
+    minHeight: 38,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceForm,
+  },
+  topBarCancelText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  topBarSaveBtn: {
+    minHeight: 38,
+    paddingVertical: 9,
+    paddingHorizontal: 18,
+    borderRadius: 11,
+    backgroundColor: Theme.darkBackground,
+  },
+  topBarSaveBtnDisabled: {
+    opacity: 0.5,
+  },
+  topBarSaveText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: Theme.textOnPrimary,
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
   },
   keyboardWrap: {
     flex: 1,

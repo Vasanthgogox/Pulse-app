@@ -4,6 +4,7 @@
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { PartyAvatar } from "@/components/PartyAvatar";
 import { type ClientRow } from "@/features/clients/services/clients.service";
 import {
     getDriversByOrganization,
@@ -39,13 +40,16 @@ import {
     MapPin,
     Navigation,
     Phone,
+    PlusCircle,
     Truck,
     User,
 } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
 import type { ViewStyle } from "react-native";
 import {
     ActivityIndicator,
+    Modal,
     Platform,
     ScrollView,
     StyleSheet,
@@ -57,15 +61,50 @@ import {
     useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { FleetEntityPickerModal } from "./FleetEntityPickerModal";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { ROUTES } from "@/lib/routes";
 import { LocationSearchField } from "./LocationSearchField";
-import { PartnerSupplierPickerModal } from "./PartnerSupplierPickerModal";
 import type { AddTripFormState } from "./types";
 import type { useAddTripForm } from "./useAddTripForm";
 
 function routePreviewLine(s: string): string {
   const t = s.trim();
   return t || "—";
+}
+
+function formatUiDateLabel(iso: string): string {
+  const t = iso.trim();
+  if (!t) return "Select date";
+  const d = new Date(`${t}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return t;
+  return d.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function toISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function getToday(): string {
+  return toISODate(new Date());
+}
+
+function getTomorrow(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return toISODate(d);
+}
+
+function getDayAfter(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 2);
+  return toISODate(d);
 }
 
 const inputStyle = {
@@ -99,15 +138,17 @@ export function AddTripFormFields({
   submitting = false,
 }: AddTripFormFieldsProps) {
   void refetchClients;
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: winW } = useWindowDimensions();
   const isWide = winW >= 720;
+  const isDesktopPreview = winW >= 1180;
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [mobilePreviewExpanded, setMobilePreviewExpanded] = useState(true);
+  const [clientListExpanded, setClientListExpanded] = useState(true);
+  const [partnerListExpanded, setPartnerListExpanded] = useState(true);
   const [pickupDropdownOpen, setPickupDropdownOpen] = useState(false);
   const [dropDropdownOpen, setDropDropdownOpen] = useState(false);
-  const [pickerType, setPickerType] = useState<"driver" | "vehicle" | null>(
-    null,
-  );
-  const [supplierDropdownOpen, setSupplierDropdownOpen] = useState(false);
   const [drivers, setDrivers] = useState<DriverRow[]>([]);
   const [driverIdsOnActiveTrip, setDriverIdsOnActiveTrip] = useState<string[]>(
     [],
@@ -144,17 +185,9 @@ export function AddTripFormFields({
     [focusField],
   );
 
-  const openPickerNext = useCallback((type: "driver" | "vehicle") => {
-    requestAnimationFrame(() => {
-      setPickerType(type);
-    });
-  }, []);
+  const openPickerNext = useCallback((_type: "driver" | "vehicle") => {}, []);
 
-  const openSupplierPickerNext = useCallback(() => {
-    requestAnimationFrame(() => {
-      setSupplierDropdownOpen(true);
-    });
-  }, []);
+  const openSupplierPickerNext = useCallback(() => {}, []);
   const fetchFleet = useCallback(() => {
     if (!organizationId) return;
     setFleetLoading(true);
@@ -228,6 +261,14 @@ export function AddTripFormFields({
     if (organizationId && state.supplySource === "aggregate") fetchSuppliers();
   }, [organizationId, state.supplySource, fetchSuppliers]);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (!organizationId) return;
+      fetchFleet();
+      fetchSuppliers();
+    }, [organizationId, fetchFleet, fetchSuppliers]),
+  );
+
   const driverPhoneLookupTimeoutRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
@@ -276,66 +317,45 @@ export function AddTripFormFields({
   const handleSelectClient = (c: ClientRow) => {
     if (state.clientId === c.id) return;
     setters.setClientSelection(c.id, c.name);
-    focusField(clientPriceInputRef);
+    setClientListExpanded(false);
   };
 
-  const closePicker = useCallback(() => setPickerType(null), []);
-  const pickerOpen = pickerType !== null;
+  const handleAddClientShortcut = useCallback(() => {
+    router.push({
+      pathname: "/(modals)/add-client",
+      params: { returnTo: ROUTES.ADD_TRIP },
+    });
+  }, [router]);
+  const handleAddSupplierShortcut = useCallback(() => {
+    router.push({
+      pathname: "/(modals)/add-supplier",
+      params: { returnTo: ROUTES.ADD_TRIP },
+    });
+  }, [router]);
+  const handleAddDriverShortcut = useCallback(() => {
+    router.push({
+      pathname: "/(modals)/add-driver",
+      params: { returnTo: ROUTES.ADD_TRIP },
+    });
+  }, [router]);
+  const handleAddVehicleShortcut = useCallback(() => {
+    router.push({
+      pathname: "/(modals)/add-vehicle",
+      params: { returnTo: ROUTES.ADD_TRIP },
+    });
+  }, [router]);
   const availableDrivers = drivers.filter(
     (d) => !driverIdsOnActiveTrip.includes(d.id),
   );
   const availableVehicles = vehicles.filter(
     (v) => !vehicleIdsOnActiveTrip.includes(v.id),
   );
-  const selectedId =
-    pickerType === "driver"
-      ? state.driverId
-      : pickerType === "vehicle"
-        ? state.vehicleId
-        : null;
-  const setSelectedId =
-    pickerType === "driver"
-      ? setters.setDriverId
-      : pickerType === "vehicle"
-        ? setters.setVehicleId
-        : () => {};
-  const handlePickerSelect = useCallback(
-    (id: string | null) => {
-      if (id === selectedId) {
-        setSelectedId(id);
-        return;
-      }
-      setSelectedId(id);
-      if (pickerType === "driver") {
-        openPickerNext("vehicle");
-      } else if (pickerType === "vehicle") {
-        focusField(notesInputRef);
-      }
-    },
-    [focusField, openPickerNext, pickerType, selectedId, setSelectedId],
-  );
 
-  const handleSupplierSelect = useCallback(
-    (id: string | null) => {
-      if (id === state.supplierId) {
-        setters.setSupplierId(id);
-        setSupplierDropdownOpen(false);
-        return;
-      }
-      setters.setSupplierId(id);
-      setSupplierDropdownOpen(false);
-      focusFieldAfterModalClose(supplierRateInputRef);
-    },
-    [focusFieldAfterModalClose, setters, state.supplierId],
-  );
-
-  const scrollBlocked =
-    pickerOpen ||
-    supplierDropdownOpen ||
-    pickupDropdownOpen ||
-    dropDropdownOpen;
+  const scrollBlocked = pickupDropdownOpen || dropDropdownOpen;
 
   const supplyIsAsset = state.supplySource === "asset";
+  const selectedClientRow = clients.find((c) => c.id === state.clientId) ?? null;
+  const selectedSupplierRow = suppliers.find((s) => s.id === state.supplierId) ?? null;
   const selectedPartnerName =
     suppliers.find((s) => s.id === state.supplierId)?.name?.trim() ?? "";
   const busyFleetHintAsset =
@@ -369,6 +389,8 @@ export function AddTripFormFields({
             },
           ]}
         >
+          <View style={[styles.mainGrid, isDesktopPreview && styles.mainGridDesktop]}>
+            <View style={styles.formColumn}>
           {/* 01 Route */}
           <View style={styles.card}>
             <View style={styles.cardHead}>
@@ -407,6 +429,148 @@ export function AddTripFormFields({
                   inputStyle={baseInputArr}
                   labelStyle={[styles.label, labelStyle]}
                   onDropdownOpenChange={setDropDropdownOpen}
+                />
+              </View>
+            </View>
+
+            <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
+              <View style={styles.gridCol}>
+                <Text style={[styles.label, labelStyle]}>Trip start date</Text>
+                <View style={styles.quickDateRow}>
+                  {[
+                    { label: "Today", get: getToday },
+                    { label: "Tomorrow", get: getTomorrow },
+                    { label: "Day after", get: getDayAfter },
+                  ].map(({ label, get }) => {
+                    const iso = get();
+                    const isActive = state.tripStartDate === iso;
+                    return (
+                      <TouchableOpacity
+                        key={label}
+                        style={[
+                          styles.quickDateChip,
+                          isActive && styles.quickDateChipActive,
+                        ]}
+                        onPress={() => setters.setTripStartDate(iso)}
+                        activeOpacity={0.8}
+                      >
+                        <Text
+                          style={[
+                            styles.quickDateChipText,
+                            isActive && styles.quickDateChipTextActive,
+                          ]}
+                        >
+                          {label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                {Platform.OS === "web" ? (
+                  <TextInput
+                    style={[styles.input, inputStyle]}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor={Theme.placeholder}
+                    value={state.tripStartDate}
+                    onChangeText={setters.setTripStartDate}
+                    autoCorrect={false}
+                  />
+                ) : (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.input, inputStyle, styles.dateTouchable]}
+                      onPress={() => setShowStartDatePicker(true)}
+                      activeOpacity={0.85}
+                    >
+                      <Text
+                        style={
+                          state.tripStartDate
+                            ? styles.dateTouchableText
+                            : styles.dateTouchablePlaceholder
+                        }
+                      >
+                        {state.tripStartDate
+                          ? new Date(
+                              `${state.tripStartDate}T12:00:00`,
+                            ).toLocaleDateString("en-IN", {
+                              weekday: "short",
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })
+                          : "Tap to pick date"}
+                      </Text>
+                    </TouchableOpacity>
+                    {showStartDatePicker &&
+                      (Platform.OS === "android" ? (
+                        <DateTimePicker
+                          value={
+                            state.tripStartDate
+                              ? new Date(`${state.tripStartDate}T12:00:00`)
+                              : new Date()
+                          }
+                          mode="date"
+                          display="default"
+                          minimumDate={new Date()}
+                          onChange={(e, date) => {
+                            setShowStartDatePicker(false);
+                            if (e.type === "set" && date) {
+                              setters.setTripStartDate(toISODate(date));
+                            }
+                          }}
+                        />
+                      ) : (
+                        <Modal visible transparent animationType="slide">
+                          <TouchableOpacity
+                            style={styles.datePickerBackdrop}
+                            activeOpacity={1}
+                            onPress={() => setShowStartDatePicker(false)}
+                          >
+                            <View
+                              style={styles.datePickerSheet}
+                              onStartShouldSetResponder={() => true}
+                            >
+                              <View style={styles.datePickerHeader}>
+                                <Text style={styles.datePickerTitle}>
+                                  Pick date
+                                </Text>
+                                <TouchableOpacity
+                                  onPress={() => setShowStartDatePicker(false)}
+                                  hitSlop={12}
+                                >
+                                  <Text style={styles.datePickerDone}>Done</Text>
+                                </TouchableOpacity>
+                              </View>
+                              <DateTimePicker
+                                value={
+                                  state.tripStartDate
+                                    ? new Date(`${state.tripStartDate}T12:00:00`)
+                                    : new Date()
+                                }
+                                mode="date"
+                                display="spinner"
+                                minimumDate={new Date()}
+                                onChange={(_, date) =>
+                                  date && setters.setTripStartDate(toISODate(date))
+                                }
+                              />
+                            </View>
+                          </TouchableOpacity>
+                        </Modal>
+                      ))}
+                  </>
+                )}
+              </View>
+              <View style={styles.gridCol}>
+                <Text style={[styles.label, labelStyle]}>Tons</Text>
+                <TextInput
+                  style={[styles.input, inputStyle]}
+                  placeholder="Enter load weight in tons"
+                  placeholderTextColor={Theme.placeholder}
+                  value={state.tons}
+                  onChangeText={setters.setTons}
+                  keyboardType="decimal-pad"
+                  autoCorrect={false}
                 />
               </View>
             </View>
@@ -466,13 +630,80 @@ export function AddTripFormFields({
 
             <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
               <View style={styles.gridCol}>
-                <Text style={[styles.label, labelStyle]}>Select client</Text>
+                <View style={styles.sectionLabelRow}>
+                  <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
+                    Select client
+                  </Text>
+                  <View style={styles.sectionLabelActions}>
+                    {state.clientId ? (
+                      <TouchableOpacity
+                        style={styles.changeSelectionBtn}
+                        onPress={() => setClientListExpanded((p) => !p)}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.changeSelectionBtnText}>
+                          {clientListExpanded ? "Collapse" : "Change"}
+                        </Text>
+                        <FontAwesome
+                          name={clientListExpanded ? "chevron-up" : "chevron-down"}
+                          size={11}
+                          color={Theme.iconPrimary}
+                        />
+                      </TouchableOpacity>
+                    ) : null}
+                    <TouchableOpacity
+                      style={[
+                        styles.addClientBtn,
+                        Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null,
+                      ]}
+                      onPress={handleAddClientShortcut}
+                      activeOpacity={0.85}
+                    >
+                      <PlusCircle size={14} color={Theme.iconPrimary} />
+                      <Text style={styles.addClientBtnText}>Add client</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
                 {clientsLoading ? (
                   <ActivityIndicator color={Theme.iconPrimary} />
                 ) : clients.length === 0 ? (
                   <Text style={styles.mutedSmall}>
                     No clients yet. Add clients from the Clients page first.
                   </Text>
+                ) : state.clientId && !clientListExpanded && selectedClientRow ? (
+                  <TouchableOpacity
+                    style={[styles.clientCard, styles.clientCardOn]}
+                    onPress={() => setClientListExpanded(true)}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.clientMain}>
+                      <PartyAvatar
+                        name={selectedClientRow.name ?? selectedClientRow.contact_person ?? "Client"}
+                        avatarUrl={
+                          (selectedClientRow as { avatar_url?: string | null }).avatar_url ?? null
+                        }
+                        avatarSeed={
+                          (selectedClientRow as { avatar_seed?: string | null }).avatar_seed ?? null
+                        }
+                        entityType="client"
+                        size={38}
+                        borderStyle={styles.clientAvatarOn}
+                      />
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={[styles.clientName, styles.clientNameOn]} numberOfLines={1}>
+                          {selectedClientRow.name}
+                        </Text>
+                        {selectedClientRow.address ? (
+                          <Text style={styles.clientSub} numberOfLines={1}>
+                            {selectedClientRow.address}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+                    <View style={styles.changeSelectionPill}>
+                      <Text style={styles.changeSelectionPillText}>Change</Text>
+                    </View>
+                  </TouchableOpacity>
                 ) : (
                   <ScrollView
                     style={styles.clientList}
@@ -494,7 +725,20 @@ export function AddTripFormFields({
                           onPress={() => handleSelectClient(c)}
                           activeOpacity={0.85}
                         >
-                          <View style={{ flex: 1, minWidth: 0 }}>
+                          <View style={styles.clientMain}>
+                            <PartyAvatar
+                              name={c.name ?? c.contact_person ?? "Client"}
+                              avatarUrl={
+                                (c as { avatar_url?: string | null }).avatar_url ?? null
+                              }
+                              avatarSeed={
+                                (c as { avatar_seed?: string | null }).avatar_seed ?? null
+                              }
+                              entityType="client"
+                              size={38}
+                              borderStyle={selected ? styles.clientAvatarOn : styles.clientAvatar}
+                            />
+                            <View style={{ flex: 1, minWidth: 0 }}>
                             <Text
                               style={[
                                 styles.clientName,
@@ -504,17 +748,18 @@ export function AddTripFormFields({
                             >
                               {c.name}
                             </Text>
-                            {c.address ? (
-                              <View style={styles.clientMetaRow}>
-                                <Clock size={11} color={Theme.textMuted} />
-                                <Text
-                                  style={styles.clientSub}
-                                  numberOfLines={1}
-                                >
-                                  {c.address}
-                                </Text>
-                              </View>
-                            ) : null}
+                              {c.address ? (
+                                <View style={styles.clientMetaRow}>
+                                  <Clock size={11} color={Theme.textMuted} />
+                                  <Text
+                                    style={styles.clientSub}
+                                    numberOfLines={1}
+                                  >
+                                    {c.address}
+                                  </Text>
+                                </View>
+                              ) : null}
+                            </View>
                           </View>
                           <View
                             style={[
@@ -537,7 +782,7 @@ export function AddTripFormFields({
               </View>
 
               <View style={styles.gridCol}>
-                <Text style={[styles.label, labelStyle]}>
+                <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
                   Client sales price (₹) *
                 </Text>
                 <View style={styles.priceWrap}>
@@ -603,7 +848,7 @@ export function AddTripFormFields({
               >
                 <Truck
                   size={16}
-                  color={supplyIsAsset ? Theme.iconPrimary : Theme.textMuted}
+                  color={supplyIsAsset ? Theme.textOnPrimary : "rgba(255,255,255,0.7)"}
                 />
                 <Text
                   style={[
@@ -611,7 +856,7 @@ export function AddTripFormFields({
                     supplyIsAsset && styles.segmentLabOn,
                   ]}
                 >
-                  Internal
+                  Asset
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -627,7 +872,7 @@ export function AddTripFormFields({
               >
                 <Building2
                   size={16}
-                  color={!supplyIsAsset ? Theme.iconPrimary : Theme.textMuted}
+                  color={!supplyIsAsset ? Theme.textOnPrimary : "rgba(255,255,255,0.7)"}
                 />
                 <Text
                   style={[
@@ -635,7 +880,7 @@ export function AddTripFormFields({
                     !supplyIsAsset && styles.segmentLabOn,
                   ]}
                 >
-                  Partner
+                  Aggregate
                 </Text>
               </TouchableOpacity>
             </View>
@@ -700,148 +945,252 @@ export function AddTripFormFields({
                 {!state.assignLater ? (
                   <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
                     <View style={styles.gridCol}>
-                      <Text style={[styles.label, labelStyle]}>
-                        Assign driver *
-                      </Text>
-                      <View style={styles.iconField}>
-                        <User
-                          size={18}
-                          color={Theme.iconMuted}
-                          style={styles.iconInField}
-                        />
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <TouchableOpacity
-                            style={[
-                              styles.fakeInput,
-                              inputStyle,
-                              styles.pickerInner,
-                            ]}
-                            onPress={() =>
-                              !fleetLoading &&
-                              setPickerType((t) =>
-                                t === "driver" ? null : "driver",
-                              )
-                            }
-                            disabled={fleetLoading}
-                            activeOpacity={0.75}
-                          >
-                            <Text
-                              style={
-                                state.driverId
-                                  ? styles.pickerText
-                                  : styles.pickerPh
-                              }
-                              numberOfLines={1}
-                            >
-                              {fleetLoading
-                                ? "Loading…"
-                                : state.driverId
-                                  ? (drivers.find(
-                                      (d) => d.id === state.driverId,
-                                    )?.name ?? "Selected")
-                                  : "Select driver"}
-                            </Text>
-                            <FontAwesome
-                              name="chevron-down"
-                              size={12}
-                              color={Theme.textMuted}
-                            />
-                          </TouchableOpacity>
-                        </View>
+                      <View
+                        style={[
+                          styles.sectionLabelRow,
+                          !isWide && styles.sectionLabelRowStack,
+                        ]}
+                      >
+                        <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
+                          Assign driver *
+                        </Text>
+                        <TouchableOpacity
+                          style={[
+                            styles.addClientBtn,
+                            !isWide && styles.addClientBtnCompact,
+                            Platform.OS === "web"
+                              ? ({ cursor: "pointer" } as ViewStyle)
+                              : null,
+                          ]}
+                          onPress={handleAddDriverShortcut}
+                          activeOpacity={0.85}
+                        >
+                          <PlusCircle size={14} color={Theme.iconPrimary} />
+                          <Text style={styles.addClientBtnText}>Add driver</Text>
+                        </TouchableOpacity>
                       </View>
+                      {fleetLoading ? (
+                        <ActivityIndicator color={Theme.iconPrimary} />
+                      ) : (
+                        <ScrollView style={styles.clientList} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                          {availableDrivers.map((d) => {
+                            const selected = state.driverId === d.id;
+                            const sub = [d.phone, d.email].filter(Boolean).join(" · ");
+                            return (
+                              <TouchableOpacity
+                                key={d.id}
+                                style={[styles.clientCard, selected && styles.clientCardOn, Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null]}
+                                onPress={() => setters.setDriverId(selected ? null : d.id)}
+                                activeOpacity={0.85}
+                              >
+                                <View style={styles.clientMain}>
+                                  <PartyAvatar
+                                    name={d.name ?? "Driver"}
+                                    avatarUrl={(d as { avatar_url?: string | null }).avatar_url ?? null}
+                                    avatarSeed={(d as { avatar_seed?: string | null }).avatar_seed ?? null}
+                                    entityType="driver"
+                                    size={38}
+                                    borderStyle={selected ? styles.clientAvatarOn : styles.clientAvatar}
+                                  />
+                                  <View style={{ flex: 1, minWidth: 0 }}>
+                                    <Text style={[styles.clientName, selected && styles.clientNameOn]} numberOfLines={1}>
+                                      {d.name || "—"}
+                                    </Text>
+                                    {sub ? <Text style={styles.clientSub} numberOfLines={1}>{sub}</Text> : null}
+                                  </View>
+                                </View>
+                                <View style={[styles.radioOuter, selected && styles.radioOuterOn]}>
+                                  {selected ? <CheckCircle2 size={16} color={Theme.iconPrimary} /> : null}
+                                </View>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+                      )}
                     </View>
                     <View style={styles.gridCol}>
-                      <Text style={[styles.label, labelStyle]}>Vehicle *</Text>
-                      <View style={styles.iconField}>
-                        <Truck
-                          size={18}
-                          color={Theme.iconMuted}
-                          style={styles.iconInField}
-                        />
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <TouchableOpacity
-                            style={[
-                              styles.fakeInput,
-                              inputStyle,
-                              styles.pickerInner,
-                            ]}
-                            onPress={() =>
-                              !fleetLoading &&
-                              setPickerType((t) =>
-                                t === "vehicle" ? null : "vehicle",
-                              )
-                            }
-                            disabled={fleetLoading}
-                            activeOpacity={0.75}
-                          >
-                            <Text
-                              style={
-                                state.vehicleId
-                                  ? styles.pickerText
-                                  : styles.pickerPh
-                              }
-                              numberOfLines={1}
-                            >
-                              {fleetLoading
-                                ? "Loading…"
-                                : state.vehicleId
-                                  ? formatIndianVehicleNumber(
-                                      vehicles.find(
-                                        (v) => v.id === state.vehicleId,
-                                      )?.vehicle_number ?? "",
-                                    ) || "Selected"
-                                  : "Select vehicle"}
-                            </Text>
-                            <FontAwesome
-                              name="chevron-down"
-                              size={12}
-                              color={Theme.textMuted}
-                            />
-                          </TouchableOpacity>
-                        </View>
+                      <View
+                        style={[
+                          styles.sectionLabelRow,
+                          !isWide && styles.sectionLabelRowStack,
+                        ]}
+                      >
+                        <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
+                          Vehicle *
+                        </Text>
+                        <TouchableOpacity
+                          style={[
+                            styles.addClientBtn,
+                            !isWide && styles.addClientBtnCompact,
+                            Platform.OS === "web"
+                              ? ({ cursor: "pointer" } as ViewStyle)
+                              : null,
+                          ]}
+                          onPress={handleAddVehicleShortcut}
+                          activeOpacity={0.85}
+                        >
+                          <PlusCircle size={14} color={Theme.iconPrimary} />
+                          <Text style={styles.addClientBtnText}>Add vehicle</Text>
+                        </TouchableOpacity>
                       </View>
+                      {fleetLoading ? (
+                        <ActivityIndicator color={Theme.iconPrimary} />
+                      ) : (
+                        <ScrollView style={styles.clientList} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                          {availableVehicles.map((v) => {
+                            const selected = state.vehicleId === v.id;
+                            const primary = formatIndianVehicleNumber(v.vehicle_number || "") || "—";
+                            const secondary = [v.vehicle_body_type || v.vehicle_type, [v.vehicle_size, v.vehicle_axle].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
+                            return (
+                              <TouchableOpacity
+                                key={v.id}
+                                style={[styles.clientCard, selected && styles.clientCardOn, Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null]}
+                                onPress={() => setters.setVehicleId(selected ? null : v.id)}
+                                activeOpacity={0.85}
+                              >
+                                <View style={styles.clientMain}>
+                                  <View style={styles.vehicleCardIcon}>
+                                    <Truck size={18} color={Theme.iconPrimary} />
+                                  </View>
+                                  <View style={{ flex: 1, minWidth: 0 }}>
+                                    <Text style={[styles.clientName, selected && styles.clientNameOn]} numberOfLines={1}>
+                                      {primary}
+                                    </Text>
+                                    {secondary ? <Text style={styles.clientSub} numberOfLines={1}>{secondary.toUpperCase()}</Text> : null}
+                                  </View>
+                                </View>
+                                <View style={[styles.radioOuter, selected && styles.radioOuterOn]}>
+                                  {selected ? <CheckCircle2 size={16} color={Theme.iconPrimary} /> : null}
+                                </View>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+                      )}
                     </View>
                   </View>
                 ) : null}
               </>
             ) : (
               <>
-                <Text style={[styles.label, labelStyle]}>
-                  Transport partner *
-                </Text>
-                <View style={styles.pickerRow}>
-                  <TouchableOpacity
-                    style={[styles.input, inputStyle, styles.pickerFlex]}
-                    onPress={() =>
-                      !suppliersLoading && setSupplierDropdownOpen((p) => !p)
-                    }
-                    disabled={suppliersLoading}
-                  >
-                    <Text
-                      style={
-                        state.supplierId ? styles.pickerText : styles.pickerPh
-                      }
-                      numberOfLines={1}
+                <View style={[styles.aggregateSplit, isWide && styles.aggregateSplitWide]}>
+                  <View style={styles.aggregateLeftPane}>
+                <View style={styles.sectionLabelRow}>
+                  <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
+                    Transport partner *
+                  </Text>
+                  <View style={styles.sectionLabelActions}>
+                    {state.supplierId ? (
+                      <TouchableOpacity
+                        style={styles.changeSelectionBtn}
+                        onPress={() => setPartnerListExpanded((p) => !p)}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.changeSelectionBtnText}>
+                          {partnerListExpanded ? "Collapse" : "Change"}
+                        </Text>
+                        <FontAwesome
+                          name={partnerListExpanded ? "chevron-up" : "chevron-down"}
+                          size={11}
+                          color={Theme.iconPrimary}
+                        />
+                      </TouchableOpacity>
+                    ) : null}
+                    <TouchableOpacity
+                      style={[
+                        styles.addClientBtn,
+                        Platform.OS === "web"
+                          ? ({ cursor: "pointer" } as ViewStyle)
+                          : null,
+                      ]}
+                      onPress={handleAddSupplierShortcut}
+                      activeOpacity={0.85}
                     >
-                      {suppliersLoading
-                        ? "Loading…"
-                        : state.supplierId
-                          ? suppliers.find((s) => s.id === state.supplierId)
-                              ?.company_name ||
-                            suppliers.find((s) => s.id === state.supplierId)
-                              ?.name ||
-                            "Selected"
-                          : "Choose partner"}
-                    </Text>
-                    <FontAwesome
-                      name={
-                        supplierDropdownOpen ? "chevron-up" : "chevron-down"
-                      }
-                      size={12}
-                      color={Theme.textMuted}
-                    />
-                  </TouchableOpacity>
+                      <PlusCircle size={14} color={Theme.iconPrimary} />
+                      <Text style={styles.addClientBtnText}>Add partner</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
+                {suppliersLoading ? (
+                  <ActivityIndicator color={Theme.iconPrimary} />
+                ) : suppliers.length === 0 ? (
+                  <Text style={styles.mutedSmall}>
+                    No partners yet. Add suppliers from your network first.
+                  </Text>
+                ) : state.supplierId && !partnerListExpanded && selectedSupplierRow ? (
+                  <TouchableOpacity
+                    style={[styles.clientCard, styles.clientCardOn]}
+                    onPress={() => setPartnerListExpanded(true)}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.clientMain}>
+                      <PartyAvatar
+                        name={selectedSupplierRow.company_name?.trim() || selectedSupplierRow.name?.trim() || "—"}
+                        organizationImageUrl={(selectedSupplierRow as { organization_avatar_url?: string | null }).organization_avatar_url ?? null}
+                        organizationAvatarSeed={(selectedSupplierRow as { organization_avatar_seed?: string | null }).organization_avatar_seed ?? null}
+                        avatarUrl={(selectedSupplierRow as { avatar_url?: string | null }).avatar_url ?? null}
+                        avatarSeed={(selectedSupplierRow as { avatar_seed?: string | null }).avatar_seed ?? null}
+                        entityType="supplier"
+                        size={38}
+                        borderStyle={styles.clientAvatarOn}
+                      />
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={[styles.clientName, styles.clientNameOn]} numberOfLines={1}>
+                          {selectedSupplierRow.company_name?.trim() || selectedSupplierRow.name?.trim() || "—"}
+                        </Text>
+                        <Text style={styles.clientSub} numberOfLines={1}>
+                          {[selectedSupplierRow.supplier_type, selectedSupplierRow.phone, selectedSupplierRow.email].filter(Boolean).join(" · ")}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.changeSelectionPill}>
+                      <Text style={styles.changeSelectionPillText}>Change</Text>
+                    </View>
+                  </TouchableOpacity>
+                ) : (
+                  <ScrollView style={styles.clientList} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                    {suppliers.map((s) => {
+                      const selected = state.supplierId === s.id;
+                      const primary = s.company_name?.trim() || s.name?.trim() || "—";
+                      const secondary = [s.supplier_type, s.phone, s.email].filter(Boolean).join(" · ");
+                      return (
+                        <TouchableOpacity
+                          key={s.id}
+                          style={[styles.clientCard, selected && styles.clientCardOn, Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null]}
+                          onPress={() => {
+                            setters.setSupplierId(selected ? null : s.id);
+                            if (!selected) setPartnerListExpanded(false);
+                          }}
+                          activeOpacity={0.85}
+                        >
+                          <View style={styles.clientMain}>
+                            <PartyAvatar
+                              name={primary}
+                              organizationImageUrl={(s as { organization_avatar_url?: string | null }).organization_avatar_url ?? null}
+                              organizationAvatarSeed={(s as { organization_avatar_seed?: string | null }).organization_avatar_seed ?? null}
+                              avatarUrl={(s as { avatar_url?: string | null }).avatar_url ?? null}
+                              avatarSeed={(s as { avatar_seed?: string | null }).avatar_seed ?? null}
+                              entityType="supplier"
+                              size={38}
+                              borderStyle={selected ? styles.clientAvatarOn : styles.clientAvatar}
+                            />
+                            <View style={{ flex: 1, minWidth: 0 }}>
+                              <Text style={[styles.clientName, selected && styles.clientNameOn]} numberOfLines={1}>
+                                {primary}
+                              </Text>
+                              {secondary ? <Text style={styles.clientSub} numberOfLines={1}>{secondary}</Text> : null}
+                            </View>
+                          </View>
+                          <View style={[styles.radioOuter, selected && styles.radioOuterOn]}>
+                            {selected ? <CheckCircle2 size={16} color={Theme.iconPrimary} /> : null}
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                )}
+                  </View>
+                  <View style={styles.aggregateRightPane}>
 
                 <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
                   <View style={styles.gridCol}>
@@ -1014,27 +1363,11 @@ export function AddTripFormFields({
                     </Text>
                   </View>
                 )}
+                  </View>
+                </View>
               </>
             )}
 
-            <FleetEntityPickerModal
-              visible={pickerOpen}
-              mode={pickerType ?? "vehicle"}
-              drivers={availableDrivers}
-              vehicles={availableVehicles}
-              selectedId={selectedId}
-              onSelect={handlePickerSelect}
-              onClose={closePicker}
-            />
-
-            <PartnerSupplierPickerModal
-              visible={supplierDropdownOpen}
-              suppliers={suppliers}
-              loading={suppliersLoading}
-              selectedId={state.supplierId}
-              onSelect={handleSupplierSelect}
-              onClose={() => setSupplierDropdownOpen(false)}
-            />
           </View>
 
           {/* 04 Notes */}
@@ -1092,28 +1425,141 @@ export function AddTripFormFields({
               </Text>
             ) : null}
           </View>
+            </View>
+
+            {isDesktopPreview ? (
+              <View style={styles.previewColumn}>
+                <View style={[styles.previewCard, styles.previewCardDesktop]} pointerEvents="none">
+                  <View style={styles.previewHead}>
+                    <Text style={styles.previewHeadTitle}>Trip Preview</Text>
+                    <View style={styles.livePill}>
+                      <Text style={styles.livePillText}>Live</Text>
+                    </View>
+                  </View>
+                  <View style={styles.previewBody}>
+                    <View style={styles.previewLine}>
+                      <Text style={styles.previewLab}>Pickup</Text>
+                      <Text style={styles.previewVal} numberOfLines={2}>
+                        {routePreviewLine(state.pickupArea)}
+                      </Text>
+                    </View>
+                    <View style={styles.previewLine}>
+                      <Text style={styles.previewLab}>Drop</Text>
+                      <Text style={styles.previewVal} numberOfLines={2}>
+                        {routePreviewLine(state.dropLocation)}
+                      </Text>
+                    </View>
+                    {state.pickupArea.trim() && state.dropLocation.trim() ? (
+                      <View style={styles.previewRow2}>
+                        <View style={styles.previewCell}>
+                          <Text style={styles.previewLab}>Distance</Text>
+                          <Text style={styles.previewVal}>
+                            {state.routeLoading
+                              ? "…"
+                              : state.routeDistanceKm != null
+                                ? `${state.routeDistanceKm} km`
+                                : "—"}
+                          </Text>
+                        </View>
+                        <View style={styles.previewCell}>
+                          <Text style={styles.previewLab}>ETA</Text>
+                          <Text style={styles.previewVal}>
+                            {state.routeLoading
+                              ? "…"
+                              : state.routeEtaLabel != null
+                                ? state.routeEtaLabel
+                                : "—"}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : null}
+                    <View style={styles.previewDivider} />
+                    {!supplyIsAsset ? (
+                      <View style={styles.previewRow2}>
+                        <View style={styles.previewCell}>
+                          <Text style={styles.previewLab}>Partner</Text>
+                          <Text style={styles.previewVal} numberOfLines={1}>
+                            {selectedPartnerName || "—"}
+                          </Text>
+                        </View>
+                        <View style={styles.previewCell}>
+                          <Text style={styles.previewLab}>Partner rate</Text>
+                          <Text style={[styles.previewValStrong, { color: Theme.negative }]}>
+                            ₹{state.supplierRate.trim() || "0"}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : null}
+                    <View style={styles.previewRow2}>
+                      <View style={styles.previewCell}>
+                        <Text style={styles.previewLab}>Client</Text>
+                        <Text style={styles.previewVal} numberOfLines={1}>
+                          {state.clientName.trim() || "—"}
+                        </Text>
+                      </View>
+                      <View style={styles.previewCell}>
+                        <Text style={styles.previewLab}>Revenue</Text>
+                        <Text style={[styles.previewValStrong, { color: Theme.darkGreen }]}>
+                          ₹{state.clientPrice.trim() || "0"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.previewFoot}>
+                      <Text style={styles.previewFootLeft}>
+                        {supplyIsAsset ? "Asset" : "Aggregate"}
+                      </Text>
+                      <Text style={styles.previewFootRight} numberOfLines={1}>
+                        {supplyIsAsset
+                          ? state.vehicleId
+                            ? formatIndianVehicleNumber(
+                                vehicles.find((v) => v.id === state.vehicleId)
+                                  ?.vehicle_number ?? "",
+                              ) || "—"
+                            : state.assignLater
+                              ? "Assign later"
+                              : "—"
+                          : state.assignLater
+                            ? "Assign later"
+                            : state.aggregateVehicleText.trim() || "—"}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            ) : null}
+          </View>
         </View>
       </ScrollView>
 
       {/* Floating preview — hidden on very narrow widths to avoid blocking the form */}
-      {winW >= 420 ? (
-        <View
-          style={[
-            styles.previewCard,
-            {
-              bottom: insets.bottom + 16,
-              right: Math.max(16, insets.right + 8),
-            },
-          ]}
-          pointerEvents="box-none"
-        >
-          <View style={styles.previewHead}>
-            <Text style={styles.previewHeadTitle}>Trip Preview</Text>
-            <View style={styles.livePill}>
-              <Text style={styles.livePillText}>Live</Text>
+      {winW >= 420 && !isDesktopPreview ? (
+        mobilePreviewExpanded ? (
+          <View
+            style={[
+              styles.previewCard,
+              {
+                bottom: insets.bottom + 16,
+                right: Math.max(16, insets.right + 8),
+              },
+            ]}
+            pointerEvents="box-none"
+          >
+            <View style={styles.previewHead}>
+              <Text style={styles.previewHeadTitle}>Trip Preview</Text>
+              <View style={styles.previewHeadRight}>
+                <View style={styles.livePill}>
+                  <Text style={styles.livePillText}>Live</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setMobilePreviewExpanded(false)}
+                  style={styles.previewCollapseBtn}
+                  activeOpacity={0.8}
+                >
+                  <FontAwesome name="chevron-down" size={10} color={Theme.textOnPrimary} />
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-          <View style={styles.previewBody}>
+            <View style={styles.previewBody}>
             <View style={styles.previewLine}>
               <Text style={styles.previewLab}>Pickup</Text>
               <Text style={styles.previewVal} numberOfLines={2}>
@@ -1128,7 +1574,7 @@ export function AddTripFormFields({
             </View>
             {state.pickupArea.trim() && state.dropLocation.trim() ? (
               <View style={styles.previewRow2}>
-                <View style={{ flex: 1 }}>
+                <View style={styles.previewCell}>
                   <Text style={styles.previewLab}>Distance</Text>
                   <Text style={styles.previewVal}>
                     {state.routeLoading
@@ -1138,7 +1584,7 @@ export function AddTripFormFields({
                         : "—"}
                   </Text>
                 </View>
-                <View style={{ flex: 1 }}>
+                <View style={styles.previewCell}>
                   <Text style={styles.previewLab}>ETA</Text>
                   <Text style={styles.previewVal}>
                     {state.routeLoading
@@ -1153,37 +1599,37 @@ export function AddTripFormFields({
             <View style={styles.previewDivider} />
             {!supplyIsAsset ? (
               <View style={styles.previewRow2}>
-                <View style={{ flex: 1 }}>
+                <View style={styles.previewCell}>
                   <Text style={styles.previewLab}>Partner</Text>
                   <Text style={styles.previewVal} numberOfLines={1}>
                     {selectedPartnerName || "—"}
                   </Text>
                 </View>
-                <View style={{ flex: 1 }}>
+                <View style={styles.previewCell}>
                   <Text style={styles.previewLab}>Partner rate</Text>
-                  <Text style={[styles.previewVal, { color: Theme.negative }]}>
+                  <Text style={[styles.previewValStrong, { color: Theme.negative }]}>
                     ₹{state.supplierRate.trim() || "0"}
                   </Text>
                 </View>
               </View>
             ) : null}
             <View style={styles.previewRow2}>
-              <View style={{ flex: 1 }}>
+              <View style={styles.previewCell}>
                 <Text style={styles.previewLab}>Client</Text>
                 <Text style={styles.previewVal} numberOfLines={1}>
                   {state.clientName.trim() || "—"}
                 </Text>
               </View>
-              <View style={{ flex: 1 }}>
+              <View style={styles.previewCell}>
                 <Text style={styles.previewLab}>Revenue</Text>
-                <Text style={[styles.previewVal, { color: Theme.darkGreen }]}>
+                <Text style={[styles.previewValStrong, { color: Theme.darkGreen }]}>
                   ₹{state.clientPrice.trim() || "0"}
                 </Text>
               </View>
             </View>
             <View style={styles.previewFoot}>
               <Text style={styles.previewFootLeft}>
-                {supplyIsAsset ? "Internal" : "Aggregate"}
+                {supplyIsAsset ? "Asset" : "Aggregate"}
               </Text>
               <Text style={styles.previewFootRight} numberOfLines={1}>
                 {supplyIsAsset
@@ -1200,8 +1646,24 @@ export function AddTripFormFields({
                     : state.aggregateVehicleText.trim() || "—"}
               </Text>
             </View>
+            </View>
           </View>
-        </View>
+        ) : (
+          <TouchableOpacity
+            style={[
+              styles.previewCollapsedChip,
+              {
+                bottom: insets.bottom + 16,
+                right: Math.max(16, insets.right + 8),
+              },
+            ]}
+            onPress={() => setMobilePreviewExpanded(true)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.previewCollapsedChipText}>Trip Preview</Text>
+            <FontAwesome name="chevron-up" size={11} color={Theme.textOnPrimary} />
+          </TouchableOpacity>
+        )
       ) : null}
 
       <View style={styles.blobA} pointerEvents="none" />
@@ -1222,16 +1684,33 @@ const styles = StyleSheet.create({
   },
   contentMax: {
     width: "100%",
-    maxWidth: 960,
+    maxWidth: 1400,
     alignSelf: "center",
+  },
+  mainGrid: {
+    width: "100%",
+  },
+  mainGridDesktop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 24,
+  },
+  formColumn: {
+    flex: 1,
+    minWidth: 0,
+  },
+  previewColumn: {
+    width: 360,
+    paddingTop: 4,
+    alignSelf: "stretch",
   },
   card: {
     backgroundColor: Theme.cardWhite,
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    padding: 16,
-    marginBottom: 16,
+    padding: 18,
+    marginBottom: 18,
     ...Platform.select<ViewStyle>({
       web: {
         boxShadow: "0 1px 3px rgba(15,23,42,0.06)",
@@ -1248,51 +1727,145 @@ const styles = StyleSheet.create({
   cardHead: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
-    paddingBottom: 10,
+    paddingBottom: 11,
     marginBottom: 14,
   },
   stepBadge: {
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: "rgba(0, 0, 0, 0.08)",
+    backgroundColor: "rgba(2, 6, 23, 0.08)",
     alignItems: "center",
     justifyContent: "center",
   },
   stepBadgeText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "800",
     color: Theme.iconPrimary,
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: 21,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
+    letterSpacing: -0.45,
+    fontStyle: "italic",
+    textTransform: "uppercase",
   },
   gridRow: { gap: 14 },
-  gridRowWide: { flexDirection: "row", alignItems: "flex-start", gap: 20 },
+  gridRowWide: { flexDirection: "row", alignItems: "stretch", gap: 20 },
   gridCol: { flex: 1, minWidth: 0 },
-  label: {
-    fontSize: 11,
-    fontWeight: "800",
+  aggregateSplit: {
+    gap: 14,
+  },
+  aggregateSplitWide: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 20,
+  },
+  aggregateLeftPane: {
+    flex: 1,
+    minWidth: 0,
+  },
+  aggregateRightPane: {
+    flex: 1,
+    minWidth: 0,
+  },
+  sectionLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 12,
     marginBottom: 8,
-    letterSpacing: 1,
+  },
+  sectionLabelRowStack: {
+    alignItems: "flex-start",
+    justifyContent: "flex-start",
+  },
+  sectionLabelActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    justifyContent: "flex-start",
+    gap: 8,
+  },
+  sectionLabelTight: {
+    marginBottom: 0,
+  },
+  changeSelectionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: Theme.surfaceLight,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  changeSelectionBtnText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.iconPrimary,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  addClientBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  addClientBtnCompact: {
+    marginTop: 2,
+    alignSelf: "flex-start",
+  },
+  addClientBtnText: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: Theme.iconPrimary,
+  },
+  changeSelectionPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceLight,
+  },
+  changeSelectionPillText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.iconPrimary,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  label: {
+    fontSize: 9,
+    fontWeight: "700",
+    marginBottom: 8,
+    letterSpacing: 1.1,
     textTransform: "uppercase",
   },
   input: {
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "500",
     minHeight: 52,
-    marginBottom: 12,
-    ...Platform.select<ViewStyle>({
-      web: { outlineStyle: "none" },
-    }),
+    marginBottom: 10,
+    ...Platform.select({ web: { outlineStyle: "none" } as any }),
   },
   iconField: {
     position: "relative",
@@ -1309,16 +1882,14 @@ const styles = StyleSheet.create({
     paddingLeft: 44,
     paddingRight: 14,
     paddingVertical: 12,
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "500",
     minHeight: 52,
     borderWidth: 2,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surfaceForm,
     color: Theme.textPrimary,
-    ...Platform.select<ViewStyle>({
-      web: { outlineStyle: "none" },
-    }),
+    ...Platform.select({ web: { outlineStyle: "none" } as any }),
   },
   fakeInput: {
     flexDirection: "row",
@@ -1327,6 +1898,85 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     minHeight: 52,
   },
+  dateInputTrigger: {
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  quickDateRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 8,
+  },
+  quickDateChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+  },
+  quickDateChipActive: {
+    borderColor: Theme.iconPrimary,
+    backgroundColor: Theme.surfaceLight,
+  },
+  quickDateChipText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  quickDateChipTextActive: {
+    color: Theme.iconPrimary,
+  },
+  dateTouchable: {
+    justifyContent: "center",
+  },
+  dateTouchableText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textPrimary,
+  },
+  dateTouchablePlaceholder: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: Theme.placeholder,
+  },
+  datePickerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.35)",
+    justifyContent: "flex-end",
+  },
+  datePickerSheet: {
+    backgroundColor: Theme.cardWhite,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingBottom: 18,
+    borderTopWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  datePickerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
+  datePickerTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  datePickerDone: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.iconPrimary,
+  },
   pickerInner: {
     paddingLeft: 44,
     paddingRight: 12,
@@ -1334,8 +1984,8 @@ const styles = StyleSheet.create({
   },
   pickerText: {
     flex: 1,
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "500",
     color: Theme.textPrimary,
   },
   pickerPh: {
@@ -1385,8 +2035,9 @@ const styles = StyleSheet.create({
   routePreviewHeroText: {
     flex: 1,
     minWidth: 0,
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "500",
+    fontStyle: "italic",
     letterSpacing: -0.25,
     lineHeight: 20,
     color: Theme.textPrimaryDark,
@@ -1408,16 +2059,16 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.borderLight,
   },
   routeMetricLab: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 9,
+    fontWeight: "700",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.65,
     marginBottom: 4,
   },
   routeMetricVal: {
-    fontSize: 16,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "500",
     letterSpacing: -0.35,
     color: Theme.textPrimaryDark,
   },
@@ -1425,23 +2076,51 @@ const styles = StyleSheet.create({
   clientCard: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 2,
+    minHeight: 70,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 15,
+    borderWidth: 1.5,
     borderColor: Theme.borderLight,
     marginBottom: 10,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.cardWhite,
+  },
+  clientMain: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingRight: 8,
   },
   clientCardOn: {
-    borderColor: Theme.darkBackground,
-    backgroundColor: "rgba(0, 0, 0, 0.05)",
+    borderColor: Theme.textPrimaryDark,
+    backgroundColor: Theme.cardWhite,
   },
   clientName: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
   },
   clientNameOn: { color: Theme.iconPrimary },
+  clientAvatar: {
+    borderWidth: 1.5,
+    borderColor: Theme.borderLight,
+  },
+  clientAvatarOn: {
+    borderWidth: 2,
+    borderColor: Theme.textPrimaryDark,
+  },
+  vehicleCardIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: Theme.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
   clientMetaRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1449,7 +2128,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   clientSub: {
-    fontSize: 11,
+    fontSize: 10,
+    fontWeight: "500",
     color: Theme.textMuted,
     flex: 1,
   },
@@ -1458,7 +2138,7 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     borderWidth: 2,
-    borderColor: Theme.borderInput,
+    borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1468,7 +2148,7 @@ const styles = StyleSheet.create({
   },
   priceWrap: {
     position: "relative",
-    marginBottom: 12,
+    marginBottom: 10,
   },
   rupeeIcon: {
     position: "absolute",
@@ -1477,35 +2157,35 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   priceInput: {
-    borderRadius: 16,
+    borderRadius: 18,
     paddingLeft: 44,
     paddingRight: 16,
     paddingVertical: 16,
-    fontSize: 24,
-    fontWeight: "800",
+    fontSize: 32,
+    fontWeight: "600",
     borderWidth: 2,
     borderColor: "transparent",
     backgroundColor: Theme.surfaceForm,
     color: Theme.textPrimaryDark,
-    ...Platform.select<ViewStyle>({
-      web: { outlineStyle: "none" },
-    }),
+    ...Platform.select({ web: { outlineStyle: "none" } as any }),
   },
   infoCallout: {
     flexDirection: "row",
     gap: 10,
-    padding: 14,
-    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
     backgroundColor: "rgba(0, 0, 0, 0.04)",
     borderWidth: 1,
     borderColor: Theme.borderLight,
+    alignItems: "flex-start",
   },
   infoCalloutText: {
     flex: 1,
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: Theme.textPrimaryDark,
-    lineHeight: 16,
+    lineHeight: 17,
   },
   assignLaterPartnerHint: {
     flexDirection: "row",
@@ -1520,56 +2200,62 @@ const styles = StyleSheet.create({
   },
   assignLaterPartnerHintText: {
     flex: 1,
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
     color: Theme.textMuted,
     lineHeight: 17,
   },
   segment: {
     flexDirection: "row",
     alignSelf: "center",
-    backgroundColor: Theme.surfaceGray,
-    borderRadius: 14,
-    padding: 4,
-    marginBottom: 14,
-    gap: 4,
+    backgroundColor: "#07090C",
+    borderRadius: 20,
+    padding: 6,
+    borderWidth: 1,
+    borderColor: "#0F1318",
+    marginBottom: 16,
+    gap: 6,
   },
   segmentBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 18,
-    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 24,
+    borderRadius: 14,
+    backgroundColor: "#131820",
+    borderWidth: 1,
+    borderColor: "#252C36",
   },
   segmentBtnOn: {
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: "#000000",
+    borderColor: "rgba(255,255,255,0.34)",
     ...Platform.select<ViewStyle>({
-      web: { boxShadow: "0 1px 2px rgba(0,0,0,0.06)" },
+      web: { boxShadow: "0 8px 20px rgba(0,0,0,0.38)" },
       default: {
-        shadowColor: Theme.shadow,
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.08,
-        shadowRadius: 2,
-        elevation: 2,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.28,
+        shadowRadius: 8,
+        elevation: 3,
       },
     }),
   },
   segmentLab: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "700",
     letterSpacing: 1,
     textTransform: "uppercase",
-    color: Theme.textMuted,
+    color: "rgba(255,255,255,0.72)",
   },
-  segmentLabOn: { color: Theme.iconPrimary },
+  segmentLabOn: { color: Theme.textOnPrimary },
   assignLaterCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingVertical: 10,
+    paddingVertical: 11,
     paddingHorizontal: 12,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 2,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surfaceForm,
@@ -1592,20 +2278,20 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
   },
   assignLaterTitle: {
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "600",
     color: Theme.textPrimary,
     marginBottom: 4,
   },
   assignLaterSub: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
     color: Theme.textMuted,
     lineHeight: 17,
   },
   warningText: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
     color: Theme.teslaRed,
     marginBottom: 6,
   },
@@ -1622,18 +2308,18 @@ const styles = StyleSheet.create({
   },
   warnBannerText: {
     flex: 1,
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: Theme.warning,
     lineHeight: 16,
   },
   notesInput: {
-    minHeight: 96,
+    minHeight: 84,
     textAlignVertical: "top",
     paddingTop: 14,
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 2,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "500",
   },
   ctaBlock: {
@@ -1673,17 +2359,17 @@ const styles = StyleSheet.create({
   },
   ctaHint: {
     marginTop: 12,
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "700",
     letterSpacing: 1,
     textTransform: "uppercase",
     color: Theme.textMuted,
   },
   previewCard: {
     position: "absolute",
-    width: 300,
+    width: 336,
     backgroundColor: Theme.cardWhite,
-    borderRadius: 20,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     overflow: "hidden",
@@ -1701,16 +2387,35 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  previewCardDesktop: {
+    position: "relative",
+    width: "100%",
+    right: undefined,
+    bottom: undefined,
+    marginTop: 4,
+    ...Platform.select<ViewStyle>({
+      web: {
+        position: "sticky" as const,
+        top: 20,
+      },
+      default: {},
+    }),
+  },
   previewHead: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: Theme.darkSurface,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  previewHeadRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   previewHeadTitle: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1,
     textTransform: "uppercase",
@@ -1728,45 +2433,99 @@ const styles = StyleSheet.create({
     color: Theme.textOnPrimary,
     textTransform: "uppercase",
   },
-  previewBody: { padding: 12, gap: 8 },
+  previewCollapseBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.24)",
+  },
+  previewCollapsedChip: {
+    position: "absolute",
+    zIndex: 60,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: Theme.darkSurface,
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    ...Platform.select<ViewStyle>({
+      web: { boxShadow: "0 10px 24px rgba(15,23,42,0.2)" },
+      default: {
+        shadowColor: Theme.shadow,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.16,
+        shadowRadius: 10,
+        elevation: 4,
+      },
+    }),
+  },
+  previewCollapsedChipText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textOnPrimary,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  previewBody: { padding: 14, gap: 10 },
   previewLine: { gap: 4 },
   previewLab: {
-    fontSize: 9,
-    fontWeight: "800",
+    fontSize: 8,
+    fontWeight: "700",
     color: Theme.textMuted,
     textTransform: "uppercase",
   },
   previewVal: {
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "500",
     color: Theme.textPrimaryDark,
   },
   previewDivider: {
     height: 1,
     backgroundColor: Theme.borderLight,
-    marginVertical: 4,
+    marginVertical: 6,
   },
-  previewRow2: { flexDirection: "row", gap: 12 },
+  previewRow2: { flexDirection: "row", gap: 10 },
+  previewCell: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  previewValStrong: {
+    fontSize: 14,
+    fontWeight: "600",
+    letterSpacing: -0.2,
+    color: Theme.textPrimaryDark,
+  },
   previewFoot: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 12,
     backgroundColor: Theme.surfaceLight,
-    marginTop: 4,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
   },
   previewFootLeft: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 9,
+    fontWeight: "700",
     color: Theme.textMuted,
     textTransform: "uppercase",
   },
   previewFootRight: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 9,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
-    maxWidth: 140,
+    maxWidth: 150,
     textAlign: "right",
   },
   blobA: {
