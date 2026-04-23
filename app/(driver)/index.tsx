@@ -72,6 +72,7 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View
 } from "react-native";
@@ -571,6 +572,8 @@ export default function DriverRadarScreen() {
   /** Only one forced fit per trip bounds — avoids resetting map when sheet/POD content changes height */
   const mapHeightFitAppliedForBoundsKeyRef = useRef<string | null>(null);
   const otpInputRef = useRef<any>(null);
+  const OtpInputComponent =
+    Platform.OS === "web" ? TextInput : BottomSheetTextInput;
   const lastGuidanceKeyRef = useRef<string | null>(null);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [isFollowingLocation, setIsFollowingLocation] = useState(false);
@@ -1100,7 +1103,7 @@ export default function DriverRadarScreen() {
           </View>
         ))}
       </TouchableOpacity>
-      <BottomSheetTextInput
+      <OtpInputComponent
         ref={otpInputRef}
         value={otpValue}
         onFocus={() => {
@@ -1226,28 +1229,33 @@ export default function DriverRadarScreen() {
       ? visibleAssignableIncomingTrips[0]
       : null;
   /**
+   * In multi-trip mode, when driver taps "Accept and verify OTP", force that tapped
+   * trip into the active card context so OTP UI appears immediately.
+   */
+  const otpFocusedIncoming = useMemo(() => {
+    if (!otpClaimTripId) return null;
+    const wanted = String(otpClaimTripId).toLowerCase();
+    if (
+      selectedIncomingTrip &&
+      String(selectedIncomingTrip.id).toLowerCase() === wanted
+    ) {
+      return selectedIncomingTrip;
+    }
+    return (
+      visibleIncomingTrips.find(
+        (trip) => String(trip.id).toLowerCase() === wanted,
+      ) ?? null
+    );
+  }, [otpClaimTripId, selectedIncomingTrip, visibleIncomingTrips]);
+  /**
    * Prefer accepted assignment first so we never flash the notification list during fetch lag.
    * Otherwise single assignable trip or picker selection among remaining trips.
    */
   const effectiveFirstIncoming =
-    resolvedAcceptedIncomingTrip ?? pickerFocusedIncoming;
+    resolvedAcceptedIncomingTrip ?? pickerFocusedIncoming ?? otpFocusedIncoming;
 
-  // Single assigned trip: auto-enter flow without requiring notification selection.
-  useEffect(() => {
-    if (activeMission) return;
-    if (visibleAssignableIncomingTrips.length !== 1) return;
-    if (acceptedTripId && String(acceptedTripId).trim() !== "") return;
-    const onlyTrip = visibleAssignableIncomingTrips[0];
-    if (!onlyTrip?.id) return;
-    const requiresOtpAutoGuard =
-      !isRosterTrip(onlyTrip) &&
-      (pendingOtpTrips.some((t) => t.id === onlyTrip.id) ||
-        (isAggregateTrip(onlyTrip) && isAssignedNotStarted(onlyTrip.status)));
-    if (requiresOtpAutoGuard) return;
-    setAcceptedTripId(onlyTrip.id);
-    setSelectedIncomingTripId(onlyTrip.id);
-    void AsyncStorage.setItem(DRIVER_ACCEPTED_TRIP_ID_KEY, onlyTrip.id);
-  }, [activeMission, visibleAssignableIncomingTrips, acceptedTripId, pendingOtpTrips]);
+  // Keep incoming assignments in explicit accept/reject state until the driver acts.
+  // This prevents single asset-based assignments from auto-entering trip flow.
 
   /** Keep selection aligned when only one assignable incoming trip remains. */
   useEffect(() => {
@@ -1280,7 +1288,8 @@ export default function DriverRadarScreen() {
         ...allTrips,
       ].find(
         (trip): trip is tripsService.TripRow =>
-          trip != null && trip.id === otpClaimTripId,
+          trip != null &&
+          String(trip.id).toLowerCase() === String(otpClaimTripId).toLowerCase(),
       ) ?? null)
     : null;
 
@@ -1829,12 +1838,13 @@ export default function DriverRadarScreen() {
 
   // Blink for "New assignment" card (pending accept, or showing accept/decline feedback).
   const showNewAssignmentCard = Boolean(
-    effectiveFirstIncoming &&
-    (assignmentFeedback != null ||
-      (effectiveIncomingId !== String(acceptedTripId ?? "").toLowerCase() &&
-        effectiveIncomingId !== justClaimedTripIdRef.current &&
-        effectiveIncomingId !== justClaimedOldTripIdRef.current &&
-        !activeMission)),
+    (otpClaimTripId && otpClaimTrip) ||
+      (effectiveFirstIncoming &&
+        (assignmentFeedback != null ||
+          (effectiveIncomingId !== String(acceptedTripId ?? "").toLowerCase() &&
+            effectiveIncomingId !== justClaimedTripIdRef.current &&
+            effectiveIncomingId !== justClaimedOldTripIdRef.current &&
+            !activeMission))),
   );
   const isAcceptedIncomingFlow = Boolean(
     effectiveFirstIncoming &&
@@ -1842,7 +1852,7 @@ export default function DriverRadarScreen() {
       String(effectiveFirstIncoming.id).toLowerCase(),
   );
   const shouldUseStaticMapSheetCard = Boolean(
-    showNewAssignmentCard || activeMission || isAcceptedIncomingFlow,
+    showNewAssignmentCard || activeMission || isAcceptedIncomingFlow || otpClaimTripId,
   );
   useEffect(() => {
     if (!showNewAssignmentCard) return;
@@ -1870,6 +1880,7 @@ export default function DriverRadarScreen() {
   const shouldShowMap = Boolean(
     activeMission ||
       isAcceptedIncomingFlow ||
+      otpClaimTripId ||
       (hasSingleAssignableIncomingTrip && effectiveFirstIncoming) ||
       assignmentFeedback != null,
   );
@@ -1977,6 +1988,8 @@ export default function DriverRadarScreen() {
       setAcceptError(null);
       setOtpError(null);
       setOtpValue("");
+      // Keep dashboard/map focus on the same trip user tapped "Accept" on.
+      setSelectedIncomingTripId(trip.id);
       setOtpClaimTripId(trip.id);
       if (shouldShowMap) snapSheetToIndex(2);
       setTimeout(() => otpInputRef.current?.focus(), 150);
@@ -3709,6 +3722,8 @@ export default function DriverRadarScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+        ) : otpClaimTrip ? (
+          renderOtpClaimCard(otpClaimTrip, { showCancel: true })
         ) : !effectiveFirstIncoming && hasAssignableIncomingTrip ? (
           <View style={styles.centerCardConstraint}>
             <View style={[styles.centerCardWrap, styles.notificationListIntro]}>
