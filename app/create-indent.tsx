@@ -188,6 +188,21 @@ function isUuid(value: string | null | undefined): value is string {
   );
 }
 
+/** True when the user has entered something worth persisting (draft save). Ignores pickup_date default-only. */
+function hasIndentDraftProgress(state: FormState): boolean {
+  const t = (s: string | null | undefined) => (s ?? "").trim();
+  if (t(state.pickup_area)) return true;
+  if (t(state.drop_location)) return true;
+  if (state.client_id?.trim()) return true;
+  if (t(state.client_name)) return true;
+  if (t(state.vehicle_type)) return true;
+  if (t(state.load_type)) return true;
+  if (t(state.weight)) return true;
+  if (t(state.client_price)) return true;
+  if (t(state.supplier_target)) return true;
+  return false;
+}
+
 export default function CreateIndentScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ draftId?: string | string[] }>();
@@ -600,6 +615,13 @@ export default function CreateIndentScreen() {
       );
       return;
     }
+    if (!hasIndentDraftProgress(form)) {
+      showDialog(
+        "Nothing to save yet",
+        "Fill in at least one field (route, client, vehicle, load, weight, or pricing), then save draft.",
+      );
+      return;
+    }
     const payload = buildPayload();
     setSubmitting(true);
     try {
@@ -786,6 +808,10 @@ export default function CreateIndentScreen() {
     (form.supplier_target ?? "").trim().length > 0 &&
     parseFloat(String(form.client_price ?? "").replace(/,/g, "")) > 0 &&
     parseFloat(String(form.supplier_target ?? "").replace(/,/g, "")) >= 0;
+
+  const canSaveDraft =
+    Boolean(orgId) && !submitting && hasIndentDraftProgress(form);
+
   const isWide = windowWidth >= 720;
   const stackActionButtons = windowWidth < 760;
   const baseInputArr = [styles.tripInput, inputStyle];
@@ -1801,10 +1827,11 @@ export default function CreateIndentScreen() {
                         style={[
                           styles.draftBtn,
                           stackActionButtons && styles.actionBtnStacked,
-                          submitting && styles.submitBtnDisabled,
+                          (!canSaveDraft || submitting) &&
+                            styles.submitBtnDisabled,
                         ]}
                         onPress={persistDraft}
-                        disabled={submitting}
+                        disabled={!canSaveDraft || submitting}
                         activeOpacity={0.8}
                         focusable
                         onFocus={onDraftActionFocus}
