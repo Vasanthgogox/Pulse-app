@@ -177,7 +177,6 @@ export function PartnerSupplierPickerModal({
                   selected={selectedId === item.id}
                   onSelect={() => {
                     onSelect(selectedId === item.id ? null : item.id);
-                    onClose();
                   }}
                 />
               )}

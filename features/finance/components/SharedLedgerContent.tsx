@@ -581,14 +581,25 @@ export function SharedLedgerContent({
 
   const txs = transactions ?? [];
 
+  // Shared Ledger (integrated) should only reconcile load-based/shared trips.
+  // Exclude manual/offline trips from this view while keeping them in other tabs.
+  const sharedScopeTrips = useMemo(
+    () => (integrated ? trips.filter((t) => t.indent_id != null) : trips),
+    [integrated, trips],
+  );
+  const sharedScopeTripIdSet = useMemo(
+    () => new Set(sharedScopeTrips.map((t) => normTripKey(t.id))),
+    [sharedScopeTrips],
+  );
+
   const tripByNormRef = useMemo(() => {
     const m = new Map<string, TripRow>();
-    for (const t of trips) {
+    for (const t of sharedScopeTrips) {
       m.set(normTripKey(t.id), t);
       m.set(normTripKey(getTripDisplayNumber(t)), t);
     }
     return m;
-  }, [trips]);
+  }, [sharedScopeTrips]);
 
   const resolveTripRefToCanonicalId = useCallback(
     (tripRef: string | null | undefined): string => {
@@ -622,10 +633,16 @@ export function SharedLedgerContent({
 
   const internalMap = useMemo(
     () =>
-      trips.length && txs.length >= 0
-        ? buildInternalTrips(trips, txs, entity.id, entityType, organizationId)
+      sharedScopeTrips.length && txs.length >= 0
+        ? buildInternalTrips(
+            sharedScopeTrips,
+            txs,
+            entity.id,
+            entityType,
+            organizationId,
+          )
         : new Map(),
-    [trips, txs, entity.id, entityType, organizationId],
+    [sharedScopeTrips, txs, entity.id, entityType, organizationId],
   );
 
   // When partner is not integrated: fetch contact phone, then check if they're in app (by phone lookup).
@@ -723,11 +740,16 @@ export function SharedLedgerContent({
     getSharedLedgerTripSummary(organizationId, entity.id).then(({ error, rows }) => {
       if (cancelled) return;
       if (!error && rows?.length > 0) {
-        const fromSummary: SharedTripData[] = rows.map((r) => ({
-          tripId: r.trip_id,
-          sales: r.partner_sales,
-          paid: r.partner_paid,
-        }));
+        const fromSummary: SharedTripData[] = rows
+          .map((r) => ({
+            tripId: r.trip_id,
+            sales: r.partner_sales,
+            paid: r.partner_paid,
+          }))
+          .filter(
+            (r) =>
+              !integrated || sharedScopeTripIdSet.has(normTripKey(r.tripId)),
+          );
         // When trip summary has partner_paid = 0 (e.g. counterparty missing), merge in paid from entries
         // so partner's paid is shown for both CLIENT and SUPPLIER view (fixes "Update My Book" / Credits (Paid) staying 0).
         const needsPaidFromEntries =
@@ -741,7 +763,16 @@ export function SharedLedgerContent({
         getSharedLedgerEntriesForPartner(organizationId, entity.id).then(({ error: e2, entries }) => {
           if (cancelled) return;
           setLoadingShared(false);
-          if (!e2 && entries) setPartnerEntries(entries);
+          if (!e2 && entries) {
+            const scopedEntries = entries.filter(
+              (e) =>
+                !integrated ||
+                sharedScopeTripIdSet.has(
+                  normTripKey(String(e.reference_id ?? "")),
+                ),
+            );
+            setPartnerEntries(scopedEntries);
+          }
           const byTrip = new Map<string, number>();
           if (!e2 && entries?.length) {
             const partnerPaidFromOut = entityType === "CLIENT"; // client pays us = their amount_out
@@ -771,7 +802,14 @@ export function SharedLedgerContent({
       getSharedLedgerEntriesForPartner(organizationId, entity.id).then(({ error: e2, entries }) => {
         if (cancelled) return;
         setLoadingShared(false);
-        if (!e2 && entries) setPartnerEntries(entries);
+        if (!e2 && entries) {
+          const scopedEntries = entries.filter(
+            (e) =>
+              !integrated ||
+              sharedScopeTripIdSet.has(normTripKey(String(e.reference_id ?? ""))),
+          );
+          setPartnerEntries(scopedEntries);
+        }
         if (e2 || !entries?.length) return;
         const byTrip = new Map<string, { in: number; out: number }>();
         for (const e of entries) {
@@ -805,6 +843,7 @@ export function SharedLedgerContent({
   }, [
     organizationId,
     integrated,
+    sharedScopeTripIdSet,
     entity.id,
     entityType,
     sharedTripsProp?.length,
@@ -831,15 +870,32 @@ export function SharedLedgerContent({
     });
   }, [organizationId, partnerOrgId]);
 
+  const effectiveSharedTripsForView = useMemo(() => {
+    const rows = sharedTrips ?? sharedTripsProp;
+    if (!rows?.length) return rows;
+    if (!integrated) return rows;
+    return rows.filter((r) => sharedScopeTripIdSet.has(normTripKey(r.tripId)));
+  }, [
+    sharedTrips,
+    sharedTripsProp,
+    integrated,
+    sharedScopeTripIdSet,
+  ]);
+
   const reconciledRows = useMemo(
     () =>
       buildReconciledRows(
         internalMap,
-        sharedTrips ?? sharedTripsProp,
+        effectiveSharedTripsForView,
         entity.name ?? "—",
         entityType,
       ),
-    [internalMap, sharedTrips, sharedTripsProp, entity.name, entityType],
+    [
+      internalMap,
+      effectiveSharedTripsForView,
+      entity.name,
+      entityType,
+    ],
   );
 
   const mergePartnerLineIntoBook = useCallback(
@@ -999,7 +1055,7 @@ export function SharedLedgerContent({
       s == null ? "" : String(s).trim().toLowerCase();
     const tripMap = new Map<string, TripRow>();
     const tripDisplayById = new Map<string, string>();
-    for (const t of trips) {
+    for (const t of sharedScopeTrips) {
       const idKey = norm(t.id);
       tripMap.set(idKey, t);
       const displayKey = norm(getTripDisplayNumber(t));
@@ -1012,7 +1068,9 @@ export function SharedLedgerContent({
       (t) =>
         t.contact_type === contactType &&
         t.contact_id != null &&
-        t.contact_id === entity.id,
+        t.contact_id === entity.id &&
+        (!integrated ||
+          (t.trip_id != null && sharedScopeTripIdSet.has(norm(t.trip_id)))),
     );
 
     /** Index local entries by tripId (may have multiple per trip). */
@@ -1267,7 +1325,9 @@ export function SharedLedgerContent({
     entity.id,
     entity.name,
     entityType,
-    trips,
+    integrated,
+    sharedScopeTrips,
+    sharedScopeTripIdSet,
     reconciledRows,
     resolveTripRefToCanonicalId,
   ]);

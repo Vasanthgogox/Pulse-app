@@ -119,6 +119,42 @@ export function AddTripFormFields({
   const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
   const [fleetLoading, setFleetLoading] = useState(false);
   const [suppliersLoading, setSuppliersLoading] = useState(false);
+  const clientPriceInputRef = useRef<TextInput>(null);
+  const supplierRateInputRef = useRef<TextInput>(null);
+  const advancePaidInputRef = useRef<TextInput>(null);
+  const driverPhoneInputRef = useRef<TextInput>(null);
+  const aggregateVehicleInputRef = useRef<TextInput>(null);
+  const notesInputRef = useRef<TextInput>(null);
+
+  const focusField = useCallback((ref: { current: TextInput | null }) => {
+    requestAnimationFrame(() => {
+      ref.current?.focus();
+    });
+  }, []);
+
+  const focusFieldAfterModalClose = useCallback(
+    (ref: { current: TextInput | null }) => {
+      // Web modal close/render timing can swallow immediate focus.
+      // Retry shortly after close to make focus reliable.
+      focusField(ref);
+      setTimeout(() => {
+        ref.current?.focus();
+      }, 120);
+    },
+    [focusField],
+  );
+
+  const openPickerNext = useCallback((type: "driver" | "vehicle") => {
+    requestAnimationFrame(() => {
+      setPickerType(type);
+    });
+  }, []);
+
+  const openSupplierPickerNext = useCallback(() => {
+    requestAnimationFrame(() => {
+      setSupplierDropdownOpen(true);
+    });
+  }, []);
   const fetchFleet = useCallback(() => {
     if (!organizationId) return;
     setFleetLoading(true);
@@ -238,7 +274,9 @@ export function AddTripFormFields({
   }, [state.supplySource, state.assignLater, state.driverPhone, setters]);
 
   const handleSelectClient = (c: ClientRow) => {
+    if (state.clientId === c.id) return;
     setters.setClientSelection(c.id, c.name);
+    focusField(clientPriceInputRef);
   };
 
   const closePicker = useCallback(() => setPickerType(null), []);
@@ -261,6 +299,35 @@ export function AddTripFormFields({
       : pickerType === "vehicle"
         ? setters.setVehicleId
         : () => {};
+  const handlePickerSelect = useCallback(
+    (id: string | null) => {
+      if (id === selectedId) {
+        setSelectedId(id);
+        return;
+      }
+      setSelectedId(id);
+      if (pickerType === "driver") {
+        openPickerNext("vehicle");
+      } else if (pickerType === "vehicle") {
+        focusField(notesInputRef);
+      }
+    },
+    [focusField, openPickerNext, pickerType, selectedId, setSelectedId],
+  );
+
+  const handleSupplierSelect = useCallback(
+    (id: string | null) => {
+      if (id === state.supplierId) {
+        setters.setSupplierId(id);
+        setSupplierDropdownOpen(false);
+        return;
+      }
+      setters.setSupplierId(id);
+      setSupplierDropdownOpen(false);
+      focusFieldAfterModalClose(supplierRateInputRef);
+    },
+    [focusFieldAfterModalClose, setters, state.supplierId],
+  );
 
   const scrollBlocked =
     pickerOpen ||
@@ -485,8 +552,21 @@ export function AddTripFormFields({
                     placeholderTextColor={Theme.placeholder}
                     value={state.clientPrice}
                     onChangeText={setters.setClientPrice}
+                    ref={clientPriceInputRef}
                     keyboardType="decimal-pad"
                     autoCorrect={false}
+                    returnKeyType="next"
+                    onSubmitEditing={() => {
+                      if (supplyIsAsset) {
+                        if (state.assignLater) {
+                          focusField(notesInputRef);
+                        } else {
+                          openPickerNext("driver");
+                        }
+                        return;
+                      }
+                      openSupplierPickerNext();
+                    }}
                   />
                 </View>
                 <View style={styles.infoCallout}>
@@ -774,7 +854,10 @@ export function AddTripFormFields({
                       placeholderTextColor={Theme.placeholder}
                       value={state.supplierRate}
                       onChangeText={setters.setSupplierRate}
+                      ref={supplierRateInputRef}
                       keyboardType="decimal-pad"
+                      returnKeyType="next"
+                      onSubmitEditing={() => focusField(advancePaidInputRef)}
                     />
                   </View>
                   <View style={styles.gridCol}>
@@ -787,7 +870,16 @@ export function AddTripFormFields({
                       placeholderTextColor={Theme.placeholder}
                       value={state.advancePaid}
                       onChangeText={setters.setAdvancePaid}
+                      ref={advancePaidInputRef}
                       keyboardType="decimal-pad"
+                      returnKeyType="next"
+                      onSubmitEditing={() => {
+                        if (state.assignLater) {
+                          focusField(notesInputRef);
+                        } else {
+                          focusField(driverPhoneInputRef);
+                        }
+                      }}
                     />
                   </View>
                 </View>
@@ -820,6 +912,11 @@ export function AddTripFormFields({
                               setters.setDriverPhone(formatMobileNumber(v))
                             }
                             keyboardType="phone-pad"
+                            ref={driverPhoneInputRef}
+                            returnKeyType="next"
+                            onSubmitEditing={() =>
+                              focusField(aggregateVehicleInputRef)
+                            }
                           />
                         </View>
                       </View>
@@ -851,6 +948,9 @@ export function AddTripFormFields({
                               )
                             }
                             autoCapitalize="characters"
+                            ref={aggregateVehicleInputRef}
+                            returnKeyType="next"
+                            onSubmitEditing={() => focusField(notesInputRef)}
                           />
                         </View>
                       </View>
@@ -923,7 +1023,7 @@ export function AddTripFormFields({
               drivers={availableDrivers}
               vehicles={availableVehicles}
               selectedId={selectedId}
-              onSelect={setSelectedId}
+              onSelect={handlePickerSelect}
               onClose={closePicker}
             />
 
@@ -932,7 +1032,7 @@ export function AddTripFormFields({
               suppliers={suppliers}
               loading={suppliersLoading}
               selectedId={state.supplierId}
-              onSelect={setters.setSupplierId}
+              onSelect={handleSupplierSelect}
               onClose={() => setSupplierDropdownOpen(false)}
             />
           </View>
@@ -957,6 +1057,7 @@ export function AddTripFormFields({
                 placeholderTextColor={Theme.placeholder}
                 value={state.notes}
                 onChangeText={setters.setNotes}
+                ref={notesInputRef}
                 multiline
               />
             </View>

@@ -243,6 +243,28 @@ export default function CreateIndentScreen() {
     null,
   );
   const indentActionsHostRef = useRef<View>(null);
+  const vehicleTypeInputRef = useRef<TextInput>(null);
+  const clientPriceInputRef = useRef<TextInput>(null);
+  const supplierTargetInputRef = useRef<TextInput>(null);
+  const weightInputRef = useRef<TextInput>(null);
+
+  const focusField = useCallback((ref: { current: TextInput | null }) => {
+    requestAnimationFrame(() => {
+      ref.current?.focus();
+    });
+  }, []);
+
+  const openLoadTypePickerNext = useCallback(() => {
+    requestAnimationFrame(() => {
+      setLoadTypePickerOpen(true);
+    });
+  }, []);
+
+  const openPickupDateNext = useCallback(() => {
+    requestAnimationFrame(() => {
+      setShowDatePicker(true);
+    });
+  }, []);
 
   const cancelActionHintBlurTimer = useCallback(() => {
     if (actionHintBlurTimerRef.current) {
@@ -554,6 +576,7 @@ export default function CreateIndentScreen() {
 
   const handleSelectClient = useCallback(
     (client: ClientRow) => {
+      if (form.client_id === client.id) return;
       const clientName = client.name ?? client.contact_person ?? "";
       if (!clientName.trim()) {
         showDialog(
@@ -566,8 +589,9 @@ export default function CreateIndentScreen() {
         client_id: client.id,
         client_name: clientName,
       });
+      focusField(clientPriceInputRef);
     },
-    [update],
+    [focusField, form.client_id, showDialog, update],
   );
 
   const handleBackPress = useCallback(() => {
@@ -1085,10 +1109,13 @@ export default function CreateIndentScreen() {
                         ]}
                         value={form.client_price}
                         onChangeText={(t) => update({ client_price: t })}
+                        ref={clientPriceInputRef}
                         placeholder="0"
                         placeholderTextColor={Theme.placeholder}
                         keyboardType="decimal-pad"
                         autoCorrect={false}
+                        returnKeyType="next"
+                        onSubmitEditing={() => focusField(supplierTargetInputRef)}
                       />
                     </View>
                     {errors.client_price ? (
@@ -1129,10 +1156,13 @@ export default function CreateIndentScreen() {
                       ]}
                       value={form.supplier_target}
                       onChangeText={(t) => update({ supplier_target: t })}
+                      ref={supplierTargetInputRef}
                       placeholder="0"
                       placeholderTextColor={Theme.textMuted}
                       keyboardType="decimal-pad"
                       autoCorrect={false}
+                      returnKeyType="next"
+                      onSubmitEditing={() => focusField(weightInputRef)}
                     />
                   </View>
                   {errors.supplier_target ? (
@@ -1176,6 +1206,7 @@ export default function CreateIndentScreen() {
                             client_name: clientName,
                           });
                           setClients((prev) => [...prev, client]);
+                          focusField(clientPriceInputRef);
                         }
                       }}
                       organizationId={orgId}
@@ -1204,10 +1235,13 @@ export default function CreateIndentScreen() {
                           styles.sheetInput,
                           errors.vehicle_type && styles.inputError,
                         ]}
+                        ref={vehicleTypeInputRef}
                         value={form.vehicle_type}
                         onChangeText={(t) => update({ vehicle_type: t })}
                         placeholder="Type vehicle"
                         placeholderTextColor={Theme.textMuted}
+                        returnKeyType="next"
+                        onSubmitEditing={openLoadTypePickerNext}
                       />
                     ) : (
                       <TouchableOpacity
@@ -1287,9 +1321,12 @@ export default function CreateIndentScreen() {
                     onChangeText={(t) =>
                       update({ weight: t.replace(/[^\d.]/g, "").slice(0, 12) })
                     }
+                    ref={weightInputRef}
                     placeholder="e.g. 10 (tons)"
                     placeholderTextColor={Theme.textMuted}
                     keyboardType="decimal-pad"
+                    returnKeyType="done"
+                    onSubmitEditing={openPickupDateNext}
                   />
                   {errors.weight ? (
                     <Text style={styles.errorText}>{errors.weight}</Text>
@@ -1510,6 +1547,7 @@ export default function CreateIndentScreen() {
                                       setVehicleTypeIsOther(false);
                                       update({ vehicle_type: opt });
                                       setVehicleTypePickerOpen(false);
+                                      if (!selected) openLoadTypePickerNext();
                                     }}
                                     activeOpacity={0.75}
                                   >
@@ -1565,6 +1603,7 @@ export default function CreateIndentScreen() {
                                       setVehicleTypeIsOther(false);
                                       update({ vehicle_type: opt });
                                       setVehicleTypePickerOpen(false);
+                                      if (!selected) openLoadTypePickerNext();
                                     }}
                                     activeOpacity={0.75}
                                   >
@@ -1610,6 +1649,7 @@ export default function CreateIndentScreen() {
                               setVehicleTypeIsOther(true);
                               update({ vehicle_type: "" });
                               setVehicleTypePickerOpen(false);
+                              focusField(vehicleTypeInputRef);
                             }}
                             activeOpacity={0.75}
                           >
@@ -1723,6 +1763,7 @@ export default function CreateIndentScreen() {
                                   onPress={() => {
                                     update({ load_type: opt });
                                     setLoadTypePickerOpen(false);
+                                    if (!selected) focusField(weightInputRef);
                                   }}
                                   activeOpacity={0.75}
                                 >
