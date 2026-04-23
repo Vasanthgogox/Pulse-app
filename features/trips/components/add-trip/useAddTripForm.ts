@@ -19,6 +19,8 @@ import type { AddTripFormData, AddTripFormState } from './types';
 const initialState: AddTripFormState = {
   pickupArea: '',
   dropLocation: '',
+  tripStartDate: '',
+  tons: '',
   pickupLat: null,
   pickupLon: null,
   dropLat: null,
@@ -59,6 +61,8 @@ export function useAddTripForm() {
   })), []);
   const setPickupCoords = useCallback((lat: number, lon: number) => setState((s) => ({ ...s, pickupLat: lat, pickupLon: lon })), []);
   const setDropCoords = useCallback((lat: number, lon: number) => setState((s) => ({ ...s, dropLat: lat, dropLon: lon })), []);
+  const setTripStartDate = useCallback((v: string) => setState((s) => ({ ...s, tripStartDate: v })), []);
+  const setTons = useCallback((v: string) => setState((s) => ({ ...s, tons: v })), []);
   const setClientName = useCallback((v: string) => setState((s) => ({ ...s, clientName: v, clientId: null })), []);
   const setClientId = useCallback((id: string | null) => setState((s) => ({ ...s, clientId: id })), []);
   const setClientSelection = useCallback((id: string | null, name: string) => setState((s) => ({ ...s, clientId: id, clientName: name })), []);
@@ -277,6 +281,18 @@ export function useAddTripForm() {
     if (err) return `Pickup area: ${err}`;
     const err2 = runValidators(state.dropLocation, [required(), maxLength(255)]);
     if (err2) return `Drop location: ${err2}`;
+    if (state.tripStartDate.trim()) {
+      const dateIsoRe = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateIsoRe.test(state.tripStartDate.trim())) {
+        return 'Trip start date: use YYYY-MM-DD';
+      }
+    }
+    if (state.tons.trim()) {
+      const tonsNum = Number(state.tons);
+      if (!Number.isFinite(tonsNum) || tonsNum < 0) {
+        return 'Tons: enter a valid non-negative number';
+      }
+    }
     const err3 = runValidators(state.clientName, [required(), maxLength(VALIDATION.CLIENT_SUPPLIER_NAME_MAX_LENGTH)]);
     if (err3) return `Client: ${err3}`;
     const err4 = positiveAmount()(state.clientPrice);
@@ -323,6 +339,9 @@ export function useAddTripForm() {
     const supplierRate = state.supplySource === 'asset' ? 0 : (parseFloat(state.supplierRate) || 0);
     const advancePaid = parseFloat(state.advancePaid) || 0;
     let notes = state.notes.trim();
+    if (state.tons.trim()) {
+      notes = (notes ? notes + '\n' : '') + `Load: ${state.tons.trim()} Tons`;
+    }
     if (state.supplySource === 'aggregate' && state.aggregateVehicleText.trim()) {
       notes = (notes ? notes + '\n' : '') + 'Vehicle: ' + state.aggregateVehicleText.trim();
     }
@@ -333,6 +352,7 @@ export function useAddTripForm() {
       pickup_lon: state.pickupLon ?? undefined,
       drop_lat: state.dropLat ?? undefined,
       drop_lon: state.dropLon ?? undefined,
+      pickup_date: state.tripStartDate.trim() || null,
       distance: state.routeDistanceKm ?? undefined,
       estimated_duration: state.routeEtaInterval ?? undefined,
       client_name: state.clientName.trim(),
@@ -354,6 +374,7 @@ export function useAddTripForm() {
         state.supplySource === 'aggregate' && state.aggregateVehicleText.trim()
           ? state.aggregateVehicleText.trim()
           : undefined,
+      tons: state.tons.trim() || null,
     };
   }, [state]);
 
@@ -363,6 +384,8 @@ export function useAddTripForm() {
       setDropLocation,
       setPickupCoords,
       setDropCoords,
+      setTripStartDate,
+      setTons,
       setClientName,
       setClientId,
       setClientSelection,
@@ -386,6 +409,8 @@ export function useAddTripForm() {
       setDropLocation,
       setPickupCoords,
       setDropCoords,
+      setTripStartDate,
+      setTons,
       setClientName,
       setClientId,
       setClientSelection,

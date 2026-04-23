@@ -2,12 +2,13 @@
  * Centered fleet picker — reference layout: title, search, rich rows.
  */
 import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchInput";
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
 import { formatIndianVehicleNumber } from "@/lib/format";
-import { Truck, User, X } from "lucide-react-native";
+import { Truck, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import {
   FlatList,
@@ -213,9 +214,14 @@ function DriverPickerRow({
   const sub = [driver.phone, driver.email].filter(Boolean).join(" · ");
   return (
     <View style={[styles.row, selected && styles.rowSelected]}>
-      <View style={styles.rowIconCircle}>
-        <User size={18} color={Theme.iconPrimary} />
-      </View>
+      <PartyAvatar
+        name={driver.name ?? "Driver"}
+        avatarUrl={(driver as { avatar_url?: string | null }).avatar_url ?? null}
+        avatarSeed={(driver as { avatar_seed?: string | null }).avatar_seed ?? null}
+        entityType="driver"
+        size={44}
+        borderStyle={styles.rowAvatar}
+      />
       <View style={styles.rowTextBlock}>
         <Text style={styles.rowPrimary} numberOfLines={1}>
           {driver.name || "—"}
@@ -381,6 +387,10 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
+  },
+  rowAvatar: {
+    borderWidth: 1.5,
+    borderColor: Theme.borderLight,
   },
   rowTextBlock: {
     flex: 1,

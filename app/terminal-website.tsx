@@ -63,7 +63,7 @@ const WEBSITE_HTML = `<!doctype html>
       body { padding-bottom: 90px; }
       .mobile-tabbar {
         display: grid;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
+        grid-template-columns: repeat(6, minmax(0, 1fr));
         gap: 8px;
         position: fixed;
         left: 12px;
@@ -124,6 +124,7 @@ const WEBSITE_HTML = `<!doctype html>
         <a href="#ledger" class="nav-link font-black uppercase text-slate-400 hover:text-emerald-600 transition-colors">Ledger</a>
         <a href="#drivers" class="nav-link font-black uppercase text-slate-400 hover:text-emerald-600 transition-colors">Drivers</a>
         <a href="#contracts" class="nav-link font-black uppercase text-slate-400 hover:text-emerald-600 transition-colors">Contracts</a>
+        <a href="#steps" class="nav-link font-black uppercase text-slate-400 hover:text-emerald-600 transition-colors">Steps</a>
       </div>
       <a href="/sign-in" target="_top" class="nav-cta px-10 py-3 bg-slate-950 text-white rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 shadow-2xl transition-all">Enter OS</a>
     </div>
@@ -302,7 +303,7 @@ const WEBSITE_HTML = `<!doctype html>
     </div>
   </section>
 
-  <section class="section-stack py-40 page-pad max-w-5xl mx-auto wide-shell text-center reveal">
+  <section id="steps" class="section-stack py-40 page-pad max-w-5xl mx-auto wide-shell text-center reveal">
     <h2 class="headline-lg text-6xl font-black tracking-tighter italic uppercase mb-20">3 Steps To Start<span class="text-emerald-500">.</span></h2>
     <div class="steps-grid grid sm:grid-cols-3 gap-12 relative">
       <div class="absolute top-10 left-0 right-0 h-px bg-slate-100 hidden sm:block"></div>
@@ -332,7 +333,7 @@ const WEBSITE_HTML = `<!doctype html>
   </section>
 
   <footer class="py-16 page-pad bg-slate-950 border-t border-white/5 text-center">
-    <p class="footer-copy text-[11px] font-black text-slate-600 uppercase tracking-widest leading-relaxed italic">GoGoX pulse • All rights reserved 2024</p>
+    <p class="footer-copy text-[11px] font-black text-slate-600 uppercase tracking-widest leading-relaxed italic">GoGoX pulse • All rights reserved 2026</p>
   </footer>
   <div class="mobile-tabbar">
     <a href="#network">Network</a>
@@ -340,6 +341,7 @@ const WEBSITE_HTML = `<!doctype html>
     <a href="#ledger">Ledger</a>
     <a href="#drivers">Drivers</a>
     <a href="#contracts">Rules</a>
+    <a href="#steps">Steps</a>
   </div>
   <script>
     lucide.createIcons();

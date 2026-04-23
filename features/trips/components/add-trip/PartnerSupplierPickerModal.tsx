@@ -3,10 +3,11 @@
  * shared CreateTripSheetSearchInput.
  */
 import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchInput";
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
-import { Building2, X } from "lucide-react-native";
+import { X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -204,9 +205,22 @@ function SupplierPickerRow({
   const secondary = supplierSecondary(supplier);
   return (
     <View style={[styles.row, selected && styles.rowSelected]}>
-      <View style={styles.rowIconCircle}>
-        <Building2 size={18} color={Theme.iconPrimary} />
-      </View>
+      <PartyAvatar
+        name={primary}
+        organizationImageUrl={
+          (supplier as { organization_avatar_url?: string | null }).organization_avatar_url ??
+          null
+        }
+        organizationAvatarSeed={
+          (supplier as { organization_avatar_seed?: string | null }).organization_avatar_seed ??
+          null
+        }
+        avatarUrl={(supplier as { avatar_url?: string | null }).avatar_url ?? null}
+        avatarSeed={(supplier as { avatar_seed?: string | null }).avatar_seed ?? null}
+        entityType="supplier"
+        size={44}
+        borderStyle={styles.rowAvatar}
+      />
       <View style={styles.rowTextBlock}>
         <Text style={styles.rowPrimary} numberOfLines={2}>
           {primary}
@@ -253,7 +267,7 @@ const styles = StyleSheet.create({
     width: "100%",
     maxHeight: "82%",
     backgroundColor: Theme.cardWhite,
-    borderRadius: 20,
+    borderRadius: 22,
     overflow: "hidden",
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 12 },
@@ -267,28 +281,28 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 12,
+    paddingBottom: 10,
   },
   sheetTitles: {
     flex: 1,
     paddingRight: 12,
   },
   sheetTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.3,
+    letterSpacing: -0.6,
   },
   sheetSubtitle: {
     marginTop: 4,
-    fontSize: 14,
-    fontWeight: "500",
+    fontSize: 16,
+    fontWeight: "600",
     color: Theme.textMuted,
   },
   closeBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     borderWidth: 2,
     borderColor: Theme.primary,
     alignItems: "center",
@@ -326,8 +340,8 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
     gap: 12,
@@ -335,27 +349,24 @@ const styles = StyleSheet.create({
   rowSelected: {
     backgroundColor: Theme.surfaceLight,
   },
-  rowIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Theme.surfaceGray,
-    alignItems: "center",
-    justifyContent: "center",
+  rowAvatar: {
+    borderWidth: 1.5,
+    borderColor: Theme.borderLight,
   },
   rowTextBlock: {
     flex: 1,
     minWidth: 0,
   },
   rowPrimary: {
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "500",
     color: Theme.textPrimaryDark,
+    letterSpacing: -0.1,
   },
   rowSecondary: {
-    marginTop: 4,
-    fontSize: 11,
-    fontWeight: "700",
+    marginTop: 3,
+    fontSize: 10,
+    fontWeight: "500",
     letterSpacing: 0.6,
     color: Theme.textMuted,
   },
@@ -373,7 +384,7 @@ const styles = StyleSheet.create({
   },
   selectPillText: {
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: "700",
     letterSpacing: 1,
     color: Theme.textPrimaryDark,
   },
