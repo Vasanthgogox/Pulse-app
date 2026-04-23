@@ -320,9 +320,7 @@ export function AddTripFormFields({
                   onSelectPlace={(_name, coords) =>
                     setters.setPickupCoords(coords.lat, coords.lon)
                   }
-                  leadingIcon={
-                    <MapPin size={18} color={Theme.iconMuted} />
-                  }
+                  leadingIcon={<MapPin size={18} color={Theme.iconMuted} />}
                   inputStyle={baseInputArr}
                   labelStyle={[styles.label, labelStyle]}
                   onDropdownOpenChange={setPickupDropdownOpen}
@@ -337,9 +335,7 @@ export function AddTripFormFields({
                   onSelectPlace={(_name, coords) =>
                     setters.setDropCoords(coords.lat, coords.lon)
                   }
-                  leadingIcon={
-                    <Navigation size={18} color={Theme.iconMuted} />
-                  }
+                  leadingIcon={<Navigation size={18} color={Theme.iconMuted} />}
                   inputStyle={baseInputArr}
                   labelStyle={[styles.label, labelStyle]}
                   onDropdownOpenChange={setDropDropdownOpen}
@@ -620,9 +616,7 @@ export function AddTripFormFields({
                 ) : null}
 
                 {!state.assignLater ? (
-                  <View
-                    style={[styles.gridRow, isWide && styles.gridRowWide]}
-                  >
+                  <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
                     <View style={styles.gridCol}>
                       <Text style={[styles.label, labelStyle]}>
                         Assign driver *
@@ -660,8 +654,9 @@ export function AddTripFormFields({
                               {fleetLoading
                                 ? "Loading…"
                                 : state.driverId
-                                  ? (drivers.find((d) => d.id === state.driverId)
-                                      ?.name ?? "Selected")
+                                  ? (drivers.find(
+                                      (d) => d.id === state.driverId,
+                                    )?.name ?? "Selected")
                                   : "Select driver"}
                             </Text>
                             <FontAwesome
@@ -674,9 +669,7 @@ export function AddTripFormFields({
                       </View>
                     </View>
                     <View style={styles.gridCol}>
-                      <Text style={[styles.label, labelStyle]}>
-                        Vehicle *
-                      </Text>
+                      <Text style={[styles.label, labelStyle]}>Vehicle *</Text>
                       <View style={styles.iconField}>
                         <Truck
                           size={18}
@@ -844,9 +837,7 @@ export function AddTripFormFields({
                               inputStyle,
                               {
                                 fontFamily:
-                                  Platform.OS === "ios"
-                                    ? "Menlo"
-                                    : "monospace",
+                                  Platform.OS === "ios" ? "Menlo" : "monospace",
                               },
                             ]}
                             placeholder="e.g. TN 67 GH 7654"
@@ -1043,9 +1034,7 @@ export function AddTripFormFields({
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.previewLab}>Partner rate</Text>
-                  <Text
-                    style={[styles.previewVal, { color: Theme.negative }]}
-                  >
+                  <Text style={[styles.previewVal, { color: Theme.negative }]}>
                     ₹{state.supplierRate.trim() || "0"}
                   </Text>
                 </View>

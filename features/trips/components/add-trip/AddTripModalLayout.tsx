@@ -20,6 +20,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export interface AddTripModalLayoutProps {
   title: string;
+  /** Subtitle under the title (dark header). Defaults to Create Trip copy. */
+  subtitle?: string;
   submitLabel: string;
   canSubmit: boolean;
   submitting?: boolean;
@@ -32,6 +34,7 @@ export interface AddTripModalLayoutProps {
 
 export function AddTripModalLayout({
   title,
+  subtitle = "Route · Client & Price · Allocation",
   submitLabel,
   canSubmit,
   submitting = false,
@@ -48,7 +51,7 @@ export function AddTripModalLayout({
       <View style={[styles.darkBlock, { paddingTop: insets.top }]}>
         <TeslaHeader
           title={title}
-          subtitle="Route · Client & Price · Allocation"
+          subtitle={subtitle}
           variant="dark"
           showBack
           onBack={onClose}

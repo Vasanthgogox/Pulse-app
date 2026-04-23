@@ -1,8 +1,7 @@
 /**
  * Create Indent — Deploy New Load.
- * Full-screen form: origin, destination, client, budget, supplier target, vehicle, load type, weight, pickup date.
+ * Layout aligned with Create Trip (AddTripModalLayout + section cards + floating summary).
  */
-import { TeslaHeader } from "@/components/TeslaHeader";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { ThemedConfirmModal } from "@/components/ThemedConfirmModal";
 import Layout from "@/constants/Layout";
@@ -15,12 +14,15 @@ import {
     getClientsByOrganization,
     type ClientRow,
 } from "@/features/clients";
+import { LOAD_TYPES } from "@/features/indents/constants";
 import { createIndent, type CreateIndentInput } from "@/features/indents";
 import {
     getIndentById,
     shareDraftIndent,
     updateIndentDraft,
 } from "@/features/indents/services/indents.service";
+import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchInput";
+import { AddTripModalLayout } from "@/features/trips/components/add-trip/AddTripModalLayout";
 import { LocationSearchField } from "@/features/trips/components/add-trip/LocationSearchField";
 import {
     BODY_LENGTH_SELECT_OPTIONS,
@@ -48,14 +50,27 @@ import { getOptimalRoute } from "@/services/routingService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { StatusBar } from "expo-status-bar";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import {
+    CheckCircle2,
+    Clock,
+    FileEdit,
+    IndianRupee,
+    Info,
+    MapPin,
+    Navigation,
+    Package,
+    Share2,
+    Truck,
+    X,
+} from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
-    Dimensions,
-    KeyboardAvoidingView,
     Modal,
     Platform,
+    Pressable,
     ScrollView,
     StyleSheet,
     Text,
@@ -63,6 +78,7 @@ import {
     TouchableOpacity,
     useWindowDimensions,
     View,
+    type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -188,7 +204,6 @@ export default function CreateIndentScreen() {
     useState<FormState>(initialFormState);
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [clientsLoading, setClientsLoading] = useState(false);
-  const [clientSearch, setClientSearch] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showAddClientModal, setShowAddClientModal] = useState(false);
   const [pickupLat, setPickupLat] = useState<number | null>(null);
@@ -202,6 +217,46 @@ export default function CreateIndentScreen() {
   const [dropDropdownOpen, setDropDropdownOpen] = useState(false);
   const [vehicleTypePickerOpen, setVehicleTypePickerOpen] = useState(false);
   const [vehicleTypeIsOther, setVehicleTypeIsOther] = useState(false);
+  const [loadTypePickerOpen, setLoadTypePickerOpen] = useState(false);
+  const [vehiclePickerQuery, setVehiclePickerQuery] = useState("");
+  const [loadTypePickerQuery, setLoadTypePickerQuery] = useState("");
+  /** Web hover: which primary action’s help copy to show above the buttons. */
+  const [actionHelpHint, setActionHelpHint] = useState<
+    null | "draft" | "share"
+  >(null);
+
+  const webCursor =
+    Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
+  const pickerCardMaxW = Math.min(windowWidth - 48, 520);
+
+  const vehicleQueryNorm = vehiclePickerQuery.trim().toLowerCase();
+  const filteredVehicleCategories = useMemo(() => {
+    if (!vehicleQueryNorm) return VEHICLE_CATEGORY_LABELS;
+    return VEHICLE_CATEGORY_LABELS.filter((c) =>
+      c.toLowerCase().includes(vehicleQueryNorm),
+    );
+  }, [vehicleQueryNorm]);
+
+  const filteredBodyLengthOptions = useMemo(() => {
+    if (!vehicleQueryNorm) return BODY_LENGTH_SELECT_OPTIONS;
+    return BODY_LENGTH_SELECT_OPTIONS.filter((opt) =>
+      opt.toLowerCase().includes(vehicleQueryNorm),
+    );
+  }, [vehicleQueryNorm]);
+
+  const filteredLoadTypes = useMemo(() => {
+    const q = loadTypePickerQuery.trim().toLowerCase();
+    if (!q) return LOAD_TYPES;
+    return LOAD_TYPES.filter((t) => t.toLowerCase().includes(q));
+  }, [loadTypePickerQuery]);
+
+  useEffect(() => {
+    if (vehicleTypePickerOpen) setVehiclePickerQuery("");
+  }, [vehicleTypePickerOpen]);
+
+  useEffect(() => {
+    if (loadTypePickerOpen) setLoadTypePickerQuery("");
+  }, [loadTypePickerOpen]);
 
   const capabilities = getCapabilitiesFromProfile(
     profile
@@ -331,6 +386,13 @@ export default function CreateIndentScreen() {
     });
   }, []);
 
+  useEffect(() => {
+    const cp = parseFloat(String(form.client_price).replace(/,/g, ""));
+    if (!Number.isFinite(cp) || cp <= 0) return;
+    if ((form.supplier_target ?? "").trim() !== "") return;
+    update({ supplier_target: String(Math.round(cp * 0.9)) });
+  }, [form.client_price, form.supplier_target, update]);
+
   // Save draft whenever form changes and orgId is known.
   useEffect(() => {
     if (!orgId) return;
@@ -458,27 +520,6 @@ export default function CreateIndentScreen() {
     },
     [update],
   );
-
-  const filteredClients = useMemo(() => {
-    const q = clientSearch.trim().toLowerCase();
-    if (!q) return clients;
-    const matches = clients.filter((c) => {
-      const name = (c.name ?? "").toLowerCase();
-      const person = (c.contact_person ?? "").toLowerCase();
-      const phone = String(
-        (c as { phone?: string | null }).phone ?? "",
-      ).toLowerCase();
-      return name.includes(q) || person.includes(q) || phone.includes(q);
-    });
-    // Keep selected client visible even if it doesn't match current query.
-    if (form.client_id) {
-      const selected = clients.find((c) => c.id === form.client_id);
-      if (selected && !matches.some((c) => c.id === selected.id)) {
-        return [selected, ...matches];
-      }
-    }
-    return matches;
-  }, [clientSearch, clients, form.client_id]);
 
   const handleBackPress = useCallback(() => {
     const hasUnsavedChanges =
@@ -669,29 +710,33 @@ export default function CreateIndentScreen() {
 
   if (!canCreate) {
     return (
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={insets.top}
-      >
-        <View style={[styles.container, { paddingBottom: insets.bottom }]}>
-          <TeslaHeader
-            title="Create Indent"
-            subtitle="Deploy New Load"
-            variant="dark"
-            showBack
-            onBack={handleBackPress}
-            hideRightIcons
-          />
+      <View style={{ flex: 1 }}>
+        <StatusBar style="light" />
+        <AddTripModalLayout
+          title="Create Indent"
+          subtitle="Deploy New Load"
+          submitLabel=""
+          canSubmit={false}
+          showFooter={false}
+          onClose={handleBackPress}
+          onSubmit={() => {}}
+        >
           <View style={styles.noAccessWrap}>
             <Text style={styles.noAccessText}>
               You don't have permission to create indents.
             </Text>
           </View>
-        </View>
-      </KeyboardAvoidingView>
+        </AddTripModalLayout>
+      </View>
     );
   }
+
+  const labelStyle = { color: Theme.textMutedDemo };
+  const inputStyle = {
+    borderColor: Theme.borderInput,
+    color: Theme.textPrimary,
+    backgroundColor: Theme.surfaceForm,
+  };
 
   const canSubmit =
     !submitting &&
@@ -707,254 +752,244 @@ export default function CreateIndentScreen() {
     (form.supplier_target ?? "").trim().length > 0 &&
     parseFloat(String(form.client_price ?? "").replace(/,/g, "")) > 0 &&
     parseFloat(String(form.supplier_target ?? "").replace(/,/g, "")) >= 0;
+  const isWide = windowWidth >= 720;
   const stackActionButtons = windowWidth < 760;
-  const stackFieldGrid = windowWidth < 920;
+  const baseInputArr = [styles.tripInput, inputStyle];
+  const webPointer =
+    Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={insets.top}
-    >
-      <View style={styles.container}>
-        <TeslaHeader
-          title="Create Indent"
-          subtitle="Deploy New Load"
-          variant="dark"
-          showBack
-          onBack={handleBackPress}
-          hideRightIcons
-        />
-
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={[
-            styles.scrollContent,
-            {
-              paddingHorizontal:
-                windowWidth >= 1024 ? 0 : Layout.screenPaddingHorizontal,
-            },
-            { paddingBottom: insets.bottom + 120 },
-          ]}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={
-            Platform.OS === "ios" ? "interactive" : "on-drag"
-          }
-          showsVerticalScrollIndicator={false}
-          scrollEnabled={!pickupDropdownOpen && !dropDropdownOpen}
-        >
-          <View style={styles.sheet}>
-            <View style={styles.stepCard}>
-              <View style={styles.stepCardHead}>
-                <View style={styles.stepChip}>
-                  <Text style={styles.stepChipText}>01</Text>
-                </View>
-                <Text style={styles.stepCardTitle}>Route & Vehicle</Text>
-              </View>
-              <View style={styles.routeCard}>
-                <View style={styles.routeRow}>
-                  <View style={[styles.routeDot, styles.routeDotFirst]}>
-                    <Text style={styles.routeDotLabel}>Origin</Text>
-                    <Text
-                      style={
-                        form.pickup_area.trim()
-                          ? styles.routeDotValue
-                          : styles.routeDotPlaceholder
-                      }
-                      numberOfLines={1}
-                    >
-                      {form.pickup_area.trim() || "Origin node"}
-                    </Text>
+    <View style={{ flex: 1 }}>
+      <StatusBar style="light" />
+      <AddTripModalLayout
+        title="Create Indent"
+        subtitle="Deploy New Load"
+        submitLabel="Share to Network"
+        canSubmit={canSubmit}
+        submitting={submitting}
+        showFooter={false}
+        onClose={handleBackPress}
+        onSubmit={handleSubmit}
+      >
+        <View style={styles.pageWrap}>
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: insets.bottom + 160 },
+            ]}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={
+              Platform.OS === "ios" ? "interactive" : "on-drag"
+            }
+            showsVerticalScrollIndicator={false}
+            scrollEnabled={
+              !pickupDropdownOpen &&
+              !dropDropdownOpen &&
+              !vehicleTypePickerOpen &&
+              !loadTypePickerOpen
+            }
+          >
+            <View
+              style={[
+                styles.contentMax,
+                {
+                  paddingHorizontal: isWide
+                    ? 24
+                    : Layout.screenPaddingHorizontal,
+                },
+              ]}
+            >
+              {/* 01 Route */}
+              <View style={styles.card}>
+                <View style={styles.cardHead}>
+                  <View style={styles.stepBadge}>
+                    <Text style={styles.stepBadgeText}>01</Text>
                   </View>
-                  <View style={styles.routeArrow}>
+                  <Text style={styles.cardTitle}>Route Details</Text>
+                </View>
+
+                <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
+                  <View style={styles.gridCol}>
+                    <LocationSearchField
+                      label="Pickup *"
+                      placeholder="Search or pick pickup location"
+                      value={form.pickup_area}
+                      onChangeText={(t) => {
+                        update({ pickup_area: t });
+                        setPickupLat(null);
+                        setPickupLon(null);
+                      }}
+                      onSelectPlace={(_name, coords) => {
+                        update({
+                          pickup_area: compactLocationLabel(_name),
+                        });
+                        setPickupLat(coords.lat);
+                        setPickupLon(coords.lon);
+                      }}
+                      leadingIcon={
+                        <MapPin size={18} color={Theme.iconMuted} />
+                      }
+                      inputStyle={[
+                        ...baseInputArr,
+                        errors.pickup_area && styles.inputError,
+                      ]}
+                      labelStyle={[styles.fieldLabel, labelStyle]}
+                      onDropdownOpenChange={setPickupDropdownOpen}
+                    />
+                    {errors.pickup_area ? (
+                      <Text style={styles.errorText}>{errors.pickup_area}</Text>
+                    ) : null}
+                  </View>
+                  <View style={styles.gridCol}>
+                    <LocationSearchField
+                      label="Drop *"
+                      placeholder="Search or pick drop location"
+                      value={form.drop_location}
+                      onChangeText={(t) => {
+                        update({ drop_location: t });
+                        setDropLat(null);
+                        setDropLon(null);
+                      }}
+                      onSelectPlace={(_name, coords) => {
+                        update({
+                          drop_location: compactLocationLabel(_name),
+                        });
+                        setDropLat(coords.lat);
+                        setDropLon(coords.lon);
+                      }}
+                      leadingIcon={
+                        <Navigation size={18} color={Theme.iconMuted} />
+                      }
+                      inputStyle={[
+                        ...baseInputArr,
+                        errors.drop_location && styles.inputError,
+                      ]}
+                      labelStyle={[styles.fieldLabel, labelStyle]}
+                      onDropdownOpenChange={setDropDropdownOpen}
+                    />
+                    {errors.drop_location ? (
+                      <Text style={styles.errorText}>
+                        {errors.drop_location}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+
+                {form.pickup_area.trim() && form.drop_location.trim() ? (
+                  <View style={styles.routeSummary}>
                     <FontAwesome
                       name="long-arrow-right"
-                      size={14}
-                      color={Theme.textMuted}
+                      size={12}
+                      color={Theme.teslaRed}
+                      style={{ marginRight: 8 }}
                     />
-                  </View>
-                  <View style={[styles.routeDot, styles.routeDotLast]}>
-                    <Text style={styles.routeDotLabel}>Destination</Text>
-                    <Text
-                      style={
-                        form.drop_location.trim()
-                          ? styles.routeDotValue
-                          : styles.routeDotPlaceholder
-                      }
-                      numberOfLines={1}
-                    >
-                      {form.drop_location.trim() || "Destination node"}
+                    <Text style={styles.routeSummaryText} numberOfLines={2}>
+                      {compactLocationLabel(form.pickup_area)} →{" "}
+                      {compactLocationLabel(form.drop_location)}
                     </Text>
                   </View>
-                </View>
-              </View>
-              <View
-                style={[
-                  styles.sheetGrid,
-                  stackFieldGrid && styles.sheetGridStacked,
-                ]}
-              >
-                <View style={styles.sheetField}>
-                  <Text style={styles.sheetLabel}>Origin Node</Text>
-                  <LocationSearchField
-                    label=""
-                    placeholder="Enter origin node"
-                    value={form.pickup_area}
-                    onChangeText={(t) => {
-                      update({ pickup_area: t });
-                      setPickupLat(null);
-                      setPickupLon(null);
-                    }}
-                    onSelectPlace={(_name, coords) => {
-                      update({ pickup_area: compactLocationLabel(_name) });
-                      setPickupLat(coords.lat);
-                      setPickupLon(coords.lon);
-                    }}
-                    inputStyle={[
-                      styles.sheetInput,
-                      errors.pickup_area && styles.inputError,
-                    ]}
-                    labelStyle={styles.hiddenLabel}
-                    onDropdownOpenChange={setPickupDropdownOpen}
-                  />
-                  {errors.pickup_area ? (
-                    <Text style={styles.errorText}>{errors.pickup_area}</Text>
-                  ) : null}
-                </View>
-                <View style={styles.sheetField}>
-                  <Text style={styles.sheetLabel}>Destination Node</Text>
-                  <LocationSearchField
-                    label=""
-                    placeholder="Enter destination node"
-                    value={form.drop_location}
-                    onChangeText={(t) => {
-                      update({ drop_location: t });
-                      setDropLat(null);
-                      setDropLon(null);
-                    }}
-                    onSelectPlace={(_name, coords) => {
-                      update({ drop_location: compactLocationLabel(_name) });
-                      setDropLat(coords.lat);
-                      setDropLon(coords.lon);
-                    }}
-                    inputStyle={[
-                      styles.sheetInput,
-                      errors.drop_location && styles.inputError,
-                    ]}
-                    labelStyle={styles.hiddenLabel}
-                    onDropdownOpenChange={setDropDropdownOpen}
-                  />
-                  {errors.drop_location ? (
-                    <Text style={styles.errorText}>{errors.drop_location}</Text>
-                  ) : null}
-                </View>
-              </View>
-              {routeLoading ||
-              routeDistanceKm != null ||
-              routeEtaLabel != null ? (
-                <View style={styles.routeStatsRow}>
-                  <View style={styles.routeStat}>
-                    <Text style={styles.routeStatLabel}>Distance</Text>
-                    <Text style={styles.routeStatValue}>
-                      {routeLoading
-                        ? "…"
-                        : routeDistanceKm != null
-                          ? `${routeDistanceKm} km`
-                          : "—"}
-                    </Text>
-                  </View>
-                  <View style={styles.routeStat}>
-                    <Text style={styles.routeStatLabel}>ETA</Text>
-                    <Text style={styles.routeStatValue}>
-                      {routeLoading ? "…" : (routeEtaLabel ?? "—")}
-                    </Text>
-                  </View>
-                </View>
-              ) : null}
-            </View>
+                ) : null}
 
-            <View style={styles.stepCard}>
-              <View style={styles.stepCardHead}>
-                <View style={styles.stepChip}>
-                  <Text style={styles.stepChipText}>02</Text>
-                </View>
-                <Text style={styles.stepCardTitle}>Commercial Details</Text>
+                {routeLoading ||
+                routeDistanceKm != null ||
+                routeEtaLabel != null ? (
+                  <View style={styles.routeStats}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.routeStatLab}>Distance</Text>
+                      <Text style={styles.routeStatVal}>
+                        {routeLoading
+                          ? "…"
+                          : routeDistanceKm != null
+                            ? `${routeDistanceKm} km`
+                            : "—"}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.routeStatLab}>ETA</Text>
+                      <Text style={styles.routeStatVal}>
+                        {routeLoading ? "…" : (routeEtaLabel ?? "—")}
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
               </View>
-              <View style={styles.sheetSection}>
-                <Text style={styles.sheetLabel}>Client</Text>
-                <View style={styles.clientSearchRow}>
-                  <FontAwesome
-                    name="search"
-                    size={14}
-                    color={Theme.textMuted}
-                    style={styles.clientSearchIcon}
-                  />
-                  <TextInput
-                    style={styles.clientSearchInput}
-                    placeholder="Search client…"
-                    placeholderTextColor={Theme.textMuted}
-                    value={clientSearch}
-                    onChangeText={setClientSearch}
-                    autoCorrect={false}
-                    spellCheck={false}
-                    autoComplete="off"
-                    returnKeyType="search"
-                  />
-                  {clientSearch.trim() ? (
-                    <TouchableOpacity
-                      style={styles.clientSearchClear}
-                      onPress={() => setClientSearch("")}
-                      hitSlop={10}
-                      accessibilityRole="button"
-                      accessibilityLabel="Clear client search"
-                    >
-                      <FontAwesome
-                        name="times-circle"
-                        size={16}
-                        color={Theme.textMuted}
-                      />
-                    </TouchableOpacity>
-                  ) : null}
+
+              {/* 02 Commercial */}
+              <View style={styles.card}>
+                <View style={styles.cardHead}>
+                  <View style={styles.stepBadge}>
+                    <Text style={styles.stepBadgeText}>02</Text>
+                  </View>
+                  <Text style={styles.cardTitle}>Client & Commercials</Text>
                 </View>
-                {clientsLoading ? (
-                  <View style={styles.partnersWrap}>
-                    <Text style={styles.partnersPlaceholder}>Loading…</Text>
-                  </View>
-                ) : filteredClients.length === 0 ? (
-                  <View style={styles.partnersWrap}>
-                    <Text style={styles.partnersPlaceholder}>
-                      {clients.length === 0
-                        ? "No clients. Add one below."
-                        : "No matching clients."}
+                <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
+                  <View style={styles.gridCol}>
+                    <Text style={[styles.fieldLabel, labelStyle]}>
+                      Select client
                     </Text>
-                  </View>
+                {clientsLoading ? (
+                  <ActivityIndicator color={Theme.iconPrimary} />
+                ) : clients.length === 0 ? (
+                  <Text style={styles.mutedSmall}>
+                    No clients yet. Add one below.
+                  </Text>
                 ) : (
                   <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.partnersScrollContent}
+                    style={styles.clientList}
+                    nestedScrollEnabled
+                    keyboardShouldPersistTaps="handled"
                   >
-                    {filteredClients.map((client) => {
-                      const isSelected = form.client_id === client.id;
+                    {clients.map((client) => {
+                      const selected = form.client_id === client.id;
                       return (
                         <TouchableOpacity
                           key={client.id}
                           style={[
-                            styles.partnerChip,
-                            isSelected && styles.partnerChipSelected,
+                            styles.clientCard,
+                            selected && styles.clientCardOn,
+                            Platform.OS === "web"
+                              ? ({ cursor: "pointer" } as ViewStyle)
+                              : null,
                           ]}
                           onPress={() => handleSelectClient(client)}
-                          activeOpacity={0.8}
+                          activeOpacity={0.85}
                         >
-                          <Text
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text
+                              style={[
+                                styles.clientName,
+                                selected && styles.clientNameOn,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {client.name}
+                            </Text>
+                            {client.address ? (
+                              <View style={styles.clientMetaRow}>
+                                <Clock size={11} color={Theme.textMuted} />
+                                <Text
+                                  style={styles.clientSub}
+                                  numberOfLines={1}
+                                >
+                                  {client.address}
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
+                          <View
                             style={[
-                              styles.partnerChipText,
-                              isSelected && styles.partnerChipTextSelected,
+                              styles.radioOuter,
+                              selected && styles.radioOuterOn,
                             ]}
-                            numberOfLines={1}
                           >
-                            {client.name || client.contact_person || "—"}
-                          </Text>
+                            {selected ? (
+                              <CheckCircle2
+                                size={16}
+                                color={Theme.iconPrimary}
+                              />
+                            ) : null}
+                          </View>
                         </TouchableOpacity>
                       );
                     })}
@@ -967,101 +1002,139 @@ export default function CreateIndentScreen() {
                 >
                   <Text style={styles.addClientBtnText}>Add new client</Text>
                 </TouchableOpacity>
-                {errors.client_name ? (
-                  <Text style={styles.errorText}>{errors.client_name}</Text>
-                ) : null}
-              </View>
+                    {errors.client_name ? (
+                      <Text style={styles.errorText}>{errors.client_name}</Text>
+                    ) : null}
+                  </View>
 
-              {orgId ? (
-                <Modal
-                  visible={showAddClientModal}
-                  animationType="slide"
-                  presentationStyle="fullScreen"
-                  onRequestClose={() => setShowAddClientModal(false)}
-                >
-                  <AddClientModal
-                    onClose={() => setShowAddClientModal(false)}
-                    onComplete={async (data) => {
-                      const { error, client } = await createClient(orgId, {
-                        contact_person: data.contactPerson,
-                        phone: data.phone,
-                        organization_name: data.organizationName || undefined,
-                      });
-                      if (error) {
-                        showDialog("Could not add client", error.message);
-                        throw error;
-                      }
-                      if (client) {
-                        const clientName =
-                          client.name ?? client.contact_person ?? "";
-                        if (!clientName.trim()) {
-                          showDialog(
-                            "Invalid Client",
-                            "Added client has no name. Please ensure client has a valid name or contact person.",
-                          );
-                          return;
-                        }
-                        update({
-                          client_id: client.id,
-                          client_name: clientName,
-                        });
-                        setClients((prev) => [...prev, client]);
-                      }
-                    }}
-                    organizationId={orgId}
-                    noOrganizationMessage={null}
-                  />
-                </Modal>
-              ) : null}
-
-              <View style={[styles.sheetSection, styles.commercialHighlight]}>
-                <Text style={styles.sheetLabel}>Client Rate (₹)</Text>
-                <TextInput
-                  style={[
-                    styles.sheetInput,
-                    errors.client_price && styles.inputError,
-                  ]}
-                  value={form.client_price}
-                  onChangeText={(t) => update({ client_price: t })}
-                  placeholder="Enter Amount"
-                  placeholderTextColor={Theme.textMuted}
-                  keyboardType="decimal-pad"
-                />
-                {errors.client_price ? (
-                  <Text style={styles.errorText}>{errors.client_price}</Text>
-                ) : null}
-              </View>
-
-              <View style={[styles.sheetSection, styles.commercialHighlight]}>
-                <Text style={styles.sheetLabel}>Supplier Target (₹)</Text>
-                <TextInput
-                  style={[
-                    styles.sheetInput,
-                    errors.supplier_target && styles.inputError,
-                  ]}
-                  value={form.supplier_target}
-                  onChangeText={(t) => update({ supplier_target: t })}
-                  placeholder="0"
-                  placeholderTextColor={Theme.textMuted}
-                  keyboardType="decimal-pad"
-                />
-                {errors.supplier_target ? (
-                  <Text style={styles.errorText}>{errors.supplier_target}</Text>
-                ) : null}
-              </View>
-            </View>
-
-            <View style={styles.stepCard}>
-              <View style={styles.stepCardHead}>
-                <View style={styles.stepChip}>
-                  <Text style={styles.stepChipText}>03</Text>
+                  <View style={styles.gridCol}>
+                    <Text style={[styles.fieldLabel, labelStyle]}>
+                      Client sales price (₹) *
+                    </Text>
+                    <View style={styles.priceWrap}>
+                      <IndianRupee
+                        size={20}
+                        color={Theme.iconMuted}
+                        style={styles.rupeeIcon}
+                      />
+                      <TextInput
+                        style={[
+                          styles.priceInput,
+                          errors.client_price && styles.inputError,
+                        ]}
+                        value={form.client_price}
+                        onChangeText={(t) => update({ client_price: t })}
+                        placeholder="0"
+                        placeholderTextColor={Theme.placeholder}
+                        keyboardType="decimal-pad"
+                        autoCorrect={false}
+                      />
+                    </View>
+                    {errors.client_price ? (
+                      <Text style={styles.errorText}>{errors.client_price}</Text>
+                    ) : null}
+                    <View style={styles.infoCallout}>
+                      <Info size={16} color={Theme.iconPrimary} />
+                      <Text style={styles.infoCalloutText}>
+                        Revenue should match what you bill this client for this
+                        lane. Adjust if this indent differs.
+                      </Text>
+                    </View>
+                  </View>
                 </View>
-                <Text style={styles.stepCardTitle}>Load Specifics</Text>
+
+                <View style={styles.supplierSection}>
+                  <View style={styles.supplierLabelRow}>
+                    <Text style={[styles.fieldLabel, labelStyle]}>
+                      Supplier target (₹)
+                    </Text>
+                    <View style={styles.estBadge}>
+                      <Text style={styles.estBadgeText}>Est. target</Text>
+                    </View>
+                  </View>
+                  <View style={styles.priceWrap}>
+                    <IndianRupee
+                      size={20}
+                      color={Theme.primary}
+                      style={styles.rupeeIcon}
+                    />
+                    <TextInput
+                      style={[
+                        styles.priceInput,
+                        styles.supplierPriceInput,
+                        errors.supplier_target && styles.inputError,
+                      ]}
+                      value={form.supplier_target}
+                      onChangeText={(t) => update({ supplier_target: t })}
+                      placeholder="0"
+                      placeholderTextColor={Theme.textMuted}
+                      keyboardType="decimal-pad"
+                      autoCorrect={false}
+                    />
+                  </View>
+                  {errors.supplier_target ? (
+                    <Text style={styles.errorText}>
+                      {errors.supplier_target}
+                    </Text>
+                  ) : null}
+                </View>
+
+                {orgId ? (
+                  <Modal
+                    visible={showAddClientModal}
+                    animationType="slide"
+                    presentationStyle="fullScreen"
+                    onRequestClose={() => setShowAddClientModal(false)}
+                  >
+                    <AddClientModal
+                      onClose={() => setShowAddClientModal(false)}
+                      onComplete={async (data) => {
+                        const { error, client } = await createClient(orgId, {
+                          contact_person: data.contactPerson,
+                          phone: data.phone,
+                          organization_name:
+                            data.organizationName || undefined,
+                        });
+                        if (error) {
+                          showDialog("Could not add client", error.message);
+                          throw error;
+                        }
+                        if (client) {
+                          const clientName =
+                            client.name ?? client.contact_person ?? "";
+                          if (!clientName.trim()) {
+                            showDialog(
+                              "Invalid Client",
+                              "Added client has no name. Please ensure client has a valid name or contact person.",
+                            );
+                            return;
+                          }
+                          update({
+                            client_id: client.id,
+                            client_name: clientName,
+                          });
+                          setClients((prev) => [...prev, client]);
+                        }
+                      }}
+                      organizationId={orgId}
+                      noOrganizationMessage={null}
+                    />
+                  </Modal>
+                ) : null}
+              </View>
+
+              {/* 03 Load */}
+              <View style={styles.card}>
+              <View style={styles.cardHead}>
+                <View style={styles.stepBadge}>
+                  <Text style={styles.stepBadgeText}>03</Text>
+                </View>
+                <Text style={styles.cardTitle}>Load Specifics</Text>
               </View>
               <View
                 style={[
                   styles.sheetGrid,
-                  stackFieldGrid && styles.sheetGridStacked,
+                  !isWide && styles.sheetGridStacked,
                 ]}
               >
                 <View style={styles.sheetField}>
@@ -1115,16 +1188,27 @@ export default function CreateIndentScreen() {
                 </View>
                 <View style={styles.sheetField}>
                   <Text style={styles.sheetLabel}>Load Type</Text>
-                  <TextInput
+                  <TouchableOpacity
                     style={[
                       styles.sheetInput,
+                      { justifyContent: "center" },
+                      webPointer,
                       errors.load_type && styles.inputError,
                     ]}
-                    value={form.load_type}
-                    onChangeText={(t) => update({ load_type: t })}
-                    placeholder="e.g. FMCG"
-                    placeholderTextColor={Theme.textMuted}
-                  />
+                    onPress={() => setLoadTypePickerOpen(true)}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={
+                        form.load_type
+                          ? styles.dropdownTouchableText
+                          : styles.dropdownTouchablePlaceholder
+                      }
+                      numberOfLines={1}
+                    >
+                      {form.load_type || "Select load category"}
+                    </Text>
+                  </TouchableOpacity>
                   {errors.load_type ? (
                     <Text style={styles.errorText}>{errors.load_type}</Text>
                   ) : null}
@@ -1278,234 +1362,523 @@ export default function CreateIndentScreen() {
               <Modal
                 visible
                 transparent
-                animationType="slide"
+                animationType="fade"
                 onRequestClose={() => setVehicleTypePickerOpen(false)}
               >
-                <KeyboardAvoidingView
-                  style={styles.datePickerBackdrop}
-                  behavior={Platform.OS === "ios" ? "padding" : undefined}
-                >
-                  <TouchableOpacity
-                    style={StyleSheet.absoluteFill}
-                    activeOpacity={1}
+                <View style={styles.pickerModalRoot} accessibilityViewIsModal>
+                  <Pressable
+                    style={styles.pickerBackdropPress}
                     onPress={() => setVehicleTypePickerOpen(false)}
-                  />
-                  <View
-                    style={[
-                      styles.datePickerSheet,
-                      {
-                        paddingBottom: insets.bottom + 16,
-                        maxHeight: Dimensions.get("window").height * 0.8,
-                      },
-                    ]}
                   >
-                    <View style={styles.datePickerHeader}>
-                      <Text style={styles.datePickerTitle}>Select Vehicle</Text>
-                      <TouchableOpacity
-                        onPress={() => setVehicleTypePickerOpen(false)}
-                        hitSlop={12}
-                      >
-                        <Text style={styles.datePickerDone}>Done</Text>
-                      </TouchableOpacity>
-                    </View>
-                    <ScrollView
-                      keyboardShouldPersistTaps="handled"
-                      showsVerticalScrollIndicator
-                      style={{
-                        maxHeight: Dimensions.get("window").height * 0.7,
-                      }}
+                    <View style={styles.pickerBackdropDim} />
+                  </Pressable>
+                  <View style={styles.pickerCenterWrap} pointerEvents="box-none">
+                    <View
+                      style={[styles.pickerSheet, { maxWidth: pickerCardMaxW }]}
                     >
-                      <View style={styles.vehicleOptionSection}>
-                        <Text style={styles.vehicleOptionSectionTitle}>
-                          Categories
-                        </Text>
-                      </View>
-                      {VEHICLE_CATEGORY_LABELS.map((opt) => (
-                        <TouchableOpacity
-                          key={opt}
-                          style={[
-                            styles.vehicleOptionRow,
-                            form.vehicle_type === opt &&
-                              !vehicleTypeIsOther &&
-                              styles.vehicleOptionRowActive,
-                          ]}
-                          onPress={() => {
-                            setVehicleTypeIsOther(false);
-                            update({ vehicle_type: opt });
-                            setVehicleTypePickerOpen(false);
-                          }}
-                        >
-                          <Text
-                            style={[
-                              styles.vehicleOptionText,
-                              form.vehicle_type === opt &&
-                                !vehicleTypeIsOther &&
-                                styles.vehicleOptionTextActive,
-                            ]}
-                          >
-                            {opt}
+                      <View style={styles.pickerSheetHead}>
+                        <View style={styles.pickerSheetTitles}>
+                          <Text style={styles.pickerSheetTitle}>
+                            Select Vehicle
                           </Text>
-                        </TouchableOpacity>
-                      ))}
-
-                      <View style={styles.vehicleOptionSection}>
-                        <Text style={styles.vehicleOptionSectionTitle}>
-                          Presets & Lengths
-                        </Text>
-                      </View>
-                      {BODY_LENGTH_SELECT_OPTIONS.map((opt) => (
-                        <TouchableOpacity
-                          key={normalizeBodyLengthKey(opt)}
-                          style={[
-                            styles.vehicleOptionRow,
-                            form.vehicle_type === opt &&
-                              !vehicleTypeIsOther &&
-                              styles.vehicleOptionRowActive,
-                          ]}
-                          onPress={() => {
-                            setVehicleTypeIsOther(false);
-                            update({ vehicle_type: opt });
-                            setVehicleTypePickerOpen(false);
-                          }}
-                        >
-                          <Text
-                            style={[
-                              styles.vehicleOptionText,
-                              form.vehicle_type === opt &&
-                                !vehicleTypeIsOther &&
-                                styles.vehicleOptionTextActive,
-                            ]}
-                          >
-                            {opt}
+                          <Text style={styles.pickerSheetSubtitle}>
+                            Categories, presets, or custom entry
                           </Text>
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => setVehicleTypePickerOpen(false)}
+                          style={[styles.pickerCloseBtn, webCursor]}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          accessibilityRole="button"
+                          accessibilityLabel="Close"
+                        >
+                          <X size={18} color={Theme.primary} strokeWidth={2.5} />
                         </TouchableOpacity>
-                      ))}
-
-                      <View style={styles.vehicleOptionSection}>
-                        <Text style={styles.vehicleOptionSectionTitle}>
-                          Custom
-                        </Text>
                       </View>
-                      <TouchableOpacity
-                        style={[
-                          styles.vehicleOptionRow,
-                          vehicleTypeIsOther && styles.vehicleOptionRowActive,
-                          { borderBottomWidth: 0 },
-                        ]}
-                        onPress={() => {
-                          setVehicleTypeIsOther(true);
-                          update({ vehicle_type: "" });
-                          setVehicleTypePickerOpen(false);
-                        }}
+
+                      <CreateTripSheetSearchInput
+                        value={vehiclePickerQuery}
+                        onChangeText={setVehiclePickerQuery}
+                        placeholder="Search categories or presets…"
+                        shellStyle={styles.pickerSearchShell}
+                        accessibilityLabel="Search vehicle types"
+                      />
+
+                      <ScrollView
+                        style={styles.pickerScroll}
+                        contentContainerStyle={styles.pickerScrollContent}
+                        keyboardShouldPersistTaps="handled"
+                        showsVerticalScrollIndicator
                       >
-                        <Text
+                        {vehicleQueryNorm &&
+                          filteredVehicleCategories.length === 0 &&
+                          filteredBodyLengthOptions.length === 0 && (
+                            <Text style={styles.pickerEmptyText}>
+                              No matching categories or presets. Try another
+                              search or use custom below.
+                            </Text>
+                          )}
+                        {filteredVehicleCategories.length > 0 ? (
+                          <>
+                            <Text style={styles.pickerSectionLabel}>
+                              Categories
+                            </Text>
+                            {filteredVehicleCategories.map((opt) => {
+                              const selected =
+                                form.vehicle_type === opt && !vehicleTypeIsOther;
+                              return (
+                                <TouchableOpacity
+                                  key={opt}
+                                  style={[
+                                    styles.pickerRow,
+                                    selected && styles.pickerRowSelected,
+                                    webCursor,
+                                  ]}
+                                  onPress={() => {
+                                    setVehicleTypeIsOther(false);
+                                    update({ vehicle_type: opt });
+                                    setVehicleTypePickerOpen(false);
+                                  }}
+                                  activeOpacity={0.75}
+                                >
+                                  <View style={styles.pickerIconCircle}>
+                                    <Truck
+                                      size={18}
+                                      color={Theme.iconPrimary}
+                                    />
+                                  </View>
+                                  <Text
+                                    style={[
+                                      styles.pickerRowPrimary,
+                                      selected && styles.pickerRowPrimarySelected,
+                                    ]}
+                                    numberOfLines={3}
+                                  >
+                                    {opt}
+                                  </Text>
+                                  {selected ? (
+                                    <CheckCircle2
+                                      size={22}
+                                      color={Theme.primary}
+                                      strokeWidth={2.5}
+                                    />
+                                  ) : (
+                                    <View style={styles.pickerRowEndSpacer} />
+                                  )}
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </>
+                        ) : null}
+
+                        {filteredBodyLengthOptions.length > 0 ? (
+                          <>
+                            <Text style={styles.pickerSectionLabel}>
+                              Presets & lengths
+                            </Text>
+                            {filteredBodyLengthOptions.map((opt) => {
+                              const selected =
+                                form.vehicle_type === opt && !vehicleTypeIsOther;
+                              return (
+                                <TouchableOpacity
+                                  key={normalizeBodyLengthKey(opt)}
+                                  style={[
+                                    styles.pickerRow,
+                                    selected && styles.pickerRowSelected,
+                                    webCursor,
+                                  ]}
+                                  onPress={() => {
+                                    setVehicleTypeIsOther(false);
+                                    update({ vehicle_type: opt });
+                                    setVehicleTypePickerOpen(false);
+                                  }}
+                                  activeOpacity={0.75}
+                                >
+                                  <View style={styles.pickerIconCircle}>
+                                    <Truck
+                                      size={18}
+                                      color={Theme.iconPrimary}
+                                    />
+                                  </View>
+                                  <Text
+                                    style={[
+                                      styles.pickerRowPrimary,
+                                      selected && styles.pickerRowPrimarySelected,
+                                    ]}
+                                    numberOfLines={3}
+                                  >
+                                    {opt}
+                                  </Text>
+                                  {selected ? (
+                                    <CheckCircle2
+                                      size={22}
+                                      color={Theme.primary}
+                                      strokeWidth={2.5}
+                                    />
+                                  ) : (
+                                    <View style={styles.pickerRowEndSpacer} />
+                                  )}
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </>
+                        ) : null}
+
+                        <Text style={styles.pickerSectionLabel}>Custom</Text>
+                        <TouchableOpacity
                           style={[
-                            styles.vehicleOptionText,
-                            vehicleTypeIsOther &&
-                              styles.vehicleOptionTextActive,
+                            styles.pickerRow,
+                            vehicleTypeIsOther && styles.pickerRowSelected,
+                            webCursor,
                           ]}
+                          onPress={() => {
+                            setVehicleTypeIsOther(true);
+                            update({ vehicle_type: "" });
+                            setVehicleTypePickerOpen(false);
+                          }}
+                          activeOpacity={0.75}
                         >
-                          {OTHER_LABEL} — type manually
-                        </Text>
-                      </TouchableOpacity>
-                    </ScrollView>
+                          <View style={styles.pickerIconCircle}>
+                            <Truck size={18} color={Theme.iconPrimary} />
+                          </View>
+                          <Text
+                            style={[
+                              styles.pickerRowPrimary,
+                              vehicleTypeIsOther &&
+                                styles.pickerRowPrimarySelected,
+                            ]}
+                            numberOfLines={2}
+                          >
+                            {OTHER_LABEL} — type manually
+                          </Text>
+                          {vehicleTypeIsOther ? (
+                            <CheckCircle2
+                              size={22}
+                              color={Theme.primary}
+                              strokeWidth={2.5}
+                            />
+                          ) : (
+                            <View style={styles.pickerRowEndSpacer} />
+                          )}
+                        </TouchableOpacity>
+                      </ScrollView>
+                    </View>
                   </View>
-                </KeyboardAvoidingView>
+                </View>
               </Modal>
             ) : null}
 
-            <View style={styles.actionHelpBox}>
-              <Text style={styles.actionHelpTitle}>Save Draft</Text>
-              <Text style={styles.actionHelpText}>
-                Indent stays editable. You can save updates again and share
-                later.
-              </Text>
-              <Text style={styles.actionHelpTitle}>Share to Network</Text>
-              <Text style={styles.actionHelpText}>
-                Shared indents are broadcast and become read-only.
-              </Text>
-            </View>
+            {loadTypePickerOpen ? (
+              <Modal
+                visible
+                transparent
+                animationType="fade"
+                onRequestClose={() => setLoadTypePickerOpen(false)}
+              >
+                <View style={styles.pickerModalRoot} accessibilityViewIsModal>
+                  <Pressable
+                    style={styles.pickerBackdropPress}
+                    onPress={() => setLoadTypePickerOpen(false)}
+                  >
+                    <View style={styles.pickerBackdropDim} />
+                  </Pressable>
+                  <View style={styles.pickerCenterWrap} pointerEvents="box-none">
+                    <View
+                      style={[styles.pickerSheet, { maxWidth: pickerCardMaxW }]}
+                    >
+                      <View style={styles.pickerSheetHead}>
+                        <View style={styles.pickerSheetTitles}>
+                          <Text style={styles.pickerSheetTitle}>Load type</Text>
+                          <Text style={styles.pickerSheetSubtitle}>
+                            What you are shipping
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => setLoadTypePickerOpen(false)}
+                          style={[styles.pickerCloseBtn, webCursor]}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          accessibilityRole="button"
+                          accessibilityLabel="Close"
+                        >
+                          <X size={18} color={Theme.primary} strokeWidth={2.5} />
+                        </TouchableOpacity>
+                      </View>
+
+                      <CreateTripSheetSearchInput
+                        value={loadTypePickerQuery}
+                        onChangeText={setLoadTypePickerQuery}
+                        placeholder="Search load type…"
+                        shellStyle={styles.pickerSearchShell}
+                        accessibilityLabel="Search load types"
+                      />
+
+                      <ScrollView
+                        style={styles.pickerScroll}
+                        contentContainerStyle={styles.pickerScrollContent}
+                        keyboardShouldPersistTaps="handled"
+                        showsVerticalScrollIndicator
+                      >
+                        {filteredLoadTypes.length === 0 ? (
+                          <Text style={styles.pickerEmptyText}>
+                            No load types match your search.
+                          </Text>
+                        ) : (
+                          filteredLoadTypes.map((opt) => {
+                            const selected = form.load_type === opt;
+                            return (
+                              <TouchableOpacity
+                                key={opt}
+                                style={[
+                                  styles.pickerRow,
+                                  selected && styles.pickerRowSelected,
+                                  webCursor,
+                                ]}
+                                onPress={() => {
+                                  update({ load_type: opt });
+                                  setLoadTypePickerOpen(false);
+                                }}
+                                activeOpacity={0.75}
+                              >
+                                <View style={styles.pickerIconCircle}>
+                                  <Package
+                                    size={18}
+                                    color={Theme.iconPrimary}
+                                  />
+                                </View>
+                                <Text
+                                  style={[
+                                    styles.pickerRowPrimary,
+                                    selected && styles.pickerRowPrimarySelected,
+                                  ]}
+                                  numberOfLines={3}
+                                >
+                                  {opt}
+                                </Text>
+                                {selected ? (
+                                  <CheckCircle2
+                                    size={22}
+                                    color={Theme.primary}
+                                    strokeWidth={2.5}
+                                  />
+                                ) : (
+                                  <View style={styles.pickerRowEndSpacer} />
+                                )}
+                              </TouchableOpacity>
+                            );
+                          })
+                        )}
+                      </ScrollView>
+                    </View>
+                  </View>
+                </View>
+              </Modal>
+            ) : null}
 
             <View style={styles.actionFooterBar}>
-              <View
-                style={[
-                  styles.actionButtonsRow,
-                  stackActionButtons && styles.actionButtonsRowStacked,
-                ]}
-              >
-                <TouchableOpacity
+              <View style={styles.actionButtonsHoverHost}>
+                {actionHelpHint ? (
+                  <View
+                    style={styles.actionHelpTooltip}
+                    pointerEvents="none"
+                    accessibilityLiveRegion="polite"
+                  >
+                    <Text style={styles.actionHelpTooltipTitle}>
+                      {actionHelpHint === "draft"
+                        ? "Save Draft"
+                        : "Share to Network"}
+                    </Text>
+                    <Text style={styles.actionHelpTooltipText}>
+                      {actionHelpHint === "draft"
+                        ? "Indent stays editable. You can save updates again and share later."
+                        : "Shared indents are broadcast and become read-only."}
+                    </Text>
+                  </View>
+                ) : null}
+                <View
                   style={[
-                    styles.draftBtn,
-                    stackActionButtons && styles.actionBtnStacked,
-                    submitting && styles.submitBtnDisabled,
+                    styles.actionButtonsRow,
+                    stackActionButtons && styles.actionButtonsRowStacked,
                   ]}
-                  onPress={persistDraft}
-                  disabled={submitting}
-                  activeOpacity={0.8}
+                  {...(Platform.OS === "web"
+                    ? {
+                        onMouseLeave: () => setActionHelpHint(null),
+                      }
+                    : {})}
                 >
-                  {submitting ? (
-                    <ActivityIndicator
-                      size="small"
-                      color={Theme.textPrimaryDark}
-                    />
-                  ) : (
-                    <Text style={styles.draftBtnText}>Save Draft</Text>
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.submitBtn,
-                    stackActionButtons && styles.actionBtnStacked,
-                    (!canSubmit || submitting) && styles.submitBtnDisabled,
-                  ]}
-                  onPress={handleSubmit}
-                  disabled={!canSubmit || submitting}
-                  activeOpacity={0.8}
-                >
-                  {submitting ? (
-                    <ActivityIndicator
-                      size="small"
-                      color={Theme.buttonPrimaryText}
-                    />
-                  ) : (
-                    <Text style={styles.submitBtnText}>Share to Network</Text>
-                  )}
-                </TouchableOpacity>
+                  <View
+                    style={[
+                      styles.actionBtnHoverCell,
+                      stackActionButtons && styles.actionBtnHoverCellStacked,
+                    ]}
+                    {...(Platform.OS === "web"
+                      ? {
+                          onMouseEnter: () => setActionHelpHint("draft"),
+                        }
+                      : {})}
+                  >
+                    <TouchableOpacity
+                      style={[
+                        styles.draftBtn,
+                        stackActionButtons && styles.actionBtnStacked,
+                        submitting && styles.submitBtnDisabled,
+                      ]}
+                      onPress={persistDraft}
+                      disabled={submitting}
+                      activeOpacity={0.8}
+                      accessibilityHint="Indent stays editable. You can save updates again and share later."
+                    >
+                      {submitting ? (
+                        <ActivityIndicator
+                          size="small"
+                          color={Theme.textPrimaryDark}
+                        />
+                      ) : (
+                        <View style={styles.actionBtnInner}>
+                          <FileEdit size={18} color={Theme.textPrimaryDark} />
+                          <Text style={styles.draftBtnText}>Save Draft</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                  <View
+                    style={[
+                      styles.actionBtnHoverCell,
+                      stackActionButtons && styles.actionBtnHoverCellStacked,
+                    ]}
+                    {...(Platform.OS === "web"
+                      ? {
+                          onMouseEnter: () => setActionHelpHint("share"),
+                        }
+                      : {})}
+                  >
+                    <TouchableOpacity
+                      style={[
+                        styles.submitBtn,
+                        stackActionButtons && styles.actionBtnStacked,
+                        (!canSubmit || submitting) && styles.submitBtnDisabled,
+                      ]}
+                      onPress={handleSubmit}
+                      disabled={!canSubmit || submitting}
+                      activeOpacity={0.8}
+                      accessibilityHint="Shared indents are broadcast and become read-only."
+                    >
+                      {submitting ? (
+                        <ActivityIndicator
+                          size="small"
+                          color={Theme.buttonPrimaryText}
+                        />
+                      ) : (
+                        <View style={styles.actionBtnInner}>
+                          <Share2
+                            size={18}
+                            color={Theme.buttonMatteBlackText}
+                          />
+                          <Text style={styles.submitBtnText}>
+                            Share to Network
+                          </Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
               </View>
             </View>
           </View>
         </ScrollView>
-        {/* Modals */}
-        <ThemedAlertModal
-          visible={alertState.visible}
-          title={alertState.title}
-          message={alertState.message}
-          onOk={() => setAlertState((prev) => ({ ...prev, visible: false }))}
-        />
-        <ThemedConfirmModal
-          visible={confirmState.visible}
-          title={confirmState.title}
-          message={confirmState.message}
-          confirmText={confirmState.confirmText}
-          onCancel={() => {
-            if (confirmState.resolve) confirmState.resolve(false);
-            setConfirmState((prev) => ({
-              ...prev,
-              visible: false,
-              resolve: null,
-            }));
-          }}
-          onConfirm={() => {
-            if (confirmState.resolve) confirmState.resolve(true);
-            setConfirmState((prev) => ({
-              ...prev,
-              visible: false,
-              resolve: null,
-            }));
-          }}
-        />
+
+        {windowWidth >= 420 ? (
+          <View
+            style={[
+              styles.previewCard,
+              {
+                bottom: insets.bottom + 16,
+                right: Math.max(16, insets.right + 8),
+              },
+            ]}
+            pointerEvents="box-none"
+          >
+            <View style={styles.previewHead}>
+              <Text style={styles.previewHeadTitle}>Indent summary</Text>
+              <View style={styles.livePill}>
+                <Text style={styles.livePillText}>Live</Text>
+              </View>
+            </View>
+            <View style={styles.previewBody}>
+              <View style={styles.previewLine}>
+                <Text style={styles.previewLab}>Pickup</Text>
+                <Text style={styles.previewVal} numberOfLines={2}>
+                  {(form.pickup_area ?? "").trim() || "—"}
+                </Text>
+              </View>
+              <View style={styles.previewLine}>
+                <Text style={styles.previewLab}>Delivery</Text>
+                <Text style={styles.previewVal} numberOfLines={2}>
+                  {(form.drop_location ?? "").trim() || "—"}
+                </Text>
+              </View>
+              <View style={styles.previewDivider} />
+              <View style={styles.previewRow2}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.previewLab}>Target pay</Text>
+                  <Text style={[styles.previewVal, { color: Theme.primary }]}>
+                    ₹{form.supplier_target.trim() || "0"}
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.previewLab}>Vehicle</Text>
+                  <Text style={styles.previewVal} numberOfLines={1}>
+                    {form.vehicle_type.trim() || "—"}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.previewFoot}>
+                <Text style={styles.previewFootLeft}>
+                  {(form.load_type ?? "").trim() || "Load"}
+                </Text>
+                <Text style={styles.previewFootRight} numberOfLines={1}>
+                  {form.weight.trim()
+                    ? `${form.weight.trim()} T`
+                    : "—"}
+                </Text>
+              </View>
+            </View>
+          </View>
+        ) : null}
+
+        <View style={styles.blobA} pointerEvents="none" />
+        <View style={styles.blobB} pointerEvents="none" />
       </View>
-    </KeyboardAvoidingView>
+      </AddTripModalLayout>
+
+      <ThemedAlertModal
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        onOk={() => setAlertState((prev) => ({ ...prev, visible: false }))}
+      />
+      <ThemedConfirmModal
+        visible={confirmState.visible}
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmText={confirmState.confirmText}
+        onCancel={() => {
+          if (confirmState.resolve) confirmState.resolve(false);
+          setConfirmState((prev) => ({
+            ...prev,
+            visible: false,
+            resolve: null,
+          }));
+        }}
+        onConfirm={() => {
+          if (confirmState.resolve) confirmState.resolve(true);
+          setConfirmState((prev) => ({
+            ...prev,
+            visible: false,
+            resolve: null,
+          }));
+        }}
+      />
+    </View>
   );
 }
 
@@ -1516,12 +1889,8 @@ const styles = StyleSheet.create({
   },
   scroll: { flex: 1 },
   scrollContent: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 16,
     flexGrow: 1,
-    width: "100%",
-    minWidth: "100%",
-    alignSelf: "stretch",
+    paddingTop: 4,
   },
   sheet: {
     gap: 12,
@@ -1787,37 +2156,134 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Theme.textMuted,
   },
-  vehicleOptionSection: {
-    backgroundColor: Theme.surfaceGray,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
+  pickerModalRoot: {
+    flex: 1,
   },
-  vehicleOptionSectionTitle: {
+  pickerBackdropPress: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  pickerBackdropDim: {
+    flex: 1,
+    backgroundColor: Theme.overlayBackdrop,
+  },
+  pickerCenterWrap: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+  },
+  pickerSheet: {
+    width: "100%",
+    maxHeight: "82%",
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 20,
+    overflow: "hidden",
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 16,
+  },
+  pickerSheetHead: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
+  },
+  pickerSheetTitles: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  pickerSheetTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.3,
+  },
+  pickerSheetSubtitle: {
+    marginTop: 4,
+    fontSize: 14,
+    fontWeight: "500",
+    color: Theme.textMuted,
+  },
+  pickerCloseBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: Theme.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.cardWhite,
+  },
+  pickerSearchShell: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+  },
+  pickerScroll: {
+    maxHeight: 340,
+    minHeight: 120,
+  },
+  pickerScrollContent: {
+    paddingBottom: 16,
+  },
+  pickerSectionLabel: {
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: "800",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 1,
-  },
-  vehicleOptionRow: {
-    paddingVertical: 14,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    borderBottomWidth: 1,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 8,
+    backgroundColor: Theme.surfaceGray,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
   },
-  vehicleOptionRowActive: {
-    backgroundColor: Theme.surface,
+  pickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+    gap: 12,
   },
-  vehicleOptionText: {
+  pickerRowSelected: {
+    backgroundColor: Theme.surfaceLight,
+  },
+  pickerIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Theme.surfaceGray,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pickerRowPrimary: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 15,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
+    lineHeight: 20,
   },
-  vehicleOptionTextActive: {
-    fontWeight: "700",
+  pickerRowPrimarySelected: {
+    fontWeight: "800",
     color: Theme.primary,
+  },
+  pickerRowEndSpacer: {
+    width: 22,
+    height: 22,
+  },
+  pickerEmptyText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
   switchToPresetLink: {
     marginTop: 6,
@@ -1938,24 +2404,53 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.textOnDark,
   },
-  actionHelpBox: {
-    marginTop: 8,
-    backgroundColor: Theme.surfaceLight,
+  actionButtonsHoverHost: {
+    position: "relative",
+    zIndex: 2,
+  },
+  actionHelpTooltip: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: "100%",
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    padding: 12,
-    gap: 4,
+    backgroundColor: Theme.cardWhite,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 8,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 4px 14px rgba(0,0,0,0.08)",
+      } as ViewStyle,
+    }),
   },
-  actionHelpTitle: {
+  actionHelpTooltipTitle: {
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "800",
     color: Theme.textPrimaryDark,
-  },
-  actionHelpText: {
-    fontSize: 11,
-    color: Theme.textSecondary,
     marginBottom: 4,
+    letterSpacing: 0.2,
+  },
+  actionHelpTooltipText: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+    lineHeight: 15,
+  },
+  actionBtnHoverCell: {
+    flex: 1,
+    minWidth: 0,
+  },
+  actionBtnHoverCellStacked: {
+    flex: 0,
+    width: "100%",
   },
   actionButtonsRow: {
     flexDirection: "row",
@@ -1977,6 +2472,11 @@ const styles = StyleSheet.create({
   actionBtnStacked: {
     flex: 0,
     width: "100%",
+  },
+  actionBtnInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   draftBtn: {
     flex: 1,
@@ -2019,6 +2519,358 @@ const styles = StyleSheet.create({
     color: Theme.buttonMatteBlackText,
     textTransform: "uppercase",
     letterSpacing: 1.2,
+  },
+  pageWrap: {
+    flex: 1,
+    minHeight: 0,
+    backgroundColor: Theme.screenBackground,
+    position: "relative",
+  },
+  contentMax: {
+    width: "100%",
+    maxWidth: 960,
+    alignSelf: "center",
+  },
+  card: {
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: 16,
+    marginBottom: 16,
+    ...Platform.select<ViewStyle>({
+      web: {
+        boxShadow: "0 1px 3px rgba(15,23,42,0.06)",
+      },
+      default: {
+        shadowColor: Theme.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        elevation: 2,
+      },
+    }),
+  },
+  cardHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+    paddingBottom: 10,
+    marginBottom: 14,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  stepBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: "rgba(0, 0, 0, 0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepBadgeText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.iconPrimary,
+  },
+  fieldLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    marginBottom: 8,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  tripInput: {
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    fontWeight: "600",
+    minHeight: 52,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceForm,
+    color: Theme.textPrimary,
+    ...Platform.select<ViewStyle>({
+      web: { outlineStyle: "none" },
+    }),
+  },
+  gridRow: { gap: 14 },
+  gridRowWide: { flexDirection: "row", alignItems: "flex-start", gap: 20 },
+  gridCol: { flex: 1, minWidth: 0 },
+  routeSummary: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: Theme.darkSurface,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  routeSummaryText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textOnDark,
+  },
+  routeStats: {
+    flexDirection: "row",
+    gap: 16,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceLight,
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  routeStatLab: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    marginBottom: 4,
+  },
+  routeStatVal: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  mutedSmall: {
+    fontSize: 12,
+    color: Theme.textMuted,
+    marginBottom: 8,
+  },
+  clientList: { maxHeight: 280 },
+  clientCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: Theme.borderLight,
+    marginBottom: 10,
+    backgroundColor: Theme.screenBackground,
+  },
+  clientCardOn: {
+    borderColor: Theme.darkBackground,
+    backgroundColor: "rgba(0, 0, 0, 0.05)",
+  },
+  clientName: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  clientNameOn: { color: Theme.iconPrimary },
+  clientMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 4,
+  },
+  clientSub: {
+    fontSize: 11,
+    color: Theme.textMuted,
+    flex: 1,
+  },
+  radioOuter: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: Theme.borderInput,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  radioOuterOn: {
+    borderColor: Theme.darkBackground,
+    backgroundColor: Theme.screenBackground,
+  },
+  priceWrap: {
+    position: "relative",
+    marginBottom: 12,
+  },
+  rupeeIcon: {
+    position: "absolute",
+    left: 14,
+    top: 18,
+    zIndex: 1,
+  },
+  priceInput: {
+    borderRadius: 16,
+    paddingLeft: 44,
+    paddingRight: 16,
+    paddingVertical: 16,
+    fontSize: 24,
+    fontWeight: "800",
+    borderWidth: 2,
+    borderColor: "transparent",
+    backgroundColor: Theme.surfaceForm,
+    color: Theme.textPrimaryDark,
+    ...Platform.select<ViewStyle>({
+      web: { outlineStyle: "none" },
+    }),
+  },
+  supplierPriceInput: {
+    color: Theme.primary,
+    fontWeight: "800",
+  },
+  infoCallout: {
+    flexDirection: "row",
+    gap: 10,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.04)",
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  infoCalloutText: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    lineHeight: 16,
+  },
+  supplierSection: {
+    marginTop: 8,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+  },
+  supplierLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  estBadge: {
+    backgroundColor: "rgba(59, 130, 246, 0.12)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  estBadgeText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.primary,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  previewCard: {
+    position: "absolute",
+    width: 300,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    overflow: "hidden",
+    zIndex: 50,
+    ...Platform.select<ViewStyle>({
+      web: {
+        boxShadow: "0 12px 40px rgba(15,23,42,0.15)",
+      },
+      default: {
+        shadowColor: Theme.shadow,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 16,
+        elevation: 10,
+      },
+    }),
+  },
+  previewHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: Theme.darkSurface,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  previewHeadTitle: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: Theme.textOnDark,
+  },
+  livePill: {
+    backgroundColor: Theme.darkBackground,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  livePillText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textOnPrimary,
+    textTransform: "uppercase",
+  },
+  previewBody: { padding: 12, gap: 8 },
+  previewLine: { gap: 4 },
+  previewLab: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+  },
+  previewVal: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  previewDivider: {
+    height: 1,
+    backgroundColor: Theme.borderLight,
+    marginVertical: 4,
+  },
+  previewRow2: { flexDirection: "row", gap: 12 },
+  previewFoot: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: Theme.surfaceLight,
+    marginTop: 4,
+  },
+  previewFootLeft: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+  },
+  previewFootRight: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    maxWidth: 140,
+    textAlign: "right",
+  },
+  blobA: {
+    position: "absolute",
+    top: "18%",
+    left: "-12%",
+    width: 280,
+    height: 280,
+    borderRadius: 200,
+    backgroundColor: "rgba(0, 0, 0, 0.05)",
+    zIndex: -1,
+  },
+  blobB: {
+    position: "absolute",
+    bottom: "-8%",
+    right: "-8%",
+    width: 220,
+    height: 220,
+    borderRadius: 200,
+    backgroundColor: "rgba(232, 33, 39, 0.06)",
+    zIndex: -1,
   },
   noAccessWrap: {
     flex: 1,

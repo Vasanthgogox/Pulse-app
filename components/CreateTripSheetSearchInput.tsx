@@ -56,11 +56,6 @@ export const CreateTripSheetSearchInput = forwardRef<
       ? ({ cursor: "text" } as TextStyle)
       : undefined;
 
-  const inputWebOutline =
-    Platform.OS === "web"
-      ? ({ outlineStyle: "none" } as TextStyle)
-      : undefined;
-
   return (
     <View
       style={[
@@ -74,7 +69,7 @@ export const CreateTripSheetSearchInput = forwardRef<
       </View>
       <TextInput
         ref={ref}
-        style={[styles.input, webCursor, inputWebOutline]}
+        style={[styles.input, webCursor]}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
@@ -147,6 +142,9 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     paddingVertical: Platform.OS === "android" ? 4 : 6,
     borderWidth: 0,
+    ...Platform.select({
+      web: { outlineStyle: "none" } as TextStyle,
+    }),
   },
   clearHit: {
     justifyContent: "center",

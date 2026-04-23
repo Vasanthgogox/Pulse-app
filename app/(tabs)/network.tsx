@@ -12,65 +12,65 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { getLinkedOrgProfile } from "@/features/clients/services/clients.service";
 import {
-  cancelDriverInvite,
-  getDriverInviteeByPhone,
-  getDriverProfileDisplay,
-  inviteDriver,
+    cancelDriverInvite,
+    getDriverInviteeByPhone,
+    getDriverProfileDisplay,
+    inviteDriver,
 } from "@/features/drivers/services/drivers.service";
 import { type IndentRow } from "@/features/indents";
 import { LoadCenterView } from "@/features/network/components/LoadCenterView";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { normalizePhoneForInviteeLookup } from "@/lib/phoneLookup";
 import {
-  useClientsQuery,
-  useConnectionRequestsReceivedQuery,
-  useConnectionRequestsSentQuery,
-  useDriverInvitesSentQuery,
-  useDriversQuery,
-  useInvalidateNetwork,
-  useRealtimeNetworkInvalidation,
-  useSuppliersQuery,
+    useClientsQuery,
+    useConnectionRequestsReceivedQuery,
+    useConnectionRequestsSentQuery,
+    useDriverInvitesSentQuery,
+    useDriversQuery,
+    useInvalidateNetwork,
+    useRealtimeNetworkInvalidation,
+    useSuppliersQuery,
 } from "@/lib/queries";
 import { getInitials } from "@/lib/stringUtils";
 import { useRefreshWithFeedback } from "@/lib/useRefreshWithFeedback";
 import {
-  approveConnectionRequest,
-  cancelConnectionRequest,
-  createConnectionRequest,
-  getConnectionInviteeByPhone,
-  getConnectionInviteesByPhones,
-  rejectConnectionRequest,
+    approveConnectionRequest,
+    cancelConnectionRequest,
+    createConnectionRequest,
+    getConnectionInviteeByPhone,
+    getConnectionInviteesByPhones,
+    rejectConnectionRequest,
 } from "@/services/connectionRequestsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
-  Building2,
-  CheckCircle2,
-  CircleCheck,
-  Clock3,
-  Handshake,
-  Info,
-  Truck,
-  User,
-  UserPlus,
+    Building2,
+    CheckCircle2,
+    CircleCheck,
+    Clock3,
+    Handshake,
+    Info,
+    Truck,
+    User,
+    UserPlus,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Animated,
-  Image,
-  Modal,
-  Platform,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    ActivityIndicator,
+    Animated,
+    Image,
+    Modal,
+    Platform,
+    Pressable,
+    RefreshControl,
+    ScrollView,
+    Share,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -132,66 +132,76 @@ function toRequestItems(
   }[],
 ): RequestItem[] {
   const items: RequestItem[] = [];
-    received.forEach((row) => {
-      if (!row) return;
-      items.push({
-        id: row.id,
-        type: "RECEIVED",
-        kind: requestKind(row),
-        from_org_name: row.from_org_name ?? "Unknown",
-        to_org_name: row.to_org_name ?? "Unknown",
-        status: row.status,
-        created_at: row.created_at,
-        row,
-        nodeInfo: {
-          id: row.from_organization_id,
-          type: requestKind(row) === "CLIENT" ? "CLIENT" : requestKind(row) === "SUPPLIER" ? "SUPPLIER" : "CLIENT", // default or handle mixed
-          name: row.from_org_name ?? "Unknown",
-          isIntegrated: true,
-          status: "PENDING",
-          linked_organization_id: row.from_organization_id // Needed for lazy fetching
-        }
-      });
+  received.forEach((row) => {
+    if (!row) return;
+    items.push({
+      id: row.id,
+      type: "RECEIVED",
+      kind: requestKind(row),
+      from_org_name: row.from_org_name ?? "Unknown",
+      to_org_name: row.to_org_name ?? "Unknown",
+      status: row.status,
+      created_at: row.created_at,
+      row,
+      nodeInfo: {
+        id: row.from_organization_id,
+        type:
+          requestKind(row) === "CLIENT"
+            ? "CLIENT"
+            : requestKind(row) === "SUPPLIER"
+              ? "SUPPLIER"
+              : "CLIENT", // default or handle mixed
+        name: row.from_org_name ?? "Unknown",
+        isIntegrated: true,
+        status: "PENDING",
+        linked_organization_id: row.from_organization_id, // Needed for lazy fetching
+      },
     });
-    sent.forEach((row) => {
-      if (!row) return;
-      items.push({
-        id: row.id,
-        type: "SENT",
-        kind: requestKind(row),
-        from_org_name: row.from_org_name ?? "Unknown",
-        to_org_name: row.to_org_name ?? "Unknown",
-        status: row.status,
-        created_at: row.created_at,
-        row,
-        nodeInfo: {
-          id: row.to_organization_id,
-          type: requestKind(row) === "CLIENT" ? "CLIENT" : requestKind(row) === "SUPPLIER" ? "SUPPLIER" : "CLIENT", // default or handle mixed
-          name: row.to_org_name ?? "Unknown",
-          isIntegrated: true,
-          status: "PENDING",
-          linked_organization_id: row.to_organization_id // Needed for lazy fetching
-        }
-      });
+  });
+  sent.forEach((row) => {
+    if (!row) return;
+    items.push({
+      id: row.id,
+      type: "SENT",
+      kind: requestKind(row),
+      from_org_name: row.from_org_name ?? "Unknown",
+      to_org_name: row.to_org_name ?? "Unknown",
+      status: row.status,
+      created_at: row.created_at,
+      row,
+      nodeInfo: {
+        id: row.to_organization_id,
+        type:
+          requestKind(row) === "CLIENT"
+            ? "CLIENT"
+            : requestKind(row) === "SUPPLIER"
+              ? "SUPPLIER"
+              : "CLIENT", // default or handle mixed
+        name: row.to_org_name ?? "Unknown",
+        isIntegrated: true,
+        status: "PENDING",
+        linked_organization_id: row.to_organization_id, // Needed for lazy fetching
+      },
     });
-    driverInvites.forEach((d) => {
-      items.push({
-        id: d.id,
-        type: "SENT",
-        kind: "DRIVER_INVITE",
-        from_org_name: d.from_org_name ?? "Unknown",
-        to_org_name: d.driver_name ?? "Driver",
-        status: d.status,
-        created_at: d.created_at,
-        nodeInfo: {
-          type: "DRIVER",
-          id: d.to_user_id || d.id, // Fallback to invite id
-          name: d.driver_name ?? "Driver",
-          isIntegrated: true,
-          status: "PENDING"
-        }
-      });
+  });
+  driverInvites.forEach((d) => {
+    items.push({
+      id: d.id,
+      type: "SENT",
+      kind: "DRIVER_INVITE",
+      from_org_name: d.from_org_name ?? "Unknown",
+      to_org_name: d.driver_name ?? "Driver",
+      status: d.status,
+      created_at: d.created_at,
+      nodeInfo: {
+        type: "DRIVER",
+        id: d.to_user_id || d.id, // Fallback to invite id
+        name: d.driver_name ?? "Driver",
+        isIntegrated: true,
+        status: "PENDING",
+      },
     });
+  });
   items.sort(
     (a, b) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
@@ -261,14 +271,16 @@ function NetworkAvatar({
               avatarSeed = profile.avatarSeed || "";
             }
           } else if (node.linked_organization_id) {
-            const { profile } = await getLinkedOrgProfile(node.linked_organization_id);
+            const { profile } = await getLinkedOrgProfile(
+              node.linked_organization_id,
+            );
             if (profile) {
               avatarUrl = profile.avatarUrl || "";
               avatarSeed = profile.avatarSeed || "";
             }
           }
         } catch (e) {
-          if (__DEV__) console.warn('[NetworkAvatar] Lazy fetch failed:', e);
+          if (__DEV__) console.warn("[NetworkAvatar] Lazy fetch failed:", e);
         }
       }
 
@@ -295,7 +307,8 @@ function NetworkAvatar({
       }
 
       if (node.type === "DRIVER") {
-        if (mounted) setUri(getAvatarUriForSeed(getDriverFallbackSeed(node.id)));
+        if (mounted)
+          setUri(getAvatarUriForSeed(getDriverFallbackSeed(node.id)));
         return;
       }
 
@@ -410,30 +423,12 @@ function NetworkAvatar({
   }
 
   if (node.type === "DRIVER") {
-    return (
-      <User
-        size={18}
-        strokeWidth={1.5}
-        color={fallbackColor}
-      />
-    );
+    return <User size={18} strokeWidth={1.5} color={fallbackColor} />;
   }
   if (node.type === "SUPPLIER") {
-    return (
-      <Truck
-        size={18}
-        strokeWidth={1.5}
-        color={fallbackColor}
-      />
-    );
+    return <Truck size={18} strokeWidth={1.5} color={fallbackColor} />;
   }
-  return (
-    <Building2
-      size={18}
-      strokeWidth={1.5}
-      color={fallbackColor}
-    />
-  );
+  return <Building2 size={18} strokeWidth={1.5} color={fallbackColor} />;
 }
 
 function shortRelativeTime(iso: string): string {
@@ -462,9 +457,12 @@ export default function NetworkScreen() {
   const isLargeScreen = Platform.OS === "web" && width >= 1024;
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { tab: initialTab, indentId: initialIndentId } = useLocalSearchParams<{ tab?: SubTab; indentId?: string }>();
+  const { tab: initialTab, indentId: initialIndentId } = useLocalSearchParams<{
+    tab?: SubTab;
+    indentId?: string;
+  }>();
   const { t } = useLanguage();
-   const { currentOrganization } = useOrganization();
+  const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
   useRealtimeNetworkInvalidation(orgId);
 
@@ -507,12 +505,12 @@ export default function NetworkScreen() {
     Animated.parallel([
       Animated.spring(syncToastOpacity, {
         toValue: 1,
-        useNativeDriver: Platform.OS !== 'web',
+        useNativeDriver: Platform.OS !== "web",
         speed: 20,
       }),
       Animated.spring(syncToastTranslate, {
         toValue: 0,
-        useNativeDriver: Platform.OS !== 'web',
+        useNativeDriver: Platform.OS !== "web",
         speed: 20,
       }),
     ]).start(() => {
@@ -521,12 +519,12 @@ export default function NetworkScreen() {
           Animated.timing(syncToastOpacity, {
             toValue: 0,
             duration: 300,
-            useNativeDriver: Platform.OS !== 'web',
+            useNativeDriver: Platform.OS !== "web",
           }),
           Animated.timing(syncToastTranslate, {
             toValue: -16,
             duration: 300,
-            useNativeDriver: Platform.OS !== 'web',
+            useNativeDriver: Platform.OS !== "web",
           }),
         ]).start(() => setShowSuccess(false));
       }, 1200);
@@ -536,22 +534,22 @@ export default function NetworkScreen() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actingRequestId, setActingRequestId] = useState<string | null>(null);
   const [sendingNodeId, setSendingNodeId] = useState<string | null>(null);
-  const [confirmCancelItem, setConfirmCancelItem] = useState<RequestItem | null>(
-    null,
-  );
+  const [confirmCancelItem, setConfirmCancelItem] =
+    useState<RequestItem | null>(null);
   const [acceptTermsItem, setAcceptTermsItem] = useState<RequestItem | null>(
     null,
   );
-  const [previewRequestItem, setPreviewRequestItem] = useState<RequestItem | null>(
-    null,
-  );
+  const [previewRequestItem, setPreviewRequestItem] =
+    useState<RequestItem | null>(null);
   const [previewOpenedAtMs, setPreviewOpenedAtMs] = useState<number>(0);
   const [hoveredRequestId, setHoveredRequestId] = useState<string | null>(null);
   const [dismissedSentRequestIds, setDismissedSentRequestIds] = useState<
     Record<string, true>
   >({});
-  const [optimisticallyHiddenInviteSearchNodeIds, setOptimisticallyHiddenInviteSearchNodeIds] =
-    useState<Record<string, true>>({});
+  const [
+    optimisticallyHiddenInviteSearchNodeIds,
+    setOptimisticallyHiddenInviteSearchNodeIds,
+  ] = useState<Record<string, true>>({});
 
   const {
     data: clients = [],
@@ -590,9 +588,7 @@ export default function NetworkScreen() {
           name: (c.name || c.contact_person || "Unnamed").toUpperCase(),
           type: "CLIENT",
           status: "INTEGRATED",
-          availableOnApp: Boolean(
-            c.linked_organization_id ?? c.is_integrated,
-          ),
+          availableOnApp: Boolean(c.linked_organization_id ?? c.is_integrated),
           isIntegrated,
           phone: c.phone ?? null,
           linked_organization_id: c.linked_organization_id,
@@ -604,8 +600,7 @@ export default function NetworkScreen() {
     if (Array.isArray(suppliers)) {
       suppliers.forEach((s) => {
         const isIntegrated =
-          s.supplier_type === "integrated" ||
-          Boolean(s.linked_organization_id);
+          s.supplier_type === "integrated" || Boolean(s.linked_organization_id);
         list.push({
           id: s.id,
           name: (
@@ -667,7 +662,8 @@ export default function NetworkScreen() {
           // (because query results are re-materialized). Avoid repeatedly setting new
           // `{}` objects, which can trigger a render loop.
           const phoneMapIsEmpty = Object.keys(phoneOnAppByNodeId).length === 0;
-          const inviteeMapIsEmpty = Object.keys(inviteeOrgIdByNodeId).length === 0;
+          const inviteeMapIsEmpty =
+            Object.keys(inviteeOrgIdByNodeId).length === 0;
           if (!phoneMapIsEmpty) setPhoneOnAppByNodeId({});
           if (!inviteeMapIsEmpty) setInviteeOrgIdByNodeId({});
         }
@@ -685,7 +681,8 @@ export default function NetworkScreen() {
           const key = normalizePhoneForInviteeLookup(n.phone ?? "");
           const invitee = key ? inviteesByPhone.get(key) : undefined;
           byNodeId[n.id] = !!invitee;
-          if (invitee?.organization_id) inviteeOrgByNodeId[n.id] = invitee.organization_id;
+          if (invitee?.organization_id)
+            inviteeOrgByNodeId[n.id] = invitee.organization_id;
         });
       }
 
@@ -929,7 +926,11 @@ export default function NetworkScreen() {
     return nodes.filter((n) => {
       if (manageView === "CONNECTIONS" && !n.isIntegrated) return false;
       if (manageView === "CONNECTIONS" && !isNodeOnApp(n)) return false;
-      if (manageView === "INVITATIONS" && showInvitationSearch && n.isIntegrated)
+      if (
+        manageView === "INVITATIONS" &&
+        showInvitationSearch &&
+        n.isIntegrated
+      )
         return false;
       if (manageView === "INVITATIONS" && showInvitationSearch) {
         if (optimisticallyHiddenInviteSearchNodeIds[n.id]) return false;
@@ -990,12 +991,7 @@ export default function NetworkScreen() {
 
   if (subTab === "load") {
     return (
-      <View
-        style={[
-          styles.container,
-          { paddingTop: screenTopPad },
-        ]}
-      >
+      <View style={[styles.container, { paddingTop: screenTopPad }]}>
         <LoadCenterView
           contentTopPadding={0}
           onMyNetworkPress={() => setSubTab("manage")}
@@ -1012,12 +1008,7 @@ export default function NetworkScreen() {
   }
 
   return (
-    <View
-      style={[
-        styles.container,
-        { paddingTop: screenTopPad },
-      ]}
-    >
+    <View style={[styles.container, { paddingTop: screenTopPad }]}>
       {/* Sync toast — small animated pill, non-blocking */}
       {showSuccess && (
         <Animated.View
@@ -1042,78 +1033,79 @@ export default function NetworkScreen() {
         {/* Connections | Invitations (+ add). Load board opens via truck icon. */}
         <View style={styles.manageSwitchRow}>
           <View style={styles.manageSwitchTabsCluster}>
-          <TouchableOpacity
-            style={styles.manageSwitchTab}
-            onPress={() => setManageView("CONNECTIONS")}
-            activeOpacity={0.85}
-          >
-            <View style={styles.filterTabLabelRow}>
-              <Text
-                style={[
-                  styles.filterTabText,
-                  manageView === "CONNECTIONS" && styles.filterTabTextActive,
-                ]}
-              >
-                Connections
-              </Text>
-            </View>
-            {manageView === "CONNECTIONS" ? (
-              <View style={styles.filterTabUnderline} />
-            ) : null}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.manageSwitchTab}
-            onPress={() => setManageView("INVITATIONS")}
-            activeOpacity={0.85}
-          >
-            <View style={styles.filterTabLabelRow}>
-              <Text
-                style={[
-                  styles.filterTabText,
-                  manageView === "INVITATIONS" && styles.filterTabTextActive,
-                ]}
-              >
-                Invitations
-              </Text>
-              {pendingRequestCount > 0 ? (
-                <View
+            <TouchableOpacity
+              style={styles.manageSwitchTab}
+              onPress={() => setManageView("CONNECTIONS")}
+              activeOpacity={0.85}
+            >
+              <View style={styles.filterTabLabelRow}>
+                <Text
                   style={[
-                    styles.filterTabBadge,
-                    manageView === "INVITATIONS" && styles.filterTabBadgeActive,
+                    styles.filterTabText,
+                    manageView === "CONNECTIONS" && styles.filterTabTextActive,
                   ]}
                 >
-                  <Text
+                  Connections
+                </Text>
+              </View>
+              {manageView === "CONNECTIONS" ? (
+                <View style={styles.filterTabUnderline} />
+              ) : null}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.manageSwitchTab}
+              onPress={() => setManageView("INVITATIONS")}
+              activeOpacity={0.85}
+            >
+              <View style={styles.filterTabLabelRow}>
+                <Text
+                  style={[
+                    styles.filterTabText,
+                    manageView === "INVITATIONS" && styles.filterTabTextActive,
+                  ]}
+                >
+                  Invitations
+                </Text>
+                {pendingRequestCount > 0 ? (
+                  <View
                     style={[
-                      styles.filterTabBadgeText,
+                      styles.filterTabBadge,
                       manageView === "INVITATIONS" &&
-                        styles.filterTabBadgeTextActive,
+                        styles.filterTabBadgeActive,
                     ]}
                   >
-                    {pendingRequestCount}
-                  </Text>
-                </View>
+                    <Text
+                      style={[
+                        styles.filterTabBadgeText,
+                        manageView === "INVITATIONS" &&
+                          styles.filterTabBadgeTextActive,
+                      ]}
+                    >
+                      {pendingRequestCount}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              {manageView === "INVITATIONS" ? (
+                <View style={styles.filterTabUnderline} />
               ) : null}
-            </View>
-            {manageView === "INVITATIONS" ? (
-              <View style={styles.filterTabUnderline} />
-            ) : null}
-          </TouchableOpacity>
-          {manageView === "CONNECTIONS" &&
-          (nodeKind === "CLIENT" ||
-            nodeKind === "SUPPLIER" ||
-            nodeKind === "DRIVER") ? (
-            <TouchableOpacity
-              style={styles.filterAddBtn}
-              onPress={handleAddPress}
-              activeOpacity={0.8}
-            >
-              <FontAwesome
-                name="user-plus"
-                size={14}
-                color={Theme.textOnDark}
-              />
             </TouchableOpacity>
-          ) : null}
+            {manageView === "CONNECTIONS" &&
+            (nodeKind === "CLIENT" ||
+              nodeKind === "SUPPLIER" ||
+              nodeKind === "DRIVER") ? (
+              <TouchableOpacity
+                style={styles.filterAddBtn}
+                onPress={handleAddPress}
+                activeOpacity={0.8}
+              >
+                <FontAwesome
+                  name="user-plus"
+                  size={14}
+                  color={Theme.textOnDark}
+                />
+              </TouchableOpacity>
+            ) : null}
           </View>
           <TouchableOpacity
             style={styles.manageLoadBoardBtn}
@@ -1236,56 +1228,52 @@ export default function NetworkScreen() {
 
         {/* Search + Type filter — inside black block */}
         {manageView === "CONNECTIONS" ? (
-          <View
-            style={[
-              styles.searchRowDark,
-              styles.searchRowDarkSingle,
-            ]}
-          >
-          <View style={styles.searchWrapDark}>
-            <FontAwesome
-              name="search"
-              size={14}
-              color={Theme.textOnDarkMuted}
-              style={styles.searchIconDark}
-            />
-            <TextInput
-              style={styles.searchInputDark}
-              placeholder={"Search connections..."}
-              placeholderTextColor={Theme.textOnDarkMuted}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoCapitalize="none"
-            />
-          </View>
-          {manageView === "CONNECTIONS" ? (
-            <View style={styles.typeFilterWrapDark}>
-              {(["ALL", "CLIENT", "SUPPLIER", "DRIVER"] as const).map(
-                (kind) => (
-                  <TouchableOpacity
-                    key={kind}
-                    style={[
-                      styles.typeFilterChipDark,
-                      nodeKind === kind && styles.typeFilterChipDarkActive,
-                    ]}
-                    onPress={() => setNodeKind(kind)}
-                    activeOpacity={0.8}
-                  >
-                    <Text
-                      style={[
-                        styles.typeFilterChipTextDark,
-                        nodeKind === kind && styles.typeFilterChipTextDarkActive,
-                      ]}
-                    >
-                      {kind === "ALL"
-                        ? "All"
-                        : kind.charAt(0) + kind.slice(1).toLowerCase()}
-                    </Text>
-                  </TouchableOpacity>
-                ),
-              )}
+          <View style={[styles.searchRowDark, styles.searchRowDarkSingle]}>
+            <View style={styles.searchWrapDark}>
+              <FontAwesome
+                name="search"
+                size={14}
+                color={Theme.textOnDarkMuted}
+                style={styles.searchIconDark}
+              />
+              <TextInput
+                style={styles.searchInputDark}
+                placeholder={"Search connections..."}
+                placeholderTextColor={Theme.textOnDarkMuted}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoCapitalize="none"
+              />
             </View>
-          ) : null}
+            {manageView === "CONNECTIONS" ? (
+              <View style={styles.typeFilterWrapDark}>
+                {(["ALL", "CLIENT", "SUPPLIER", "DRIVER"] as const).map(
+                  (kind) => (
+                    <TouchableOpacity
+                      key={kind}
+                      style={[
+                        styles.typeFilterChipDark,
+                        nodeKind === kind && styles.typeFilterChipDarkActive,
+                      ]}
+                      onPress={() => setNodeKind(kind)}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={[
+                          styles.typeFilterChipTextDark,
+                          nodeKind === kind &&
+                            styles.typeFilterChipTextDarkActive,
+                        ]}
+                      >
+                        {kind === "ALL"
+                          ? "All"
+                          : kind.charAt(0) + kind.slice(1).toLowerCase()}
+                      </Text>
+                    </TouchableOpacity>
+                  ),
+                )}
+              </View>
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -1377,7 +1365,8 @@ export default function NetworkScreen() {
                   <FontAwesome name="users" size={48} color={Theme.textMuted} />
                   <Text style={styles.emptyStateText}>No contacts found</Text>
                   <Text style={styles.emptyStateSubtext}>
-                    Search by name or phone number to find people to connect with.
+                    Search by name or phone number to find people to connect
+                    with.
                   </Text>
                 </View>
               ) : (
@@ -1548,7 +1537,9 @@ export default function NetworkScreen() {
                                             </Text>
                                           </View>
                                         ) : (
-                                          <View style={styles.networkActionStack}>
+                                          <View
+                                            style={styles.networkActionStack}
+                                          >
                                             <TouchableOpacity
                                               style={
                                                 onPlatform
@@ -1558,7 +1549,9 @@ export default function NetworkScreen() {
                                               onPress={() =>
                                                 handleSendInviteOrRequest(node)
                                               }
-                                              disabled={sendingNodeId === node.id}
+                                              disabled={
+                                                sendingNodeId === node.id
+                                              }
                                               activeOpacity={0.8}
                                             >
                                               {sendingNodeId === node.id ? (
@@ -1585,7 +1578,9 @@ export default function NetworkScreen() {
                                               )}
                                             </TouchableOpacity>
                                             {!onPlatform ? (
-                                              <Text style={styles.networkActionHint}>
+                                              <Text
+                                                style={styles.networkActionHint}
+                                              >
                                                 USER IS NOT IN APP
                                               </Text>
                                             ) : null}
@@ -1618,259 +1613,312 @@ export default function NetworkScreen() {
             ) : (
               <View style={isLargeScreen ? styles.gridContainer : undefined}>
                 {filteredRequests.map((item) => {
-                const displayName =
-                  item.type === "RECEIVED"
-                    ? item.from_org_name
-                    : item.to_org_name;
-                const isReceivedPending =
-                  item.type === "RECEIVED" && item.status === "pending";
-                const isSentPending =
-                  item.type === "SENT" && item.status === "pending";
-                const showInlineSenderPreview = false;
-                const kindLabel =
-                  item.kind === "DRIVER_INVITE"
-                    ? "DRIVER INVITE"
-                    : item.kind === "CLIENT"
-                      ? item.type === "SENT"
-                        ? "ADD AS CLIENT"
-                        : "WANTS TO ADD AS CLIENT"
-                      : item.kind === "SUPPLIER"
+                  const displayName =
+                    item.type === "RECEIVED"
+                      ? item.from_org_name
+                      : item.to_org_name;
+                  const isReceivedPending =
+                    item.type === "RECEIVED" && item.status === "pending";
+                  const isSentPending =
+                    item.type === "SENT" && item.status === "pending";
+                  const showInlineSenderPreview = false;
+                  const kindLabel =
+                    item.kind === "DRIVER_INVITE"
+                      ? "DRIVER INVITE"
+                      : item.kind === "CLIENT"
                         ? item.type === "SENT"
-                          ? "ADD AS SUPPLIER"
-                          : "WANTS TO ADD AS SUPPLIER"
-                        : item.type === "SENT"
-                          ? "ADD AS CLIENT + SUPPLIER"
-                          : "WANTS TO ADD AS CLIENT + SUPPLIER";
-                return (
-                  <View
-                    key={item.id}
-                    style={isLargeScreen ? styles.gridItem : undefined}
-                  >
-                    <View style={styles.networkCardWrap}>
-                      <View style={styles.networkCard}>
-                      <View style={styles.networkCardOrb} pointerEvents="none" />
-                      <View style={styles.networkCardMainRow}>
-                        <Pressable
-                          style={styles.networkCardBody}
-                          disabled={item.type !== "RECEIVED"}
-                          onPress={() => {
-                            if (item.type === "RECEIVED") {
-                              setPreviewRequestItem((prev) =>
-                                prev?.id === item.id ? null : item,
-                              );
-                              setPreviewOpenedAtMs(Date.now());
-                            }
-                          }}
-                        >
-                          <View style={styles.networkCardTop}>
-                            <View style={styles.networkCardTopLeft}>
-                              <View
-                                style={[
-                                  styles.networkTypePill,
-                                  styles.networkTypePillRequest,
-                                ]}
-                              >
-                                <Text style={styles.networkTypePillTextRequest}>
-                                  {item.type === "RECEIVED"
-                                    ? "RECEIVED"
-                                    : "SENT"}
-                                </Text>
-                              </View>
-                              <View
-                                style={[
-                                  styles.networkTypePill,
-                                  styles.networkKindPill,
-                                ]}
-                              >
-                                <Text style={styles.networkKindPillText}>
-                                  {kindLabel}
-                                </Text>
-                              </View>
-                            </View>
-                            <View style={styles.networkCardTopRight}>
-                              <View
-                                style={[
-                                  styles.networkStagePill,
-                                  item.status === "pending"
-                                    ? styles.networkStagePillPending
-                                    : item.status === "approved"
-                                      ? styles.networkStagePillOk
-                                      : styles.networkStagePillNeutral,
-                                ]}
-                              >
-                                <Text
-                                  style={[
-                                    styles.networkStagePillText,
-                                    item.status !== "pending" &&
-                                    item.status !== "approved"
-                                      ? styles.networkStagePillTextDark
-                                      : null,
-                                  ]}
-                                >
-                                  {formatRequestStatus(item.status)}
-                                </Text>
-                              </View>
-                            </View>
-                          </View>
-                          <View style={styles.networkCardInner}>
-                            <View style={styles.networkCardInnerRow}>
-                              <View
-                                style={[
-                                  styles.networkCardIconWrap,
-                                  styles.networkCardIconWrapOn, // Assuming active/on platform for requests visually
-                                ]}
-                              >
-                                <View style={styles.networkAvatarInCard}>
-                                  {item.nodeInfo ? (
-                                    <NetworkAvatar
-                                      node={item.nodeInfo as NetworkNode}
-                                      onPlatform={true}
-                                    />
-                                  ) : item.kind === "DRIVER_INVITE" ? (
-                                    <User
-                                      size={18}
-                                      strokeWidth={1.5}
-                                      color={Theme.darkGreen}
-                                    />
-                                  ) : (
-                                    <Building2
-                                      size={18}
-                                      strokeWidth={1.5}
-                                      color={Theme.darkGreen}
-                                    />
-                                  )}
-                                </View>
-                              </View>
-                              <View style={styles.networkCardInnerCol}>
-                                <View style={styles.networkCardTitleRow}>
-                                  <View style={styles.requestTitleMeta}>
+                          ? "ADD AS CLIENT"
+                          : "WANTS TO ADD AS CLIENT"
+                        : item.kind === "SUPPLIER"
+                          ? item.type === "SENT"
+                            ? "ADD AS SUPPLIER"
+                            : "WANTS TO ADD AS SUPPLIER"
+                          : item.type === "SENT"
+                            ? "ADD AS CLIENT + SUPPLIER"
+                            : "WANTS TO ADD AS CLIENT + SUPPLIER";
+                  return (
+                    <View
+                      key={item.id}
+                      style={isLargeScreen ? styles.gridItem : undefined}
+                    >
+                      <View style={styles.networkCardWrap}>
+                        <View style={styles.networkCard}>
+                          <View
+                            style={styles.networkCardOrb}
+                            pointerEvents="none"
+                          />
+                          <View style={styles.networkCardMainRow}>
+                            <Pressable
+                              style={styles.networkCardBody}
+                              disabled={item.type !== "RECEIVED"}
+                              onPress={() => {
+                                if (item.type === "RECEIVED") {
+                                  setPreviewRequestItem((prev) =>
+                                    prev?.id === item.id ? null : item,
+                                  );
+                                  setPreviewOpenedAtMs(Date.now());
+                                }
+                              }}
+                            >
+                              <View style={styles.networkCardTop}>
+                                <View style={styles.networkCardTopLeft}>
+                                  <View
+                                    style={[
+                                      styles.networkTypePill,
+                                      styles.networkTypePillRequest,
+                                    ]}
+                                  >
                                     <Text
-                                      style={styles.networkCardTitleInline}
-                                      numberOfLines={1}
+                                      style={styles.networkTypePillTextRequest}
                                     >
-                                      {displayName}
-                                    </Text>
-                                    <Text style={styles.cardTimeAgoInline}>
-                                      {shortRelativeTime(item.created_at)}
+                                      {item.type === "RECEIVED"
+                                        ? "RECEIVED"
+                                        : "SENT"}
                                     </Text>
                                   </View>
-
-                                  {isReceivedPending && item.row ? (
-                                    <View style={styles.networkCardInlineActions}>
-                                      <TouchableOpacity
-                                        style={styles.acceptBtn}
-                                        onPress={() => handleOpenAcceptTerms(item)}
-                                        disabled={actingRequestId === item.id}
-                                        activeOpacity={0.8}
-                                        hitSlop={{
-                                          top: 6,
-                                          bottom: 6,
-                                          left: 6,
-                                          right: 6,
-                                        }}
-                                      >
-                                        {actingRequestId === item.id ? (
-                                          <ActivityIndicator
-                                            size="small"
-                                            color="#fff"
-                                          />
-                                        ) : (
-                                          <FontAwesome
-                                            name="check-circle"
-                                            size={16}
-                                            color="#fff"
-                                          />
-                                        )}
-                                      </TouchableOpacity>
-                                      <TouchableOpacity
-                                        style={styles.rejectBtn}
-                                        onPress={() => handleReject(item.id)}
-                                        disabled={actingRequestId === item.id}
-                                        activeOpacity={0.8}
-                                        hitSlop={{
-                                          top: 6,
-                                          bottom: 6,
-                                          left: 6,
-                                          right: 6,
-                                        }}
-                                      >
-                                        <FontAwesome
-                                          name="times-circle"
-                                          size={16}
-                                          color={ROSE_500}
-                                        />
-                                      </TouchableOpacity>
-                                    </View>
-                                  ) : null}
-
-                                  {!isReceivedPending && isSentPending ? (
-                                    <TouchableOpacity
-                                      style={styles.cancelInlineBtn}
-                                      onPress={() => handleCancelRequest(item)}
-                                      disabled={actingRequestId === item.id}
-                                      activeOpacity={0.8}
+                                  <View
+                                    style={[
+                                      styles.networkTypePill,
+                                      styles.networkKindPill,
+                                    ]}
+                                  >
+                                    <Text style={styles.networkKindPillText}>
+                                      {kindLabel}
+                                    </Text>
+                                  </View>
+                                </View>
+                                <View style={styles.networkCardTopRight}>
+                                  <View
+                                    style={[
+                                      styles.networkStagePill,
+                                      item.status === "pending"
+                                        ? styles.networkStagePillPending
+                                        : item.status === "approved"
+                                          ? styles.networkStagePillOk
+                                          : styles.networkStagePillNeutral,
+                                    ]}
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.networkStagePillText,
+                                        item.status !== "pending" &&
+                                        item.status !== "approved"
+                                          ? styles.networkStagePillTextDark
+                                          : null,
+                                      ]}
                                     >
-                                      {actingRequestId === item.id ? (
-                                        <ActivityIndicator
-                                          size="small"
-                                          color={Theme.screenBackground}
+                                      {formatRequestStatus(item.status)}
+                                    </Text>
+                                  </View>
+                                </View>
+                              </View>
+                              <View style={styles.networkCardInner}>
+                                <View style={styles.networkCardInnerRow}>
+                                  <View
+                                    style={[
+                                      styles.networkCardIconWrap,
+                                      styles.networkCardIconWrapOn, // Assuming active/on platform for requests visually
+                                    ]}
+                                  >
+                                    <View style={styles.networkAvatarInCard}>
+                                      {item.nodeInfo ? (
+                                        <NetworkAvatar
+                                          node={item.nodeInfo as NetworkNode}
+                                          onPlatform={true}
+                                        />
+                                      ) : item.kind === "DRIVER_INVITE" ? (
+                                        <User
+                                          size={18}
+                                          strokeWidth={1.5}
+                                          color={Theme.darkGreen}
                                         />
                                       ) : (
-                                        <Text style={styles.cancelInlineBtnText}>
-                                          Withdraw
-                                        </Text>
+                                        <Building2
+                                          size={18}
+                                          strokeWidth={1.5}
+                                          color={Theme.darkGreen}
+                                        />
                                       )}
-                                    </TouchableOpacity>
-                                  ) : null}
-                                </View>
-                              </View>
-                            </View>
+                                    </View>
+                                  </View>
+                                  <View style={styles.networkCardInnerCol}>
+                                    <View style={styles.networkCardTitleRow}>
+                                      <View style={styles.requestTitleMeta}>
+                                        <Text
+                                          style={styles.networkCardTitleInline}
+                                          numberOfLines={1}
+                                        >
+                                          {displayName}
+                                        </Text>
+                                        <Text style={styles.cardTimeAgoInline}>
+                                          {shortRelativeTime(item.created_at)}
+                                        </Text>
+                                      </View>
 
-                            {showInlineSenderPreview ? (
-                              <View style={styles.requestPreviewCard}>
-                                <View style={styles.requestPreviewHeader}>
-                                  <View style={styles.requestPreviewAvatar}>
-                                    <Text style={styles.requestPreviewAvatarText}>
-                                      {getInitials(item.from_org_name || "S")}
-                                    </Text>
+                                      {isReceivedPending && item.row ? (
+                                        <View
+                                          style={
+                                            styles.networkCardInlineActions
+                                          }
+                                        >
+                                          <TouchableOpacity
+                                            style={styles.acceptBtn}
+                                            onPress={() =>
+                                              handleOpenAcceptTerms(item)
+                                            }
+                                            disabled={
+                                              actingRequestId === item.id
+                                            }
+                                            activeOpacity={0.8}
+                                            hitSlop={{
+                                              top: 6,
+                                              bottom: 6,
+                                              left: 6,
+                                              right: 6,
+                                            }}
+                                          >
+                                            {actingRequestId === item.id ? (
+                                              <ActivityIndicator
+                                                size="small"
+                                                color="#fff"
+                                              />
+                                            ) : (
+                                              <FontAwesome
+                                                name="check-circle"
+                                                size={16}
+                                                color="#fff"
+                                              />
+                                            )}
+                                          </TouchableOpacity>
+                                          <TouchableOpacity
+                                            style={styles.rejectBtn}
+                                            onPress={() =>
+                                              handleReject(item.id)
+                                            }
+                                            disabled={
+                                              actingRequestId === item.id
+                                            }
+                                            activeOpacity={0.8}
+                                            hitSlop={{
+                                              top: 6,
+                                              bottom: 6,
+                                              left: 6,
+                                              right: 6,
+                                            }}
+                                          >
+                                            <FontAwesome
+                                              name="times-circle"
+                                              size={16}
+                                              color={ROSE_500}
+                                            />
+                                          </TouchableOpacity>
+                                        </View>
+                                      ) : null}
+
+                                      {!isReceivedPending && isSentPending ? (
+                                        <TouchableOpacity
+                                          style={styles.cancelInlineBtn}
+                                          onPress={() =>
+                                            handleCancelRequest(item)
+                                          }
+                                          disabled={actingRequestId === item.id}
+                                          activeOpacity={0.8}
+                                        >
+                                          {actingRequestId === item.id ? (
+                                            <ActivityIndicator
+                                              size="small"
+                                              color={Theme.screenBackground}
+                                            />
+                                          ) : (
+                                            <Text
+                                              style={styles.cancelInlineBtnText}
+                                            >
+                                              Withdraw
+                                            </Text>
+                                          )}
+                                        </TouchableOpacity>
+                                      ) : null}
+                                    </View>
                                   </View>
-                                  <View style={styles.requestPreviewHeaderBody}>
-                                    <Text style={styles.requestPreviewHeading}>
-                                      {item.from_org_name}
-                                    </Text>
-                                    <Text style={styles.requestPreviewBodySubtitle}>
-                                      Sender information
-                                    </Text>
+                                </View>
+
+                                {showInlineSenderPreview ? (
+                                  <View style={styles.requestPreviewCard}>
+                                    <View style={styles.requestPreviewHeader}>
+                                      <View style={styles.requestPreviewAvatar}>
+                                        <Text
+                                          style={
+                                            styles.requestPreviewAvatarText
+                                          }
+                                        >
+                                          {getInitials(
+                                            item.from_org_name || "S",
+                                          )}
+                                        </Text>
+                                      </View>
+                                      <View
+                                        style={styles.requestPreviewHeaderBody}
+                                      >
+                                        <Text
+                                          style={styles.requestPreviewHeading}
+                                        >
+                                          {item.from_org_name}
+                                        </Text>
+                                        <Text
+                                          style={
+                                            styles.requestPreviewBodySubtitle
+                                          }
+                                        >
+                                          Sender information
+                                        </Text>
+                                      </View>
+                                    </View>
+                                    <View style={styles.requestPreviewInfoRow}>
+                                      <Text
+                                        style={styles.requestPreviewMetaLabel}
+                                      >
+                                        Request
+                                      </Text>
+                                      <Text
+                                        style={styles.requestPreviewMetaValue}
+                                      >
+                                        {requestPreviewRole(item.kind)}
+                                      </Text>
+                                    </View>
+                                    <View style={styles.requestPreviewInfoRow}>
+                                      <Text
+                                        style={styles.requestPreviewMetaLabel}
+                                      >
+                                        Status
+                                      </Text>
+                                      <Text
+                                        style={styles.requestPreviewMetaValue}
+                                      >
+                                        {formatRequestStatus(item.status)}
+                                      </Text>
+                                    </View>
+                                    <View style={styles.requestPreviewInfoRow}>
+                                      <Text
+                                        style={styles.requestPreviewMetaLabel}
+                                      >
+                                        Received
+                                      </Text>
+                                      <Text
+                                        style={styles.requestPreviewMetaValue}
+                                      >
+                                        {shortRelativeTime(item.created_at)}
+                                      </Text>
+                                    </View>
                                   </View>
-                                </View>
-                                <View style={styles.requestPreviewInfoRow}>
-                                  <Text style={styles.requestPreviewMetaLabel}>Request</Text>
-                                  <Text style={styles.requestPreviewMetaValue}>
-                                    {requestPreviewRole(item.kind)}
-                                  </Text>
-                                </View>
-                                <View style={styles.requestPreviewInfoRow}>
-                                  <Text style={styles.requestPreviewMetaLabel}>Status</Text>
-                                  <Text style={styles.requestPreviewMetaValue}>
-                                    {formatRequestStatus(item.status)}
-                                  </Text>
-                                </View>
-                                <View style={styles.requestPreviewInfoRow}>
-                                  <Text style={styles.requestPreviewMetaLabel}>Received</Text>
-                                  <Text style={styles.requestPreviewMetaValue}>
-                                    {shortRelativeTime(item.created_at)}
-                                  </Text>
-                                </View>
+                                ) : null}
                               </View>
-                            ) : null}
+                            </Pressable>
                           </View>
-                        </Pressable>
+                        </View>
                       </View>
                     </View>
-                    </View>
-                  </View>
-                );
-              })}
+                  );
+                })}
               </View>
             )
           ) : loading ? (
@@ -1885,227 +1933,237 @@ export default function NetworkScreen() {
               </Text>
             </View>
           ) : (
-            <View
-              style={isLargeScreen ? styles.gridContainer : undefined}
-            >
+            <View style={isLargeScreen ? styles.gridContainer : undefined}>
               {filteredNodes.map((node) => {
-              const onPlatform = isNodeOnApp(node);
-              const typePillStyle =
-                node.type === "CLIENT"
-                  ? styles.networkTypePillClient
-                  : node.type === "SUPPLIER"
-                    ? styles.networkTypePillSupplier
-                    : styles.networkTypePillDriver;
-              const typePillTextStyle =
-                node.type === "CLIENT"
-                  ? styles.networkTypePillTextClient
-                  : node.type === "SUPPLIER"
-                    ? styles.networkTypePillTextSupplier
-                    : styles.networkTypePillTextDriver;
-              const stageLabel =
-                node.status === "DISCONNECTED" ? "OFFLINE" : "ACTIVE";
-              const stagePillStyle =
-                node.status === "DISCONNECTED"
-                  ? styles.networkStagePillNeutral
-                  : styles.networkStagePillOk;
-              return (
-                <View
-                  key={node.id}
-                  style={isLargeScreen ? styles.gridItem : undefined}
-                >
-                  <View style={styles.networkCardWrap}>
-                    <View
-                      style={[
-                        styles.networkCard,
-                        !isLargeScreen && styles.networkCardElevated,
-                      ]}
-                    >
-                      <View style={styles.networkCardCornerRight}>
-                        <View style={styles.networkCardCornerChevron}>
-                          <FontAwesome
-                            name="chevron-right"
-                            size={12}
-                            color={Theme.textMuted}
-                          />
-                        </View>
-                      </View>
+                const onPlatform = isNodeOnApp(node);
+                const typePillStyle =
+                  node.type === "CLIENT"
+                    ? styles.networkTypePillClient
+                    : node.type === "SUPPLIER"
+                      ? styles.networkTypePillSupplier
+                      : styles.networkTypePillDriver;
+                const typePillTextStyle =
+                  node.type === "CLIENT"
+                    ? styles.networkTypePillTextClient
+                    : node.type === "SUPPLIER"
+                      ? styles.networkTypePillTextSupplier
+                      : styles.networkTypePillTextDriver;
+                const stageLabel =
+                  node.status === "DISCONNECTED" ? "OFFLINE" : "ACTIVE";
+                const stagePillStyle =
+                  node.status === "DISCONNECTED"
+                    ? styles.networkStagePillNeutral
+                    : styles.networkStagePillOk;
+                return (
+                  <View
+                    key={node.id}
+                    style={isLargeScreen ? styles.gridItem : undefined}
+                  >
+                    <View style={styles.networkCardWrap}>
                       <View
-                        style={styles.networkCardOrb}
-                        pointerEvents="none"
-                      />
-                      <View style={styles.networkCardMainRow}>
-                      <TouchableOpacity
-                        style={styles.networkCardBody}
-                        activeOpacity={0.7}
-                        onPress={() => {
-                          if (node.type === "CLIENT")
-                            router.push({
-                              pathname: "/client/[id]",
-                              params: { id: node.id },
-                            });
-                          else if (node.type === "SUPPLIER")
-                            router.push({
-                              pathname: "/supplier/[id]",
-                              params: { id: node.id },
-                            });
-                          else if (node.type === "DRIVER")
-                            router.push({
-                              pathname: "/driver/[id]",
-                              params: { id: node.id },
-                            });
-                        }}
+                        style={[
+                          styles.networkCard,
+                          !isLargeScreen && styles.networkCardElevated,
+                        ]}
                       >
-                        <View style={styles.networkCardTop}>
-                          <View style={styles.networkCardTopLeft}>
-                            <View
-                              style={[styles.networkTypePill, typePillStyle]}
-                            >
-                              <Text
-                                style={[
-                                  styles.networkTypePillTextBase,
-                                  typePillTextStyle,
-                                ]}
-                              >
-                                {node.type}
-                              </Text>
-                            </View>
-                            <View
-                              style={[
-                                styles.networkTypePill,
-                                onPlatform
-                                  ? styles.networkPlatformPillOn
-                                  : styles.networkPlatformPillOff,
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.networkPlatformPillText,
-                                  onPlatform
-                                    ? styles.networkPlatformPillTextOn
-                                    : styles.networkPlatformPillTextOff,
-                                ]}
-                              >
-                                {onPlatform ? "ON APP" : "OFFLINE"}
-                              </Text>
-                            </View>
+                        <View style={styles.networkCardCornerRight}>
+                          <View style={styles.networkCardCornerChevron}>
+                            <FontAwesome
+                              name="chevron-right"
+                              size={12}
+                              color={Theme.textMuted}
+                            />
                           </View>
-                          <View style={styles.networkCardTopRight} />
                         </View>
-                        <View style={styles.networkCardInner}>
-                          <View style={styles.networkCardInnerRow}>
-                            <View
-                              style={[
-                                styles.networkCardIconWrap,
-                                onPlatform
-                                  ? styles.networkCardIconWrapOn
-                                  : styles.networkCardIconWrapOff,
-                              ]}
-                            >
-                              <View style={styles.networkAvatarInCard}>
-                                <NetworkAvatar
-                                  node={node}
-                                  onPlatform={onPlatform}
-                                />
-                              </View>
-                              <View
-                                style={[
-                                  styles.connectionDot,
-                                  onPlatform
-                                    ? styles.connectionDotActive
-                                    : styles.connectionDotMuted,
-                                ]}
-                              />
-                            </View>
-                            <View
-                              style={[
-                                styles.networkCardInnerCol,
-                                !isLargeScreen && styles.networkCardInnerColSolo,
-                              ]}
-                            >
-                              <View style={styles.networkCardNameRow}>
-                                <Text
+                        <View
+                          style={styles.networkCardOrb}
+                          pointerEvents="none"
+                        />
+                        <View style={styles.networkCardMainRow}>
+                          <TouchableOpacity
+                            style={styles.networkCardBody}
+                            activeOpacity={0.7}
+                            onPress={() => {
+                              if (node.type === "CLIENT")
+                                router.push({
+                                  pathname: "/client/[id]",
+                                  params: { id: node.id },
+                                });
+                              else if (node.type === "SUPPLIER")
+                                router.push({
+                                  pathname: "/supplier/[id]",
+                                  params: { id: node.id },
+                                });
+                              else if (node.type === "DRIVER")
+                                router.push({
+                                  pathname: "/driver/[id]",
+                                  params: { id: node.id },
+                                });
+                            }}
+                          >
+                            <View style={styles.networkCardTop}>
+                              <View style={styles.networkCardTopLeft}>
+                                <View
                                   style={[
-                                    styles.networkCardTitleInline,
-                                    styles.networkCardNameText,
+                                    styles.networkTypePill,
+                                    typePillStyle,
                                   ]}
-                                  numberOfLines={1}
                                 >
-                                  {node.name}
-                                </Text>
-
-                                {node.isIntegrated ? (
-                                  <View style={styles.networkCardIntegratedBadge}>
-                                    <Handshake
-                                      size={16}
-                                      strokeWidth={1.9}
-                                      color={Theme.darkGreen}
+                                  <Text
+                                    style={[
+                                      styles.networkTypePillTextBase,
+                                      typePillTextStyle,
+                                    ]}
+                                  >
+                                    {node.type}
+                                  </Text>
+                                </View>
+                                <View
+                                  style={[
+                                    styles.networkTypePill,
+                                    onPlatform
+                                      ? styles.networkPlatformPillOn
+                                      : styles.networkPlatformPillOff,
+                                  ]}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.networkPlatformPillText,
+                                      onPlatform
+                                        ? styles.networkPlatformPillTextOn
+                                        : styles.networkPlatformPillTextOff,
+                                    ]}
+                                  >
+                                    {onPlatform ? "ON APP" : "OFFLINE"}
+                                  </Text>
+                                </View>
+                              </View>
+                              <View style={styles.networkCardTopRight} />
+                            </View>
+                            <View style={styles.networkCardInner}>
+                              <View style={styles.networkCardInnerRow}>
+                                <View
+                                  style={[
+                                    styles.networkCardIconWrap,
+                                    onPlatform
+                                      ? styles.networkCardIconWrapOn
+                                      : styles.networkCardIconWrapOff,
+                                  ]}
+                                >
+                                  <View style={styles.networkAvatarInCard}>
+                                    <NetworkAvatar
+                                      node={node}
+                                      onPlatform={onPlatform}
                                     />
                                   </View>
-                                ) : null}
-                              </View>
-                            </View>
-                          </View>
-                        </View>
-                      </TouchableOpacity>
-                      <View style={styles.networkCardActionsCol}>
-                        {node.status === "INTEGRATED" &&
-                        node.availableOnApp !== false ? (
-                          !onPlatform ? (
-                            <View style={styles.activePill}>
-                              <CircleCheck
-                                size={12}
-                                strokeWidth={1.7}
-                                color={Theme.darkGreen}
-                                style={{ marginRight: 5 }}
-                              />
-                              <Text style={styles.activePillText}>Active</Text>
-                            </View>
-                          ) : null
-                        ) : (
-                          <View style={styles.networkActionStack}>
-                            <TouchableOpacity
-                              style={[
-                                styles.connectBtn,
-                                !onPlatform && styles.inviteBtn,
-                              ]}
-                              onPress={() => handleSendInviteOrRequest(node)}
-                              disabled={sendingNodeId === node.id}
-                              activeOpacity={0.8}
-                            >
-                              {sendingNodeId === node.id ? (
-                                <ActivityIndicator
-                                  size="small"
-                                  color={
-                                    onPlatform
-                                      ? Theme.textOnPrimary
-                                      : Theme.textPrimaryDark
-                                  }
-                                />
-                              ) : (
-                                <Text
+                                  <View
+                                    style={[
+                                      styles.connectionDot,
+                                      onPlatform
+                                        ? styles.connectionDotActive
+                                        : styles.connectionDotMuted,
+                                    ]}
+                                  />
+                                </View>
+                                <View
                                   style={[
-                                    styles.connectBtnText,
-                                    !onPlatform && styles.inviteBtnText,
+                                    styles.networkCardInnerCol,
+                                    !isLargeScreen &&
+                                      styles.networkCardInnerColSolo,
                                   ]}
                                 >
-                                  {onPlatform ? "Connect" : "Invite"}
-                                </Text>
-                              )}
-                            </TouchableOpacity>
-                            {!onPlatform ? (
-                              <Text style={styles.networkActionHint}>
-                                USER IS NOT IN APP
-                              </Text>
-                            ) : null}
+                                  <View style={styles.networkCardNameRow}>
+                                    <Text
+                                      style={[
+                                        styles.networkCardTitleInline,
+                                        styles.networkCardNameText,
+                                      ]}
+                                      numberOfLines={1}
+                                    >
+                                      {node.name}
+                                    </Text>
+
+                                    {node.isIntegrated ? (
+                                      <View
+                                        style={
+                                          styles.networkCardIntegratedBadge
+                                        }
+                                      >
+                                        <Handshake
+                                          size={16}
+                                          strokeWidth={1.9}
+                                          color={Theme.darkGreen}
+                                        />
+                                      </View>
+                                    ) : null}
+                                  </View>
+                                </View>
+                              </View>
+                            </View>
+                          </TouchableOpacity>
+                          <View style={styles.networkCardActionsCol}>
+                            {node.status === "INTEGRATED" &&
+                            node.availableOnApp !== false ? (
+                              !onPlatform ? (
+                                <View style={styles.activePill}>
+                                  <CircleCheck
+                                    size={12}
+                                    strokeWidth={1.7}
+                                    color={Theme.darkGreen}
+                                    style={{ marginRight: 5 }}
+                                  />
+                                  <Text style={styles.activePillText}>
+                                    Active
+                                  </Text>
+                                </View>
+                              ) : null
+                            ) : (
+                              <View style={styles.networkActionStack}>
+                                <TouchableOpacity
+                                  style={[
+                                    styles.connectBtn,
+                                    !onPlatform && styles.inviteBtn,
+                                  ]}
+                                  onPress={() =>
+                                    handleSendInviteOrRequest(node)
+                                  }
+                                  disabled={sendingNodeId === node.id}
+                                  activeOpacity={0.8}
+                                >
+                                  {sendingNodeId === node.id ? (
+                                    <ActivityIndicator
+                                      size="small"
+                                      color={
+                                        onPlatform
+                                          ? Theme.textOnPrimary
+                                          : Theme.textPrimaryDark
+                                      }
+                                    />
+                                  ) : (
+                                    <Text
+                                      style={[
+                                        styles.connectBtnText,
+                                        !onPlatform && styles.inviteBtnText,
+                                      ]}
+                                    >
+                                      {onPlatform ? "Connect" : "Invite"}
+                                    </Text>
+                                  )}
+                                </TouchableOpacity>
+                                {!onPlatform ? (
+                                  <Text style={styles.networkActionHint}>
+                                    USER IS NOT IN APP
+                                  </Text>
+                                ) : null}
+                              </View>
+                            )}
                           </View>
-                        )}
+                        </View>
                       </View>
                     </View>
                   </View>
-                  </View>
-                </View>
-              );
-            })}
+                );
+              })}
             </View>
           )}
         </ScrollView>
@@ -2165,7 +2223,9 @@ export default function NetworkScreen() {
           }}
         >
           {previewRequestItem ? (
-            <View style={[styles.confirmModalCard, styles.requestPreviewModalCard]}>
+            <View
+              style={[styles.confirmModalCard, styles.requestPreviewModalCard]}
+            >
               <View style={styles.requestPreviewAccentBar} />
               <View style={styles.requestPreviewHeader}>
                 {previewRequestItem.nodeInfo ? (
@@ -2352,7 +2412,9 @@ export default function NetworkScreen() {
                 </Text>
               </View>
             </ScrollView>
-            <View style={[styles.confirmModalActions, styles.termsModalActions]}>
+            <View
+              style={[styles.confirmModalActions, styles.termsModalActions]}
+            >
               <TouchableOpacity
                 style={styles.confirmModalKeepBtn}
                 onPress={() => setAcceptTermsItem(null)}
@@ -2372,7 +2434,10 @@ export default function NetworkScreen() {
                 activeOpacity={0.8}
               >
                 {actingRequestId === acceptTermsItem?.id ? (
-                  <ActivityIndicator size="small" color={Theme.screenBackground} />
+                  <ActivityIndicator
+                    size="small"
+                    color={Theme.screenBackground}
+                  />
                 ) : (
                   <Text style={styles.confirmModalConfirmText}>Confirm</Text>
                 )}
