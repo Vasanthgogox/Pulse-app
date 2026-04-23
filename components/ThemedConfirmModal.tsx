@@ -52,7 +52,7 @@ export function ThemedConfirmModal({
         iconName: "exclamation",
         iconInnerBg: Theme.negative,
         iconBg: Theme.negativeMuted || "rgba(239, 68, 68, 0.12)",
-        confirmButtonBg: Theme.primary,
+        confirmButtonBg: Theme.buttonMatteBlack,
         iconColor: "#FFFFFF",
       };
     }
@@ -71,7 +71,7 @@ export function ThemedConfirmModal({
       iconName: "question",
       iconInnerBg: Theme.primary,
       iconBg: "rgba(26, 35, 126, 0.08)",
-      confirmButtonBg: Theme.primary,
+      confirmButtonBg: Theme.buttonMatteBlack,
       iconColor: "#FFFFFF",
     };
   }, [variant]);
@@ -101,7 +101,11 @@ export function ThemedConfirmModal({
 
           <View style={[styles.iconCircle, { backgroundColor: variantConfig.iconBg }]}>
             <View style={[styles.iconInnerCircle, { backgroundColor: variantConfig.iconInnerBg }]}>
-              <FontAwesome name={variantConfig.iconName as any} size={20} color={variantConfig.iconColor} />
+              <FontAwesome
+                name={variantConfig.iconName as keyof typeof FontAwesome.glyphMap}
+                size={20}
+                color={variantConfig.iconColor}
+              />
             </View>
           </View>
 
@@ -148,12 +152,12 @@ const styles = StyleSheet.create({
   },
   card: {
     width: "100%",
-    maxWidth: 360,
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 24,
-    paddingHorizontal: 24,
-    paddingTop: 32,
-    paddingBottom: 24,
+    maxWidth: 460,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 20,
+    paddingHorizontal: 22,
+    paddingTop: 26,
+    paddingBottom: 20,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     alignItems: "center",
@@ -166,23 +170,23 @@ const styles = StyleSheet.create({
   accentBar: {
     position: "absolute",
     top: 16,
-    width: "70%",
+    width: "64%",
     height: 4,
     borderRadius: 2,
   },
   iconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 8,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   iconInnerCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -194,10 +198,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   message: {
-    fontSize: 14,
-    fontWeight: "500",
+    fontSize: 13,
+    fontWeight: "600",
     color: Theme.textSecondary,
-    marginBottom: 24,
+    marginBottom: 20,
     textAlign: "center",
     lineHeight: 20,
   },
@@ -211,24 +215,25 @@ const styles = StyleSheet.create({
   buttonBase: {
     flex: 1,
     borderRadius: 999,
-    minHeight: 48,
+    minHeight: 52,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 16,
   },
   buttonSecondary: {
-    backgroundColor: Theme.surfaceGray,
-    borderWidth: 0,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
   },
   buttonDestructive: {
     backgroundColor: Theme.negative,
   },
   textBase: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "800",
   },
   textPrimary: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonMatteBlackText,
   },
   textSecondary: {
     color: Theme.textPrimaryDark,
