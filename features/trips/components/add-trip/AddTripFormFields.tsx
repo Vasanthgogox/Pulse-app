@@ -28,6 +28,7 @@ import { validatePhone } from "@/lib/phoneValidation";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import {
     AlertCircle,
+    ArrowRight,
     Building2,
     CheckCircle2,
     Clock,
@@ -344,44 +345,45 @@ export function AddTripFormFields({
             </View>
 
             {state.pickupArea.trim() && state.dropLocation.trim() ? (
-              <View style={styles.routeSummary}>
-                <FontAwesome
-                  name="long-arrow-right"
-                  size={12}
-                  color={Theme.teslaRed}
-                  style={{ marginRight: 8 }}
-                />
-                <Text style={styles.routeSummaryText} numberOfLines={2}>
-                  {routePreviewLine(state.pickupArea)} →{" "}
-                  {routePreviewLine(state.dropLocation)}
-                </Text>
-              </View>
-            ) : null}
-
-            {state.routeLoading ||
-            state.routeDistanceKm != null ||
-            state.routeEtaLabel != null ? (
-              <View style={styles.routeStats}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.routeStatLab}>Distance</Text>
-                  <Text style={styles.routeStatVal}>
-                    {state.routeLoading
-                      ? "…"
-                      : state.routeDistanceKm != null
-                        ? `${state.routeDistanceKm} km`
-                        : "—"}
+              <View style={styles.routePreviewPanel}>
+                <View style={styles.routePreviewHero}>
+                  <ArrowRight
+                    size={20}
+                    color={Theme.teslaRed}
+                    strokeWidth={2.5}
+                  />
+                  <Text style={styles.routePreviewHeroText} numberOfLines={2}>
+                    {routePreviewLine(state.pickupArea)} →{" "}
+                    {routePreviewLine(state.dropLocation)}
                   </Text>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.routeStatLab}>ETA</Text>
-                  <Text style={styles.routeStatVal}>
-                    {state.routeLoading
-                      ? "…"
-                      : state.routeEtaLabel != null
-                        ? state.routeEtaLabel
-                        : "—"}
-                  </Text>
-                </View>
+                {state.routeLoading ||
+                state.routeDistanceKm != null ||
+                state.routeEtaLabel != null ? (
+                  <View style={styles.routePreviewMetrics}>
+                    <View style={styles.routePreviewMetricCol}>
+                      <Text style={styles.routeMetricLab}>Distance</Text>
+                      <Text style={styles.routeMetricVal}>
+                        {state.routeLoading
+                          ? "…"
+                          : state.routeDistanceKm != null
+                            ? `${state.routeDistanceKm} km`
+                            : "—"}
+                      </Text>
+                    </View>
+                    <View style={styles.routePreviewMetricDivider} />
+                    <View style={styles.routePreviewMetricCol}>
+                      <Text style={styles.routeMetricLab}>ETA</Text>
+                      <Text style={styles.routeMetricVal}>
+                        {state.routeLoading
+                          ? "…"
+                          : state.routeEtaLabel != null
+                            ? state.routeEtaLabel
+                            : "—"}
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
               </View>
             ) : null}
           </View>
@@ -1023,6 +1025,30 @@ export function AddTripFormFields({
                 {routePreviewLine(state.dropLocation)}
               </Text>
             </View>
+            {state.pickupArea.trim() && state.dropLocation.trim() ? (
+              <View style={styles.previewRow2}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.previewLab}>Distance</Text>
+                  <Text style={styles.previewVal}>
+                    {state.routeLoading
+                      ? "…"
+                      : state.routeDistanceKm != null
+                        ? `${state.routeDistanceKm} km`
+                        : "—"}
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.previewLab}>ETA</Text>
+                  <Text style={styles.previewVal}>
+                    {state.routeLoading
+                      ? "…"
+                      : state.routeEtaLabel != null
+                        ? state.routeEtaLabel
+                        : "—"}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
             <View style={styles.previewDivider} />
             {!supplyIsAsset ? (
               <View style={styles.previewRow2}>
@@ -1224,40 +1250,74 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  routeSummary: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: Theme.darkSurface,
-    marginTop: 4,
-    marginBottom: 12,
-  },
-  routeSummaryText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: "600",
-    color: Theme.textOnDark,
-  },
-  routeStats: {
-    flexDirection: "row",
-    gap: 16,
-    padding: 12,
-    borderRadius: 12,
+  routePreviewPanel: {
+    marginTop: 6,
+    marginBottom: 14,
+    borderRadius: 14,
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    backgroundColor: Theme.surfaceLight,
+    backgroundColor: Theme.cardWhite,
+    ...Platform.select<ViewStyle>({
+      web: {
+        boxShadow: "0 2px 12px rgba(15,23,42,0.07)",
+      },
+      default: {
+        shadowColor: Theme.shadow,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.08,
+        shadowRadius: 10,
+        elevation: 3,
+      },
+    }),
   },
-  routeStatLab: {
+  routePreviewHero: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    backgroundColor: Theme.surfaceGray,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+  },
+  routePreviewHeroText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: -0.25,
+    lineHeight: 20,
+    color: Theme.textPrimaryDark,
+  },
+  routePreviewMetrics: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    backgroundColor: Theme.cardWhite,
+    borderTopWidth: 0,
+  },
+  routePreviewMetricCol: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  routePreviewMetricDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: Theme.borderLight,
+  },
+  routeMetricLab: {
     fontSize: 10,
     fontWeight: "800",
     color: Theme.textMuted,
     textTransform: "uppercase",
+    letterSpacing: 0.65,
     marginBottom: 4,
   },
-  routeStatVal: {
-    fontSize: 15,
+  routeMetricVal: {
+    fontSize: 16,
     fontWeight: "800",
+    letterSpacing: -0.35,
     color: Theme.textPrimaryDark,
   },
   clientList: { maxHeight: 280 },

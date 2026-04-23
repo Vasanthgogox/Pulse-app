@@ -2,6 +2,7 @@
  * Create Indent — Deploy New Load.
  * Layout aligned with Create Trip (AddTripModalLayout + section cards + floating summary).
  */
+import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchInput";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { ThemedConfirmModal } from "@/components/ThemedConfirmModal";
 import Layout from "@/constants/Layout";
@@ -14,14 +15,13 @@ import {
     getClientsByOrganization,
     type ClientRow,
 } from "@/features/clients";
-import { LOAD_TYPES } from "@/features/indents/constants";
 import { createIndent, type CreateIndentInput } from "@/features/indents";
+import { LOAD_TYPES } from "@/features/indents/constants";
 import {
     getIndentById,
     shareDraftIndent,
     updateIndentDraft,
 } from "@/features/indents/services/indents.service";
-import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchInput";
 import { AddTripModalLayout } from "@/features/trips/components/add-trip/AddTripModalLayout";
 import { LocationSearchField } from "@/features/trips/components/add-trip/LocationSearchField";
 import {
@@ -47,12 +47,12 @@ import {
     VALIDATION,
 } from "@/lib/validation";
 import { getOptimalRoute } from "@/services/routingService";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { StatusBar } from "expo-status-bar";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import {
+    ArrowRight,
     CheckCircle2,
     Clock,
     FileEdit,
@@ -65,7 +65,7 @@ import {
     Truck,
     X,
 } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Modal,
@@ -220,10 +220,44 @@ export default function CreateIndentScreen() {
   const [loadTypePickerOpen, setLoadTypePickerOpen] = useState(false);
   const [vehiclePickerQuery, setVehiclePickerQuery] = useState("");
   const [loadTypePickerQuery, setLoadTypePickerQuery] = useState("");
-  /** Web hover: which primary action’s help copy to show above the buttons. */
+  /** Hover / keyboard focus: which primary action’s help copy to show above the buttons. */
   const [actionHelpHint, setActionHelpHint] = useState<
     null | "draft" | "share"
   >(null);
+  const actionHintBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const indentActionsHostRef = useRef<View>(null);
+
+  const cancelActionHintBlurTimer = useCallback(() => {
+    if (actionHintBlurTimerRef.current) {
+      clearTimeout(actionHintBlurTimerRef.current);
+      actionHintBlurTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleClearActionHelpHint = useCallback(() => {
+    cancelActionHintBlurTimer();
+    actionHintBlurTimerRef.current = setTimeout(() => {
+      actionHintBlurTimerRef.current = null;
+      setActionHelpHint(null);
+    }, 80);
+  }, [cancelActionHintBlurTimer]);
+
+  const onDraftActionFocus = useCallback(() => {
+    cancelActionHintBlurTimer();
+    setActionHelpHint("draft");
+  }, [cancelActionHintBlurTimer]);
+
+  const onShareActionFocus = useCallback(() => {
+    cancelActionHintBlurTimer();
+    setActionHelpHint("share");
+  }, [cancelActionHintBlurTimer]);
+
+  useEffect(
+    () => () => cancelActionHintBlurTimer(),
+    [cancelActionHintBlurTimer],
+  );
 
   const webCursor =
     Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
@@ -827,9 +861,7 @@ export default function CreateIndentScreen() {
                         setPickupLat(coords.lat);
                         setPickupLon(coords.lon);
                       }}
-                      leadingIcon={
-                        <MapPin size={18} color={Theme.iconMuted} />
-                      }
+                      leadingIcon={<MapPin size={18} color={Theme.iconMuted} />}
                       inputStyle={[
                         ...baseInputArr,
                         errors.pickup_area && styles.inputError,
@@ -877,40 +909,41 @@ export default function CreateIndentScreen() {
                 </View>
 
                 {form.pickup_area.trim() && form.drop_location.trim() ? (
-                  <View style={styles.routeSummary}>
-                    <FontAwesome
-                      name="long-arrow-right"
-                      size={12}
-                      color={Theme.teslaRed}
-                      style={{ marginRight: 8 }}
-                    />
-                    <Text style={styles.routeSummaryText} numberOfLines={2}>
-                      {compactLocationLabel(form.pickup_area)} →{" "}
-                      {compactLocationLabel(form.drop_location)}
-                    </Text>
-                  </View>
-                ) : null}
-
-                {routeLoading ||
-                routeDistanceKm != null ||
-                routeEtaLabel != null ? (
-                  <View style={styles.routeStats}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.routeStatLab}>Distance</Text>
-                      <Text style={styles.routeStatVal}>
-                        {routeLoading
-                          ? "…"
-                          : routeDistanceKm != null
-                            ? `${routeDistanceKm} km`
-                            : "—"}
+                  <View style={styles.routePreviewPanel}>
+                    <View style={styles.routePreviewHero}>
+                      <ArrowRight
+                        size={20}
+                        color={Theme.teslaRed}
+                        strokeWidth={2.5}
+                      />
+                      <Text style={styles.routePreviewHeroText} numberOfLines={2}>
+                        {compactLocationLabel(form.pickup_area)} →{" "}
+                        {compactLocationLabel(form.drop_location)}
                       </Text>
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.routeStatLab}>ETA</Text>
-                      <Text style={styles.routeStatVal}>
-                        {routeLoading ? "…" : (routeEtaLabel ?? "—")}
-                      </Text>
-                    </View>
+                    {routeLoading ||
+                    routeDistanceKm != null ||
+                    routeEtaLabel != null ? (
+                      <View style={styles.routePreviewMetrics}>
+                        <View style={styles.routePreviewMetricCol}>
+                          <Text style={styles.routeMetricLab}>Distance</Text>
+                          <Text style={styles.routeMetricVal}>
+                            {routeLoading
+                              ? "…"
+                              : routeDistanceKm != null
+                                ? `${routeDistanceKm} km`
+                                : "—"}
+                          </Text>
+                        </View>
+                        <View style={styles.routePreviewMetricDivider} />
+                        <View style={styles.routePreviewMetricCol}>
+                          <Text style={styles.routeMetricLab}>ETA</Text>
+                          <Text style={styles.routeMetricVal}>
+                            {routeLoading ? "…" : (routeEtaLabel ?? "—")}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : null}
                   </View>
                 ) : null}
               </View>
@@ -928,80 +961,82 @@ export default function CreateIndentScreen() {
                     <Text style={[styles.fieldLabel, labelStyle]}>
                       Select client
                     </Text>
-                {clientsLoading ? (
-                  <ActivityIndicator color={Theme.iconPrimary} />
-                ) : clients.length === 0 ? (
-                  <Text style={styles.mutedSmall}>
-                    No clients yet. Add one below.
-                  </Text>
-                ) : (
-                  <ScrollView
-                    style={styles.clientList}
-                    nestedScrollEnabled
-                    keyboardShouldPersistTaps="handled"
-                  >
-                    {clients.map((client) => {
-                      const selected = form.client_id === client.id;
-                      return (
-                        <TouchableOpacity
-                          key={client.id}
-                          style={[
-                            styles.clientCard,
-                            selected && styles.clientCardOn,
-                            Platform.OS === "web"
-                              ? ({ cursor: "pointer" } as ViewStyle)
-                              : null,
-                          ]}
-                          onPress={() => handleSelectClient(client)}
-                          activeOpacity={0.85}
-                        >
-                          <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text
+                    {clientsLoading ? (
+                      <ActivityIndicator color={Theme.iconPrimary} />
+                    ) : clients.length === 0 ? (
+                      <Text style={styles.mutedSmall}>
+                        No clients yet. Add one below.
+                      </Text>
+                    ) : (
+                      <ScrollView
+                        style={styles.clientList}
+                        nestedScrollEnabled
+                        keyboardShouldPersistTaps="handled"
+                      >
+                        {clients.map((client) => {
+                          const selected = form.client_id === client.id;
+                          return (
+                            <TouchableOpacity
+                              key={client.id}
                               style={[
-                                styles.clientName,
-                                selected && styles.clientNameOn,
+                                styles.clientCard,
+                                selected && styles.clientCardOn,
+                                Platform.OS === "web"
+                                  ? ({ cursor: "pointer" } as ViewStyle)
+                                  : null,
                               ]}
-                              numberOfLines={1}
+                              onPress={() => handleSelectClient(client)}
+                              activeOpacity={0.85}
                             >
-                              {client.name}
-                            </Text>
-                            {client.address ? (
-                              <View style={styles.clientMetaRow}>
-                                <Clock size={11} color={Theme.textMuted} />
+                              <View style={{ flex: 1, minWidth: 0 }}>
                                 <Text
-                                  style={styles.clientSub}
+                                  style={[
+                                    styles.clientName,
+                                    selected && styles.clientNameOn,
+                                  ]}
                                   numberOfLines={1}
                                 >
-                                  {client.address}
+                                  {client.name}
                                 </Text>
+                                {client.address ? (
+                                  <View style={styles.clientMetaRow}>
+                                    <Clock size={11} color={Theme.textMuted} />
+                                    <Text
+                                      style={styles.clientSub}
+                                      numberOfLines={1}
+                                    >
+                                      {client.address}
+                                    </Text>
+                                  </View>
+                                ) : null}
                               </View>
-                            ) : null}
-                          </View>
-                          <View
-                            style={[
-                              styles.radioOuter,
-                              selected && styles.radioOuterOn,
-                            ]}
-                          >
-                            {selected ? (
-                              <CheckCircle2
-                                size={16}
-                                color={Theme.iconPrimary}
-                              />
-                            ) : null}
-                          </View>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                )}
-                <TouchableOpacity
-                  style={styles.addClientBtn}
-                  onPress={() => setShowAddClientModal(true)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.addClientBtnText}>Add new client</Text>
-                </TouchableOpacity>
+                              <View
+                                style={[
+                                  styles.radioOuter,
+                                  selected && styles.radioOuterOn,
+                                ]}
+                              >
+                                {selected ? (
+                                  <CheckCircle2
+                                    size={16}
+                                    color={Theme.iconPrimary}
+                                  />
+                                ) : null}
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    )}
+                    <TouchableOpacity
+                      style={styles.addClientBtn}
+                      onPress={() => setShowAddClientModal(true)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.addClientBtnText}>
+                        Add new client
+                      </Text>
+                    </TouchableOpacity>
                     {errors.client_name ? (
                       <Text style={styles.errorText}>{errors.client_name}</Text>
                     ) : null}
@@ -1031,7 +1066,9 @@ export default function CreateIndentScreen() {
                       />
                     </View>
                     {errors.client_price ? (
-                      <Text style={styles.errorText}>{errors.client_price}</Text>
+                      <Text style={styles.errorText}>
+                        {errors.client_price}
+                      </Text>
                     ) : null}
                     <View style={styles.infoCallout}>
                       <Info size={16} color={Theme.iconPrimary} />
@@ -1092,8 +1129,7 @@ export default function CreateIndentScreen() {
                         const { error, client } = await createClient(orgId, {
                           contact_person: data.contactPerson,
                           phone: data.phone,
-                          organization_name:
-                            data.organizationName || undefined,
+                          organization_name: data.organizationName || undefined,
                         });
                         if (error) {
                           showDialog("Could not add client", error.message);
@@ -1125,307 +1161,531 @@ export default function CreateIndentScreen() {
 
               {/* 03 Load */}
               <View style={styles.card}>
-              <View style={styles.cardHead}>
-                <View style={styles.stepBadge}>
-                  <Text style={styles.stepBadgeText}>03</Text>
+                <View style={styles.cardHead}>
+                  <View style={styles.stepBadge}>
+                    <Text style={styles.stepBadgeText}>03</Text>
+                  </View>
+                  <Text style={styles.cardTitle}>Load Specifics</Text>
                 </View>
-                <Text style={styles.cardTitle}>Load Specifics</Text>
-              </View>
-              <View
-                style={[
-                  styles.sheetGrid,
-                  !isWide && styles.sheetGridStacked,
-                ]}
-              >
-                <View style={styles.sheetField}>
-                  <Text style={styles.sheetLabel}>Vehicle</Text>
-                  {vehicleTypeIsOther ? (
-                    <TextInput
-                      style={[
-                        styles.sheetInput,
-                        errors.vehicle_type && styles.inputError,
-                      ]}
-                      value={form.vehicle_type}
-                      onChangeText={(t) => update({ vehicle_type: t })}
-                      placeholder="Type vehicle"
-                      placeholderTextColor={Theme.textMuted}
-                    />
-                  ) : (
+                <View
+                  style={[styles.sheetGrid, !isWide && styles.sheetGridStacked]}
+                >
+                  <View style={styles.sheetField}>
+                    <Text style={styles.sheetLabel}>Vehicle</Text>
+                    {vehicleTypeIsOther ? (
+                      <TextInput
+                        style={[
+                          styles.sheetInput,
+                          errors.vehicle_type && styles.inputError,
+                        ]}
+                        value={form.vehicle_type}
+                        onChangeText={(t) => update({ vehicle_type: t })}
+                        placeholder="Type vehicle"
+                        placeholderTextColor={Theme.textMuted}
+                      />
+                    ) : (
+                      <TouchableOpacity
+                        style={[
+                          styles.sheetInput,
+                          { justifyContent: "center" },
+                          errors.vehicle_type && styles.inputError,
+                        ]}
+                        onPress={() => setVehicleTypePickerOpen(true)}
+                        activeOpacity={0.8}
+                      >
+                        <Text
+                          style={
+                            form.vehicle_type
+                              ? styles.dropdownTouchableText
+                              : styles.dropdownTouchablePlaceholder
+                          }
+                          numberOfLines={1}
+                        >
+                          {form.vehicle_type || "Select Vehicle"}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                    {vehicleTypeIsOther ? (
+                      <TouchableOpacity
+                        onPress={() => setVehicleTypePickerOpen(true)}
+                        style={styles.switchToPresetLink}
+                      >
+                        <Text style={styles.switchToPresetLinkText}>
+                          Choose from list instead
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    {errors.vehicle_type ? (
+                      <Text style={styles.errorText}>
+                        {errors.vehicle_type}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View style={styles.sheetField}>
+                    <Text style={styles.sheetLabel}>Load Type</Text>
                     <TouchableOpacity
                       style={[
                         styles.sheetInput,
                         { justifyContent: "center" },
-                        errors.vehicle_type && styles.inputError,
+                        webPointer,
+                        errors.load_type && styles.inputError,
                       ]}
-                      onPress={() => setVehicleTypePickerOpen(true)}
+                      onPress={() => setLoadTypePickerOpen(true)}
                       activeOpacity={0.8}
                     >
                       <Text
                         style={
-                          form.vehicle_type
+                          form.load_type
                             ? styles.dropdownTouchableText
                             : styles.dropdownTouchablePlaceholder
                         }
                         numberOfLines={1}
                       >
-                        {form.vehicle_type || "Select Vehicle"}
+                        {form.load_type || "Select load category"}
                       </Text>
                     </TouchableOpacity>
-                  )}
-                  {vehicleTypeIsOther ? (
-                    <TouchableOpacity
-                      onPress={() => setVehicleTypePickerOpen(true)}
-                      style={styles.switchToPresetLink}
-                    >
-                      <Text style={styles.switchToPresetLinkText}>
-                        Choose from list instead
-                      </Text>
-                    </TouchableOpacity>
-                  ) : null}
-                  {errors.vehicle_type ? (
-                    <Text style={styles.errorText}>{errors.vehicle_type}</Text>
+                    {errors.load_type ? (
+                      <Text style={styles.errorText}>{errors.load_type}</Text>
+                    ) : null}
+                  </View>
+                </View>
+
+                <View style={styles.sheetSection}>
+                  <Text style={styles.sheetLabel}>Weight (Tons)</Text>
+                  <TextInput
+                    style={[
+                      styles.sheetInput,
+                      errors.weight && styles.inputError,
+                    ]}
+                    value={form.weight}
+                    onChangeText={(t) =>
+                      update({ weight: t.replace(/[^\d.]/g, "").slice(0, 12) })
+                    }
+                    placeholder="e.g. 10 (tons)"
+                    placeholderTextColor={Theme.textMuted}
+                    keyboardType="decimal-pad"
+                  />
+                  {errors.weight ? (
+                    <Text style={styles.errorText}>{errors.weight}</Text>
                   ) : null}
                 </View>
-                <View style={styles.sheetField}>
-                  <Text style={styles.sheetLabel}>Load Type</Text>
+
+                <View style={styles.sheetSection}>
+                  <Text style={styles.sheetLabel}>Pickup date</Text>
+                  <View style={styles.quickDateRow}>
+                    {[
+                      { label: "Today", get: getToday },
+                      { label: "Tomorrow", get: getTomorrow },
+                      { label: "Day after", get: getDayAfter },
+                    ].map(({ label, get }) => {
+                      const iso = get();
+                      const isActive = form.pickup_date === iso;
+                      return (
+                        <TouchableOpacity
+                          key={label}
+                          style={[
+                            styles.quickDateChip,
+                            isActive && styles.quickDateChipActive,
+                          ]}
+                          onPress={() => update({ pickup_date: iso })}
+                          activeOpacity={0.8}
+                        >
+                          <Text
+                            style={[
+                              styles.quickDateChipText,
+                              isActive && styles.quickDateChipTextActive,
+                            ]}
+                          >
+                            {label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                   <TouchableOpacity
                     style={[
                       styles.sheetInput,
-                      { justifyContent: "center" },
-                      webPointer,
-                      errors.load_type && styles.inputError,
+                      styles.dateTouchable,
+                      errors.pickup_date && styles.inputError,
                     ]}
-                    onPress={() => setLoadTypePickerOpen(true)}
+                    onPress={() => setShowDatePicker(true)}
                     activeOpacity={0.8}
                   >
                     <Text
                       style={
-                        form.load_type
-                          ? styles.dropdownTouchableText
-                          : styles.dropdownTouchablePlaceholder
+                        form.pickup_date
+                          ? styles.dateTouchableText
+                          : styles.dateTouchablePlaceholder
                       }
-                      numberOfLines={1}
                     >
-                      {form.load_type || "Select load category"}
+                      {form.pickup_date
+                        ? new Date(
+                            form.pickup_date + "T12:00:00",
+                          ).toLocaleDateString("en-IN", {
+                            weekday: "short",
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })
+                        : "Tap to pick date"}
                     </Text>
                   </TouchableOpacity>
-                  {errors.load_type ? (
-                    <Text style={styles.errorText}>{errors.load_type}</Text>
+                  {errors.pickup_date ? (
+                    <Text style={styles.errorText}>{errors.pickup_date}</Text>
                   ) : null}
-                </View>
-              </View>
 
-              <View style={styles.sheetSection}>
-                <Text style={styles.sheetLabel}>Weight (Tons)</Text>
-                <TextInput
-                  style={[
-                    styles.sheetInput,
-                    errors.weight && styles.inputError,
-                  ]}
-                  value={form.weight}
-                  onChangeText={(t) =>
-                    update({ weight: t.replace(/[^\d.]/g, "").slice(0, 12) })
-                  }
-                  placeholder="e.g. 10 (tons)"
-                  placeholderTextColor={Theme.textMuted}
-                  keyboardType="decimal-pad"
-                />
-                {errors.weight ? (
-                  <Text style={styles.errorText}>{errors.weight}</Text>
-                ) : null}
-              </View>
-
-              <View style={styles.sheetSection}>
-                <Text style={styles.sheetLabel}>Pickup date</Text>
-                <View style={styles.quickDateRow}>
-                  {[
-                    { label: "Today", get: getToday },
-                    { label: "Tomorrow", get: getTomorrow },
-                    { label: "Day after", get: getDayAfter },
-                  ].map(({ label, get }) => {
-                    const iso = get();
-                    const isActive = form.pickup_date === iso;
-                    return (
-                      <TouchableOpacity
-                        key={label}
-                        style={[
-                          styles.quickDateChip,
-                          isActive && styles.quickDateChipActive,
-                        ]}
-                        onPress={() => update({ pickup_date: iso })}
-                        activeOpacity={0.8}
-                      >
-                        <Text
-                          style={[
-                            styles.quickDateChipText,
-                            isActive && styles.quickDateChipTextActive,
-                          ]}
-                        >
-                          {label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-                <TouchableOpacity
-                  style={[
-                    styles.sheetInput,
-                    styles.dateTouchable,
-                    errors.pickup_date && styles.inputError,
-                  ]}
-                  onPress={() => setShowDatePicker(true)}
-                  activeOpacity={0.8}
-                >
-                  <Text
-                    style={
-                      form.pickup_date
-                        ? styles.dateTouchableText
-                        : styles.dateTouchablePlaceholder
-                    }
-                  >
-                    {form.pickup_date
-                      ? new Date(
-                          form.pickup_date + "T12:00:00",
-                        ).toLocaleDateString("en-IN", {
-                          weekday: "short",
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        })
-                      : "Tap to pick date"}
-                  </Text>
-                </TouchableOpacity>
-                {errors.pickup_date ? (
-                  <Text style={styles.errorText}>{errors.pickup_date}</Text>
-                ) : null}
-
-                {showDatePicker &&
-                  (Platform.OS === "android" ? (
-                    <DateTimePicker
-                      value={
-                        form.pickup_date
-                          ? new Date(form.pickup_date + "T12:00:00")
-                          : new Date()
-                      }
-                      mode="date"
-                      display="default"
-                      minimumDate={new Date()}
-                      onChange={(e, date) => {
-                        setShowDatePicker(false);
-                        if (e.type === "set" && date)
-                          update({ pickup_date: toISODate(date) });
-                      }}
-                    />
-                  ) : (
-                    <Modal visible transparent animationType="slide">
-                      <TouchableOpacity
-                        style={styles.datePickerBackdrop}
-                        activeOpacity={1}
-                        onPress={() => setShowDatePicker(false)}
-                      >
-                        <View
-                          style={styles.datePickerSheet}
-                          onStartShouldSetResponder={() => true}
-                        >
-                          <View style={styles.datePickerHeader}>
-                            <Text style={styles.datePickerTitle}>
-                              Pick date
-                            </Text>
-                            <TouchableOpacity
-                              onPress={() => setShowDatePicker(false)}
-                              hitSlop={12}
-                            >
-                              <Text style={styles.datePickerDone}>Done</Text>
-                            </TouchableOpacity>
-                          </View>
-                          <DateTimePicker
-                            value={
-                              form.pickup_date
-                                ? new Date(form.pickup_date + "T12:00:00")
-                                : new Date()
-                            }
-                            mode="date"
-                            display="spinner"
-                            minimumDate={new Date()}
-                            onChange={(_, date) =>
-                              date && update({ pickup_date: toISODate(date) })
-                            }
-                          />
-                        </View>
-                      </TouchableOpacity>
-                    </Modal>
-                  ))}
-              </View>
-            </View>
-
-            {vehicleTypePickerOpen ? (
-              <Modal
-                visible
-                transparent
-                animationType="fade"
-                onRequestClose={() => setVehicleTypePickerOpen(false)}
-              >
-                <View style={styles.pickerModalRoot} accessibilityViewIsModal>
-                  <Pressable
-                    style={styles.pickerBackdropPress}
-                    onPress={() => setVehicleTypePickerOpen(false)}
-                  >
-                    <View style={styles.pickerBackdropDim} />
-                  </Pressable>
-                  <View style={styles.pickerCenterWrap} pointerEvents="box-none">
-                    <View
-                      style={[styles.pickerSheet, { maxWidth: pickerCardMaxW }]}
-                    >
-                      <View style={styles.pickerSheetHead}>
-                        <View style={styles.pickerSheetTitles}>
-                          <Text style={styles.pickerSheetTitle}>
-                            Select Vehicle
-                          </Text>
-                          <Text style={styles.pickerSheetSubtitle}>
-                            Categories, presets, or custom entry
-                          </Text>
-                        </View>
-                        <TouchableOpacity
-                          onPress={() => setVehicleTypePickerOpen(false)}
-                          style={[styles.pickerCloseBtn, webCursor]}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          accessibilityRole="button"
-                          accessibilityLabel="Close"
-                        >
-                          <X size={18} color={Theme.primary} strokeWidth={2.5} />
-                        </TouchableOpacity>
-                      </View>
-
-                      <CreateTripSheetSearchInput
-                        value={vehiclePickerQuery}
-                        onChangeText={setVehiclePickerQuery}
-                        placeholder="Search categories or presets…"
-                        shellStyle={styles.pickerSearchShell}
-                        accessibilityLabel="Search vehicle types"
+                  {showDatePicker &&
+                    (Platform.OS === "android" ? (
+                      <DateTimePicker
+                        value={
+                          form.pickup_date
+                            ? new Date(form.pickup_date + "T12:00:00")
+                            : new Date()
+                        }
+                        mode="date"
+                        display="default"
+                        minimumDate={new Date()}
+                        onChange={(e, date) => {
+                          setShowDatePicker(false);
+                          if (e.type === "set" && date)
+                            update({ pickup_date: toISODate(date) });
+                        }}
                       />
+                    ) : (
+                      <Modal visible transparent animationType="slide">
+                        <TouchableOpacity
+                          style={styles.datePickerBackdrop}
+                          activeOpacity={1}
+                          onPress={() => setShowDatePicker(false)}
+                        >
+                          <View
+                            style={styles.datePickerSheet}
+                            onStartShouldSetResponder={() => true}
+                          >
+                            <View style={styles.datePickerHeader}>
+                              <Text style={styles.datePickerTitle}>
+                                Pick date
+                              </Text>
+                              <TouchableOpacity
+                                onPress={() => setShowDatePicker(false)}
+                                hitSlop={12}
+                              >
+                                <Text style={styles.datePickerDone}>Done</Text>
+                              </TouchableOpacity>
+                            </View>
+                            <DateTimePicker
+                              value={
+                                form.pickup_date
+                                  ? new Date(form.pickup_date + "T12:00:00")
+                                  : new Date()
+                              }
+                              mode="date"
+                              display="spinner"
+                              minimumDate={new Date()}
+                              onChange={(_, date) =>
+                                date && update({ pickup_date: toISODate(date) })
+                              }
+                            />
+                          </View>
+                        </TouchableOpacity>
+                      </Modal>
+                    ))}
+                </View>
+              </View>
 
-                      <ScrollView
-                        style={styles.pickerScroll}
-                        contentContainerStyle={styles.pickerScrollContent}
-                        keyboardShouldPersistTaps="handled"
-                        showsVerticalScrollIndicator
+              {vehicleTypePickerOpen ? (
+                <Modal
+                  visible
+                  transparent
+                  animationType="fade"
+                  onRequestClose={() => setVehicleTypePickerOpen(false)}
+                >
+                  <View style={styles.pickerModalRoot} accessibilityViewIsModal>
+                    <Pressable
+                      style={styles.pickerBackdropPress}
+                      onPress={() => setVehicleTypePickerOpen(false)}
+                    >
+                      <View style={styles.pickerBackdropDim} />
+                    </Pressable>
+                    <View
+                      style={styles.pickerCenterWrap}
+                      pointerEvents="box-none"
+                    >
+                      <View
+                        style={[
+                          styles.pickerSheet,
+                          { maxWidth: pickerCardMaxW },
+                        ]}
                       >
-                        {vehicleQueryNorm &&
-                          filteredVehicleCategories.length === 0 &&
-                          filteredBodyLengthOptions.length === 0 && (
+                        <View style={styles.pickerSheetHead}>
+                          <View style={styles.pickerSheetTitles}>
+                            <Text style={styles.pickerSheetTitle}>
+                              Select Vehicle
+                            </Text>
+                            <Text style={styles.pickerSheetSubtitle}>
+                              Categories, presets, or custom entry
+                            </Text>
+                          </View>
+                          <TouchableOpacity
+                            onPress={() => setVehicleTypePickerOpen(false)}
+                            style={[styles.pickerCloseBtn, webCursor]}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            accessibilityRole="button"
+                            accessibilityLabel="Close"
+                          >
+                            <X
+                              size={18}
+                              color={Theme.primary}
+                              strokeWidth={2.5}
+                            />
+                          </TouchableOpacity>
+                        </View>
+
+                        <CreateTripSheetSearchInput
+                          value={vehiclePickerQuery}
+                          onChangeText={setVehiclePickerQuery}
+                          placeholder="Search categories or presets…"
+                          shellStyle={styles.pickerSearchShell}
+                          accessibilityLabel="Search vehicle types"
+                        />
+
+                        <ScrollView
+                          style={styles.pickerScroll}
+                          contentContainerStyle={styles.pickerScrollContent}
+                          keyboardShouldPersistTaps="handled"
+                          showsVerticalScrollIndicator
+                        >
+                          {vehicleQueryNorm &&
+                            filteredVehicleCategories.length === 0 &&
+                            filteredBodyLengthOptions.length === 0 && (
+                              <Text style={styles.pickerEmptyText}>
+                                No matching categories or presets. Try another
+                                search or use custom below.
+                              </Text>
+                            )}
+                          {filteredVehicleCategories.length > 0 ? (
+                            <>
+                              <Text style={styles.pickerSectionLabel}>
+                                Categories
+                              </Text>
+                              {filteredVehicleCategories.map((opt) => {
+                                const selected =
+                                  form.vehicle_type === opt &&
+                                  !vehicleTypeIsOther;
+                                return (
+                                  <TouchableOpacity
+                                    key={opt}
+                                    style={[
+                                      styles.pickerRow,
+                                      selected && styles.pickerRowSelected,
+                                      webCursor,
+                                    ]}
+                                    onPress={() => {
+                                      setVehicleTypeIsOther(false);
+                                      update({ vehicle_type: opt });
+                                      setVehicleTypePickerOpen(false);
+                                    }}
+                                    activeOpacity={0.75}
+                                  >
+                                    <View style={styles.pickerIconCircle}>
+                                      <Truck
+                                        size={18}
+                                        color={Theme.iconPrimary}
+                                      />
+                                    </View>
+                                    <Text
+                                      style={[
+                                        styles.pickerRowPrimary,
+                                        selected &&
+                                          styles.pickerRowPrimarySelected,
+                                      ]}
+                                      numberOfLines={3}
+                                    >
+                                      {opt}
+                                    </Text>
+                                    {selected ? (
+                                      <CheckCircle2
+                                        size={22}
+                                        color={Theme.primary}
+                                        strokeWidth={2.5}
+                                      />
+                                    ) : (
+                                      <View style={styles.pickerRowEndSpacer} />
+                                    )}
+                                  </TouchableOpacity>
+                                );
+                              })}
+                            </>
+                          ) : null}
+
+                          {filteredBodyLengthOptions.length > 0 ? (
+                            <>
+                              <Text style={styles.pickerSectionLabel}>
+                                Presets & lengths
+                              </Text>
+                              {filteredBodyLengthOptions.map((opt) => {
+                                const selected =
+                                  form.vehicle_type === opt &&
+                                  !vehicleTypeIsOther;
+                                return (
+                                  <TouchableOpacity
+                                    key={normalizeBodyLengthKey(opt)}
+                                    style={[
+                                      styles.pickerRow,
+                                      selected && styles.pickerRowSelected,
+                                      webCursor,
+                                    ]}
+                                    onPress={() => {
+                                      setVehicleTypeIsOther(false);
+                                      update({ vehicle_type: opt });
+                                      setVehicleTypePickerOpen(false);
+                                    }}
+                                    activeOpacity={0.75}
+                                  >
+                                    <View style={styles.pickerIconCircle}>
+                                      <Truck
+                                        size={18}
+                                        color={Theme.iconPrimary}
+                                      />
+                                    </View>
+                                    <Text
+                                      style={[
+                                        styles.pickerRowPrimary,
+                                        selected &&
+                                          styles.pickerRowPrimarySelected,
+                                      ]}
+                                      numberOfLines={3}
+                                    >
+                                      {opt}
+                                    </Text>
+                                    {selected ? (
+                                      <CheckCircle2
+                                        size={22}
+                                        color={Theme.primary}
+                                        strokeWidth={2.5}
+                                      />
+                                    ) : (
+                                      <View style={styles.pickerRowEndSpacer} />
+                                    )}
+                                  </TouchableOpacity>
+                                );
+                              })}
+                            </>
+                          ) : null}
+
+                          <Text style={styles.pickerSectionLabel}>Custom</Text>
+                          <TouchableOpacity
+                            style={[
+                              styles.pickerRow,
+                              vehicleTypeIsOther && styles.pickerRowSelected,
+                              webCursor,
+                            ]}
+                            onPress={() => {
+                              setVehicleTypeIsOther(true);
+                              update({ vehicle_type: "" });
+                              setVehicleTypePickerOpen(false);
+                            }}
+                            activeOpacity={0.75}
+                          >
+                            <View style={styles.pickerIconCircle}>
+                              <Truck size={18} color={Theme.iconPrimary} />
+                            </View>
+                            <Text
+                              style={[
+                                styles.pickerRowPrimary,
+                                vehicleTypeIsOther &&
+                                  styles.pickerRowPrimarySelected,
+                              ]}
+                              numberOfLines={2}
+                            >
+                              {OTHER_LABEL} — type manually
+                            </Text>
+                            {vehicleTypeIsOther ? (
+                              <CheckCircle2
+                                size={22}
+                                color={Theme.primary}
+                                strokeWidth={2.5}
+                              />
+                            ) : (
+                              <View style={styles.pickerRowEndSpacer} />
+                            )}
+                          </TouchableOpacity>
+                        </ScrollView>
+                      </View>
+                    </View>
+                  </View>
+                </Modal>
+              ) : null}
+
+              {loadTypePickerOpen ? (
+                <Modal
+                  visible
+                  transparent
+                  animationType="fade"
+                  onRequestClose={() => setLoadTypePickerOpen(false)}
+                >
+                  <View style={styles.pickerModalRoot} accessibilityViewIsModal>
+                    <Pressable
+                      style={styles.pickerBackdropPress}
+                      onPress={() => setLoadTypePickerOpen(false)}
+                    >
+                      <View style={styles.pickerBackdropDim} />
+                    </Pressable>
+                    <View
+                      style={styles.pickerCenterWrap}
+                      pointerEvents="box-none"
+                    >
+                      <View
+                        style={[
+                          styles.pickerSheet,
+                          { maxWidth: pickerCardMaxW },
+                        ]}
+                      >
+                        <View style={styles.pickerSheetHead}>
+                          <View style={styles.pickerSheetTitles}>
+                            <Text style={styles.pickerSheetTitle}>
+                              Load type
+                            </Text>
+                            <Text style={styles.pickerSheetSubtitle}>
+                              What you are shipping
+                            </Text>
+                          </View>
+                          <TouchableOpacity
+                            onPress={() => setLoadTypePickerOpen(false)}
+                            style={[styles.pickerCloseBtn, webCursor]}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            accessibilityRole="button"
+                            accessibilityLabel="Close"
+                          >
+                            <X
+                              size={18}
+                              color={Theme.primary}
+                              strokeWidth={2.5}
+                            />
+                          </TouchableOpacity>
+                        </View>
+
+                        <CreateTripSheetSearchInput
+                          value={loadTypePickerQuery}
+                          onChangeText={setLoadTypePickerQuery}
+                          placeholder="Search load type…"
+                          shellStyle={styles.pickerSearchShell}
+                          accessibilityLabel="Search load types"
+                        />
+
+                        <ScrollView
+                          style={styles.pickerScroll}
+                          contentContainerStyle={styles.pickerScrollContent}
+                          keyboardShouldPersistTaps="handled"
+                          showsVerticalScrollIndicator
+                        >
+                          {filteredLoadTypes.length === 0 ? (
                             <Text style={styles.pickerEmptyText}>
-                              No matching categories or presets. Try another
-                              search or use custom below.
+                              No load types match your search.
                             </Text>
-                          )}
-                        {filteredVehicleCategories.length > 0 ? (
-                          <>
-                            <Text style={styles.pickerSectionLabel}>
-                              Categories
-                            </Text>
-                            {filteredVehicleCategories.map((opt) => {
-                              const selected =
-                                form.vehicle_type === opt && !vehicleTypeIsOther;
+                          ) : (
+                            filteredLoadTypes.map((opt) => {
+                              const selected = form.load_type === opt;
                               return (
                                 <TouchableOpacity
                                   key={opt}
@@ -1435,14 +1695,13 @@ export default function CreateIndentScreen() {
                                     webCursor,
                                   ]}
                                   onPress={() => {
-                                    setVehicleTypeIsOther(false);
-                                    update({ vehicle_type: opt });
-                                    setVehicleTypePickerOpen(false);
+                                    update({ load_type: opt });
+                                    setLoadTypePickerOpen(false);
                                   }}
                                   activeOpacity={0.75}
                                 >
                                   <View style={styles.pickerIconCircle}>
-                                    <Truck
+                                    <Package
                                       size={18}
                                       color={Theme.iconPrimary}
                                     />
@@ -1450,7 +1709,8 @@ export default function CreateIndentScreen() {
                                   <Text
                                     style={[
                                       styles.pickerRowPrimary,
-                                      selected && styles.pickerRowPrimarySelected,
+                                      selected &&
+                                        styles.pickerRowPrimarySelected,
                                     ]}
                                     numberOfLines={3}
                                   >
@@ -1467,387 +1727,233 @@ export default function CreateIndentScreen() {
                                   )}
                                 </TouchableOpacity>
                               );
-                            })}
-                          </>
-                        ) : null}
-
-                        {filteredBodyLengthOptions.length > 0 ? (
-                          <>
-                            <Text style={styles.pickerSectionLabel}>
-                              Presets & lengths
-                            </Text>
-                            {filteredBodyLengthOptions.map((opt) => {
-                              const selected =
-                                form.vehicle_type === opt && !vehicleTypeIsOther;
-                              return (
-                                <TouchableOpacity
-                                  key={normalizeBodyLengthKey(opt)}
-                                  style={[
-                                    styles.pickerRow,
-                                    selected && styles.pickerRowSelected,
-                                    webCursor,
-                                  ]}
-                                  onPress={() => {
-                                    setVehicleTypeIsOther(false);
-                                    update({ vehicle_type: opt });
-                                    setVehicleTypePickerOpen(false);
-                                  }}
-                                  activeOpacity={0.75}
-                                >
-                                  <View style={styles.pickerIconCircle}>
-                                    <Truck
-                                      size={18}
-                                      color={Theme.iconPrimary}
-                                    />
-                                  </View>
-                                  <Text
-                                    style={[
-                                      styles.pickerRowPrimary,
-                                      selected && styles.pickerRowPrimarySelected,
-                                    ]}
-                                    numberOfLines={3}
-                                  >
-                                    {opt}
-                                  </Text>
-                                  {selected ? (
-                                    <CheckCircle2
-                                      size={22}
-                                      color={Theme.primary}
-                                      strokeWidth={2.5}
-                                    />
-                                  ) : (
-                                    <View style={styles.pickerRowEndSpacer} />
-                                  )}
-                                </TouchableOpacity>
-                              );
-                            })}
-                          </>
-                        ) : null}
-
-                        <Text style={styles.pickerSectionLabel}>Custom</Text>
-                        <TouchableOpacity
-                          style={[
-                            styles.pickerRow,
-                            vehicleTypeIsOther && styles.pickerRowSelected,
-                            webCursor,
-                          ]}
-                          onPress={() => {
-                            setVehicleTypeIsOther(true);
-                            update({ vehicle_type: "" });
-                            setVehicleTypePickerOpen(false);
-                          }}
-                          activeOpacity={0.75}
-                        >
-                          <View style={styles.pickerIconCircle}>
-                            <Truck size={18} color={Theme.iconPrimary} />
-                          </View>
-                          <Text
-                            style={[
-                              styles.pickerRowPrimary,
-                              vehicleTypeIsOther &&
-                                styles.pickerRowPrimarySelected,
-                            ]}
-                            numberOfLines={2}
-                          >
-                            {OTHER_LABEL} — type manually
-                          </Text>
-                          {vehicleTypeIsOther ? (
-                            <CheckCircle2
-                              size={22}
-                              color={Theme.primary}
-                              strokeWidth={2.5}
-                            />
-                          ) : (
-                            <View style={styles.pickerRowEndSpacer} />
+                            })
                           )}
-                        </TouchableOpacity>
-                      </ScrollView>
-                    </View>
-                  </View>
-                </View>
-              </Modal>
-            ) : null}
-
-            {loadTypePickerOpen ? (
-              <Modal
-                visible
-                transparent
-                animationType="fade"
-                onRequestClose={() => setLoadTypePickerOpen(false)}
-              >
-                <View style={styles.pickerModalRoot} accessibilityViewIsModal>
-                  <Pressable
-                    style={styles.pickerBackdropPress}
-                    onPress={() => setLoadTypePickerOpen(false)}
-                  >
-                    <View style={styles.pickerBackdropDim} />
-                  </Pressable>
-                  <View style={styles.pickerCenterWrap} pointerEvents="box-none">
-                    <View
-                      style={[styles.pickerSheet, { maxWidth: pickerCardMaxW }]}
-                    >
-                      <View style={styles.pickerSheetHead}>
-                        <View style={styles.pickerSheetTitles}>
-                          <Text style={styles.pickerSheetTitle}>Load type</Text>
-                          <Text style={styles.pickerSheetSubtitle}>
-                            What you are shipping
-                          </Text>
-                        </View>
-                        <TouchableOpacity
-                          onPress={() => setLoadTypePickerOpen(false)}
-                          style={[styles.pickerCloseBtn, webCursor]}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          accessibilityRole="button"
-                          accessibilityLabel="Close"
-                        >
-                          <X size={18} color={Theme.primary} strokeWidth={2.5} />
-                        </TouchableOpacity>
+                        </ScrollView>
                       </View>
+                    </View>
+                  </View>
+                </Modal>
+              ) : null}
 
-                      <CreateTripSheetSearchInput
-                        value={loadTypePickerQuery}
-                        onChangeText={setLoadTypePickerQuery}
-                        placeholder="Search load type…"
-                        shellStyle={styles.pickerSearchShell}
-                        accessibilityLabel="Search load types"
-                      />
-
-                      <ScrollView
-                        style={styles.pickerScroll}
-                        contentContainerStyle={styles.pickerScrollContent}
-                        keyboardShouldPersistTaps="handled"
-                        showsVerticalScrollIndicator
+              <View style={styles.actionFooterBar}>
+                <View
+                  ref={indentActionsHostRef}
+                  style={styles.actionButtonsHoverHost}
+                >
+                  {actionHelpHint ? (
+                    <View
+                      style={styles.actionHelpTooltip}
+                      pointerEvents="none"
+                      accessibilityLiveRegion="polite"
+                    >
+                      <Text style={styles.actionHelpTooltipTitle}>
+                        {actionHelpHint === "draft"
+                          ? "Save Draft"
+                          : "Share to Network"}
+                      </Text>
+                      <Text style={styles.actionHelpTooltipText}>
+                        {actionHelpHint === "draft"
+                          ? "Indent stays editable. You can save updates again and share later."
+                          : "Shared indents are broadcast and become read-only."}
+                      </Text>
+                    </View>
+                  ) : null}
+                  <View
+                    style={[
+                      styles.actionButtonsRow,
+                      stackActionButtons && styles.actionButtonsRowStacked,
+                    ]}
+                    {...(Platform.OS === "web"
+                      ? {
+                          onMouseLeave: () => {
+                            requestAnimationFrame(() => {
+                              if (typeof document === "undefined") return;
+                              const host =
+                                indentActionsHostRef.current as unknown as HTMLElement | null;
+                              const active = document.activeElement;
+                              if (
+                                host &&
+                                active &&
+                                typeof host.contains === "function" &&
+                                host.contains(active)
+                              ) {
+                                return;
+                              }
+                              setActionHelpHint(null);
+                            });
+                          },
+                        }
+                      : {})}
+                  >
+                    <View
+                      style={[
+                        styles.actionBtnHoverCell,
+                        stackActionButtons && styles.actionBtnHoverCellStacked,
+                      ]}
+                      {...(Platform.OS === "web"
+                        ? {
+                            onMouseEnter: () => setActionHelpHint("draft"),
+                          }
+                        : {})}
+                    >
+                      <TouchableOpacity
+                        style={[
+                          styles.draftBtn,
+                          stackActionButtons && styles.actionBtnStacked,
+                          submitting && styles.submitBtnDisabled,
+                        ]}
+                        onPress={persistDraft}
+                        disabled={submitting}
+                        activeOpacity={0.8}
+                        focusable
+                        onFocus={onDraftActionFocus}
+                        onBlur={scheduleClearActionHelpHint}
+                        accessibilityHint="Indent stays editable. You can save updates again and share later."
                       >
-                        {filteredLoadTypes.length === 0 ? (
-                          <Text style={styles.pickerEmptyText}>
-                            No load types match your search.
-                          </Text>
+                        {submitting ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={Theme.textPrimaryDark}
+                          />
                         ) : (
-                          filteredLoadTypes.map((opt) => {
-                            const selected = form.load_type === opt;
-                            return (
-                              <TouchableOpacity
-                                key={opt}
-                                style={[
-                                  styles.pickerRow,
-                                  selected && styles.pickerRowSelected,
-                                  webCursor,
-                                ]}
-                                onPress={() => {
-                                  update({ load_type: opt });
-                                  setLoadTypePickerOpen(false);
-                                }}
-                                activeOpacity={0.75}
-                              >
-                                <View style={styles.pickerIconCircle}>
-                                  <Package
-                                    size={18}
-                                    color={Theme.iconPrimary}
-                                  />
-                                </View>
-                                <Text
-                                  style={[
-                                    styles.pickerRowPrimary,
-                                    selected && styles.pickerRowPrimarySelected,
-                                  ]}
-                                  numberOfLines={3}
-                                >
-                                  {opt}
-                                </Text>
-                                {selected ? (
-                                  <CheckCircle2
-                                    size={22}
-                                    color={Theme.primary}
-                                    strokeWidth={2.5}
-                                  />
-                                ) : (
-                                  <View style={styles.pickerRowEndSpacer} />
-                                )}
-                              </TouchableOpacity>
-                            );
-                          })
+                          <View style={styles.actionBtnInner}>
+                            <FileEdit size={18} color={Theme.textPrimaryDark} />
+                            <Text style={styles.draftBtnText}>Save Draft</Text>
+                          </View>
                         )}
-                      </ScrollView>
+                      </TouchableOpacity>
+                    </View>
+                    <View
+                      style={[
+                        styles.actionBtnHoverCell,
+                        stackActionButtons && styles.actionBtnHoverCellStacked,
+                      ]}
+                      {...(Platform.OS === "web"
+                        ? {
+                            onMouseEnter: () => setActionHelpHint("share"),
+                          }
+                        : {})}
+                    >
+                      <TouchableOpacity
+                        style={[
+                          styles.submitBtn,
+                          stackActionButtons && styles.actionBtnStacked,
+                          (!canSubmit || submitting) &&
+                            styles.submitBtnDisabled,
+                        ]}
+                        onPress={handleSubmit}
+                        disabled={!canSubmit || submitting}
+                        activeOpacity={0.8}
+                        focusable
+                        onFocus={onShareActionFocus}
+                        onBlur={scheduleClearActionHelpHint}
+                        accessibilityHint="Shared indents are broadcast and become read-only."
+                      >
+                        {submitting ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={Theme.buttonPrimaryText}
+                          />
+                        ) : (
+                          <View style={styles.actionBtnInner}>
+                            <Share2
+                              size={18}
+                              color={Theme.buttonMatteBlackText}
+                            />
+                            <Text style={styles.submitBtnText}>
+                              Share to Network
+                            </Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
                     </View>
                   </View>
                 </View>
-              </Modal>
-            ) : null}
+              </View>
+            </View>
+          </ScrollView>
 
-            <View style={styles.actionFooterBar}>
-              <View style={styles.actionButtonsHoverHost}>
-                {actionHelpHint ? (
-                  <View
-                    style={styles.actionHelpTooltip}
-                    pointerEvents="none"
-                    accessibilityLiveRegion="polite"
-                  >
-                    <Text style={styles.actionHelpTooltipTitle}>
-                      {actionHelpHint === "draft"
-                        ? "Save Draft"
-                        : "Share to Network"}
-                    </Text>
-                    <Text style={styles.actionHelpTooltipText}>
-                      {actionHelpHint === "draft"
-                        ? "Indent stays editable. You can save updates again and share later."
-                        : "Shared indents are broadcast and become read-only."}
-                    </Text>
+          {windowWidth >= 420 ? (
+            <View
+              style={[
+                styles.previewCard,
+                {
+                  bottom: insets.bottom + 16,
+                  right: Math.max(16, insets.right + 8),
+                },
+              ]}
+              pointerEvents="box-none"
+            >
+              <View style={styles.previewHead}>
+                <Text style={styles.previewHeadTitle}>Indent summary</Text>
+                <View style={styles.livePill}>
+                  <Text style={styles.livePillText}>Live</Text>
+                </View>
+              </View>
+              <View style={styles.previewBody}>
+                <View style={styles.previewLine}>
+                  <Text style={styles.previewLab}>Pickup</Text>
+                  <Text style={styles.previewVal} numberOfLines={2}>
+                    {(form.pickup_area ?? "").trim() || "—"}
+                  </Text>
+                </View>
+                <View style={styles.previewLine}>
+                  <Text style={styles.previewLab}>Delivery</Text>
+                  <Text style={styles.previewVal} numberOfLines={2}>
+                    {(form.drop_location ?? "").trim() || "—"}
+                  </Text>
+                </View>
+                {form.pickup_area.trim() && form.drop_location.trim() ? (
+                  <View style={styles.previewRow2}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.previewLab}>Distance</Text>
+                      <Text style={styles.previewVal}>
+                        {routeLoading
+                          ? "…"
+                          : routeDistanceKm != null
+                            ? `${routeDistanceKm} km`
+                            : "—"}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.previewLab}>ETA</Text>
+                      <Text style={styles.previewVal}>
+                        {routeLoading ? "…" : (routeEtaLabel ?? "—")}
+                      </Text>
+                    </View>
                   </View>
                 ) : null}
-                <View
-                  style={[
-                    styles.actionButtonsRow,
-                    stackActionButtons && styles.actionButtonsRowStacked,
-                  ]}
-                  {...(Platform.OS === "web"
-                    ? {
-                        onMouseLeave: () => setActionHelpHint(null),
-                      }
-                    : {})}
-                >
-                  <View
-                    style={[
-                      styles.actionBtnHoverCell,
-                      stackActionButtons && styles.actionBtnHoverCellStacked,
-                    ]}
-                    {...(Platform.OS === "web"
-                      ? {
-                          onMouseEnter: () => setActionHelpHint("draft"),
-                        }
-                      : {})}
-                  >
-                    <TouchableOpacity
-                      style={[
-                        styles.draftBtn,
-                        stackActionButtons && styles.actionBtnStacked,
-                        submitting && styles.submitBtnDisabled,
-                      ]}
-                      onPress={persistDraft}
-                      disabled={submitting}
-                      activeOpacity={0.8}
-                      accessibilityHint="Indent stays editable. You can save updates again and share later."
-                    >
-                      {submitting ? (
-                        <ActivityIndicator
-                          size="small"
-                          color={Theme.textPrimaryDark}
-                        />
-                      ) : (
-                        <View style={styles.actionBtnInner}>
-                          <FileEdit size={18} color={Theme.textPrimaryDark} />
-                          <Text style={styles.draftBtnText}>Save Draft</Text>
-                        </View>
-                      )}
-                    </TouchableOpacity>
+                <View style={styles.previewDivider} />
+                <View style={styles.previewRow2}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.previewLab}>Target pay</Text>
+                    <Text style={[styles.previewVal, { color: Theme.primary }]}>
+                      ₹{form.supplier_target.trim() || "0"}
+                    </Text>
                   </View>
-                  <View
-                    style={[
-                      styles.actionBtnHoverCell,
-                      stackActionButtons && styles.actionBtnHoverCellStacked,
-                    ]}
-                    {...(Platform.OS === "web"
-                      ? {
-                          onMouseEnter: () => setActionHelpHint("share"),
-                        }
-                      : {})}
-                  >
-                    <TouchableOpacity
-                      style={[
-                        styles.submitBtn,
-                        stackActionButtons && styles.actionBtnStacked,
-                        (!canSubmit || submitting) && styles.submitBtnDisabled,
-                      ]}
-                      onPress={handleSubmit}
-                      disabled={!canSubmit || submitting}
-                      activeOpacity={0.8}
-                      accessibilityHint="Shared indents are broadcast and become read-only."
-                    >
-                      {submitting ? (
-                        <ActivityIndicator
-                          size="small"
-                          color={Theme.buttonPrimaryText}
-                        />
-                      ) : (
-                        <View style={styles.actionBtnInner}>
-                          <Share2
-                            size={18}
-                            color={Theme.buttonMatteBlackText}
-                          />
-                          <Text style={styles.submitBtnText}>
-                            Share to Network
-                          </Text>
-                        </View>
-                      )}
-                    </TouchableOpacity>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.previewLab}>Vehicle</Text>
+                    <Text style={styles.previewVal} numberOfLines={1}>
+                      {form.vehicle_type.trim() || "—"}
+                    </Text>
                   </View>
                 </View>
-              </View>
-            </View>
-          </View>
-        </ScrollView>
-
-        {windowWidth >= 420 ? (
-          <View
-            style={[
-              styles.previewCard,
-              {
-                bottom: insets.bottom + 16,
-                right: Math.max(16, insets.right + 8),
-              },
-            ]}
-            pointerEvents="box-none"
-          >
-            <View style={styles.previewHead}>
-              <Text style={styles.previewHeadTitle}>Indent summary</Text>
-              <View style={styles.livePill}>
-                <Text style={styles.livePillText}>Live</Text>
-              </View>
-            </View>
-            <View style={styles.previewBody}>
-              <View style={styles.previewLine}>
-                <Text style={styles.previewLab}>Pickup</Text>
-                <Text style={styles.previewVal} numberOfLines={2}>
-                  {(form.pickup_area ?? "").trim() || "—"}
-                </Text>
-              </View>
-              <View style={styles.previewLine}>
-                <Text style={styles.previewLab}>Delivery</Text>
-                <Text style={styles.previewVal} numberOfLines={2}>
-                  {(form.drop_location ?? "").trim() || "—"}
-                </Text>
-              </View>
-              <View style={styles.previewDivider} />
-              <View style={styles.previewRow2}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.previewLab}>Target pay</Text>
-                  <Text style={[styles.previewVal, { color: Theme.primary }]}>
-                    ₹{form.supplier_target.trim() || "0"}
+                <View style={styles.previewFoot}>
+                  <Text style={styles.previewFootLeft}>
+                    {(form.load_type ?? "").trim() || "Load"}
                   </Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.previewLab}>Vehicle</Text>
-                  <Text style={styles.previewVal} numberOfLines={1}>
-                    {form.vehicle_type.trim() || "—"}
+                  <Text style={styles.previewFootRight} numberOfLines={1}>
+                    {form.weight.trim() ? `${form.weight.trim()} T` : "—"}
                   </Text>
                 </View>
               </View>
-              <View style={styles.previewFoot}>
-                <Text style={styles.previewFootLeft}>
-                  {(form.load_type ?? "").trim() || "Load"}
-                </Text>
-                <Text style={styles.previewFootRight} numberOfLines={1}>
-                  {form.weight.trim()
-                    ? `${form.weight.trim()} T`
-                    : "—"}
-                </Text>
-              </View>
             </View>
-          </View>
-        ) : null}
+          ) : null}
 
-        <View style={styles.blobA} pointerEvents="none" />
-        <View style={styles.blobB} pointerEvents="none" />
-      </View>
+          <View style={styles.blobA} pointerEvents="none" />
+          <View style={styles.blobB} pointerEvents="none" />
+        </View>
       </AddTripModalLayout>
 
       <ThemedAlertModal
@@ -2328,82 +2434,6 @@ const styles = StyleSheet.create({
   },
   inputError: { borderColor: Theme.negative },
   errorText: { fontSize: 12, color: Theme.negative, marginTop: 4 },
-  routeStatsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: -2,
-    marginBottom: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: Theme.darkSurface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.separatorDark,
-    gap: 10,
-  },
-  routeCard: {
-    backgroundColor: Theme.darkSurface,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: Theme.separatorDark,
-  },
-  routeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  routeDot: {
-    flex: 1,
-    minWidth: 0,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: Theme.darkInputBg,
-    borderRadius: 8,
-    marginHorizontal: 6,
-  },
-  routeDotFirst: { marginLeft: 0 },
-  routeDotLast: { marginRight: 0 },
-  routeDotLabel: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: Theme.textSecondary,
-    letterSpacing: 1,
-    marginBottom: 4,
-    textTransform: "uppercase",
-  },
-  routeDotValue: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: Theme.textOnDark,
-  },
-  routeDotPlaceholder: {
-    fontSize: 13,
-    color: Theme.textMuted,
-    fontStyle: "italic",
-  },
-  routeArrow: {
-    paddingHorizontal: 4,
-  },
-  routeStat: {
-    flex: 1,
-    minWidth: 0,
-  },
-  routeStatLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    marginBottom: 2,
-  },
-  routeStatValue: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: Theme.textOnDark,
-  },
   actionButtonsHoverHost: {
     position: "relative",
     zIndex: 2,
@@ -2604,42 +2634,74 @@ const styles = StyleSheet.create({
   gridRow: { gap: 14 },
   gridRowWide: { flexDirection: "row", alignItems: "flex-start", gap: 20 },
   gridCol: { flex: 1, minWidth: 0 },
-  routeSummary: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: Theme.darkSurface,
-    marginTop: 4,
-    marginBottom: 12,
-  },
-  routeSummaryText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: "600",
-    color: Theme.textOnDark,
-  },
-  routeStats: {
-    flexDirection: "row",
-    gap: 16,
-    padding: 12,
-    borderRadius: 12,
+  routePreviewPanel: {
+    marginTop: 6,
+    marginBottom: 14,
+    borderRadius: 14,
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    backgroundColor: Theme.surfaceLight,
-    alignItems: "center",
-    marginBottom: 4,
+    backgroundColor: Theme.cardWhite,
+    ...Platform.select<ViewStyle>({
+      web: {
+        boxShadow: "0 2px 12px rgba(15,23,42,0.07)",
+      },
+      default: {
+        shadowColor: Theme.shadow,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.08,
+        shadowRadius: 10,
+        elevation: 3,
+      },
+    }),
   },
-  routeStatLab: {
+  routePreviewHero: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    backgroundColor: Theme.surfaceGray,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+  },
+  routePreviewHeroText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: -0.25,
+    lineHeight: 20,
+    color: Theme.textPrimaryDark,
+  },
+  routePreviewMetrics: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    backgroundColor: Theme.cardWhite,
+    borderTopWidth: 0,
+  },
+  routePreviewMetricCol: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  routePreviewMetricDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: Theme.borderLight,
+  },
+  routeMetricLab: {
     fontSize: 10,
     fontWeight: "800",
     color: Theme.textMuted,
     textTransform: "uppercase",
+    letterSpacing: 0.65,
     marginBottom: 4,
   },
-  routeStatVal: {
-    fontSize: 15,
+  routeMetricVal: {
+    fontSize: 16,
     fontWeight: "800",
+    letterSpacing: -0.35,
     color: Theme.textPrimaryDark,
   },
   mutedSmall: {
