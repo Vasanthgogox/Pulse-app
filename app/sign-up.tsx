@@ -294,7 +294,7 @@ export default function SignUp() {
           {
             text: 'OK',
             onPress: () =>
-              router.replace(`/sign-in?email=${encodeURIComponent(existing.email!)}`),
+              router.replace(`/sign-in?direct=1&email=${encodeURIComponent(existing.email!)}`),
           },
         ]
       );
@@ -531,7 +531,7 @@ export default function SignUp() {
 
       <View style={styles.footer}>
         <Text style={styles.footerMuted}>Already have an account? </Text>
-        <Link href="/sign-in" asChild>
+        <Link href="/sign-in?direct=1" asChild>
           <TouchableOpacity disabled={loading} activeOpacity={0.8}>
             <Text style={styles.footerLink}>Sign In</Text>
           </TouchableOpacity>
@@ -575,7 +575,7 @@ export default function SignUp() {
       {isDesktopLayout ? (
         <View style={styles.desktopShell}>
           <View style={styles.desktopBrandPane}>
-            <Text style={styles.brandLogo}>PULSE.</Text>
+            <Text style={styles.brandLogo}>PULSE<Text style={styles.brandLogoDot}>.</Text></Text>
             <Text style={styles.brandTag}>Business Hub Onboarding</Text>
             <Text style={styles.brandTitle}>Build your workspace.</Text>
             <Text style={styles.brandDescription}>
@@ -649,14 +649,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f172a',
   },
   desktopScroll: {
-    paddingHorizontal: 40,
-    paddingVertical: 36,
+    paddingHorizontal: 48,
+    paddingVertical: 48,
   },
   brandLogo: {
     fontSize: 44,
     fontWeight: '900',
     color: Theme.textOnDark,
     marginBottom: 14,
+  },
+  brandLogoDot: {
+    color: Theme.driverPrimary,
   },
   brandTag: {
     fontSize: 11,
@@ -690,8 +693,11 @@ const styles = StyleSheet.create({
     padding: 22,
   },
   formCardDesktop: {
-    backgroundColor: '#020617',
-    borderColor: 'rgba(255,255,255,0.12)',
+    maxWidth: 9999,
+    borderWidth: 0,
+    borderRadius: 0,
+    padding: 0,
+    backgroundColor: 'transparent',
   },
   offlineBanner: {
     position: 'absolute',
