@@ -132,6 +132,18 @@ export function AddTripFormFields({
     });
   }, []);
 
+  const focusFieldAfterModalClose = useCallback(
+    (ref: { current: TextInput | null }) => {
+      // Web modal close/render timing can swallow immediate focus.
+      // Retry shortly after close to make focus reliable.
+      focusField(ref);
+      setTimeout(() => {
+        ref.current?.focus();
+      }, 120);
+    },
+    [focusField],
+  );
+
   const openPickerNext = useCallback((type: "driver" | "vehicle") => {
     requestAnimationFrame(() => {
       setPickerType(type);
@@ -312,11 +324,9 @@ export function AddTripFormFields({
       }
       setters.setSupplierId(id);
       setSupplierDropdownOpen(false);
-      setTimeout(() => {
-        focusField(supplierRateInputRef);
-      }, 0);
+      focusFieldAfterModalClose(supplierRateInputRef);
     },
-    [focusField, setters, state.supplierId],
+    [focusFieldAfterModalClose, setters, state.supplierId],
   );
 
   const scrollBlocked =
