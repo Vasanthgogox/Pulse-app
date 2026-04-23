@@ -55,8 +55,8 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
     resetBarVisible();
   }, [routeName, resetBarVisible]);
 
-  // Ops Agent (index) is full-screen with back button — no bottom nav
-  if (routeName === 'index') {
+  // Ops Agent is full-screen with back button — no bottom nav
+  if (routeName === 'ops-agent') {
     return null;
   }
 
@@ -91,7 +91,7 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
   );
 }
 
-export const unstable_settings = { initialRouteName: 'index' };
+export const unstable_settings = { initialRouteName: 'trips' };
 
 export default function TabLayout() {
   return (
@@ -105,7 +105,8 @@ export default function TabLayout() {
           tabBarStyle: { display: 'none' },
         }}
       >
-        <Tabs.Screen name="index" options={{ title: 'Ops' }} />
+        <Tabs.Screen name="index" options={{ title: 'Home' }} />
+        <Tabs.Screen name="ops-agent" options={{ href: null }} />
         <Tabs.Screen name="finance" options={{ title: 'Fiscal' }} />
         <Tabs.Screen name="trips" options={{ title: 'Trips' }} />
         <Tabs.Screen name="network" options={{ title: 'Network' }} />

@@ -60,7 +60,7 @@ const WEBSITE_HTML = `<!doctype html>
         <a href="#drivers" class="nav-link font-black uppercase text-slate-400 hover:text-emerald-600 transition-colors">Drivers</a>
         <a href="#contracts" class="nav-link font-black uppercase text-slate-400 hover:text-emerald-600 transition-colors">Contracts</a>
       </div>
-      <a href="/sign-in" target="_top" class="px-10 py-3 bg-slate-950 text-white rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 shadow-2xl transition-all">Enter OS</a>
+      <a href="/sign-up" target="_top" class="px-10 py-3 bg-slate-950 text-white rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 shadow-2xl transition-all">Enter OS</a>
     </div>
   </nav>
 
