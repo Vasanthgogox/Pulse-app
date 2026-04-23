@@ -4,7 +4,7 @@
  */
 import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
+import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export interface DocItem {
   id: string;
@@ -20,54 +20,132 @@ interface LRDocumentsSectionProps {
   docs?: DocItem[];
   onUpdateLR?: () => void;
   onAddDocument?: () => void;
+  /** `gallery` — horizontal document cards (reference trip detail UI). */
+  presentation?: "list" | "gallery";
 }
 
 export function LRDocumentsSection({
   docs = [],
   onUpdateLR,
   onAddDocument,
+  presentation = "list",
 }: LRDocumentsSectionProps) {
   const hasDocs = docs.length > 0;
-  const { width } = useWindowDimensions();
-  const isMobile = width < 640;
+  const isGallery = presentation === "gallery";
+  const galleryDistributeRow =
+    isGallery && Platform.OS === "web" && hasDocs && docs.length <= 6;
 
   return (
     <View style={styles.section}>
-      <View style={[styles.sectionHeader, isMobile && styles.sectionHeaderMobile]}>
-        <Text style={styles.sectionTitle}>LR & Documents</Text>
-        <View style={[styles.sectionActions, isMobile && styles.sectionActionsMobile]}>
-          <TouchableOpacity
-            style={[styles.actionBtnPrimary, isMobile && styles.actionBtnFlex]}
-            onPress={onUpdateLR}
-            activeOpacity={0.85}
-          >
-            <FontAwesome name="plus" size={11} color="#fff" />
-            <Text style={styles.actionBtnPrimaryText} numberOfLines={1}>Update LR</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionBtnSecondary, isMobile && styles.actionBtnFlex]}
-            onPress={onAddDocument}
-            activeOpacity={0.85}
-          >
-            <FontAwesome name="plus" size={11} color="#fff" />
-            <Text style={styles.actionBtnSecondaryText} numberOfLines={1}>Add Doc</Text>
-          </TouchableOpacity>
+      {isGallery ? (
+        <View style={styles.galleryHeader}>
+          <View style={styles.galleryHeaderLeft}>
+            <FontAwesome name="paperclip" size={14} color="#9ca3af" />
+            <Text style={styles.galleryHeaderTitle}>DOCUMENTS</Text>
+          </View>
+          <View style={styles.sectionActions}>
+            <TouchableOpacity
+              style={styles.galleryIconBtn}
+              onPress={onUpdateLR}
+              activeOpacity={0.85}
+            >
+              <FontAwesome name="pencil" size={12} color="#64748b" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.galleryIconBtn}
+              onPress={onAddDocument}
+              activeOpacity={0.85}
+            >
+              <FontAwesome name="plus" size={12} color="#64748b" />
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      ) : (
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>LR & Documents</Text>
+          <View style={styles.sectionActions}>
+            <TouchableOpacity
+              style={styles.actionBtnPrimary}
+              onPress={onUpdateLR}
+              activeOpacity={0.85}
+            >
+              <FontAwesome name="plus" size={11} color="#fff" />
+              <Text style={styles.actionBtnPrimaryText}>UPDATE LR</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionBtnSecondary}
+              onPress={onAddDocument}
+              activeOpacity={0.85}
+            >
+              <FontAwesome name="plus" size={11} color="#fff" />
+              <Text style={styles.actionBtnSecondaryText}>Add Document</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       <View style={styles.docArea}>
         {hasDocs ? (
-          <View style={styles.docList}>
-            {docs.map((doc) => (
-              <DocRow key={doc.id} doc={doc} />
-            ))}
-          </View>
+          isGallery ? (
+            galleryDistributeRow ? (
+              <View style={styles.galleryRow}>
+                {docs.map((doc) => (
+                  <GalleryDocCard key={doc.id} doc={doc} rowLayout />
+                ))}
+              </View>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.galleryScroll}
+              >
+                {docs.map((doc) => (
+                  <GalleryDocCard key={doc.id} doc={doc} />
+                ))}
+              </ScrollView>
+            )
+          ) : (
+            <View style={styles.docList}>
+              {docs.map((doc) => (
+                <DocRow key={doc.id} doc={doc} />
+              ))}
+            </View>
+          )
         ) : (
           <EmptyDocs />
         )}
       </View>
     </View>
   );
+}
+
+function GalleryDocCard({ doc, rowLayout }: { doc: DocItem; rowLayout?: boolean }) {
+  const uploaded = doc.status === "Uploaded";
+  const body = (
+    <View style={styles.galleryCardContent}>
+      <FontAwesome name="file-text-o" size={22} color="#9ca3af" />
+      <Text style={styles.galleryCardTitle} numberOfLines={2}>
+        {doc.label.toUpperCase()}
+      </Text>
+      <Text style={styles.galleryCardType}>{doc.type || "FILE"}</Text>
+      <View style={styles.galleryCardSpacer} />
+      <View
+        style={[
+          styles.galleryStatusDot,
+          uploaded ? styles.galleryStatusDotOn : styles.galleryStatusDotOff,
+        ]}
+      />
+    </View>
+  );
+  const cardStyle = [styles.galleryCard, rowLayout && styles.galleryCardRow];
+  if (doc.onView) {
+    return (
+      <TouchableOpacity style={cardStyle} onPress={doc.onView} activeOpacity={0.85}>
+        {body}
+      </TouchableOpacity>
+    );
+  }
+  return <View style={cardStyle}>{body}</View>;
 }
 
 function DocRow({ doc }: { doc: DocItem }) {
@@ -206,6 +284,104 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "#fff",
+  },
+  galleryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+  },
+  galleryHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  galleryHeaderTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#6b7280",
+    letterSpacing: 0.8,
+  },
+  galleryIconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f9fafb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  galleryScroll: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    gap: 12,
+  },
+  galleryRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    gap: 12,
+    justifyContent: "space-between",
+    width: "100%",
+  },
+  galleryCard: {
+    width: 132,
+    minHeight: 148,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: Theme.screenBackground,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    marginRight: 12,
+  },
+  galleryCardRow: {
+    flexGrow: 1,
+    flexBasis: 0,
+    minWidth: 140,
+    maxWidth: 400,
+    marginRight: 0,
+    width: undefined,
+  },
+  galleryCardContent: {
+    width: "100%",
+    minHeight: 120,
+    alignItems: "center",
+  },
+  galleryCardSpacer: {
+    flexGrow: 1,
+    minHeight: 8,
+  },
+  galleryCardTitle: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#111827",
+    textAlign: "center",
+    letterSpacing: 0.2,
+    lineHeight: 14,
+  },
+  galleryCardType: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#9ca3af",
+    textTransform: "uppercase",
+  },
+  galleryStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: "auto",
+  },
+  galleryStatusDotOn: {
+    backgroundColor: "#22c55e",
+  },
+  galleryStatusDotOff: {
+    backgroundColor: "#d1d5db",
   },
   docArea: {
     minHeight: 120,

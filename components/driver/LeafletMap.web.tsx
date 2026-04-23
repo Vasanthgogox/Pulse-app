@@ -110,11 +110,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
 
     useEffect(() => {
       isMountedRef.current = true;
-      if (
-        typeof window === "undefined" ||
-        !mapContainerRef.current ||
-        mapRef.current
-      ) {
+      if (typeof window === "undefined" || mapRef.current) {
         return;
       }
 
@@ -127,74 +123,99 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
       }
 
       let cancelled = false;
-      import("maplibre-gl").then((MapLibreModule) => {
-        if (cancelled || !isMountedRef.current || !mapContainerRef.current)
+      let rafId = 0;
+
+      const mountMap = () => {
+        if (cancelled || !isMountedRef.current || mapRef.current) return;
+        if (!mapContainerRef.current) {
+          rafId = requestAnimationFrame(mountMap);
           return;
-        const maplibregl =
-          (MapLibreModule as { default?: MapLibreModuleLike }).default ??
-          (MapLibreModule as unknown as MapLibreModuleLike);
+        }
 
-        const map = new maplibregl.Map({
-          container: mapContainerRef.current,
-          style: MAP_STYLE,
-          center: [center.longitude, center.latitude],
-          zoom,
-          dragRotate: !lowPower,
-          pitchWithRotate: !lowPower,
-          attributionControl: false,
-        });
+        import("maplibre-gl").then((MapLibreModule) => {
+          if (cancelled || !isMountedRef.current || !mapContainerRef.current || mapRef.current)
+            return;
+          const maplibregl =
+            (MapLibreModule as { default?: MapLibreModuleLike }).default ??
+            (MapLibreModule as unknown as MapLibreModuleLike);
 
-        mapRef.current = map;
+          const map = new maplibregl.Map({
+            container: mapContainerRef.current,
+            style: MAP_STYLE,
+            center: [center.longitude, center.latitude],
+            zoom,
+            dragRotate: !lowPower,
+            pitchWithRotate: !lowPower,
+            attributionControl: false,
+          });
 
-        map.on("load", () => {
-          if (!map.getSource("route-src")) {
-            map.addSource("route-src", {
-              type: "geojson",
-              data: {
-                type: "Feature",
-                geometry: {
-                  type: "LineString",
-                  coordinates: [],
+          mapRef.current = map;
+
+          map.on("load", () => {
+            if (!map.getSource("route-src")) {
+              map.addSource("route-src", {
+                type: "geojson",
+                data: {
+                  type: "Feature",
+                  geometry: {
+                    type: "LineString",
+                    coordinates: [],
+                  },
+                  properties: {},
                 },
-                properties: {},
-              },
-            });
-          }
-          if (!map.getLayer("route-outline")) {
-            map.addLayer({
-              id: "route-outline",
-              type: "line",
-              source: "route-src",
-              paint: {
-                "line-color": `${polylineColor}33`,
-                "line-width": 8,
-              },
-              layout: {
-                "line-cap": "round",
-                "line-join": "round",
-              },
-            });
-          }
-          if (!map.getLayer("route-main")) {
-            map.addLayer({
-              id: "route-main",
-              type: "line",
-              source: "route-src",
-              paint: {
-                "line-color": polylineColor,
-                "line-width": 4,
-              },
-              layout: {
-                "line-cap": "round",
-                "line-join": "round",
-              },
-            });
-          }
+              });
+            }
+            if (!map.getLayer("route-outline")) {
+              map.addLayer({
+                id: "route-outline",
+                type: "line",
+                source: "route-src",
+                paint: {
+                  "line-color": `${polylineColor}33`,
+                  "line-width": 8,
+                },
+                layout: {
+                  "line-cap": "round",
+                  "line-join": "round",
+                },
+              });
+            }
+            if (!map.getLayer("route-main")) {
+              map.addLayer({
+                id: "route-main",
+                type: "line",
+                source: "route-src",
+                paint: {
+                  "line-color": polylineColor,
+                  "line-width": 4,
+                },
+                layout: {
+                  "line-cap": "round",
+                  "line-join": "round",
+                },
+              });
+            }
+            try {
+              map.resize();
+            } catch {
+              // ignore
+            }
+            setTimeout(() => {
+              try {
+                map.resize();
+              } catch {
+                // ignore
+              }
+            }, 120);
+          });
         });
-      });
+      };
+
+      mountMap();
 
       return () => {
         cancelled = true;
+        cancelAnimationFrame(rafId);
         isMountedRef.current = false;
         if (mapRef.current) {
           markersRef.current.forEach((m) => m.remove?.());
