@@ -53,6 +53,10 @@ export interface TripRow {
   started_at: string | null;
   completed_at: string | null;
   load_type: string | null;
+  /** Optional load weight in tons from Add Trip form. */
+  load_tons?: number | null;
+  /** Optional advance amount paid to supplier for this trip. */
+  advance_paid?: number | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -314,6 +318,10 @@ export interface CreateTripData {
   supplier_rate?: number;
   notes?: string | null;
   pickup_date?: string | null;
+  /** Optional load weight in tons (stored in trips.load_tons). */
+  load_tons?: number | null;
+  /** Optional advance paid to supplier (stored in trips.advance_paid). */
+  advance_paid?: number | null;
   supplier_id?: string | null;
   driver_id?: string | null;
   vehicle_id?: string | null;
@@ -728,6 +736,14 @@ export async function createTrip(
 
   const clientPrice = Number(data.client_price) || 0;
   const supplierRate = Number(data.supplier_rate) || 0;
+  const loadTonsRaw = Number(data.load_tons);
+  const loadTons =
+    Number.isFinite(loadTonsRaw) && loadTonsRaw >= 0 ? loadTonsRaw : null;
+  const advancePaidRaw = Number(data.advance_paid);
+  const advancePaid =
+    Number.isFinite(advancePaidRaw) && advancePaidRaw >= 0
+      ? advancePaidRaw
+      : 0;
   const explicitId = normalizeNullableUuid(data.id) ?? undefined;
   const ownerUserId =
     normalizeNullableUuid(data.owner_user_id) ??
@@ -789,6 +805,8 @@ export async function createTrip(
     status: "assigned",
     notes: (data.notes ?? "").trim() || null,
     pickup_date: data.pickup_date ?? null,
+    load_tons: loadTons,
+    advance_paid: advancePaid,
     supplier_id: normalizeNullableUuid(data.supplier_id),
     driver_id: normalizeNullableUuid(data.driver_id),
     vehicle_id: normalizeNullableUuid(data.vehicle_id),
