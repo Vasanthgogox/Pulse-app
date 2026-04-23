@@ -260,6 +260,12 @@ export default function CreateIndentScreen() {
     });
   }, []);
 
+  const openPickupDateNext = useCallback(() => {
+    requestAnimationFrame(() => {
+      setShowDatePicker(true);
+    });
+  }, []);
+
   const cancelActionHintBlurTimer = useCallback(() => {
     if (actionHintBlurTimerRef.current) {
       clearTimeout(actionHintBlurTimerRef.current);
@@ -570,6 +576,7 @@ export default function CreateIndentScreen() {
 
   const handleSelectClient = useCallback(
     (client: ClientRow) => {
+      if (form.client_id === client.id) return;
       const clientName = client.name ?? client.contact_person ?? "";
       if (!clientName.trim()) {
         showDialog(
@@ -584,7 +591,7 @@ export default function CreateIndentScreen() {
       });
       focusField(clientPriceInputRef);
     },
-    [focusField, update],
+    [focusField, form.client_id, showDialog, update],
   );
 
   const handleBackPress = useCallback(() => {
@@ -1319,6 +1326,7 @@ export default function CreateIndentScreen() {
                     placeholderTextColor={Theme.textMuted}
                     keyboardType="decimal-pad"
                     returnKeyType="done"
+                    onSubmitEditing={openPickupDateNext}
                   />
                   {errors.weight ? (
                     <Text style={styles.errorText}>{errors.weight}</Text>
@@ -1539,7 +1547,7 @@ export default function CreateIndentScreen() {
                                       setVehicleTypeIsOther(false);
                                       update({ vehicle_type: opt });
                                       setVehicleTypePickerOpen(false);
-                                      openLoadTypePickerNext();
+                                      if (!selected) openLoadTypePickerNext();
                                     }}
                                     activeOpacity={0.75}
                                   >
@@ -1595,7 +1603,7 @@ export default function CreateIndentScreen() {
                                       setVehicleTypeIsOther(false);
                                       update({ vehicle_type: opt });
                                       setVehicleTypePickerOpen(false);
-                                      openLoadTypePickerNext();
+                                      if (!selected) openLoadTypePickerNext();
                                     }}
                                     activeOpacity={0.75}
                                   >
@@ -1755,7 +1763,7 @@ export default function CreateIndentScreen() {
                                   onPress={() => {
                                     update({ load_type: opt });
                                     setLoadTypePickerOpen(false);
-                                    focusField(weightInputRef);
+                                    if (!selected) focusField(weightInputRef);
                                   }}
                                   activeOpacity={0.75}
                                 >
