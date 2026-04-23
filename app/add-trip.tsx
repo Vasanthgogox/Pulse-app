@@ -59,6 +59,7 @@ export default function AddTripPage() {
         vehicle_display_number: data.vehicle_display_number?.trim() || undefined,
         owner_user_id: profile?.uid ?? userId,
         created_by_user_id: profile?.uid ?? userId,
+        trip_payout_mode: 'market',
       });
       if (error) throw error;
       const advancePaidAgg = Number(data.advance_paid ?? 0);
@@ -105,6 +106,7 @@ export default function AddTripPage() {
       vehicle_id: data.vehicle_id ?? undefined,
       owner_user_id: profile?.uid ?? userId,
       created_by_user_id: profile?.uid ?? userId,
+      trip_payout_mode: options?.supplySource === 'aggregate' ? 'market' : 'asset',
     });
     if (error) throw error;
     if (trip && options?.supplySource === 'aggregate' && options?.driverPhone?.trim()) {

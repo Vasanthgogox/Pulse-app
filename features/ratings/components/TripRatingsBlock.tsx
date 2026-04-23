@@ -656,7 +656,7 @@ export function TripRatingsBlock({
     let rater_id: string;
     if (isClientSupplier) {
       if (trip.client_id) {
-        rater_type = 'client';
+      rater_type = 'client';
         rater_id = trip.client_id;
       } else {
         rater_type = 'organization';
@@ -735,28 +735,28 @@ export function TripRatingsBlock({
     <>
       {displaySupplierAvg != null && (
         <View style={[styles.summaryPill, isWorkspace && styles.wsSummaryPill]}>
-          <Feather name="briefcase" size={12} color={Theme.textPrimaryDark} />
+                    <Feather name="briefcase" size={12} color={Theme.textPrimaryDark} />
           <Text style={[styles.summaryText, isWorkspace && styles.wsSummaryPillText]}>
             Supplier {displaySupplierAvg.toFixed(1)} ★
           </Text>
-        </View>
-      )}
+                  </View>
+                )}
       {displayDriverAvg != null && (
         <View style={[styles.summaryPill, isWorkspace && styles.wsSummaryPill]}>
-          <Feather name="truck" size={12} color={Theme.textPrimaryDark} />
+                    <Feather name="truck" size={12} color={Theme.textPrimaryDark} />
           <Text style={[styles.summaryText, isWorkspace && styles.wsSummaryPillText]}>
             Driver {displayDriverAvg.toFixed(1)} ★
           </Text>
-        </View>
-      )}
-      {clientFeedback != null && (
+                  </View>
+                )}
+                {clientFeedback != null && (
         <View style={[styles.summaryPill, isWorkspace && styles.wsSummaryPill]}>
-          <Feather name="user" size={12} color={Theme.textPrimaryDark} />
+                    <Feather name="user" size={12} color={Theme.textPrimaryDark} />
           <Text style={[styles.summaryText, isWorkspace && styles.wsSummaryPillText]}>
             Client {clientFeedback.score.toFixed(1)} ★
           </Text>
-        </View>
-      )}
+                  </View>
+                )}
     </>
   );
 
@@ -764,14 +764,14 @@ export function TripRatingsBlock({
     ratings.length > 0 ? (
     <View style={[styles.list, isWorkspace && styles.wsList]}>
       {ratings.map((r) => {
-        const parsed = parseCommentPayload(r.comment);
+                    const parsed = parseCommentPayload(r.comment);
         const fromLabel =
           r.rater_type === 'client' ? 'Client' : r.rater_type === 'organization' ? 'Fleet' : 'Supplier';
         const toLabel =
           r.rated_type === 'supplier' ? supplierDisplayName : driverDisplayName;
         const ratedAvatarUri =
           r.rated_type === 'supplier' ? supplierAvatarUri : driverAvatarUri;
-        return (
+                    return (
           <View key={r.id} style={[styles.row, isWorkspace && styles.wsAuditCard]}>
             {isWorkspace ? (
               <View style={styles.wsAuditMainRow}>
@@ -792,35 +792,35 @@ export function TripRatingsBlock({
               <View style={styles.rowTopWithAvatar}>
                 <PartyAvatar uri={ratedAvatarUri} name={toLabel} size={36} />
                 <View style={styles.rowTopTextCol}>
-                  <Text style={styles.rowLabel}>
+                        <Text style={styles.rowLabel}>
                     {fromLabel} → {toLabel}
-                  </Text>
-                  <Text style={styles.rowScore}>{r.score} ★</Text>
+                        </Text>
+                        <Text style={styles.rowScore}>{r.score} ★</Text>
                 </View>
               </View>
             )}
-            {parsed.tags.length > 0 ? (
+                        {parsed.tags.length > 0 ? (
               <View style={[styles.rowTags, isWorkspace && styles.wsRowTags]}>
-                {parsed.tags.map((tagId) => {
-                  const tagLabel = getQuickTagLabel(tagId, r.rated_type);
-                  return (
+                            {parsed.tags.map((tagId) => {
+                              const tagLabel = getQuickTagLabel(tagId, r.rated_type);
+                              return (
                     <View key={`${r.id}-${tagId}`} style={[styles.rowTagChip, isWorkspace && styles.wsTagChip]}>
                       <Text style={[styles.rowTagText, isWorkspace && styles.wsTagChipText]}>{tagLabel}</Text>
-                    </View>
-                  );
-                })}
-              </View>
-            ) : null}
-            {parsed.note ? (
+                                </View>
+                              );
+                            })}
+                          </View>
+                        ) : null}
+                        {parsed.note ? (
               <Text style={[styles.rowComment, isWorkspace && styles.wsRowComment]} numberOfLines={2}>
-                {parsed.note}
-              </Text>
-            ) : null}
+                            {parsed.note}
+                          </Text>
+                        ) : null}
             {!isWorkspace ? <Text style={styles.rowDate}>{formatDate(r.created_at)}</Text> : null}
-          </View>
-        );
+                      </View>
+                    );
       })}
-    </View>
+              </View>
   ) : null;
 
   const clientFeedbackList = clientFeedback != null ? (
@@ -844,32 +844,32 @@ export function TripRatingsBlock({
             <PartyAvatar uri={clientAvatarUri} name={clientDisplayName} size={36} />
             <View style={styles.rowTopTextCol}>
               <Text style={styles.rowLabel}>Supplier → {clientDisplayName}</Text>
-              <Text style={styles.rowScore}>{clientFeedback.score} ★</Text>
+                  <Text style={styles.rowScore}>{clientFeedback.score} ★</Text>
             </View>
           </View>
         )}
-        {clientFeedback.tags.length > 0 ? (
+                  {clientFeedback.tags.length > 0 ? (
           <View style={[styles.rowTags, isWorkspace && styles.wsRowTags]}>
-            {clientFeedback.tags.map((tagId) => {
+                      {clientFeedback.tags.map((tagId) => {
               const tagLabel = CLIENT_RATING_TAGS.find((t) => t.id === tagId)?.label || tagId;
-              return (
+                        return (
                 <View key={`client-${tagId}`} style={[styles.rowTagChip, isWorkspace && styles.wsTagChip]}>
                   <Text style={[styles.rowTagText, isWorkspace && styles.wsTagChipText]}>{tagLabel}</Text>
-                </View>
-              );
-            })}
-          </View>
-        ) : null}
-        {clientFeedback.note ? (
+                          </View>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+                  {clientFeedback.note ? (
           <Text style={[styles.rowComment, isWorkspace && styles.wsRowComment]} numberOfLines={2}>
-            {clientFeedback.note}
-          </Text>
-        ) : null}
+                      {clientFeedback.note}
+                    </Text>
+                  ) : null}
         {!isWorkspace ? (
-          <Text style={styles.rowDate}>{formatDate(clientFeedback.created_at)}</Text>
+                  <Text style={styles.rowDate}>{formatDate(clientFeedback.created_at)}</Text>
         ) : null}
-      </View>
-    </View>
+                </View>
+              </View>
   ) : null;
 
   return (

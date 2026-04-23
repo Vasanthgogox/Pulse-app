@@ -150,6 +150,24 @@ function financeAggregateSupplierLabel(
   return "Aggregate Supplier";
 }
 
+/** Bill-to vs carrier: never show the same display string in Client and Supplier columns for the same row. */
+function financeDisambiguateSupplierColumnLabel(
+  trip: TripRow,
+  supplierResolvedLabel: string,
+  clientResolvedLabel: string,
+): { title: string; sameAsClient: boolean } {
+  const c = (clientResolvedLabel ?? "").trim().toLowerCase();
+  const s = (supplierResolvedLabel ?? "").trim().toLowerCase();
+  const cid = (trip.client_id ?? "").trim().toLowerCase();
+  const sid = (trip.supplier_id ?? "").trim().toLowerCase();
+  const sameIds = Boolean(cid && sid && cid === sid);
+  const sameNames = Boolean(c && s && c === s);
+  if (sameIds || sameNames) {
+    return { title: "Own operations", sameAsClient: true };
+  }
+  return { title: supplierResolvedLabel, sameAsClient: false };
+}
+
 function supplierPartyAvatarPropsFinance(
   trip: TripRow,
   displayName: string,
@@ -3191,10 +3209,21 @@ export function EntityDetailOverlay({
                           (tx) => tx.trip_id === r.id,
                         )
                       : [];
-                  const RowWrapper =
-                    isPartyLedger && isExpandableTrip ? Pressable : TouchableOpacity;
-                  const rowPressProps =
-                    isPartyLedger && isExpandableTrip
+                  const showSupplierWebGrid =
+                    entityType === "SUPPLIER" && isWebDesktop && !isVehicleRow;
+                  const supplierWebRowOpensTrip =
+                    showSupplierWebGrid && isTripRow && tripForRow != null;
+                  const RowWrapper = supplierWebRowOpensTrip
+                    ? TouchableOpacity
+                    : isPartyLedger && isExpandableTrip
+                      ? Pressable
+                      : TouchableOpacity;
+                  const rowPressProps = supplierWebRowOpensTrip
+                    ? {
+                        onPress: () => router.push(`/trip/${r.id}` as const),
+                        activeOpacity: 0.75,
+                      }
+                    : isPartyLedger && isExpandableTrip
                       ? {
                           onPress: () =>
                             setExpandedEntityLedgerRowId((id) =>
@@ -3210,8 +3239,6 @@ export function EntityDetailOverlay({
                           activeOpacity: r.id === "none" ? 1 : 0.7,
                           disabled: r.id === "none",
                         };
-                  const showSupplierWebGrid =
-                    entityType === "SUPPLIER" && isWebDesktop && !isVehicleRow;
                   return (
                     <View key={r.id}>
                       <RowWrapper
@@ -3257,10 +3284,18 @@ export function EntityDetailOverlay({
                                     financeSupplierById,
                                   )
                                 : "Asset / Own Vehicle";
+                              const {
+                                title: supplierColumnTitle,
+                                sameAsClient: supplierColumnSameAsClient,
+                              } = financeDisambiguateSupplierColumnLabel(
+                                t,
+                                supplierNameLabel,
+                                clientNameForUi,
+                              );
                               const supplierAv =
                                 supplierPartyAvatarPropsFinance(
                                   t,
-                                  supplierNameLabel,
+                                  supplierColumnTitle,
                                   financeSupplierById,
                                   financeLinkedOrgDisplayMap,
                                   {},
@@ -3375,7 +3410,7 @@ export function EntityDetailOverlay({
                                   <View style={styles.spWebTdParty}>
                                     <View style={styles.spWebTdPartyAvatarRow}>
                                       <PartyAvatar
-                                        name={supplierNameLabel || "—"}
+                                        name={supplierColumnTitle || "—"}
                                         organizationImageUrl={
                                           supplierAv.organizationImageUrl ??
                                           undefined
@@ -3400,14 +3435,16 @@ export function EntityDetailOverlay({
                                           style={styles.spWebTdPartyTitle}
                                           numberOfLines={1}
                                         >
-                                          {supplierNameLabel}
+                                          {supplierColumnTitle}
                                         </Text>
                                         {isAggregateTrip ? (
                                           <Text
                                             style={styles.spWebTdPartyHint}
                                             numberOfLines={1}
                                           >
-                                            Partner · Margin{" "}
+                                            {supplierColumnSameAsClient
+                                              ? "Same org as client · Margin"
+                                              : "Partner · Margin"}{" "}
                                             {marginPct.toFixed(1)}%
                                           </Text>
                                         ) : supplierRate <= 0 &&
@@ -3760,15 +3797,36 @@ export function EntityDetailOverlay({
                                 )}
                               </>
                             )}
-                        {isPartyLedger && (
-                          <View style={styles.entityLedgerChevronTd}>
-                            <FontAwesome
-                              name={expanded ? "chevron-down" : "chevron-right"}
-                              size={10}
-                              color={Theme.textMutedDemo}
-                            />
-                          </View>
-                        )}
+                        {isPartyLedger &&
+                          (supplierWebRowOpensTrip ? (
+                            <Pressable
+                              style={styles.entityLedgerChevronTd}
+                              hitSlop={12}
+                              onPress={() =>
+                                setExpandedEntityLedgerRowId((id) =>
+                                  id === r.id ? null : r.id,
+                                )
+                              }
+                            >
+                              <FontAwesome
+                                name={
+                                  expanded ? "chevron-down" : "chevron-right"
+                                }
+                                size={10}
+                                color={Theme.textMutedDemo}
+                              />
+                            </Pressable>
+                          ) : (
+                            <View style={styles.entityLedgerChevronTd}>
+                              <FontAwesome
+                                name={
+                                  expanded ? "chevron-down" : "chevron-right"
+                                }
+                                size={10}
+                                color={Theme.textMutedDemo}
+                              />
+                            </View>
+                          ))}
                       </RowWrapper>
                       {isPartyLedger && expanded && isTripRow && tripForRow && (
                         <View style={styles.ledgerExpandedDetail}>
