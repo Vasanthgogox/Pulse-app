@@ -13,6 +13,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -43,13 +44,15 @@ export function AddTripModalLayout({
   children,
 }: AddTripModalLayoutProps) {
   const insets = useSafeAreaInsets();
+  const { width: winW } = useWindowDimensions();
+  const isCompactMobile = winW < 480;
   const submitDisabled = !canSubmit || submitting;
   const showHeaderActions = !showFooter;
 
   return (
     <View style={styles.container}>
-      <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
-        <View style={styles.topBarMain}>
+      <View style={[styles.topBar, isCompactMobile && styles.topBarCompact, { paddingTop: insets.top + 10 }]}>
+        <View style={[styles.topBarMain, isCompactMobile && styles.topBarMainCompact]}>
           <View style={styles.topBarLeft}>
             <TouchableOpacity style={styles.topBarBackBtn} onPress={onClose} activeOpacity={0.85}>
               <FontAwesome name="chevron-left" size={16} color={Theme.textPrimaryDark} />
@@ -60,7 +63,7 @@ export function AddTripModalLayout({
             </View>
           </View>
           {showHeaderActions ? (
-            <View style={styles.topBarActions}>
+            <View style={[styles.topBarActions, isCompactMobile && styles.topBarActionsCompact]}>
               <TouchableOpacity style={styles.topBarCancelBtn} onPress={onClose} activeOpacity={0.85}>
                 <Text style={styles.topBarCancelText}>Cancel</Text>
               </TouchableOpacity>
@@ -83,10 +86,10 @@ export function AddTripModalLayout({
       
       <KeyboardAvoidingView
         style={styles.keyboardWrap}
-        behavior={Platform.OS === "ios" ? "padding" : "padding"}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={0}
       >
-        <View style={[styles.body, { paddingBottom: Layout.sectionSpacing }]}>
+        <View style={[styles.body, isCompactMobile && styles.bodyCompact, { paddingBottom: Layout.sectionSpacing + insets.bottom }]}>
           {children}
         </View>
 
@@ -163,11 +166,17 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
+  topBarCompact: {
+    paddingHorizontal: 10,
+  },
   topBarMain: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
+  },
+  topBarMainCompact: {
+    alignItems: "flex-start",
   },
   topBarLeft: {
     flex: 1,
@@ -211,6 +220,11 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     gap: 8,
   },
+  topBarActionsCompact: {
+    width: "100%",
+    justifyContent: "flex-end",
+    marginTop: 8,
+  },
   topBarCancelBtn: {
     minHeight: 38,
     paddingVertical: 9,
@@ -253,6 +267,10 @@ const styles = StyleSheet.create({
     minHeight: 0,
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 12,
+  },
+  bodyCompact: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
   },
   footer: {
     marginTop: 8,

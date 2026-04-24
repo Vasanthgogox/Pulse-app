@@ -141,6 +141,7 @@ export function AddTripFormFields({
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: winW } = useWindowDimensions();
+  const isCompactMobile = winW < 480;
   const isWide = winW >= 720;
   const isDesktopPreview = winW >= 1180;
   const showFloatingPreview = winW >= 480 && !isDesktopPreview;
@@ -361,6 +362,14 @@ export function AddTripFormFields({
   const availableVehicles = vehicles.filter(
     (v) => !vehicleIdsOnActiveTrip.includes(v.id),
   );
+  const driverOptions = drivers.map((d) => ({
+    ...d,
+    isBusy: driverIdsOnActiveTrip.includes(d.id),
+  }));
+  const vehicleOptions = vehicles.map((v) => ({
+    ...v,
+    isBusy: vehicleIdsOnActiveTrip.includes(v.id),
+  }));
 
   const scrollBlocked = pickupDropdownOpen || dropDropdownOpen;
 
@@ -390,25 +399,29 @@ export function AddTripFormFields({
         ]}
         showsVerticalScrollIndicator
         keyboardShouldPersistTaps="handled"
-        scrollEnabled={!scrollBlocked}
+        scrollEnabled={isCompactMobile ? true : !scrollBlocked}
       >
         <View
           style={[
             styles.contentMax,
             {
-              paddingHorizontal: isWide ? 24 : Layout.screenPaddingHorizontal,
+              paddingHorizontal: isWide
+                ? 24
+                : isCompactMobile
+                  ? 0
+                  : Layout.screenPaddingHorizontal,
             },
           ]}
         >
           <View style={[styles.mainGrid, isDesktopPreview && styles.mainGridDesktop]}>
             <View style={styles.formColumn}>
           {/* 01 Route */}
-          <View style={styles.card}>
+          <View style={[styles.card, isCompactMobile && styles.cardCompact]}>
             <View style={styles.cardHead}>
               <View style={styles.stepBadge}>
                 <Text style={styles.stepBadgeText}>01</Text>
               </View>
-              <Text style={styles.cardTitle}>Route Details</Text>
+              <Text style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}>Route Details</Text>
             </View>
 
             <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
@@ -631,12 +644,12 @@ export function AddTripFormFields({
           </View>
 
           {/* 02 Client & Commercials */}
-          <View style={styles.card}>
+          <View style={[styles.card, isCompactMobile && styles.cardCompact]}>
             <View style={styles.cardHead}>
               <View style={styles.stepBadge}>
                 <Text style={styles.stepBadgeText}>02</Text>
               </View>
-              <Text style={styles.cardTitle}>Client & Commercials</Text>
+              <Text style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}>Client & Commercials</Text>
             </View>
 
             <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
@@ -837,12 +850,12 @@ export function AddTripFormFields({
           </View>
 
           {/* 03 Supply & Allocation */}
-          <View style={styles.card}>
+          <View style={[styles.card, isCompactMobile && styles.cardCompact]}>
             <View style={styles.cardHead}>
               <View style={styles.stepBadge}>
                 <Text style={styles.stepBadgeText}>03</Text>
               </View>
-              <Text style={styles.cardTitle}>Supply & Allocation</Text>
+              <Text style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}>Supply & Allocation</Text>
             </View>
 
             <View style={styles.segment}>
@@ -936,7 +949,7 @@ export function AddTripFormFields({
                     <Text style={styles.warnBannerText}>
                       {drivers.length === 0
                         ? "No drivers yet. Add drivers from Drivers first."
-                        : "All drivers are on a trip. Enable Assign later or retry when someone is free."}
+                        : "Some drivers are currently on active trips. Select an available driver or use Assign later."}
                     </Text>
                   </View>
                 ) : null}
@@ -948,7 +961,7 @@ export function AddTripFormFields({
                     <Text style={styles.warnBannerText}>
                       {vehicles.length === 0
                         ? "No vehicles yet. Add vehicles from Vehicles first."
-                        : "All vehicles are on active trips. Assign later or retry later."}
+                        : "Vehicles marked 'On trip' are currently busy. Choose an available vehicle or use Assign later."}
                     </Text>
                   </View>
                 ) : null}
@@ -982,16 +995,92 @@ export function AddTripFormFields({
                       </View>
                       {fleetLoading ? (
                         <ActivityIndicator color={Theme.iconPrimary} />
+                      ) : isCompactMobile ? (
+                        <View style={styles.mobileListWrap}>
+                          {driverOptions.length === 0 ? (
+                            <View style={styles.emptyListCard}>
+                              <Text style={styles.emptyListText}>
+                                No drivers added yet. Add a driver to continue.
+                              </Text>
+                            </View>
+                          ) : (
+                            driverOptions.map((d) => {
+                              const selected = state.driverId === d.id;
+                              const sub = [d.phone, d.email].filter(Boolean).join(" · ");
+                              return (
+                                <TouchableOpacity
+                                  key={d.id}
+                                  style={[
+                                    styles.clientCard,
+                                    styles.clientCardMobile,
+                                    d.isBusy && styles.clientCardDisabled,
+                                    selected && styles.clientCardOn,
+                                    Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null,
+                                  ]}
+                                  onPress={() => {
+                                    if (d.isBusy) return;
+                                    setters.setDriverId(selected ? null : d.id);
+                                  }}
+                                  disabled={d.isBusy}
+                                  activeOpacity={0.85}
+                                >
+                                  <View style={styles.clientMain}>
+                                    <PartyAvatar
+                                      name={d.name ?? "Driver"}
+                                      avatarUrl={(d as { avatar_url?: string | null }).avatar_url ?? null}
+                                      avatarSeed={(d as { avatar_seed?: string | null }).avatar_seed ?? null}
+                                      entityType="driver"
+                                      size={38}
+                                      borderStyle={selected ? styles.clientAvatarOn : styles.clientAvatar}
+                                    />
+                                    <View style={{ flex: 1, minWidth: 0 }}>
+                                      <Text style={[styles.clientName, selected && styles.clientNameOn]} numberOfLines={1}>
+                                        {d.name || "—"}
+                                      </Text>
+                                      {sub ? <Text style={styles.clientSub} numberOfLines={1}>{sub}</Text> : null}
+                                    </View>
+                                  </View>
+                                {d.isBusy ? (
+                                  <View style={styles.busyPill}>
+                                    <Text style={styles.busyPillText}>On trip</Text>
+                                  </View>
+                                ) : (
+                                  <View style={[styles.radioOuter, selected && styles.radioOuterOn]}>
+                                    {selected ? <CheckCircle2 size={16} color={Theme.iconPrimary} /> : null}
+                                  </View>
+                                )}
+                                </TouchableOpacity>
+                              );
+                            })
+                          )}
+                        </View>
                       ) : (
-                        <ScrollView style={styles.clientList} nestedScrollEnabled keyboardShouldPersistTaps="handled">
-                          {availableDrivers.map((d) => {
+                        <ScrollView
+                          style={[
+                            styles.clientList,
+                            isCompactMobile && styles.clientListCompact,
+                          ]}
+                          nestedScrollEnabled={!isCompactMobile}
+                          scrollEnabled={!isCompactMobile}
+                          keyboardShouldPersistTaps="handled"
+                        >
+                          {driverOptions.map((d) => {
                             const selected = state.driverId === d.id;
                             const sub = [d.phone, d.email].filter(Boolean).join(" · ");
                             return (
                               <TouchableOpacity
                                 key={d.id}
-                                style={[styles.clientCard, selected && styles.clientCardOn, Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null]}
-                                onPress={() => setters.setDriverId(selected ? null : d.id)}
+                                style={[
+                                  styles.clientCard,
+                                  d.isBusy && styles.clientCardDisabled,
+                                  selected && styles.clientCardOn,
+                                  Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null,
+                                ]}
+                                onPress={() => {
+                                  if (d.isBusy) return;
+                                  setters.setDriverId(selected ? null : d.id);
+                                }}
+                                disabled={d.isBusy}
                                 activeOpacity={0.85}
                               >
                                 <View style={styles.clientMain}>
@@ -1010,9 +1099,15 @@ export function AddTripFormFields({
                                     {sub ? <Text style={styles.clientSub} numberOfLines={1}>{sub}</Text> : null}
                                   </View>
                                 </View>
-                                <View style={[styles.radioOuter, selected && styles.radioOuterOn]}>
-                                  {selected ? <CheckCircle2 size={16} color={Theme.iconPrimary} /> : null}
-                                </View>
+                                {d.isBusy ? (
+                                  <View style={styles.busyPill}>
+                                    <Text style={styles.busyPillText}>On trip</Text>
+                                  </View>
+                                ) : (
+                                  <View style={[styles.radioOuter, selected && styles.radioOuterOn]}>
+                                    {selected ? <CheckCircle2 size={16} color={Theme.iconPrimary} /> : null}
+                                  </View>
+                                )}
                               </TouchableOpacity>
                             );
                           })}
@@ -1046,17 +1141,89 @@ export function AddTripFormFields({
                       </View>
                       {fleetLoading ? (
                         <ActivityIndicator color={Theme.iconPrimary} />
+                      ) : isCompactMobile ? (
+                        <View style={styles.mobileListWrap}>
+                          {vehicleOptions.length === 0 ? (
+                            <View style={styles.emptyListCard}>
+                              <Text style={styles.emptyListText}>
+                                No vehicles added yet. Add a vehicle to continue.
+                              </Text>
+                            </View>
+                          ) : (
+                            vehicleOptions.map((v) => {
+                              const selected = state.vehicleId === v.id;
+                              const primary = formatIndianVehicleNumber(v.vehicle_number || "") || "—";
+                              const secondary = [v.vehicle_body_type || v.vehicle_type, [v.vehicle_size, v.vehicle_axle].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
+                              return (
+                                <TouchableOpacity
+                                  key={v.id}
+                                  style={[
+                                    styles.clientCard,
+                                    styles.clientCardMobile,
+                                    v.isBusy && styles.clientCardDisabled,
+                                    selected && styles.clientCardOn,
+                                    Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null,
+                                  ]}
+                                  onPress={() => {
+                                    if (v.isBusy) return;
+                                    setters.setVehicleId(selected ? null : v.id);
+                                  }}
+                                  disabled={v.isBusy}
+                                  activeOpacity={0.85}
+                                >
+                                  <View style={styles.clientMain}>
+                                    <View style={styles.vehicleCardIcon}>
+                                      <Truck size={18} color={Theme.iconPrimary} />
+                                    </View>
+                                    <View style={{ flex: 1, minWidth: 0 }}>
+                                      <Text style={[styles.clientName, selected && styles.clientNameOn]} numberOfLines={1}>
+                                        {primary}
+                                      </Text>
+                                      {secondary ? <Text style={styles.clientSub} numberOfLines={1}>{secondary.toUpperCase()}</Text> : null}
+                                    </View>
+                                  </View>
+                                {v.isBusy ? (
+                                  <View style={styles.busyPill}>
+                                    <Text style={styles.busyPillText}>On trip</Text>
+                                  </View>
+                                ) : (
+                                  <View style={[styles.radioOuter, selected && styles.radioOuterOn]}>
+                                    {selected ? <CheckCircle2 size={16} color={Theme.iconPrimary} /> : null}
+                                  </View>
+                                )}
+                                </TouchableOpacity>
+                              );
+                            })
+                          )}
+                        </View>
                       ) : (
-                        <ScrollView style={styles.clientList} nestedScrollEnabled keyboardShouldPersistTaps="handled">
-                          {availableVehicles.map((v) => {
+                        <ScrollView
+                          style={[
+                            styles.clientList,
+                            isCompactMobile && styles.clientListCompact,
+                          ]}
+                          nestedScrollEnabled={!isCompactMobile}
+                          scrollEnabled={!isCompactMobile}
+                          keyboardShouldPersistTaps="handled"
+                        >
+                          {vehicleOptions.map((v) => {
                             const selected = state.vehicleId === v.id;
                             const primary = formatIndianVehicleNumber(v.vehicle_number || "") || "—";
                             const secondary = [v.vehicle_body_type || v.vehicle_type, [v.vehicle_size, v.vehicle_axle].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
                             return (
                               <TouchableOpacity
                                 key={v.id}
-                                style={[styles.clientCard, selected && styles.clientCardOn, Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null]}
-                                onPress={() => setters.setVehicleId(selected ? null : v.id)}
+                                style={[
+                                  styles.clientCard,
+                                  v.isBusy && styles.clientCardDisabled,
+                                  selected && styles.clientCardOn,
+                                  Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null,
+                                ]}
+                                onPress={() => {
+                                  if (v.isBusy) return;
+                                  setters.setVehicleId(selected ? null : v.id);
+                                }}
+                                disabled={v.isBusy}
                                 activeOpacity={0.85}
                               >
                                 <View style={styles.clientMain}>
@@ -1070,9 +1237,15 @@ export function AddTripFormFields({
                                     {secondary ? <Text style={styles.clientSub} numberOfLines={1}>{secondary.toUpperCase()}</Text> : null}
                                   </View>
                                 </View>
-                                <View style={[styles.radioOuter, selected && styles.radioOuterOn]}>
-                                  {selected ? <CheckCircle2 size={16} color={Theme.iconPrimary} /> : null}
-                                </View>
+                                {v.isBusy ? (
+                                  <View style={styles.busyPill}>
+                                    <Text style={styles.busyPillText}>On trip</Text>
+                                  </View>
+                                ) : (
+                                  <View style={[styles.radioOuter, selected && styles.radioOuterOn]}>
+                                    {selected ? <CheckCircle2 size={16} color={Theme.iconPrimary} /> : null}
+                                  </View>
+                                )}
                               </TouchableOpacity>
                             );
                           })}
@@ -1382,12 +1555,12 @@ export function AddTripFormFields({
           </View>
 
           {/* 04 Notes */}
-          <View style={styles.card}>
+          <View style={[styles.card, isCompactMobile && styles.cardCompact]}>
             <View style={styles.cardHead}>
               <View style={styles.stepBadge}>
                 <Text style={styles.stepBadgeText}>04</Text>
               </View>
-              <Text style={styles.cardTitle}>Notes & Instructions</Text>
+              <Text style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}>Notes & Instructions</Text>
             </View>
             <View style={styles.iconField}>
               <FileText
@@ -1736,6 +1909,11 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  cardCompact: {
+    padding: 14,
+    borderRadius: 16,
+    marginBottom: 14,
+  },
   cardHead: {
     flexDirection: "row",
     alignItems: "center",
@@ -1765,6 +1943,10 @@ const styles = StyleSheet.create({
     letterSpacing: -0.45,
     fontStyle: "italic",
     textTransform: "uppercase",
+  },
+  cardTitleCompact: {
+    fontSize: 17,
+    letterSpacing: -0.25,
   },
   gridRow: { gap: 14 },
   gridRowWide: { flexDirection: "row", alignItems: "stretch", gap: 20 },
@@ -2085,6 +2267,46 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
   },
   clientList: { maxHeight: 280 },
+  clientListCompact: { maxHeight: undefined },
+  mobileListWrap: {
+    gap: 10,
+    marginBottom: 2,
+  },
+  emptyListCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  emptyListText: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "600",
+    color: Theme.textMuted,
+  },
+  clientCardMobile: {
+    marginBottom: 0,
+  },
+  clientCardDisabled: {
+    opacity: 0.6,
+  },
+  busyPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceLight,
+  },
+  busyPillText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
   clientCard: {
     flexDirection: "row",
     alignItems: "center",

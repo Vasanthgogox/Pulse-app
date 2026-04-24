@@ -14,12 +14,15 @@ import { useClientsForTrip } from "./useClientsForTrip";
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
 import { regenerateTripOtp } from "@/features/trips/services/tripOtp.service";
+import { useWindowDimensions } from "react-native";
 
 export function AddTripModal({
   organizationId,
   onClose,
   onComplete,
 }: AddTripModalProps) {
+  const { width: windowWidth } = useWindowDimensions();
+  const showStickyFooter = windowWidth < 480;
   const form = useAddTripForm();
   const [submitting, setSubmitting] = useState(false);
   const [createdResult, setCreatedResult] = useState<AddTripCompleteResult | null>(null);
@@ -119,7 +122,7 @@ export function AddTripModal({
       submitLabel="Create Trip"
       canSubmit={form.canSubmit}
       submitting={submitting}
-      showFooter={false}
+      showFooter={showStickyFooter}
       onClose={onClose}
       onSubmit={handleSubmit}
     >
