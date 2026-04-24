@@ -113,21 +113,25 @@ Use for decisions: sell asset, replace driver, adjust rate.
 
 ## 7. Ledger Entry Data Model (Target)
 
-Each ledger entry should support (or be interpretable as):
+Each ledger entry answers **Who / Why / How** and should support (or be interpretable as):
+
+- **Who:** `entity_type` + `entity_id` → today mapped from `contact_type` + `contact_id` (client | supplier | driver); vehicle / garage lines use `vehicle_number` and category in `description`.
+- **Why:** `trip_id` (recommended, optional) + **category** (first segment of `description`, e.g. Trip Payment, Fuel).
+- **How:** **payment mode** + optional **reference** → stored in `description` as `| Mode: …` and `| UTR: …` (reference omitted for Cash). Helpers: `features/finance/ledger/ledgerEntryModel.ts` (`buildLedgerSyncDescriptionLine`, `interpretLedgerRowStructured`).
+
+Unified shape (logical; DB may evolve):
 
 - `entry_id`
 - `entity_type` (customer / supplier / driver / vehicle)
 - `entity_id`
 - `trip_id` (nullable)
-- `debit_account`
-- `credit_account`
-- `amount`
-- `transaction_type`
+- `transaction_type` (receivable | payable | expense) — infer: Cash IN → receivable; Cash OUT + driver/supplier → payable; vehicle-style expense → expense
+- `category`, `payment_mode`, `reference_number`, optional `notes`
 - `created_by` · `created_at` · `status`
 
 **Do not store only balance.** Store full transaction history; **balance must be computed**.
 
-Current `transactions` table (amount_in, amount_out, contact_id, contact_type, description) is the single-entry surface; see `features/finance/accounting/accountingModel.ts` for the mapping to double-entry accounts.
+Current `transactions` table (`amount_in`, `amount_out`, `contact_id`, `contact_type`, `trip_id`, `description`, optional `vehicle_number` / `driver_name` when present) plus optional **`ledger_entity_type`**, **`ledger_flow_type`**, **`ledger_category`** (migration `20260423190000_transactions_ledger_meta_columns.sql`) is the single-entry surface; see `features/finance/accounting/accountingModel.ts` for double-entry mapping. `createLedgerEntry` fills meta from `interpretLedgerRowStructured` when columns exist.
 
 ---
 

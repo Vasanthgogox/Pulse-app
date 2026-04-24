@@ -48,7 +48,7 @@ export interface UseFinanceEntitiesResult {
   /** Trips from other orgs where this org is the supplier/carrier (load-board + direct trips). */
   tripsWhereOrgIsSupplier: TripRow[];
   supplierRows: SupplierRow[];
-  suppliersList: { id: string; name: string }[];
+  suppliersList: PartyOption[];
   vehicleRows: VehicleRow[];
   driverRows: DriverRow[];
   driverOffers: Record<string, DriverOffer>;
@@ -141,6 +141,10 @@ export function useFinanceEntities({
       clientRows.map((c) => ({
         id: c.id,
         name: c.name || c.contact_person || "",
+        linked_organization_id: c.linked_organization_id ?? null,
+        is_integrated: c.is_integrated === true,
+        avatar_url: c.avatar_url ?? null,
+        avatar_seed: c.avatar_seed ?? null,
       })),
     [clientRows]
   );
@@ -159,6 +163,17 @@ export function useFinanceEntities({
         route_label:
           [t.pickup_area, t.drop_location].filter(Boolean).join(" → ") || null,
         trip_date: formatLedgerDate(t.pickup_date || t.created_at),
+        organization_id: t.organization_id ?? null,
+        supplier_name: t.supplier_name ?? null,
+        driver_display_name: t.driver_display_name ?? null,
+        client_price: t.client_price ?? null,
+        supplier_rate: t.supplier_rate ?? null,
+        driver_commission: t.driver_commission ?? null,
+        distance: t.distance ?? null,
+        is_cross_org_supplier: false,
+        trip_payout_mode: t.trip_payout_mode ?? null,
+        status: t.status ?? null,
+        completed_at: t.completed_at ?? null,
       })),
     [tripRows]
   );
@@ -172,6 +187,10 @@ export function useFinanceEntities({
             (s as { name?: string }).name ||
             s.contact_person ||
             ""),
+        linked_organization_id: s.linked_organization_id ?? null,
+        supplier_type: s.supplier_type ?? null,
+        avatar_url: s.avatar_url ?? null,
+        avatar_seed: s.avatar_seed ?? null,
       })),
     [supplierRows]
   );

@@ -22,6 +22,10 @@ import type { LedgerRow } from '../services/finance.service';
 import { type FinancialRowData } from "./FinancialRow";
 import { FinanceEntryDetailScreen } from "./FinanceEntryDetailScreen";
 import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
+import {
+  getLedgerFlowForRow,
+  LedgerFlowChip,
+} from "@/features/finance/components/LedgerFlowChip";
 
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
@@ -207,6 +211,9 @@ function KanbanCard({
         </View>
 
         <View style={styles.rightCol}>
+          {getLedgerFlowForRow(row) ? (
+            <LedgerFlowChip row={row} compact />
+          ) : null}
           {tripIdOnly && (
             <TouchableOpacity
               style={styles.tripPillWithCheck}

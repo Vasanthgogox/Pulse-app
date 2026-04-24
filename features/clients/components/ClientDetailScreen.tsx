@@ -84,6 +84,27 @@ function isUuidLikeString(value: string | null | undefined): boolean {
   );
 }
 
+function normPartyKey(name: string | null | undefined): string {
+  return (name || "").trim().toLowerCase();
+}
+
+/** Bill-to vs carrier: avoid duplicating the client name in the Supplier column. */
+function clientDetailSupplierColumnTitle(
+  trip: TripRow,
+  aggregateSupplier: string,
+  billToClientName: string,
+): { title: string; sameAsClient: boolean } {
+  const cid = (trip.client_id ?? "").trim().toLowerCase();
+  const sid = (trip.supplier_id ?? "").trim().toLowerCase();
+  const sameIds = Boolean(cid && sid && cid === sid);
+  const sameNames =
+    normPartyKey(aggregateSupplier) === normPartyKey(billToClientName);
+  if (sameIds || sameNames) {
+    return { title: "Own operations", sameAsClient: true };
+  }
+  return { title: aggregateSupplier, sameAsClient: false };
+}
+
 /**
  * When the same trip exists as org-owned row and as supplier-RPC row, we previously kept only the owner
  * copy — `get_trips_where_org_is_supplier` often carries supplier_name / supplier_id the owner row lacks.
@@ -1050,6 +1071,8 @@ export default function ClientDetailScreen({
   );
   const tripTableReport = useMemo(() => {
     if (detailSubTab !== "trips") return undefined;
+    const billTo =
+      client?.name || client?.contact_person || t("client");
     const rows = missionRows.map((row) => {
       const key = String(row.trip.id).trim().toLowerCase();
       const meta = tripTransactionMetaById[key] ?? { count: 0, lastTxnDate: null };
@@ -1063,6 +1086,11 @@ export default function ClientDetailScreen({
       const supplierName = isAggregateTrip
         ? aggregateSupplierLabel(row.trip)
         : "Asset / Own Vehicle";
+      const { title: supplierForReport } = clientDetailSupplierColumnTitle(
+        row.trip,
+        supplierName,
+        billTo,
+      );
       const cost = supplierRate > 0 ? supplierRate : expenseCaptured;
       const pnl = row.sales - cost;
       const margin = row.sales > 0 ? `${((pnl / row.sales) * 100).toFixed(1)}%` : "0.0%";
@@ -1070,7 +1098,7 @@ export default function ClientDetailScreen({
         trip: row.missionId,
         route: row.route,
         model: isAggregateTrip ? "Aggregate" : "Asset",
-        supplier: supplierName,
+        supplier: supplierForReport,
         sales: formatINR(row.sales),
         cost: formatINR(cost),
         pnl: formatINR(pnl),
@@ -1100,8 +1128,11 @@ export default function ClientDetailScreen({
     };
   }, [
     aggregateSupplierLabel,
+    client?.contact_person,
+    client?.name,
     detailSubTab,
     missionRows,
+    t,
     tripTransactionMetaById,
     tripExpenseById,
   ]);
@@ -1443,6 +1474,14 @@ export default function ClientDetailScreen({
                     const supplierName = isAggregateTrip
                       ? aggregateSupplierLabel(row.trip)
                       : "Asset / Own Vehicle";
+                    const {
+                      title: supplierColumnTitle,
+                      sameAsClient: supplierColumnSameAsClient,
+                    } = clientDetailSupplierColumnTitle(
+                      row.trip,
+                      supplierName,
+                      clientName,
+                    );
                     const expenseCaptured =
                       tripExpenseById[String(row.trip.id).trim().toLowerCase()] ?? 0;
                     const supplierRate = Number(row.trip.supplier_rate ?? 0);
@@ -1452,7 +1491,7 @@ export default function ClientDetailScreen({
                     const tripDateIso = row.trip.pickup_date ?? row.trip.created_at;
                     const supplierAv = supplierPartyAvatarProps(
                       row.trip,
-                      supplierName,
+                      supplierColumnTitle,
                       supplierById,
                       linkedOrgDisplayMap,
                       partnerOrgBrandingByOrgId,
@@ -1542,12 +1581,16 @@ export default function ClientDetailScreen({
                         />
                         <View style={styles.tdPartyTextStack}>
                           <Text style={styles.tdPartyWebDesktop} numberOfLines={1}>
-                            {supplierName}
+                            {supplierColumnTitle}
                           </Text>
                           {isAggregateTrip ? (
                             <Text style={styles.tdPartyHintWebDesktop} numberOfLines={1}>
-                              {isLoadBasedTrip(row.trip) ? "Partner" : "Aggregate"} · Margin{" "}
-                              {marginPct.toFixed(1)}%
+                              {supplierColumnSameAsClient
+                                ? "Same org as client"
+                                : isLoadBasedTrip(row.trip)
+                                  ? "Partner"
+                                  : "Aggregate"}{" "}
+                              · Margin {marginPct.toFixed(1)}%
                             </Text>
                           ) : supplierRate <= 0 && expenseCaptured > 0 ? (
                             <Text style={styles.tdPartyHintWebDesktop} numberOfLines={1}>
