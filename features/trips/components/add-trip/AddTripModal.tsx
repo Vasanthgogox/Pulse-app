@@ -91,6 +91,7 @@ export function AddTripModal({
         submitLabel="Done"
         canSubmit={true}
         submitting={false}
+        primaryActionMode="footer"
         onClose={handleDone}
         onSubmit={handleDone}
       >
@@ -122,7 +123,7 @@ export function AddTripModal({
       submitLabel="Create Trip"
       canSubmit={form.canSubmit}
       submitting={submitting}
-      showFooter={showStickyFooter}
+      primaryActionMode={showStickyFooter ? "footer" : "content"}
       onClose={onClose}
       onSubmit={handleSubmit}
     >
@@ -136,6 +137,7 @@ export function AddTripModal({
         onSubmit={handleSubmit}
         canSubmit={form.canSubmit}
         submitting={submitting}
+        showInlineCta={!showStickyFooter}
       />
     </AddTripModalLayout>
   );

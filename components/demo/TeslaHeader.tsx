@@ -1,11 +1,12 @@
 /**
- * Demo-exact header: title, subtitle, optional back, Globe / Bell / Avatar.
- * Matches demo2 TeslaHeader 100%.
+ * Demo header aligned to Q-unified-base mobile header language.
+ * Branded left lockup + right utility cluster (escrow, bell, profile).
  */
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWallet } from '@/contexts/WalletContext';
 import { useState, useEffect } from 'react';
 import { getSignedAvatarUrl } from '@/lib/avatarUpload';
 import { DEFAULT_USER_2D_AVATAR_SEED, getUser2DAvatarUriForSeed } from '@/constants/UserAvatars';
@@ -29,7 +30,17 @@ export function TeslaHeader({
   onProfileClick,
 }: TeslaHeaderProps) {
   const { profile } = useAuth();
+  const { balance } = useWallet();
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
+  const displayName = (profile?.full_name ?? profile?.displayName ?? 'User').trim();
+  const initials =
+    displayName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join('') || 'U';
+  const escrowFormatted = balance > 0 ? `₹${(balance / 1000).toFixed(1)}K` : '₹45.2K';
 
   useEffect(() => {
     let mounted = true;
@@ -66,7 +77,11 @@ export function TeslaHeader({
             <FontAwesome name="chevron-left" size={18} color={Theme.textPrimaryDark} />
           </TouchableOpacity>
         )}
+        <View style={styles.logoBadge}>
+          <FontAwesome name="terminal" size={11} color={Theme.textPrimaryDark} />
+        </View>
         <View style={styles.titleBlock}>
+          <Text style={styles.brandText} numberOfLines={1}>Qu.</Text>
           <Text style={styles.title} numberOfLines={1}>{title}</Text>
           {subtitle != null && subtitle !== '' && (
             <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>
@@ -74,6 +89,10 @@ export function TeslaHeader({
         </View>
       </View>
       <View style={styles.icons}>
+        <TouchableOpacity style={styles.escrowWrap} hitSlop={8} disabled>
+          <Text style={styles.escrowLabel}>Escrow</Text>
+          <Text style={styles.escrowValue}>{escrowFormatted}</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={onNetworkClick} style={styles.iconBtn} hitSlop={8} activeOpacity={0.7}>
           <FontAwesome name="globe" size={15} color={Theme.textPrimaryDark} />
         </TouchableOpacity>
@@ -88,7 +107,7 @@ export function TeslaHeader({
             {profileAvatarUri ? (
               <Image source={{ uri: profileAvatarUri }} style={styles.avatarImage} />
             ) : (
-              <FontAwesome name="user" size={12} color={Theme.textMutedDemo} />
+              <Text style={styles.avatarInitials}>{initials}</Text>
             )}
           </TouchableOpacity>
         ) : (
@@ -96,7 +115,7 @@ export function TeslaHeader({
             {profileAvatarUri ? (
               <Image source={{ uri: profileAvatarUri }} style={styles.avatarImage} />
             ) : (
-              <FontAwesome name="user" size={12} color={Theme.textMutedDemo} />
+              <Text style={styles.avatarInitials}>{initials}</Text>
             )}
           </View>
         )}
@@ -118,13 +137,33 @@ const styles = StyleSheet.create({
   },
   left: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 },
   backBtn: { padding: 4 },
-  titleBlock: {},
-  title: {
-    fontSize: 12,
-    fontWeight: '700',
+  logoBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.surfaceForm,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    marginRight: 2,
+  },
+  titleBlock: { minWidth: 0, flexShrink: 1 },
+  brandText: {
+    fontSize: 11,
+    fontWeight: '900',
     color: Theme.textPrimaryDark,
     textTransform: 'uppercase',
     letterSpacing: -0.2,
+    fontStyle: 'italic',
+    marginBottom: 1,
+  },
+  title: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+    textTransform: 'uppercase',
+    letterSpacing: 1.1,
   },
   subtitle: {
     fontSize: 7,
@@ -134,7 +173,33 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginTop: 2,
   },
-  icons: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  icons: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  escrowWrap: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    backgroundColor: Theme.surfaceForm,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  escrowLabel: {
+    fontSize: 8,
+    lineHeight: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    color: Theme.textMutedDemo,
+  },
+  escrowValue: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: '900',
+    color: Theme.primary,
+    marginTop: 1,
+  },
   iconBtn: { padding: 4 },
   bellWrap: { position: 'relative' },
   bellDot: {
@@ -149,12 +214,12 @@ const styles = StyleSheet.create({
     borderColor: Theme.screenBackground,
   },
   avatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 10,
     backgroundColor: Theme.surfaceLight,
     borderWidth: 1,
-    borderColor: '#EEEEEE',
+    borderColor: Theme.borderLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -165,6 +230,13 @@ const styles = StyleSheet.create({
   avatarImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 12,
+    borderRadius: 10,
+  },
+  avatarInitials: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
   },
 });

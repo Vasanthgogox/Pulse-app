@@ -1,7 +1,6 @@
 /**
  * Treasury header + tab row + summary card (totals, search, filters).
  */
-import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
@@ -115,69 +114,60 @@ export function FinanceSummarySection({
   const router = useRouter();
   const { t } = useLanguage();
   return (
-    <View style={[styles.darkBlock, { paddingTop: 0 }]}>
-      <View style={styles.darkBlockContent}>
-        <TreasurySummaryCard
-          fullWidth
-          topContent={
-            <>
-              <FinanceTabRow
-                activeTab={activeTab}
-                onTabPress={onTabPress}
-                screenWidth={screenWidth}
-              />
-              {datePreset != null && (
-                <DatePresetPillBar
-                  variant="onDark"
-                  period={datePreset.period}
-                  onPeriodChange={datePreset.onPeriodChange}
-                  onCustomRangePress={datePreset.onCustomRangePress}
-                  customFrom={datePreset.customFrom}
-                  customTo={datePreset.customTo}
+    <>
+      <View style={[styles.darkBlock, { paddingTop: 0 }]}>
+        <View style={styles.darkBlockContent}>
+          <TreasurySummaryCard
+            fullWidth
+            topContent={
+              <>
+                <FinanceTabRow
+                  activeTab={activeTab}
+                  onTabPress={onTabPress}
+                  screenWidth={screenWidth}
                 />
-              )}
-              {(activeTab as FinanceSubTab | "ledger") === "ledger" &&
-                onLedgerViewModeChange != null &&
-                ledgerViewMode != null && (
-                <View style={styles.ledgerViewModeRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.ledgerViewModePill,
-                      ledgerViewMode === "table" && styles.ledgerViewModePillActive,
-                    ]}
-                    onPress={() => onLedgerViewModeChange("table")}
-                    activeOpacity={0.8}
-                  >
-                    <Text
+                {(activeTab as FinanceSubTab | "ledger") === "ledger" &&
+                  onLedgerViewModeChange != null &&
+                  ledgerViewMode != null && (
+                  <View style={styles.ledgerViewModeRow}>
+                    <TouchableOpacity
                       style={[
-                        styles.ledgerViewModePillText,
-                        ledgerViewMode === "table" && styles.ledgerViewModePillTextActive,
+                        styles.ledgerViewModePill,
+                        ledgerViewMode === "table" && styles.ledgerViewModePillActive,
                       ]}
+                      onPress={() => onLedgerViewModeChange("table")}
+                      activeOpacity={0.8}
                     >
-                      {t("tableView")}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.ledgerViewModePill,
-                      ledgerViewMode === "transaction" && styles.ledgerViewModePillActive,
-                    ]}
-                    onPress={() => onLedgerViewModeChange("transaction")}
-                    activeOpacity={0.8}
-                  >
-                    <Text
+                      <Text
+                        style={[
+                          styles.ledgerViewModePillText,
+                          ledgerViewMode === "table" && styles.ledgerViewModePillTextActive,
+                        ]}
+                      >
+                        {t("tableView")}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
                       style={[
-                        styles.ledgerViewModePillText,
-                        ledgerViewMode === "transaction" && styles.ledgerViewModePillTextActive,
+                        styles.ledgerViewModePill,
+                        ledgerViewMode === "transaction" && styles.ledgerViewModePillActive,
                       ]}
+                      onPress={() => onLedgerViewModeChange("transaction")}
+                      activeOpacity={0.8}
                     >
-                      {t("transactionView")}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </>
-          }
+                      <Text
+                        style={[
+                          styles.ledgerViewModePillText,
+                          ledgerViewMode === "transaction" && styles.ledgerViewModePillTextActive,
+                        ]}
+                      >
+                        {t("transactionView")}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            }
           filterRowRight={
             activeTab === "customers" &&
             onCustomerViewModeChange != null &&
@@ -264,8 +254,21 @@ export function FinanceSummarySection({
           }
           onClearFilters={onClearFilters}
           isAnyFilterActive={isAnyFilterActive}
-        />
+          />
+        </View>
       </View>
-    </View>
+      {datePreset != null && (
+        <View style={styles.financeDatePresetOutsideWrap}>
+          <DatePresetPillBar
+            variant="onLight"
+            period={datePreset.period}
+            onPeriodChange={datePreset.onPeriodChange}
+            onCustomRangePress={datePreset.onCustomRangePress}
+            customFrom={datePreset.customFrom}
+            customTo={datePreset.customTo}
+          />
+        </View>
+      )}
+    </>
   );
 }

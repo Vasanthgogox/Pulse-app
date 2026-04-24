@@ -124,6 +124,7 @@ export interface AddTripFormFieldsProps {
   onSubmit: () => void;
   canSubmit: boolean;
   submitting?: boolean;
+  showInlineCta?: boolean;
 }
 
 export function AddTripFormFields({
@@ -136,6 +137,7 @@ export function AddTripFormFields({
   onSubmit,
   canSubmit,
   submitting = false,
+  showInlineCta = true,
 }: AddTripFormFieldsProps) {
   void refetchClients;
   const router = useRouter();
@@ -1580,35 +1582,36 @@ export function AddTripFormFields({
             </View>
           </View>
 
-          {/* Primary CTA */}
-          <View style={styles.ctaBlock}>
-            <TouchableOpacity
-              style={[
-                styles.primaryCta,
-                (!canSubmit || submitting) && styles.primaryCtaDis,
-                Platform.OS === "web"
-                  ? ({ cursor: "pointer" } as ViewStyle)
-                  : null,
-              ]}
-              onPress={onSubmit}
-              disabled={!canSubmit || submitting}
-              activeOpacity={0.9}
-            >
-              {submitting ? (
-                <ActivityIndicator color={Theme.textOnPrimary} />
-              ) : (
-                <>
-                  <CheckCircle2 size={22} color={Theme.textOnPrimary} />
-                  <Text style={styles.primaryCtaText}>Create Trip Now</Text>
-                </>
-              )}
-            </TouchableOpacity>
-            {!canSubmit && !submitting ? (
-              <Text style={styles.ctaHint}>
-                Please fill all mandatory fields to continue
-              </Text>
-            ) : null}
-          </View>
+          {showInlineCta ? (
+            <View style={styles.ctaBlock}>
+              <TouchableOpacity
+                style={[
+                  styles.primaryCta,
+                  (!canSubmit || submitting) && styles.primaryCtaDis,
+                  Platform.OS === "web"
+                    ? ({ cursor: "pointer" } as ViewStyle)
+                    : null,
+                ]}
+                onPress={onSubmit}
+                disabled={!canSubmit || submitting}
+                activeOpacity={0.9}
+              >
+                {submitting ? (
+                  <ActivityIndicator color={Theme.textOnPrimary} />
+                ) : (
+                  <>
+                    <CheckCircle2 size={22} color={Theme.textOnPrimary} />
+                    <Text style={styles.primaryCtaText}>Create Trip Now</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              {!canSubmit && !submitting ? (
+                <Text style={styles.ctaHint}>
+                  Please fill all mandatory fields to continue
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
             </View>
 
             {isDesktopPreview ? (

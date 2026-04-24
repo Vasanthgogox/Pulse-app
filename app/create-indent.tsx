@@ -299,6 +299,7 @@ export default function CreateIndentScreen() {
   );
 
   const isWide = windowWidth >= 720;
+  const isCompactPhone = windowWidth < 420;
   const isDesktopPreview = windowWidth >= 1180;
   const showFloatingPreview = windowWidth >= 480 && !isDesktopPreview;
   const floatingPreviewWidth = Math.min(336, Math.max(280, windowWidth - 24));
@@ -815,7 +816,7 @@ export default function CreateIndentScreen() {
           subtitle="Deploy New Load"
           submitLabel=""
           canSubmit={false}
-          showFooter={false}
+          primaryActionMode="content"
           onClose={handleBackPress}
           onSubmit={() => {}}
         >
@@ -867,7 +868,7 @@ export default function CreateIndentScreen() {
         submitLabel="Share to Network"
         canSubmit={canSubmit}
         submitting={submitting}
-        showFooter={false}
+        primaryActionMode="content"
         onClose={handleBackPress}
         onSubmit={handleSubmit}
       >
@@ -896,7 +897,9 @@ export default function CreateIndentScreen() {
                 {
                   paddingHorizontal: isWide
                     ? 24
-                    : Layout.screenPaddingHorizontal,
+                    : isCompactPhone
+                      ? 12
+                      : Layout.screenPaddingHorizontal,
                 },
               ]}
             >
@@ -908,12 +911,16 @@ export default function CreateIndentScreen() {
               >
                 <View style={styles.formColumn}>
               {/* 01 Route */}
-              <View style={styles.card}>
+              <View style={[styles.card, isCompactPhone && styles.cardCompact]}>
                 <View style={styles.cardHead}>
                   <View style={styles.stepBadge}>
                     <Text style={styles.stepBadgeText}>01</Text>
                   </View>
-                  <Text style={styles.cardTitle}>Route Details</Text>
+                  <Text
+                    style={[styles.cardTitle, isCompactPhone && styles.cardTitleCompact]}
+                  >
+                    Route Details
+                  </Text>
                 </View>
 
                 <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
@@ -1191,12 +1198,16 @@ export default function CreateIndentScreen() {
               </View>
 
               {/* 02 Commercial */}
-              <View style={styles.card}>
+              <View style={[styles.card, isCompactPhone && styles.cardCompact]}>
                 <View style={styles.cardHead}>
                   <View style={styles.stepBadge}>
                     <Text style={styles.stepBadgeText}>02</Text>
                   </View>
-                  <Text style={styles.cardTitle}>Client & Commercials</Text>
+                  <Text
+                    style={[styles.cardTitle, isCompactPhone && styles.cardTitleCompact]}
+                  >
+                    Client & Commercials
+                  </Text>
                 </View>
                 <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
                   <View style={styles.gridCol}>
@@ -1322,6 +1333,7 @@ export default function CreateIndentScreen() {
                       <TextInput
                         style={[
                           styles.priceInput,
+                          isCompactPhone && styles.priceInputCompact,
                           errors.client_price && styles.inputError,
                         ]}
                         value={form.client_price}
@@ -1367,12 +1379,13 @@ export default function CreateIndentScreen() {
                       color={Theme.primary}
                       style={styles.rupeeIcon}
                     />
-                    <TextInput
-                      style={[
-                        styles.priceInput,
-                        styles.supplierPriceInput,
-                        errors.supplier_target && styles.inputError,
-                      ]}
+                      <TextInput
+                        style={[
+                          styles.priceInput,
+                          isCompactPhone && styles.priceInputCompact,
+                          styles.supplierPriceInput,
+                          errors.supplier_target && styles.inputError,
+                        ]}
                       value={form.supplier_target}
                       onChangeText={(t) => update({ supplier_target: t })}
                       ref={supplierTargetInputRef}
@@ -1436,12 +1449,16 @@ export default function CreateIndentScreen() {
               </View>
 
               {/* 03 Load */}
-              <View style={styles.card}>
+              <View style={[styles.card, isCompactPhone && styles.cardCompact]}>
                 <View style={styles.cardHead}>
                   <View style={styles.stepBadge}>
                     <Text style={styles.stepBadgeText}>03</Text>
                   </View>
-                  <Text style={styles.cardTitle}>Load Specifics</Text>
+                  <Text
+                    style={[styles.cardTitle, isCompactPhone && styles.cardTitleCompact]}
+                  >
+                    Load Specifics
+                  </Text>
                 </View>
                 <View
                   style={[styles.sheetGrid, !isWide && styles.sheetGridStacked]}
@@ -2882,6 +2899,11 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  cardCompact: {
+    padding: 12,
+    borderRadius: 14,
+    marginBottom: 12,
+  },
   cardHead: {
     flexDirection: "row",
     alignItems: "center",
@@ -2898,6 +2920,10 @@ const styles = StyleSheet.create({
     letterSpacing: -0.45,
     fontStyle: "italic",
     textTransform: "uppercase",
+  },
+  cardTitleCompact: {
+    fontSize: 18,
+    letterSpacing: -0.25,
   },
   stepBadge: {
     width: 32,
@@ -3102,6 +3128,10 @@ const styles = StyleSheet.create({
     ...Platform.select<ViewStyle>({
       web: { outlineStyle: "none" },
     }),
+  },
+  priceInputCompact: {
+    fontSize: 20,
+    paddingVertical: 14,
   },
   supplierPriceInput: {
     color: Theme.primary,

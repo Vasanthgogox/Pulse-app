@@ -1,4 +1,9 @@
-import type { DriverPaymentType, PartyOption, TripOption } from "@/components/AddTransactionModal";
+import type {
+    DriverPaymentType,
+    PartyOption,
+    TripOption,
+} from "@/components/AddTransactionModal";
+import { DateRangePickerModal } from "@/components/DateRangePickerModal";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import { Layout } from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -6,44 +11,59 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { AIInsightsPanel } from "@/features/ai";
-import type { ClientRow, UpdateClientData } from "@/features/clients/services/clients.service";
+import type {
+    ClientRow,
+    UpdateClientData,
+} from "@/features/clients/services/clients.service";
 import { updateClient } from "@/features/clients/services/clients.service";
 import {
-  getDriverLedgerByDriver,
-  type DriverLedgerRow
+    getDriverLedgerByDriver,
+    type DriverLedgerRow,
 } from "@/features/drivers/services/drivers.service";
-import { aggregateCustomers, aggregateDrivers, aggregateSuppliers, type DriverOfferForAggregation } from "@/features/finance/aggregation";
-import type { SupplierRow, UpdateSupplierData } from "@/features/suppliers/services/suppliers.service";
+import {
+    aggregateCustomers,
+    aggregateDrivers,
+    aggregateSuppliers,
+    type DriverOfferForAggregation,
+} from "@/features/finance/aggregation";
+import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPeriod";
+import type {
+    SupplierRow,
+    UpdateSupplierData,
+} from "@/features/suppliers/services/suppliers.service";
 import { updateSupplier } from "@/features/suppliers/services/suppliers.service";
 import { getTripDisplayNumber, type TripRow } from "@/features/trips";
 import {
-  buildUniqueLinkedOrgIdMap,
-  isIntegratedClientRow,
-  isIntegratedSupplierRow,
-  isLoadBasedTrip,
+    buildUniqueLinkedOrgIdMap,
+    isIntegratedClientRow,
+    isIntegratedSupplierRow,
+    isLoadBasedTrip,
 } from "@/features/trips/visibility/tripVisibility";
 import type { GarrageViewTab } from "@/features/vehicles/components/GarrageTab";
 import type { GarragePeriodValue } from "@/features/vehicles/pnl";
-import { buildTripPnLListForPeriod, buildVehiclePnLList, resolveVehicleIdForTrip } from "@/features/vehicles/pnl";
 import {
-  canAccessFinance,
-  getCapabilitiesFromProfile,
+    buildTripPnLListForPeriod,
+    buildVehiclePnLList,
+    resolveVehicleIdForTrip,
+} from "@/features/vehicles/pnl";
+import {
+    canAccessFinance,
+    getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
+import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatIndianVehicleNumber, formatLedgerDate } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
-import {
-  updateSalaryRequestStatus
-} from "@/services/salaryRequestsService";
+import { updateSalaryRequestStatus } from "@/services/salaryRequestsService";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Platform,
-  Text,
-  View,
-  useWindowDimensions
+    ActivityIndicator,
+    Platform,
+    Text,
+    View,
+    useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFinanceAddEntityHandlers } from "../hooks/useFinanceAddEntityHandlers";
@@ -51,11 +71,11 @@ import { useFinanceEntities } from "../hooks/useFinanceEntities";
 import { useFinanceLedger } from "../hooks/useFinanceLedger";
 import { useFinanceTransactionSubmit } from "../hooks/useFinanceTransactionSubmit";
 import type { LedgerRow } from "../services/finance.service";
-import { getProfileImage, updateLedgerEntry } from "../services/finance.service";
+import {
+    getProfileImage,
+    updateLedgerEntry,
+} from "../services/finance.service";
 import type { FinanceSubTab } from "../types";
-import { DateRangePickerModal } from "@/components/DateRangePickerModal";
-import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPeriod";
-import { tripDayIso } from "@/lib/dateRangePresets";
 import type { TripEntryContext } from "./EntityDetailOverlay";
 import { EntityListCategoryModal } from "./EntityListCategoryModal";
 import { FinanceModals } from "./FinanceModals";
@@ -125,7 +145,11 @@ export function FinanceScreen() {
       : null,
   );
   const canAccess = canAccessFinance(capabilities);
-  const { currentOrganization, refreshOrganization, isLoading: isOrgLoading } = useOrganization();
+  const {
+    currentOrganization,
+    refreshOrganization,
+    isLoading: isOrgLoading,
+  } = useOrganization();
   const queryClient = useQueryClient();
   const [entitiesRefreshKey, setEntitiesRefreshKey] = useState(0);
   const entities = useFinanceEntities({
@@ -210,7 +234,11 @@ export function FinanceScreen() {
 
   const tripMatchesFinanceDate = useCallback(
     (t: TripRow) =>
-      ledgerDayMatchesPeriod(tripDayIso(t), financePeriodFilter, financeDateOpts),
+      ledgerDayMatchesPeriod(
+        tripDayIso(t),
+        financePeriodFilter,
+        financeDateOpts,
+      ),
     [financePeriodFilter, financeDateOpts],
   );
 
@@ -247,13 +275,18 @@ export function FinanceScreen() {
   const [editingEntry, setEditingEntry] = useState<LedgerRow | null>(null);
   const [tabTotals, setTabTotals] = useState({ totalIn: 0, totalOut: 0 });
   const [refreshing, setRefreshing] = useState(false);
-  const [profileImages, setProfileImages] = useState<Record<string, string>>({});
+  const [profileImages, setProfileImages] = useState<Record<string, string>>(
+    {},
+  );
 
   useEffect(() => {
     let cancelled = false;
 
     const fetchProfileImages = async () => {
-      const pending = new Map<string, { id: string; type: "client" | "supplier" | "driver" }>();
+      const pending = new Map<
+        string,
+        { id: string; type: "client" | "supplier" | "driver" }
+      >();
       for (const row of filteredLedgerForDisplay) {
         const id = (row.contact_id ?? "").trim();
         const type = row.contact_type;
@@ -321,7 +354,9 @@ export function FinanceScreen() {
 
   const [editingClient, setEditingClient] = useState<ClientRow | null>(null);
   const [showEditClientModal, setShowEditClientModal] = useState(false);
-  const [editingSupplier, setEditingSupplier] = useState<SupplierRow | null>(null);
+  const [editingSupplier, setEditingSupplier] = useState<SupplierRow | null>(
+    null,
+  );
   const [showEditSupplierModal, setShowEditSupplierModal] = useState(false);
   const salaryRequestIdToPayAfterSubmitRef = useRef<string | null>(null);
   const [
@@ -355,7 +390,8 @@ export function FinanceScreen() {
           return;
         }
         if (contactType === "driver") {
-          const driverId = partyId === "driver-salary" ? (data.contactId ?? partyId) : partyId;
+          const driverId =
+            partyId === "driver-salary" ? (data.contactId ?? partyId) : partyId;
           if (driverId) router.push(`/driver/${driverId}` as const);
         }
       }
@@ -439,11 +475,7 @@ export function FinanceScreen() {
   } = addEntityHandlers;
 
   useEffect(() => {
-    if (
-      canAccess &&
-      currentOrganization?.id &&
-      financeSubTab !== "cash"
-    ) {
+    if (canAccess && currentOrganization?.id && financeSubTab !== "cash") {
       setEntitiesRefreshKey((k) => k + 1);
     }
   }, [canAccess, currentOrganization?.id, financeSubTab]);
@@ -460,7 +492,9 @@ export function FinanceScreen() {
       setEntitiesRefreshKey((k) => k + 1);
       setLedgerRefreshKey((k) => k + 1);
       queryClient.invalidateQueries({ queryKey: queryKeys.drivers.all(orgId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all(orgId) });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.vehicles.all(orgId),
+      });
     }, [canAccess, currentOrganization?.id, queryClient]),
   );
 
@@ -516,7 +550,11 @@ export function FinanceScreen() {
     const fallbackDate = new Date().toISOString();
     const ledgerRows = ledgerTransactions ?? [];
     const q = searchQuery.trim().toLowerCase();
-    const updateLatest = (map: Record<string, string>, key: string | null | undefined, value: string | null | undefined) => {
+    const updateLatest = (
+      map: Record<string, string>,
+      key: string | null | undefined,
+      value: string | null | undefined,
+    ) => {
       if (!key || !value) return;
       if (!map[key] || value > map[key]) map[key] = value;
     };
@@ -551,7 +589,9 @@ export function FinanceScreen() {
 
       const clientIdByNameKey: Record<string, string> = {};
       clientRows.forEach((client) => {
-        const key = (client.name || client.contact_person || "").trim().toLowerCase();
+        const key = (client.name || client.contact_person || "")
+          .trim()
+          .toLowerCase();
         if (key) clientIdByNameKey[key] = client.id;
       });
       const linkedClientIdByOrgId = buildUniqueLinkedOrgIdMap(clientRows);
@@ -559,10 +599,10 @@ export function FinanceScreen() {
       allTrips.forEach((trip) => {
         const nameKey = (trip.client_name || "").trim().toLowerCase();
         let clientId =
-          trip.client_id ??
-          (nameKey ? clientIdByNameKey[nameKey] : undefined);
+          trip.client_id ?? (nameKey ? clientIdByNameKey[nameKey] : undefined);
         if (!clientId && trip.organization_id && isLoadBasedTrip(trip)) {
-          clientId = linkedClientIdByOrgId.get(trip.organization_id) ?? undefined;
+          clientId =
+            linkedClientIdByOrgId.get(trip.organization_id) ?? undefined;
         }
         updateLatest(
           latestTripDateByClientId,
@@ -662,7 +702,8 @@ export function FinanceScreen() {
     }
 
     if (financeSubTab === "drivers") {
-      const offersForAggregation: Record<string, DriverOfferForAggregation> = {};
+      const offersForAggregation: Record<string, DriverOfferForAggregation> =
+        {};
       Object.entries(driverOffers).forEach(([driverId, offer]) => {
         offersForAggregation[driverId] = {
           payableAmount: offer.payableAmount ?? null,
@@ -677,8 +718,12 @@ export function FinanceScreen() {
         offersForAggregation,
         tripPartyMap,
       );
-      const driverById = new Map(driverRows.map((driver) => [driver.id, driver]));
-      const vehicleById = new Map(vehicleRows.map((vehicle) => [vehicle.id, vehicle]));
+      const driverById = new Map(
+        driverRows.map((driver) => [driver.id, driver]),
+      );
+      const vehicleById = new Map(
+        vehicleRows.map((vehicle) => [vehicle.id, vehicle]),
+      );
       let filteredRows = rows.map((row) => {
         const driver = driverById.get(row.id);
         const vehicle = driver?.assigned_vehicle_id
@@ -785,7 +830,8 @@ export function FinanceScreen() {
           description: `${row.clientName} • ${row.origin} → ${row.dest}`,
           amountIn: Number(row.sales ?? 0),
           amountOut: Number(row.totalExpense ?? 0),
-          transactionDate: row.trip.pickup_date ?? row.trip.created_at ?? fallbackDate,
+          transactionDate:
+            row.trip.pickup_date ?? row.trip.created_at ?? fallbackDate,
           tripNumber: row.missionId,
           tripId: row.id,
         });
@@ -794,9 +840,13 @@ export function FinanceScreen() {
 
     let filteredVehicleRows = vehicleRowsForReport;
     if (garageViewTab === "revenue") {
-      filteredVehicleRows = [...filteredVehicleRows].sort((a, b) => b.sales - a.sales);
+      filteredVehicleRows = [...filteredVehicleRows].sort(
+        (a, b) => b.sales - a.sales,
+      );
     } else if (garageViewTab === "profit") {
-      filteredVehicleRows = [...filteredVehicleRows].sort((a, b) => b.pnl - a.pnl);
+      filteredVehicleRows = [...filteredVehicleRows].sort(
+        (a, b) => b.pnl - a.pnl,
+      );
     }
     if (q) {
       filteredVehicleRows = filteredVehicleRows.filter(
@@ -806,9 +856,13 @@ export function FinanceScreen() {
       );
     }
     if (entityFilter === "has_due") {
-      filteredVehicleRows = filteredVehicleRows.filter((row) => row.expense > 0);
+      filteredVehicleRows = filteredVehicleRows.filter(
+        (row) => row.expense > 0,
+      );
     } else if (entityFilter === "no_due") {
-      filteredVehicleRows = filteredVehicleRows.filter((row) => row.expense === 0);
+      filteredVehicleRows = filteredVehicleRows.filter(
+        (row) => row.expense === 0,
+      );
     }
 
     return filteredVehicleRows.map((row) =>
@@ -845,8 +899,7 @@ export function FinanceScreen() {
     tripsWhereOrgIsSupplier,
     vehicleRows,
   ]);
-  const bannerTotals =
-    financeSubTab === "cash" ? ledgerTotalsData : tabTotals;
+  const bannerTotals = financeSubTab === "cash" ? ledgerTotalsData : tabTotals;
 
   const handleEntityRowSelect = useCallback(
     (
@@ -957,7 +1010,8 @@ export function FinanceScreen() {
         if (t.client_id === entity.id) return true;
         if (!clientRow || !isIntegratedClientRow(clientRow)) return false;
         const linkedOrgId = clientRow.linked_organization_id;
-        if (!linkedOrgId || !isLoadBasedTrip(t) || !t.organization_id) return false;
+        if (!linkedOrgId || !isLoadBasedTrip(t) || !t.organization_id)
+          return false;
         if (t.organization_id !== linkedOrgId) return false;
         return uniqueLinkedClientIdByOrgId.get(linkedOrgId) === entity.id;
       });
@@ -1159,9 +1213,7 @@ export function FinanceScreen() {
   if (!orgId) {
     return (
       <View style={[styles.container, { paddingTop: screenTopPad }]}>
-        <View
-          style={[styles.centered, { flex: 1, paddingTop: 24 }]}
-        >
+        <View style={[styles.centered, { flex: 1, paddingTop: 24 }]}>
           <Text style={styles.message}>{t("noOrganization")}</Text>
           <Text
             style={[
@@ -1177,7 +1229,10 @@ export function FinanceScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: screenTopPad }]} testID="finance-tab-screen">
+    <View
+      style={[styles.container, { paddingTop: screenTopPad }]}
+      testID="finance-tab-screen"
+    >
       <FinanceSummarySection
         title={t("treasury")}
         subtitle={t("fiscalMatrix")}
@@ -1207,7 +1262,9 @@ export function FinanceScreen() {
                 )
             : undefined
         }
-        ledgerCategory={financeSubTab === "cash" ? selectedLedgerCategory : undefined}
+        ledgerCategory={
+          financeSubTab === "cash" ? selectedLedgerCategory : undefined
+        }
         onLedgerCategoryChange={
           financeSubTab === "cash" ? setSelectedLedgerCategory : undefined
         }
@@ -1221,9 +1278,7 @@ export function FinanceScreen() {
               : t("searchEntities")
         }
         onReportPress={() => setShowReportModal(true)}
-        entityFilter={
-          financeSubTab === "cash" ? undefined : entityFilter
-        }
+        entityFilter={financeSubTab === "cash" ? undefined : entityFilter}
         onEntityFilterChange={
           financeSubTab === "cash" ? undefined : setEntityFilter
         }
@@ -1259,15 +1314,11 @@ export function FinanceScreen() {
           customFrom: financeCustomRangeFrom,
           customTo: financeCustomRangeTo,
         }}
-        sourceFilter={
-          financeSubTab === "cash" ? sourceSupplyFilter : undefined
-        }
+        sourceFilter={financeSubTab === "cash" ? sourceSupplyFilter : undefined}
         onSourceFilterChange={
           financeSubTab === "cash" ? setSourceSupplyFilter : undefined
         }
-        ledgerViewMode={
-          financeSubTab === "cash" ? "transaction" : undefined
-        }
+        ledgerViewMode={financeSubTab === "cash" ? "transaction" : undefined}
         onLedgerViewModeChange={undefined}
         onClearFilters={handleClearFilters}
         isAnyFilterActive={isAnyFilterActive}
@@ -1282,7 +1333,9 @@ export function FinanceScreen() {
               ledgerTransactions={ledgerTransactions}
               filteredLedgerForDisplay={filteredLedgerForDisplay}
               ledgerRefreshKey={ledgerRefreshKey}
-              onAddTransactionPress={() => router.push("/(modals)/ledger-sync" as const)}
+              onAddTransactionPress={() =>
+                router.push("/(modals)/ledger-sync" as const)
+              }
               onLedgerRowSelect={handleLedgerRowSelect}
               getVehicleNumberForTripId={getVehicleNumberForTripId}
               tripOptions={filteredTripOptionsForFinance}
@@ -1320,10 +1373,7 @@ export function FinanceScreen() {
               refreshing={refreshing}
               onRefresh={handleRefresh}
               bottomInset={
-                24 +
-                insets.bottom +
-                Layout.demoTabBarScrollBottomInset +
-                40
+                24 + insets.bottom + Layout.demoTabBarScrollBottomInset + 40
               }
               profileImages={profileImages}
               linkedOrgDisplayMap={linkedOrgDisplayMap}
@@ -1605,7 +1655,11 @@ export function FinanceScreen() {
               params.set("partyId", String(entity.data.id));
             const pending = entity.data.pending;
             const due = entity.data.due;
-            if (entity.entityType === "CLIENT" && pending != null && pending > 0) {
+            if (
+              entity.entityType === "CLIENT" &&
+              pending != null &&
+              pending > 0
+            ) {
               params.set("dueAmountIn", String(pending));
             }
             if (entity.entityType === "SUPPLIER" && due != null && due > 0) {
@@ -1625,8 +1679,12 @@ export function FinanceScreen() {
           setEntitiesRefreshKey((k) => k + 1);
           const orgId = currentOrganization?.id ?? "";
           if (orgId) {
-            queryClient.invalidateQueries({ queryKey: queryKeys.drivers.all(orgId) });
-            queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all(orgId) });
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.drivers.all(orgId),
+            });
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.vehicles.all(orgId),
+            });
           }
         }}
         garageTripIdForPnL={garageTripIdForPnL}

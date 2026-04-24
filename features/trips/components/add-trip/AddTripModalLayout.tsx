@@ -27,6 +27,16 @@ export interface AddTripModalLayoutProps {
   submitting?: boolean;
   /** When false, the page puts the primary action inside the form (e.g. centered CTA). */
   showFooter?: boolean;
+  /** Optional override for rendering top-right header actions. */
+  showHeaderActions?: boolean;
+  /**
+   * Preferred primary action surface.
+   * - "header": render action in header
+   * - "footer": render sticky footer action
+   * - "content": caller renders action inside children
+   * - "auto": keep legacy showFooter/showHeaderActions behavior
+   */
+  primaryActionMode?: "auto" | "header" | "footer" | "content";
   onClose: () => void;
   onSubmit: () => void;
   children: ReactNode;
@@ -39,6 +49,8 @@ export function AddTripModalLayout({
   canSubmit,
   submitting = false,
   showFooter = true,
+  showHeaderActions,
+  primaryActionMode = "auto",
   onClose,
   onSubmit,
   children,
@@ -47,13 +59,24 @@ export function AddTripModalLayout({
   const { width: winW } = useWindowDimensions();
   const isCompactMobile = winW < 480;
   const submitDisabled = !canSubmit || submitting;
-  const showHeaderActions = !showFooter;
+  const shouldShowFooter =
+    primaryActionMode === "footer"
+      ? true
+      : primaryActionMode === "header" || primaryActionMode === "content"
+        ? false
+        : showFooter;
+  const shouldShowHeaderActions =
+    primaryActionMode === "header"
+      ? true
+      : primaryActionMode === "footer" || primaryActionMode === "content"
+        ? false
+        : (showHeaderActions ?? !showFooter);
 
   return (
     <View style={styles.container}>
       <View style={[styles.topBar, isCompactMobile && styles.topBarCompact, { paddingTop: insets.top + 10 }]}>
         <View style={[styles.topBarMain, isCompactMobile && styles.topBarMainCompact]}>
-          <View style={styles.topBarLeft}>
+          <View style={[styles.topBarLeft, isCompactMobile && styles.topBarLeftCompact]}>
             <TouchableOpacity style={styles.topBarBackBtn} onPress={onClose} activeOpacity={0.85}>
               <FontAwesome name="chevron-left" size={16} color={Theme.textPrimaryDark} />
             </TouchableOpacity>
@@ -62,7 +85,7 @@ export function AddTripModalLayout({
               <Text style={styles.topBarSubtitle}>{subtitle}</Text>
             </View>
           </View>
-          {showHeaderActions ? (
+          {shouldShowHeaderActions ? (
             <View style={[styles.topBarActions, isCompactMobile && styles.topBarActionsCompact]}>
               <TouchableOpacity style={styles.topBarCancelBtn} onPress={onClose} activeOpacity={0.85}>
                 <Text style={styles.topBarCancelText}>Cancel</Text>
@@ -93,7 +116,7 @@ export function AddTripModalLayout({
           {children}
         </View>
 
-        {showFooter ? (
+        {shouldShowFooter ? (
           <View
             style={[
               styles.footer,
@@ -176,12 +199,17 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   topBarMainCompact: {
+    flexDirection: "column",
     alignItems: "flex-start",
+    gap: 8,
   },
   topBarLeft: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
+  },
+  topBarLeftCompact: {
+    width: "100%",
   },
   topBarBackBtn: {
     width: 34,
@@ -223,7 +251,8 @@ const styles = StyleSheet.create({
   topBarActionsCompact: {
     width: "100%",
     justifyContent: "flex-end",
-    marginTop: 8,
+    marginTop: 2,
+    flexWrap: "wrap",
   },
   topBarCancelBtn: {
     minHeight: 38,
