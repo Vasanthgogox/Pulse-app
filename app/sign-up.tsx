@@ -27,7 +27,12 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
 import { validateEmail } from '@/lib/emailValidation';
-import { isPhoneValid, validatePhone } from '@/lib/phoneValidation';
+import {
+  extractIndianMobileTenDigits,
+  isPhoneValid,
+  normalizeIndianPhoneForMetadata,
+  validatePhone,
+} from '@/lib/phoneValidation';
 import { formatMobileNumber } from '@/lib/format';
 import { VALIDATION, maxLength, validateFullName, validatePassword } from '@/lib/validation';
 import { useAuth } from '@/contexts/AuthContext';
@@ -43,12 +48,6 @@ const OPERATING_MODELS: { value: OperatingModel; label: string }[] = [
   { value: 'NON_ASSET', label: 'Aggregate' },
   { value: 'HYBRID', label: 'Both' },
 ];
-
-/** Normalize phone for storage and lookup (matches get_invitee_by_phone / get_driver_invitee_by_phone). */
-function normalizePhone(value: string): string {
-  return value.trim().replace(/\s+/g, '');
-}
-
 
 export default function SignUp() {
   const insets = useSafeAreaInsets();
@@ -144,8 +143,7 @@ export default function SignUp() {
     setPhoneExistsCheck((prev) => (prev ? { ...prev, loading: true } : { loading: true, exists: false }));
     phoneCheckTimeoutRef.current = setTimeout(async () => {
       phoneCheckTimeoutRef.current = null;
-      const normalized = normalizePhone(phone);
-      const result = await checkExistingUserByPhone(normalized);
+      const result = await checkExistingUserByPhone(phone);
       setPhoneExistsCheck({
         loading: false,
         exists: result.exists,
@@ -267,8 +265,7 @@ export default function SignUp() {
       setErrorMsg('Please enter email.');
       return;
     }
-    const normalizedPhone = normalizePhone(phone);
-    if (normalizedPhone.length === 0) {
+    if (!extractIndianMobileTenDigits(phone)) {
       setErrorMsg('Please enter your phone number.');
       return;
     }
@@ -277,8 +274,13 @@ export default function SignUp() {
       setErrorMsg(phoneErr);
       return;
     }
+    const storedPhone = normalizeIndianPhoneForMetadata(phone);
+    if (!storedPhone) {
+      setErrorMsg('Please enter a valid phone number.');
+      return;
+    }
     setLoading(true);
-    const existing = await checkExistingUserByPhone(normalizedPhone);
+    const existing = await checkExistingUserByPhone(storedPhone);
     setLoading(false);
     if (existing.error) {
       setErrorMsg(existing.error.message);
@@ -308,7 +310,7 @@ export default function SignUp() {
       fullName.trim() || undefined,
       'user',
       operatingModel,
-      normalizedPhone,
+      storedPhone,
       companyTrim,
     );
     setLoading(false);
@@ -399,20 +401,36 @@ export default function SignUp() {
         style={styles.inputWrap}
         onLayout={(e) => { fieldYRef.current.phone = e.nativeEvent.layout.y; }}
       >
-        <TextInput
-          style={[styles.input, isDesktopLayout && styles.inputDesktop, styles.inputNoMargin]}
-          placeholder="10-digit Phone"
-          placeholderTextColor={Theme.textMuted}
-          value={phone}
-          onChangeText={(text) => setPhone(formatMobileNumber(text))}
-          maxLength={10}
-          onFocus={() => scrollToField('phone')}
-          keyboardType="phone-pad"
-          autoCorrect={false}
-          spellCheck={false}
-          autoComplete="tel"
-          editable={!loading}
-        />
+        <View
+          style={[
+            styles.phoneFieldShell,
+            isDesktopLayout && styles.phoneFieldShellDesktop,
+          ]}
+        >
+          <Text
+            style={[styles.phoneDialCode, isDesktopLayout && styles.phoneDialCodeDesktop]}
+            accessibilityRole="text"
+          >
+            +91
+          </Text>
+          <TextInput
+            style={[
+              styles.phoneNationalInput,
+              isDesktopLayout && styles.phoneNationalInputDesktop,
+            ]}
+            placeholder="98765 43210"
+            placeholderTextColor={Theme.textMuted}
+            value={phone}
+            onChangeText={(text) => setPhone(formatMobileNumber(text))}
+            maxLength={10}
+            onFocus={() => scrollToField('phone')}
+            keyboardType="phone-pad"
+            autoCorrect={false}
+            spellCheck={false}
+            autoComplete="tel-national"
+            editable={!loading}
+          />
+        </View>
       </View>
       {phoneExistsCheck?.loading ? (
         <Text style={styles.phoneExistsHint}>Checking...</Text>
@@ -815,6 +833,50 @@ const styles = StyleSheet.create({
   },
   inputNoMargin: {
     marginBottom: 0,
+  },
+  phoneFieldShell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Theme.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    paddingHorizontal: 12,
+    minHeight: 54,
+    marginBottom: 16,
+  },
+  phoneFieldShellDesktop: {
+    backgroundColor: '#020617',
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  phoneDialCode: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+    paddingVertical: 12,
+    paddingRight: 12,
+    marginRight: 4,
+    borderRightWidth: 1,
+    borderRightColor: Theme.border,
+  },
+  phoneDialCodeDesktop: {
+    color: Theme.textOnDark,
+    borderRightColor: 'rgba(255,255,255,0.14)',
+  },
+  phoneNationalInput: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 16,
+    fontWeight: '600',
+    color: Theme.textPrimaryDark,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    ...Platform.select({
+      web: { outlineStyle: 'none' } as object,
+    }),
+  },
+  phoneNationalInputDesktop: {
+    color: Theme.textOnDark,
   },
   companyTakenHint: {
     marginTop: -4,

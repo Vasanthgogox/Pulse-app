@@ -11,9 +11,10 @@ const INDIA_COUNTRY_CODE = '91';
 const PLACEHOLDER_PHONES = /^(123-?456-?7890|1234567890|000+)$/i;
 
 /**
- * Normalizes input to 10 digits: strips spaces/dashes/parens, then if 12 digits starting with 91 uses last 10.
+ * Extracts the 10-digit Indian mobile (national) from user input.
+ * Accepts: 10 digits, or 12 digits starting with 91 (e.g. +919876543210).
  */
-function toTenDigits(phone: string): string | null {
+export function extractIndianMobileTenDigits(phone: string): string | null {
   const trimmed = (phone ?? '').trim();
   if (trimmed.length === 0) return null;
   const normalized = trimmed.replace(/[\s\-()]/g, '');
@@ -26,12 +27,23 @@ function toTenDigits(phone: string): string | null {
 }
 
 /**
+ * Canonical value for `profiles.phone` and auth `user_metadata.phone` (India): +91 plus 10 digits, no spaces.
+ * Returns null if not a valid Indian mobile or if placeholder.
+ */
+export function normalizeIndianPhoneForMetadata(phone: string): string | null {
+  const tenDigits = extractIndianMobileTenDigits(phone);
+  if (tenDigits === null) return null;
+  if (PLACEHOLDER_PHONES.test(tenDigits)) return null;
+  return `+${INDIA_COUNTRY_CODE}${tenDigits}`;
+}
+
+/**
  * Validates a phone number string.
  * @param phone - Raw input: 10 digits or +91 followed by 10 digits (spaces/dashes allowed).
  * @returns Error message if invalid, or null if valid.
  */
 export function validatePhone(phone: string): string | null {
-  const tenDigits = toTenDigits(phone);
+  const tenDigits = extractIndianMobileTenDigits(phone);
   if (tenDigits === null) {
     return 'Enter a 10-digit number or +91 followed by 10 digits (e.g. +91 98765 43210).';
   }
