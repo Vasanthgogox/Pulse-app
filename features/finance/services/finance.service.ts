@@ -7,6 +7,7 @@
  * Use getDoubleEntryFromLedgerRow (features/finance/accounting/accountingModel.ts) for consistent interpretation.
  * Service-layer validation: amount cap, date format, string length.
  */
+import { interpretLedgerRowStructured } from '@/features/finance/ledger/ledgerEntryModel';
 import { supabase } from '@/lib/supabase';
 import { LEDGER_PAGE_SIZE, type PageOpts } from '@/lib/pagination';
 import { VALIDATION, dateISO } from '@/lib/validation';
@@ -97,6 +98,10 @@ export interface LedgerRow {
   reconciliation_label?: string | null;
   reconciliation_action_label?: string | null;
   reconciliation_helper_text?: string | null;
+  /** Set when migration 20260423190000 is applied; else derived in UI. */
+  ledger_entity_type?: string | null;
+  ledger_flow_type?: string | null;
+  ledger_category?: string | null;
 }
 
 export interface CreateLedgerEntryData {
@@ -115,6 +120,29 @@ export interface CreateLedgerEntryData {
   indent_id?: string | null;
   vehicle_number?: string | null;
   driver_name?: string | null;
+  ledger_entity_type?: string | null;
+  ledger_flow_type?: string | null;
+  ledger_category?: string | null;
+}
+
+function enrichLedgerMetaFromRow(
+  entry: CreateLedgerEntryData,
+): CreateLedgerEntryData {
+  const s = interpretLedgerRowStructured({
+    contact_id: entry.contact_id ?? null,
+    contact_type: entry.contact_type ?? null,
+    trip_id: entry.trip_id ?? null,
+    description: entry.description ?? null,
+    amount_in: entry.amount_in ?? 0,
+    amount_out: entry.amount_out ?? 0,
+    vehicle_number: entry.vehicle_number ?? null,
+  });
+  return {
+    ...entry,
+    ledger_entity_type: entry.ledger_entity_type ?? s.entity_type,
+    ledger_flow_type: entry.ledger_flow_type ?? s.transaction_type,
+    ledger_category: entry.ledger_category ?? s.category,
+  };
 }
 
 type LedgerDescriptionMeta = {
@@ -268,11 +296,23 @@ function toLedgerRow(row: {
   vehicle_number?: string | null;
   driver_name?: string | null;
   trips?: { trip_number: string; display_trip_id?: string | null } | null;
+  ledger_entity_type?: string | null;
+  ledger_flow_type?: string | null;
+  ledger_category?: string | null;
 }): LedgerRow {
   const descriptionRaw = row.description ?? 'ENTRY';
   const description = stripLedgerMeta(descriptionRaw) || 'ENTRY';
   const meta = extractLedgerMeta(descriptionRaw);
   const tripNumber = row.trips?.display_trip_id ?? row.trips?.trip_number ?? row.trip_number ?? meta.trip_number ?? null;
+  const interpreted = interpretLedgerRowStructured({
+    contact_id: row.contact_id,
+    contact_type: row.contact_type,
+    trip_id: row.trip_id,
+    description: descriptionRaw,
+    amount_in: row.amount_in,
+    amount_out: row.amount_out,
+    vehicle_number: row.vehicle_number ?? null,
+  });
   return {
     id: row.id,
     organization_id: row.organization_id,
@@ -290,7 +330,7 @@ function toLedgerRow(row: {
     driver_name: row.driver_name ?? meta.driver_name ?? null,
     trips: row.trips ? { trip_number: row.trips.trip_number, display_trip_id: row.trips.display_trip_id ?? row.trips.trip_number } : null,
     profileImageUrl: null,
-    primary_category: normalizePrimaryCategory(descriptionRaw),
+    primary_category: (row.ledger_category ?? '').trim() || normalizePrimaryCategory(descriptionRaw),
     payment_mode: parsePaymentMode(descriptionRaw),
     payment_reference: parsePaymentReference(descriptionRaw),
     ...deriveReconciliationMeta({
@@ -301,6 +341,9 @@ function toLedgerRow(row: {
       amount_in: row.amount_in,
       amount_out: row.amount_out,
     }),
+    ledger_entity_type: row.ledger_entity_type ?? interpreted.entity_type,
+    ledger_flow_type: row.ledger_flow_type ?? interpreted.transaction_type,
+    ledger_category: row.ledger_category ?? interpreted.category,
   };
 }
 
@@ -332,7 +375,7 @@ export async function getTransactionsByOrganization(
       ));
     }
     if (error) return { error: new Error(error.message), transactions: [] };
-    const rows = (data ?? []) as Row[];
+    const rows = (data ?? []) as unknown as Row[];
     const transactions: LedgerRow[] = rows.slice(0, limit).map(toLedgerRow);
     return { error: null, transactions, hasMore: rows.length > limit };
   }
@@ -343,7 +386,7 @@ export async function getTransactionsByOrganization(
   }
   if (error) return { error: new Error(error.message), transactions: [] };
 
-  const rows = (data ?? []) as Row[];
+  const rows = (data ?? []) as unknown as Row[];
   const transactions: LedgerRow[] = rows.map(toLedgerRow);
 
   return { error: null, transactions };
@@ -458,12 +501,13 @@ export async function createLedgerEntry(
   orgId: string,
   entry: CreateLedgerEntryData
 ): Promise<{ error: Error | null; row: LedgerRow | null }> {
-  const amountIn = Math.max(0, Math.min(VALIDATION.AMOUNT_MAX, entry.amount_in ?? 0));
-  const amountOut = Math.max(0, Math.min(VALIDATION.AMOUNT_MAX, entry.amount_out ?? 0));
-  const rawDate = (entry.transaction_date ?? new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const enriched = enrichLedgerMetaFromRow(entry);
+  const amountIn = Math.max(0, Math.min(VALIDATION.AMOUNT_MAX, enriched.amount_in ?? 0));
+  const amountOut = Math.max(0, Math.min(VALIDATION.AMOUNT_MAX, enriched.amount_out ?? 0));
+  const rawDate = (enriched.transaction_date ?? new Date().toISOString().slice(0, 10)).slice(0, 10);
   const dateErr = dateISO()(rawDate);
   const date = dateErr ? new Date().toISOString().slice(0, 10) : rawDate;
-  const partyName = ((entry.party_name || '—').trim() || '—').slice(0, VALIDATION.PARTY_NAME_MAX_LENGTH);
+  const partyName = ((enriched.party_name || '—').trim() || '—').slice(0, VALIDATION.PARTY_NAME_MAX_LENGTH);
   const description = buildDescriptionWithMeta(
     entry.description ?? 'ENTRY',
     {
@@ -482,14 +526,17 @@ export async function createLedgerEntry(
 
   const payload = {
     organization_id: orgId,
-    trip_id: entry.trip_id ?? null,
+    trip_id: enriched.trip_id ?? null,
     party_name: partyName,
     description,
     amount_in: isCashIn ? amountIn : 0,
     amount_out: isCashIn ? 0 : amountOut,
     transaction_date: date,
-    contact_id: entry.contact_id ?? null,
-    contact_type: entry.contact_type ?? null,
+    contact_id: enriched.contact_id ?? null,
+    contact_type: enriched.contact_type ?? null,
+    ledger_entity_type: enriched.ledger_entity_type ?? null,
+    ledger_flow_type: enriched.ledger_flow_type ?? null,
+    ledger_category: enriched.ledger_category ?? null,
   };
 
   let { data, error } = await supabase()
@@ -523,6 +570,9 @@ export async function createLedgerEntry(
     vehicle_number?: string | null;
     driver_name?: string | null;
     trips?: { trip_number: string; display_trip_id?: string | null } | null;
+    ledger_entity_type?: string | null;
+    ledger_flow_type?: string | null;
+    ledger_category?: string | null;
   };
 
   return { error: null, row: toLedgerRow(row) };
@@ -533,12 +583,13 @@ export async function updateLedgerEntry(
   entryId: string,
   entry: CreateLedgerEntryData
 ): Promise<{ error: Error | null; row: LedgerRow | null }> {
-  const amountIn = Math.max(0, Math.min(VALIDATION.AMOUNT_MAX, entry.amount_in ?? 0));
-  const amountOut = Math.max(0, Math.min(VALIDATION.AMOUNT_MAX, entry.amount_out ?? 0));
-  const rawDate = (entry.transaction_date ?? new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const enriched = enrichLedgerMetaFromRow(entry);
+  const amountIn = Math.max(0, Math.min(VALIDATION.AMOUNT_MAX, enriched.amount_in ?? 0));
+  const amountOut = Math.max(0, Math.min(VALIDATION.AMOUNT_MAX, enriched.amount_out ?? 0));
+  const rawDate = (enriched.transaction_date ?? new Date().toISOString().slice(0, 10)).slice(0, 10);
   const date = dateISO()(rawDate) ? new Date().toISOString().slice(0, 10) : rawDate;
   const isCashIn = amountIn > 0;
-  const partyName = ((entry.party_name || '—').trim() || '—').slice(0, VALIDATION.PARTY_NAME_MAX_LENGTH);
+  const partyName = ((enriched.party_name || '—').trim() || '—').slice(0, VALIDATION.PARTY_NAME_MAX_LENGTH);
   const description = buildDescriptionWithMeta(
     entry.description ?? 'ENTRY',
     {
@@ -554,14 +605,17 @@ export async function updateLedgerEntry(
   );
 
   const payload = {
-    trip_id: entry.trip_id ?? null,
+    trip_id: enriched.trip_id ?? null,
     party_name: partyName,
     description,
     amount_in: isCashIn ? amountIn : 0,
     amount_out: isCashIn ? 0 : amountOut,
     transaction_date: date,
-    contact_id: entry.contact_id ?? null,
-    contact_type: entry.contact_type ?? null,
+    contact_id: enriched.contact_id ?? null,
+    contact_type: enriched.contact_type ?? null,
+    ledger_entity_type: enriched.ledger_entity_type ?? null,
+    ledger_flow_type: enriched.ledger_flow_type ?? null,
+    ledger_category: enriched.ledger_category ?? null,
   };
 
   let { data, error } = await supabase()
@@ -600,6 +654,9 @@ export async function updateLedgerEntry(
     vehicle_number?: string | null;
     driver_name?: string | null;
     trips?: { trip_number: string; display_trip_id?: string | null } | null;
+    ledger_entity_type?: string | null;
+    ledger_flow_type?: string | null;
+    ledger_category?: string | null;
   };
 
   return { error: null, row: toLedgerRow(row) };

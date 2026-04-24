@@ -278,6 +278,8 @@ export function FinanceModals(props: FinanceModalsProps) {
         defaultContactId={defaultContactId}
         defaultContactType={defaultContactType}
         defaultDriverPaymentType={defaultDriverPaymentType ?? undefined}
+        ledgerTransactions={ledgerTransactions ?? null}
+        driverOffersByDriverId={driverOffers}
       />
 
       <AddClientModal

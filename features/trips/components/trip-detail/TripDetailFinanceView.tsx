@@ -3,10 +3,13 @@
  * Grid Tracking Node, Protocol Specification (financial blueprint), Adjustment Registry,
  * Supplier Sync bar, Associated Handshakes.
  */
+import { TripFinancialCard } from "@/components/TripFinancialCard";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getDoubleEntryDisplayLabel } from "@/features/finance/accounting/accountingModel";
+import type { TripLedgerQuickTag } from "@/features/finance/ledger/tripLedgerEntryChooser";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
+import { computeTripEntryFinancialSnapshot } from "@/features/finance/utils/computeTripEntryFinancials.util";
 import type { TripAssignmentAuditRow } from "@/features/trips/services/trip-assignment-audit.service";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import { adjustedCost, adjustedRevenue } from "@/features/trips/services/tripAdjustments";
@@ -198,6 +201,8 @@ export interface TripDetailFinanceViewProps {
   onTripDetailTabChange?: (tab: TripDetailTab) => void;
   /** Tracking tab: map + vehicle + driver activity (parent renders `TrackingMapBlock` + timeline). */
   trackingTabExtras?: ReactNode;
+  /** Opens ledger-sync from the trip financial snapshot (respects market vs asset). */
+  onTripFinancialLedgerCta?: (tag: TripLedgerQuickTag) => void;
 }
 
 export type DocCategory = "vehicle" | "trip" | "driver";
@@ -1077,6 +1082,7 @@ export function TripDetailFinanceView({
   tripDetailTab = null,
   onTripDetailTabChange,
   trackingTabExtras,
+  onTripFinancialLedgerCta,
 }: TripDetailFinanceViewProps) {
   const { t } = useLanguage();
   const tabsEnabled =
@@ -1137,6 +1143,34 @@ export function TripDetailFinanceView({
   const adjSales = useMemo(() => adjustedRevenue(sales, adjustments), [sales, adjustments]);
   const adjCost = useMemo(() => adjustedCost(cost, adjustments), [cost, adjustments]);
   const adjMargin = adjSales - adjCost;
+
+  const tripFinanceSnapshot = useMemo(() => {
+    if (!viewerOrgId) return null;
+    const cp = Number(trip.client_price ?? 0) || 0;
+    const sr = Number(trip.supplier_rate ?? 0) || 0;
+    if (cp <= 0 && sr <= 0) return null;
+    return computeTripEntryFinancialSnapshot(
+      {
+        id: trip.id,
+        organization_id: trip.organization_id,
+        indent_id: trip.indent_id ?? null,
+        client_id: trip.client_id,
+        supplier_id: trip.supplier_id,
+        driver_id: trip.driver_id,
+        client_price: trip.client_price,
+        supplier_rate: trip.supplier_rate,
+        driver_commission: trip.driver_commission,
+        distance: trip.distance,
+        is_cross_org_supplier:
+          (trip as { is_cross_org_supplier?: boolean | null }).is_cross_org_supplier ?? null,
+        subcontract_rate: subcontractRate ?? null,
+        trip_payout_mode: trip.trip_payout_mode ?? null,
+      },
+      tripLedgerEntries,
+      viewerOrgId,
+      null,
+    );
+  }, [trip, tripLedgerEntries, viewerOrgId, subcontractRate]);
 
   const receivedFromCustomer = useMemo(
     () => tripLedgerEntries.reduce((s, tx) => s + Number(tx.amount_in ?? 0), 0),
@@ -1429,6 +1463,22 @@ export function TripDetailFinanceView({
             <Text style={styles.financeProfitValue}>{formatINR(adjMargin)}</Text>
           </View>
         </View>
+
+        {onTripFinancialLedgerCta && tripFinanceSnapshot ? (
+          <View style={styles.tripFinanceSnapshotWrap}>
+            <TripFinancialCard
+              snapshot={tripFinanceSnapshot}
+              selectedTag={null}
+              onDuePress={(tag) => onTripFinancialLedgerCta(tag)}
+              onAddExpense={
+                tripFinanceSnapshot.trip_type === "asset"
+                  ? () => onTripFinancialLedgerCta("vehicle")
+                  : undefined
+              }
+              variant="stack"
+            />
+          </View>
+        ) : null}
 
         {/* MULTI-PARTY RECONCILIATION HERO (client + supplier + driver) */}
         {reconciliationParties && reconciliationParties.length > 0 ? (
@@ -2487,6 +2537,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 6,
     elevation: 2,
+  },
+  tripFinanceSnapshotWrap: {
+    marginBottom: 12,
+    marginTop: -8,
   },
   financeHeader: {
     flexDirection: "row",

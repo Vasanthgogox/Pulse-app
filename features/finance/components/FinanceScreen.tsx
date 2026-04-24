@@ -16,7 +16,12 @@ import { aggregateCustomers, aggregateDrivers, aggregateSuppliers, type DriverOf
 import type { SupplierRow, UpdateSupplierData } from "@/features/suppliers/services/suppliers.service";
 import { updateSupplier } from "@/features/suppliers/services/suppliers.service";
 import { getTripDisplayNumber, type TripRow } from "@/features/trips";
-import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
+import {
+  buildUniqueLinkedOrgIdMap,
+  isIntegratedClientRow,
+  isIntegratedSupplierRow,
+  isLoadBasedTrip,
+} from "@/features/trips/visibility/tripVisibility";
 import type { GarrageViewTab } from "@/features/vehicles/components/GarrageTab";
 import type { GarragePeriodValue } from "@/features/vehicles/pnl";
 import { buildTripPnLListForPeriod, buildVehiclePnLList, resolveVehicleIdForTrip } from "@/features/vehicles/pnl";
@@ -209,10 +214,6 @@ export function FinanceScreen() {
     [financePeriodFilter, financeDateOpts],
   );
 
-  const financeFilteredTripRows = useMemo(
-    () => tripRows.filter(tripMatchesFinanceDate),
-    [tripRows, tripMatchesFinanceDate],
-  );
   const financeFilteredTripsWhereOrgIsClient = useMemo(
     () => tripsWhereOrgIsClient.filter(tripMatchesFinanceDate),
     [tripsWhereOrgIsClient, tripMatchesFinanceDate],
@@ -889,6 +890,10 @@ export function FinanceScreen() {
             s.contact_person ||
             t("supplier")
           ).trim() || t("supplier"),
+        linked_organization_id: s.linked_organization_id ?? null,
+        supplier_type: s.supplier_type ?? null,
+        avatar_url: s.avatar_url ?? null,
+        avatar_seed: s.avatar_seed ?? null,
       })),
     [supplierRows, t],
   );
@@ -922,6 +927,8 @@ export function FinanceScreen() {
       driverRows.map((d) => ({
         id: d.id,
         name: (d.name || t("driver")).trim() || t("driver"),
+        avatar_url: d.avatar_url ?? null,
+        avatar_seed: d.avatar_seed ?? null,
       })),
     [driverRows, t],
   );
@@ -945,56 +952,39 @@ export function FinanceScreen() {
     if (!selectedEntity) return [];
     const { data: entity, entityType } = selectedEntity;
     if (entityType === "CLIENT") {
-      const nameKey = (entity.name ?? "").toLowerCase().trim();
-      const linkedOrgId = (entity as { linked_organization_id?: string | null })
-        .linked_organization_id;
-      const isIntegratedClient = (entity as { is_integrated?: boolean }).is_integrated === true;
-      return tripRows.filter(
-        (t) => {
-          const matchesDirect =
-            t.client_id === entity.id ||
-            (nameKey &&
-              (t.client_name || "").toLowerCase().trim() === nameKey);
-          const matchesLinkedOrg =
-            isIntegratedClient &&
-            linkedOrgId &&
-            isLoadBasedTrip(t) &&
-            t.organization_id &&
-            t.organization_id === linkedOrgId &&
-            uniqueLinkedClientIdByOrgId.get(linkedOrgId) === entity.id;
-          return matchesDirect || matchesLinkedOrg;
-        },
-      );
+      const clientRow = clientRows.find((c) => c.id === entity.id) ?? null;
+      return tripRows.filter((t) => {
+        if (t.client_id === entity.id) return true;
+        if (!clientRow || !isIntegratedClientRow(clientRow)) return false;
+        const linkedOrgId = clientRow.linked_organization_id;
+        if (!linkedOrgId || !isLoadBasedTrip(t) || !t.organization_id) return false;
+        if (t.organization_id !== linkedOrgId) return false;
+        return uniqueLinkedClientIdByOrgId.get(linkedOrgId) === entity.id;
+      });
     }
     if (entityType === "SUPPLIER") {
-      const supplierNameKey = (entity.name ?? "").toLowerCase().trim();
-      const fromOwned = tripRows.filter(
+      const supplierRow = supplierRows.find((s) => s.id === entity.id) ?? null;
+      const fromOwned = tripRows.filter((t) => t.supplier_id === entity.id);
+      if (!supplierRow || !isIntegratedSupplierRow(supplierRow)) {
+        return fromOwned;
+      }
+      const linkedOrgId = supplierRow.linked_organization_id;
+      if (!linkedOrgId) return fromOwned;
+      const fromAsClient = tripsWhereOrgIsClient.filter(
         (t) =>
-          t.supplier_id === entity.id ||
-          (supplierNameKey &&
-            !t.supplier_id &&
-            (t.supplier_name ?? "").toLowerCase().trim() === supplierNameKey),
+          isLoadBasedTrip(t) &&
+          t.organization_id === linkedOrgId &&
+          uniqueLinkedSupplierIdByOrgId.get(linkedOrgId) === entity.id,
       );
-      const linkedOrgId = (entity as { linked_organization_id?: string | null })
-        .linked_organization_id;
-      const isIntegratedSupplier =
-        (entity as { supplier_type?: string | null }).supplier_type === "integrated";
-      if (linkedOrgId && isIntegratedSupplier) {
-        const fromAsClient = tripsWhereOrgIsClient.filter(
-          (t) =>
-            isLoadBasedTrip(t) &&
-            t.organization_id === linkedOrgId &&
-            uniqueLinkedSupplierIdByOrgId.get(linkedOrgId) === entity.id,
-        );
-        const seen = new Set(fromOwned.map((t) => t.id));
-        for (const t of fromAsClient) {
-          if (!seen.has(t.id)) {
-            seen.add(t.id);
-            fromOwned.push(t);
-          }
+      const seen = new Set(fromOwned.map((t) => t.id));
+      const merged = [...fromOwned];
+      for (const t of fromAsClient) {
+        if (!seen.has(t.id)) {
+          seen.add(t.id);
+          merged.push(t);
         }
       }
-      return fromOwned;
+      return merged;
     }
     if (entityType === "DRIVER")
       return tripRows.filter((t) => t.driver_id === entity.id);
@@ -1007,6 +997,8 @@ export function FinanceScreen() {
   }, [
     selectedEntity,
     tripRows,
+    clientRows,
+    supplierRows,
     tripsWhereOrgIsClient,
     uniqueLinkedClientIdByOrgId,
     uniqueLinkedSupplierIdByOrgId,
@@ -1020,23 +1012,33 @@ export function FinanceScreen() {
         selectedEntity.entityType === "SUPPLIER";
       const isVehicle = selectedEntity.entityType === "VEHICLE";
       if (isClientOrSupplier || isVehicle) {
-        const entityId = selectedEntity.data.id;
-        const isSupplier = selectedEntity.entityType === "SUPPLIER";
         return selectedEntityTrips.map((t) => ({
           id: t.id,
           trip_number: getTripDisplayNumber(t),
           client_id: t.client_id ?? null,
           client_name: t.client_name ?? null,
-          supplier_id: isSupplier
-            ? (t.supplier_id ?? entityId)
-            : (t.supplier_id ?? null),
+          supplier_id: t.supplier_id ?? null,
+          supplier_name: t.supplier_name ?? null,
           driver_id: t.driver_id ?? null,
+          driver_display_name: t.driver_display_name ?? null,
           vehicle_id: t.vehicle_id ?? null,
           indent_id: t.indent_id ?? null,
           route_label:
             [t.pickup_area, t.drop_location].filter(Boolean).join(" → ") ||
             null,
           trip_date: formatLedgerDate(t.pickup_date || t.created_at),
+          client_price: t.client_price ?? null,
+          supplier_rate: t.supplier_rate ?? null,
+          driver_commission: t.driver_commission ?? null,
+          distance: t.distance ?? null,
+          is_cross_org_supplier:
+            !!currentOrganization?.id &&
+            !!t.organization_id &&
+            t.organization_id !== currentOrganization.id &&
+            tripsWhereOrgIsSupplier.some((x) => x.id === t.id),
+          trip_payout_mode: t.trip_payout_mode ?? null,
+          status: t.status ?? null,
+          completed_at: t.completed_at ?? null,
           ...(t.organization_id != null && {
             organization_id: t.organization_id,
           }),
@@ -1044,7 +1046,13 @@ export function FinanceScreen() {
       }
     }
     return trips;
-  }, [selectedEntity, selectedEntityTrips, trips]);
+  }, [
+    selectedEntity,
+    selectedEntityTrips,
+    trips,
+    currentOrganization?.id,
+    tripsWhereOrgIsSupplier,
+  ]);
 
   const selectedEntityTransactions = useMemo((): LedgerRow[] | null => {
     if (!selectedEntity) return null;

@@ -88,6 +88,8 @@ export interface AddVehicleEntryModalProps {
   /** Optional: show Driver dropdown when adding entry (e.g. from ledger-sync). */
   drivers?: DriverOption[];
   fullPage?: boolean;
+  /** When opening from trip detail, pre-select this trip in the picker. */
+  initialTripId?: string;
 }
 
 /** Categories that show odometer field (fuel, repairs, tyres). */
@@ -159,6 +161,12 @@ export function AddVehicleEntryModal({
   }, [visible]);
 
   useEffect(() => {
+    if (!visible || !initialTripId?.trim()) return;
+    const tid = initialTripId.trim();
+    if (trips.some((t) => t.id === tid)) setTripId(tid);
+  }, [visible, initialTripId, trips]);
+
+  useEffect(() => {
     if (!visible) return;
     setCategoryId(null);
   }, [type, visible]);
@@ -181,8 +189,11 @@ export function AddVehicleEntryModal({
     const parts: string[] = [];
     if (categoryLabel) parts.push(categoryLabel);
     const paymentName = PAYMENT_MODES.find((p) => p.id === paymentModeId)?.name;
-    if (paymentName) parts.push(`Payment: ${paymentName}`);
-    if (paymentReference.trim()) parts.push(`UTR: ${paymentReference.trim()}`);
+    if (paymentName) parts.push(`Mode: ${paymentName}`);
+    const isCash = paymentModeId === "CASH";
+    if (!isCash && paymentReference.trim()) {
+      parts.push(`UTR: ${paymentReference.trim()}`);
+    }
     if (odometerStr.trim()) parts.push(`Odo: ${odometerStr.trim()}`);
     if (vendorStr.trim()) parts.push(vendorStr.trim());
     if (notes.trim()) parts.push(`Notes: ${notes.trim()}`);

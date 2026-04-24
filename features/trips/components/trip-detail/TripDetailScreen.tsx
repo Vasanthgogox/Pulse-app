@@ -10,6 +10,11 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { getClientById } from "@/features/clients/services/clients.service";
 import { getDriverById, getDriverProfileDisplay } from "@/features/drivers/services/drivers.service";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
+import {
+  openTripLedgerEntryChooser,
+  pushTripLedgerQuickEntry,
+  type TripLedgerQuickTag,
+} from "@/features/finance/ledger/tripLedgerEntryChooser";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
 import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
 import { averageScore, getRatingsForTrip } from "@/features/ratings/services/ratings.service";
@@ -2125,76 +2130,57 @@ export default function TripDetailScreen({
 
   const openAddEntry = useCallback(() => {
     if (!trip?.id) return;
-    const hasSupplier =
-      trip.supplier_id != null && trip.supplier_id.trim() !== "";
-
-    const tripNumber = getTripDisplayNumber(trip);
-    // Supplier-origin trip detail: default OUT with supplier as party.
-    if (entryContext === "supplier" && hasSupplier) {
-      const params = new URLSearchParams({
-        tripId: trip.id,
-        tripNumber,
-        defaultType: "out",
-        partyContext: "suppliers",
-        partyId: trip.supplier_id ?? "",
-        partyName: (trip.supplier_name ?? "").trim() || t("supplier"),
-      });
-      router.push(`/(modals)/ledger-sync?${params.toString()}`);
-      return;
-    }
-
-    // Client-origin trip detail (from Customers tab/integrated client): default IN with client pre-selected.
-    if (entryContext === "client" && clientIdFromContext) {
-      const params = new URLSearchParams({
-        tripId: trip.id,
-        tripNumber,
-        defaultType: "in",
-        partyContext: "customers",
-        partyId: clientIdFromContext,
-        partyName:
-          clientNameFromContext ??
-          displayClientName ??
-          trip.client_name ??
-          t("client"),
-      });
-      router.push(`/(modals)/ledger-sync?${params.toString()}`);
-      return;
-    }
-
-    // Vehicle-origin trip detail: default OUT with this trip pre-selected (vehicle expense flow).
-    if (entryContext === "vehicle") {
-      const params = new URLSearchParams({
-        tripId: trip.id,
-        tripNumber,
-        defaultType: "out",
-      });
-      router.push(`/(modals)/ledger-sync?${params.toString()}`);
-      return;
-    }
-
-    // Default: IN against client (or "all" when supplier exists so OUT can select supplier later).
-    const partyContext =
-      hasSupplier ? "all" : "customers";
-    const params = new URLSearchParams({
-      tripId: trip.id,
-      tripNumber,
-      defaultType: "in",
-      partyContext,
-      partyId: trip.client_id ?? "",
-      partyName: displayClientName ?? trip.client_name ?? t("client"),
+    openTripLedgerEntryChooser({
+      trip,
+      router,
+      displayClientName: displayClientName ?? null,
+      clientIdFromContext: clientIdFromContext ?? null,
+      clientNameFromContext: clientNameFromContext ?? null,
+      partnerName: partnerName ?? null,
+      driverDisplayName: driverName,
+      labels: {
+        addTransaction: t("addEntry"),
+      },
     });
-    router.push(`/(modals)/ledger-sync?${params.toString()}`);
   }, [
-    trip?.id,
-    trip?.client_id,
-    displayClientName,
-    trip?.client_name,
-    trip?.supplier_id,
-    trip?.supplier_name,
-    entryContext,
+    trip,
     router,
+    displayClientName,
+    clientIdFromContext,
+    clientNameFromContext,
+    partnerName,
+    driverName,
     t,
   ]);
+
+  const openTripLedgerFromSnapshot = useCallback(
+    (tag: TripLedgerQuickTag) => {
+      if (!trip?.id) return;
+      pushTripLedgerQuickEntry(
+        {
+          trip,
+          router,
+          displayClientName: displayClientName ?? null,
+          clientIdFromContext: clientIdFromContext ?? null,
+          clientNameFromContext: clientNameFromContext ?? null,
+          partnerName: partnerName ?? null,
+          driverDisplayName: driverName ?? null,
+          labels: { addTransaction: t("addEntry") },
+        },
+        tag,
+      );
+    },
+    [
+      trip,
+      router,
+      displayClientName,
+      clientIdFromContext,
+      clientNameFromContext,
+      partnerName,
+      driverName,
+      t,
+    ],
+  );
 
   const handleAddAdjustment = () => setShowAdjustmentModal(true);
   const openCompareVerifyFromTrip = useCallback((
@@ -3019,6 +3005,7 @@ export default function TripDetailScreen({
             onOpenTracking={() => setShowTrackingModal(true)}
             tripDocs={computedTripDocs}
             onOpenDoc={(doc) => setSelectedDoc(doc)}
+            onTripFinancialLedgerCta={openTripLedgerFromSnapshot}
             assignmentBlock={
             trip.organization_id ? (
               <TripAssignmentBlock

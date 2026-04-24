@@ -84,3 +84,15 @@ export {
   filterLedgerByPeriod,
 } from './lib/filterLedgerByPeriod';
 export { ledgerTotals } from './lib/ledgerTotals';
+export {
+  interpretLedgerRowStructured,
+  buildLedgerSyncDescriptionLine,
+  type LedgerEntityType,
+  type LedgerFlowType,
+  type LedgerRowStructuredView,
+  type BuildLedgerSyncDescriptionInput,
+} from './ledger/ledgerEntryModel';
+export {
+  openTripLedgerEntryChooser,
+  type TripLedgerChooserLabels,
+} from './ledger/tripLedgerEntryChooser';

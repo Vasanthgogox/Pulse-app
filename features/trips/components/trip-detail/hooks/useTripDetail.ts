@@ -12,6 +12,7 @@ import {
   getDriverProfileDisplay,
 } from "@/features/drivers/services/drivers.service";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
+import { openTripLedgerEntryChooser } from "@/features/finance/ledger/tripLedgerEntryChooser";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
 import { averageScore, getRatingsForTrip } from "@/features/ratings/services/ratings.service";
 import {
@@ -883,32 +884,27 @@ export function useTripDetail({
   // ── Entry modal ───────────────────────────────────────────────────────────
   const openAddEntry = useCallback(() => {
     if (!trip?.id) return;
-    const tripNumber = getTripDisplayNumber(trip);
-    const params = new URLSearchParams({ tripId: trip.id, tripNumber });
-    if (entryContext === "supplier" && trip.supplier_id) {
-      params.set("defaultType", "out");
-      params.set("partyContext", "suppliers");
-      params.set("partyId", trip.supplier_id);
-      if (partnerName) params.set("partyName", partnerName);
-    } else if (entryContext === "vehicle" && trip.vehicle_id) {
-      params.set("defaultType", "out");
-      params.set("tripId", trip.id);
-    } else if (entryContext === "client" && (clientIdFromContext ?? trip.client_id)) {
-      params.set("defaultType", "in");
-      params.set("partyContext", "customers");
-      params.set("partyId", clientIdFromContext ?? trip.client_id ?? "");
-      const name = clientNameFromContext ?? displayClientName ?? trip.client_name ?? "";
-      if (name) params.set("partyName", name);
-    }
-    router.push(`/(modals)/ledger-sync?${params.toString()}`);
+    openTripLedgerEntryChooser({
+      trip,
+      router,
+      displayClientName: displayClientName ?? null,
+      clientIdFromContext: clientIdFromContext ?? null,
+      clientNameFromContext: clientNameFromContext ?? null,
+      partnerName: partnerName ?? null,
+      driverDisplayName: driverName,
+      labels: {
+        addTransaction: t("addEntry"),
+      },
+    });
   }, [
     trip,
-    entryContext,
+    router,
     clientIdFromContext,
     clientNameFromContext,
     partnerName,
     displayClientName,
-    router,
+    driverName,
+    t,
   ]);
 
   /** Cash OUT / trip expense — same query shape as TripLedgerDetailScreen.onAddExpense. */
