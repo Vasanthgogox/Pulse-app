@@ -5,7 +5,11 @@
  * Service-layer validation: single pass over inputs before Supabase calls.
  */
 import { validateEmail } from "@/lib/emailValidation";
-import { validatePhone } from "@/lib/phoneValidation";
+import {
+  extractIndianMobileTenDigits,
+  normalizeIndianPhoneForMetadata,
+  validatePhone,
+} from "@/lib/phoneValidation";
 import { supabase } from "@/lib/supabase";
 import {
     VALIDATION,
@@ -169,10 +173,10 @@ export async function signUp({
     if (fullName?.trim()) metadata.full_name = fullName.trim();
     if (companyName != null && companyName.trim())
       metadata.company_name = companyName.trim();
-    // Normalize phone (trim + collapse spaces) so it matches get_invitee_by_phone / get_driver_invitee_by_phone lookup.
+    // Canonical E.164-style India (+91…) for profiles.phone and metadata; RPCs normalize to 10 digits for lookup.
     if (phone != null && phone !== "") {
-      const normalized = phone.trim().replace(/\s+/g, "");
-      if (normalized) metadata.phone = normalized;
+      const e164 = normalizeIndianPhoneForMetadata(phone);
+      if (e164) metadata.phone = e164;
     }
     const { data, error } = await supabase().auth.signUp({
       email: email.trim(),
@@ -298,19 +302,9 @@ async function clearLocalSessionIfInvalid(error: unknown): Promise<void> {
   }
 }
 
-/** Normalize phone the same way as get_invitee_by_phone so lookups match. */
-function normalizePhoneForProfile(phone: string): string {
-  return phone.trim().replace(/\s+/g, "");
-}
-
-/** Normalize to 10 digits for check-user-by-phone (matches get_invitee_by_phone: digits only, 91 prefix → last 10). */
+/** Ten-digit national number for get_email_by_phone / check-user-by-phone (aligned with validatePhone). */
 function normalizePhoneToTenDigits(phone: string): string | null {
-  const trimmed = (phone ?? "").trim();
-  if (trimmed.length === 0) return null;
-  const digits = trimmed.replace(/\s+/g, "").replace(/\D/g, "");
-  if (digits.length >= 12 && digits.startsWith("91")) return digits.slice(-10);
-  if (digits.length >= 10) return digits.slice(-10);
-  return digits.length === 0 ? null : digits;
+  return extractIndianMobileTenDigits(phone ?? "");
 }
 
 /** Mask email for display (e.g. ni***@gmail.com). */
@@ -612,10 +606,15 @@ export async function updateProfile(
     const data: Record<string, unknown> = {};
     if (updates.full_name !== undefined)
       data.full_name = updates.full_name.trim();
-    if (updates.phone !== undefined)
-      data.phone = updates.phone.trim()
-        ? normalizePhoneForProfile(updates.phone)
-        : "";
+    if (updates.phone !== undefined) {
+      const t = updates.phone.trim();
+      if (!t) {
+        data.phone = "";
+      } else {
+        const e164 = normalizeIndianPhoneForMetadata(updates.phone);
+        data.phone = e164 ?? "";
+      }
+    }
     if (updates.company_name !== undefined)
       data.company_name = updates.company_name.trim();
     if (updates.avatar_url !== undefined)
@@ -631,7 +630,12 @@ export async function updateProfile(
     // 2. Sync to public.profiles table (for relational use, searching, and public profile view)
     const profileUpdates: Record<string, any> = {};
     if (updates.full_name !== undefined) profileUpdates.full_name = updates.full_name.trim();
-    if (updates.phone !== undefined) profileUpdates.phone = updates.phone.trim() ? normalizePhoneForProfile(updates.phone) : "";
+    if (updates.phone !== undefined) {
+      const t = updates.phone.trim();
+      profileUpdates.phone = t
+        ? normalizeIndianPhoneForMetadata(updates.phone) ?? ""
+        : "";
+    }
     if (updates.company_name !== undefined) profileUpdates.company_name = updates.company_name.trim();
     if (updates.avatar_url !== undefined) profileUpdates.avatar_url = updates.avatar_url;
     if (updates.avatar_seed !== undefined) profileUpdates.avatar_seed = updates.avatar_seed;
