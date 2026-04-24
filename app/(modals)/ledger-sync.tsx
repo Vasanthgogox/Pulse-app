@@ -15,16 +15,17 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { getClientsByOrganization, type ClientRow } from "@/features/clients";
 import {
   createDriverLedgerEntry,
-  getDriverById,
   getDriverOffersByOrganization,
   getDriversByOrganization,
 } from "@/features/drivers";
+import type { DriverOffer } from "@/features/drivers/services/drivers.service";
 import {
   createLedgerEntry,
   getTransactionsByOrganization,
   updateLedgerEntry,
   type LedgerRow,
 } from "@/features/finance";
+import { buildLedgerSyncDescriptionLine } from "@/features/finance/ledger/ledgerEntryModel";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
 import { getSuppliersByOrganization, type SupplierRow } from "@/features/suppliers";
 import { getTripDisplayNumber, getTripsByOrganization, getTripsWhereOrgIsClient, getTripsWhereOrgIsSupplier, type TripRow } from "@/features/trips";
@@ -168,10 +169,8 @@ export default function LedgerSyncScreen() {
   const [trips, setTrips] = useState<TripOptionWithOrg[]>([]);
   const [tripDueMetaById, setTripDueMetaById] = useState<Record<string, TripDueMeta>>({});
   const [transactions, setTransactions] = useState<LedgerRow[] | null>(null);
-  const [driverOffers, setDriverOffers] = useState<Record<string, { payableAmount: number | null }>>({});
+  const [driverOffers, setDriverOffers] = useState<Record<string, DriverOffer>>({});
   const [editingEntry, setEditingEntry] = useState<LedgerRow | null>(null);
-  /** Full driver row when entityType=DRIVER (for trip filter by driver_display_name/phone). */
-  const [driverForFilter, setDriverForFilter] = useState<{ name?: string; phone?: string } | null>(null);
   /** When we're in vehicle add-entry flow, keep vehicle id so we always fall back to vehicle detail on save/close. */
   const vehicleIdForFallbackRef = React.useRef<string | null>(null);
   if (params.entityType === "VEHICLE" && params.entityId) {
@@ -192,7 +191,14 @@ export default function LedgerSyncScreen() {
       getSuppliersByOrganization(orgId).then((r) => (r.error ? [] : (r.suppliers ?? []))),
       getDriversByOrganization(orgId).then((r) => {
         const list = r?.error ? [] : (r?.drivers ?? []);
-        return Array.isArray(list) ? list.map((d) => ({ id: d.id, name: d.name ?? d.phone ?? t("driver") })) : [];
+        return Array.isArray(list)
+          ? list.map((d) => ({
+              id: d.id,
+              name: d.name ?? d.phone ?? t("driver"),
+              avatar_url: d.avatar_url ?? null,
+              avatar_seed: d.avatar_seed ?? null,
+            }))
+          : [];
       }),
       getVehiclesByOrganization(orgId).then((r) => {
         const list = r?.error ? [] : (r?.vehicles ?? []);
@@ -237,31 +243,38 @@ export default function LedgerSyncScreen() {
             isCrossOrgSupplier: asSupplierIds.has(t.id) && t.organization_id !== orgId,
           };
         });
-        const options = merged.map((t: TripRow) => ({
-          id: t.id,
-          trip_number: getTripDisplayNumber(t),
-          client_id: t.client_id ?? null,
-          client_name: t.client_name ?? null,
-          supplier_id: t.supplier_id ?? null,
-          driver_id: t.driver_id ?? null,
-          driver_display_name: t.driver_display_name ?? null,
-          vehicle_id: t.vehicle_id ?? null,
-          indent_id: t.indent_id ?? null,
-          route_label: [t.pickup_area, t.drop_location].filter(Boolean).join(' → ') || null,
-          trip_date: formatLedgerDate(t.pickup_date || t.created_at),
-          organization_id: t.organization_id,
-        })) as TripOptionWithOrg[];
+        const options = merged.map((t: TripRow) => {
+          const meta = tripDueMeta[t.id];
+          return {
+            id: t.id,
+            trip_number: getTripDisplayNumber(t),
+            client_id: t.client_id ?? null,
+            client_name: t.client_name ?? null,
+            supplier_id: t.supplier_id ?? null,
+            supplier_name: t.supplier_name ?? null,
+            driver_id: t.driver_id ?? null,
+            driver_display_name: t.driver_display_name ?? null,
+            vehicle_id: t.vehicle_id ?? null,
+            indent_id: t.indent_id ?? null,
+            route_label: [t.pickup_area, t.drop_location].filter(Boolean).join(' → ') || null,
+            trip_date: formatLedgerDate(t.pickup_date || t.created_at),
+            organization_id: t.organization_id,
+            client_price: t.client_price ?? null,
+            supplier_rate: t.supplier_rate ?? null,
+            driver_commission: t.driver_commission ?? null,
+            distance: t.distance ?? null,
+            is_cross_org_supplier: meta?.isCrossOrgSupplier ?? false,
+            trip_payout_mode: t.trip_payout_mode ?? null,
+            status: t.status ?? null,
+            completed_at: t.completed_at ?? null,
+          } as TripOptionWithOrg;
+        });
         return { options, tripDueMeta };
       }),
       getTransactionsByOrganization(orgId).then(({ error, transactions: txs }) => (error ? [] : (txs ?? []))),
-      getDriverOffersByOrganization(orgId).then((r) => {
-        if (r.error || !r.offersByDriverId) return {} as Record<string, { payableAmount: number | null }>;
-        const map: Record<string, { payableAmount: number | null }> = {};
-        Object.entries(r.offersByDriverId).forEach(([driverId, o]) => {
-          map[driverId] = { payableAmount: o.payableAmount ?? null };
-        });
-        return map;
-      }),
+      getDriverOffersByOrganization(orgId).then((r) =>
+        r.error || !r.offersByDriverId ? {} : r.offersByDriverId,
+      ),
     ])
       .then(([clientsList, suppliersList, d, v, tripLoad, txs, offers]) => {
         if (cancelled) return;
@@ -286,20 +299,6 @@ export default function LedgerSyncScreen() {
     };
   }, [orgId, params.entryId]);
 
-  useEffect(() => {
-    if (!orgId || params.entityType !== "DRIVER" || !params.entityId) {
-      setDriverForFilter(null);
-      return;
-    }
-    getDriverById(orgId, params.entityId).then(({ error, driver }) => {
-      if (!error && driver) {
-        setDriverForFilter({ name: driver.name ?? undefined, phone: driver.phone ?? undefined });
-      } else {
-        setDriverForFilter(null);
-      }
-    });
-  }, [orgId, params.entityType, params.entityId]);
-
   const uniqueLinkedClientIdByOrgId = useMemo(
     () => buildUniqueLinkedOrgIdMap(clients),
     [clients],
@@ -315,24 +314,8 @@ export default function LedgerSyncScreen() {
     switch (params.entityType) {
       case "VEHICLE":
         return trips.filter((t) => (t as { vehicle_id?: string | null }).vehicle_id === params.entityId);
-      case "DRIVER": {
-        const driver = driverForFilter ?? drivers.find((d) => d.id === params.entityId);
-        return trips.filter((t) => {
-          if (t.driver_id === params.entityId) return true;
-          const displayName = (t as { driver_display_name?: string | null }).driver_display_name ?? "";
-          if (!displayName.trim()) return false;
-          const driverName = (driver?.name ?? "").trim();
-          if (driverName && driverName.toLowerCase() === displayName.trim().toLowerCase())
-            return true;
-          const phoneNorm = (p: string) => (p ?? "").replace(/\s/g, "").replace(/\D/g, "");
-          const driverPhone = (driver as { phone?: string | null } | undefined)?.phone ?? "";
-          return (
-            driverPhone.trim() !== "" &&
-            phoneNorm(displayName).length >= 10 &&
-            phoneNorm(driverPhone) === phoneNorm(displayName)
-          );
-        });
-      }
+      case "DRIVER":
+        return trips.filter((t) => t.driver_id === params.entityId);
       case "CLIENT":
         return trips.filter((t) => {
           const client = clients.find((c) => c.id === params.entityId) as {
@@ -378,8 +361,6 @@ export default function LedgerSyncScreen() {
     params.entityId,
     suppliers,
     clients,
-    drivers,
-    driverForFilter,
     uniqueLinkedClientIdByOrgId,
     uniqueLinkedSupplierIdByOrgId,
   ]);
@@ -387,10 +368,18 @@ export default function LedgerSyncScreen() {
   const clientPartyOptions: PartyOption[] = clients.map((c) => ({
     id: c.id,
     name: c.name ?? c.contact_person ?? t("client"),
+    avatar_url: c.avatar_url ?? null,
+    avatar_seed: c.avatar_seed ?? null,
+    linked_organization_id: c.linked_organization_id ?? null,
+    is_integrated: c.is_integrated === true,
   }));
   const supplierPartyOptions: PartyOption[] = suppliers.map((s) => ({
     id: s.id,
     name: s.name ?? t("supplier"),
+    avatar_url: s.avatar_url ?? null,
+    avatar_seed: s.avatar_seed ?? null,
+    linked_organization_id: s.linked_organization_id ?? null,
+    supplier_type: s.supplier_type ?? null,
   }));
 
   /** For VEHICLE entity: trip options for AddVehicleEntryModal (with driver_id for auto-fill). */
@@ -575,35 +564,50 @@ export default function LedgerSyncScreen() {
         }
       }
 
-      let baseDescription = (data.type === "in"
+      if (
+        data.type === "out" &&
+        data.contactType === "driver" &&
+        data.contactId
+      ) {
+        const fromDriverList =
+          drivers.find((d) => d.id === data.contactId)?.name?.trim() || null;
+        const fromPayload =
+          (data.driverName || data.partyName || "").trim() || null;
+        if (fromDriverList || fromPayload) {
+          resolvedPartyName = fromDriverList || fromPayload || resolvedPartyName;
+        }
+      }
+
+      const baseDescription = (data.type === "in"
         ? (data.category ?? "ENTRY")
         : data.type === "out"
           ? (driverPaymentLabel ?? data.category ?? "ENTRY")
           : "ENTRY") as string;
-          
-      const descParts = [baseDescription];
-      if (data.paymentMode) {
-        const modeName =
-          data.paymentMode === "UPI"
-            ? "UPI"
-            : data.paymentMode === "BANK"
-              ? "Bank Transfer"
-              : data.paymentMode === "CHEQUE"
-                ? "Cheque"
-                : data.paymentMode === "CASH"
-                  ? "Cash"
-                  : data.paymentMode;
-        descParts.push(`Mode: ${modeName}`);
-      }
-      if (data.paymentReference) {
-        descParts.push(`UTR: ${data.paymentReference}`);
-      }
+
+      const modeName = data.paymentMode
+        ? data.paymentMode === "UPI"
+          ? "UPI"
+          : data.paymentMode === "BANK"
+            ? "Bank Transfer"
+            : data.paymentMode === "CHEQUE"
+              ? "Cheque"
+              : data.paymentMode === "CASH"
+                ? "Cash"
+                : data.paymentMode
+        : null;
+
+      const description = buildLedgerSyncDescriptionLine({
+        categoryOrKind: baseDescription,
+        paymentModeLabel: modeName,
+        paymentModeId: data.paymentMode ?? null,
+        paymentReference: data.paymentReference?.trim() || null,
+      });
 
       const payload = {
         trip_id: data.tripId ?? null,
         trip_number: data.tripNumber ?? null,
         party_name: resolvedPartyName,
-        description: descParts.join(' | '),
+        description,
         amount_in: data.type === "in" ? data.amount : 0,
         amount_out: data.type === "out" ? data.amount : 0,
         transaction_date: transactionDate,
@@ -770,6 +774,7 @@ export default function LedgerSyncScreen() {
           entryContextLabel={entryContextLabel ?? undefined}
           trips={vehicleTripOptions}
           drivers={drivers}
+          initialTripId={params.tripId ?? undefined}
         />
       </View>
     );
@@ -844,6 +849,8 @@ export default function LedgerSyncScreen() {
         requireTripForSupplierOut
         dueAmountIn={effectiveDueAmountIn}
         dueAmountOut={effectiveDueAmountOut}
+        ledgerTransactions={transactions}
+        driverOffersByDriverId={driverOffers}
       />
     </View>
   );

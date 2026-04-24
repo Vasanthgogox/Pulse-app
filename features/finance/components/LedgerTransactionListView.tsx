@@ -10,6 +10,10 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { getDoubleEntryDisplayLabel } from "@/features/finance/accounting/accountingModel";
 import { partyAvatarInitialsTextColor } from "@/lib/partyAvatarDisplay";
+import {
+  getLedgerFlowForRow,
+  LedgerFlowChip,
+} from "@/features/finance/components/LedgerFlowChip";
 import { type LedgerRow } from "@/features/finance/services/finance.service";
 import { formatLedgerAmount } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -234,6 +238,14 @@ function TransactionRowDetail({ row }: { row: LedgerRow }) {
           {typeLabel}
         </Text>
       </View>
+      {getLedgerFlowForRow(row) ? (
+        <View style={styles.detailRow}>
+          <Text style={styles.detailLabel}>Flow</Text>
+          <View style={styles.detailValue}>
+            <LedgerFlowChip row={row} />
+          </View>
+        </View>
+      ) : null}
       <View style={styles.detailRow}>
         <Text style={styles.detailLabel}>Entry date</Text>
         <Text style={styles.detailValue}>{dateStr}</Text>
@@ -2153,6 +2165,9 @@ export function LedgerTransactionListView({
 
                           const rightBlock = (
                             <View style={styles.rightCol}>
+                              {getLedgerFlowForRow(row) ? (
+                                <LedgerFlowChip row={row} />
+                              ) : null}
                               {tripPillContent}
                               {onRowPress ? (
                                 <TouchableOpacity
@@ -2182,6 +2197,9 @@ export function LedgerTransactionListView({
                                 leftContent
                               )}
                               <View style={styles.rightCol}>
+                                {getLedgerFlowForRow(row) ? (
+                                  <LedgerFlowChip row={row} />
+                                ) : null}
                                 {tripPillContent}
                                 {onRowPress ? (
                                   <TouchableOpacity

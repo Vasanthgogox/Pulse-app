@@ -32,6 +32,8 @@ export interface TripRow {
   client_id: string | null;
   client_name: string;
   supplier_id: string | null;
+  /** Ledger lane: `market` = supplier payable; `asset` = driver + vehicle. NULL = infer from supplier_id. */
+  trip_payout_mode?: "market" | "asset" | string | null;
   /** Optional; when set without supplier_id, used for supplier due/name matching (e.g. synced trips). */
   supplier_name?: string | null;
   driver_id: string | null;
@@ -323,6 +325,8 @@ export interface CreateTripData {
   /** Optional advance paid to supplier (stored in trips.advance_paid). */
   advance_paid?: number | null;
   supplier_id?: string | null;
+  /** When omitted, set from supplier_id (aggregate → market, asset → asset). */
+  trip_payout_mode?: "market" | "asset" | null;
   driver_id?: string | null;
   vehicle_id?: string | null;
   /** Ad-hoc vehicle number for aggregate trips (when vehicle_id is null). */
@@ -808,6 +812,9 @@ export async function createTrip(
     load_tons: loadTons,
     advance_paid: advancePaid,
     supplier_id: normalizeNullableUuid(data.supplier_id),
+    trip_payout_mode:
+      data.trip_payout_mode ??
+      (normalizeNullableUuid(data.supplier_id) ? "market" : "asset"),
     driver_id: normalizeNullableUuid(data.driver_id),
     vehicle_id: normalizeNullableUuid(data.vehicle_id),
     vehicle_display_number: (data.vehicle_display_number ?? "").trim() || null,

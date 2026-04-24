@@ -1,4 +1,5 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { DateRangePickerModal } from "@/components/DateRangePickerModal";
 import { DetailPageLayout, DetailSection } from "@/components/DetailPageLayout";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import Layout from "@/constants/Layout";
@@ -41,7 +42,6 @@ import {
   formatIndianVehicleNumber,
   formatLedgerAmount,
   formatLedgerDate,
-  formatLedgerDateTime,
 } from "@/lib/format";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
@@ -138,6 +138,103 @@ function formatLedgerDateShort(s: string): string {
   return `${day} ${months[Number(m) - 1] ?? m} ${y}`;
 }
 
+function getClientInitials(name: string | null | undefined): string {
+  const n = (name ?? "").trim().toUpperCase();
+  if (!n) return "?";
+  const parts = n.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2)
+    return `${parts[0].charAt(0)}${parts[1].charAt(0)}`.slice(0, 2);
+  return n.slice(0, 2);
+}
+
+function formatDayMonUpper(iso: string | null | undefined): string {
+  if (!iso || iso.length < 10) return "—";
+  const [y, m, day] = iso.slice(0, 10).split("-").map(Number);
+  const months =
+    "JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC".split(" ");
+  if (!y || !m || !day) return "—";
+  return `${day} ${months[m - 1] ?? ""}`.trim();
+}
+
+type TripsDatePreset =
+  | "today"
+  | "yesterday"
+  | "this_week"
+  | "this_month"
+  | "all"
+  | "custom";
+
+function startOfLocalDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function endOfLocalDay(d: Date): Date {
+  return new Date(
+    d.getFullYear(),
+    d.getMonth(),
+    d.getDate(),
+    23,
+    59,
+    59,
+    999,
+  );
+}
+
+function startOfWeekMonday(d: Date): Date {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day = x.getDay();
+  const diff = x.getDate() - day + (day === 0 ? -6 : 1);
+  x.setDate(diff);
+  return startOfLocalDay(x);
+}
+
+function startOfMonthLocal(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+function parseTripFilterDate(iso: string | undefined): Date | null {
+  if (!iso || iso.length < 10) return null;
+  const [y, m, day] = iso.slice(0, 10).split("-").map(Number);
+  if (!y || !m || !day) return null;
+  return new Date(y, m - 1, day);
+}
+
+function tripMatchesDatePreset(
+  dateIso: string | undefined,
+  preset: TripsDatePreset,
+  customFrom: string | null,
+  customTo: string | null,
+  now: Date = new Date(),
+): boolean {
+  if (preset === "all") return true;
+  const tripD = parseTripFilterDate(dateIso);
+  if (!tripD) return false;
+  const t0 = startOfLocalDay(now);
+  if (preset === "today") {
+    return tripD >= t0 && tripD <= endOfLocalDay(now);
+  }
+  if (preset === "yesterday") {
+    const y = new Date(t0);
+    y.setDate(y.getDate() - 1);
+    return tripD >= startOfLocalDay(y) && tripD <= endOfLocalDay(y);
+  }
+  if (preset === "this_week") {
+    const wStart = startOfWeekMonday(now);
+    return tripD >= wStart && tripD <= endOfLocalDay(now);
+  }
+  if (preset === "this_month") {
+    const mStart = startOfMonthLocal(now);
+    return tripD >= mStart && tripD <= endOfLocalDay(now);
+  }
+  if (preset === "custom" && customFrom && customTo) {
+    const from = parseTripFilterDate(customFrom);
+    const to = parseTripFilterDate(customTo);
+    if (!from || !to) return true;
+    return tripD >= startOfLocalDay(from) && tripD <= endOfLocalDay(to);
+  }
+  return true;
+}
+
 function getDriverFallbackSeed(driverId: string): string {
   const value = (driverId ?? "").trim() || "driver";
   let hash = 0;
@@ -212,6 +309,12 @@ export default function DriverDetailScreen({
   const [driverDetailTab, setDriverDetailTab] = useState<
     "trips" | "ledger" | "statement"
   >("trips");
+  const [tripsDatePreset, setTripsDatePreset] =
+    useState<TripsDatePreset>("all");
+  const [tripsCustomFrom, setTripsCustomFrom] = useState<string | null>(null);
+  const [tripsCustomTo, setTripsCustomTo] = useState<string | null>(null);
+  const [tripsDateRangeModalVisible, setTripsDateRangeModalVisible] =
+    useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -480,6 +583,8 @@ export default function DriverDetailScreen({
       id == null ? "" : String(id).trim();
     const paidByTripId: Record<string, number> = {};
     for (const t of trips) paidByTripId[normId(t.id)] = 0;
+    const txnCountByTripId: Record<string, number> = {};
+    const lastTxnIsoByTripId: Record<string, string> = {};
     for (const tx of driverTransactions) {
       const txTripKey = normId(tx.trip_id);
       if (
@@ -492,11 +597,20 @@ export default function DriverDetailScreen({
         paidByTripId[txTripKey] =
           (paidByTripId[txTripKey] ?? 0) + Number(tx.amount_out ?? 0);
       }
+      if (
+        tx.contact_type === "driver" &&
+        tx.contact_id != null &&
+        normId(tx.contact_id) === normId(driverId) &&
+        txTripKey !== ""
+      ) {
+        txnCountByTripId[txTripKey] = (txnCountByTripId[txTripKey] ?? 0) + 1;
+        const d = (tx.transaction_date ?? tx.created_at ?? "").slice(0, 10);
+        if (d.length === 10) {
+          const prev = lastTxnIsoByTripId[txTripKey];
+          if (!prev || d > prev) lastTxnIsoByTripId[txTripKey] = d;
+        }
+      }
     }
-    const totalPaidLinked = trips.reduce(
-      (sum, t) => sum + (paidByTripId[normId(t.id)] ?? 0),
-      0,
-    );
     const offer = driverOffer
       ? {
           payableAmount: driverOffer.payableAmount ?? null,
@@ -505,6 +619,7 @@ export default function DriverDetailScreen({
         }
       : null;
     const tripRows = trips.map((t) => {
+      const tid = normId(t.id);
       const commission = computeDriverCommissionForTrip(
         {
           ...t,
@@ -513,7 +628,7 @@ export default function DriverDetailScreen({
         },
         offer ?? undefined,
       );
-      const paid = paidByTripId[normId(t.id)] ?? 0;
+      const paid = paidByTripId[tid] ?? 0;
       const due = Math.max(0, commission - paid);
       const tripDateIso =
         (
@@ -524,18 +639,32 @@ export default function DriverDetailScreen({
         )
           .toString()
           .slice(0, 10) || null;
+      const filterDateIso =
+        (t.pickup_date ?? t.created_at ?? "").toString().slice(0, 10) ||
+        undefined;
       const route =
         t.pickup_area?.trim() && t.drop_location?.trim()
           ? `${t.pickup_area.trim()} → ${t.drop_location.trim()}`
           : t.drop_location?.trim() || "—";
       const dateTimeIso = (t.pickup_date ?? t.created_at ?? "").toString();
       /** Show assigned vehicle for asset-based (own fleet) or when vehicle is assigned. */
-      const isAssetOrAssignedVehicle = !t.supplier_id || t.vehicle_id != null || (t.vehicle_display_number ?? "").trim() !== "";
+      const isAssetOrAssignedVehicle =
+        !t.supplier_id ||
+        t.vehicle_id != null ||
+        (t.vehicle_display_number ?? "").trim() !== "";
       const vehicleNum = (t.vehicle_display_number ?? "").trim();
       const vehicleDisplay =
         isAssetOrAssignedVehicle && vehicleNum
           ? formatIndianVehicleNumber(vehicleNum)
           : null;
+      const ledgerLast = lastTxnIsoByTripId[tid];
+      const paymentLast = getLatestPaymentDateForTrip(t.id, driverTransactions);
+      const lastIso =
+        ledgerLast && paymentLast
+          ? ledgerLast > paymentLast
+            ? ledgerLast
+            : paymentLast
+          : ledgerLast ?? paymentLast ?? null;
       return {
         id: t.id,
         missionId: getTripDisplayNumber(t),
@@ -547,15 +676,55 @@ export default function DriverDetailScreen({
         tripDate: tripDateIso ? formatLedgerDateShort(tripDateIso) : "—",
         tripDateIso: dateTimeIso || undefined,
         agingLabel: getAgingLabel(tripDateIso, due),
+        filterDateIso,
+        clientName: (t.client_name ?? "").trim() || "—",
+        clientInitials: getClientInitials(t.client_name),
+        clientRev: Number(t.client_price ?? 0),
+        margin: Number(t.margin ?? 0),
+        txnCount: txnCountByTripId[tid] ?? 0,
+        lastTxnShort: formatDayMonUpper(lastIso),
       };
     });
     return tripRows;
-  }, [
-    trips,
-    driverTransactions,
-    driverId,
-    driverOffer,
-  ]);
+  }, [trips, driverTransactions, driverId, driverOffer]);
+
+  const filteredLedgerRows = useMemo(
+    () =>
+      ledgerRows.filter((r) =>
+        tripMatchesDatePreset(
+          r.filterDateIso,
+          tripsDatePreset,
+          tripsCustomFrom,
+          tripsCustomTo,
+        ),
+      ),
+    [
+      ledgerRows,
+      tripsDatePreset,
+      tripsCustomFrom,
+      tripsCustomTo,
+    ],
+  );
+
+  const tripsScorecard = useMemo(() => {
+    const contractValue = filteredLedgerRows.reduce(
+      (s, r) => s + Number(r.col1 ?? 0),
+      0,
+    );
+    const paidSum = filteredLedgerRows.reduce(
+      (s, r) => s + Number(r.col2 ?? 0),
+      0,
+    );
+    const dueSum = filteredLedgerRows.reduce(
+      (s, r) => s + Number(r.col3 ?? 0),
+      0,
+    );
+    const health =
+      contractValue > 0
+        ? Math.min(100, Math.round((paidSum / contractValue) * 100))
+        : 0;
+    return { contractValue, paidSum, dueSum, health };
+  }, [filteredLedgerRows]);
 
   /** Trip details map for Cash Flow list. */
   const driverTripDetailsMap = useMemo(() => {
@@ -907,7 +1076,7 @@ export default function DriverDetailScreen({
                   params.set("dueAmountOut", String(entityPending));
                 }
                 router.push(
-                  `/(modals)/ledger-sync?${params.toString()}` as any,
+                  `/(modals)/ledger-sync?${params.toString()}` as const,
                 );
               }}
               accessibilityLabel={t("addTransaction")}
@@ -935,32 +1104,67 @@ export default function DriverDetailScreen({
         <View style={styles.scorecardTop}>
           <View style={styles.scorecardLeft}>
             <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
-            <Text style={styles.scorecardSalesLabel}>DRIVER PAYMENTS</Text>
-            <Text style={styles.scorecardAmount}>
-              {formatINR(totalDriverEarnings)}
-            </Text>
+            {driverDetailTab === "trips" ? (
+              <>
+                <Text style={styles.scorecardSalesLabel}>
+                  {t("driverScorecardContractValue")}
+                </Text>
+                <Text style={styles.scorecardAmount}>
+                  {formatINR(tripsScorecard.contractValue)}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.scorecardSalesLabel}>DRIVER PAYMENTS</Text>
+                <Text style={styles.scorecardAmount}>
+                  {formatINR(totalDriverEarnings)}
+                </Text>
+              </>
+            )}
           </View>
           <View style={styles.healthCircle}>
             <View
               style={[
                 styles.healthCircleFill,
-                { height: `${Math.min(100, settlementHealth)}%` },
+                {
+                  height: `${Math.min(
+                    100,
+                    driverDetailTab === "trips"
+                      ? tripsScorecard.health
+                      : settlementHealth,
+                  )}%`,
+                },
               ]}
             />
-            <Text style={styles.healthCircleText}>{settlementHealth}%</Text>
+            <Text style={styles.healthCircleText}>
+              {driverDetailTab === "trips"
+                ? tripsScorecard.health
+                : settlementHealth}
+              %
+            </Text>
           </View>
         </View>
         <View style={styles.scorecardGrid}>
           <View>
             <Text style={styles.scorecardGridLabelPaid}>PAID</Text>
             <Text style={styles.scorecardGridPaid}>
-              {formatINR(entityPaid)}
+              {formatINR(
+                driverDetailTab === "trips"
+                  ? tripsScorecard.paidSum
+                  : entityPaid,
+              )}
             </Text>
           </View>
           <View style={styles.scorecardGridRight}>
-            <Text style={styles.scorecardGridLabelDue}>TO PAY</Text>
+            <Text style={styles.scorecardGridLabelDue}>
+              {driverDetailTab === "trips" ? t("due") : t("toPay")}
+            </Text>
             <Text style={styles.scorecardGridDue}>
-              {formatINR(entityPending)}
+              {formatINR(
+                driverDetailTab === "trips"
+                  ? tripsScorecard.dueSum
+                  : entityPending,
+              )}
             </Text>
           </View>
         </View>
@@ -981,7 +1185,7 @@ export default function DriverDetailScreen({
               driverDetailTab === "trips" && styles.tabItemTextActive,
             ]}
           >
-            TRIPS
+            {t("driverDetailTabTripsTitle")}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -998,7 +1202,7 @@ export default function DriverDetailScreen({
               driverDetailTab === "ledger" && styles.tabItemTextActive,
             ]}
           >
-            {t("tabCash")}
+            {t("driverDetailTabCashFlow")}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -1390,30 +1594,110 @@ export default function DriverDetailScreen({
           style={styles.tabScroll}
           contentContainerStyle={[
             styles.tabScrollContent,
+            styles.tabScrollContentTripsFull,
             { paddingBottom: 24 + insets.bottom },
           ]}
           showsVerticalScrollIndicator={false}
+          nestedScrollEnabled
         >
-          <View style={styles.tableWrap}>
-            {ledgerRows.length > 0 ? (
-              <View style={styles.ledgerSummaryRow}>
-                <View style={styles.ledgerSummaryCell}>
-                  <Text style={styles.ledgerSummaryLabel}>TOTAL PAID</Text>
+          <View style={styles.tripsTabInner}>
+            <View style={styles.tripsFilterBar}>
+              <ScrollView
+                horizontal
+                style={styles.tripsFilterScroll}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.tripsFilterChipsContent}
+              >
+                {(
+                  [
+                    { key: "today" as const, label: t("today") },
+                    { key: "yesterday" as const, label: t("yesterdayTrips") },
+                    { key: "this_week" as const, label: t("thisWeekTrips") },
+                    { key: "this_month" as const, label: t("thisMonth") },
+                    { key: "all" as const, label: t("all") },
+                  ] as { key: TripsDatePreset; label: string }[]
+                ).map(({ key, label }) => (
+                  <TouchableOpacity
+                    key={key}
+                    style={[
+                      styles.tripsFilterChip,
+                      tripsDatePreset === key && styles.tripsFilterChipActive,
+                    ]}
+                    onPress={() => {
+                      setTripsDatePreset(key);
+                      if (key !== "custom") {
+                        setTripsCustomFrom(null);
+                        setTripsCustomTo(null);
+                      }
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Text
+                      style={[
+                        styles.tripsFilterChipText,
+                        tripsDatePreset === key &&
+                          styles.tripsFilterChipTextActive,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  style={[
+                    styles.tripsFilterChip,
+                    tripsDatePreset === "custom" &&
+                      styles.tripsFilterChipActive,
+                  ]}
+                  onPress={() => {
+                    setTripsDatePreset("custom");
+                    setTripsDateRangeModalVisible(true);
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text
+                    style={[
+                      styles.tripsFilterChipText,
+                      tripsDatePreset === "custom" &&
+                        styles.tripsFilterChipTextActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {t("driverTripsFilterCustom")}
+                  </Text>
+                </TouchableOpacity>
+              </ScrollView>
+              <TouchableOpacity
+                style={styles.tripsFilterCalendarBtn}
+                onPress={() => {
+                  setTripsDatePreset("custom");
+                  setTripsDateRangeModalVisible(true);
+                }}
+                hitSlop={8}
+                accessibilityLabel={t("driverTripsFilterCustom")}
+              >
+                <FontAwesome name="calendar" size={14} color={Theme.primary} />
+              </TouchableOpacity>
+            </View>
+
+            {ledgerRows.length > 0 && filteredLedgerRows.length > 0 ? (
+              <View style={styles.ledgerSummaryRowTripsFull}>
+                <View style={styles.ledgerSummaryTripsPaidBlock}>
+                  <Text style={styles.ledgerSummaryLabel}>{t("paid")}</Text>
                   <Text
                     style={[styles.ledgerSummaryAmount, styles.ledgerSummaryIn]}
                   >
                     {formatINR(
-                      ledgerRows.reduce((s, r) => s + Number(r.col2 ?? 0), 0),
+                      filteredLedgerRows.reduce(
+                        (s, r) => s + Number(r.col2 ?? 0),
+                        0,
+                      ),
                     )}
                   </Text>
                 </View>
-                <View
-                  style={[
-                    styles.ledgerSummaryCell,
-                    styles.ledgerSummaryCellBorder,
-                  ]}
-                >
-                  <Text style={styles.ledgerSummaryLabel}>TO PAY</Text>
+                <View style={styles.ledgerSummaryTripsDueBlock}>
+                  <Text style={styles.ledgerSummaryLabel}>{t("due")}</Text>
                   <Text
                     style={[
                       styles.ledgerSummaryAmount,
@@ -1421,95 +1705,177 @@ export default function DriverDetailScreen({
                     ]}
                   >
                     {formatINR(
-                      ledgerRows.reduce((s, r) => s + Number(r.col3 ?? 0), 0),
+                      filteredLedgerRows.reduce(
+                        (s, r) => s + Number(r.col3 ?? 0),
+                        0,
+                      ),
                     )}
                   </Text>
                 </View>
               </View>
             ) : null}
-            <View style={styles.tripTableCard}>
-              <View style={styles.tripTableHeader}>
-                <Text style={[styles.tripTh, styles.tripThMission]} numberOfLines={1}>
-                  TRIP
-                </Text>
-                <View style={styles.tripHeaderAmountCol}>
-                  <Text style={[styles.tripTh, styles.tripThSales]} numberOfLines={1}>
-                    PAID
-                  </Text>
-                </View>
-                <View style={styles.tripHeaderAmountCol}>
-                  <Text style={[styles.tripTh, styles.tripThRight]} numberOfLines={1}>
-                    TO PAY
-                  </Text>
+
+            <View style={[styles.tripTableCard, styles.tripTableCardFullWidth]}>
+              <View style={styles.driverTripsTableFull}>
+                  <View style={styles.driverTripsHeaderRow}>
+                    <Text style={styles.driverTripsThTrip} numberOfLines={1}>
+                      {t("driverTripsColTrip")}
+                    </Text>
+                    <Text style={styles.driverTripsThClient} numberOfLines={1}>
+                      {t("tripsHubColClient")}
+                    </Text>
+                    <Text style={styles.driverTripsThNum} numberOfLines={1}>
+                      {t("driverTripsColClientRev")}
+                    </Text>
+                    <Text style={styles.driverTripsThNum} numberOfLines={1}>
+                      {t("driverTripsColContract")}
+                    </Text>
+                    <Text style={styles.driverTripsThNum} numberOfLines={1}>
+                      {t("driverTripsColPnL")}
+                    </Text>
+                    <Text style={styles.driverTripsThNum} numberOfLines={1}>
+                      {t("paid")}
+                    </Text>
+                    <Text style={styles.driverTripsThNum} numberOfLines={1}>
+                      {t("due")}
+                    </Text>
+                    <Text style={styles.driverTripsThTxn} numberOfLines={1}>
+                      {t("tripsHubColTxns")}
+                    </Text>
+                    <Text style={styles.driverTripsThLast} numberOfLines={1}>
+                      {t("driverTripsColLastTxn")}
+                    </Text>
+                  </View>
+                  {ledgerRows.length === 0 ? (
+                    <View
+                      style={[
+                        styles.driverTripsDataRow,
+                        styles.driverTripsDataRowEmpty,
+                      ]}
+                    >
+                      <Text
+                        style={styles.driverTripsEmptyWide}
+                        numberOfLines={2}
+                      >
+                        {t("noLedgerEntriesDriver")}
+                      </Text>
+                    </View>
+                  ) : filteredLedgerRows.length === 0 ? (
+                    <View
+                      style={[
+                        styles.driverTripsDataRow,
+                        styles.driverTripsDataRowEmpty,
+                      ]}
+                    >
+                      <Text
+                        style={styles.driverTripsEmptyWide}
+                        numberOfLines={2}
+                      >
+                        {t("driverTripsEmptyFilter")}
+                      </Text>
+                    </View>
+                  ) : (
+                    filteredLedgerRows.map((r) => {
+                      const pl = Number(r.margin ?? 0);
+                      const plStyle =
+                        pl > 0
+                          ? styles.tdGreen
+                          : pl < 0
+                            ? styles.tdRed
+                            : styles.tdMuted;
+                      return (
+                        <Pressable
+                          key={r.id}
+                          style={({ pressed }) => [
+                            styles.driverTripsDataRow,
+                            pressed && styles.ledgerRowPressed,
+                          ]}
+                          onPress={() => {
+                            const tripId = String(r.id ?? "").trim();
+                            if (!tripId) return;
+                            router.push(`/trip/${tripId}`);
+                          }}
+                        >
+                          <View style={styles.driverTripsCellTrip}>
+                            <Text
+                              style={styles.driverTripsTripId}
+                              numberOfLines={1}
+                            >
+                              {r.missionId ?? "—"}
+                            </Text>
+                            <Text
+                              style={styles.driverTripsRoute}
+                              numberOfLines={2}
+                            >
+                              {r.dest?.trim() || "—"}
+                            </Text>
+                          </View>
+                          <View style={styles.driverTripsCellClient}>
+                            <View style={styles.driverTripsClientAvatar}>
+                              <Text style={styles.driverTripsClientAvatarText}>
+                                {r.clientInitials}
+                              </Text>
+                            </View>
+                            <Text
+                              style={styles.driverTripsClientName}
+                              numberOfLines={2}
+                            >
+                              {(r.clientName ?? "—").toUpperCase()}
+                            </Text>
+                          </View>
+                          <Text style={styles.driverTripsAmt} numberOfLines={1}>
+                            {formatINR(r.clientRev)}
+                          </Text>
+                          <Text style={styles.driverTripsAmt} numberOfLines={1}>
+                            {formatINR(r.col1)}
+                          </Text>
+                          <Text
+                            style={[styles.driverTripsAmt, plStyle]}
+                            numberOfLines={1}
+                          >
+                            {formatINR(pl)}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.driverTripsAmt,
+                              (r.col2 ?? 0) > 0 ? styles.tdGreen : styles.tdMuted,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {(r.col2 ?? 0) > 0
+                              ? formatLedgerAmount(r.col2)
+                              : "—"}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.driverTripsAmt,
+                              (r.col3 ?? 0) > 0 ? styles.tdRed : styles.tdMuted,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {(r.col3 ?? 0) > 0
+                              ? formatLedgerAmount(r.col3)
+                              : "—"}
+                          </Text>
+                          <Text
+                            style={styles.driverTripsTxn}
+                            numberOfLines={1}
+                          >
+                            {r.txnCount > 0 ? String(r.txnCount) : "—"}
+                          </Text>
+                          <Text
+                            style={styles.driverTripsLastTxn}
+                            numberOfLines={1}
+                          >
+                            {r.lastTxnShort}
+                          </Text>
+                        </Pressable>
+                      );
+                    })
+                  )}
                 </View>
               </View>
-              {ledgerRows.length === 0 ? (
-                <View style={styles.tripTableRow}>
-                  <Text style={[styles.tripTd, styles.tripTdMission]} numberOfLines={1}>
-                    {t("noLedgerEntriesDriver")}
-                  </Text>
-                </View>
-              ) : (
-                ledgerRows.map((r) => (
-                  <Pressable
-                    key={r.id}
-                    style={({ pressed }) => [
-                      styles.tripTableRow,
-                      pressed && styles.ledgerRowPressed,
-                    ]}
-                    onPress={() => {
-                      const tripId = String(r.id ?? "").trim();
-                      if (!tripId) return;
-                      router.push(`/trip/${tripId}`);
-                    }}
-                  >
-                    <View style={styles.tripTdMission}>
-                      <Text style={styles.tripTdMissionId} numberOfLines={1}>
-                        {r.missionId ?? "—"}
-                      </Text>
-                      <Text style={styles.tripTdRoute} numberOfLines={1}>
-                        {r.dest?.trim() || "—"}
-                      </Text>
-                      {(r as { vehicleDisplay?: string }).vehicleDisplay ? (
-                        <Text style={styles.tripTdRoute} numberOfLines={1}>
-                          {(r as { vehicleDisplay?: string }).vehicleDisplay}
-                        </Text>
-                      ) : null}
-                      <Text style={styles.tripTdRoute} numberOfLines={1}>
-                        {formatLedgerDateTime(
-                          (r as { tripDateIso?: string }).tripDateIso,
-                        )}
-                      </Text>
-                    </View>
-                    <View style={styles.tripAmountCol}>
-                      <Text
-                        style={[
-                          styles.tripTd,
-                          styles.tripTdSales,
-                          (r.col2 ?? 0) > 0 ? styles.tdGreen : styles.tdMuted,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {(r.col2 ?? 0) > 0 ? formatLedgerAmount(r.col2) : "—"}
-                      </Text>
-                    </View>
-                    <View style={styles.tripAmountCol}>
-                      <Text
-                        style={[
-                          styles.tripTd,
-                          styles.tripTdRight,
-                          (r.col3 ?? 0) > 0 ? styles.tdRed : styles.tdMuted,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {(r.col3 ?? 0) > 0 ? formatLedgerAmount(r.col3) : "—"}
-                      </Text>
-                    </View>
-                  </Pressable>
-                ))
-              )}
             </View>
-          </View>
         </ScrollView>
       )}
 
@@ -1818,6 +2184,25 @@ export default function DriverDetailScreen({
           )}
         </View>
       )}
+
+      <DateRangePickerModal
+        visible={tripsDateRangeModalVisible}
+        initialFrom={tripsCustomFrom ?? undefined}
+        initialTo={tripsCustomTo ?? undefined}
+        onDismiss={() => setTripsDateRangeModalVisible(false)}
+        onApply={(from, to) => {
+          setTripsCustomFrom(from);
+          setTripsCustomTo(to);
+          setTripsDatePreset("custom");
+          setTripsDateRangeModalVisible(false);
+        }}
+        onClear={() => {
+          setTripsCustomFrom(null);
+          setTripsCustomTo(null);
+          setTripsDatePreset("all");
+          setTripsDateRangeModalVisible(false);
+        }}
+      />
 
       <LedgerReportModal
         visible={showReportModal}
@@ -2258,6 +2643,243 @@ const styles = StyleSheet.create({
   tabScroll: { flex: 1 },
   tabScrollContent: {
     flexGrow: 1,
+  },
+  tabScrollContentTripsFull: {
+    alignSelf: "stretch",
+    width: "100%",
+  },
+  tripsTabInner: {
+    alignSelf: "stretch",
+    width: "100%",
+    marginHorizontal: -Layout.screenPaddingHorizontal,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 8,
+  },
+  tripsFilterBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 14,
+    gap: 6,
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  tripsFilterScroll: {
+    flex: 1,
+    minWidth: 0,
+  },
+  tripsFilterChipsContent: {
+    flexGrow: 0,
+    alignItems: "center",
+    paddingRight: 4,
+    gap: 8,
+  },
+  tripsFilterChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    backgroundColor: Theme.surfaceGray,
+  },
+  tripsFilterChipActive: {
+    backgroundColor: Theme.primary,
+  },
+  tripsFilterChipText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textMuted,
+  },
+  tripsFilterChipTextActive: {
+    color: Theme.textOnPrimary,
+  },
+  tripsFilterCalendarBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: Theme.surfaceGray,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  driverTripsTableFull: {
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  tripTableCardFullWidth: {
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  ledgerSummaryRowTripsFull: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    width: "100%",
+    alignSelf: "stretch",
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    marginBottom: 14,
+  },
+  ledgerSummaryTripsPaidBlock: {
+    flexShrink: 0,
+    minWidth: 0,
+  },
+  ledgerSummaryTripsDueBlock: {
+    flexShrink: 0,
+    minWidth: 0,
+    alignItems: "flex-end",
+  },
+  driverTripsHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: "100%",
+    alignSelf: "stretch",
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    backgroundColor: Theme.surfaceLight,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
+  driverTripsDataRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: "100%",
+    alignSelf: "stretch",
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+    minHeight: 56,
+  },
+  driverTripsDataRowEmpty: {
+    justifyContent: "center",
+  },
+  driverTripsThTrip: {
+    flex: 2.05,
+    minWidth: 0,
+    fontSize: 7,
+    fontWeight: "700",
+    fontStyle: "italic",
+    color: Theme.textMuted,
+    letterSpacing: 0.35,
+  },
+  driverTripsThClient: {
+    flex: 1.85,
+    minWidth: 0,
+    fontSize: 7,
+    fontWeight: "700",
+    fontStyle: "italic",
+    color: Theme.textMuted,
+    letterSpacing: 0.35,
+  },
+  driverTripsThNum: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 7,
+    fontWeight: "700",
+    fontStyle: "italic",
+    color: Theme.textMuted,
+    letterSpacing: 0.35,
+    textAlign: "right",
+  },
+  driverTripsThTxn: {
+    flex: 0.62,
+    minWidth: 0,
+    fontSize: 7,
+    fontWeight: "700",
+    fontStyle: "italic",
+    color: Theme.textMuted,
+    letterSpacing: 0.35,
+    textAlign: "right",
+  },
+  driverTripsThLast: {
+    flex: 0.72,
+    minWidth: 0,
+    fontSize: 7,
+    fontWeight: "700",
+    fontStyle: "italic",
+    color: Theme.textMuted,
+    letterSpacing: 0.35,
+    textAlign: "right",
+  },
+  driverTripsCellTrip: {
+    flex: 2.05,
+    minWidth: 0,
+    paddingRight: 6,
+  },
+  driverTripsTripId: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  driverTripsRoute: {
+    fontSize: 10,
+    fontWeight: "400",
+    color: Theme.textMuted,
+    marginTop: 4,
+  },
+  driverTripsCellClient: {
+    flex: 1.85,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingRight: 4,
+  },
+  driverTripsClientAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Theme.positiveMuted,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  driverTripsClientAvatarText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.darkGreen,
+  },
+  driverTripsClientName: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  driverTripsAmt: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 9,
+    fontWeight: "600",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+    textAlign: "right",
+  },
+  driverTripsTxn: {
+    flex: 0.62,
+    minWidth: 0,
+    fontSize: 9,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    textAlign: "right",
+  },
+  driverTripsLastTxn: {
+    flex: 0.72,
+    minWidth: 0,
+    fontSize: 8,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    textAlign: "right",
+  },
+  driverTripsEmptyWide: {
+    flex: 1,
+    width: "100%",
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    fontSize: 13,
+    fontWeight: "500",
+    color: Theme.textMuted,
   },
   tableWrap: { paddingHorizontal: 16, paddingTop: 24 },
   tripTableCard: {
