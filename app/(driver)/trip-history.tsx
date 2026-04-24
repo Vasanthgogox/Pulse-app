@@ -104,6 +104,47 @@ function isCompleted(status: string) {
   return s === "completed" || s === "delivered" || s === "done";
 }
 
+function isAssignedNotStarted(status: string) {
+  const s = (status || "").toLowerCase();
+  return s === "assigned" || s === "pending" || s === "scheduled";
+}
+
+function isTransitStatus(status: string) {
+  const s = (status || "").toLowerCase();
+  return s === "in_transit" || s === "transit";
+}
+
+function isPickupProgressStatus(status: string) {
+  const s = (status || "").toLowerCase();
+  return s === "in_progress" || s === "pickup" || s === "picked_up" || s === "started";
+}
+
+function isAtDropStatus(status: string) {
+  const s = (status || "").toLowerCase();
+  return s === "at_drop";
+}
+
+function getTripStageBadgeLabel(trip: tripsService.TripRow): string {
+  if (isCompleted(trip.status)) return "COMPLETED";
+  if (isAssignedNotStarted(trip.status) && !trip.started_at) return "ASSIGNED";
+  if (isAtDropStatus(trip.status)) return "AT DROP";
+  if (isTransitStatus(trip.status) || (String(trip.status || "").toLowerCase() === "in_progress" && !!trip.started_at)) {
+    return "IN TRANSIT";
+  }
+  return "PICKUP";
+}
+
+function getTripProgressTitle(trip: tripsService.TripRow): string {
+  if (isCompleted(trip.status)) return "DELIVERED SUCCESSFULLY";
+  if (isAssignedNotStarted(trip.status) && !trip.started_at) return "AWAITING ACCEPTANCE";
+  if (isAtDropStatus(trip.status)) return "AT DROP-OFF LOCATION";
+  if (isTransitStatus(trip.status) || (String(trip.status || "").toLowerCase() === "in_progress" && !!trip.started_at)) {
+    return "TRIP IN PROGRESS";
+  }
+  if (isPickupProgressStatus(trip.status)) return "AT PICKUP STAGE";
+  return "ACTIVE TRIP";
+}
+
 function formatDate(dateStr: string | null) {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
@@ -508,6 +549,7 @@ export default function DriverTripsScreen() {
 
   const renderItem = ({ item }: { item: tripsService.TripRow }) => {
     const completed = isCompleted(item.status);
+    const badgeLabel = getTripStageBadgeLabel(item);
     const pickupParts = splitLocationPrimarySecondary(item.pickup_area);
     const dropParts = splitLocationPrimarySecondary(item.drop_location);
     const corridorHint = [pickupParts.secondary, dropParts.secondary].filter(Boolean).join(" · ");
@@ -588,7 +630,7 @@ export default function DriverTripsScreen() {
               <Text
                 style={[styles.badgeRefText, { color: colors.textOnPrimary }]}
               >
-                {completed ? "COMPLETED" : "IN TRANSIT"}
+                {badgeLabel}
               </Text>
             </View>
           </View>
@@ -1313,7 +1355,7 @@ export default function DriverTripsScreen() {
                           Status
                         </Text>
                         <Text style={[styles.tdProgressTitle, { color: colors.text }]}>
-                          TRIP IN PROGRESS
+                          {getTripProgressTitle(selectedTrip)}
                         </Text>
                       </View>
                       <View

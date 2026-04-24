@@ -105,11 +105,14 @@ function isTripInProgress(t: tripsService.TripRow) {
 /** Human-readable status for dashboard status-only card (no actions). */
 function getTripStatusLabel(t: tripsService.TripRow): string {
   const s = (t.status || "").toLowerCase();
+  if (s === "assigned" || s === "pending" || s === "scheduled")
+    return "Awaiting acceptance";
   if (s === "in_progress" || s === "pickup" || s === "picked_up")
     return "Proceed to pickup";
   if (s === "in_transit" || s === "transit") return "Trip in transit";
+  if (s === "at_drop") return "At drop-off location";
   if (isCompletedStatus(t.status)) return "Completed";
-  return "Proceed to pickup";
+  return "Awaiting acceptance";
 }
 
 const UUID_V4_RE =
