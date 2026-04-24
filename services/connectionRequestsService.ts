@@ -6,8 +6,9 @@
  * Data model (phone is on the person, not the org):
  * - organizations = company/org (name, slug, owner_id, etc.). No phone column.
  * - auth.users = the person; raw_user_meta_data->>'phone' (and optional ->'phone_numbers' array) stores phone on sign-up and profile edit.
- * Lookup "by phone" is by person: get_invitee_by_phone reads auth.users.raw_user_meta_data, then resolves that user's
- * organization via organization_members or organizations.owner_id, and returns organization_id, full_name, phone.
+ * Lookup "by phone" is by person: get_invitee_by_phone reads profiles.phone then auth metadata, resolves that user's
+ * organization via organization_members or organizations.owner_id, and returns organization_id, full_name, phone,
+ * organization_name, profile_company_name, and profile_role (profiles.role, for driver-aware invite UI).
  *
  * Role semantics (one direction per request; see on_connection_request_approved trigger):
  * - Add Client (requestShipperClient: true): inviter gets invitee as CLIENT; invitee gets inviter as SUPPLIER.
@@ -33,6 +34,8 @@ export interface ConnectionInviteeByPhone {
   organization_name: string;
   /** Matched user's profile company (profiles.company_name), if set. */
   profile_company_name: string | null;
+  /** `profiles.role` from get_invitee_by_phone (lowercase), e.g. `driver`. Empty when unknown. */
+  profile_role: string;
 }
 
 /** Prefill: prefer profile company_name, else organization display name. */
@@ -43,6 +46,11 @@ export function inviteeSuggestedCompanyName(invitee: {
   const fromProfile = (invitee.profile_company_name ?? "").trim();
   if (fromProfile.length > 0) return fromProfile;
   return (invitee.organization_name ?? "").trim();
+}
+
+/** True when invitee RPC reported a driver profile — used for Add Client / Supplier copy. */
+export function inviteeProfileIsDriver(role: string | null | undefined): boolean {
+  return (role ?? "").toLowerCase() === "driver";
 }
 
 export interface ConnectionRequestRow {
@@ -70,6 +78,7 @@ export interface ConnectionInviteeByPhoneRow {
   full_name: string | null;
   organization_name?: string | null;
   profile_company_name?: string | null;
+  profile_role?: string | null;
 }
 
 export async function getConnectionInviteeByPhone(phone: string): Promise<{
@@ -93,6 +102,7 @@ export async function getConnectionInviteeByPhone(phone: string): Promise<{
       phone: row.phone ?? normalized,
       organization_name: row.organization_name ?? '',
       profile_company_name: row.profile_company_name ?? null,
+      profile_role: (row.profile_role ?? '').trim().toLowerCase(),
     },
   };
 }
@@ -160,6 +170,7 @@ export async function getConnectionInviteesByPhones(phones: string[]): Promise<{
       phone: r.phone ?? phoneKey,
       organization_name: r.organization_name ?? '',
       profile_company_name: r.profile_company_name ?? null,
+      profile_role: (r.profile_role ?? '').trim().toLowerCase(),
     });
   }
   return { error: null, inviteesByPhone };

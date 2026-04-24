@@ -18,7 +18,7 @@ import { useFonts } from 'expo-font';
 import { Stack, usePathname, useRouter, type ErrorBoundaryProps } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useMemo, useRef } from 'react';
-import { LogBox, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { LogBox, Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -259,6 +259,7 @@ function RootOverlayTabBar() {
   const pathname = usePathname();
   const router = useRouter();
   const { resetBarVisible } = useDemoTabBarScroll();
+  const { width } = useWindowDimensions();
 
   const showOnRootScreens =
     pathname === '/pod-reconciliation' ||
@@ -273,22 +274,44 @@ function RootOverlayTabBar() {
 
   // These screens are reached from the Finance tab, so Finance stays active in the dock.
   const activeTab: DemoTabId = 'finance';
-  const isWeb = Platform.OS === 'web';
+  const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
+
+  const shellStyle = [
+    styles.rootTabBarWrap,
+    isDesktopWeb && {
+      position: 'absolute' as const,
+      left: 0,
+      right: 0,
+      top: 0,
+      zIndex: 100,
+      width: '100%',
+    },
+  ];
+
+  if (isDesktopWeb) {
+    return (
+      <View style={shellStyle}>
+        <DemoTabBar
+          activeTab={activeTab}
+          onTabChange={(tab) =>
+            router.push(
+              (tab === 'finance'
+                ? ROUTES.TABS.FINANCE
+                : tab === 'trips'
+                  ? ROUTES.TABS.TRIPS
+                  : tab === 'network'
+                    ? ROUTES.TABS.NETWORK
+                    : ROUTES.TABS.RESOURCES) as '/'
+            )
+          }
+          onProfilePress={() => router.push('/(tabs)/profile')}
+        />
+      </View>
+    );
+  }
 
   return (
-    <DemoTabBarAutoHideShell
-      style={[
-        styles.rootTabBarWrap,
-        isWeb && {
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 100,
-          width: '100%',
-        },
-      ]}
-    >
+    <DemoTabBarAutoHideShell style={shellStyle}>
       <DemoTabBar
         activeTab={activeTab}
         onTabChange={(tab) =>
@@ -297,13 +320,12 @@ function RootOverlayTabBar() {
               ? ROUTES.TABS.FINANCE
               : tab === 'trips'
                 ? ROUTES.TABS.TRIPS
-                : ROUTES.TABS.NETWORK) as '/'
+                : tab === 'network'
+                  ? ROUTES.TABS.NETWORK
+                  : ROUTES.TABS.RESOURCES) as '/'
           )
         }
-        onLoadBoardPress={() => router.push('/load-board')}
         onProfilePress={() => router.push('/(tabs)/profile')}
-        onLogoPress={() => router.navigate('/')}
-        showLoadFab={false}
       />
     </DemoTabBarAutoHideShell>
   );

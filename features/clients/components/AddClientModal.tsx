@@ -10,7 +10,10 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { pickContactForNameAndPhone } from "@/lib/contactPicker";
 import { validatePhone } from "@/lib/phoneValidation";
 import { formatMobileNumber } from "@/lib/format";
-import { inviteeSuggestedCompanyName } from "@/services/connectionRequestsService";
+import {
+  inviteeProfileIsDriver,
+  inviteeSuggestedCompanyName,
+} from "@/services/connectionRequestsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -44,6 +47,8 @@ export interface ConnectionInviteeMatch {
   organization_name?: string;
   /** Invitee profile company (profiles.company_name). */
   profile_company_name?: string | null;
+  /** From `get_invitee_by_phone` (profiles.role, lowercase). */
+  profile_role?: string;
 }
 
 interface AddClientModalProps {
@@ -95,6 +100,7 @@ export function AddClientModal({
   const contactInputRef = useRef<TextInput>(null);
   const phoneInputRef = useRef<TextInput>(null);
   const { width: windowWidth } = useWindowDimensions();
+  const inviteeIsDriver = inviteeProfileIsDriver(inviteeMatch?.profile_role);
 
   const handleImportFromContacts = async () => {
     setError(null);
@@ -137,6 +143,7 @@ export function AddClientModal({
   const useInvitePrimaryAction = Boolean(
     inviteeMatch && onSendInvitation,
   );
+  const hidePrimaryActionForDriverMatch = Boolean(inviteeMatch && inviteeIsDriver);
 
   // Reset form when modal opens so each open shows empty fields (not previous submission).
   useEffect(() => {
@@ -360,12 +367,18 @@ export function AddClientModal({
       ) : null}
       {inviteeMatch ? (
         <View style={styles.ledgerInviteeCard}>
-          <Text style={styles.ledgerInviteeLabel}>Found on platform</Text>
+          <Text style={styles.ledgerInviteeLabel}>
+            {inviteeIsDriver
+              ? t("inviteeRegisteredDriver")
+              : t("inviteeFoundOnPlatform")}
+          </Text>
           <Text style={styles.ledgerInviteeName}>
             {inviteeMatch.full_name || inviteeMatch.phone}
           </Text>
           <Text style={styles.ledgerInviteeFooterHint}>
-            Use the button below to send a connection request, or add as offline.
+            {inviteeIsDriver
+              ? t("addClientInviteeHintDriver")
+              : t("addClientInviteeHintDefault")}
           </Text>
           <TouchableOpacity
             style={styles.ledgerAddOfflineLink}
@@ -387,25 +400,27 @@ export function AddClientModal({
           {error}
         </Text>
       ) : null}
-      <TouchableOpacity
-        style={[
-          styles.ledgerSubmitBtn,
-          !canSubmit && styles.ledgerSubmitBtnDisabled,
-        ]}
-        onPress={useInvitePrimaryAction ? handleSendInvitation : handleSubmit}
-        disabled={!canSubmit}
-        activeOpacity={0.9}
-      >
-        <Text style={styles.ledgerSubmitBtnText}>
-          {submitting
-            ? useInvitePrimaryAction
-              ? t("sending")
-              : "Adding…"
-            : useInvitePrimaryAction
-              ? t("sendInvitation")
-              : "ADD CLIENT"}
-        </Text>
-      </TouchableOpacity>
+      {!hidePrimaryActionForDriverMatch ? (
+        <TouchableOpacity
+          style={[
+            styles.ledgerSubmitBtn,
+            !canSubmit && styles.ledgerSubmitBtnDisabled,
+          ]}
+          onPress={useInvitePrimaryAction ? handleSendInvitation : handleSubmit}
+          disabled={!canSubmit}
+          activeOpacity={0.9}
+        >
+          <Text style={styles.ledgerSubmitBtnText}>
+            {submitting
+              ? useInvitePrimaryAction
+                ? t("sending")
+                : "Adding…"
+              : useInvitePrimaryAction
+                ? t("sendInvitation")
+                : "ADD CLIENT"}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
     </>
   );
 
@@ -639,14 +654,18 @@ export function AddClientModal({
 
             {inviteeMatch ? (
               <View style={styles.screenInviteeCard}>
-                <Text style={styles.screenInviteeLabel}>FOUND ON PLATFORM</Text>
+                <Text style={styles.screenInviteeLabel}>
+                  {inviteeIsDriver
+                    ? t("inviteeRegisteredDriver").toUpperCase()
+                    : t("inviteeFoundOnPlatform").toUpperCase()}
+                </Text>
                 <Text style={styles.screenInviteeName}>
                   {inviteeMatch.full_name || inviteeMatch.phone}
                 </Text>
                 <Text style={styles.screenInviteeSubtext}>
-                  Send a connection request from the button below, or add this
-                  client as offline if you do not want to invite them on the
-                  platform.
+                  {inviteeIsDriver
+                    ? t("addClientInviteeHintDriver")
+                    : t("addClientInviteeHintDefault")}
                 </Text>
                 <TouchableOpacity
                   style={styles.screenAddOfflineLink}
@@ -681,27 +700,29 @@ export function AddClientModal({
             { paddingBottom: insets.bottom + 12 },
           ]}
         >
-          <TouchableOpacity
-            style={[
-              styles.screenSubmitButton,
-              (!canSubmit || submitting) && styles.screenButtonDisabled,
-            ]}
-            onPress={
-              useInvitePrimaryAction ? handleSendInvitation : handleSubmit
-            }
-            disabled={!canSubmit || submitting}
-            activeOpacity={0.9}
-          >
-            <Text style={styles.screenSubmitButtonText}>
-              {submitting
-                ? useInvitePrimaryAction
-                  ? t("sending")
-                  : "Saving..."
-                : useInvitePrimaryAction
-                  ? t("sendInvitation")
-                  : "ADD CLIENT"}
-            </Text>
-          </TouchableOpacity>
+          {!hidePrimaryActionForDriverMatch ? (
+            <TouchableOpacity
+              style={[
+                styles.screenSubmitButton,
+                (!canSubmit || submitting) && styles.screenButtonDisabled,
+              ]}
+              onPress={
+                useInvitePrimaryAction ? handleSendInvitation : handleSubmit
+              }
+              disabled={!canSubmit || submitting}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.screenSubmitButtonText}>
+                {submitting
+                  ? useInvitePrimaryAction
+                    ? t("sending")
+                    : "Saving..."
+                  : useInvitePrimaryAction
+                    ? t("sendInvitation")
+                    : "ADD CLIENT"}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
     </KeyboardAvoidingView>

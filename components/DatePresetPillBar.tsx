@@ -135,33 +135,36 @@ export function DatePresetPillBar({
 
 const styles = StyleSheet.create({
   wrap: {
-    marginHorizontal: -4,
-    marginBottom: 4,
+    marginHorizontal: -2,
+    marginBottom: 0,
   },
   scrollContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 4,
+    gap: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 2,
   },
   pill: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    minHeight: 40,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
     borderRadius: 999,
     borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   iconPill: {
-    width: 40,
-    height: 36,
+    width: 42,
+    height: 40,
     borderRadius: 999,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
   pillDark: {
-    backgroundColor: Theme.darkSurface,
-    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "#17191f",
+    borderColor: "rgba(255,255,255,0.14)",
   },
   pillLight: {
     backgroundColor: Theme.screenBackground,
@@ -176,9 +179,9 @@ const styles = StyleSheet.create({
     borderColor: Theme.primary,
   },
   pillText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
-    letterSpacing: 0.3,
+    letterSpacing: 0.1,
   },
   pillTextDark: {
     color: Theme.textOnDarkMuted,

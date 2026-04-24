@@ -13,6 +13,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,6 +27,16 @@ export interface AddTripModalLayoutProps {
   submitting?: boolean;
   /** When false, the page puts the primary action inside the form (e.g. centered CTA). */
   showFooter?: boolean;
+  /** Optional override for rendering top-right header actions. */
+  showHeaderActions?: boolean;
+  /**
+   * Preferred primary action surface.
+   * - "header": render action in header
+   * - "footer": render sticky footer action
+   * - "content": caller renders action inside children
+   * - "auto": keep legacy showFooter/showHeaderActions behavior
+   */
+  primaryActionMode?: "auto" | "header" | "footer" | "content";
   onClose: () => void;
   onSubmit: () => void;
   children: ReactNode;
@@ -38,19 +49,34 @@ export function AddTripModalLayout({
   canSubmit,
   submitting = false,
   showFooter = true,
+  showHeaderActions,
+  primaryActionMode = "auto",
   onClose,
   onSubmit,
   children,
 }: AddTripModalLayoutProps) {
   const insets = useSafeAreaInsets();
+  const { width: winW } = useWindowDimensions();
+  const isCompactMobile = winW < 480;
   const submitDisabled = !canSubmit || submitting;
-  const showHeaderActions = !showFooter;
+  const shouldShowFooter =
+    primaryActionMode === "footer"
+      ? true
+      : primaryActionMode === "header" || primaryActionMode === "content"
+        ? false
+        : showFooter;
+  const shouldShowHeaderActions =
+    primaryActionMode === "header"
+      ? true
+      : primaryActionMode === "footer" || primaryActionMode === "content"
+        ? false
+        : (showHeaderActions ?? !showFooter);
 
   return (
     <View style={styles.container}>
-      <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
-        <View style={styles.topBarMain}>
-          <View style={styles.topBarLeft}>
+      <View style={[styles.topBar, isCompactMobile && styles.topBarCompact, { paddingTop: insets.top + 10 }]}>
+        <View style={[styles.topBarMain, isCompactMobile && styles.topBarMainCompact]}>
+          <View style={[styles.topBarLeft, isCompactMobile && styles.topBarLeftCompact]}>
             <TouchableOpacity style={styles.topBarBackBtn} onPress={onClose} activeOpacity={0.85}>
               <FontAwesome name="chevron-left" size={16} color={Theme.textPrimaryDark} />
             </TouchableOpacity>
@@ -59,8 +85,8 @@ export function AddTripModalLayout({
               <Text style={styles.topBarSubtitle}>{subtitle}</Text>
             </View>
           </View>
-          {showHeaderActions ? (
-            <View style={styles.topBarActions}>
+          {shouldShowHeaderActions ? (
+            <View style={[styles.topBarActions, isCompactMobile && styles.topBarActionsCompact]}>
               <TouchableOpacity style={styles.topBarCancelBtn} onPress={onClose} activeOpacity={0.85}>
                 <Text style={styles.topBarCancelText}>Cancel</Text>
               </TouchableOpacity>
@@ -83,14 +109,14 @@ export function AddTripModalLayout({
       
       <KeyboardAvoidingView
         style={styles.keyboardWrap}
-        behavior={Platform.OS === "ios" ? "padding" : "padding"}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={0}
       >
-        <View style={[styles.body, { paddingBottom: Layout.sectionSpacing }]}>
+        <View style={[styles.body, isCompactMobile && styles.bodyCompact, { paddingBottom: Layout.sectionSpacing + insets.bottom }]}>
           {children}
         </View>
 
-        {showFooter ? (
+        {shouldShowFooter ? (
           <View
             style={[
               styles.footer,
@@ -163,16 +189,27 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
+  topBarCompact: {
+    paddingHorizontal: 10,
+  },
   topBarMain: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
   },
+  topBarMainCompact: {
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: 8,
+  },
   topBarLeft: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
+  },
+  topBarLeftCompact: {
+    width: "100%",
   },
   topBarBackBtn: {
     width: 34,
@@ -210,6 +247,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-end",
     gap: 8,
+  },
+  topBarActionsCompact: {
+    width: "100%",
+    justifyContent: "flex-end",
+    marginTop: 2,
+    flexWrap: "wrap",
   },
   topBarCancelBtn: {
     minHeight: 38,
@@ -253,6 +296,10 @@ const styles = StyleSheet.create({
     minHeight: 0,
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 12,
+  },
+  bodyCompact: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
   },
   footer: {
     marginTop: 8,

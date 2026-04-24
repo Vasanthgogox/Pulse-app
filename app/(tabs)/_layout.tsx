@@ -5,7 +5,7 @@
 import React, { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { DemoTabBar, type DemoTabId } from '@/components/demo';
 import {
   DemoTabBarAutoHideShell,
@@ -21,27 +21,22 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
   const { resetBarVisible } = useDemoTabBarScroll();
   const { state, navigation } = props;
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
   const routeName = state.routes[state.index]?.name;
   const activeTab: DemoTabId =
     routeName === 'finance' ? 'finance'
     : routeName === 'trips' ? 'trips'
     : routeName === 'network' ? 'network'
+    : routeName === 'resources' ? 'resources'
     : 'trips';
 
   const onTabChange = (tab: DemoTabId) => {
     navigation.navigate(tab);
   };
 
-  const onLoadBoardPress = () => {
-    router.push('/load-board');
-  };
-
   const onProfilePress = () => {
     router.push('/(tabs)/profile');
-  };
-
-  const onLogoPress = () => {
-    router.navigate('/');
   };
 
   useEffect(() => {
@@ -50,6 +45,7 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
       routeName === 'finance' ? ROUTES.TABS.FINANCE
       : routeName === 'trips'   ? ROUTES.TABS.TRIPS
       : routeName === 'network' ? ROUTES.TABS.NETWORK
+      : routeName === 'resources' ? ROUTES.TABS.RESOURCES
       : null;
     if (tabRoute) saveLastTabRoute(tabRoute);
     resetBarVisible();
@@ -60,32 +56,39 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
     return null;
   }
 
-  const isWeb = Platform.OS === 'web';
+  const shellStyle = [
+    styles.tabBarWrap,
+    isDesktopWeb && {
+      position: 'absolute' as const,
+      left: 0,
+      right: 0,
+      top: 0,
+      zIndex: 100,
+      width: '100%',
+    },
+    !isDesktopWeb && {
+      paddingBottom: insets.bottom > 0 ? 0 : 4,
+    },
+  ];
+
+  if (isDesktopWeb) {
+    return (
+      <View style={shellStyle}>
+        <DemoTabBar
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          onProfilePress={onProfilePress}
+        />
+      </View>
+    );
+  }
 
   return (
-    <DemoTabBarAutoHideShell
-      style={[
-        styles.tabBarWrap,
-        isWeb && {
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 100,
-          width: '100%',
-        },
-        !isWeb && {
-          paddingBottom: insets.bottom > 0 ? 0 : 4,
-        },
-      ]}
-    >
+    <DemoTabBarAutoHideShell style={shellStyle}>
       <DemoTabBar
         activeTab={activeTab}
         onTabChange={onTabChange}
-        onLoadBoardPress={onLoadBoardPress}
         onProfilePress={onProfilePress}
-        onLogoPress={onLogoPress}
-        showLoadFab={false}
       />
     </DemoTabBarAutoHideShell>
   );
@@ -94,6 +97,8 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
 export const unstable_settings = { initialRouteName: 'trips' };
 
 export default function TabLayout() {
+  const { width } = useWindowDimensions();
+  const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
   return (
     <DemoTabBarScrollProvider>
       <Tabs
@@ -103,6 +108,7 @@ export default function TabLayout() {
           headerShown: false,
           tabBarShowLabel: false,
           tabBarStyle: { display: 'none' },
+          sceneStyle: isDesktopWeb ? { paddingTop: 68 } : undefined,
         }}
       >
         <Tabs.Screen name="index" options={{ title: 'Home' }} />

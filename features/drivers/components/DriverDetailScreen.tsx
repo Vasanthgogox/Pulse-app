@@ -1219,7 +1219,7 @@ export default function DriverDetailScreen({
               driverDetailTab === "statement" && styles.tabItemTextActive,
             ]}
           >
-            {t("shared")}
+            {t("statement")}
           </Text>
         </TouchableOpacity>
       </View>

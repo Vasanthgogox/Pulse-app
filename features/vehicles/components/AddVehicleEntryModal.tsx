@@ -114,6 +114,7 @@ export function AddVehicleEntryModal({
   trips = [],
   drivers = [],
   fullPage = false,
+  initialTripId,
 }: AddVehicleEntryModalProps) {
   const insets = useSafeAreaInsets();
   const [type, setType] = useState<VehicleEntryType>('out');
