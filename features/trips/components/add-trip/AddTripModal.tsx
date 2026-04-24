@@ -14,6 +14,7 @@ import { useClientsForTrip } from "./useClientsForTrip";
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
 import { regenerateTripOtp } from "@/features/trips/services/tripOtp.service";
+import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { useWindowDimensions } from "react-native";
 
 export function AddTripModal({
@@ -26,6 +27,11 @@ export function AddTripModal({
   const form = useAddTripForm();
   const [submitting, setSubmitting] = useState(false);
   const [createdResult, setCreatedResult] = useState<AddTripCompleteResult | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successDetails, setSuccessDetails] = useState<{
+    tripNumber: string;
+    routeLabel: string;
+  } | null>(null);
   const [regenerating, setRegenerating] = useState(false);
   const {
     clients,
@@ -48,8 +54,18 @@ export function AddTripModal({
       };
       const result = await Promise.resolve(onComplete(form.buildPayload(), options));
       const typed = result as AddTripCompleteResult | undefined;
-      if (typed?.trip && typed?.otp) {
-        setCreatedResult(typed);
+      if (typed?.trip) {
+        if (typed.otp) {
+          setCreatedResult(typed);
+          return;
+        }
+        setSuccessDetails(
+          typed.successDetails ?? {
+            tripNumber: typed.trip.id,
+            routeLabel: `${form.state.pickupArea} -> ${form.state.dropLocation}`,
+          },
+        );
+        setShowSuccessModal(true);
         return;
       }
       onClose();
@@ -76,6 +92,12 @@ export function AddTripModal({
 
   const handleDone = () => {
     setCreatedResult(null);
+    onClose();
+  };
+
+  const handleSuccessOk = () => {
+    setShowSuccessModal(false);
+    setSuccessDetails(null);
     onClose();
   };
 
@@ -118,28 +140,41 @@ export function AddTripModal({
   }
 
   return (
-    <AddTripModalLayout
-      title="Create Trip"
-      submitLabel="Create Trip"
-      canSubmit={form.canSubmit}
-      submitting={submitting}
-      primaryActionMode={showStickyFooter ? "footer" : "content"}
-      onClose={onClose}
-      onSubmit={handleSubmit}
-    >
-      <AddTripFormFields
-        state={form.state}
-        setters={form.setters}
-        clients={clients}
-        clientsLoading={clientsLoading}
-        organizationId={organizationId}
-        refetchClients={refetchClients}
-        onSubmit={handleSubmit}
+    <>
+      <AddTripModalLayout
+        title="Create Trip"
+        submitLabel="Create Trip"
         canSubmit={form.canSubmit}
         submitting={submitting}
-        showInlineCta={!showStickyFooter}
+        primaryActionMode={showStickyFooter ? "footer" : "content"}
+        onClose={onClose}
+        onSubmit={handleSubmit}
+      >
+        <AddTripFormFields
+          state={form.state}
+          setters={form.setters}
+          clients={clients}
+          clientsLoading={clientsLoading}
+          organizationId={organizationId}
+          refetchClients={refetchClients}
+          onSubmit={handleSubmit}
+          canSubmit={form.canSubmit}
+          submitting={submitting}
+          showInlineCta={!showStickyFooter}
+        />
+      </AddTripModalLayout>
+
+      <ThemedAlertModal
+        visible={showSuccessModal}
+        title="Trip Created Successfully"
+        message={`Trip Number: ${successDetails?.tripNumber ?? "Trip"}\nRoute: ${successDetails?.routeLabel ?? "Route details unavailable"}`}
+        okText="OK"
+        onOk={handleSuccessOk}
+        onRequestClose={handleSuccessOk}
+        variant="neutral"
+        okVariant="primary"
       />
-    </AddTripModalLayout>
+    </>
   );
 }
 

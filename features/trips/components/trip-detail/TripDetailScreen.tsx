@@ -5,22 +5,22 @@ import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
-import { useOrganization } from "@/contexts/OrganizationContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useOrganization } from "@/contexts/OrganizationContext";
 import { getClientById } from "@/features/clients/services/clients.service";
 import { getDriverById, getDriverProfileDisplay } from "@/features/drivers/services/drivers.service";
-import type { LedgerRow } from "@/features/finance/services/finance.service";
 import {
-  openTripLedgerEntryChooser,
-  pushTripLedgerQuickEntry,
-  type TripLedgerQuickTag,
+    openTripLedgerEntryChooser,
+    pushTripLedgerQuickEntry,
+    type TripLedgerQuickTag,
 } from "@/features/finance/ledger/tripLedgerEntryChooser";
+import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
 import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
 import { averageScore, getRatingsForTrip } from "@/features/ratings/services/ratings.service";
 import {
-  getSupplierById,
-  getSupplierDetails,
+    getSupplierById,
+    getSupplierDetails,
 } from "@/features/suppliers/services/suppliers.service";
 import { getVehicleDocumentViewUrl } from "@/features/vehicles/services/vehicleDocuments.service";
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
@@ -32,6 +32,16 @@ import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import { useShipperDisplayNamesQuery, useTransactionsQuery, useTripSubcontractsQuery } from "@/lib/queries";
 import * as driverLocationService from "@/services/driverLocationService";
+import type { DisputeRow } from "@/services/sharedLedgerService";
+import {
+    acceptPartnerView,
+    createDispute,
+    getDisputesForPartner,
+    getDisputesReceived,
+    getSharedLedgerEntriesForPartner,
+    resolveDispute,
+    resolveDisputeTableOnly,
+} from "@/services/sharedLedgerService";
 import * as tripDocumentsService from "@/services/tripDocumentsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
@@ -43,7 +53,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
-    Animated,
     Dimensions,
     Image,
     Modal,
@@ -53,50 +62,40 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRealtimeTrip } from "../../hooks/useRealtimeTrips";
 import {
-  clearInitialTripForDetail,
-  getInitialTripForDetail,
+    clearInitialTripForDetail,
+    getInitialTripForDetail,
 } from "../../initialTripForDetail";
 import type { TripAssignmentAuditRow } from "../../services/trip-assignment-audit.service";
 import { getTripAssignmentAuditHistory } from "../../services/trip-assignment-audit.service";
 import type { TripAdjustment } from "../../services/tripAdjustments";
 import {
-  addTripAdjustment,
-  getTripAdjustments,
-  removeTripAdjustment,
+    addTripAdjustment,
+    getTripAdjustments,
+    removeTripAdjustment,
 } from "../../services/tripAdjustments";
 import { getTripOtpForDisplay } from "../../services/tripOtp.service";
 import {
-  getTripById,
-  getTripDisplayNumber,
-  getTripsWhereOrgIsSupplier,
-  isTripCompleted,
-  manualAdvanceTrip,
-  type TripRow,
+    getTripById,
+    getTripDisplayNumber,
+    getTripsWhereOrgIsSupplier,
+    isTripCompleted,
+    manualAdvanceTrip,
+    type TripRow,
 } from "../../services/trips.service";
 import { TripAssignmentBlock, type AssignmentSource } from "../TripAssignmentBlock";
-import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import { TrackingMapBlock, VehicleTrackingCard } from "./TrackingMapBlock";
+import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import {
-  TripDetailFinanceView,
-  type ReconciliationPartyInfo,
-  type TripDetailTab,
-  type TripDocItem,
+    TripDetailFinanceView,
+    type ReconciliationPartyInfo,
+    type TripDetailTab,
+    type TripDocItem,
 } from "./TripDetailFinanceView";
-import {
-  acceptPartnerView,
-  createDispute,
-  getDisputesForPartner,
-  getDisputesReceived,
-  getSharedLedgerEntriesForPartner,
-  resolveDispute,
-  resolveDisputeTableOnly,
-} from "@/services/sharedLedgerService";
-import type { DisputeRow } from "@/services/sharedLedgerService";
 
 let ExpoLocationModule: typeof ExpoLocationTypes | null = null;
 

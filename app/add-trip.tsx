@@ -6,15 +6,14 @@ import { useOrganization } from '@/contexts/OrganizationContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { createLedgerEntry } from '@/features/finance';
 import { AddTripModal, assignTripDriverByPhone, createTrip, createTripWithOtp, type AddTripFormData } from '@/features/trips';
+import type { AddTripCompleteResult } from '@/features/trips/components/add-trip/types';
 import { useInvalidateTrips } from '@/lib/queries';
-import { useSafeBack } from '@/lib/useSafeBack';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
 
 export default function AddTripPage() {
   const router = useRouter();
-  const safeBack = useSafeBack();
   const { currentOrganization } = useOrganization();
   const { user, profile } = useAuth();
   const invalidateTrips = useInvalidateTrips();
@@ -37,7 +36,21 @@ export default function AddTripPage() {
     await Promise.resolve(invalidateTrips(orgId));
   };
 
-  const handleComplete = async (data: AddTripFormData, options?: { supplySource: string; driverPhone?: string }) => {
+  const resolveTripNumber = (trip: unknown): string => {
+    if (!trip || typeof trip !== 'object') return 'Trip';
+    const candidateKeys = ['display_trip_id', 'trip_number', 'id'] as const;
+    for (const key of candidateKeys) {
+      const value = (trip as Record<string, unknown>)[key];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+      if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+    }
+    return 'Trip';
+  };
+
+  const handleComplete = async (
+    data: AddTripFormData,
+    options?: { supplySource: string; driverPhone?: string },
+  ): Promise<AddTripCompleteResult | void> => {
     const { orgId, userId } = ensureSessionReady();
     const loadTonsRaw =
       data.tons != null && String(data.tons).trim() !== ""
@@ -100,7 +113,16 @@ export default function AddTripPage() {
         await refreshTripsAfterCreate(orgId);
       }
       if (trip && otp && options?.driverPhone?.trim()) return { trip, otp };
-      closeAndGoBack();
+      if (trip) {
+        return {
+          trip,
+          otp: null,
+          successDetails: {
+            tripNumber: resolveTripNumber(trip),
+            routeLabel: `${data.pickup_area} -> ${data.drop_location}`,
+          },
+        };
+      }
       return;
     }
     const { error, trip } = await createTrip(orgId, userId, {
@@ -149,7 +171,16 @@ export default function AddTripPage() {
     if (trip) {
       await refreshTripsAfterCreate(orgId);
     }
-    closeAndGoBack();
+    if (trip) {
+      return {
+        trip,
+        otp: null,
+        successDetails: {
+          tripNumber: resolveTripNumber(trip),
+          routeLabel: `${data.pickup_area} -> ${data.drop_location}`,
+        },
+      };
+    }
   };
 
   return (
