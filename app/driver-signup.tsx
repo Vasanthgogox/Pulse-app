@@ -848,6 +848,7 @@ const styles = StyleSheet.create({
   brandText: {
     fontSize: 28,
     fontWeight: '900',
+    fontStyle: 'italic',
     letterSpacing: -0.8,
     color: Theme.driverPrimary,
   },

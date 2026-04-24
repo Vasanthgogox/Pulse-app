@@ -90,4 +90,20 @@ export const queryKeys = {
     trips: (orgId: string) => ['q', 'invoicing', 'trips', orgId] as const,
     summary: (orgId: string) => ['q', 'invoicing', 'summary', orgId] as const,
   },
+
+  posts: {
+    all: (orgId: string) => ['q', 'posts', orgId] as const,
+    feed: (orgId: string, opts?: { limit?: number; offset?: number }) =>
+      opts ? (['q', 'posts', orgId, 'feed', opts] as const) : (['q', 'posts', orgId, 'feed'] as const),
+    detail: (postId: string) => ['q', 'posts', 'detail', postId] as const,
+  },
+
+  bids: {
+    forPost: (postId: string) => ['q', 'bids', 'post', postId] as const,
+    myBid: (postId: string, orgId: string) => ['q', 'bids', 'mine', postId, orgId] as const,
+  },
+
+  discover: {
+    search: (orgId: string, search: string) => ['q', 'discover', orgId, search] as const,
+  },
 } as const;

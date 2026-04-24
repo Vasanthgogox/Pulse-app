@@ -655,6 +655,8 @@ const styles = StyleSheet.create({
   brandLogo: {
     fontSize: 44,
     fontWeight: '900',
+    fontStyle: 'italic',
+    letterSpacing: -1.1,
     color: Theme.textOnDark,
     marginBottom: 14,
   },
