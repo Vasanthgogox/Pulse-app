@@ -104,6 +104,7 @@ export default function AddClientScreen() {
     <AddClientModal
       onClose={() => closeModal(router, returnTo)}
       onComplete={handleComplete}
+      successEntity="customer"
       organizationId={currentOrganization?.id ?? null}
       noOrganizationMessage={currentOrganization ? null : NO_ORG_MESSAGE}
       onRefreshOrganization={refreshOrganization}
