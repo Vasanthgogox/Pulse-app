@@ -3,7 +3,10 @@
  * Used by FinanceScreen.
  */
 import { createClient } from "@/features/clients/services/clients.service";
-import type { AddClientFormData } from "@/features/clients/components/AddClientModal";
+import type {
+  AddClientFormData,
+  ConnectionInviteeMatch,
+} from "@/features/clients/components/AddClientModal";
 import { createDriver, inviteDriver } from "@/features/drivers/services/drivers.service";
 import type { DriverFormData } from "@/features/drivers/components/AddDriverModal";
 import {
@@ -35,15 +38,7 @@ export interface UseFinanceAddEntityHandlersArgs {
 export interface UseFinanceAddEntityHandlersResult {
   NO_ORG_MESSAGE: string;
   handleAddClientComplete: (data: AddClientFormData) => Promise<void>;
-  searchInviteeByPhone: (
-    phone: string,
-  ) => Promise<{
-    organization_id: string;
-    full_name: string;
-    phone: string;
-    organization_name?: string;
-    profile_company_name?: string | null;
-  } | null>;
+  searchInviteeByPhone: (phone: string) => Promise<ConnectionInviteeMatch | null>;
   handleSendClientInvitation: (toOrgId: string) => Promise<void>;
   handleSendSupplierInvitation: (toOrgId: string) => Promise<void>;
   handleAddVehicleComplete: (payload: AddVehicleCompletePayload) => Promise<void>;
@@ -91,6 +86,7 @@ export function useFinanceAddEntityHandlers(
       phone: invitee.phone,
       organization_name: invitee.organization_name,
       profile_company_name: invitee.profile_company_name,
+      profile_role: invitee.profile_role,
     };
   }, []);
 

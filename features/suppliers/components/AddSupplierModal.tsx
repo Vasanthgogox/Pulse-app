@@ -10,7 +10,10 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { pickContactForNameAndPhone } from "@/lib/contactPicker";
 import { validatePhone } from "@/lib/phoneValidation";
 import { formatMobileNumber } from "@/lib/format";
-import { inviteeSuggestedCompanyName } from "@/services/connectionRequestsService";
+import {
+  inviteeProfileIsDriver,
+  inviteeSuggestedCompanyName,
+} from "@/services/connectionRequestsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -42,6 +45,8 @@ export interface SupplierInviteeMatch {
   phone: string;
   organization_name?: string;
   profile_company_name?: string | null;
+  /** From `get_invitee_by_phone` (profiles.role, lowercase). */
+  profile_role?: string;
 }
 
 interface AddSupplierModalProps {
@@ -91,6 +96,7 @@ export function AddSupplierModal({
   const nameInputRef = useRef<TextInput>(null);
   const phoneInputRef = useRef<TextInput>(null);
   const { width: windowWidth } = useWindowDimensions();
+  const inviteeIsDriver = inviteeProfileIsDriver(inviteeMatch?.profile_role);
 
   const handleImportFromContacts = async () => {
     setError(null);
@@ -359,12 +365,18 @@ export function AddSupplierModal({
       ) : null}
       {inviteeMatch ? (
         <View style={styles.ledgerInviteeCard}>
-          <Text style={styles.ledgerInviteeLabel}>Found on platform</Text>
+          <Text style={styles.ledgerInviteeLabel}>
+            {inviteeIsDriver
+              ? t("inviteeRegisteredDriver")
+              : t("inviteeFoundOnPlatform")}
+          </Text>
           <Text style={styles.ledgerInviteeName}>
             {inviteeMatch.full_name || inviteeMatch.phone}
           </Text>
           <Text style={styles.ledgerInviteeFooterHint}>
-            Use the button below to send a connection request, or add as offline.
+            {inviteeIsDriver
+              ? t("addSupplierInviteeHintDriver")
+              : t("addSupplierInviteeHintDefault")}
           </Text>
           <TouchableOpacity
             style={styles.ledgerAddOfflineLink}
@@ -401,7 +413,9 @@ export function AddSupplierModal({
               ? t("sending")
               : "Adding…"
             : useInvitePrimaryAction
-              ? t("sendInvitation")
+              ? inviteeIsDriver
+                ? t("connectionRequestLinkOrganizations")
+                : t("sendInvitation")
               : "ADD SUPPLIER"}
         </Text>
       </TouchableOpacity>
@@ -638,14 +652,18 @@ export function AddSupplierModal({
 
             {inviteeMatch ? (
               <View style={styles.screenInviteeCard}>
-                <Text style={styles.screenInviteeLabel}>FOUND ON PLATFORM</Text>
+                <Text style={styles.screenInviteeLabel}>
+                  {inviteeIsDriver
+                    ? t("inviteeRegisteredDriver").toUpperCase()
+                    : t("inviteeFoundOnPlatform").toUpperCase()}
+                </Text>
                 <Text style={styles.screenInviteeName}>
                   {inviteeMatch.full_name || inviteeMatch.phone}
                 </Text>
                 <Text style={styles.screenInviteeSubtext}>
-                  Send a connection request from the button below, or add this
-                  supplier as offline if you do not want to invite them on the
-                  platform.
+                  {inviteeIsDriver
+                    ? t("addSupplierInviteeHintDriver")
+                    : t("addSupplierInviteeHintDefault")}
                 </Text>
                 <TouchableOpacity
                   style={styles.screenAddOfflineLink}
@@ -697,7 +715,9 @@ export function AddSupplierModal({
                   ? t("sending")
                   : "Saving..."
                 : useInvitePrimaryAction
-                  ? t("sendInvitation")
+                  ? inviteeIsDriver
+                    ? t("connectionRequestLinkOrganizations")
+                    : t("sendInvitation")
                   : "ADD SUPPLIER"}
             </Text>
           </TouchableOpacity>
