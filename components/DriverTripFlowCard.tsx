@@ -7,26 +7,34 @@ import * as tripDocumentsService from '@/services/tripDocumentsService';
 import * as tripsService from '@/services/tripsService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Pressable as HoldPressable } from 'react-native-gesture-handler';
 import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    Linking,
-    Modal,
-    Platform,
-    Pressable,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 type StepId = 'accepted' | 'pickup' | 'transit' | 'reached' | 'completed';
 
 const HOLD_DURATION_MS = 1500;
+/** So finger drift / parent scroll do not end the hold (sheet / ScrollView). */
+const HOLD_PRESS_RETENTION = 100;
 const DRIVER_ACCEPTED_TRIP_ID_KEY = 'driver_accepted_trip_id';
+
+const holdCompleteWebStyle = {
+  touchAction: 'none' as 'none' | 'auto' | 'manipulation',
+  userSelect: 'none' as 'none' | 'auto' | 'text' | 'contain' | 'all',
+};
 
 function deriveStepFromTrip(t: tripsService.TripRow): StepId {
   const s = String(t.status ?? '').toLowerCase();
@@ -559,10 +567,16 @@ export function DriverTripFlowCard({
           </View>
 
           {(podDocuments.length >= 1 || podSkipped) ? (
-            <Pressable
-              style={[styles.holdBtnWrap, { backgroundColor: colors.emeraldMuted ?? Theme.surfaceLight }]}
+            <HoldPressable
               onPressIn={startHold}
               onPressOut={cancelHold}
+              pressRetentionOffset={HOLD_PRESS_RETENTION}
+              android_ripple={{ color: 'transparent' }}
+              style={[
+                styles.holdBtnWrap,
+                { backgroundColor: colors.emeraldMuted ?? Theme.surfaceLight },
+                Platform.OS === 'web' && holdCompleteWebStyle,
+              ]}
             >
               <View style={[styles.holdFill, { width: `${holdProgress}%`, backgroundColor: colors.emerald }]} />
               <View style={[styles.holdContent, { pointerEvents: 'none' }]}>
@@ -577,7 +591,7 @@ export function DriverTripFlowCard({
                   Hold to Complete Delivery
                 </Text>
               </View>
-            </Pressable>
+            </HoldPressable>
           ) : (
             <Text style={[styles.podRequired, { color: Theme.textMuted }]}>
               Upload at least one POD to complete the trip.

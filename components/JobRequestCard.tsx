@@ -5,15 +5,15 @@
  */
 import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import React, { useEffect, useRef, useState } from "react";
+import { Pressable } from "react-native-gesture-handler";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-    Platform,
-    Pressable,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 const CARD_PADDING = 24;
@@ -36,6 +36,14 @@ const HOLD_DURATION_MS = 1500;
 const HOLD_BTN_HEIGHT = 56;
 const HOLD_BTN_RADIUS = 14;
 const OTP_LENGTH = 6;
+/** Generous so finger drift / scroll handoff does not end the hold (native + sheet). */
+const HOLD_PRESS_RETENTION = 100;
+
+/** Reduces spurious onPressOut on mobile web (scroll/selection) during long-press. */
+const holdBtnWebStyle = {
+  touchAction: "none" as "none" | "auto" | "manipulation",
+  userSelect: "none" as "none" | "auto" | "text" | "contain" | "all",
+};
 
 export interface JobRequestCardProps {
   pickup: string;
@@ -81,6 +89,11 @@ export interface JobRequestCardProps {
    * - "page": frameless page inside the existing bottom sheet container
    */
   variant?: "card" | "page";
+  /**
+   * Stable id for the assignment. Hold-to-accept resets when this or pickup/dropoff
+   * changes, not when distance/eta/earnings strings refresh (e.g. after route load).
+   */
+  assignmentId?: string;
 }
 
 export function JobRequestCard({
@@ -110,6 +123,7 @@ export function JobRequestCard({
   onOtpCancel,
   edgeToEdge = false,
   variant = "card",
+  assignmentId,
 }: JobRequestCardProps) {
   const [isAccepted, setIsAccepted] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
@@ -117,6 +131,14 @@ export function JobRequestCard({
   const holdTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const holdStartRef = useRef(0);
   const otpInputRef = useRef<TextInput | null>(null);
+
+  const holdResetKey = useMemo(
+    () =>
+      assignmentId != null && String(assignmentId).length > 0
+        ? `id:${String(assignmentId)}`
+        : `route:${pickup}\u0001${dropoff}`,
+    [assignmentId, pickup, dropoff],
+  );
 
   useEffect(() => {
     setIsAccepted(false);
@@ -126,7 +148,7 @@ export function JobRequestCard({
       clearInterval(holdTimerRef.current);
       holdTimerRef.current = null;
     }
-  }, [pickup, dropoff, distance, eta, earnings]);
+  }, [holdResetKey]);
 
   useEffect(() => {
     if (!otpMode) {
@@ -450,7 +472,13 @@ export function JobRequestCard({
               <Pressable
                 onPressIn={startHold}
                 onPressOut={cancelHold}
-                style={[styles.holdBtnWrap, disabled && styles.holdBtnDisabled]}
+                pressRetentionOffset={HOLD_PRESS_RETENTION}
+                android_ripple={{ color: "transparent" }}
+                style={[
+                  styles.holdBtnWrap,
+                  disabled && styles.holdBtnDisabled,
+                  Platform.OS === "web" && holdBtnWebStyle,
+                ]}
                 disabled={disabled}
               >
                 <View

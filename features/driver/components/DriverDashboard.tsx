@@ -2004,6 +2004,7 @@ export default function DriverDashboard() {
                               <JobRequestCard
                                 edgeToEdge
                                 variant="page"
+                                assignmentId={String(effectiveFirstIncoming.id)}
                                 pickup={effectiveFirstIncoming.pickup_area?.trim() || '—'}
                                 dropoff={effectiveFirstIncoming.drop_location?.trim() || '—'}
                                 distance={formatTripDistance(effectiveFirstIncoming.distance)}
@@ -2593,6 +2594,7 @@ export default function DriverDashboard() {
           />
         ) : effectiveFirstIncoming && otpClaimTripId === effectiveFirstIncoming.id ? (
           <JobRequestCard
+            assignmentId={String(effectiveFirstIncoming.id)}
             pickup={effectiveFirstIncoming.pickup_area?.trim() || '—'}
             dropoff={effectiveFirstIncoming.drop_location?.trim() || '—'}
             distance={formatTripDistance(effectiveFirstIncoming.distance)}
@@ -2617,6 +2619,7 @@ export default function DriverDashboard() {
           />
         ) : effectiveFirstIncoming ? (
           <JobRequestCard
+            assignmentId={String(effectiveFirstIncoming.id)}
             pickup={effectiveFirstIncoming.pickup_area?.trim() || '—'}
             dropoff={effectiveFirstIncoming.drop_location?.trim() || '—'}
             distance={formatTripDistance(effectiveFirstIncoming.distance)}

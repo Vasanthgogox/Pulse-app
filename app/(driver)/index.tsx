@@ -3882,6 +3882,7 @@ export default function DriverRadarScreen() {
           effectiveFirstIncoming &&
           !assignmentFeedback ? (
           <JobRequestCard
+            assignmentId={String(effectiveFirstIncoming.id)}
             pickup={effectiveFirstIncoming.pickup_area?.trim() || "—"}
             dropoff={effectiveFirstIncoming.drop_location?.trim() || "—"}
             distance={(() => {
