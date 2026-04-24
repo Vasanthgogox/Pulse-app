@@ -143,6 +143,7 @@ export function AddClientModal({
   const useInvitePrimaryAction = Boolean(
     inviteeMatch && onSendInvitation,
   );
+  const hidePrimaryActionForDriverMatch = Boolean(inviteeMatch && inviteeIsDriver);
 
   // Reset form when modal opens so each open shows empty fields (not previous submission).
   useEffect(() => {
@@ -399,27 +400,27 @@ export function AddClientModal({
           {error}
         </Text>
       ) : null}
-      <TouchableOpacity
-        style={[
-          styles.ledgerSubmitBtn,
-          !canSubmit && styles.ledgerSubmitBtnDisabled,
-        ]}
-        onPress={useInvitePrimaryAction ? handleSendInvitation : handleSubmit}
-        disabled={!canSubmit}
-        activeOpacity={0.9}
-      >
-        <Text style={styles.ledgerSubmitBtnText}>
-          {submitting
-            ? useInvitePrimaryAction
-              ? t("sending")
-              : "Adding…"
-            : useInvitePrimaryAction
-              ? inviteeIsDriver
-                ? t("connectionRequestLinkOrganizations")
-                : t("sendInvitation")
-              : "ADD CLIENT"}
-        </Text>
-      </TouchableOpacity>
+      {!hidePrimaryActionForDriverMatch ? (
+        <TouchableOpacity
+          style={[
+            styles.ledgerSubmitBtn,
+            !canSubmit && styles.ledgerSubmitBtnDisabled,
+          ]}
+          onPress={useInvitePrimaryAction ? handleSendInvitation : handleSubmit}
+          disabled={!canSubmit}
+          activeOpacity={0.9}
+        >
+          <Text style={styles.ledgerSubmitBtnText}>
+            {submitting
+              ? useInvitePrimaryAction
+                ? t("sending")
+                : "Adding…"
+              : useInvitePrimaryAction
+                ? t("sendInvitation")
+                : "ADD CLIENT"}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
     </>
   );
 
@@ -699,29 +700,29 @@ export function AddClientModal({
             { paddingBottom: insets.bottom + 12 },
           ]}
         >
-          <TouchableOpacity
-            style={[
-              styles.screenSubmitButton,
-              (!canSubmit || submitting) && styles.screenButtonDisabled,
-            ]}
-            onPress={
-              useInvitePrimaryAction ? handleSendInvitation : handleSubmit
-            }
-            disabled={!canSubmit || submitting}
-            activeOpacity={0.9}
-          >
-            <Text style={styles.screenSubmitButtonText}>
-              {submitting
-                ? useInvitePrimaryAction
-                  ? t("sending")
-                  : "Saving..."
-                : useInvitePrimaryAction
-                  ? inviteeIsDriver
-                    ? t("connectionRequestLinkOrganizations")
-                    : t("sendInvitation")
-                  : "ADD CLIENT"}
-            </Text>
-          </TouchableOpacity>
+          {!hidePrimaryActionForDriverMatch ? (
+            <TouchableOpacity
+              style={[
+                styles.screenSubmitButton,
+                (!canSubmit || submitting) && styles.screenButtonDisabled,
+              ]}
+              onPress={
+                useInvitePrimaryAction ? handleSendInvitation : handleSubmit
+              }
+              disabled={!canSubmit || submitting}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.screenSubmitButtonText}>
+                {submitting
+                  ? useInvitePrimaryAction
+                    ? t("sending")
+                    : "Saving..."
+                  : useInvitePrimaryAction
+                    ? t("sendInvitation")
+                    : "ADD CLIENT"}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
     </KeyboardAvoidingView>
