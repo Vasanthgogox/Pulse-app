@@ -134,6 +134,9 @@ export function AddClientModal({
     !phoneError &&
     !submitting;
   const hasInviteSearch = Boolean(searchInviteeByPhone && onSendInvitation);
+  const useInvitePrimaryAction = Boolean(
+    inviteeMatch && onSendInvitation,
+  );
 
   // Reset form when modal opens so each open shows empty fields (not previous submission).
   useEffect(() => {
@@ -361,27 +364,18 @@ export function AddClientModal({
           <Text style={styles.ledgerInviteeName}>
             {inviteeMatch.full_name || inviteeMatch.phone}
           </Text>
-          <View style={styles.ledgerInviteeActions}>
-            <TouchableOpacity
-              style={[styles.ledgerSubmitBtn, styles.ledgerInviteBtn]}
-              onPress={handleSendInvitation}
-              disabled={submitting}
-              activeOpacity={0.9}
-            >
-              <Text style={styles.ledgerSubmitBtnText}>
-                {submitting ? t("sending") : t("sendInvitation")}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.ledgerAddOfflineLink}
-              onPress={handleAddAsOfflineInstead}
-              disabled={submitting}
-            >
-              <Text style={styles.ledgerAddOfflineLinkText}>
-                Add as offline instead
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.ledgerInviteeFooterHint}>
+            Use the button below to send a connection request, or add as offline.
+          </Text>
+          <TouchableOpacity
+            style={styles.ledgerAddOfflineLink}
+            onPress={handleAddAsOfflineInstead}
+            disabled={submitting}
+          >
+            <Text style={styles.ledgerAddOfflineLinkText}>
+              Add as offline instead
+            </Text>
+          </TouchableOpacity>
         </View>
       ) : searchedNoResult ? (
         <Text style={[styles.ledgerHintText, { color: Theme.textSecondary }]}>
@@ -398,12 +392,18 @@ export function AddClientModal({
           styles.ledgerSubmitBtn,
           !canSubmit && styles.ledgerSubmitBtnDisabled,
         ]}
-        onPress={handleSubmit}
+        onPress={useInvitePrimaryAction ? handleSendInvitation : handleSubmit}
         disabled={!canSubmit}
         activeOpacity={0.9}
       >
         <Text style={styles.ledgerSubmitBtnText}>
-          {submitting ? "Adding…" : "ADD CLIENT"}
+          {submitting
+            ? useInvitePrimaryAction
+              ? t("sending")
+              : "Adding…"
+            : useInvitePrimaryAction
+              ? t("sendInvitation")
+              : "ADD CLIENT"}
         </Text>
       </TouchableOpacity>
     </>
@@ -644,28 +644,17 @@ export function AddClientModal({
                   {inviteeMatch.full_name || inviteeMatch.phone}
                 </Text>
                 <Text style={styles.screenInviteeSubtext}>
-                  Send an invitation to connect this organization directly.
+                  Send a connection request from the button below, or add this
+                  client as offline if you do not want to invite them on the
+                  platform.
                 </Text>
                 <TouchableOpacity
-                  style={[
-                    styles.screenPrimaryButton,
-                    submitting && styles.screenButtonDisabled,
-                  ]}
-                  onPress={handleSendInvitation}
-                  disabled={submitting}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.screenPrimaryButtonText}>
-                    {submitting ? t("sending") : t("sendInvitation")}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.screenGhostButton}
+                  style={styles.screenAddOfflineLink}
                   onPress={handleAddAsOfflineInstead}
                   disabled={submitting}
-                  activeOpacity={0.75}
+                  activeOpacity={0.7}
                 >
-                  <Text style={styles.screenGhostButtonText}>
+                  <Text style={styles.screenAddOfflineLinkText}>
                     Add as offline instead
                   </Text>
                 </TouchableOpacity>
@@ -697,12 +686,20 @@ export function AddClientModal({
               styles.screenSubmitButton,
               (!canSubmit || submitting) && styles.screenButtonDisabled,
             ]}
-            onPress={handleSubmit}
+            onPress={
+              useInvitePrimaryAction ? handleSendInvitation : handleSubmit
+            }
             disabled={!canSubmit || submitting}
             activeOpacity={0.9}
           >
             <Text style={styles.screenSubmitButtonText}>
-              {submitting ? "Saving..." : "ADD CLIENT"}
+              {submitting
+                ? useInvitePrimaryAction
+                  ? t("sending")
+                  : "Saving..."
+                : useInvitePrimaryAction
+                  ? t("sendInvitation")
+                  : "ADD CLIENT"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -901,10 +898,14 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
-    marginBottom: 10,
+    marginBottom: 6,
   },
-  ledgerInviteeActions: { gap: 8 },
-  ledgerInviteBtn: { marginBottom: 0 },
+  ledgerInviteeFooterHint: {
+    fontSize: 9,
+    color: Theme.textSecondary,
+    marginBottom: 8,
+    lineHeight: 13,
+  },
   ledgerAddOfflineLink: {
     paddingVertical: 6,
     alignItems: "center",
@@ -1293,37 +1294,16 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
     lineHeight: 18,
   },
-  screenPrimaryButton: {
-    minHeight: Layout.minTouchTargetSize + 8,
-    borderRadius: 14,
-    backgroundColor: Theme.buttonMatteBlack,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    marginTop: 4,
+  screenAddOfflineLink: {
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+    paddingHorizontal: 0,
   },
-  screenPrimaryButtonText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: Theme.buttonMatteBlackText,
-    textTransform: "uppercase",
-    letterSpacing: 1.2,
-  },
-  screenGhostButton: {
-    minHeight: Layout.minTouchTargetSize,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  screenGhostButtonText: {
+  screenAddOfflineLinkText: {
     fontSize: 13,
     fontWeight: "600",
-    color: Theme.textPrimaryDark,
+    color: Theme.primary,
+    textDecorationLine: "underline",
   },
   screenStatusCard: {
     backgroundColor: Theme.screenBackground,
