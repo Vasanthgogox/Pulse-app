@@ -1,0 +1,210 @@
+diff --git a/node_modules/expo-server/build/cjs/vendor/express.js b/node_modules/expo-server/build/cjs/vendor/express.js
+index 4f98944..9a858fc 100644
+--- a/node_modules/expo-server/build/cjs/vendor/express.js
++++ b/node_modules/expo-server/build/cjs/vendor/express.js
+@@ -108,9 +108,28 @@ async function respond(res, expoRes) {
+         }
+     }
+     if (expoRes.body) {
+-        await (0, promises_1.pipeline)(node_stream_1.Readable.fromWeb(expoRes.body), res);
++        if (!res.destroyed) {
++            try {
++                await (0, promises_1.pipeline)(node_stream_1.Readable.fromWeb(expoRes.body), res);
++            }
++            catch (err) {
++                if (res.destroyed || res.writableEnded) {
++                    return;
++                }
++                const code = err && typeof err === 'object' && 'code' in err ? err.code : undefined;
++                const message = err && typeof err === 'object' && 'message' in err ? String(err.message) : '';
++                if (code === 'ERR_STREAM_DESTROYED' ||
++                    code === 'ERR_STREAM_PREMATURE_CLOSE' ||
++                    code === 'EPIPE' ||
++                    code === 'ECONNRESET' ||
++                    message.includes('closed or destroyed')) {
++                    return;
++                }
++                throw err;
++            }
++        }
+     }
+-    else {
++    else if (!res.destroyed) {
+         res.end();
+     }
+ }
+diff --git a/node_modules/expo-server/build/cjs/vendor/http.js b/node_modules/expo-server/build/cjs/vendor/http.js
+index 4ffaac4..f07bc0b 100644
+--- a/node_modules/expo-server/build/cjs/vendor/http.js
++++ b/node_modules/expo-server/build/cjs/vendor/http.js
+@@ -109,9 +109,28 @@ async function respond(res, expoRes) {
+         }
+     }
+     if (expoRes.body) {
+-        await (0, promises_1.pipeline)(node_stream_1.Readable.fromWeb(expoRes.body), res);
++        if (!res.destroyed) {
++            try {
++                await (0, promises_1.pipeline)(node_stream_1.Readable.fromWeb(expoRes.body), res);
++            }
++            catch (err) {
++                if (res.destroyed || res.writableEnded) {
++                    return;
++                }
++                const code = err && typeof err === 'object' && 'code' in err ? err.code : undefined;
++                const message = err && typeof err === 'object' && 'message' in err ? String(err.message) : '';
++                if (code === 'ERR_STREAM_DESTROYED' ||
++                    code === 'ERR_STREAM_PREMATURE_CLOSE' ||
++                    code === 'EPIPE' ||
++                    code === 'ECONNRESET' ||
++                    message.includes('closed or destroyed')) {
++                    return;
++                }
++                throw err;
++            }
++        }
+     }
+-    else {
++    else if (!res.destroyed) {
+         res.end();
+     }
+ }
+diff --git a/node_modules/expo-server/build/cjs/vendor/vercel.js b/node_modules/expo-server/build/cjs/vendor/vercel.js
+index e443b7c..310d46c 100644
+--- a/node_modules/expo-server/build/cjs/vendor/vercel.js
++++ b/node_modules/expo-server/build/cjs/vendor/vercel.js
+@@ -100,9 +100,28 @@ async function respond(res, expoRes) {
+     res.statusMessage = expoRes.statusText;
+     res.writeHead(expoRes.status, expoRes.statusText, [...expoRes.headers.entries()].flat());
+     if (expoRes.body) {
+-        await (0, promises_1.pipeline)(node_stream_1.Readable.fromWeb(expoRes.body), res);
++        if (!res.destroyed) {
++            try {
++                await (0, promises_1.pipeline)(node_stream_1.Readable.fromWeb(expoRes.body), res);
++            }
++            catch (err) {
++                if (res.destroyed || res.writableEnded) {
++                    return;
++                }
++                const code = err && typeof err === 'object' && 'code' in err ? err.code : undefined;
++                const message = err && typeof err === 'object' && 'message' in err ? String(err.message) : '';
++                if (code === 'ERR_STREAM_DESTROYED' ||
++                    code === 'ERR_STREAM_PREMATURE_CLOSE' ||
++                    code === 'EPIPE' ||
++                    code === 'ECONNRESET' ||
++                    message.includes('closed or destroyed')) {
++                    return;
++                }
++                throw err;
++            }
++        }
+     }
+-    else {
++    else if (!res.destroyed) {
+         res.end();
+     }
+ }
+diff --git a/node_modules/expo-server/build/mjs/vendor/express.js b/node_modules/expo-server/build/mjs/vendor/express.js
+index 41fb798..4379380 100644
+--- a/node_modules/expo-server/build/mjs/vendor/express.js
++++ b/node_modules/expo-server/build/mjs/vendor/express.js
+@@ -100,9 +100,28 @@ export async function respond(res, expoRes) {
+         }
+     }
+     if (expoRes.body) {
+-        await pipeline(Readable.fromWeb(expoRes.body), res);
++        if (!res.destroyed) {
++            try {
++                await pipeline(Readable.fromWeb(expoRes.body), res);
++            }
++            catch (err) {
++                if (res.destroyed || res.writableEnded) {
++                    return;
++                }
++                const code = err && typeof err === 'object' && 'code' in err ? err.code : undefined;
++                const message = err && typeof err === 'object' && 'message' in err ? String(err.message) : '';
++                if (code === 'ERR_STREAM_DESTROYED' ||
++                    code === 'ERR_STREAM_PREMATURE_CLOSE' ||
++                    code === 'EPIPE' ||
++                    code === 'ECONNRESET' ||
++                    message.includes('closed or destroyed')) {
++                    return;
++                }
++                throw err;
++            }
++        }
+     }
+-    else {
++    else if (!res.destroyed) {
+         res.end();
+     }
+ }
+diff --git a/node_modules/expo-server/build/mjs/vendor/http.js b/node_modules/expo-server/build/mjs/vendor/http.js
+index be9397c..dd68ee9 100644
+--- a/node_modules/expo-server/build/mjs/vendor/http.js
++++ b/node_modules/expo-server/build/mjs/vendor/http.js
+@@ -101,9 +101,28 @@ export async function respond(res, expoRes) {
+         }
+     }
+     if (expoRes.body) {
+-        await pipeline(Readable.fromWeb(expoRes.body), res);
++        if (!res.destroyed) {
++            try {
++                await pipeline(Readable.fromWeb(expoRes.body), res);
++            }
++            catch (err) {
++                if (res.destroyed || res.writableEnded) {
++                    return;
++                }
++                const code = err && typeof err === 'object' && 'code' in err ? err.code : undefined;
++                const message = err && typeof err === 'object' && 'message' in err ? String(err.message) : '';
++                if (code === 'ERR_STREAM_DESTROYED' ||
++                    code === 'ERR_STREAM_PREMATURE_CLOSE' ||
++                    code === 'EPIPE' ||
++                    code === 'ECONNRESET' ||
++                    message.includes('closed or destroyed')) {
++                    return;
++                }
++                throw err;
++            }
++        }
+     }
+-    else {
++    else if (!res.destroyed) {
+         res.end();
+     }
+ }
+diff --git a/node_modules/expo-server/build/mjs/vendor/vercel.js b/node_modules/expo-server/build/mjs/vendor/vercel.js
+index 460cb7f..e629210 100644
+--- a/node_modules/expo-server/build/mjs/vendor/vercel.js
++++ b/node_modules/expo-server/build/mjs/vendor/vercel.js
+@@ -92,9 +92,28 @@ export async function respond(res, expoRes) {
+     res.statusMessage = expoRes.statusText;
+     res.writeHead(expoRes.status, expoRes.statusText, [...expoRes.headers.entries()].flat());
+     if (expoRes.body) {
+-        await pipeline(Readable.fromWeb(expoRes.body), res);
++        if (!res.destroyed) {
++            try {
++                await pipeline(Readable.fromWeb(expoRes.body), res);
++            }
++            catch (err) {
++                if (res.destroyed || res.writableEnded) {
++                    return;
++                }
++                const code = err && typeof err === 'object' && 'code' in err ? err.code : undefined;
++                const message = err && typeof err === 'object' && 'message' in err ? String(err.message) : '';
++                if (code === 'ERR_STREAM_DESTROYED' ||
++                    code === 'ERR_STREAM_PREMATURE_CLOSE' ||
++                    code === 'EPIPE' ||
++                    code === 'ECONNRESET' ||
++                    message.includes('closed or destroyed')) {
++                    return;
++                }
++                throw err;
++            }
++        }
+     }
+-    else {
++    else if (!res.destroyed) {
+         res.end();
+     }
+ }
