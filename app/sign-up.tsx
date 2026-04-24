@@ -83,6 +83,22 @@ export default function SignUp() {
   const fieldYRef = useRef({ fullName: 0, company: 0, phone: 0, email: 0, password: 0, confirmPassword: 0 });
   const { width } = useWindowDimensions();
   const isDesktopLayout = width >= 1024;
+  /** Small phones (under ~390pt): tighter padding and typography. */
+  const isCompact = width < 390;
+  /** Stack business-model chips vertically for readability and 44pt+ tap targets. */
+  const useStackedModelChips = width < 440;
+  /** Large phone / small tablet: slightly roomier horizontal padding (still mobile layout). */
+  const isLargeMobile = width >= 600 && width < 1024;
+  const screenPaddingH = isDesktopLayout
+    ? 0
+    : isCompact
+      ? 12
+      : isLargeMobile
+        ? Math.min(28, Math.floor(width * 0.06))
+        : Layout.screenPaddingHorizontal;
+  const titleFontSize = isDesktopLayout ? 40 : isCompact ? 26 : width < 430 ? 28 : 32;
+  const formCardPadding = isDesktopLayout ? 0 : isCompact ? 14 : isLargeMobile ? 24 : 20;
+  const formCardRadius = isCompact ? 18 : 24;
 
   /** Extra scroll offset so focused field stays above keyboard. Use larger offset on iOS when focusing password so the field stays above the "Strong Password" / autofill bar. */
   const SCROLL_OFFSET_DEFAULT = 100;
@@ -90,7 +106,8 @@ export default function SignUp() {
 
   const scrollToField = (name: keyof typeof fieldYRef.current) => {
     const isPasswordOnIos = name === 'password' && Platform.OS === 'ios';
-    const offset = isPasswordOnIos ? SCROLL_OFFSET_PASSWORD_IOS : SCROLL_OFFSET_DEFAULT;
+    const baseOffset = isCompact ? 72 : SCROLL_OFFSET_DEFAULT;
+    const offset = isPasswordOnIos ? SCROLL_OFFSET_PASSWORD_IOS : baseOffset;
     setTimeout(() => {
       const y = fieldYRef.current[name];
       scrollRef.current?.scrollTo({
@@ -327,21 +344,49 @@ export default function SignUp() {
   };
 
   /** On iOS, keyboard height does not include the "Strong Password" / autofill bar (~50–88pt). Add extra inset so the password field can scroll above it. */
-  const KEYBOARD_BOTTOM_INSET = Platform.OS === 'ios' ? 88 : 40;
+  const KEYBOARD_BOTTOM_INSET =
+    Platform.OS === 'ios' ? (isCompact ? 96 : 88) : isCompact ? 48 : 40;
 
   const scrollContentStyle = [
     styles.scrollContent,
+    isCompact && styles.scrollContentCompact,
     keyboardVisible && {
       flexGrow: 0,
       justifyContent: 'flex-start' as const,
-      paddingBottom: keyboardHeight + KEYBOARD_BOTTOM_INSET,
+      paddingBottom: keyboardHeight + KEYBOARD_BOTTOM_INSET + (isCompact ? 20 : 0),
     },
   ];
 
   const form = (
-    <View style={[styles.formCard, isDesktopLayout && styles.formCardDesktop]}>
-      <Text style={[styles.title, isDesktopLayout && styles.titleDesktop]}>Create Account</Text>
-      <Text style={[styles.subtitle, isDesktopLayout && styles.subtitleDesktop]}>Enter your details to get started.</Text>
+    <View
+      style={[
+        styles.formCard,
+        isDesktopLayout && styles.formCardDesktop,
+        !isDesktopLayout && {
+          padding: formCardPadding,
+          borderRadius: formCardRadius,
+          maxWidth: isLargeMobile ? 520 : '100%',
+        },
+      ]}
+    >
+      <Text
+        style={[
+          styles.title,
+          isDesktopLayout && styles.titleDesktop,
+          !isDesktopLayout && { fontSize: titleFontSize },
+        ]}
+      >
+        Create Account
+      </Text>
+      <Text
+        style={[
+          styles.subtitle,
+          isDesktopLayout && styles.subtitleDesktop,
+          isCompact && !isDesktopLayout && styles.subtitleCompact,
+        ]}
+      >
+        Enter your details to get started.
+      </Text>
 
       {errorMsg ? (
         <View style={styles.errorAlert}>
@@ -441,17 +486,33 @@ export default function SignUp() {
       ) : null}
 
       <Text style={[styles.label, isDesktopLayout && styles.labelDesktop]}>Business model</Text>
-      <View style={styles.modelRow}>
+      <View
+        style={[
+          styles.modelRow,
+          useStackedModelChips && styles.modelRowStacked,
+        ]}
+      >
         {OPERATING_MODELS.map(({ value, label }) => {
           const isActive = operatingModel === value;
           return (
             <TouchableOpacity
               key={value}
-              style={[styles.modelChip, isActive && styles.modelChipActive]}
+              style={[
+                styles.modelChip,
+                useStackedModelChips && styles.modelChipStacked,
+                isActive && styles.modelChipActive,
+              ]}
               onPress={() => setOperatingModel(value)}
               disabled={loading}
             >
-              <Text style={[styles.modelChipText, isDesktopLayout && styles.modelChipTextDesktop, isActive && styles.modelChipTextActive]}>
+              <Text
+                style={[
+                  styles.modelChipText,
+                  isDesktopLayout && styles.modelChipTextDesktop,
+                  isActive && styles.modelChipTextActive,
+                  isCompact && !isDesktopLayout && styles.modelChipTextCompact,
+                ]}
+              >
                 {label}
               </Text>
             </TouchableOpacity>
@@ -580,10 +641,21 @@ export default function SignUp() {
       style={[
         styles.container,
         isDesktopLayout && styles.containerDesktop,
-        { paddingTop: insets.top, paddingBottom: insets.bottom },
+        Platform.OS === 'web' && styles.containerWeb,
+        {
+          paddingTop: insets.top,
+          paddingBottom: insets.bottom,
+          paddingHorizontal: screenPaddingH,
+        },
       ]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+      behavior={
+        Platform.OS === 'web'
+          ? undefined
+          : Platform.OS === 'ios'
+            ? 'padding'
+            : 'padding'
+      }
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : Platform.OS === 'android' ? insets.top + 12 : 0}
     >
       {!isOnline ? (
         <View style={[styles.offlineBanner, { paddingTop: insets.top + 10 }]}>
@@ -592,7 +664,7 @@ export default function SignUp() {
       ) : null}
       {isDesktopLayout ? (
         <View style={styles.desktopShell}>
-          <View style={styles.desktopBrandPane}>
+          <View style={[styles.desktopBrandPane, width < 1200 && styles.desktopBrandPaneNarrow]}>
             <Text style={styles.brandLogo}>PULSE<Text style={styles.brandLogoDot}>.</Text></Text>
             <Text style={styles.brandTag}>Business Hub Onboarding</Text>
             <Text style={styles.brandTitle}>Build your workspace.</Text>
@@ -603,7 +675,10 @@ export default function SignUp() {
           <View style={styles.desktopFormPane}>
             <ScrollView
               ref={scrollRef}
-              contentContainerStyle={styles.desktopScroll}
+              contentContainerStyle={[
+                styles.desktopScroll,
+                width < 1200 && styles.desktopScrollNarrow,
+              ]}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
@@ -618,8 +693,11 @@ export default function SignUp() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={keyboardVisible}
+          bounces={!keyboardVisible}
         >
-          <View style={styles.mobileWrap}>{form}</View>
+          <View style={[styles.mobileWrap, isCompact && styles.mobileWrapCompact]}>
+            {form}
+          </View>
         </ScrollView>
       )}
     </KeyboardAvoidingView>
@@ -629,9 +707,14 @@ export default function SignUp() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    width: '100%',
+    maxWidth: '100%',
     backgroundColor: '#020617',
-    paddingHorizontal: Layout.screenPaddingHorizontal,
   },
+  containerWeb: {
+    alignSelf: 'stretch',
+    minHeight: '100%',
+  } as const,
   containerDesktop: {
     paddingHorizontal: 0,
   },
@@ -641,12 +724,24 @@ const styles = StyleSheet.create({
     paddingTop: 24,
     paddingBottom: 24,
   },
+  scrollContentCompact: {
+    paddingTop: 16,
+    paddingBottom: 16,
+  },
   mobileWrap: {
     width: '100%',
+    maxWidth: '100%',
     alignItems: 'center',
+    minWidth: 0,
+  },
+  mobileWrapCompact: {
+    alignSelf: 'stretch',
   },
   desktopShell: {
     flex: 1,
+    width: '100%',
+    maxWidth: '100%',
+    minWidth: 0,
     flexDirection: 'row',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
@@ -657,18 +752,28 @@ const styles = StyleSheet.create({
   },
   desktopBrandPane: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: '#000000',
     paddingHorizontal: 52,
     paddingVertical: 48,
     justifyContent: 'center',
   },
+  desktopBrandPaneNarrow: {
+    paddingHorizontal: 32,
+    paddingVertical: 36,
+  },
   desktopFormPane: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: '#0f172a',
   },
   desktopScroll: {
     paddingHorizontal: 48,
     paddingVertical: 48,
+  },
+  desktopScrollNarrow: {
+    paddingHorizontal: 28,
+    paddingVertical: 36,
   },
   brandLogo: {
     fontSize: 44,
@@ -704,6 +809,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 520,
     alignSelf: 'center',
+    minWidth: 0,
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: Theme.border,
@@ -754,6 +860,11 @@ const styles = StyleSheet.create({
   subtitleDesktop: {
     color: 'rgba(148,163,184,0.9)',
   },
+  subtitleCompact: {
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 12,
+  },
   inputDesktop: {
     backgroundColor: '#020617',
     borderColor: 'rgba(255,255,255,0.14)',
@@ -775,6 +886,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     flex: 1,
+    minWidth: 0,
     fontSize: 13,
     fontWeight: '500',
     color: Theme.negative,
@@ -794,14 +906,25 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 14,
   },
+  modelRowStacked: {
+    flexDirection: 'column',
+    gap: 8,
+  },
   modelChip: {
     flex: 1,
+    minHeight: Layout.minTouchTargetSize,
     paddingVertical: 14,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Theme.border,
     backgroundColor: Theme.surface,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modelChipStacked: {
+    flex: 0,
+    alignSelf: 'stretch',
+    width: '100%',
   },
   modelChipActive: {
     backgroundColor: Theme.driverPrimary,
@@ -817,6 +940,9 @@ const styles = StyleSheet.create({
   },
   modelChipTextActive: {
     color: '#ffffff',
+  },
+  modelChipTextCompact: {
+    fontSize: 15,
   },
   input: {
     backgroundColor: Theme.surface,
