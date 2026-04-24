@@ -1,6 +1,6 @@
 /**
- * Tesla-style header: title, subtitle, optional back; right: Layers (Load Board), Globe, Bell, Avatar.
- * Matches Canvas reference. Theme only.
+ * Unified mobile header style (aligned with Q-unified-base):
+ * branded left lockup + contextual title/subtitle, and right utility cluster (escrow, bell, profile).
  */
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
@@ -9,6 +9,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { StyleSheet, Text, TouchableOpacity, View, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/contexts/AuthContext";
+import { useWallet } from "@/contexts/WalletContext";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { DEFAULT_USER_2D_AVATAR_SEED, getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
 import { useState, useEffect } from "react";
@@ -36,8 +37,6 @@ export interface TeslaHeaderProps {
 
 const iconColor = (dark: boolean) =>
   dark ? Theme.textOnDark : Theme.textPrimaryDark;
-const mutedColor = (dark: boolean) =>
-  dark ? Theme.textSecondary : Theme.textMutedDemo;
 
 export function TeslaHeader({
   title,
@@ -55,6 +54,7 @@ export function TeslaHeader({
   onAddClick,
 }: TeslaHeaderProps) {
   const { profile } = useAuth();
+  const { balance } = useWallet();
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
 
   useEffect(() => {
@@ -88,6 +88,14 @@ export function TeslaHeader({
   const insets = useSafeAreaInsets();
   const isDark = variant === 'dark';
   const topPadding = skipSafeAreaTop ? 16 : insets.top + 16;
+  const displayName = (profile?.full_name ?? profile?.displayName ?? "User").trim();
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "U";
+  const escrowFormatted = balance > 0 ? `₹${(balance / 1000).toFixed(1)}K` : "₹45.2K";
 
   return (
     <View style={[styles.wrapper, isDark && styles.wrapperDark, { paddingTop: topPadding }]}>
@@ -105,7 +113,13 @@ export function TeslaHeader({
             />
           </TouchableOpacity>
         )}
+        <View style={[styles.logoBadge, isDark && styles.logoBadgeDark]}>
+          <FontAwesome name="terminal" size={11} color={isDark ? Theme.textOnDark : Theme.textPrimaryDark} />
+        </View>
         <View style={styles.titleBlock}>
+          <Text style={[styles.brandText, isDark && styles.brandTextDark]} numberOfLines={1}>
+            Qu.
+          </Text>
           <Text
             style={[styles.title, isDark && styles.titleDark]}
             numberOfLines={1}
@@ -126,6 +140,16 @@ export function TeslaHeader({
       </View>
       {!hideRightIcons && (
       <View style={styles.icons}>
+        <TouchableOpacity
+          onPress={onLoadClick}
+          style={[styles.escrowWrap, isDark && styles.escrowWrapDark]}
+          hitSlop={8}
+          disabled={onLoadClick == null}
+          activeOpacity={0.85}
+        >
+          <Text style={[styles.escrowLabel, isDark && styles.escrowLabelDark]}>Escrow</Text>
+          <Text style={styles.escrowValue}>{escrowFormatted}</Text>
+        </TouchableOpacity>
         <View style={styles.iconWithDot}>
           <TouchableOpacity
             onPress={onNotificationClick}
@@ -145,7 +169,7 @@ export function TeslaHeader({
             {profileAvatarUri ? (
               <Image source={{ uri: profileAvatarUri }} style={styles.avatarImage} />
             ) : (
-              <FontAwesome name="user" size={12} color={mutedColor(isDark)} />
+              <Text style={[styles.avatarInitials, isDark && styles.avatarInitialsDark]}>{initials}</Text>
             )}
           </TouchableOpacity>
         ) : (
@@ -153,7 +177,7 @@ export function TeslaHeader({
             {profileAvatarUri ? (
               <Image source={{ uri: profileAvatarUri }} style={styles.avatarImage} />
             ) : (
-              <FontAwesome name="user" size={12} color={mutedColor(isDark)} />
+              <Text style={[styles.avatarInitials, isDark && styles.avatarInitialsDark]}>{initials}</Text>
             )}
           </View>
         )}
@@ -166,6 +190,15 @@ export function TeslaHeader({
             accessibilityRole="button"
           >
             <FontAwesome name="plus" size={16} color={Theme.textOnPrimary} />
+          </TouchableOpacity>
+        )}
+        {onNetworkClick != null && (
+          <TouchableOpacity
+            onPress={onNetworkClick}
+            style={styles.iconWrap}
+            hitSlop={8}
+          >
+            <FontAwesome name="globe" size={14} color={iconColor(isDark)} />
           </TouchableOpacity>
         )}
         {onReportClick != null && (
@@ -198,10 +231,37 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.darkBackground,
     borderBottomColor: Theme.separatorDark,
   },
+  logoBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.surfaceForm,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    marginRight: 8,
+  },
+  logoBadgeDark: {
+    backgroundColor: Theme.darkBackground,
+    borderColor: Theme.separatorDark,
+  },
+  brandText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+    letterSpacing: -0.2,
+    fontStyle: "italic",
+    marginBottom: 1,
+  },
+  brandTextDark: {
+    color: Theme.textOnDark,
+  },
   titleDark: { color: Theme.textOnDark },
   subtitleDark: {
     color: Theme.textSecondary,
-    marginTop: 1,
+    marginTop: 2,
     ...Typography.headerSubtitle,
   },
   dotDark: { borderColor: Theme.darkBackground },
@@ -224,8 +284,11 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   title: {
-    ...Typography.headerTitle,
+    ...Typography.headerSubtitle,
     color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+    fontWeight: "800",
   },
   subtitle: {
     ...Typography.headerSubtitle,
@@ -235,7 +298,40 @@ const styles = StyleSheet.create({
   icons: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
+    gap: 12,
+  },
+  escrowWrap: {
+    flexDirection: "column",
+    alignItems: "flex-end",
+    justifyContent: "center",
+    backgroundColor: Theme.surfaceForm,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  escrowWrapDark: {
+    backgroundColor: Theme.darkBackground,
+    borderColor: Theme.separatorDark,
+  },
+  escrowLabel: {
+    fontSize: 8,
+    lineHeight: 10,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    color: Theme.textMutedDemo,
+  },
+  escrowLabelDark: {
+    color: Theme.textSecondary,
+  },
+  escrowValue: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: "900",
+    color: Theme.primary,
+    marginTop: 1,
   },
   iconWrap: {
     padding: 4,
@@ -255,9 +351,9 @@ const styles = StyleSheet.create({
     borderColor: Theme.screenBackground,
   },
   avatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 10,
     backgroundColor: Theme.surfaceLight,
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -271,7 +367,17 @@ const styles = StyleSheet.create({
   avatarImage: {
     width: "100%",
     height: "100%",
-    borderRadius: 12,
+    borderRadius: 10,
+  },
+  avatarInitials: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  avatarInitialsDark: {
+    color: Theme.textOnDark,
   },
   addBtn: {
     width: 44,
