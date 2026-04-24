@@ -45,8 +45,8 @@ const DEFAULT_AVATAR_SEED = 'driver-1';
 /** Driver edit screen — cool white page (reference: #FDFEFF). */
 const DRIVER_EDIT_PAGE_BG = '#F6FAFC';
 const DRIVER_SCREEN_BG = DRIVER_EDIT_PAGE_BG;
-/** Legacy alias — use Theme.driverEmerald for accents */
-const DRIVER_FOREST = Theme.driverEmerald;
+/** Accent for photo actions should match app primary theme. */
+const DRIVER_FOREST = Theme.primary;
 const DRIVER_INPUT_BG = Theme.liquidPillBg;
 const DRIVER_AVATAR_SIZE = 144;
 const DRIVER_EDIT_FAB = 48;
@@ -96,7 +96,9 @@ export function EditProfileModal({
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
   const isUser2D = avatarPresetStyle === 'user-2d';
-  const driverRefLayout = !isUser2D;
+  // Use the same clean, form-first modal layout across driver + user flows.
+  // Keeps interactions identical while matching app theme consistently.
+  const driverRefLayout = false;
   const accent = isUser2D ? Theme.primary : Theme.positive;
   const [fullName, setFullName] = useState(initialFullName);
   const [phone, setPhone] = useState(initialPhone);
@@ -725,65 +727,41 @@ export function EditProfileModal({
                 <Text style={[styles.sectionLabel, { color: Theme.textMuted }]}>
                   Change profile photo
                 </Text>
-                <View
-                  style={[
-                    styles.avatarPreviewWrap,
-                    styles.avatarRingGreen,
-                    {
-                      backgroundColor: Theme.surfaceGray,
-                      borderColor: Theme.borderLight,
-                    },
-                  ]}
-                >
-                  <Image source={{ uri: avatarUri }} style={styles.avatarPreview} />
-                </View>
-
-                <View
-                  style={[
-                    styles.changePhotoOptionsCard,
-                    { backgroundColor: Theme.surface, borderColor: Theme.borderLight },
-                  ]}
-                >
+                <View style={styles.avatarActionWrap}>
                   <TouchableOpacity
-                    style={[styles.changePhotoOptionRow, styles.changePhotoOptionBorder]}
-                    onPress={handleChangePhoto}
+                    activeOpacity={0.9}
+                    onPress={openAvatarActions}
                     disabled={saving || photoUploading}
-                    activeOpacity={0.7}
-                    accessibilityLabel="Upload photo"
+                    accessibilityLabel="Change profile photo"
+                    accessibilityRole="button"
                   >
-                    {photoUploading ? (
-                      <ActivityIndicator size="small" color={accent} style={styles.photoIcon} />
-                    ) : (
-                      <FontAwesome
-                        name="cloud-upload"
-                        size={18}
-                        color={accent}
-                        style={styles.photoIcon}
-                      />
-                    )}
-                    <Text style={styles.changePhotoOptionLabel}>
-                      {photoUploading ? 'Uploading…' : 'Profile photo upload'}
-                    </Text>
-                    <FontAwesome name="chevron-right" size={12} color={Theme.textMuted} />
+                    <View
+                      style={[
+                        styles.avatarPreviewWrap,
+                        styles.avatarRingGreen,
+                        {
+                          backgroundColor: Theme.surfaceGray,
+                          borderColor: Theme.primary,
+                        },
+                      ]}
+                    >
+                      <Image source={{ uri: avatarUri }} style={styles.avatarPreview} />
+                      {photoUploading ? (
+                        <View style={styles.avatarPreviewLoading}>
+                          <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                        </View>
+                      ) : null}
+                    </View>
                   </TouchableOpacity>
-
                   <TouchableOpacity
-                    style={styles.changePhotoOptionRow}
-                    onPress={() => setShowAvatarDropdown((v) => !v)}
+                    style={styles.avatarQuickEditBtn}
+                    onPress={openAvatarActions}
                     disabled={saving || photoUploading}
-                    activeOpacity={0.7}
-                    accessibilityLabel="Choose avatar"
-                    accessibilityState={{ expanded: showAvatarDropdown }}
+                    activeOpacity={0.85}
+                    accessibilityLabel="Edit profile photo"
+                    accessibilityRole="button"
                   >
-                    <Image source={selectedPreset.image} style={styles.changePhotoOptionAvatar} />
-                    <Text style={styles.changePhotoOptionLabel} numberOfLines={1}>
-                      Choose avatar
-                    </Text>
-                    <FontAwesome
-                      name={showAvatarDropdown ? 'chevron-up' : 'chevron-down'}
-                      size={14}
-                      color={Theme.textMuted}
-                    />
+                    <Edit3 size={14} color={Theme.textOnPrimary} strokeWidth={2.4} />
                   </TouchableOpacity>
                 </View>
 
@@ -907,8 +885,8 @@ export function EditProfileModal({
           </View>
         ) : null}
 
-        {driverRefLayout && showAvatarActions ? (
-          <View style={[styles.actionSheetOverlay, { pointerEvents: 'box-none' }]}>
+        {showAvatarActions ? (
+          <View style={styles.actionSheetOverlay}>
             <Pressable
               style={styles.actionSheetBackdropFill}
               onPress={() => setShowAvatarActions(false)}
@@ -917,7 +895,7 @@ export function EditProfileModal({
             <View
               style={[
                 styles.actionSheetCard,
-                { paddingBottom: Math.max(insets.bottom, 16) + 12, pointerEvents: 'box-none' },
+                { paddingBottom: Math.max(insets.bottom, 16) + 12 },
               ]}
             >
               <Text style={styles.actionSheetTitle}>Profile photo</Text>
@@ -1686,9 +1664,19 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     alignItems: 'stretch',
   },
+  avatarActionWrap: {
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 96,
+    height: 96,
+    marginBottom: 14,
+    position: 'relative',
+  },
   avatarPreviewWrap: {
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 0,
+    position: 'relative',
   },
   changePhotoOptionsCard: {
     borderRadius: 12,
@@ -1725,15 +1713,35 @@ const styles = StyleSheet.create({
     padding: 4,
     borderRadius: 50,
     alignSelf: 'center',
-    backgroundColor: Theme.positiveMuted,
+    backgroundColor: Theme.surfaceLight,
     borderWidth: 2,
-    borderColor: Theme.positive,
+    borderColor: Theme.primary,
   },
   avatarPreview: {
     width: 88,
     height: 88,
     borderRadius: 44,
     backgroundColor: Theme.surfaceLight,
+  },
+  avatarPreviewLoading: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.28)',
+    borderRadius: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarQuickEditBtn: {
+    position: 'absolute',
+    right: -8,
+    bottom: -4,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: Theme.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: Theme.screenBackground,
   },
   photoRow: {
     flexDirection: 'row',
