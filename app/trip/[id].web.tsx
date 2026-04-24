@@ -1,6 +1,7 @@
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import { useAuth } from '@/contexts/AuthContext';
 import TripDetailScreen from '@/features/trips/components/trip-detail/TripDetailScreen.web';
+import { ROUTES } from '@/lib/routes';
 import { useSafeBack } from '@/lib/useSafeBack';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect } from 'react';
@@ -22,7 +23,7 @@ export default function TripDetailRoute() {
   // (which would redirect drivers to /(driver) based on profile.role)
   useEffect(() => {
     if (!loading && !user) {
-      router.replace('/sign-in');
+      router.replace(ROUTES.SIGN_IN_DIRECT);
     }
   }, [loading, user, router]);
 
@@ -32,7 +33,7 @@ export default function TripDetailRoute() {
 
   if (!user) {
     // Render nothing while the useEffect fires the redirect
-    return <AuthRedirectScreen onSignIn={() => router.replace('/sign-in')} />;
+    return <AuthRedirectScreen onSignIn={() => router.replace(ROUTES.SIGN_IN_DIRECT)} />;
   }
 
   const tripId = typeof raw.id === 'string' ? raw.id : raw.id?.[0] ?? '';

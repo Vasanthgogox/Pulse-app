@@ -7,6 +7,8 @@
 export const ROUTES = {
   INDEX: '/',
   SIGN_IN: '/sign-in',
+  /** Direct sign-in form (skip web landing chooser). */
+  SIGN_IN_DIRECT: '/sign-in?direct=1',
   SIGN_UP: '/sign-up',
 
   TABS: {

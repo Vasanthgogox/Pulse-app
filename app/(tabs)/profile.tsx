@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { EditProfileModal } from "@/features/auth";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { getCapabilitiesFromProfile } from "@/lib/capabilities";
+import { ROUTES } from "@/lib/routes";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
@@ -180,7 +181,7 @@ export default function ProfileScreen() {
     try {
       await signOut();
       setShowSignOutConfirm(false);
-      router.replace("/sign-in");
+      router.replace(ROUTES.SIGN_IN_DIRECT);
     } finally {
       setSignOutLoading(false);
     }
