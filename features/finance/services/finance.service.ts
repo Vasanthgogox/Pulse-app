@@ -13,6 +13,27 @@ import { VALIDATION, dateISO } from '@/lib/validation';
 import { getAvatarUriForSeed } from '@/constants/DriverLevels';
 import { resolveAvatarPublicUrl } from '@/lib/avatarUpload';
 
+/** Join trips for ledger rows; older DBs may not have `trips.display_trip_id` yet (PostgREST 400). */
+const LEDGER_TX_SELECT_WITH_TRIPS =
+  '*, trips(trip_number, display_trip_id)' as const;
+const LEDGER_TX_SELECT_WITH_TRIPS_LEGACY = '*, trips(trip_number)' as const;
+
+function isMissingTripsDisplayTripIdError(error: {
+  message?: string;
+  code?: string;
+} | null): boolean {
+  if (!error?.message) return false;
+  const msg = error.message.toLowerCase();
+  if (!msg.includes('display_trip_id')) return false;
+  return (
+    error.code === '42703' ||
+    msg.includes('does not exist') ||
+    msg.includes('schema cache') ||
+    msg.includes('could not find') ||
+    msg.includes('column')
+  );
+}
+
 export async function getProfileImage(
   contactId: string | null | undefined,
   contactType: "client" | "supplier" | "driver" | null | undefined,
@@ -287,58 +308,42 @@ export async function getTransactionsByOrganization(
   orgId: string,
   opts?: PageOpts
 ): Promise<{ error: Error | null; transactions: LedgerRow[]; hasMore?: boolean }> {
-  const q = supabase()
-    .from('transactions')
-    .select('*, trips(trip_number, display_trip_id)')
-    .eq('organization_id', orgId)
-    .order('transaction_date', { ascending: false })
-    .order('created_at', { ascending: false });
+  const base = (tripSelect: string) =>
+    supabase()
+      .from('transactions')
+      .select(tripSelect)
+      .eq('organization_id', orgId)
+      .order('transaction_date', { ascending: false })
+      .order('created_at', { ascending: false });
+
+  type Row = Parameters<typeof toLedgerRow>[0];
 
   if (opts != null) {
     const limit = opts.limit ?? LEDGER_PAGE_SIZE;
     const offset = opts.offset ?? 0;
-    const { data, error } = await q.range(offset, offset + limit);
+    let { data, error } = await base(LEDGER_TX_SELECT_WITH_TRIPS).range(
+      offset,
+      offset + limit,
+    );
+    if (error && isMissingTripsDisplayTripIdError(error)) {
+      ({ data, error } = await base(LEDGER_TX_SELECT_WITH_TRIPS_LEGACY).range(
+        offset,
+        offset + limit,
+      ));
+    }
     if (error) return { error: new Error(error.message), transactions: [] };
-    const rows = (data ?? []) as Array<{
-      id: string;
-      organization_id: string;
-      trip_id: string | null;
-      party_name: string | null;
-      description: string | null;
-      amount_in: number;
-      amount_out: number;
-      transaction_date: string;
-      created_at: string;
-      contact_id: string | null;
-      contact_type: string | null;
-      vehicle_number?: string | null;
-      driver_name?: string | null;
-      trips?: { trip_number: string; display_trip_id?: string | null } | null;
-    }>;
+    const rows = (data ?? []) as Row[];
     const transactions: LedgerRow[] = rows.slice(0, limit).map(toLedgerRow);
     return { error: null, transactions, hasMore: rows.length > limit };
   }
 
-  const { data, error } = await q;
+  let { data, error } = await base(LEDGER_TX_SELECT_WITH_TRIPS);
+  if (error && isMissingTripsDisplayTripIdError(error)) {
+    ({ data, error } = await base(LEDGER_TX_SELECT_WITH_TRIPS_LEGACY));
+  }
   if (error) return { error: new Error(error.message), transactions: [] };
 
-  const rows = (data ?? []) as Array<{
-    id: string;
-    organization_id: string;
-    trip_id: string | null;
-    party_name: string | null;
-    description: string | null;
-    amount_in: number;
-    amount_out: number;
-    transaction_date: string;
-    created_at: string;
-    contact_id: string | null;
-    contact_type: string | null;
-    vehicle_number?: string | null;
-    driver_name?: string | null;
-    trips?: { trip_number: string; display_trip_id?: string | null } | null;
-  }>;
-
+  const rows = (data ?? []) as Row[];
   const transactions: LedgerRow[] = rows.map(toLedgerRow);
 
   return { error: null, transactions };
@@ -350,13 +355,23 @@ export async function getTransactionsByOrganizationAndParty(
   partyName: string
 ): Promise<{ error: Error | null; transactions: LedgerRow[] }> {
   if (!partyName?.trim()) return getTransactionsByOrganization(orgId);
-  const { data, error } = await supabase()
+  let { data, error } = await supabase()
     .from('transactions')
-    .select('*, trips(trip_number, display_trip_id)')
+    .select(LEDGER_TX_SELECT_WITH_TRIPS)
     .eq('organization_id', orgId)
     .ilike('party_name', `%${partyName.trim()}%`)
     .order('transaction_date', { ascending: false })
     .order('created_at', { ascending: false });
+
+  if (error && isMissingTripsDisplayTripIdError(error)) {
+    ({ data, error } = await supabase()
+      .from('transactions')
+      .select(LEDGER_TX_SELECT_WITH_TRIPS_LEGACY)
+      .eq('organization_id', orgId)
+      .ilike('party_name', `%${partyName.trim()}%`)
+      .order('transaction_date', { ascending: false })
+      .order('created_at', { ascending: false }));
+  }
 
   if (error) return { error: new Error(error.message), transactions: [] };
   const rows = (data ?? []) as Array<Parameters<typeof toLedgerRow>[0]>;
@@ -369,13 +384,23 @@ export async function getTransactionsByOrganizationAndContactId(
   contactId: string
 ): Promise<{ error: Error | null; transactions: LedgerRow[] }> {
   if (!contactId?.trim()) return { error: null, transactions: [] };
-  const { data, error } = await supabase()
+  let { data, error } = await supabase()
     .from('transactions')
-    .select('*, trips(trip_number, display_trip_id)')
+    .select(LEDGER_TX_SELECT_WITH_TRIPS)
     .eq('organization_id', orgId)
     .eq('contact_id', contactId)
     .order('transaction_date', { ascending: false })
     .order('created_at', { ascending: false });
+
+  if (error && isMissingTripsDisplayTripIdError(error)) {
+    ({ data, error } = await supabase()
+      .from('transactions')
+      .select(LEDGER_TX_SELECT_WITH_TRIPS_LEGACY)
+      .eq('organization_id', orgId)
+      .eq('contact_id', contactId)
+      .order('transaction_date', { ascending: false })
+      .order('created_at', { ascending: false }));
+  }
 
   if (error) return { error: new Error(error.message), transactions: [] };
   const rows = (data ?? []) as Array<Parameters<typeof toLedgerRow>[0]>;
@@ -388,14 +413,25 @@ export async function getTransactionsByOrganizationAndDriver(
   driverId: string
 ): Promise<{ error: Error | null; transactions: LedgerRow[] }> {
   if (!driverId?.trim()) return { error: null, transactions: [] };
-  const { data, error } = await supabase()
+  let { data, error } = await supabase()
     .from('transactions')
-    .select('*, trips(trip_number, display_trip_id)')
+    .select(LEDGER_TX_SELECT_WITH_TRIPS)
     .eq('organization_id', orgId)
     .eq('contact_type', 'driver')
     .eq('contact_id', driverId.trim())
     .order('transaction_date', { ascending: false })
     .order('created_at', { ascending: false });
+
+  if (error && isMissingTripsDisplayTripIdError(error)) {
+    ({ data, error } = await supabase()
+      .from('transactions')
+      .select(LEDGER_TX_SELECT_WITH_TRIPS_LEGACY)
+      .eq('organization_id', orgId)
+      .eq('contact_type', 'driver')
+      .eq('contact_id', driverId.trim())
+      .order('transaction_date', { ascending: false })
+      .order('created_at', { ascending: false }));
+  }
 
   if (error) return { error: new Error(error.message), transactions: [] };
   const rows = (data ?? []) as Array<{
@@ -456,11 +492,19 @@ export async function createLedgerEntry(
     contact_type: entry.contact_type ?? null,
   };
 
-  const { data, error } = await supabase()
+  let { data, error } = await supabase()
     .from('transactions')
     .insert(payload)
-    .select('*, trips(trip_number, display_trip_id)')
+    .select(LEDGER_TX_SELECT_WITH_TRIPS)
     .single();
+
+  if (error && isMissingTripsDisplayTripIdError(error)) {
+    ({ data, error } = await supabase()
+      .from('transactions')
+      .insert(payload)
+      .select(LEDGER_TX_SELECT_WITH_TRIPS_LEGACY)
+      .single());
+  }
 
   if (error) return { error: new Error(error.message), row: null };
 
@@ -520,13 +564,23 @@ export async function updateLedgerEntry(
     contact_type: entry.contact_type ?? null,
   };
 
-  const { data, error } = await supabase()
+  let { data, error } = await supabase()
     .from('transactions')
     .update(payload)
     .eq('id', entryId)
     .eq('organization_id', orgId)
-    .select('*, trips(trip_number, display_trip_id)')
+    .select(LEDGER_TX_SELECT_WITH_TRIPS)
     .single();
+
+  if (error && isMissingTripsDisplayTripIdError(error)) {
+    ({ data, error } = await supabase()
+      .from('transactions')
+      .update(payload)
+      .eq('id', entryId)
+      .eq('organization_id', orgId)
+      .select(LEDGER_TX_SELECT_WITH_TRIPS_LEGACY)
+      .single());
+  }
 
   if (error) return { error: new Error(error.message), row: null };
   if (!data) return { error: new Error('Update returned no row'), row: null };
