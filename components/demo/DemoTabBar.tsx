@@ -9,7 +9,6 @@ import {
 } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useWallet } from "@/contexts/WalletContext";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { Command } from "lucide-react-native";
@@ -246,7 +245,6 @@ export function DemoTabBar({
   onProfilePress,
 }: DemoTabBarProps) {
   const { profile } = useAuth();
-  const { balance } = useWallet();
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
 
   useEffect(() => {
@@ -303,8 +301,6 @@ export function DemoTabBar({
       .slice(0, 2)
       .map((p) => p[0]?.toUpperCase())
       .join("") || "US";
-  const escrowFormatted =
-    balance > 0 ? `₹${(balance / 1000).toFixed(1)}K` : "₹125.0K";
 
   const dockBottom = insets.bottom;
   const verticalPad = Math.max(dockBottom / 4, 4);
@@ -345,15 +341,11 @@ export function DemoTabBar({
       <View style={styles.webTopShell}>
         <View style={styles.webHeaderRow}>
           <View style={styles.webBrandWrap}>
-            <AnimatedPress style={styles.webBrandLogo} activeOpacity={1}>
-              <Command
-                size={13}
-                color={Theme.textOnPrimary}
-                strokeWidth={2.2}
-              />
-            </AnimatedPress>
             <View>
-              <Text style={styles.webBrandTitle}>PULSE</Text>
+              <Text style={styles.webBrandTitle}>
+                PULSE
+                <Text style={styles.webBrandDotText}>.</Text>
+              </Text>
             </View>
           </View>
 
@@ -371,10 +363,6 @@ export function DemoTabBar({
           </View>
 
           <View style={styles.webUtilityWrap}>
-            <View style={styles.webEscrowWrap}>
-              <Text style={styles.webEscrowLabel}>Escrow</Text>
-              <Text style={styles.webEscrowValue}>{escrowFormatted}</Text>
-            </View>
             <AnimatedPress style={styles.webBellBtn} activeOpacity={0.8}>
               <FontAwesome5 name="bell" size={13} color={Theme.textMutedDemo} />
             </AnimatedPress>
@@ -672,7 +660,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    minWidth: 184,
+    minWidth: 210,
+    paddingRight: 8,
   },
   webBrandLogo: {
     width: 36,
@@ -683,11 +672,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   webBrandTitle: {
-    fontSize: 14,
+    fontSize: 26,
     fontWeight: "900",
     color: Theme.textPrimaryDark,
     fontStyle: "italic",
-    letterSpacing: -0.2,
+    letterSpacing: -0.6,
+    lineHeight: 28,
+  },
+  webBrandDotText: {
+    color: Theme.darkGreen,
   },
   webBrandSub: {
     marginTop: 1,
@@ -755,36 +748,15 @@ const styles = StyleSheet.create({
     letterSpacing: 1.35,
   },
   webNavSubActive: {
-    color: "rgba(255,255,255,0.8)",
+    color: Theme.teslaRed,
   },
   webUtilityWrap: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    minWidth: 214,
+    minWidth: 90,
     justifyContent: "flex-end",
-  },
-  webEscrowWrap: {
-    alignItems: "flex-end",
-    backgroundColor: "rgba(255,255,255,0.8)",
-    borderWidth: 1,
-    borderColor: "rgba(15,23,42,0.08)",
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  webEscrowLabel: {
-    fontSize: 7,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    color: Theme.textMutedDemo,
-  },
-  webEscrowValue: {
-    fontSize: 12,
-    fontWeight: "900",
-    color: Theme.primary,
-    marginTop: 1,
+    paddingRight: 6,
   },
   webBellBtn: {
     width: 32,

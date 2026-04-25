@@ -33,6 +33,7 @@ import {
   Animated,
   Alert,
   Easing,
+  useWindowDimensions,
   Pressable,
   StyleSheet,
   Text,
@@ -95,6 +96,12 @@ function storyHeadline(post: PostRow, isLoad: boolean, isVehicle: boolean): stri
   return "Active broadcast";
 }
 
+function storyTypeLabel(post: PostRow): string {
+  if (post.type === "LOAD") return "LOAD BROADCAST";
+  if (post.type === "VEHICLE_AVAILABILITY") return "CAPACITY ALERT";
+  return "NETWORK UPDATE";
+}
+
 function ProgressSegment({
   index,
   current,
@@ -129,6 +136,8 @@ function ProgressSegment({
 export default function StoryDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: viewportWidth } = useWindowDimensions();
+  const isDesktopPreview = viewportWidth >= 1024;
   const params = useLocalSearchParams<{ orgId?: string; postId?: string; storyType?: string; queue?: string }>();
   const { currentOrganization } = useOrganization();
   const myOrgId = currentOrganization?.id ?? "";
@@ -268,6 +277,7 @@ export default function StoryDetailScreen() {
     if (!post) return "";
     return formatStoryDate(post.created_at);
   }, [post]);
+  const heroLabel = useMemo(() => (post ? storyTypeLabel(post) : ""), [post]);
 
   const handleDeletePost = useCallback(() => {
     if (!post || !isOwnPost || isDeletingCurrent) return;
@@ -317,16 +327,25 @@ export default function StoryDetailScreen() {
       </View>
 
       {/* Top bar: org + close (reference: floating) */}
-      <View style={[styles.topBar, { paddingHorizontal: Layout.screenPaddingHorizontal }]}>
+      <View
+        style={[
+          styles.topBar,
+          isDesktopPreview && styles.topBarDesktop,
+          { paddingHorizontal: Layout.screenPaddingHorizontal },
+        ]}
+      >
         <View style={styles.topBarLeft}>
-          <View style={[styles.logoTile, { transform: [{ rotate: "-3deg" }] }]}>
-            <Text style={styles.logoTileText}>{getInitials(post.org_name)}</Text>
-          </View>
           <View style={styles.topBarText}>
             <View style={styles.orgTitleRow}>
-              <Text style={styles.orgTitle} numberOfLines={1}>
-                {post.org_name}
-              </Text>
+              <View style={styles.orgBrandRow}>
+                <Text
+                  style={[styles.orgTitle, post.org_name.trim().toUpperCase() === "PULSE" && styles.orgTitlePulse]}
+                  numberOfLines={1}
+                >
+                  {post.org_name}
+                </Text>
+                {post.org_name.trim().toUpperCase() === "PULSE" ? <View style={styles.pulseGreenDot} /> : null}
+              </View>
               {isOwnPost ? (
                 <Pressable
                   style={[styles.inlineDeleteBtn, isDeletingCurrent && styles.inlineDeleteBtnDisabled]}
@@ -356,8 +375,8 @@ export default function StoryDetailScreen() {
       </View>
 
       {/* Center payload (scroll-free hero) */}
-      <View style={styles.centerStage} pointerEvents="none">
-        <View style={[styles.iconHero, { backgroundColor: color + "18" }]}>
+      <View style={[styles.centerStage, isDesktopPreview && styles.centerStageDesktop]} pointerEvents="none">
+        <View style={[styles.iconHero, isDesktopPreview && styles.iconHeroDesktop, { backgroundColor: color + "18" }]}>
           {isLoad ? (
             <Package size={44} color={color} strokeWidth={1.8} />
           ) : isVehicle ? (
@@ -366,36 +385,50 @@ export default function StoryDetailScreen() {
             <Sparkles size={44} color={color} strokeWidth={1.8} />
           )}
         </View>
-        <Text style={[styles.kicker, { color }]}>ACTIVE BROADCAST PAYLOAD</Text>
-        <Text style={styles.heroTitle} numberOfLines={6}>
+        <Text style={[styles.kicker, isDesktopPreview && styles.kickerDesktop, { color }]}>{heroLabel}</Text>
+        <Text style={[styles.heroTitle, isDesktopPreview && styles.heroTitleDesktop]} numberOfLines={6}>
           {isVehicle ? `${vehicleTypeHeadline} AVAILABLE` : headline}
         </Text>
         {isVehicle ? (
-          <View style={styles.vehicleAvailabilityBlock}>
+          <View style={[styles.vehicleAvailabilityBlock, isDesktopPreview && styles.vehicleAvailabilityBlockDesktop]}>
             <View style={styles.vehicleAvailabilityLine}>
               <Clock3 size={14} color={MUTED} />
-              <Text style={styles.vehicleAvailabilityText}>{vehicleAvailabilityText}</Text>
+              <Text style={[styles.vehicleAvailabilityText, isDesktopPreview && styles.vehicleAvailabilityTextDesktop]}>
+                {vehicleAvailabilityText}
+              </Text>
             </View>
-            {storyDateLabel ? <Text style={styles.vehicleDateText}>{storyDateLabel}</Text> : null}
+            {storyDateLabel ? (
+              <Text style={[styles.vehicleDateText, isDesktopPreview && styles.vehicleDateTextDesktop]}>
+                {storyDateLabel}
+              </Text>
+            ) : null}
           </View>
         ) : null}
 
         {isLoad && post.origin && post.destination ? (
-          <View style={styles.routeLine}>
-            <View style={styles.routeDotG} />
-            <Text style={styles.routeText} numberOfLines={1}>
-              {post.origin}
-            </Text>
-            <ArrowRight size={16} color={MUTED} />
-            <View style={[styles.routeDot, { backgroundColor: color }]} />
-            <Text style={styles.routeText} numberOfLines={1}>
-              {post.destination}
-            </Text>
+          <View style={[styles.routeCard, isDesktopPreview && styles.routeCardDesktop]}>
+            <View style={styles.routeLine}>
+              <View style={styles.routePoint}>
+                <View style={styles.routeDotG} />
+                <Text style={styles.routeLabel}>ORIGIN</Text>
+                <Text style={styles.routeText} numberOfLines={1}>
+                  {post.origin}
+                </Text>
+              </View>
+              <ArrowRight size={16} color={MUTED} />
+              <View style={[styles.routePoint, { alignItems: "flex-end" }]}>
+                <View style={[styles.routeDot, { backgroundColor: color }]} />
+                <Text style={styles.routeLabel}>DESTINATION</Text>
+                <Text style={styles.routeText} numberOfLines={1}>
+                  {post.destination}
+                </Text>
+              </View>
+            </View>
           </View>
         ) : null}
 
         {isVehicle ? (
-          <View style={styles.vehicleLocationsCard}>
+          <View style={[styles.vehicleLocationsCard, isDesktopPreview && styles.vehicleLocationsCardDesktop]}>
             <View style={styles.vehicleLocationRow}>
               <MapPin size={13} color={color} />
               <Text style={styles.vehicleLocationLabel}>Vehicle location:</Text>
@@ -415,7 +448,7 @@ export default function StoryDetailScreen() {
         ) : null}
 
         {isLoad && (post.vehicle_type != null || post.weight_tonnes != null || post.rate_offer != null) ? (
-          <View style={styles.metaRow}>
+          <View style={[styles.metaRow, isDesktopPreview && styles.metaRowDesktop]}>
             {post.vehicle_type ? (
               <View style={styles.metaChip}>
                 <Truck size={10} color={MUTED} />
@@ -436,7 +469,7 @@ export default function StoryDetailScreen() {
         ) : null}
 
         {isVehicle && post.vehicle_type ? (
-          <View style={styles.metaRow}>
+          <View style={[styles.metaRow, isDesktopPreview && styles.metaRowDesktop]}>
             <View style={styles.metaChip}>
               <Truck size={10} color={MUTED} />
               <Text style={styles.metaChipText}>{post.vehicle_type}</Text>
@@ -445,7 +478,7 @@ export default function StoryDetailScreen() {
         ) : null}
       </View>
 
-      <View style={styles.watermark} pointerEvents="none">
+      <View style={[styles.watermark, isDesktopPreview && styles.watermarkDesktop]} pointerEvents="none">
         <Text style={styles.watermarkText}>PULSE</Text>
       </View>
 
@@ -547,36 +580,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     zIndex: 50,
-    marginBottom: 4,
+    marginBottom: 6,
+  },
+  topBarDesktop: {
+    marginBottom: 12,
   },
   topBarLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
     flex: 1,
     minWidth: 0,
   },
-  logoTile: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: INK,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "#fff",
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  logoTileText: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#fff",
-    fontStyle: "italic",
-  },
   topBarText: { flex: 1, minWidth: 0 },
+  orgBrandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+    minWidth: 0,
+  },
   orgTitleRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -590,6 +612,18 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: INK,
     letterSpacing: -0.3,
+  },
+  orgTitlePulse: {
+    fontStyle: "italic",
+    letterSpacing: -0.45,
+  },
+  pulseGreenDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: Theme.darkGreen,
+    marginTop: 1,
+    flexShrink: 0,
   },
   inlineDeleteBtn: {
     width: 24,
@@ -639,6 +673,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     marginTop: -16,
   },
+  centerStageDesktop: {
+    marginTop: -8,
+    paddingHorizontal: 56,
+  },
   iconHero: {
     width: 100,
     height: 100,
@@ -646,6 +684,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 20,
+  },
+  iconHeroDesktop: {
+    width: 118,
+    height: 118,
+    borderRadius: 36,
+    marginBottom: 24,
   },
   kicker: {
     fontSize: 10,
@@ -655,22 +699,60 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 12,
   },
+  kickerDesktop: {
+    fontSize: 11,
+    letterSpacing: 5.5,
+    marginBottom: 14,
+  },
   heroTitle: {
-    fontSize: 30,
+    fontSize: 48,
     fontWeight: "900",
     color: INK,
-    lineHeight: 36,
+    lineHeight: 50,
     textAlign: "center",
     fontStyle: "italic",
     letterSpacing: -1.1,
   },
+  heroTitleDesktop: {
+    fontSize: 56,
+    lineHeight: 58,
+    letterSpacing: -1.7,
+    maxWidth: 980,
+  },
+  routeCard: {
+    marginTop: 20,
+    minWidth: "82%",
+    maxWidth: "95%",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  routeCardDesktop: {
+    minWidth: "70%",
+    maxWidth: 900,
+    marginTop: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
   routeLine: {
     flexDirection: "row",
     alignItems: "center",
-    flexWrap: "wrap",
-    justifyContent: "center",
+    justifyContent: "space-between",
     gap: 8,
-    marginTop: 20,
+  },
+  routePoint: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  routeLabel: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: Theme.textMutedDemo,
+    letterSpacing: 0.7,
   },
   routeDotG: {
     width: 8,
@@ -680,16 +762,20 @@ const styles = StyleSheet.create({
   },
   routeDot: { width: 8, height: 8, borderRadius: 4 },
   routeText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "800",
     color: INK,
-    maxWidth: "42%",
+    maxWidth: "100%",
   },
   routeSep: { color: MUTED, fontWeight: "800" },
   vehicleAvailabilityBlock: {
     marginTop: 10,
     alignItems: "center",
     gap: 5,
+  },
+  vehicleAvailabilityBlockDesktop: {
+    marginTop: 14,
+    gap: 6,
   },
   vehicleAvailabilityLine: {
     flexDirection: "row",
@@ -704,12 +790,20 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
     textTransform: "capitalize",
   },
+  vehicleAvailabilityTextDesktop: {
+    fontSize: 20,
+    letterSpacing: -0.25,
+  },
   vehicleDateText: {
     fontSize: 11,
     fontWeight: "700",
     color: MUTED,
     letterSpacing: 0.6,
     textTransform: "uppercase",
+  },
+  vehicleDateTextDesktop: {
+    fontSize: 12,
+    letterSpacing: 0.75,
   },
   vehicleLocationsCard: {
     marginTop: 16,
@@ -722,6 +816,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     gap: 8,
+  },
+  vehicleLocationsCardDesktop: {
+    minWidth: "70%",
+    maxWidth: 900,
+    marginTop: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   vehicleLocationRow: {
     flexDirection: "row",
@@ -752,6 +853,10 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 16,
   },
+  metaRowDesktop: {
+    marginTop: 20,
+    gap: 10,
+  },
   metaChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -773,6 +878,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: "center",
+  },
+  watermarkDesktop: {
+    bottom: 120,
   },
   watermarkText: {
     fontSize: 96,

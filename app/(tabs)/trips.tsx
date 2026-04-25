@@ -609,207 +609,6 @@ export default function TripsScreen() {
         { paddingTop: screenTopPad },
       ]}
     >
-      <View style={styles.headerBlock}>
-        {Platform.OS === "web" ? (
-          <View style={styles.tabRowWeb}>
-            {mainTabs.map((tab) => (
-              <TouchableOpacity
-                key={tab.id}
-                style={[styles.tabWeb, tab.isActive && styles.tabActive]}
-                onPress={tab.onPress}
-                activeOpacity={0.7}
-              >
-                <Text
-                  style={[styles.tabText, tab.isActive && styles.tabTextActive]}
-                >
-                  {tab.label}
-                </Text>
-                {tab.isActive ? <View style={styles.tabUnderline} /> : null}
-              </TouchableOpacity>
-            ))}
-          </View>
-        ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.tabRowScrollContent}
-            style={styles.tabRowScroll}
-          >
-            {mainTabs.map((tab) => (
-              <TouchableOpacity
-                key={tab.id}
-                style={[styles.tab, tab.isActive && styles.tabActive]}
-                onPress={tab.onPress}
-                activeOpacity={0.7}
-              >
-                <Text
-                  style={[styles.tabText, tab.isActive && styles.tabTextActive]}
-                >
-                  {tab.label}
-                </Text>
-                {tab.isActive ? <View style={styles.tabUnderline} /> : null}
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
-
-        {/* SUB-TABS: ALL | ASSET | AGGREGATED */}
-        {Platform.OS === "web" ? (
-          <View style={styles.tabRowWebSub}>
-            {subTabs.map((tab) => (
-              <TouchableOpacity
-                key={tab.id}
-                style={[styles.tabWeb, tab.isActive && styles.tabActive]}
-                onPress={tab.onPress}
-                activeOpacity={0.7}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    { fontSize: 7 },
-                    tab.isActive && styles.tabTextActive,
-                  ]}
-                >
-                  {tab.label}
-                </Text>
-                {tab.isActive ? <View style={styles.tabUnderline} /> : null}
-              </TouchableOpacity>
-            ))}
-          </View>
-        ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.tabRowScrollContent}
-            style={styles.tabRowScrollSub}
-          >
-            {subTabs.map((tab) => (
-              <TouchableOpacity
-                key={tab.id}
-                style={[styles.tab, tab.isActive && styles.tabActive]}
-                onPress={tab.onPress}
-                activeOpacity={0.7}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    { fontSize: 7 },
-                    tab.isActive && styles.tabTextActive,
-                  ]}
-                >
-                  {tab.label}
-                </Text>
-                {tab.isActive ? <View style={styles.tabUnderline} /> : null}
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
-
-        <View style={styles.tripsToolbar}>
-          <View style={styles.tripsLayoutToggle} accessibilityRole="tablist">
-            <TouchableOpacity
-              style={[
-                styles.tripsLayoutToggleBtn,
-                listLayout === "cards" && styles.tripsLayoutToggleBtnActive,
-              ]}
-              onPress={() => setListLayout("cards")}
-              activeOpacity={0.85}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: listLayout === "cards" }}
-              accessibilityLabel={tr("tripsViewCards")}
-            >
-              <FontAwesome
-                name="th-large"
-                size={14}
-                color={
-                  listLayout === "cards"
-                    ? Theme.textPrimaryDark
-                    : Theme.textOnDarkMuted
-                }
-              />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.tripsLayoutToggleBtn,
-                listLayout === "table" && styles.tripsLayoutToggleBtnActive,
-              ]}
-              onPress={() => setListLayout("table")}
-              activeOpacity={0.85}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: listLayout === "table" }}
-              accessibilityLabel={tr("tripsViewTable")}
-            >
-              <FontAwesome
-                name="list"
-                size={14}
-                color={
-                  listLayout === "table"
-                    ? Theme.textPrimaryDark
-                    : Theme.textOnDarkMuted
-                }
-              />
-            </TouchableOpacity>
-          </View>
-          <View
-            style={[
-              styles.tripsSearchWrap,
-              Platform.OS === "web" && styles.tripsSearchWrapWeb,
-              isLargeScreen && styles.tripsSearchWrapRow,
-            ]}
-          >
-            <FontAwesome
-              name="search"
-              size={12}
-              color={Theme.textOnDarkMuted}
-              style={styles.tripsSearchIcon}
-            />
-            <TextInput
-              style={[
-                styles.tripsSearchInput,
-                Platform.OS === "web" && styles.tripsSearchInputWeb,
-              ]}
-              placeholder={
-                isLargeScreen ? "Find by name..." : tr("searchTripsPlaceholder")
-              }
-              placeholderTextColor={Theme.textOnDarkMuted}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              returnKeyType="search"
-              autoCorrect={false}
-              spellCheck={false}
-              autoComplete="off"
-              maxLength={120}
-            />
-          </View>
-          <View style={styles.tripsToolbarActions}>
-            <TouchableOpacity
-              style={[
-                styles.tripsFilterIconBtn,
-                Platform.OS === "web" && styles.tripsSupplyChipWeb,
-              ]}
-              onPress={(e) => {
-                // @ts-ignore - capture location for dropdown anchor on native
-                const target = e.currentTarget;
-                if (target && typeof target.measureInWindow === "function") {
-                  target.measureInWindow(
-                    (_x: number, y: number, _w: number, h: number) => {
-                      setSortAnchorY(y + h + 6);
-                      setShowSortModal(true);
-                    },
-                  );
-                } else {
-                  setSortAnchorY(100);
-                  setShowSortModal(true);
-                }
-              }}
-              activeOpacity={0.7}
-            >
-              <FontAwesome name="sort" size={12} color={Theme.textOnDark} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-
       <Modal
         visible={showSortModal}
         transparent
@@ -1065,61 +864,354 @@ export default function TripsScreen() {
           }
         >
           <View style={styles.tripsBodyFiltersBleed}>
-            {tripFilter === "Active" ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={[
-                  styles.tripMetricsGrid,
-                  isLargeScreen && styles.tripMetricsGridWeb,
-                ]}
-                style={styles.tripMetricsScroll}
-              >
-                {TRIP_METRIC_ORDER.map((metricId) => {
-                  const count = metricCounts[metricId];
-                  const active = activeMetricTab === metricId;
-                  const copy = tripMetricCopy[metricId];
-                  return (
-                    <TouchableOpacity
-                      key={metricId}
+            <View style={styles.tripsInlineFilterPanel}>
+              {Platform.OS !== "web" ? (
+                <>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.tabRowScrollContent}
+                    style={styles.tabRowScroll}
+                  >
+                    {mainTabs.map((tab) => (
+                      <TouchableOpacity
+                        key={tab.id}
+                        style={[styles.tab, tab.isActive && styles.tabActive]}
+                        onPress={tab.onPress}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.tabText, tab.isActive && styles.tabTextActive]}>
+                          {tab.label}
+                        </Text>
+                        {tab.isActive ? <View style={styles.tabUnderline} /> : null}
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.tabRowScrollContent}
+                    style={styles.tabRowScrollSub}
+                  >
+                    {subTabs.map((tab) => (
+                      <TouchableOpacity
+                        key={tab.id}
+                        style={[styles.tab, tab.isActive && styles.tabActive]}
+                        onPress={tab.onPress}
+                        activeOpacity={0.7}
+                      >
+                        <Text
+                          style={[
+                            styles.tabText,
+                            { fontSize: 7 },
+                            tab.isActive && styles.tabTextActive,
+                          ]}
+                        >
+                          {tab.label}
+                        </Text>
+                        {tab.isActive ? <View style={styles.tabUnderline} /> : null}
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                  <View style={styles.tripsToolbar}>
+                    <View style={styles.tripsLayoutToggle} accessibilityRole="tablist">
+                      <TouchableOpacity
+                        style={[
+                          styles.tripsLayoutToggleBtn,
+                          listLayout === "cards" && styles.tripsLayoutToggleBtnActive,
+                        ]}
+                        onPress={() => setListLayout("cards")}
+                        activeOpacity={0.85}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: listLayout === "cards" }}
+                        accessibilityLabel={tr("tripsViewCards")}
+                      >
+                        <FontAwesome
+                          name="th-large"
+                          size={14}
+                          color={listLayout === "cards" ? Theme.textPrimaryDark : Theme.textSecondary}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.tripsLayoutToggleBtn,
+                          listLayout === "table" && styles.tripsLayoutToggleBtnActive,
+                        ]}
+                        onPress={() => setListLayout("table")}
+                        activeOpacity={0.85}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: listLayout === "table" }}
+                        accessibilityLabel={tr("tripsViewTable")}
+                      >
+                        <FontAwesome
+                          name="list"
+                          size={14}
+                          color={listLayout === "table" ? Theme.textPrimaryDark : Theme.textSecondary}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                    <View
                       style={[
-                        styles.tripMetricTile,
-                        isLargeScreen && styles.tripMetricTileWeb,
-                        active && styles.tripMetricTileActive,
+                        styles.tripsSearchWrap,
+                        Platform.OS === "web" && styles.tripsSearchWrapWeb,
+                        isLargeScreen && styles.tripsSearchWrapRow,
                       ]}
-                      onPress={() => setActiveMetricTab(metricId)}
-                      activeOpacity={0.85}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: active }}
-                      accessibilityLabel={`${copy.title}, ${count} trips`}
                     >
-                      <Text
+                      <FontAwesome
+                        name="search"
+                        size={12}
+                        color={Theme.textSecondary}
+                        style={styles.tripsSearchIcon}
+                      />
+                      <TextInput
                         style={[
-                          styles.tripMetricCount,
-                          active && styles.tripMetricCountActive,
+                          styles.tripsSearchInput,
+                          Platform.OS === "web" && styles.tripsSearchInputWeb,
                         ]}
-                      >
-                        {count}
-                      </Text>
-                      <Text
+                        placeholder={isLargeScreen ? "Find by name..." : tr("searchTripsPlaceholder")}
+                        placeholderTextColor={Theme.textSecondary}
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        returnKeyType="search"
+                        autoCorrect={false}
+                        spellCheck={false}
+                        autoComplete="off"
+                        maxLength={120}
+                      />
+                    </View>
+                    <View style={styles.tripsToolbarActions}>
+                      <TouchableOpacity
                         style={[
-                          styles.tripMetricTitle,
-                          active && styles.tripMetricTitleActive,
+                          styles.tripsFilterIconBtn,
+                          Platform.OS === "web" && styles.tripsSupplyChipWeb,
                         ]}
-                        numberOfLines={2}
+                        onPress={(e) => {
+                          // @ts-ignore - capture location for dropdown anchor on native
+                          const target = e.currentTarget;
+                          if (target && typeof target.measureInWindow === "function") {
+                            target.measureInWindow((_x: number, y: number, _w: number, h: number) => {
+                              setSortAnchorY(y + h + 6);
+                              setShowSortModal(true);
+                            });
+                          } else {
+                            setSortAnchorY(100);
+                            setShowSortModal(true);
+                          }
+                        }}
+                        activeOpacity={0.7}
                       >
-                        {copy.title}
-                      </Text>
-                      <Text style={styles.tripMetricHint} numberOfLines={2}>
-                        {copy.hint}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            ) : null}
+                        <FontAwesome name="sort" size={12} color={Theme.textPrimaryDark} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </>
+              ) : (
+                <View style={styles.tripsInlineFilterRowWeb}>
+                  <View style={styles.tripsTabClusterWeb}>
+                    {mainTabs.map((tab) => (
+                      <TouchableOpacity
+                        key={tab.id}
+                        style={[styles.tabWebCompact, tab.isActive && styles.tabActive]}
+                        onPress={tab.onPress}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.tabText, tab.isActive && styles.tabTextActive]}>{tab.label}</Text>
+                        {tab.isActive ? <View style={styles.tabUnderline} /> : null}
+                      </TouchableOpacity>
+                    ))}
+                    {subTabs.map((tab) => (
+                      <TouchableOpacity
+                        key={tab.id}
+                        style={[styles.tabWebCompact, tab.isActive && styles.tabActive]}
+                        onPress={tab.onPress}
+                        activeOpacity={0.7}
+                      >
+                        <Text
+                          style={[
+                            styles.tabText,
+                            styles.tabTextSubCompact,
+                            tab.isActive && styles.tabTextActive,
+                          ]}
+                        >
+                          {tab.label}
+                        </Text>
+                        {tab.isActive ? <View style={styles.tabUnderline} /> : null}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <View style={styles.tripsToolbarWeb}>
+                    <View style={styles.tripsLayoutToggle} accessibilityRole="tablist">
+                      <TouchableOpacity
+                        style={[
+                          styles.tripsLayoutToggleBtn,
+                          listLayout === "cards" && styles.tripsLayoutToggleBtnActive,
+                        ]}
+                        onPress={() => setListLayout("cards")}
+                        activeOpacity={0.85}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: listLayout === "cards" }}
+                        accessibilityLabel={tr("tripsViewCards")}
+                      >
+                        <FontAwesome
+                          name="th-large"
+                          size={14}
+                          color={listLayout === "cards" ? Theme.textPrimaryDark : Theme.textSecondary}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.tripsLayoutToggleBtn,
+                          listLayout === "table" && styles.tripsLayoutToggleBtnActive,
+                        ]}
+                        onPress={() => setListLayout("table")}
+                        activeOpacity={0.85}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: listLayout === "table" }}
+                        accessibilityLabel={tr("tripsViewTable")}
+                      >
+                        <FontAwesome
+                          name="list"
+                          size={14}
+                          color={listLayout === "table" ? Theme.textPrimaryDark : Theme.textSecondary}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                    <View style={[styles.tripsSearchWrap, styles.tripsSearchWrapWeb, styles.tripsSearchWrapRow]}>
+                      <FontAwesome
+                        name="search"
+                        size={12}
+                        color={Theme.textSecondary}
+                        style={styles.tripsSearchIcon}
+                      />
+                      <TextInput
+                        style={[styles.tripsSearchInput, styles.tripsSearchInputWeb]}
+                        placeholder={isLargeScreen ? "Find by name..." : tr("searchTripsPlaceholder")}
+                        placeholderTextColor={Theme.textSecondary}
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        returnKeyType="search"
+                        autoCorrect={false}
+                        spellCheck={false}
+                        autoComplete="off"
+                        maxLength={120}
+                      />
+                    </View>
+                    <View style={styles.tripsToolbarActions}>
+                      <TouchableOpacity
+                        style={[styles.tripsFilterIconBtn, styles.tripsSupplyChipWeb]}
+                        onPress={(e) => {
+                          // @ts-ignore - capture location for dropdown anchor on native
+                          const target = e.currentTarget;
+                          if (target && typeof target.measureInWindow === "function") {
+                            target.measureInWindow((_x: number, y: number, _w: number, h: number) => {
+                              setSortAnchorY(y + h + 6);
+                              setShowSortModal(true);
+                            });
+                          } else {
+                            setSortAnchorY(100);
+                            setShowSortModal(true);
+                          }
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <FontAwesome name="sort" size={12} color={Theme.textPrimaryDark} />
+                      </TouchableOpacity>
+                    </View>
+                    <View style={styles.tripsDateInlineRowWeb}>
+                      {(
+                        [
+                          { id: "all" as const, label: tr("all") },
+                          { id: "today" as const, label: tr("todayTrips") },
+                          { id: "yesterday" as const, label: tr("yesterdayTrips") },
+                          { id: "this_week" as const, label: tr("thisWeekTrips") },
+                          { id: "this_month" as const, label: tr("thisMonthTrips") },
+                        ] as const
+                      ).map(({ id, label }) => (
+                        <TouchableOpacity
+                          key={id}
+                          style={[
+                            styles.tripsBodyDateChip,
+                            dateRangeFilter === id && styles.tripsBodyDateChipActive,
+                            styles.tripsSupplyChipWeb,
+                          ]}
+                          onPress={() => {
+                            setDateRangeFilter(id);
+                            setCustomDateFrom(null);
+                            setCustomDateTo(null);
+                          }}
+                          activeOpacity={0.85}
+                        >
+                          <Text
+                            style={[
+                              styles.tripsBodyDateChipText,
+                              dateRangeFilter === id && styles.tripsBodyDateChipTextActive,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                      {dateRangeFilter === "custom" && customDateFrom && customDateTo ? (
+                        <View style={[styles.tripsBodyDateChip, styles.tripsDateChipCustom]}>
+                          <FontAwesome
+                            name="calendar"
+                            size={9}
+                            color={Theme.textOnDark}
+                            style={styles.tripsDateChipCustomIcon}
+                          />
+                          <Text
+                            style={[
+                              styles.tripsDateChipText,
+                              styles.tripsDateChipTextActive,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {formatLedgerDate(customDateFrom).toUpperCase()} →{" "}
+                            {formatLedgerDate(customDateTo).toUpperCase()}
+                          </Text>
+                          <TouchableOpacity
+                            onPress={() => {
+                              setDateRangeFilter("all");
+                              setCustomDateFrom(null);
+                              setCustomDateTo(null);
+                            }}
+                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            style={styles.tripsDateChipCustomClose}
+                          >
+                            <FontAwesome name="times" size={9} color={Theme.textOnDark} />
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+                      <TouchableOpacity
+                        style={[
+                          styles.tripsBodyDateRangeIconBtn,
+                          dateRangeFilter === "custom" && styles.tripsDateRangeIconBtnActive,
+                          styles.tripsSupplyChipWeb,
+                        ]}
+                        onPress={() => setShowDateRangePicker(true)}
+                        activeOpacity={0.8}
+                        accessibilityLabel={tr("dateRangeLabel")}
+                        accessibilityRole="button"
+                      >
+                        <FontAwesome
+                          name="calendar"
+                          size={12}
+                          color={
+                            dateRangeFilter === "custom"
+                              ? Theme.textOnDark
+                              : Theme.textPrimaryDark
+                          }
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              )}
+            </View>
 
-            <View style={styles.tripsBodyDateFilterRow}>
+            {Platform.OS !== "web" ? (
+              <View style={styles.tripsBodyDateFilterRow}>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -1221,7 +1313,62 @@ export default function TripsScreen() {
                   }
                 />
               </TouchableOpacity>
-            </View>
+              </View>
+            ) : null}
+
+            {tripFilter === "Active" ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={[
+                  styles.tripMetricsGrid,
+                  isLargeScreen && styles.tripMetricsGridWeb,
+                ]}
+                style={styles.tripMetricsScroll}
+              >
+                {TRIP_METRIC_ORDER.map((metricId) => {
+                  const count = metricCounts[metricId];
+                  const active = activeMetricTab === metricId;
+                  const copy = tripMetricCopy[metricId];
+                  return (
+                    <TouchableOpacity
+                      key={metricId}
+                      style={[
+                        styles.tripMetricTile,
+                        isLargeScreen && styles.tripMetricTileWeb,
+                        active && styles.tripMetricTileActive,
+                      ]}
+                      onPress={() => setActiveMetricTab(metricId)}
+                      activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      accessibilityLabel={`${copy.title}, ${count} trips`}
+                    >
+                      <Text
+                        style={[
+                          styles.tripMetricCount,
+                          active && styles.tripMetricCountActive,
+                        ]}
+                      >
+                        {count}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.tripMetricTitle,
+                          active && styles.tripMetricTitleActive,
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {copy.title}
+                      </Text>
+                      <Text style={styles.tripMetricHint} numberOfLines={2}>
+                        {copy.hint}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            ) : null}
           </View>
 
           {filtered.length === 0 ? (
@@ -1355,9 +1502,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.screenPaddingHorizontal,
     marginTop: 2,
     marginBottom: 4,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.separatorDark,
+    paddingBottom: 6,
   },
   tabRowScroll: {
     flexGrow: 0,
@@ -1370,9 +1515,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.screenPaddingHorizontal,
     marginTop: 2,
     marginBottom: 4,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.separatorDark,
+    paddingBottom: 6,
   },
   tabRowScrollSub: {
     flexGrow: 0,
@@ -1409,9 +1552,9 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 2,
-    color: Theme.textOnDarkMuted,
+    color: Theme.textSecondary,
   },
-  tabTextActive: { color: Theme.textOnDark },
+  tabTextActive: { color: Theme.textPrimaryDark },
   tabUnderline: {
     position: "absolute",
     bottom: 0,
@@ -1426,20 +1569,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 12,
-    paddingBottom: 16,
-    backgroundColor: "#000000",
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.separatorDark,
+    paddingTop: 8,
+    paddingBottom: 8,
+    backgroundColor: "transparent",
     gap: 16,
   },
   tripsLayoutToggle: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Theme.darkSurface,
+    backgroundColor: Theme.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.borderOnDark,
+    borderColor: Theme.borderLight,
     padding: 3,
     gap: 2,
   },
@@ -1466,9 +1607,9 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 38,
     borderRadius: 11,
-    backgroundColor: Theme.darkSurface,
+    backgroundColor: Theme.surface,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
+    borderColor: Theme.borderLight,
     paddingHorizontal: 12,
     paddingVertical: 0,
     minWidth: 0,
@@ -1488,7 +1629,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 14,
     fontWeight: "600",
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
     paddingVertical: 0,
   },
   tripsSearchInputWeb: {
@@ -1499,9 +1640,9 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: "rgba(255,255,255,0.12)",
+    backgroundColor: Theme.surface,
     borderWidth: 1,
-    borderColor: Theme.separatorDark,
+    borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1794,6 +1935,55 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
+  },
+  tripsInlineFilterPanel: {
+    marginBottom: 10,
+    backgroundColor: Theme.screenBackground,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  tripsInlineFilterRowWeb: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingVertical: 8,
+  },
+  tripsTabClusterWeb: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 0,
+  },
+  tabWebCompact: {
+    minWidth: 58,
+    position: "relative" as const,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  tabTextSubCompact: {
+    fontSize: 7,
+    letterSpacing: 1.2,
+  },
+  tripsToolbarWeb: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    backgroundColor: "transparent",
+  },
+  tripsDateInlineRowWeb: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 0,
+    marginLeft: 2,
   },
   tripMetricsGrid: {
     flexDirection: "row",

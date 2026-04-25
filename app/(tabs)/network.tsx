@@ -239,51 +239,19 @@ export default function NetworkScreen() {
 
   const hubBar = (
     <View style={styles.hubBar}>
-      <View style={styles.hubTopRow}>
-        <View style={styles.hubEyebrowRow}>
-          <Text style={styles.hubEyebrow}>Mission control</Text>
-          <View style={styles.growBadge}>
-            <Text style={styles.growBadgeText}>GROW MODE</Text>
-          </View>
+      {recentAddedNames.length > 0 ? (
+        <Animated.View style={[styles.hubTopRow, { transform: [{ scale: recentPulse }] }]}>
           <Pressable
-            onPress={() => setNetworkSegment("load")}
-            style={[
-              styles.loadCenterReturnBtn,
-              networkSegment === "load" && styles.loadCenterReturnBtnOn,
-            ]}
-            hitSlop={6}
+            onPress={() => setNetworkSegment("connections")}
+            style={styles.recentAddedChip}
           >
-            <View style={styles.segmentLabelInline}>
-              <Truck
-                size={12}
-                color={networkSegment === "load" ? Theme.textPrimaryDark : Theme.textSecondary}
-                strokeWidth={2.2}
-              />
-              <Text
-                style={[
-                  styles.loadCenterReturnText,
-                  networkSegment === "load" && styles.loadCenterReturnTextOn,
-                ]}
-              >
-                LOAD CENTER
-              </Text>
-            </View>
+            <Text style={styles.recentAddedLabel}>Recently added</Text>
+            <Text style={styles.recentAddedNames} numberOfLines={1}>
+              {recentAddedNames.join(", ")}
+            </Text>
           </Pressable>
-        </View>
-        {recentAddedNames.length > 0 ? (
-          <Animated.View style={{ transform: [{ scale: recentPulse }] }}>
-            <Pressable
-              onPress={() => setNetworkSegment("connections")}
-              style={styles.recentAddedChip}
-            >
-              <Text style={styles.recentAddedLabel}>Recently added</Text>
-              <Text style={styles.recentAddedNames} numberOfLines={1}>
-                {recentAddedNames.join(", ")}
-              </Text>
-            </Pressable>
-          </Animated.View>
-        ) : null}
-      </View>
+        </Animated.View>
+      ) : null}
 
     </View>
   );
@@ -315,66 +283,68 @@ export default function NetworkScreen() {
         <>
           <View style={styles.sectionBlock}>
             <View style={styles.connectionsCard}>
-              <View style={styles.sectionHeadingRow}>
-                <Activity size={14} color={Theme.textPrimaryDark} />
-                <View style={styles.sectionTitleBlock}>
-                  <Text style={styles.sectionKicker}>Operations pulse</Text>
-                  <Text style={styles.sectionHeading}>Your connections</Text>
+              <View style={styles.sectionHeadingRowSpread}>
+                <View style={styles.sectionHeadingRowCompact}>
+                  <Activity size={14} color={Theme.textPrimaryDark} />
+                  <View style={styles.sectionTitleBlock}>
+                    <Text style={styles.sectionKicker}>Operations pulse</Text>
+                    <Text style={styles.sectionHeading}>Your connections</Text>
+                  </View>
                 </View>
-              </View>
-              <View style={styles.inlineControlsRow}>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.inlineFilterScroll}
-                  style={styles.inlineTabsWrap}
-                >
-                  {filterTabs.map((t) => {
-                    const active = connFilter === t;
-                    return (
+                <View style={styles.connectionsHeaderControls}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.inlineFilterScroll}
+                    style={[styles.inlineTabsWrap, styles.inlineTabsWrapHeader]}
+                  >
+                    {filterTabs.map((t) => {
+                      const active = connFilter === t;
+                      return (
+                        <Pressable
+                          key={t}
+                          onPress={() => setConnFilter(t)}
+                          style={[styles.inlineFilterPill, active && styles.inlineFilterPillOn]}
+                        >
+                          <Text style={[styles.inlineFilterPillText, active && styles.inlineFilterPillTextOn]}>
+                            {t}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                  {connSearchOpen ? (
+                    <View style={styles.inlineSearchBox}>
+                      <Search size={13} color={Theme.textSecondary} />
+                      <TextInput
+                        style={styles.inlineSearchInput}
+                        placeholder="Search…"
+                        placeholderTextColor={Theme.textSecondary}
+                        value={connSearch}
+                        onChangeText={setConnSearch}
+                        returnKeyType="search"
+                        autoFocus
+                      />
                       <Pressable
-                        key={t}
-                        onPress={() => setConnFilter(t)}
-                        style={[styles.inlineFilterPill, active && styles.inlineFilterPillOn]}
+                        onPress={() => {
+                          setConnSearch("");
+                          setConnSearchOpen(false);
+                        }}
+                        hitSlop={8}
                       >
-                        <Text style={[styles.inlineFilterPillText, active && styles.inlineFilterPillTextOn]}>
-                          {t}
-                        </Text>
+                        <Text style={styles.inlineSearchClose}>×</Text>
                       </Pressable>
-                    );
-                  })}
-                </ScrollView>
-                {connSearchOpen ? (
-                  <View style={styles.inlineSearchBox}>
-                    <Search size={13} color={Theme.textSecondary} />
-                    <TextInput
-                      style={styles.inlineSearchInput}
-                      placeholder="Search…"
-                      placeholderTextColor={Theme.textSecondary}
-                      value={connSearch}
-                      onChangeText={setConnSearch}
-                      returnKeyType="search"
-                      autoFocus
-                    />
+                    </View>
+                  ) : (
                     <Pressable
-                      onPress={() => {
-                        setConnSearch("");
-                        setConnSearchOpen(false);
-                      }}
+                      onPress={() => setConnSearchOpen(true)}
+                      style={({ pressed }) => [styles.inlineSearchIconBtn, pressed && { opacity: 0.72 }]}
                       hitSlop={8}
                     >
-                      <Text style={styles.inlineSearchClose}>×</Text>
+                      <Search size={13} color={Theme.textPrimaryDark} strokeWidth={2.4} />
                     </Pressable>
-                  </View>
-                ) : (
-                  <Pressable
-                    onPress={() => setConnSearchOpen(true)}
-                    style={({ pressed }) => [styles.inlineSearchIconBtn, pressed && { opacity: 0.72 }]}
-                    hitSlop={8}
-                  >
-                    <Search size={13} color={Theme.textPrimaryDark} strokeWidth={2.4} />
-                  </Pressable>
-                )}
+                  )}
+                </View>
               </View>
               <ConnectionsView
                 orgId={orgId}
@@ -451,55 +421,55 @@ export default function NetworkScreen() {
                   <Text style={styles.sectionHeading}>{pendingCount} pending syncs</Text>
                 </View>
               </View>
-            </View>
-            <View style={styles.inlineControlsRow}>
-              <View style={styles.invSubRowCompact}>
-                {(["received", "sent"] as const).map((k) => {
-                  const on = invSubTab === k;
-                  return (
+              <View style={styles.invitationsHeaderControls}>
+                <View style={[styles.invSubRowCompact, styles.invSubRowCompactHeader]}>
+                  {(["received", "sent"] as const).map((k) => {
+                    const on = invSubTab === k;
+                    return (
+                      <Pressable
+                        key={k}
+                        onPress={() => setInvSubTab(k)}
+                        style={[styles.inlineFilterPill, on && styles.inlineFilterPillOn]}
+                      >
+                        <Text style={[styles.inlineFilterPillText, on && styles.inlineFilterPillTextOn]}>
+                          {k === "received" ? "RECEIVED" : "SENT"}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                {invSearchOpen ? (
+                  <View style={styles.inlineSearchBox}>
+                    <Search size={13} color={Theme.textSecondary} />
+                    <TextInput
+                      style={styles.inlineSearchInput}
+                      placeholder={invSubTab === "received" ? "Search received…" : "Search sent…"}
+                      placeholderTextColor={Theme.textSecondary}
+                      value={invSearch}
+                      onChangeText={setInvSearch}
+                      returnKeyType="search"
+                      autoFocus
+                    />
                     <Pressable
-                      key={k}
-                      onPress={() => setInvSubTab(k)}
-                      style={[styles.inlineFilterPill, on && styles.inlineFilterPillOn]}
+                      onPress={() => {
+                        setInvSearch("");
+                        setInvSearchOpen(false);
+                      }}
+                      hitSlop={8}
                     >
-                      <Text style={[styles.inlineFilterPillText, on && styles.inlineFilterPillTextOn]}>
-                        {k === "received" ? "RECEIVED" : "SENT"}
-                      </Text>
+                      <Text style={styles.inlineSearchClose}>×</Text>
                     </Pressable>
-                  );
-                })}
-              </View>
-              {invSearchOpen ? (
-                <View style={styles.inlineSearchBox}>
-                  <Search size={13} color={Theme.textSecondary} />
-                  <TextInput
-                    style={styles.inlineSearchInput}
-                    placeholder={invSubTab === "received" ? "Search received…" : "Search sent…"}
-                    placeholderTextColor={Theme.textSecondary}
-                    value={invSearch}
-                    onChangeText={setInvSearch}
-                    returnKeyType="search"
-                    autoFocus
-                  />
+                  </View>
+                ) : (
                   <Pressable
-                    onPress={() => {
-                      setInvSearch("");
-                      setInvSearchOpen(false);
-                    }}
+                    onPress={() => setInvSearchOpen(true)}
+                    style={({ pressed }) => [styles.inlineSearchIconBtn, pressed && { opacity: 0.72 }]}
                     hitSlop={8}
                   >
-                    <Text style={styles.inlineSearchClose}>×</Text>
+                    <Search size={13} color={Theme.textPrimaryDark} strokeWidth={2.4} />
                   </Pressable>
-                </View>
-              ) : (
-                <Pressable
-                  onPress={() => setInvSearchOpen(true)}
-                  style={({ pressed }) => [styles.inlineSearchIconBtn, pressed && { opacity: 0.72 }]}
-                  hitSlop={8}
-                >
-                  <Search size={13} color={Theme.textPrimaryDark} strokeWidth={2.4} />
-                </Pressable>
-              )}
+                )}
+              </View>
             </View>
             <InvitationsView
               orgId={orgId}
@@ -529,36 +499,46 @@ export default function NetworkScreen() {
             onPress={() => setNetworkSegment("connections")}
             style={[
               styles.storyTopSwitchBtn,
+              styles.storyTopSwitchBtnIconOnly,
+              networkSegment === "connections" && styles.storyTopSwitchBtnWide,
               networkSegment === "connections" && styles.storyTopSwitchBtnOn,
             ]}
             hitSlop={6}
           >
-            <Text
-              style={[
-                styles.storyTopSwitchText,
-                networkSegment === "connections" && styles.storyTopSwitchTextOn,
-              ]}
-            >
-              CONNECTIONS
-            </Text>
+            <View style={styles.segmentLabelInline}>
+              <Activity
+                size={12}
+                color={networkSegment === "connections" ? Theme.textOnPrimary : Theme.textSecondary}
+                strokeWidth={2.2}
+              />
+              {networkSegment === "connections" ? (
+                <Text style={[styles.storyTopSwitchText, styles.storyTopSwitchTextOn]}>
+                  CONNECTIONS
+                </Text>
+              ) : null}
+            </View>
           </Pressable>
           <Pressable
             onPress={() => setNetworkSegment("invitations")}
             style={[
               styles.storyTopSwitchBtn,
+              styles.storyTopSwitchBtnIconOnly,
+              networkSegment === "invitations" && styles.storyTopSwitchBtnWide,
               networkSegment === "invitations" && styles.storyTopSwitchBtnOn,
             ]}
             hitSlop={6}
           >
             <View style={styles.segmentLabelInline}>
-              <Text
-                style={[
-                  styles.storyTopSwitchText,
-                  networkSegment === "invitations" && styles.storyTopSwitchTextOn,
-                ]}
-              >
-                INVITATIONS
-              </Text>
+              <UserPlus2
+                size={12}
+                color={networkSegment === "invitations" ? Theme.textOnPrimary : Theme.textSecondary}
+                strokeWidth={2.2}
+              />
+              {networkSegment === "invitations" ? (
+                <Text style={[styles.storyTopSwitchText, styles.storyTopSwitchTextOn]}>
+                  INVITATIONS
+                </Text>
+              ) : null}
               {pendingCount > 0 ? (
                 <Animated.View
                   style={[
@@ -568,6 +548,29 @@ export default function NetworkScreen() {
                 >
                   <Text style={styles.storyInviteBadgeText}>{pendingCount}</Text>
                 </Animated.View>
+              ) : null}
+            </View>
+          </Pressable>
+          <Pressable
+            onPress={() => setNetworkSegment("load")}
+            style={[
+              styles.storyTopSwitchBtn,
+              styles.storyTopSwitchBtnIconOnly,
+              networkSegment === "load" && styles.storyTopSwitchBtnWide,
+              networkSegment === "load" && styles.storyTopSwitchBtnOn,
+            ]}
+            hitSlop={6}
+          >
+            <View style={styles.segmentLabelInline}>
+              <Truck
+                size={12}
+                color={networkSegment === "load" ? Theme.textOnPrimary : Theme.textSecondary}
+                strokeWidth={2.2}
+              />
+              {networkSegment === "load" ? (
+                <Text style={[styles.storyTopSwitchText, styles.storyTopSwitchTextOn]}>
+                  LOAD CENTER
+                </Text>
               ) : null}
             </View>
           </Pressable>
@@ -792,6 +795,18 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  inlineTabsWrapHeader: {
+    flex: 0,
+    maxWidth: 340,
+  },
+  connectionsHeaderControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+    justifyContent: "flex-end",
+    minWidth: 0,
+  },
   inlineFilterScroll: {
     flexDirection: "row",
     alignItems: "center",
@@ -955,11 +970,8 @@ const styles = StyleSheet.create({
     borderBottomColor: Theme.borderLight,
   },
   hubTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    gap: 12,
-    flexWrap: "wrap",
+    paddingTop: 2,
   },
   recentAddedChip: {
     width: "100%",
@@ -986,32 +998,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
-  },
-  hubEyebrowRow: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 6,
-  },
-  hubEyebrow: {
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 2.8,
-    color: Theme.textSection,
-    textTransform: "uppercase",
-  },
-  growBadge: {
-    borderRadius: 8,
-    backgroundColor: Theme.primary,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-  },
-  growBadgeText: {
-    fontSize: 8,
-    fontWeight: "900",
-    color: Theme.textOnPrimary,
-    letterSpacing: 0.8,
   },
   loadCenterReturnBtn: {
     marginLeft: "auto",
@@ -1084,26 +1070,37 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   storyTopSwitchBtn: {
-    minHeight: 24,
-    paddingHorizontal: 9,
-    borderRadius: 12,
+    minHeight: 48,
+    paddingHorizontal: 12,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
     justifyContent: "center",
   },
+  storyTopSwitchBtnIconOnly: {
+    minWidth: 48,
+    alignItems: "center",
+    paddingHorizontal: 0,
+  },
+  storyTopSwitchBtnWide: {
+    minWidth: 220,
+    alignItems: "flex-start",
+    paddingHorizontal: 18,
+  },
   storyTopSwitchBtnOn: {
-    borderColor: Theme.textPrimaryDark,
-    backgroundColor: Theme.surfaceGray,
+    borderColor: Theme.borderOnDark,
+    backgroundColor: Theme.darkBackground,
   },
   storyTopSwitchText: {
-    fontSize: 9,
+    fontSize: 13,
     fontWeight: "900",
-    letterSpacing: 0.7,
+    letterSpacing: 2.1,
     color: Theme.textSecondary,
+    textTransform: "uppercase",
   },
   storyTopSwitchTextOn: {
-    color: Theme.textPrimaryDark,
+    color: Theme.textOnPrimary,
   },
   hubTools: {
     marginTop: 10,
@@ -1146,6 +1143,17 @@ const styles = StyleSheet.create({
   filterPillTextOn: { color: Theme.textOnDark },
   invSubRow: { flexDirection: "row", gap: 10, marginBottom: 2 },
   invSubRowCompact: { flexDirection: "row", gap: 6, flex: 1, minWidth: 0 },
+  invSubRowCompactHeader: {
+    flex: 0,
+  },
+  invitationsHeaderControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "flex-end",
+  },
   invSubBtn: {
     paddingVertical: 8,
     paddingHorizontal: 4,

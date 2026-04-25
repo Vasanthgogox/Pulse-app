@@ -318,4 +318,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
     width: "100%",
   },
+  storyMeta: {
+    marginTop: 1,
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    letterSpacing: 0.1,
+    textAlign: "center",
+    width: "100%",
+  },
 });
