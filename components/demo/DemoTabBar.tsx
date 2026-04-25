@@ -134,11 +134,11 @@ function AnimatedNavPill({
 
   useEffect(() => {
     activeProgress.value = withTiming(active ? 1 : 0, {
-      duration: 240,
+      duration: 500,
       easing: Easing.out(Easing.cubic),
     });
     expandProgress.value = withTiming(active ? 1 : 0, {
-      duration: 260,
+      duration: 500,
       easing: Easing.out(Easing.cubic),
     });
   }, [active, activeProgress]);
@@ -185,7 +185,7 @@ function AnimatedNavPill({
         });
         if (!active) {
           expandProgress.value = withTiming(1, {
-            duration: 220,
+            duration: 500,
             easing: Easing.out(Easing.cubic),
           });
         }
@@ -197,7 +197,7 @@ function AnimatedNavPill({
         });
         if (!active) {
           expandProgress.value = withTiming(0, {
-            duration: 180,
+            duration: 500,
             easing: Easing.out(Easing.cubic),
           });
         }
