@@ -8,7 +8,7 @@ import { type PostRow } from "@/features/network/services/posts.service";
 import { getInitials } from "@/lib/stringUtils";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import { ArrowUpRight, MapPin, Plus, Radio, Truck } from "lucide-react-native";
+import { Package, Plus, Radio, Truck } from "lucide-react-native";
 import React, { useRef } from "react";
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -37,16 +37,26 @@ function shortPlace(value: string | null | undefined): string {
   return clean || "Open lane";
 }
 
+function previewText(post: PostRow): string {
+  if (post.type === "VEHICLE_AVAILABILITY") {
+    return (post.vehicle_type?.trim() || "VEHICLE AVAILABLE").toUpperCase();
+  }
+  if (post.type === "LOAD") {
+    const route = `${shortPlace(post.origin)} → ${shortPlace(post.destination)}`;
+    const requiredVehicle = post.vehicle_type?.trim() || "VEHICLE REQUIRED";
+    return `${requiredVehicle.toUpperCase()} · ${route}`;
+  }
+  const fromContent = (post.content ?? "").trim();
+  if (fromContent.length > 0) return fromContent;
+  return "Network update";
+}
+
 function BroadcastCard({ post, onPress }: { post: PostRow; onPress: () => void }) {
   const scale = useRef(new Animated.Value(1)).current;
   const color = seedColor(post.organization_id);
   const isLoad = post.type === "LOAD";
   const isVehicle = post.type === "VEHICLE_AVAILABILITY";
-  const typeLabel = isLoad ? "LOAD" : isVehicle ? "CAPACITY" : "UPDATE";
-  const routeLabel = isLoad || isVehicle
-    ? `${shortPlace(post.origin)} → ${shortPlace(post.destination)}`
-    : post.content ?? "Network update";
-  const metaLabel = post.vehicle_type || post.material || `${post.bid_count} bids`;
+  const storyPreview = previewText(post);
   const handlePressIn = () =>
     Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start();
   const handlePressOut = () =>
@@ -62,20 +72,22 @@ function BroadcastCard({ post, onPress }: { post: PostRow; onPress: () => void }
           style={styles.storyRing}
         >
           <View style={styles.storyAvatar}>
-            {isLoad ? (
-              <Truck size={15} color={color} strokeWidth={2.2} />
-            ) : isVehicle ? (
-              <MapPin size={15} color={color} strokeWidth={2.2} />
-            ) : (
-              <Text style={[styles.initials, { color }]}>{getInitials(post.org_name)}</Text>
-            )}
+            <Text style={styles.storyAvatarPreview} numberOfLines={3}>
+              {storyPreview}
+            </Text>
+            <View style={[styles.storyAvatarIconWrap, { borderColor: withAlpha(color, "44") }]}>
+              {isLoad ? (
+                <Package size={12} color={color} strokeWidth={2.2} />
+              ) : isVehicle ? (
+                <Truck size={12} color={color} strokeWidth={2.2} />
+              ) : (
+                <Text style={[styles.initials, { color }]}>{getInitials(post.org_name)}</Text>
+              )}
+            </View>
           </View>
         </LinearGradient>
         <Text style={styles.storyName} numberOfLines={1}>
           {post.org_name.toUpperCase()}
-        </Text>
-        <Text style={styles.storyMeta} numberOfLines={1}>
-          {typeLabel} · {metaLabel}
         </Text>
       </Animated.View>
     </Pressable>
@@ -90,7 +102,7 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
       (a, b) =>
         new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime(),
     );
-  const seenOrgs = new Set<string>();
+  const seenStoryKeys = new Set<string>();
   const stories: PostRow[] = [];
   const ownStories: PostRow[] = [];
   const otherStories: PostRow[] = [];
@@ -100,12 +112,14 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
   }
   const ordered = [...ownStories, ...otherStories];
   for (const p of ordered) {
-    if (!seenOrgs.has(p.organization_id)) {
-      seenOrgs.add(p.organization_id);
+    const storyKey = `${p.organization_id}:${p.type}`;
+    if (!seenStoryKeys.has(storyKey)) {
+      seenStoryKeys.add(storyKey);
       stories.push(p);
     }
     if (stories.length >= 20) break;
   }
+  const storyQueueIds = stories.map((s) => s.id).join(",");
 
   return (
     <View style={styles.wrap}>
@@ -145,7 +159,12 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
             onPress={() =>
               router.push({
                 pathname: "/(modals)/story-detail",
-                params: { postId: post.id, orgId: post.organization_id },
+                params: {
+                  postId: post.id,
+                  orgId: post.organization_id,
+                  storyType: post.type,
+                  queue: storyQueueIds,
+                },
               })
             }
           />
@@ -239,6 +258,30 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: Theme.borderLight,
+    overflow: "visible",
+  },
+  storyAvatarPreview: {
+    width: "82%",
+    fontSize: 6.6,
+    fontWeight: "700",
+    fontStyle: "italic",
+    lineHeight: 8,
+    color: Theme.textMutedDemo,
+    textAlign: "center",
+    opacity: 0.86,
+    letterSpacing: 0.05,
+  },
+  storyAvatarIconWrap: {
+    position: "absolute",
+    top: -4,
+    left: -4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    backgroundColor: Theme.screenBackground,
+    alignItems: "center",
+    justifyContent: "center",
   },
   launchRing: {
     width: 62,
@@ -272,15 +315,6 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.1,
-    textAlign: "center",
-    width: "100%",
-  },
-  storyMeta: {
-    marginTop: 1,
-    fontSize: 9,
-    fontWeight: "700",
-    fontStyle: "italic",
-    color: Theme.textMutedDemo,
     textAlign: "center",
     width: "100%",
   },

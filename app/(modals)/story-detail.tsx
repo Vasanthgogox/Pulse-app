@@ -6,7 +6,11 @@ import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { BidSheet } from "@/features/network/components/BidSheet";
-import { isPostVisibleForOrg, type PostRow } from "@/features/network/services/posts.service";
+import {
+  deactivatePost,
+  isPostVisibleForOrg,
+  type PostRow,
+} from "@/features/network/services/posts.service";
 import { formatINR } from "@/lib/format";
 import { getInitials } from "@/lib/stringUtils";
 import { useNetworkFeedQuery, useInvalidatePosts } from "@/lib/queries";
@@ -15,17 +19,19 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   ArrowRight,
   Clock3,
-  MapPin,
   MessageSquare,
+  MapPin,
   Package,
   Send,
   Sparkles,
+  Trash2,
   Truck,
   X,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
+  Alert,
   Easing,
   Pressable,
   StyleSheet,
@@ -34,7 +40,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const STORY_DURATION = 6500;
+const STORY_DURATION = 15000;
 
 const INK = Theme.textPrimaryDark;
 const MUTED = Theme.textSecondary;
@@ -63,6 +69,16 @@ function timeAgo(d: string): string {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
+}
+
+function formatStoryDate(d: string): string {
+  const dt = new Date(d);
+  if (Number.isNaN(dt.getTime())) return "";
+  return dt.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function storyHeadline(post: PostRow, isLoad: boolean, isVehicle: boolean): string {
@@ -113,7 +129,7 @@ function ProgressSegment({
 export default function StoryDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ orgId?: string; postId?: string }>();
+  const params = useLocalSearchParams<{ orgId?: string; postId?: string; storyType?: string; queue?: string }>();
   const { currentOrganization } = useOrganization();
   const myOrgId = currentOrganization?.id ?? "";
   const orgId = myOrgId;
@@ -130,15 +146,42 @@ export default function StoryDetailScreen() {
     p.type === "LOAD" || p.type === "VEHICLE_AVAILABILITY";
 
   const targetOrgId = params.orgId ?? "";
-  const stories: PostRow[] = allPosts.filter(
-    (p) => p.organization_id === targetOrgId && isBusinessPost(p),
+  const queueIds = useMemo(
+    () =>
+      (params.queue ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    [params.queue],
   );
+  const targetStoryType =
+    params.storyType === "LOAD" || params.storyType === "VEHICLE_AVAILABILITY"
+      ? params.storyType
+      : null;
+  const storiesByOrgType: PostRow[] = allPosts.filter(
+    (p) =>
+      p.organization_id === targetOrgId &&
+      isBusinessPost(p) &&
+      (targetStoryType ? p.type === targetStoryType : true),
+  );
+  const storiesFromQueue: PostRow[] = useMemo(() => {
+    if (queueIds.length === 0) return [];
+    const byId = new Map(allPosts.map((p) => [p.id, p] as const));
+    return queueIds.map((id) => byId.get(id)).filter((p): p is PostRow => !!p && isBusinessPost(p));
+  }, [queueIds, allPosts]);
   const seedPost = allPosts.find((p) => p.id === params.postId && isBusinessPost(p));
   const storyList: PostRow[] =
-    stories.length > 0 ? stories : seedPost ? [seedPost] : [];
+    storiesFromQueue.length > 0
+      ? storiesFromQueue
+      : storiesByOrgType.length > 0
+        ? storiesByOrgType
+        : seedPost
+          ? [seedPost]
+          : [];
 
   const [current, setCurrent] = useState(0);
   const [bidPost, setBidPost] = useState<PostRow | null>(null);
+  const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const progress = useRef(new Animated.Value(0)).current;
   const animRef = useRef<Animated.CompositeAnimation | null>(null);
 
@@ -176,6 +219,18 @@ export default function StoryDetailScreen() {
     };
   }, [current, storyList.length, goNext, progress]);
 
+  const initialStoryIndex = useMemo(() => {
+    const targetPostId = params.postId ?? "";
+    if (!targetPostId || storyList.length === 0) return 0;
+    const idx = storyList.findIndex((p) => p.id === targetPostId);
+    return idx >= 0 ? idx : 0;
+  }, [storyList, params.postId]);
+
+  useEffect(() => {
+    setCurrent(initialStoryIndex);
+    progress.setValue(0);
+  }, [initialStoryIndex, progress]);
+
   const post = storyList[current];
   const color = post ? seedColor(post.organization_id) : PALETTE[0];
   const isLoad = post?.type === "LOAD";
@@ -191,6 +246,7 @@ export default function StoryDetailScreen() {
   const canContactVehicle = Boolean(
     isVehicle && !isOwnPost && myOrgId,
   );
+  const isDeletingCurrent = deletingPostId != null && deletingPostId === post?.id;
 
   const headline = post ? storyHeadline(post, Boolean(isLoad), Boolean(isVehicle)) : "";
   const availabilityLabel = useMemo(() => {
@@ -200,6 +256,44 @@ export default function StoryDetailScreen() {
     if (post.load_date?.trim()) return post.load_date.trim();
     return null;
   }, [post, isVehicle]);
+  const vehicleTypeHeadline = useMemo(() => {
+    if (!post || !isVehicle) return "";
+    return post.vehicle_type?.trim().toUpperCase() || "VEHICLE";
+  }, [post, isVehicle]);
+  const vehicleAvailabilityText = useMemo(() => {
+    if (!post || !isVehicle) return "";
+    return availabilityLabel || "Available now";
+  }, [post, isVehicle, availabilityLabel]);
+  const storyDateLabel = useMemo(() => {
+    if (!post) return "";
+    return formatStoryDate(post.created_at);
+  }, [post]);
+
+  const handleDeletePost = useCallback(() => {
+    if (!post || !isOwnPost || isDeletingCurrent) return;
+    Alert.alert(
+      "Delete story?",
+      "This story will be removed from your network broadcasts.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setDeletingPostId(post.id);
+            const { error } = await deactivatePost(post.id, myOrgId);
+            setDeletingPostId(null);
+            if (error) {
+              Alert.alert("Could not delete", error.message);
+              return;
+            }
+            invalidatePosts();
+            router.back();
+          },
+        },
+      ],
+    );
+  }, [post, isOwnPost, isDeletingCurrent, invalidatePosts, router]);
 
   if (!post) {
     return (
@@ -229,9 +323,21 @@ export default function StoryDetailScreen() {
             <Text style={styles.logoTileText}>{getInitials(post.org_name)}</Text>
           </View>
           <View style={styles.topBarText}>
-            <Text style={styles.orgTitle} numberOfLines={1}>
-              {post.org_name}
-            </Text>
+            <View style={styles.orgTitleRow}>
+              <Text style={styles.orgTitle} numberOfLines={1}>
+                {post.org_name}
+              </Text>
+              {isOwnPost ? (
+                <Pressable
+                  style={[styles.inlineDeleteBtn, isDeletingCurrent && styles.inlineDeleteBtnDisabled]}
+                  onPress={handleDeletePost}
+                  disabled={isDeletingCurrent}
+                  hitSlop={8}
+                >
+                  <Trash2 size={11} color={Theme.teslaRed} strokeWidth={2.5} />
+                </Pressable>
+              ) : null}
+            </View>
             <Text style={styles.timeAgoLabel}>{timeAgo(post.created_at)}</Text>
           </View>
         </View>
@@ -255,15 +361,24 @@ export default function StoryDetailScreen() {
           {isLoad ? (
             <Package size={44} color={color} strokeWidth={1.8} />
           ) : isVehicle ? (
-            <MapPin size={44} color={color} strokeWidth={1.8} />
+            <Truck size={44} color={color} strokeWidth={1.8} />
           ) : (
             <Sparkles size={44} color={color} strokeWidth={1.8} />
           )}
         </View>
         <Text style={[styles.kicker, { color }]}>ACTIVE BROADCAST PAYLOAD</Text>
         <Text style={styles.heroTitle} numberOfLines={6}>
-          {headline}
+          {isVehicle ? `${vehicleTypeHeadline} AVAILABLE` : headline}
         </Text>
+        {isVehicle ? (
+          <View style={styles.vehicleAvailabilityBlock}>
+            <View style={styles.vehicleAvailabilityLine}>
+              <Clock3 size={14} color={MUTED} />
+              <Text style={styles.vehicleAvailabilityText}>{vehicleAvailabilityText}</Text>
+            </View>
+            {storyDateLabel ? <Text style={styles.vehicleDateText}>{storyDateLabel}</Text> : null}
+          </View>
+        ) : null}
 
         {isLoad && post.origin && post.destination ? (
           <View style={styles.routeLine}>
@@ -279,16 +394,23 @@ export default function StoryDetailScreen() {
           </View>
         ) : null}
 
-        {isVehicle && post.origin ? (
-          <View style={styles.routeLine}>
-            <MapPin size={14} color={color} />
-            <Text style={styles.routeText}>{post.origin}</Text>
-            {post.destination ? (
-              <>
-                <Text style={styles.routeSep}>·</Text>
-                <Text style={styles.routeText}>{post.destination}</Text>
-              </>
-            ) : null}
+        {isVehicle ? (
+          <View style={styles.vehicleLocationsCard}>
+            <View style={styles.vehicleLocationRow}>
+              <MapPin size={13} color={color} />
+              <Text style={styles.vehicleLocationLabel}>Vehicle location:</Text>
+              <Text style={styles.vehicleLocationValue} numberOfLines={1}>
+                {post.origin?.trim() || "Not set"}
+              </Text>
+            </View>
+            <View style={styles.vehicleLocationDivider} />
+            <View style={styles.vehicleLocationRow}>
+              <MapPin size={13} color={MUTED} />
+              <Text style={styles.vehicleLocationLabel}>Preferred location:</Text>
+              <Text style={styles.vehicleLocationValue} numberOfLines={1}>
+                {post.destination?.trim() || "Not set"}
+              </Text>
+            </View>
           </View>
         ) : null}
 
@@ -313,20 +435,12 @@ export default function StoryDetailScreen() {
           </View>
         ) : null}
 
-        {isVehicle && (post.vehicle_type != null || availabilityLabel) ? (
+        {isVehicle && post.vehicle_type ? (
           <View style={styles.metaRow}>
-            {post.vehicle_type ? (
-              <View style={styles.metaChip}>
-                <Truck size={10} color={MUTED} />
-                <Text style={styles.metaChipText}>{post.vehicle_type}</Text>
-              </View>
-            ) : null}
-            {availabilityLabel ? (
-              <View style={styles.metaChip}>
-                <Clock3 size={10} color={MUTED} />
-                <Text style={styles.metaChipText}>{availabilityLabel}</Text>
-              </View>
-            ) : null}
+            <View style={styles.metaChip}>
+              <Truck size={10} color={MUTED} />
+              <Text style={styles.metaChipText}>{post.vehicle_type}</Text>
+            </View>
           </View>
         ) : null}
       </View>
@@ -463,11 +577,33 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
   topBarText: { flex: 1, minWidth: 0 },
+  orgTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 0,
+    paddingRight: 2,
+  },
   orgTitle: {
+    flex: 1,
     fontSize: 15,
     fontWeight: "900",
     color: INK,
     letterSpacing: -0.3,
+  },
+  inlineDeleteBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    zIndex: 60,
+  },
+  inlineDeleteBtnDisabled: {
+    opacity: 0.55,
   },
   timeAgoLabel: {
     fontSize: 9,
@@ -550,6 +686,65 @@ const styles = StyleSheet.create({
     maxWidth: "42%",
   },
   routeSep: { color: MUTED, fontWeight: "800" },
+  vehicleAvailabilityBlock: {
+    marginTop: 10,
+    alignItems: "center",
+    gap: 5,
+  },
+  vehicleAvailabilityLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  vehicleAvailabilityText: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: INK,
+    fontStyle: "italic",
+    letterSpacing: -0.2,
+    textTransform: "capitalize",
+  },
+  vehicleDateText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: MUTED,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  vehicleLocationsCard: {
+    marginTop: 16,
+    minWidth: "78%",
+    maxWidth: "92%",
+    backgroundColor: Theme.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  vehicleLocationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minWidth: 0,
+  },
+  vehicleLocationLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: MUTED,
+  },
+  vehicleLocationValue: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    fontWeight: "800",
+    color: INK,
+  },
+  vehicleLocationDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Theme.borderMedium,
+  },
   metaRow: {
     flexDirection: "row",
     flexWrap: "wrap",
