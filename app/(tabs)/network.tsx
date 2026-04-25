@@ -8,8 +8,10 @@ import Typography from "@/constants/Typography";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import {
   ConnectionsView,
+  type ConnectedOrg,
   type ConnectionFilterTab,
 } from "@/features/network/components/ConnectionsView";
+import { RecentAddedStrip } from "@/features/network/components/RecentAddedStrip";
 import { DiscoverView } from "@/features/network/components/DiscoverView";
 import { InvitationsView } from "@/features/network/components/InvitationsView";
 import { StoryReel } from "@/features/network/components/StoryReel";
@@ -29,12 +31,12 @@ import {
   Compass,
   Search,
   UserPlus2,
+  Users,
 } from "lucide-react-native";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Animated,
   Platform,
   Pressable,
   RefreshControl,
@@ -103,9 +105,6 @@ export default function NetworkScreen() {
   const [invSearchOpen, setInvSearchOpen] = useState(false);
   const [discoverSearchOpen, setDiscoverSearchOpen] = useState(false);
   const [discoverSearch, setDiscoverSearch] = useState("");
-  const [recentAddedNames, setRecentAddedNames] = useState<string[]>([]);
-  const recentPulse = React.useRef(new Animated.Value(1)).current;
-  const prevConnectionCountRef = React.useRef<number | null>(null);
 
   useRealtimeNetworkInvalidation(orgId);
   const receivedQ = useConnectionRequestsReceivedQuery(orgId);
@@ -124,68 +123,133 @@ export default function NetworkScreen() {
     () => (receivedQ.data ?? []).filter((r) => r.status === "pending").length,
     [receivedQ.data],
   );
-  const totalConnections = useMemo(
-    () =>
-      ((clientsQ.data ?? []) as unknown[]).length +
-      ((suppliersQ.data ?? []) as unknown[]).length +
-      (driversQ.data ?? []).filter((d) => !d.left_at).length,
-    [clientsQ.data, suppliersQ.data, driversQ.data],
+  const clientCount = useMemo(
+    () => ((clientsQ.data ?? []) as unknown[]).length,
+    [clientsQ.data],
   );
-  const newestConnectionNames = useMemo(() => {
+  const supplierCount = useMemo(
+    () => ((suppliersQ.data ?? []) as unknown[]).length,
+    [suppliersQ.data],
+  );
+  const driverCount = useMemo(
+    () => (driversQ.data ?? []).filter((d) => !d.left_at).length,
+    [driversQ.data],
+  );
+  const totalConnections = useMemo(
+    () => clientCount + supplierCount + driverCount,
+    [clientCount, supplierCount, driverCount],
+  );
+  const recentAddedConnections = useMemo((): ConnectedOrg[] => {
     const now = Date.now();
-    const recentWithinMs = 24 * 60 * 60 * 1000;
-    const names: string[] = [];
+    const windowMs = 24 * 60 * 60 * 1000;
+    type R = ConnectedOrg & { createdAt: number };
+    const acc: R[] = [];
 
-    for (const c of (clientsQ.data ?? []) as Array<{ name?: string | null; created_at?: string | null }>) {
+    for (const c of (clientsQ.data ?? []) as Array<{
+      id: string;
+      name: string;
+      phone?: string | null;
+      linked_organization_id?: string | null;
+      is_integrated?: boolean;
+      created_at?: string | null;
+      avatar_url?: string | null;
+      avatar_seed?: string | null;
+      mutual_count?: number | null;
+      mutual_connections_count?: number | null;
+      rating?: number | null;
+      average_rating?: number | null;
+    }>) {
       const created = c.created_at ? new Date(c.created_at).getTime() : 0;
-      if (created > 0 && now - created <= recentWithinMs && c.name?.trim()) {
-        names.push(c.name.trim().toUpperCase());
-      }
+      if (created === 0 || now - created > windowMs || !c.name?.trim()) continue;
+      acc.push({
+        id: c.id,
+        name: c.name,
+        role: "CLIENT",
+        is_integrated: c.is_integrated ?? Boolean(c.linked_organization_id),
+        avatar_url: c.avatar_url ?? null,
+        avatar_seed: c.avatar_seed ?? null,
+        mutual_count: c.mutual_count ?? c.mutual_connections_count ?? null,
+        rating: c.rating ?? c.average_rating ?? null,
+        phone: c.phone ?? null,
+        linked_organization_id: c.linked_organization_id ?? null,
+        createdAt: created,
+      });
     }
-    for (const s of (suppliersQ.data ?? []) as Array<{ name?: string | null; created_at?: string | null }>) {
+
+    for (const s of (suppliersQ.data ?? []) as Array<{
+      id: string;
+      name: string | null;
+      phone?: string | null;
+      linked_organization_id?: string | null;
+      supplier_type?: string | null;
+      is_integrated?: boolean;
+      created_at?: string | null;
+      avatar_url?: string | null;
+      avatar_seed?: string | null;
+      mutual_count?: number | null;
+      mutual_connections_count?: number | null;
+      rating?: number | null;
+      average_rating?: number | null;
+    }>) {
       const created = s.created_at ? new Date(s.created_at).getTime() : 0;
-      if (created > 0 && now - created <= recentWithinMs && s.name?.trim()) {
-        names.push(s.name.trim().toUpperCase());
-      }
+      if (created === 0 || now - created > windowMs) continue;
+      const name = s.name?.trim() ? s.name.trim() : "Supplier";
+      acc.push({
+        id: s.id,
+        name,
+        role: "SUPPLIER",
+        is_integrated: s.is_integrated ?? (s.supplier_type === "integrated" || Boolean(s.linked_organization_id)),
+        avatar_url: s.avatar_url ?? null,
+        avatar_seed: s.avatar_seed ?? null,
+        mutual_count: s.mutual_count ?? s.mutual_connections_count ?? null,
+        rating: s.rating ?? s.average_rating ?? null,
+        phone: s.phone ?? null,
+        linked_organization_id: s.linked_organization_id ?? null,
+        createdAt: created,
+      });
     }
-    for (const d of (driversQ.data ?? []) as Array<{ name?: string | null; left_at?: string | null; created_at?: string | null }>) {
+
+    for (const d of driversQ.data ?? []) {
       if (d.left_at) continue;
-      const created = d.created_at ? new Date(d.created_at).getTime() : 0;
-      if (created > 0 && now - created <= recentWithinMs && d.name?.trim()) {
-        names.push(d.name.trim().toUpperCase());
-      }
+      const dr = d as {
+        id: string;
+        name: string;
+        user_id?: string | null;
+        left_at?: string | null;
+        created_at?: string | null;
+        phone?: string | null;
+        avatar_url?: string | null;
+        avatar_seed?: string | null;
+        mutual_count?: number | null;
+        mutual_connections_count?: number | null;
+        rating?: number | null;
+        average_rating?: number | null;
+      };
+      const created = dr.created_at ? new Date(dr.created_at).getTime() : 0;
+      if (created === 0 || now - created > windowMs || !dr.name?.trim()) continue;
+      acc.push({
+        id: `driver-${dr.id}`,
+        name: dr.name,
+        role: "DRIVER",
+        is_integrated: Boolean(dr.user_id),
+        avatar_url: dr.avatar_url ?? null,
+        avatar_seed: dr.avatar_seed ?? null,
+        mutual_count: dr.mutual_count ?? dr.mutual_connections_count ?? null,
+        rating: dr.rating ?? dr.average_rating ?? null,
+        phone: dr.phone ?? null,
+        createdAt: created,
+      });
     }
 
-    return Array.from(new Set(names)).slice(0, 3);
+    return acc
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 5)
+      .map((row) => {
+        const { createdAt, ...rest } = row;
+        void createdAt;
+        return rest;
+      });
   }, [clientsQ.data, suppliersQ.data, driversQ.data]);
-
-  useEffect(() => {
-    const prev = prevConnectionCountRef.current;
-    if (prev == null) {
-      prevConnectionCountRef.current = totalConnections;
-      return;
-    }
-    if (totalConnections > prev) {
-      setRecentAddedNames(newestConnectionNames);
-    }
-    prevConnectionCountRef.current = totalConnections;
-  }, [totalConnections, newestConnectionNames]);
-
-  useEffect(() => {
-    const runPulse = (value: Animated.Value) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(value, { toValue: 1.08, duration: 650, useNativeDriver: true }),
-          Animated.timing(value, { toValue: 1, duration: 650, useNativeDriver: true }),
-        ]),
-      );
-    const recentAnim = recentAddedNames.length > 0 ? runPulse(recentPulse) : null;
-    recentAnim?.start();
-    return () => {
-      recentAnim?.stop();
-      recentPulse.setValue(1);
-    };
-  }, [recentAddedNames.length, recentPulse]);
 
   const onCreatePost = () => router.push("/(modals)/create-post");
   const allowLoadPosts = organization?.capabilities?.canBid ?? true;
@@ -219,23 +283,8 @@ export default function NetworkScreen() {
     );
   }
 
-  const hubBar = (
-    <View style={styles.hubBar}>
-      {recentAddedNames.length > 0 ? (
-        <Animated.View style={[styles.hubTopRow, { transform: [{ scale: recentPulse }] }]}>
-          <Pressable
-            style={styles.recentAddedChip}
-          >
-            <Text style={styles.recentAddedLabel}>Recently added</Text>
-            <Text style={styles.recentAddedNames} numberOfLines={1}>
-              {recentAddedNames.join(", ")}
-            </Text>
-          </Pressable>
-        </Animated.View>
-      ) : null}
-
-    </View>
-  );
+  const hasRecent = recentAddedConnections.length > 0;
+  const splitSideBySide = width >= 900;
 
   const scrollContent = (
     <ScrollView
@@ -261,6 +310,88 @@ export default function NetworkScreen() {
       }
     >
       <>
+        <NetworkStoryStrip
+          orgId={orgId}
+          orgName={organization?.name ?? ""}
+          feedPosts={feedPosts}
+          feedLoading={feedQ.isLoading}
+          onCreatePost={onCreatePost}
+        />
+        <View
+          style={[
+            styles.splitBelowStory,
+            hasRecent && splitSideBySide && styles.splitBelowStoryRow,
+          ]}
+        >
+          <View
+            style={[
+              styles.splitPaneSnapshot,
+              hasRecent && splitSideBySide && styles.splitPaneSnapshotInRow,
+              (!hasRecent || !splitSideBySide) && styles.splitPaneSnapshotFull,
+            ]}
+          >
+            <View
+              style={[
+                styles.snapshotCard,
+                hasRecent && splitSideBySide && styles.snapshotCardStretch,
+              ]}
+            >
+              <View style={styles.snapshotHeaderRow}>
+                <View style={styles.snapshotIconRing} accessibilityElementsHidden>
+                  <Users size={12} color={Theme.primary} strokeWidth={2.2} />
+                </View>
+                <Text style={styles.snapshotKicker}>Allies snapshot</Text>
+              </View>
+              <Text style={styles.snapshotPrimary} numberOfLines={1}>
+                {totalConnections} live connections
+              </Text>
+              <View style={styles.snapshotSplitRow}>
+                <View style={styles.snapshotStatCell}>
+                  <Text style={styles.snapshotStatN}>{clientCount}</Text>
+                  <Text style={styles.snapshotStatL} numberOfLines={1}>
+                    Clients
+                  </Text>
+                </View>
+                <View style={styles.snapshotStatDividerV} />
+                <View style={styles.snapshotStatCell}>
+                  <Text style={styles.snapshotStatN}>{supplierCount}</Text>
+                  <Text style={styles.snapshotStatL} numberOfLines={1}>
+                    Suppliers
+                  </Text>
+                </View>
+                <View style={styles.snapshotStatDividerV} />
+                <View style={styles.snapshotStatCell}>
+                  <Text style={styles.snapshotStatN}>{driverCount}</Text>
+                  <Text style={styles.snapshotStatL} numberOfLines={1}>
+                    Drivers
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.snapshotSecondary} numberOfLines={1}>
+                {pendingCount} pending syncs
+              </Text>
+            </View>
+          </View>
+          {hasRecent ? (
+            <View
+              style={[
+                styles.splitPaneRecent,
+                splitSideBySide && styles.splitPaneRecentInRow,
+                !splitSideBySide && styles.splitPaneRecentStack,
+              ]}
+            >
+              <RecentAddedStrip
+                orgId={orgId}
+                items={recentAddedConnections}
+                layout="split"
+                onAfterInAppSuccess={async () => {
+                  await Promise.all([clientsQ.refetch(), suppliersQ.refetch()]);
+                  invalidateNetwork();
+                }}
+              />
+            </View>
+          ) : null}
+        </View>
         <View style={[styles.networkMergedRow, !isWideNetwork && styles.networkMergedRowStack]}>
           <View style={[styles.sectionBlock, isWideNetwork && styles.networkMergedPanePrimary]}>
             <View style={[styles.connectionsCard, isWideNetwork && styles.networkMergedCard]}>
@@ -482,21 +613,8 @@ export default function NetworkScreen() {
     </ScrollView>
   );
 
-  const broadcastStrip = (
-    <NetworkStoryStrip
-      orgId={orgId}
-      orgName={organization?.name ?? ""}
-      feedPosts={feedPosts}
-      feedLoading={feedQ.isLoading}
-      onCreatePost={onCreatePost}
-    />
-  );
-
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {broadcastStrip}
-      {hubBar}
-
       {scrollContent}
     </View>
   );
@@ -510,9 +628,120 @@ const styles = StyleSheet.create({
   },
   scroll: { flex: 1 },
   scrollContent: {
-    paddingTop: 4,
+    paddingTop: 0,
     paddingBottom: 18,
     backgroundColor: Theme.screenBackground,
+  },
+  splitBelowStory: {
+    width: "100%",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 8,
+    paddingBottom: 4,
+    gap: 12,
+  },
+  splitBelowStoryRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
+  splitPaneSnapshot: {
+    minWidth: 0,
+    alignSelf: "stretch",
+  },
+  /** 60% — flexBasis 0 so ratio holds vs wide snapshot copy */
+  splitPaneSnapshotInRow: {
+    flex: 6,
+    flexBasis: 0,
+  },
+  splitPaneSnapshotFull: {
+    width: "100%",
+  },
+  splitPaneRecent: {
+    minWidth: 0,
+    alignSelf: "stretch",
+  },
+  /** 40% */
+  splitPaneRecentInRow: {
+    flex: 4,
+    flexBasis: 0,
+  },
+  splitPaneRecentStack: {
+    width: "100%",
+  },
+  snapshotCard: {
+    width: "100%",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.cinematicCardBorder,
+    backgroundColor: Theme.screenBackground,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  snapshotCardStretch: {
+    flex: 1,
+  },
+  snapshotSplitRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
+    paddingTop: 2,
+  },
+  snapshotStatCell: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "center",
+    gap: 2,
+  },
+  snapshotStatN: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+  },
+  snapshotStatL: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.textSection,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  snapshotStatDividerV: {
+    width: StyleSheet.hairlineWidth * 2,
+    alignSelf: "stretch",
+    minHeight: 32,
+    backgroundColor: Theme.borderLight,
+  },
+  snapshotHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  snapshotIconRing: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  snapshotKicker: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+    color: Theme.textSection,
+    textTransform: "uppercase",
+  },
+  snapshotPrimary: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  snapshotSecondary: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textSecondary,
   },
   storyLoading: {
     flexDirection: "row",
@@ -870,43 +1099,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.textSecondary,
     lineHeight: 18,
-  },
-  hubBar: {
-    backgroundColor: Theme.screenBackground,
-    paddingTop: 10,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
-  },
-  hubTopRow: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 2,
-  },
-  recentAddedChip: {
-    width: "100%",
-    marginTop: 2,
-    minHeight: 34,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surfaceGray,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    justifyContent: "center",
-    gap: 2,
-  },
-  recentAddedLabel: {
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-    color: Theme.textSection,
-    textTransform: "uppercase",
-  },
-  recentAddedNames: {
-    fontSize: 11,
-    fontWeight: "700",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
   },
   loadCenterReturnBtn: {
     marginLeft: "auto",

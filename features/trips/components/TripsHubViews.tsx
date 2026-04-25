@@ -3,6 +3,7 @@
  * Styling aligns with fleet hub / reference; data bindings mirror TripExpandableCard.
  */
 import { PartyAvatar } from "@/components/PartyAvatar";
+import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Theme from "@/constants/Theme";
 import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
@@ -11,6 +12,7 @@ import { isAggregateTrip } from "@/lib/driverUtils";
 import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
 import {
   isBlankOrPlaceholderPartyName,
+  partyAvatarHasRenderableOutput,
   resolvePartyDisplayUri,
 } from "@/lib/partyAvatarDisplay";
 import {
@@ -34,6 +36,7 @@ import {
   TextInput,
   TouchableOpacity,
   UIManager,
+  useWindowDimensions,
   View,
   type ViewStyle,
 } from "react-native";
@@ -326,52 +329,81 @@ export function summarizeTripLedgerForHub(entries: LedgerRow[]): {
   return { receivedTotal, paidTotal, count: entries.length, lastAtIso };
 }
 
-const HUB_TABLE_PARTY_AVATAR = 22;
+const HUB_TABLE_AVATAR = 26;
 
-/** Hub card: storage/http URL + seed via `resolvePartyDisplayUri`, else DiceBear from `fallbackSeed`. */
+type HubPartyAvatarSize = "default" | "compact";
+
+/** Hub card / table: linked org → contact photo → seed (DiceBear); drivers use driver preset seeds. */
 function HubPartyAvatar({
   avatarUrl,
   avatarSeed,
   fallbackSeed,
   entityType = "client",
   partyLabel,
+  organizationImageUrl,
+  organizationAvatarSeed,
+  size = "default",
 }: {
   avatarUrl: string | null | undefined;
   avatarSeed: string | null | undefined;
   fallbackSeed: string;
-  entityType?: "client" | "supplier";
-  /** When empty or placeholder-only, no synthetic DiceBear avatar is shown. */
+  entityType?: "client" | "supplier" | "driver";
+  /** When empty or placeholder-only, no synthetic DiceBear avatar is shown (unless driver with fallbackSeed). */
   partyLabel: string;
+  organizationImageUrl?: string | null;
+  organizationAvatarSeed?: string | null;
+  size?: HubPartyAvatarSize;
 }) {
+  const ringStyle =
+    size === "compact" ? styles.hubTableAvatarRing : styles.hubPartyAvatarRing;
+  const imgStyle =
+    size === "compact" ? styles.hubTableAvatarImg : styles.hubPartyAvatarImg;
   const resolved =
     resolvePartyDisplayUri({
+      organizationImageUrl,
+      organizationAvatarSeed,
       avatarUrl,
       avatarSeed,
       entityType,
     }) ?? null;
   if (resolved) {
     return (
-      <View style={styles.hubPartyAvatarRing}>
+      <View style={ringStyle}>
         <Image
           source={{ uri: resolved }}
-          style={styles.hubPartyAvatarImg}
+          style={imgStyle}
           resizeMode="cover"
           accessibilityIgnoresInvertColors
         />
       </View>
     );
   }
+  const seedKey = (fallbackSeed ?? "").trim() || partyLabel.trim();
   if (isBlankOrPlaceholderPartyName(partyLabel)) {
+    if (entityType === "driver" && seedKey) {
+      const displayUri = getAvatarUriForSeed(seedKey || "driver");
+      return (
+        <View style={ringStyle}>
+          <Image
+            source={{ uri: displayUri }}
+            style={imgStyle}
+            resizeMode="cover"
+            accessibilityIgnoresInvertColors
+          />
+        </View>
+      );
+    }
     return null;
   }
-  const displayUri = getUser2DAvatarUriForSeed(
-    (fallbackSeed ?? "").trim() || partyLabel.trim() || "party",
-  );
+  const displayUri =
+    entityType === "driver"
+      ? getAvatarUriForSeed(seedKey || "driver")
+      : getUser2DAvatarUriForSeed(seedKey || "party");
   return (
-    <View style={styles.hubPartyAvatarRing}>
+    <View style={ringStyle}>
       <Image
         source={{ uri: displayUri }}
-        style={styles.hubPartyAvatarImg}
+        style={imgStyle}
         resizeMode="cover"
         accessibilityIgnoresInvertColors
       />
@@ -714,14 +746,6 @@ export type TripsHubTableViewProps = {
   partyMetaByTripId?: Map<string, TripHubPartyMeta>;
 };
 
-function txnFlowLabel(row: LedgerRow, tr: (k: string) => string): string {
-  const amountIn = Number(row.amount_in ?? 0);
-  const out = Number(row.amount_out ?? 0);
-  if (amountIn > 0) return tr("tripsHubTxnReceived");
-  if (out > 0) return tr("tripsHubTxnPaid");
-  return row.primary_category?.split("|")[0]?.trim() || tr("entry");
-}
-
 function txnAmount(row: LedgerRow): number {
   return Math.max(Number(row.amount_in ?? 0), Number(row.amount_out ?? 0));
 }
@@ -780,6 +804,9 @@ export function TripsHubTableView({
   partyMetaByTripId,
 }: TripsHubTableViewProps) {
   const insets = useSafeAreaInsets();
+  const { width: layoutWidth } = useWindowDimensions();
+  /** Narrow viewports: shorter settlement cards (no bar, tighter padding, single-line name). */
+  const compactSettlement = layoutWidth > 0 && layoutWidth < 520;
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [visibleCols, setVisibleCols] = useState<
     Record<TripsHubTableColumnId, boolean>
@@ -1070,28 +1097,48 @@ export function TripsHubTableView({
 
       <View style={styles.manifestHeaderRow}>
         <View style={[styles.manifestTh, styles.manifestColIdentity]}>
-          <Text style={styles.manifestThText}>Trip Identity</Text>
+          <Text style={styles.manifestThText}>Trip identity</Text>
         </View>
-        <View style={[styles.manifestTh, styles.manifestColTelemetry]}>
-          <Text style={styles.manifestThText}>Telemetry Path</Text>
+        <View style={[styles.manifestTh, styles.manifestColTelemetry, styles.manifestThDivider]}>
+          <Text style={styles.manifestThText}>Telemetry path</Text>
         </View>
-        <View style={[styles.manifestTh, styles.manifestColDriver]}>
-          <Text style={styles.manifestThText}>Operator & App</Text>
-        </View>
-        <View style={[styles.manifestTh, styles.manifestColSupplier]}>
-          <Text style={styles.manifestThText}>Asset Logic</Text>
-        </View>
-        <View style={[styles.manifestTh, styles.manifestColEarnings]}>
+        <View
+          style={[
+            styles.manifestTh,
+            styles.manifestColEarnings,
+            styles.manifestThDivider,
+            styles.manifestThAlignEnd,
+          ]}
+        >
           <Text style={[styles.manifestThText, styles.manifestThTextRight]}>
-            Audit Ledger
+            Audit ledger
           </Text>
         </View>
-        <View style={[styles.manifestTh, styles.manifestColAudit]}>
-          <Text style={[styles.manifestThText, styles.manifestThTextCenter]}>
-            Settlement
+        <View
+          style={[
+            styles.manifestTh,
+            styles.manifestColReceivable,
+            styles.manifestThDivider,
+            styles.manifestThAlignEnd,
+          ]}
+        >
+          <Text style={[styles.manifestThText, styles.manifestThTextRight]}>
+            {tr("tripsHubMetricGroupReceivable")}
           </Text>
         </View>
-        <View style={[styles.manifestTh, styles.manifestColActions]}>
+        <View
+          style={[
+            styles.manifestTh,
+            styles.manifestColPayable,
+            styles.manifestThDivider,
+            styles.manifestThAlignEnd,
+          ]}
+        >
+          <Text style={[styles.manifestThText, styles.manifestThTextRight]}>
+            {tr("tripsHubMetricGroupPayable")}
+          </Text>
+        </View>
+        <View style={[styles.manifestTh, styles.manifestColActions, styles.manifestThDivider]}>
           <Text style={[styles.manifestThText, styles.manifestThTextCenter]}>Health</Text>
         </View>
       </View>
@@ -1111,56 +1158,72 @@ export function TripsHubTableView({
         const showAssetTripIcon = !aggregate;
         const typeLabel = showAssetTripIcon ? tr("tripAsset") : tr("tripAggregate");
         const subTypeLabel = aggregate ? tr("integrated") : tr("manual");
-        const stageUpper = getStageLabel(t).toUpperCase();
         const routeShort = `${t.pickup_area ?? "—"} → ${t.drop_location ?? "—"}`;
-        const expanded = expandedIds.has(t.id);
-        const sortedEntries = sortedTripLedger(entries);
-        const lastTxnShort = ledgerRoll.lastAtIso
-          ? formatLedgerDate(ledgerRoll.lastAtIso)
-          : "—";
-        const filterKind = classifyTripFilter(t);
+        const routeDisplay = routeShort.toUpperCase();
+        const pnl = tripHubPnl(t, currentOrganizationId);
+        const marginPct = marginPercentLabel(t, currentOrganizationId);
+        const displayClient = (clientNameByTripId?.[t.id] ?? t.client_name ?? "").trim();
         const meta = partyMetaByTripId?.get(t.id);
         const supplierLine = (meta?.displaySupplierName ?? "").trim() || "—";
-        const progressPct = deployPercentForTrip(t, stageUpper);
-        const auditLabel =
-          filterKind === "verified"
-            ? "VERIFIED"
-            : filterKind === "attention"
-              ? "NEEDS REVIEW"
-              : "PENDING";
-
-        const statusPillStyle =
-          filterKind === "attention"
-            ? styles.tableStatusPillRose
-            : filterKind === "verified"
-              ? styles.tableStatusPillEmerald
-              : styles.tableStatusPillUnassigned;
+        const clientOrgFields = linkedOrgAvatarFields(
+          meta?.clientLinkedOrgId,
+          linkedOrgByOrganizationId,
+        );
+        const supplierOrgFields = linkedOrgAvatarFields(
+          meta?.supplierLinkedOrgId,
+          linkedOrgByOrganizationId,
+        );
+        const showSupplierParty =
+          (supplierLine !== "—" && supplierLine.trim() !== "") ||
+          aggregate ||
+          isLoadBasedTrip(t);
+        const driverFb = t.driver_id
+          ? `driver-entity:${String(t.driver_id).trim()}`
+          : `driver-trip:${t.id}`;
+        /** Payable leg = supplier; show resolved supplier name for column header. */
+        const payablePartyName =
+          supplierLine !== "—"
+            ? supplierLine
+            : showSupplierParty
+              ? tr("tripsHubAwaitingData")
+              : "—";
+        const expanded = expandedIds.has(t.id);
+        const sortedEntries = sortedTripLedger(entries);
+        const filterKind = classifyTripFilter(t);
+        const stageTag = getStageLabel(t).toUpperCase();
         const receivableTarget = Math.max(mySales, 0);
         const payableTarget = Math.max(cost, 0);
         const receivedActual = Math.max(ledgerRoll.receivedTotal, 0);
         const paidActual = Math.max(ledgerRoll.paidTotal, 0);
         const pendingReceivable = Math.max(receivableTarget - receivedActual, 0);
         const pendingPayable = Math.max(payableTarget - paidActual, 0);
-        const settlementTag =
-          pendingReceivable <= 0 && pendingPayable <= 0
-            ? "CLEARED"
-            : pendingReceivable > 0 && pendingPayable <= 0
-              ? "RECEIVABLE"
-              : pendingPayable > 0 && pendingReceivable <= 0
-                ? "PAYABLE"
-                : "PENDING";
-        const settlementTagStyle =
-          settlementTag === "CLEARED"
-            ? styles.tableStatusPillEmerald
-            : settlementTag === "PENDING"
-              ? styles.tableStatusPillUnassigned
-              : styles.tableStatusPillRose;
-        const settlementTagTextStyle =
-          settlementTag === "CLEARED"
-            ? styles.tableStatusPillTextPositive
-            : settlementTag === "PENDING"
-              ? styles.tableStatusPillTextUnassigned
-              : styles.tableStatusPillTextNegative;
+        const recvBarPct =
+          receivableTarget > 0
+            ? Math.min(100, (receivedActual / receivableTarget) * 100)
+            : 0;
+        const payBarPct =
+          payableTarget > 0
+            ? Math.min(100, (paidActual / payableTarget) * 100)
+            : 0;
+        const clientRecvLabel = (displayClient || tr("tripsHubAwaitingData")).trim();
+        const clientRecvRenderable = partyAvatarHasRenderableOutput({
+          name: clientRecvLabel,
+          organizationImageUrl: clientOrgFields.organizationImageUrl,
+          organizationAvatarSeed: clientOrgFields.organizationAvatarSeed,
+          avatarUrl: meta?.clientAvatarUrl,
+          avatarSeed: meta?.clientAvatarSeed,
+          entityType: "client",
+        });
+        const supplierPayLabel =
+          payablePartyName === "—" ? "" : payablePartyName.trim();
+        const supplierPayRenderable = partyAvatarHasRenderableOutput({
+          name: supplierPayLabel || tr("tripsHubAwaitingData"),
+          organizationImageUrl: supplierOrgFields.organizationImageUrl,
+          organizationAvatarSeed: supplierOrgFields.organizationAvatarSeed,
+          avatarUrl: meta?.supplierAvatarUrl,
+          avatarSeed: meta?.supplierAvatarSeed,
+          entityType: "supplier",
+        });
 
         return (
           <View key={t.id} style={styles.auditRowGroup}>
@@ -1187,97 +1250,299 @@ export function TripsHubTableView({
                     <HubIconPulse>
                       <FontAwesome
                         name={showAssetTripIcon ? "truck" : "link"}
-                        size={16}
+                        size={13}
                         color={
                           hasSalesConflict
                             ? Theme.teslaRed
                             : showAssetTripIcon
-                              ? Theme.textPrimaryDark
-                              : Theme.aggregatePillText
+                              ? Theme.textSecondary
+                              : Theme.textMuted
                         }
                       />
                     </HubIconPulse>
                   </View>
                   <View style={styles.auditIdentityText}>
-                    <Text style={styles.auditTripId} numberOfLines={1}>
+                    <Text style={[styles.auditTripId, styles.auditTripIdEmphasis]} numberOfLines={1}>
                       {getTripDisplayNumber(t)}
                     </Text>
                     <Text style={styles.manifestDateMeta} numberOfLines={1}>
                       {formatTripPickupCell(t.pickup_date)}
                     </Text>
+                    <View style={[styles.tableBadgeRowLeft, styles.manifestIdentityBadges]}>
+                      <View style={styles.tableBadgeBlue}>
+                        <Text style={styles.tableBadgeBlueText}>{typeLabel}</Text>
+                      </View>
+                      <View style={styles.tableBadgeViolet}>
+                        <Text style={styles.tableBadgeVioletText}>{subTypeLabel}</Text>
+                      </View>
+                    </View>
                   </View>
                 </View>
               </View>
 
               <View style={[styles.manifestTd, styles.manifestColTelemetry]}>
-                <Text style={styles.auditRouteHint} numberOfLines={1}>
-                  {routeShort}
+                <Text style={styles.manifestRouteOnly} numberOfLines={2}>
+                  {routeDisplay}
                 </Text>
-                <View style={styles.manifestProgressTrack}>
-                  <View style={[styles.manifestProgressFill, { width: `${progressPct}%` }]} />
-                </View>
-                <Text style={styles.manifestDateMeta} numberOfLines={1}>
-                  {lastTxnShort} sync
-                </Text>
-              </View>
-
-              <View style={[styles.manifestTd, styles.manifestColDriver]}>
-                <Text style={styles.manifestProviderName} numberOfLines={1}>
-                  {(t.driver_display_name ?? "—").trim() || "—"}
-                </Text>
-                <Text style={styles.manifestDateMeta} numberOfLines={1}>
-                  {(t.vehicle_display_number ?? "—").trim() || "—"}
-                </Text>
-              </View>
-
-              <View style={[styles.manifestTd, styles.manifestColSupplier]}>
-                <Text
+                <View
                   style={[
-                    styles.manifestProviderName,
-                    supplierLine === "—" && styles.manifestProviderNamePending,
+                    styles.manifestTelemetryStatusTag,
+                    filterKind === "verified"
+                      ? styles.manifestTelemetryStatusTagVerified
+                      : filterKind === "attention"
+                        ? styles.manifestTelemetryStatusTagAttention
+                        : styles.manifestTelemetryStatusTagPending,
                   ]}
-                  numberOfLines={1}
                 >
-                  {showAssetTripIcon
-                    ? "Own Asset"
-                    : supplierLine === "—"
-                      ? "Aggregate"
-                      : supplierLine}
-                </Text>
-                <View style={styles.tableBadgeRow}>
-                  <View style={styles.tableBadgeBlue}>
-                    <Text style={styles.tableBadgeBlueText}>{typeLabel}</Text>
-                  </View>
-                  <View style={styles.tableBadgeViolet}>
-                    <Text style={styles.tableBadgeVioletText}>{subTypeLabel}</Text>
+                  <Text style={styles.manifestTelemetryStatusTagText} numberOfLines={1}>
+                    {stageTag}
+                  </Text>
+                </View>
+                <View style={styles.manifestTelemetryOperatorRow}>
+                  <HubPartyAvatar
+                    size="compact"
+                    entityType="driver"
+                    avatarUrl={meta?.driverAvatarUrl}
+                    avatarSeed={meta?.driverAvatarSeed}
+                    fallbackSeed={driverFb}
+                    partyLabel={(t.driver_display_name ?? "").trim()}
+                  />
+                  <View style={styles.manifestOperatorTextCol}>
+                    <Text style={styles.manifestOperatorName} numberOfLines={1}>
+                      {(t.driver_display_name ?? "—").trim().toUpperCase() || "—"}
+                    </Text>
+                    <Text style={styles.manifestDateMeta} numberOfLines={1}>
+                      {(t.vehicle_display_number ?? "—").trim().toUpperCase() || "—"}
+                    </Text>
                   </View>
                 </View>
               </View>
 
               <View style={[styles.manifestTd, styles.manifestColEarnings, styles.manifestTdRight]}>
                 <Text style={styles.manifestMoneyMain}>{formatINR(mySales)}</Text>
-                <Text style={styles.manifestDateMeta}>Cost {formatINR(cost)}</Text>
+                <Text style={styles.manifestLedgerSubLine}>
+                  <Text style={styles.manifestLedgerSubLabel}>
+                    {tr("tripsHubColCost").toUpperCase()}{" "}
+                  </Text>
+                  {formatINR(cost)}
+                </Text>
+                <Text style={styles.manifestLedgerSubLine} numberOfLines={1}>
+                  <Text style={styles.manifestLedgerSubLabel}>
+                    {tr("tripsHubMarginSuffix").toUpperCase()}{" "}
+                  </Text>
+                  {formatINR(pnl)} · {marginPct}
+                </Text>
               </View>
 
-              <View style={[styles.manifestTd, styles.manifestColAudit, styles.manifestTdRight]}>
-                <Text style={[styles.manifestMoneyMain, styles.manifestSettlementAmount]}>
-                  {formatINR(receivedActual)}
-                </Text>
-                <Text style={styles.manifestSettlementMeta}>
-                  Recv {formatINR(receivedActual)} / {formatINR(receivableTarget)}
-                </Text>
-                <Text style={styles.manifestSettlementMeta}>
-                  Pay {formatINR(paidActual)} / {formatINR(payableTarget)}
-                </Text>
-                <View style={[styles.tableStatusPill, settlementTagStyle]}>
+              <View
+                style={[
+                  styles.manifestTd,
+                  styles.manifestColReceivable,
+                  styles.manifestSettlementCell,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.manifestSettlementCard,
+                    compactSettlement && styles.manifestSettlementCardCompact,
+                  ]}
+                >
+                  <View style={styles.manifestSettlementHeaderRow}>
+                    <View style={styles.manifestSettlementHeaderTextCol}>
+                      <Text style={styles.manifestSettlementPartyKindCard}>
+                        {tr("tripsHubColClient")}
+                      </Text>
+                      <Text
+                        style={styles.manifestSettlementPartyNameCard}
+                        numberOfLines={compactSettlement ? 1 : 2}
+                      >
+                        {clientRecvLabel.toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={styles.manifestSettlementIconChipRecv}>
+                      <View style={[styles.manifestSettlementChipOrb, styles.manifestSettlementChipOrbRecvA]} />
+                      <View style={[styles.manifestSettlementChipOrb, styles.manifestSettlementChipOrbRecvB]} />
+                      {clientRecvRenderable ? (
+                        <View style={styles.manifestSettlementAvatarRingRecv}>
+                          <HubPartyAvatar
+                            size="compact"
+                            entityType="client"
+                            avatarUrl={meta?.clientAvatarUrl}
+                            avatarSeed={meta?.clientAvatarSeed}
+                            fallbackSeed={
+                              meta?.clientFallbackSeed ?? `client-trip:${t.id}`
+                            }
+                            partyLabel={clientRecvLabel}
+                            organizationImageUrl={clientOrgFields.organizationImageUrl}
+                            organizationAvatarSeed={clientOrgFields.organizationAvatarSeed}
+                          />
+                        </View>
+                      ) : (
+                        <View
+                          style={[
+                            styles.manifestSettlementAvatarPh,
+                            styles.manifestSettlementPhRecv,
+                          ]}
+                        >
+                          <FontAwesome
+                            name="user"
+                            size={11}
+                            color={Theme.textMuted}
+                          />
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                  {receivableTarget > 0 && !compactSettlement ? (
+                    <View style={styles.manifestSettlementFiscalBarTrack}>
+                      <View
+                        style={[
+                          styles.manifestSettlementFiscalBarFill,
+                          styles.manifestSettlementFiscalBarFillRecv,
+                          { width: `${recvBarPct}%` },
+                        ]}
+                      />
+                    </View>
+                  ) : null}
                   <Text
                     style={[
-                      styles.tableStatusPillText,
-                      settlementTagTextStyle,
+                      styles.manifestMoneyMain,
+                      styles.manifestMoneyMainInSettlementCard,
+                      compactSettlement && styles.manifestSettlementTargetCompact,
+                      pendingReceivable <= 0 && styles.manifestSettlementAmount,
                     ]}
                   >
-                    {settlementTag}
+                    {formatINR(receivableTarget)}
                   </Text>
+                  <View style={styles.manifestSettlementDuoRow}>
+                    <Text
+                      style={styles.manifestSettlementDuoLeft}
+                      numberOfLines={1}
+                    >
+                      {tr("tripsHubTableRecvPrefix")}: {formatINR(receivedActual)}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.manifestSettlementDuoRight,
+                        pendingReceivable > 0
+                          ? styles.manifestSettlementDuoRightRecvDue
+                          : styles.manifestSettlementDuoRightOk,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {pendingReceivable > 0
+                        ? `${tr("tripsHubColDue")} ${formatINR(pendingReceivable)}`
+                        : tr("tripsHubSettlementCleared").toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <View
+                style={[
+                  styles.manifestTd,
+                  styles.manifestColPayable,
+                  styles.manifestSettlementCell,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.manifestSettlementCard,
+                    compactSettlement && styles.manifestSettlementCardCompact,
+                  ]}
+                >
+                  <View style={styles.manifestSettlementHeaderRow}>
+                    <View style={styles.manifestSettlementHeaderTextCol}>
+                      <Text style={styles.manifestSettlementPartyKindCard}>
+                        {tr("tripsHubSupplierShort")}
+                      </Text>
+                      <Text
+                        style={styles.manifestSettlementPartyNameCard}
+                        numberOfLines={compactSettlement ? 1 : 2}
+                      >
+                        {payablePartyName === "—"
+                          ? "—"
+                          : payablePartyName.toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={styles.manifestSettlementIconChipPay}>
+                      <View style={[styles.manifestSettlementChipOrb, styles.manifestSettlementChipOrbPayA]} />
+                      <View style={[styles.manifestSettlementChipOrb, styles.manifestSettlementChipOrbPayB]} />
+                      {supplierPayRenderable && showSupplierParty ? (
+                        <View style={styles.manifestSettlementAvatarRingPay}>
+                          <HubPartyAvatar
+                            size="compact"
+                            entityType="supplier"
+                            avatarUrl={meta?.supplierAvatarUrl}
+                            avatarSeed={meta?.supplierAvatarSeed}
+                            fallbackSeed={
+                              meta?.supplierFallbackSeed ?? `supplier-trip:${t.id}`
+                            }
+                            partyLabel={
+                              supplierPayLabel || tr("tripsHubAwaitingData")
+                            }
+                            organizationImageUrl={supplierOrgFields.organizationImageUrl}
+                            organizationAvatarSeed={supplierOrgFields.organizationAvatarSeed}
+                          />
+                        </View>
+                      ) : (
+                        <View
+                          style={[
+                            styles.manifestSettlementAvatarPh,
+                            styles.manifestSettlementPhPay,
+                          ]}
+                        >
+                          <FontAwesome
+                            name="truck"
+                            size={11}
+                            color={Theme.textMuted}
+                          />
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                  {payableTarget > 0 && !compactSettlement ? (
+                    <View style={styles.manifestSettlementFiscalBarTrack}>
+                      <View
+                        style={[
+                          styles.manifestSettlementFiscalBarFill,
+                          styles.manifestSettlementFiscalBarFillPay,
+                          { width: `${payBarPct}%` },
+                        ]}
+                      />
+                    </View>
+                  ) : null}
+                  <Text
+                    style={[
+                      styles.manifestMoneyMain,
+                      styles.manifestMoneyMainInSettlementCard,
+                      compactSettlement && styles.manifestSettlementTargetCompact,
+                      pendingPayable <= 0 && styles.manifestSettlementAmount,
+                    ]}
+                  >
+                    {formatINR(payableTarget)}
+                  </Text>
+                  <View style={styles.manifestSettlementDuoRow}>
+                    <Text
+                      style={styles.manifestSettlementDuoLeft}
+                      numberOfLines={1}
+                    >
+                      {tr("tripsHubTablePayPrefix")}: {formatINR(paidActual)}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.manifestSettlementDuoRight,
+                        pendingPayable > 0
+                          ? styles.manifestSettlementDuoRightPayDue
+                          : styles.manifestSettlementDuoRightOk,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {pendingPayable > 0
+                        ? `${tr("tripsHubColDue")} ${formatINR(pendingPayable)}`
+                        : tr("tripsHubSettlementSettled").toUpperCase()}
+                    </Text>
+                  </View>
                 </View>
               </View>
 
@@ -1323,9 +1588,9 @@ export function TripsHubTableView({
                         : styles.auditIconActionTrip,
                       pressed && styles.auditCtaPressed,
                     ]}
-                    onPress={() => setReceiptTx({ trip: t, row: sortedEntries[0] ?? null })}
+                    onPress={() => onOpenTripDetails(t)}
                     accessibilityRole="button"
-                    accessibilityLabel="Open trip receipt popup"
+                    accessibilityLabel={tr("tripsHubViewTripDetails")}
                     hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                   >
                     <FontAwesome
@@ -1346,13 +1611,37 @@ export function TripsHubTableView({
                   <>
                     <View style={styles.txnSectionHead}>
                       <View style={styles.txnSectionHeadLeft}>
-                        <View style={styles.txnSectionAccent} />
-                        <Text style={styles.txnSectionTitle}>
-                          Associated Ledger Entries ({sortedEntries.length})
+                        <FontAwesome
+                          name="exchange"
+                          size={12}
+                          color={Theme.primary}
+                        />
+                        <Text style={styles.txnSectionTitle} numberOfLines={2}>
+                          {tr("tripsHubLedgerStripTitle")} ({sortedEntries.length})
                         </Text>
                       </View>
-                      <View style={styles.txnVerifiedBadge}>
-                        <Text style={styles.txnVerifiedBadgeText}>System Verified</Text>
+                      <View style={styles.txnSectionHeadRight}>
+                        <View style={styles.txnVerifiedBadge}>
+                          <Text style={styles.txnVerifiedBadgeText}>
+                            {tr("tripsHubTableSync")}
+                          </Text>
+                        </View>
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.txnStripClose,
+                            pressed && styles.auditCtaPressed,
+                          ]}
+                          onPress={() => toggleExpanded(t.id)}
+                          accessibilityRole="button"
+                          accessibilityLabel={tr("tripsHubLedgerStripClose")}
+                          hitSlop={10}
+                        >
+                          <FontAwesome
+                            name="times"
+                            size={12}
+                            color={Theme.textMuted}
+                          />
+                        </Pressable>
                       </View>
                     </View>
                     <ScrollView
@@ -1364,7 +1653,6 @@ export function TripsHubTableView({
                         const when = formatLedgerDateTime(
                           row.transaction_date || row.created_at,
                         );
-                        const flow = txnFlowLabel(row, tr);
                         const amt = txnAmount(row);
                         const inFlow = (row.amount_in ?? 0) > 0;
                         const counterparty =
@@ -1423,6 +1711,19 @@ export function TripsHubTableView({
                           </Pressable>
                         );
                       })}
+                      <View
+                        style={styles.txnPostTxnStub}
+                        accessibilityLabel={tr("tripsHubPostTxnSync")}
+                      >
+                        <FontAwesome
+                          name="plus-circle"
+                          size={20}
+                          color={Theme.textSection}
+                        />
+                        <Text style={styles.txnPostTxnStubText}>
+                          {tr("tripsHubPostTxnSync")}
+                        </Text>
+                      </View>
                     </ScrollView>
                   </>
                 )}
@@ -1777,7 +2078,7 @@ const styles = StyleSheet.create({
   },
   fleetBadgeBlueText: {
     fontSize: FS_CAPTION,
-    fontWeight: "600",
+    fontWeight: "900",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
     letterSpacing: 0.4,
@@ -1792,14 +2093,14 @@ const styles = StyleSheet.create({
   },
   fleetBadgeVioletText: {
     fontSize: FS_CAPTION,
-    fontWeight: "600",
+    fontWeight: "900",
     color: Theme.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
   fleetTripId: {
     fontSize: FS_AMOUNT,
-    fontWeight: "600",
+    fontWeight: "900",
     fontStyle: "normal",
     color: Theme.textPrimaryDark,
     letterSpacing: 0.15,
@@ -1826,20 +2127,20 @@ const styles = StyleSheet.create({
   },
   fleetMissionPillText: {
     fontSize: FS_AMOUNT_LABEL,
-    fontWeight: "700",
+    fontWeight: "900",
     letterSpacing: 0.6,
     textTransform: "uppercase",
   },
   fleetMissionPillTextUnassigned: {
     color: Theme.textPrimaryDark,
-    fontWeight: "600",
+    fontWeight: "900",
     letterSpacing: 0.55,
   },
   fleetMissionPillTextRose: { color: Theme.teslaRed },
   fleetMissionPillTextEmerald: { color: Theme.darkGreen },
   fleetAging: {
     fontSize: FS_CAPTION,
-    fontWeight: "600",
+    fontWeight: "900",
     color: Theme.textMuted,
     letterSpacing: 0.6,
     textTransform: "uppercase",
@@ -1867,7 +2168,7 @@ const styles = StyleSheet.create({
     fontSize: FS_ROUTE_HERO,
     fontWeight: "700",
     fontStyle: "normal",
-    color: Theme.textPrimaryDark,
+    color: Theme.textRouteCard,
     letterSpacing: -0.2,
     lineHeight: 15,
   },
@@ -1875,7 +2176,7 @@ const styles = StyleSheet.create({
     fontSize: FS_ROUTE_HERO,
     fontWeight: "700",
     fontStyle: "normal",
-    color: Theme.teslaRed,
+    color: Theme.textRouteCard,
     textAlign: "right",
     letterSpacing: -0.2,
     lineHeight: 15,
@@ -1888,15 +2189,15 @@ const styles = StyleSheet.create({
   },
   fleetProgHeadMuted: {
     fontSize: FS_CAPTION,
-    fontWeight: "700",
+    fontWeight: "800",
     color: Theme.textMuted,
     letterSpacing: 0.6,
     textTransform: "uppercase",
   },
   fleetProgHeadIndigo: {
     fontSize: FS_CAPTION,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
+    fontWeight: "700",
+    color: Theme.textSecondary,
     letterSpacing: 0.6,
     textTransform: "uppercase",
   },
@@ -1909,7 +2210,7 @@ const styles = StyleSheet.create({
   fleetProgFill: {
     height: "100%",
     borderRadius: 999,
-    backgroundColor: Theme.textPrimaryDark,
+    backgroundColor: Theme.darkGreen,
   },
   fleetFooter: {
     flexDirection: "row",
@@ -1935,7 +2236,7 @@ const styles = StyleSheet.create({
   },
   fleetRevSnapLabel: {
     fontSize: FS_CAPTION,
-    fontWeight: "700",
+    fontWeight: "900",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.6,
@@ -1943,7 +2244,7 @@ const styles = StyleSheet.create({
   fleetRevSnapVal: {
     marginTop: 0,
     fontSize: FS_AMOUNT,
-    fontWeight: "600",
+    fontWeight: "900",
     fontStyle: "normal",
     color: Theme.textPrimaryDark,
     letterSpacing: 0,
@@ -1960,7 +2261,7 @@ const styles = StyleSheet.create({
   },
   fleetPartyLabel: {
     fontSize: FS_CAPTION,
-    fontWeight: "700",
+    fontWeight: "900",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -1975,14 +2276,14 @@ const styles = StyleSheet.create({
   fleetPartyName: {
     marginTop: 2,
     fontSize: FS_LABEL,
-    fontWeight: "600",
+    fontWeight: "900",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
   },
   fleetPartySub: {
     marginTop: 2,
     fontSize: FS_CAPTION,
-    fontWeight: "600",
+    fontWeight: "800",
     color: Theme.textSecondary,
   },
   fleetPartySubAlignEnd: { textAlign: "right", alignSelf: "stretch" },
@@ -1999,6 +2300,62 @@ const styles = StyleSheet.create({
   hubPartyAvatarImg: {
     width: 34,
     height: 34,
+  },
+  hubTableAvatarRing: {
+    width: HUB_TABLE_AVATAR,
+    height: HUB_TABLE_AVATAR,
+    borderRadius: HUB_TABLE_AVATAR / 2,
+    overflow: "hidden",
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    flexShrink: 0,
+  },
+  hubTableAvatarImg: {
+    width: HUB_TABLE_AVATAR,
+    height: HUB_TABLE_AVATAR,
+  },
+  manifestOperatorTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  manifestTelemetryOperatorRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    width: "100%",
+    minWidth: 0,
+  },
+  manifestIdentityBadges: {
+    marginTop: 2,
+  },
+  manifestTelemetryStatusTag: {
+    marginTop: 3,
+    alignSelf: "flex-start",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  manifestTelemetryStatusTagVerified: {
+    backgroundColor: Theme.positiveMuted,
+    borderColor: "rgba(21, 128, 61, 0.32)",
+  },
+  manifestTelemetryStatusTagPending: {
+    backgroundColor: Theme.warningMuted,
+    borderColor: "rgba(180, 83, 9, 0.3)",
+  },
+  manifestTelemetryStatusTagAttention: {
+    backgroundColor: "rgba(232, 33, 39, 0.12)",
+    borderColor: "rgba(232, 33, 39, 0.32)",
+  },
+  manifestTelemetryStatusTagText: {
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.35,
+    textTransform: "uppercase",
+    color: Theme.textPrimaryDark,
   },
   fleetPartyAvatarRow: {
     flexDirection: "row",
@@ -2042,7 +2399,7 @@ const styles = StyleSheet.create({
   },
   fleetMetricLabel: {
     fontSize: FS_AMOUNT_LABEL,
-    fontWeight: "700",
+    fontWeight: "900",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.4,
@@ -2050,7 +2407,7 @@ const styles = StyleSheet.create({
   fleetMetricVal: {
     marginTop: 2,
     fontSize: FS_BODY,
-    fontWeight: "300",
+    fontWeight: "900",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.25,
@@ -2058,13 +2415,13 @@ const styles = StyleSheet.create({
   fleetMetricPct: {
     marginTop: 1,
     fontSize: FS_CAPTION,
-    fontWeight: "600",
+    fontWeight: "900",
     color: Theme.textSecondary,
   },
   fleetMetricMeta: {
     marginTop: 2,
     fontSize: FS_AMOUNT_LABEL,
-    fontWeight: "600",
+    fontWeight: "800",
     color: Theme.textMuted,
     lineHeight: 11,
   },
@@ -2230,6 +2587,13 @@ const styles = StyleSheet.create({
   manifestThTextRight: {
     textAlign: "right",
   },
+  manifestThDivider: {
+    borderLeftWidth: StyleSheet.hairlineWidth * 2,
+    borderLeftColor: "rgba(255,255,255,0.12)",
+  },
+  manifestThAlignEnd: {
+    alignItems: "flex-end",
+  },
   manifestTd: {
     minWidth: 0,
     justifyContent: "center",
@@ -2243,40 +2607,33 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   manifestColIdentity: {
-    width: "18%",
-    minWidth: 168,
+    width: "22%",
+    minWidth: 208,
   },
   manifestColTelemetry: {
-    width: "24%",
-    minWidth: 196,
+    width: "20%",
+    minWidth: 190,
     borderLeftWidth: 1,
     borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 6,
   },
   manifestColEarnings: {
     width: "12%",
-    minWidth: 112,
+    minWidth: 116,
     borderLeftWidth: 1,
     borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 6,
   },
-  manifestColSupplier: {
-    width: "14%",
-    minWidth: 126,
+  manifestColReceivable: {
+    width: "20%",
+    minWidth: 170,
     borderLeftWidth: 1,
     borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 6,
   },
-  manifestColDriver: {
-    width: "14%",
-    minWidth: 126,
-    borderLeftWidth: 1,
-    borderLeftColor: Theme.surfaceBorder,
-    paddingLeft: 6,
-  },
-  manifestColAudit: {
-    width: "12%",
-    minWidth: 104,
+  manifestColPayable: {
+    width: "20%",
+    minWidth: 170,
     borderLeftWidth: 1,
     borderLeftColor: Theme.surfaceBorder,
     paddingLeft: 6,
@@ -2302,10 +2659,262 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.35,
   },
+  manifestOperatorName: {
+    fontSize: 10.5,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+    width: "100%",
+  },
+  manifestLedgerSubLine: {
+    marginTop: 2,
+    fontSize: 8,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    textAlign: "right",
+    width: "100%",
+  },
+  manifestLedgerSubLabel: {
+    fontSize: 7,
+    fontWeight: "800",
+    color: Theme.textMuted,
+  },
+  /** Settlement column: full-width card (reference: justify-between party vs chip). */
+  manifestSettlementCell: {
+    alignItems: "stretch",
+    alignSelf: "stretch",
+  },
+  /** Fiscal “node” card — white panel, light shadow, party left / avatar or icon right. */
+  manifestSettlementCard: {
+    width: "100%",
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 5,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#0f172a",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.07,
+        shadowRadius: 3,
+      },
+      android: {
+        elevation: 2,
+      },
+      default: {},
+    }),
+  },
+  manifestSettlementCardCompact: {
+    paddingHorizontal: 6,
+    paddingVertical: 5,
+    gap: 3,
+    borderRadius: 12,
+  },
+  manifestSettlementHeaderRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
+    width: "100%",
+  },
+  manifestSettlementHeaderTextCol: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "flex-start",
+  },
+  manifestSettlementPartyKindCard: {
+    fontSize: 7,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    textAlign: "left",
+    width: "100%",
+  },
+  manifestSettlementIconChipRecv: {
+    backgroundColor: Theme.surface,
+    borderRadius: 8,
+    padding: 2,
+    position: "relative",
+    overflow: "hidden",
+    flexShrink: 0,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  manifestSettlementIconChipPay: {
+    backgroundColor: Theme.surface,
+    borderRadius: 8,
+    padding: 2,
+    position: "relative",
+    overflow: "hidden",
+    flexShrink: 0,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  /** Abstract chip background orbs (inspired by network cards). */
+  manifestSettlementChipOrb: {
+    position: "absolute",
+    borderRadius: 999,
+  },
+  manifestSettlementChipOrbRecvA: {
+    width: 18,
+    height: 18,
+    right: -5,
+    top: -4,
+    backgroundColor: "rgba(148, 163, 184, 0.22)",
+  },
+  manifestSettlementChipOrbRecvB: {
+    width: 13,
+    height: 13,
+    left: -4,
+    bottom: -3,
+    backgroundColor: "rgba(203, 213, 225, 0.32)",
+  },
+  manifestSettlementChipOrbPayA: {
+    width: 18,
+    height: 18,
+    right: -5,
+    top: -4,
+    backgroundColor: "rgba(148, 163, 184, 0.22)",
+  },
+  manifestSettlementChipOrbPayB: {
+    width: 13,
+    height: 13,
+    left: -4,
+    bottom: -3,
+    backgroundColor: "rgba(203, 213, 225, 0.32)",
+  },
+  manifestSettlementAvatarRingRecv: {
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 999,
+    padding: 1,
+    backgroundColor: Theme.cardWhite,
+  },
+  manifestSettlementAvatarRingPay: {
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 999,
+    padding: 1,
+    backgroundColor: Theme.cardWhite,
+  },
+  manifestSettlementAvatarPh: {
+    width: HUB_TABLE_AVATAR,
+    height: HUB_TABLE_AVATAR,
+    borderRadius: HUB_TABLE_AVATAR / 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  manifestSettlementPhRecv: {
+    backgroundColor: Theme.cardWhite,
+  },
+  manifestSettlementPhPay: {
+    backgroundColor: Theme.cardWhite,
+  },
+  manifestSettlementFiscalBarTrack: {
+    marginTop: 0,
+    height: 3,
+    width: "100%",
+    borderRadius: 2,
+    backgroundColor: Theme.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.surfaceBorder,
+    overflow: "hidden",
+  },
+  manifestSettlementFiscalBarFill: {
+    height: "100%",
+    borderRadius: 2,
+  },
+  manifestSettlementFiscalBarFillRecv: {
+    backgroundColor: Theme.darkGreen,
+  },
+  manifestSettlementFiscalBarFillPay: {
+    backgroundColor: Theme.teslaRed,
+  },
+  manifestMoneyMainInSettlementCard: {
+    marginTop: 1,
+  },
+  manifestSettlementTargetCompact: {
+    fontSize: 12,
+    lineHeight: 15,
+  },
+  manifestSettlementPartyNameCard: {
+    marginTop: 2,
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.2,
+    textTransform: "uppercase",
+    textAlign: "left",
+    width: "100%",
+  },
+  manifestSettlementDuoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+    width: "100%",
+    marginTop: 1,
+  },
+  manifestSettlementDuoLeft: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 7,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  manifestSettlementDuoRight: {
+    flexShrink: 0,
+    maxWidth: "52%",
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+    textAlign: "right",
+  },
+  manifestSettlementDuoRightOk: {
+    color: Theme.darkGreen,
+  },
+  manifestSettlementDuoRightRecvDue: {
+    color: Theme.warning,
+  },
+  manifestSettlementDuoRightPayDue: {
+    color: Theme.teslaRed,
+  },
+  tableBadgeRowLeft: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    marginTop: 2,
+    justifyContent: "flex-start",
+    width: "100%",
+  },
+  tableStatusPillNarrow: {
+    marginTop: 2,
+    alignSelf: "flex-end",
+  },
+  /** Pending + INR amount needs a bit more room than CLEARED-only. */
+  tableStatusPillWithAmount: {
+    minWidth: 0,
+    maxWidth: "100%",
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+  },
+  tableStatusPillTextAmount: {
+    fontSize: 6.5,
+    lineHeight: 9,
+    letterSpacing: 0.2,
+  },
   manifestProgressTrack: {
     marginTop: 4,
     width: "100%",
-    height: 4,
+    height: 5,
     borderRadius: 999,
     backgroundColor: Theme.surfaceBorder,
     overflow: "hidden",
@@ -2313,7 +2922,7 @@ const styles = StyleSheet.create({
   manifestProgressFill: {
     height: "100%",
     borderRadius: 999,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.darkGreen,
   },
   manifestMoneyMain: {
     fontSize: 14,
@@ -2337,29 +2946,19 @@ const styles = StyleSheet.create({
   manifestMoneyBad: {
     color: Theme.teslaRed,
   },
-  manifestProviderName: {
-    fontSize: 10,
-    fontWeight: "500",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
-    width: "100%",
-    textTransform: "uppercase",
-  },
-  manifestProviderNamePending: {
-    color: Theme.textMuted,
-    fontWeight: "500",
-  },
   manifestSettlementAmount: {
     color: Theme.darkGreen,
     marginBottom: 2,
   },
-  manifestSettlementMeta: {
-    marginTop: 1,
-    fontSize: 7,
+  /** Route-only telemetry cell (no progress / sync lines). */
+  manifestRouteOnly: {
+    fontSize: 9,
     fontWeight: "600",
-    color: Theme.textMuted,
+    color: Theme.textRouteCard,
     letterSpacing: 0.2,
-    textAlign: "center",
+    lineHeight: 13,
+    textTransform: "uppercase",
+    width: "100%",
   },
   manifestHealthDot: {
     width: 5,
@@ -2784,8 +3383,8 @@ const styles = StyleSheet.create({
   auditTr: {
     position: "relative" as const,
     flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 9,
+    alignItems: "flex-start",
+    paddingVertical: 10,
     paddingHorizontal: 14,
     gap: 4,
     overflow: "hidden",
@@ -2840,9 +3439,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   auditTruckWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 9,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -2864,12 +3463,18 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     textTransform: "uppercase",
   },
+  auditTripIdEmphasis: {
+    color: Theme.primary,
+    fontWeight: "800",
+    fontStyle: "normal",
+  },
   auditRouteHint: {
     marginTop: 1,
-    fontSize: 8,
-    fontWeight: "500",
-    color: Theme.textMuted,
-    letterSpacing: 0.3,
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textRouteCard,
+    letterSpacing: 0.25,
+    lineHeight: 14,
     textTransform: "uppercase",
   },
   auditRowChevron: { marginLeft: 4 },
@@ -2888,6 +3493,11 @@ const styles = StyleSheet.create({
   tableStatusPillRose: {
     backgroundColor: Theme.warningMuted,
     borderColor: Theme.teslaRed,
+  },
+  /** Receivable still due — distinct from payable (red). */
+  tableStatusPillReceivable: {
+    backgroundColor: Theme.warningMuted,
+    borderColor: Theme.warning,
   },
   tableStatusPillEmerald: {
     backgroundColor: Theme.positiveMuted,
@@ -2913,7 +3523,16 @@ const styles = StyleSheet.create({
     color: Theme.teslaRed,
     fontWeight: "700",
   },
-  tableBadgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 4, justifyContent: "center" },
+  tableStatusPillTextReceivable: {
+    color: Theme.warning,
+    fontWeight: "700",
+  },
+  tableBadgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    justifyContent: "center",
+  },
   tableBadgeBlue: {
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -3091,7 +3710,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
     paddingHorizontal: 2,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   txnSectionHeadLeft: {
     flexDirection: "row",
@@ -3100,18 +3719,27 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  txnSectionAccent: {
-    width: 3,
-    height: 16,
-    borderRadius: 3,
-    backgroundColor: Theme.primary,
+  txnSectionHeadRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 0,
+  },
+  txnStripClose: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
   },
   txnSectionTitle: {
-    fontSize: 10,
+    flex: 1,
+    minWidth: 0,
+    fontSize: 9,
     fontWeight: "800",
-    color: Theme.textMuted,
+    color: Theme.textPrimaryDark,
     textTransform: "uppercase",
-    letterSpacing: 0.45,
+    letterSpacing: 0.4,
   },
   txnVerifiedBadge: {
     paddingHorizontal: 8,
@@ -3131,6 +3759,30 @@ const styles = StyleSheet.create({
   txnHorizontalList: {
     paddingBottom: 2,
     gap: 10,
+    paddingRight: 4,
+  },
+  txnPostTxnStub: {
+    minWidth: 200,
+    maxWidth: 220,
+    minHeight: 88,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: Theme.borderLight,
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    gap: 6,
+    backgroundColor: Theme.screenBackground,
+  },
+  txnPostTxnStubText: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.textSection,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    textAlign: "center",
   },
   expandEmpty: {
     fontSize: FS_BODY,
@@ -3248,8 +3900,8 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   txnVaultCard: {
-    minWidth: 316,
-    maxWidth: 360,
+    minWidth: 280,
+    maxWidth: 340,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",

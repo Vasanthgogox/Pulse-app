@@ -12,17 +12,22 @@ export async function createRating(
 ): Promise<{ error: Error | null; rating: RatingRow | null }> {
   const { data: row, error } = await supabase()
     .from('ratings')
-    .insert({
-      organization_id: organizationId,
-      trip_id: data.trip_id,
-      rater_type: data.rater_type,
-      rater_id: data.rater_id,
-      rated_type: data.rated_type,
-      rated_id: data.rated_id,
-      score: Math.min(5, Math.max(1, data.score)),
-      comment: data.comment ?? null,
-      updated_at: new Date().toISOString(),
-    })
+    .upsert(
+      {
+        organization_id: organizationId,
+        trip_id: data.trip_id,
+        rater_type: data.rater_type,
+        rater_id: data.rater_id,
+        rated_type: data.rated_type,
+        rated_id: data.rated_id,
+        score: Math.min(5, Math.max(1, data.score)),
+        comment: data.comment ?? null,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict: 'trip_id,rater_type,rater_id,rated_type,rated_id',
+      }
+    )
     .select()
     .single();
 

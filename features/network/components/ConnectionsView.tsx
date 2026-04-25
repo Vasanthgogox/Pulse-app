@@ -11,15 +11,10 @@ import {
 import {
   HubConnectionListCard,
   type HubConnectionItem,
-} from '@/features/network/components/NetworkConnectionHubCards';
+} from "@/features/network/components/NetworkConnectionHubCards";
+import { runConnectionInvite } from "@/features/network/utils/connectionInvite.util";
 import { useClientsQuery, useDriversQuery, useSuppliersQuery } from '@/lib/queries';
 import { getInitials } from '@/lib/stringUtils';
-import {
-  CONNECTION_REQUEST_DAILY_LIMIT_MESSAGE,
-  createConnectionRequest,
-  getConnectionInviteeByPhone,
-  looksLikeConnectionRateLimitError,
-} from '@/services/connectionRequestsService';
 import {
   LayoutGrid,
   List,
@@ -36,13 +31,12 @@ import {
   FlatList,
   Pressable,
   RefreshControl,
-  Share,
   StyleSheet,
   Text,
   TextInput,
   useWindowDimensions,
   View,
-} from 'react-native';
+} from "react-native";
 
 export type ConnectionFilterTab = 'ALL' | 'CLIENT' | 'SUPPLIER' | 'DRIVER';
 
@@ -67,7 +61,7 @@ function seedColor(id: string): string {
   return COVER_TOKENS[h];
 }
 
-interface ConnectedOrg {
+export interface ConnectedOrg {
   id: string;
   name: string;
   role: 'CLIENT' | 'SUPPLIER' | 'DRIVER';
@@ -386,35 +380,8 @@ export function ConnectionsView({
 
     setInvitingId(item.id);
     try {
-      const { invitee, error: lookupError } = await getConnectionInviteeByPhone(item.phone);
-      if (lookupError) throw lookupError;
-
-      if (invitee?.organization_id && item.role !== "DRIVER") {
-        const { error, alreadyInvited } = await createConnectionRequest(
-          orgId,
-          invitee.organization_id,
-          {
-            requestShipperClient: item.role === "CLIENT",
-            requestCarrierSupplier: item.role === "SUPPLIER",
-          },
-        );
-        if (error) throw error;
-        await Promise.all([clientsQ.refetch(), suppliersQ.refetch()]);
-        Alert.alert(
-          alreadyInvited ? "Request already sent" : "Request sent",
-          `${item.name} is on Q. We sent an in-app connection request.`,
-        );
-        return;
-      }
-
-      await Share.share({
-        message: `Hi ${item.name}, join me on Q to manage loads, trips, payments, and network requests together.`,
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Could not send invite";
-      Alert.alert(
-        "Could not send invite",
-        looksLikeConnectionRateLimitError(message) ? CONNECTION_REQUEST_DAILY_LIMIT_MESSAGE : message,
+      await runConnectionInvite(orgId, item, () =>
+        Promise.all([clientsQ.refetch(), suppliersQ.refetch()]),
       );
     } finally {
       setInvitingId(null);
@@ -436,7 +403,6 @@ export function ConnectionsView({
     () => chunkForGrid(connections.slice(0, hubNumColumns * 2), hubNumColumns),
     [connections, hubNumColumns],
   );
-
   const showChrome = !hubMode;
 
   const embeddedBody = useHubLayout ? (
@@ -575,7 +541,12 @@ export function ConnectionsView({
           key="hub-list"
           data={connections}
           keyExtractor={(item) => `hub-${item.role}-${item.id}`}
-          renderItem={({ item }) => <HubConnectionListCard item={toHubItem(item)} />}
+          renderItem={({ item }) => (
+            <HubConnectionListCard
+              item={toHubItem(item)}
+              onActionPress={() => void inviteOffAppParty(item)}
+            />
+          )}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           scrollEnabled
@@ -652,11 +623,11 @@ const styles = StyleSheet.create({
   gridRowEmbedded: {
     flexDirection: "row",
     alignItems: "flex-start",
-    paddingHorizontal: 8,
+    paddingHorizontal: 22,
   },
-  listContentEmbedded: { paddingHorizontal: 14, paddingBottom: 16, gap: 8 },
+  listContentEmbedded: { paddingHorizontal: 22, paddingBottom: 16, gap: 8 },
   hubGridEmbedded: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 22,
     paddingTop: 8,
     paddingBottom: 18,
     gap: 12,

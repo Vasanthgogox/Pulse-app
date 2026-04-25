@@ -48,12 +48,18 @@ function seedColor(id: string): string {
   return palette[h];
 }
 
+/** Min height for horizontal hub connection row (carousel / side-scroll). Kept exported for callers & stable bundles. */
+export const HUB_CAROUSEL_MIN_HEIGHT = 400;
+
 export function HubConnectionListCard({
   item,
   onActionPress,
+  layout = "grid",
 }: {
   item: HubConnectionItem;
   onActionPress?: () => void;
+  /** `carousel` = fixed width for horizontal row / side-scroll. */
+  layout?: "grid" | "carousel";
 }) {
   const scale = React.useRef(new Animated.Value(1)).current;
   const rs = ROLE_STYLES[item.role];
@@ -65,10 +71,21 @@ export function HubConnectionListCard({
     : null;
   const onIn = () => Animated.spring(scale, { toValue: 0.98, useNativeDriver: true }).start();
   const onOut = () => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
+  const isCarousel = layout === "carousel";
 
   return (
-    <Pressable onPressIn={onIn} onPressOut={onOut} style={styles.cardPress}>
-      <Animated.View style={[styles.cardOuter, { transform: [{ scale }] }]}>
+    <Pressable
+      onPressIn={onIn}
+      onPressOut={onOut}
+      style={[styles.cardPress, isCarousel && styles.cardPressCarousel]}
+    >
+      <Animated.View
+        style={[
+          styles.cardOuter,
+          isCarousel && styles.cardOuterCarousel,
+          { transform: [{ scale }] },
+        ]}
+      >
         <View style={styles.coverBg}>
           <View style={styles.coverOrbLarge} />
           <View style={styles.coverOrbSmall} />
@@ -200,6 +217,13 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  cardPressCarousel: {
+    width: 220,
+    flex: 0,
+    flexGrow: 0,
+    flexShrink: 0,
+    marginRight: 12,
+  },
   cardOuter: {
     flex: 1,
     backgroundColor: Theme.screenBackground,
@@ -213,6 +237,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 7 },
     elevation: 2,
     overflow: "hidden",
+  },
+  cardOuterCarousel: {
+    flex: 0,
+    width: "100%",
+    marginBottom: 0,
   },
   coverBg: {
     height: 82,
@@ -407,7 +436,8 @@ const styles = StyleSheet.create({
   heroAvatar: {
     width: 62,
     height: 62,
-    borderRadius: 22,
+    borderRadius: 31,
+    overflow: "hidden",
     backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",

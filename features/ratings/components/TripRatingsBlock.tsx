@@ -1517,7 +1517,12 @@ export function TripRatingsBlock({
                     score: clientScore,
                     comment: commentPayload,
                   });
-                  if (error) {
+                  const allowLocalClientFallback =
+                    !!error &&
+                    (error.message.toLowerCase().includes('ratings_rated_type_check') ||
+                      error.message.toLowerCase().includes('check constraint') ||
+                      error.message.toLowerCase().includes('rated_type'));
+                  if (error && !allowLocalClientFallback) {
                     setClientSubmitting(false);
                     Alert.alert('Rating failed', error.message);
                     return;
