@@ -20,6 +20,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useMemo, useRef } from 'react';
 import { LogBox, Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import 'react-native-gesture-handler';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -131,6 +132,10 @@ const errorStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  /** Required so RNGH components (e.g. hold-to-accept Pressable) work on Android; stabilizes iOS. */
+  ghRoot: {
+    flex: 1,
+  },
   rootTabBarWrap: {
     width: '100%',
     paddingHorizontal: 0,
@@ -191,19 +196,21 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <QueryClientProvider client={queryClient}>
-        <NetworkProvider>
-          <LanguageProvider>
-            <AuthProvider>
-              <OrganizationProvider>
-                <WalletProvider>
-                  <RootLayoutNav />
-                </WalletProvider>
-              </OrganizationProvider>
-            </AuthProvider>
-          </LanguageProvider>
-        </NetworkProvider>
-      </QueryClientProvider>
+      <GestureHandlerRootView style={styles.ghRoot}>
+        <QueryClientProvider client={queryClient}>
+          <NetworkProvider>
+            <LanguageProvider>
+              <AuthProvider>
+                <OrganizationProvider>
+                  <WalletProvider>
+                    <RootLayoutNav />
+                  </WalletProvider>
+                </OrganizationProvider>
+              </AuthProvider>
+            </LanguageProvider>
+          </NetworkProvider>
+        </QueryClientProvider>
+      </GestureHandlerRootView>
     </SafeAreaProvider>
   );
 }
