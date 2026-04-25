@@ -145,23 +145,19 @@ function AnimatedNavPill({
 
   const pillAnimatedStyle = useAnimatedStyle(() => {
     const expanded = active ? 1 : expandProgress.value;
-    const bg = interpolateColor(
-      activeProgress.value,
-      [0, 1],
-      ["rgba(15,23,42,0)", "rgba(0,0,0,1)"],
-    );
+    const rgb = interpolate(activeProgress.value, [0, 1], [255, 0]);
+    const alpha = interpolate(activeProgress.value, [0, 1], [hoverProgress.value * 0.8, 1]);
     const border = interpolateColor(
       activeProgress.value,
       [0, 1],
-      ["rgba(15,23,42,0.04)", "rgba(255,255,255,0.12)"],
+      ["rgba(229,231,235,0)", "rgba(255,255,255,0.12)"],
     );
     return {
       width: interpolate(expanded, [0, 1], [52, 184]),
-      backgroundColor: bg,
+      backgroundColor: `rgba(${rgb},${rgb},${rgb},${alpha})`,
       borderColor: border,
       transform: [
-        { scale: 1 + hoverProgress.value * 0.02 + activeProgress.value * 0.01 },
-        { translateY: -hoverProgress.value * 1.5 },
+        { scale: 1 + activeProgress.value * 0.01 },
       ],
     };
   });
@@ -171,7 +167,7 @@ function AnimatedNavPill({
     return {
       opacity: expanded,
       width: interpolate(expanded, [0, 1], [0, 112]),
-      transform: [{ translateX: interpolate(expanded, [0, 1], [-8, 0]) }],
+      transform: [{ translateX: interpolate(expanded, [0, 1], [-16, 0]) }],
     };
   });
 
@@ -184,21 +180,23 @@ function AnimatedNavPill({
           easing: Easing.out(Easing.quad),
         });
         if (!active) {
-          expandProgress.value = withTiming(1, {
-            duration: 500,
-            easing: Easing.out(Easing.cubic),
+          expandProgress.value = withSpring(1, {
+            damping: 22,
+            stiffness: 140,
+            mass: 0.9,
           });
         }
       }}
       onHoverOut={() => {
         hoverProgress.value = withTiming(0, {
-          duration: 140,
-          easing: Easing.out(Easing.quad),
+          duration: 220,
+          easing: Easing.out(Easing.ease),
         });
         if (!active) {
-          expandProgress.value = withTiming(0, {
-            duration: 500,
-            easing: Easing.out(Easing.cubic),
+          expandProgress.value = withSpring(0, {
+            damping: 26,
+            stiffness: 160,
+            mass: 0.8,
           });
         }
       }}
@@ -207,7 +205,7 @@ function AnimatedNavPill({
       <Animated.View style={[styles.webNavPill, pillAnimatedStyle]}>
         <FontAwesome5
           name={icon}
-          size={12}
+          size={16}
           color={active ? Theme.textOnPrimary : Theme.textMutedDemo}
           solid={active}
         />
@@ -342,7 +340,7 @@ export function DemoTabBar({
     ];
 
     return (
-      <View style={styles.webTopShell}>
+      <View style={[styles.webTopShell, Platform.OS === "web" && ({ backdropFilter: "blur(24px)" } as any)]}>
         <View style={styles.webHeaderRow}>
           <View style={styles.webBrandWrap}>
             <AnimatedPress style={styles.webBrandLogo} activeOpacity={1}>
@@ -376,7 +374,7 @@ export function DemoTabBar({
               <Text style={styles.webEscrowValue}>{escrowFormatted}</Text>
             </View>
             <AnimatedPress style={styles.webBellBtn} activeOpacity={0.8}>
-              <FontAwesome5 name="bell" size={13} color={Theme.textMutedDemo} />
+              <FontAwesome5 name="bell" size={16} color={Theme.textMutedDemo} />
             </AnimatedPress>
             <AnimatedPress
               onPress={onProfilePress}
@@ -653,9 +651,9 @@ const styles = StyleSheet.create({
   },
   webTopShell: {
     width: "100%",
-    backgroundColor: "rgba(255,255,255,0.96)",
+    backgroundColor: "rgba(255,255,255,0.7)",
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(15,23,42,0.08)",
+    borderBottomColor: "#f3f4f6",
     paddingHorizontal: 18,
     paddingTop: 10,
     paddingBottom: 10,
@@ -700,12 +698,13 @@ const styles = StyleSheet.create({
   webNavPillGroup: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    backgroundColor: "rgba(15,23,42,0.04)",
+    gap: 8,
+    backgroundColor: "#f9fafb",
     borderWidth: 1,
-    borderColor: "rgba(15,23,42,0.08)",
-    borderRadius: 26,
-    padding: 6,
+    borderColor: "rgba(229,231,235,0.4)",
+    borderRadius: 32,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
     minWidth: 0,
     maxWidth: 520,
     width: "auto",
@@ -715,16 +714,15 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   webNavPill: {
-    minWidth: 56,
-    borderRadius: 20,
+    minWidth: 52,
+    borderRadius: 24,
     paddingVertical: 8,
     paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-start",
-    gap: 10,
+    gap: 12,
     borderWidth: 1,
-    borderColor: "rgba(15,23,42,0.04)",
     overflow: "hidden",
   },
   webNavPillActive: {
@@ -737,11 +735,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   webNavTitle: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "900",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
-    letterSpacing: 1.9,
+    letterSpacing: 2.4,
   },
   webNavTitleActive: {
     color: Theme.textOnPrimary,
@@ -752,10 +750,10 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.textMutedDemo,
     textTransform: "uppercase",
-    letterSpacing: 1.35,
+    letterSpacing: 0.8,
   },
   webNavSubActive: {
-    color: "rgba(255,255,255,0.8)",
+    color: "#818cf8",
   },
   webUtilityWrap: {
     flexDirection: "row",
@@ -768,13 +766,13 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     backgroundColor: "rgba(255,255,255,0.8)",
     borderWidth: 1,
-    borderColor: "rgba(15,23,42,0.08)",
+    borderColor: "#f3f4f6",
     borderRadius: 12,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 6,
   },
   webEscrowLabel: {
-    fontSize: 7,
+    fontSize: 8,
     fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 1,
@@ -783,7 +781,7 @@ const styles = StyleSheet.create({
   webEscrowValue: {
     fontSize: 12,
     fontWeight: "900",
-    color: Theme.primary,
+    color: "#4f46e5",
     marginTop: 1,
   },
   webBellBtn: {
@@ -793,7 +791,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(15,23,42,0.08)",
+    borderColor: "#f3f4f6",
     backgroundColor: "rgba(255,255,255,0.8)",
   },
   webAvatarBtn: {
@@ -802,7 +800,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.primary,
+    backgroundColor: "#4f46e5",
   },
   webAvatarText: {
     fontSize: 11,
