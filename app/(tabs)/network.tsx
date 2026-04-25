@@ -110,6 +110,17 @@ export default function NetworkScreen() {
   const [discoverSearch, setDiscoverSearch] = useState("");
   const [shareLoad, setShareLoad] = useState<IndentRow | null>(null);
   const [recentAddedNames, setRecentAddedNames] = useState<string[]>([]);
+  const SEGMENT_ICON_WIDTH = 40;
+  const SEGMENT_ACTIVE_WIDTH = 172;
+  const connWidthAnim = React.useRef(
+    new Animated.Value(networkSegment === "connections" ? SEGMENT_ACTIVE_WIDTH : SEGMENT_ICON_WIDTH),
+  ).current;
+  const invWidthAnim = React.useRef(
+    new Animated.Value(networkSegment === "invitations" ? SEGMENT_ACTIVE_WIDTH : SEGMENT_ICON_WIDTH),
+  ).current;
+  const loadWidthAnim = React.useRef(
+    new Animated.Value(networkSegment === "load" ? SEGMENT_ACTIVE_WIDTH : SEGMENT_ICON_WIDTH),
+  ).current;
   const invitePulse = React.useRef(new Animated.Value(1)).current;
   const recentPulse = React.useRef(new Animated.Value(1)).current;
   const prevConnectionCountRef = React.useRef<number | null>(null);
@@ -119,6 +130,26 @@ export default function NetworkScreen() {
       setNetworkSegment("load");
     }
   }, [tabParam]);
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(connWidthAnim, {
+        toValue: networkSegment === "connections" ? SEGMENT_ACTIVE_WIDTH : SEGMENT_ICON_WIDTH,
+        duration: 220,
+        useNativeDriver: false,
+      }),
+      Animated.timing(invWidthAnim, {
+        toValue: networkSegment === "invitations" ? SEGMENT_ACTIVE_WIDTH : SEGMENT_ICON_WIDTH,
+        duration: 220,
+        useNativeDriver: false,
+      }),
+      Animated.timing(loadWidthAnim, {
+        toValue: networkSegment === "load" ? SEGMENT_ACTIVE_WIDTH : SEGMENT_ICON_WIDTH,
+        duration: 220,
+        useNativeDriver: false,
+      }),
+    ]).start();
+  }, [networkSegment, connWidthAnim, invWidthAnim, loadWidthAnim]);
 
   useRealtimeNetworkInvalidation(orgId);
   const receivedQ = useConnectionRequestsReceivedQuery(orgId);
@@ -495,85 +526,85 @@ export default function NetworkScreen() {
       onCreatePost={onCreatePost}
       headerActions={
         <View style={styles.storyTopSwitchRow}>
-          <Pressable
-            onPress={() => setNetworkSegment("connections")}
-            style={[
-              styles.storyTopSwitchBtn,
-              styles.storyTopSwitchBtnIconOnly,
-              networkSegment === "connections" && styles.storyTopSwitchBtnWide,
-              networkSegment === "connections" && styles.storyTopSwitchBtnOn,
-            ]}
-            hitSlop={6}
-          >
-            <View style={styles.segmentLabelInline}>
-              <Activity
-                size={12}
-                color={networkSegment === "connections" ? Theme.textOnPrimary : Theme.textSecondary}
-                strokeWidth={2.2}
-              />
-              {networkSegment === "connections" ? (
-                <Text style={[styles.storyTopSwitchText, styles.storyTopSwitchTextOn]}>
-                  CONNECTIONS
-                </Text>
-              ) : null}
-            </View>
-          </Pressable>
-          <Pressable
-            onPress={() => setNetworkSegment("invitations")}
-            style={[
-              styles.storyTopSwitchBtn,
-              styles.storyTopSwitchBtnIconOnly,
-              networkSegment === "invitations" && styles.storyTopSwitchBtnWide,
-              networkSegment === "invitations" && styles.storyTopSwitchBtnOn,
-            ]}
-            hitSlop={6}
-          >
-            <View style={styles.segmentLabelInline}>
-              <UserPlus2
-                size={12}
-                color={networkSegment === "invitations" ? Theme.textOnPrimary : Theme.textSecondary}
-                strokeWidth={2.2}
-              />
-              {networkSegment === "invitations" ? (
-                <Text style={[styles.storyTopSwitchText, styles.storyTopSwitchTextOn]}>
-                  INVITATIONS
-                </Text>
-              ) : null}
-              {pendingCount > 0 ? (
-                <Animated.View
-                  style={[
-                    styles.storyInviteBadge,
-                    { transform: [{ scale: invitePulse }] },
-                  ]}
-                >
-                  <Text style={styles.storyInviteBadgeText}>{pendingCount}</Text>
-                </Animated.View>
-              ) : null}
-            </View>
-          </Pressable>
-          <Pressable
-            onPress={() => setNetworkSegment("load")}
-            style={[
-              styles.storyTopSwitchBtn,
-              styles.storyTopSwitchBtnIconOnly,
-              networkSegment === "load" && styles.storyTopSwitchBtnWide,
-              networkSegment === "load" && styles.storyTopSwitchBtnOn,
-            ]}
-            hitSlop={6}
-          >
-            <View style={styles.segmentLabelInline}>
-              <Truck
-                size={12}
-                color={networkSegment === "load" ? Theme.textOnPrimary : Theme.textSecondary}
-                strokeWidth={2.2}
-              />
-              {networkSegment === "load" ? (
-                <Text style={[styles.storyTopSwitchText, styles.storyTopSwitchTextOn]}>
-                  LOAD CENTER
-                </Text>
-              ) : null}
-            </View>
-          </Pressable>
+          <Animated.View style={[styles.storyTopSwitchAnimWrap, { width: connWidthAnim }]}>
+            <Pressable
+              onPress={() => setNetworkSegment("connections")}
+              style={[
+                styles.storyTopSwitchBtn,
+                networkSegment === "connections" && styles.storyTopSwitchBtnOn,
+              ]}
+              hitSlop={6}
+            >
+              <View style={styles.segmentLabelInline}>
+                <Activity
+                  size={12}
+                  color={networkSegment === "connections" ? Theme.textOnPrimary : Theme.textSecondary}
+                  strokeWidth={2.2}
+                />
+                {networkSegment === "connections" ? (
+                  <Text style={[styles.storyTopSwitchText, styles.storyTopSwitchTextOn]}>
+                    CONNECTIONS
+                  </Text>
+                ) : null}
+              </View>
+            </Pressable>
+          </Animated.View>
+          <Animated.View style={[styles.storyTopSwitchAnimWrap, { width: invWidthAnim }]}>
+            <Pressable
+              onPress={() => setNetworkSegment("invitations")}
+              style={[
+                styles.storyTopSwitchBtn,
+                networkSegment === "invitations" && styles.storyTopSwitchBtnOn,
+              ]}
+              hitSlop={6}
+            >
+              <View style={styles.segmentLabelInline}>
+                <UserPlus2
+                  size={12}
+                  color={networkSegment === "invitations" ? Theme.textOnPrimary : Theme.textSecondary}
+                  strokeWidth={2.2}
+                />
+                {networkSegment === "invitations" ? (
+                  <Text style={[styles.storyTopSwitchText, styles.storyTopSwitchTextOn]}>
+                    INVITATIONS
+                  </Text>
+                ) : null}
+                {pendingCount > 0 ? (
+                  <Animated.View
+                    style={[
+                      styles.storyInviteBadge,
+                      { transform: [{ scale: invitePulse }] },
+                    ]}
+                  >
+                    <Text style={styles.storyInviteBadgeText}>{pendingCount}</Text>
+                  </Animated.View>
+                ) : null}
+              </View>
+            </Pressable>
+          </Animated.View>
+          <Animated.View style={[styles.storyTopSwitchAnimWrap, { width: loadWidthAnim }]}>
+            <Pressable
+              onPress={() => setNetworkSegment("load")}
+              style={[
+                styles.storyTopSwitchBtn,
+                networkSegment === "load" && styles.storyTopSwitchBtnOn,
+              ]}
+              hitSlop={6}
+            >
+              <View style={styles.segmentLabelInline}>
+                <Truck
+                  size={12}
+                  color={networkSegment === "load" ? Theme.textOnPrimary : Theme.textSecondary}
+                  strokeWidth={2.2}
+                />
+                {networkSegment === "load" ? (
+                  <Text style={[styles.storyTopSwitchText, styles.storyTopSwitchTextOn]}>
+                    LOAD CENTER
+                  </Text>
+                ) : null}
+              </View>
+            </Pressable>
+          </Animated.View>
         </View>
       }
     />
@@ -814,9 +845,9 @@ const styles = StyleSheet.create({
     paddingRight: 6,
   },
   inlineFilterPill: {
-    minHeight: 24,
-    paddingHorizontal: 10,
-    borderRadius: 12,
+    minHeight: 22,
+    paddingHorizontal: 9,
+    borderRadius: 11,
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -827,18 +858,18 @@ const styles = StyleSheet.create({
     borderColor: Theme.textPrimaryDark,
   },
   inlineFilterPillText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "900",
-    letterSpacing: 0.6,
+    letterSpacing: 0.5,
     color: Theme.textSecondary,
   },
   inlineFilterPillTextOn: {
     color: Theme.textOnDark,
   },
   inlineSearchIconBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.surfaceGray,
@@ -1050,52 +1081,47 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.teslaRed,
   },
   storyInviteBadge: {
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
+    minWidth: 14,
+    height: 14,
+    borderRadius: 7,
     backgroundColor: Theme.teslaRed,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 4,
+    paddingHorizontal: 3,
   },
   storyInviteBadgeText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "900",
     color: Theme.textOnPrimary,
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
   },
   storyTopSwitchRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 4,
+  },
+  storyTopSwitchAnimWrap: {
+    overflow: "hidden",
   },
   storyTopSwitchBtn: {
-    minHeight: 48,
-    paddingHorizontal: 12,
-    borderRadius: 24,
+    minHeight: 40,
+    height: 40,
+    paddingHorizontal: 10,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
     justifyContent: "center",
-  },
-  storyTopSwitchBtnIconOnly: {
-    minWidth: 48,
     alignItems: "center",
-    paddingHorizontal: 0,
-  },
-  storyTopSwitchBtnWide: {
-    minWidth: 220,
-    alignItems: "flex-start",
-    paddingHorizontal: 18,
   },
   storyTopSwitchBtnOn: {
     borderColor: Theme.borderOnDark,
     backgroundColor: Theme.darkBackground,
   },
   storyTopSwitchText: {
-    fontSize: 13,
+    fontSize: 9,
     fontWeight: "900",
-    letterSpacing: 2.1,
+    letterSpacing: 0.9,
     color: Theme.textSecondary,
     textTransform: "uppercase",
   },
@@ -1142,17 +1168,18 @@ const styles = StyleSheet.create({
   },
   filterPillTextOn: { color: Theme.textOnDark },
   invSubRow: { flexDirection: "row", gap: 10, marginBottom: 2 },
-  invSubRowCompact: { flexDirection: "row", gap: 6, flex: 1, minWidth: 0 },
+  invSubRowCompact: { flexDirection: "row", gap: 5, flex: 1, minWidth: 0 },
   invSubRowCompactHeader: {
     flex: 0,
+    alignItems: "center",
   },
   invitationsHeaderControls: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    flex: 1,
-    minWidth: 0,
+    gap: 6,
+    flexShrink: 0,
     justifyContent: "flex-end",
+    marginLeft: 8,
   },
   invSubBtn: {
     paddingVertical: 8,

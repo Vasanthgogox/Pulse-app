@@ -5,11 +5,20 @@
  * - Indent-based: Client→Supplier, Client→Driver, Supplier→Driver
  */
 import Theme from '@/constants/Theme';
-import { getClientById } from '@/features/clients/services/clients.service';
+import {
+  getClientById,
+  getClientDetails,
+  getLinkedOrgProfile,
+} from '@/features/clients/services/clients.service';
 import {
   getSupplierById,
   getSupplierDetails,
+  getLinkedOrgProfileForSupplier,
 } from '@/features/suppliers/services/suppliers.service';
+import {
+  getDriverById,
+  getDriversByOrganization,
+} from '@/features/drivers/services/drivers.service';
 import { getSignedAvatarUrl } from '@/lib/avatarUpload';
 import { VALIDATION } from '@/lib/validation';
 import { useOrganization } from '@/contexts/OrganizationContext';
@@ -38,6 +47,7 @@ import type { TripRow } from '@/features/trips/services/trips.service';
 import {
   createRating,
   getRatingsForTrip,
+  getRatingsForClient,
   getRatingsForDriver,
   getRatingsForSupplier,
   averageScore,
@@ -112,6 +122,7 @@ const COMMENT_TAG_PREFIX = '[[tags:';
 const COMMENT_TAG_SUFFIX = ']]';
 
 function getQuickTagsForRatedType(ratedType: RatedType): readonly QuickTag[] {
+  if (ratedType === 'client') return CLIENT_RATING_TAGS;
   return ratedType === 'supplier' ? SUPPLIER_RATING_TAGS : DRIVER_RATING_TAGS;
 }
 
@@ -283,6 +294,9 @@ export function TripRatingsBlock({
   const [ratings, setRatings] = useState<RatingRow[]>([]);
   const [clientAvatarUri, setClientAvatarUri] = useState<string | null>(null);
   const [supplierAvatarUri, setSupplierAvatarUri] = useState<string | null>(null);
+  const [resolvedDriverAvatarUri, setResolvedDriverAvatarUri] = useState<string | null>(driverAvatarUri ?? null);
+  /** All-time average from `ratings` for this client (all trips). */
+  const [histClientAvg, setHistClientAvg] = useState<number | null>(null);
   /** All-time average from `ratings` for this driver (all trips). */
   const [histDriverAvg, setHistDriverAvg] = useState<number | null>(null);
   /** All-time average from `ratings` for this supplier (all trips). */
@@ -340,6 +354,12 @@ export function TripRatingsBlock({
       r.rated_type === 'driver' &&
       (r.rater_type === 'client' || r.rater_type === 'supplier' || r.rater_type === 'organization')
   );
+  const hasRatedClient = ratings.some(
+    (r) =>
+      r.rated_type === 'client' &&
+      !!trip.client_id &&
+      r.rated_id === trip.client_id,
+  );
 
   const hasSupplier = !!trip.supplier_id;
   const hasClient = !!trip.client_id;
@@ -372,7 +392,8 @@ export function TripRatingsBlock({
     isCompleted &&
     paymentCaptured &&
     !!clientName &&
-    clientFeedback == null;
+    clientFeedback == null &&
+    !hasRatedClient;
 
   const clientFeedbackStorageKey = `trip_client_feedback:${trip.id}`;
 
@@ -428,6 +449,22 @@ export function TripRatingsBlock({
 
   useEffect(() => {
     let cancelled = false;
+    const id = trip.client_id?.trim();
+    if (!id) {
+      setHistClientAvg(null);
+      return;
+    }
+    getRatingsForClient(id).then(({ error, ratings: rows }) => {
+      if (cancelled || error) return;
+      setHistClientAvg(averageScore(rows));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [trip.client_id]);
+
+  useEffect(() => {
+    let cancelled = false;
     AsyncStorage.getItem(clientFeedbackStorageKey)
       .then((raw) => {
         if (cancelled || !raw) return;
@@ -457,9 +494,22 @@ export function TripRatingsBlock({
 
     void (async () => {
       if (trip.client_id) {
-        const { client } = await getClientById(ownerOrg, trip.client_id);
-        if (cancelled || !client) return;
-        const u = await resolveAvatarUri(client.avatar_url);
+        let rawAvatar = '';
+        const d1 = await getClientDetails(trip.client_id);
+        if (!cancelled && d1.client?.avatar_url) rawAvatar = d1.client.avatar_url;
+        if (!rawAvatar && d1.client?.linked_organization_id) {
+          const linked = await getLinkedOrgProfile(d1.client.linked_organization_id);
+          if (!cancelled && linked.profile?.avatarUrl) rawAvatar = linked.profile.avatarUrl;
+        }
+        if (!rawAvatar) {
+          const { client } = await getClientById(ownerOrg, trip.client_id);
+          if (!cancelled && client?.avatar_url) rawAvatar = client.avatar_url;
+          if (!rawAvatar && client?.linked_organization_id) {
+            const linked = await getLinkedOrgProfile(client.linked_organization_id);
+            if (!cancelled && linked.profile?.avatarUrl) rawAvatar = linked.profile.avatarUrl;
+          }
+        }
+        const u = await resolveAvatarUri(rawAvatar || null);
         if (!cancelled) setClientAvatarUri(u);
       }
 
@@ -467,9 +517,17 @@ export function TripRatingsBlock({
         let rawAvatar = '';
         const d1 = await getSupplierDetails(trip.supplier_id);
         if (!cancelled && d1.supplier?.avatar_url) rawAvatar = d1.supplier.avatar_url;
+        if (!rawAvatar && d1.supplier?.linked_organization_id) {
+          const linked = await getLinkedOrgProfileForSupplier(d1.supplier.linked_organization_id);
+          if (!cancelled && linked.profile?.avatarUrl) rawAvatar = linked.profile.avatarUrl;
+        }
         if (!rawAvatar) {
           const s2 = await getSupplierById(ownerOrg, trip.supplier_id);
           if (!cancelled && s2.supplier?.avatar_url) rawAvatar = s2.supplier.avatar_url ?? '';
+          if (!rawAvatar && s2.supplier?.linked_organization_id) {
+            const linked = await getLinkedOrgProfileForSupplier(s2.supplier.linked_organization_id);
+            if (!cancelled && linked.profile?.avatarUrl) rawAvatar = linked.profile.avatarUrl;
+          }
         }
         const viewerId = currentOrganization?.id;
         if (!rawAvatar && viewerId && viewerId !== ownerOrg) {
@@ -485,6 +543,39 @@ export function TripRatingsBlock({
       cancelled = true;
     };
   }, [trip.id, trip.client_id, trip.supplier_id, trip.organization_id, currentOrganization?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setResolvedDriverAvatarUri(driverAvatarUri ?? null);
+    if (driverAvatarUri || !trip.driver_id) return;
+
+    void (async () => {
+      const candidateOrgIds = Array.from(
+        new Set([currentOrganization?.id, trip.organization_id].filter(Boolean) as string[]),
+      );
+      for (const candidateOrgId of candidateOrgIds) {
+        const { drivers } = await getDriversByOrganization(candidateOrgId);
+        if (cancelled) return;
+        const joinedDriver = drivers.find((item) => item.id === trip.driver_id);
+        const joinedResolved = await resolveAvatarUri(joinedDriver?.avatar_url);
+        if (joinedResolved) {
+          if (!cancelled) setResolvedDriverAvatarUri(joinedResolved);
+          return;
+        }
+        const { driver } = await getDriverById(candidateOrgId, trip.driver_id!);
+        if (cancelled) return;
+        const resolved = await resolveAvatarUri(driver?.avatar_url);
+        if (resolved) {
+          if (!cancelled) setResolvedDriverAvatarUri(resolved);
+          return;
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentOrganization?.id, driverAvatarUri, trip.driver_id, trip.organization_id]);
 
   useEffect(() => {
     if (!flow) {
@@ -693,21 +784,34 @@ export function TripRatingsBlock({
       if (!error) {
         setSubmitSuccess(true);
         loadRatings();
+        if (rated_type === 'supplier') {
+          getRatingsForSupplier(rated_id).then(({ ratings: rows }) => {
+            setHistSupplierAvg(averageScore(rows));
+          });
+        } else if (rated_type === 'driver') {
+          getRatingsForDriver(rated_id).then(({ ratings: rows }) => {
+            setHistDriverAvg(averageScore(rows));
+          });
+        }
       } else {
         Alert.alert('Rating failed', error.message);
       }
     });
   };
 
-  const supplierAvg = averageScore(
-    ratings.filter((r) => r.rated_type === 'supplier')
+  const supplierTripRating = ratings.find((r) => isSupplierRatingForTrip(r, trip));
+  const driverTripRating = ratings.find(
+    (r) => r.rated_type === 'driver' && (!trip.driver_id || r.rated_id === trip.driver_id),
   );
-  const driverAvg = averageScore(
-    ratings.filter((r) => r.rated_type === 'driver')
+  const clientTripRating = ratings.find(
+    (r) => r.rated_type === 'client' && (!trip.client_id || r.rated_id === trip.client_id),
   );
-  /** Prefer lifetime averages from `ratings` when loaded; fall back to this trip only. */
-  const displaySupplierAvg = histSupplierAvg ?? supplierAvg;
-  const displayDriverAvg = histDriverAvg ?? driverAvg;
+  const supplierTripAvg = supplierTripRating?.score ?? null;
+  const driverTripAvg = driverTripRating?.score ?? null;
+  const clientTripAvg = clientTripRating?.score ?? clientFeedback?.score ?? null;
+  const displaySupplierAvg = histSupplierAvg;
+  const displayDriverAvg = histDriverAvg;
+  const displayClientAvg = histClientAvg;
   const clientDisplayName = (clientName || trip.client_name || 'Client').trim();
   const supplierDisplayName = (partnerName || 'Supplier').trim();
   const driverDisplayName = (
@@ -725,6 +829,27 @@ export function TripRatingsBlock({
   const activeQuickTags = flow?.type === 'client_supplier' ? SUPPLIER_RATING_TAGS : DRIVER_RATING_TAGS;
   const presentationKind = flow ? presentationKindFromFlow(flow) : 'DRIVER';
   const pulseUi = FEEDBACK_PRESENTATION[presentationKind];
+  const renderPartyScores = (
+    tripScore: number | null,
+    globalScore: number | null,
+  ) => (
+    <View style={styles.wsPartyMetricsRow}>
+      <View style={styles.wsPartyScoreBlock}>
+        <View style={styles.wsPartyScoreRow}>
+          <Text style={styles.wsPartyScore}>{tripScore != null ? tripScore.toFixed(1) : '—'}</Text>
+          <FontAwesome name="star" size={12} color={Theme.feedbackModalStarActive} />
+        </View>
+        <Text style={styles.wsPartyAvgCaption}>This trip</Text>
+      </View>
+      <View style={[styles.wsPartyScoreBlock, styles.wsPartyScoreBlockRight]}>
+        <View style={styles.wsPartyScoreRow}>
+          <Text style={styles.wsPartyScore}>{globalScore != null ? globalScore.toFixed(1) : '—'}</Text>
+          <FontAwesome name="star" size={12} color={Theme.feedbackModalStarActive} />
+        </View>
+        <Text style={styles.wsPartyAvgCaption}>Global avg</Text>
+      </View>
+    </View>
+  );
 
   if (!isCompleted) return null;
   if (!canRateSupplier && !canRateDriver && !canRateClient && ratings.length === 0 && !clientFeedback) {
@@ -749,11 +874,11 @@ export function TripRatingsBlock({
           </Text>
                   </View>
                 )}
-                {clientFeedback != null && (
+                {displayClientAvg != null && (
         <View style={[styles.summaryPill, isWorkspace && styles.wsSummaryPill]}>
                     <Feather name="user" size={12} color={Theme.textPrimaryDark} />
           <Text style={[styles.summaryText, isWorkspace && styles.wsSummaryPillText]}>
-            Client {clientFeedback.score.toFixed(1)} ★
+            Client {displayClientAvg.toFixed(1)} ★
           </Text>
                   </View>
                 )}
@@ -768,16 +893,24 @@ export function TripRatingsBlock({
         const fromLabel =
           r.rater_type === 'client' ? 'Client' : r.rater_type === 'organization' ? 'Fleet' : 'Supplier';
         const toLabel =
-          r.rated_type === 'supplier' ? supplierDisplayName : driverDisplayName;
+          r.rated_type === 'client'
+            ? clientDisplayName
+            : r.rated_type === 'supplier'
+              ? supplierDisplayName
+              : driverDisplayName;
         const ratedAvatarUri =
-          r.rated_type === 'supplier' ? supplierAvatarUri : driverAvatarUri;
+          r.rated_type === 'client'
+            ? clientAvatarUri
+            : r.rated_type === 'supplier'
+              ? supplierAvatarUri
+              : resolvedDriverAvatarUri;
                     return (
           <View key={r.id} style={[styles.row, isWorkspace && styles.wsAuditCard]}>
             {isWorkspace ? (
               <View style={styles.wsAuditMainRow}>
                 <PartyAvatar uri={ratedAvatarUri} name={toLabel} size={44} />
                 <View style={styles.wsAuditLeft}>
-                  <RatedPartyBadge kind={r.rated_type === 'supplier' ? 'supplier' : 'driver'} />
+                  <RatedPartyBadge kind={r.rated_type} />
                   <Text style={styles.wsAuditFromTo}>
                     {fromLabel} → {toLabel}
                   </Text>
@@ -906,7 +1039,7 @@ export function TripRatingsBlock({
                 </View>
                 {(displaySupplierAvg != null ||
                   displayDriverAvg != null ||
-                  clientFeedback != null) && (
+                  displayClientAvg != null) && (
                   <View style={styles.wsPillRow}>{summaryPillsEl}</View>
                 )}
               </View>
@@ -940,18 +1073,8 @@ export function TripRatingsBlock({
                     {clientDisplayName}
                   </Text>
                   <View style={styles.wsPartyDivider} />
+                  {renderPartyScores(clientTripAvg, displayClientAvg)}
                   <View style={styles.wsPartyFooter}>
-                    <View style={styles.wsPartyScoreBlock}>
-                      <View style={styles.wsPartyScoreRow}>
-                        <Text style={styles.wsPartyScore}>
-                          {clientFeedback != null ? clientFeedback.score.toFixed(1) : '—'}
-                        </Text>
-                        <FontAwesome name="star" size={12} color={Theme.feedbackModalStarActive} />
-                      </View>
-                      {clientFeedback != null ? (
-                        <Text style={styles.wsPartyAvgCaption}>Partner feedback</Text>
-                      ) : null}
-                    </View>
                     {canRateClient ? (
                       <Text style={styles.wsRateCta}>Rate party</Text>
                     ) : (
@@ -976,20 +1099,8 @@ export function TripRatingsBlock({
                     {supplierDisplayName}
                   </Text>
                   <View style={styles.wsPartyDivider} />
+                  {renderPartyScores(supplierTripAvg, displaySupplierAvg)}
                   <View style={styles.wsPartyFooter}>
-                    <View style={styles.wsPartyScoreBlock}>
-                      <View style={styles.wsPartyScoreRow}>
-                        <Text style={styles.wsPartyScore}>
-                          {displaySupplierAvg != null ? displaySupplierAvg.toFixed(1) : '—'}
-                        </Text>
-                        <FontAwesome name="star" size={12} color={Theme.feedbackModalStarActive} />
-                      </View>
-                      {histSupplierAvg != null ? (
-                        <Text style={styles.wsPartyAvgCaption}>All trips avg</Text>
-                      ) : supplierAvg != null ? (
-                        <Text style={styles.wsPartyAvgCaption}>This trip</Text>
-                      ) : null}
-                    </View>
                     {canRateSupplier && !hasRatedSupplier ? (
                       <Text style={styles.wsRateCta}>Rate party</Text>
                     ) : hasRatedSupplier ? (
@@ -1010,7 +1121,7 @@ export function TripRatingsBlock({
                 >
                   <View style={[styles.wsPartyIcon, styles.wsPartyIconDriver]}>
                     <PartyAvatar
-                      uri={driverAvatarUri}
+                      uri={resolvedDriverAvatarUri}
                       name={driverDisplayName}
                       size={72}
                       initialTextStyle={{ color: Theme.primary }}
@@ -1022,20 +1133,8 @@ export function TripRatingsBlock({
                     {driverDisplayName}
                   </Text>
                   <View style={styles.wsPartyDivider} />
+                  {renderPartyScores(driverTripAvg, displayDriverAvg)}
                   <View style={styles.wsPartyFooter}>
-                    <View style={styles.wsPartyScoreBlock}>
-                      <View style={styles.wsPartyScoreRow}>
-                        <Text style={styles.wsPartyScore}>
-                          {displayDriverAvg != null ? displayDriverAvg.toFixed(1) : '—'}
-                        </Text>
-                        <FontAwesome name="star" size={12} color={Theme.feedbackModalStarActive} />
-                      </View>
-                      {histDriverAvg != null ? (
-                        <Text style={styles.wsPartyAvgCaption}>All trips avg</Text>
-                      ) : driverAvg != null ? (
-                        <Text style={styles.wsPartyAvgCaption}>This trip</Text>
-                      ) : null}
-                    </View>
                     {canRateDriver && !hasRatedDriver ? (
                       <Text style={styles.wsRateCta}>Rate party</Text>
                     ) : hasRatedDriver ? (
@@ -1046,13 +1145,6 @@ export function TripRatingsBlock({
                   </View>
                 </TouchableOpacity>
               </View>
-            ) : null}
-
-            {ratingsList}
-            {clientFeedbackList}
-
-            {isWorkspace && (ratings.length === 0 && !clientFeedback) ? (
-              <Text style={styles.wsEmptyAudits}>No audit entries yet for this trip.</Text>
             ) : null}
 
             <View style={[styles.actions, isWorkspace && styles.wsActions]}>
@@ -1136,9 +1228,9 @@ export function TripRatingsBlock({
                   <View style={[styles.heroGlowTwoPulse, { backgroundColor: pulseUi.glowSoft }]} />
                   <View style={styles.heroTopRowPulse}>
                     <View style={styles.avatarWrapPulse}>
-                      {flow?.type === 'supplier_driver' && driverAvatarUri ? (
+                      {flow?.type === 'supplier_driver' && resolvedDriverAvatarUri ? (
                         <Image
-                          source={{ uri: driverAvatarUri }}
+                          source={{ uri: resolvedDriverAvatarUri }}
                           style={styles.avatarImagePulse}
                           resizeMode="cover"
                         />
@@ -1401,6 +1493,10 @@ export function TripRatingsBlock({
                 disabled={clientScore < 1 || clientSubmitting}
                 onPress={async () => {
                   if (clientScore < 1) return;
+                  if (!organizationId || !trip.client_id) {
+                    Alert.alert('Rating failed', 'Client profile is missing for this trip.');
+                    return;
+                  }
                   setClientSubmitting(true);
                   const payload: LocalClientFeedback = {
                     score: clientScore,
@@ -1408,11 +1504,29 @@ export function TripRatingsBlock({
                     note: clientComment.trim(),
                     created_at: new Date().toISOString(),
                   };
-                  await AsyncStorage.setItem(
-                    clientFeedbackStorageKey,
-                    JSON.stringify(payload),
+                  const commentPayload = buildCommentPayload(
+                    clientTags,
+                    clientComment.trim().slice(0, VALIDATION.NOTES_MAX_LENGTH),
                   );
+                  const { error } = await createRating(organizationId, {
+                    trip_id: trip.id,
+                    rater_type: trip.supplier_id ? 'supplier' : 'organization',
+                    rater_id: trip.supplier_id ?? organizationId,
+                    rated_type: 'client',
+                    rated_id: trip.client_id,
+                    score: clientScore,
+                    comment: commentPayload,
+                  });
+                  if (error) {
+                    setClientSubmitting(false);
+                    Alert.alert('Rating failed', error.message);
+                    return;
+                  }
+                  await AsyncStorage.setItem(clientFeedbackStorageKey, JSON.stringify(payload));
                   setClientFeedback(payload);
+                  await loadRatings();
+                  const { ratings: clientRatings } = await getRatingsForClient(trip.client_id);
+                  setHistClientAvg(averageScore(clientRatings));
                   setClientSubmitting(false);
                   setShowClientFeedbackModal(false);
                 }}
@@ -1711,14 +1825,25 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     alignItems: 'flex-end',
+    justifyContent: 'flex-end',
+    paddingTop: 8,
+  },
+  wsPartyMetricsRow: {
+    width: '100%',
+    flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingTop: 4,
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingTop: 2,
   },
   wsPartyScoreBlock: {
     flex: 1,
     minWidth: 0,
     alignItems: 'flex-start',
     gap: 2,
+  },
+  wsPartyScoreBlockRight: {
+    alignItems: 'flex-end',
   },
   wsPartyAvgCaption: {
     fontSize: 8,

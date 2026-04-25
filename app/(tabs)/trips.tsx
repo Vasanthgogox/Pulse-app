@@ -13,39 +13,40 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import {
-  buildTripHubPartyMetaByTripId,
-  summarizeTripLedgerForHub,
-  TripsHubTableView,
-  TripsHubTripCard,
-  type TripRow,
+    buildTripHubPartyMetaByTripId,
+    summarizeTripLedgerForHub,
+    TripsHubTableView,
+    TripsHubTripCard,
+    type TripRow,
 } from "@/features/trips";
 import {
-  TRIP_METRIC_ORDER,
-  type TripMetricId,
-  classifyTripMetric,
-  countTripsByMetric,
-  isTripCancelledForHub,
+    classifyTripMetric,
+    countTripsByMetric,
+    isTripCancelledForHub,
+    TRIP_METRIC_ORDER,
+    type TripMetricId,
 } from "@/features/trips/utils/tripHubMetrics";
 import { canAccessTrips, getCapabilitiesFromProfile } from "@/lib/capabilities";
-import { usePaginatedScroll } from "@/lib/usePaginatedScroll";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatLedgerDate } from "@/lib/format";
 import {
-  useAssignmentAuditQuery,
-  useClientsQuery,
-  useDriversQuery,
-  useRealtimeTransactionsInvalidation,
-  useRealtimeTripsInvalidation,
-  useShipperDisplayNamesQuery,
-  useSuppliersQuery,
-  useTransactionsQuery,
-  useTripsQuery,
+    useAssignmentAuditQuery,
+    useClientsQuery,
+    useDriversQuery,
+    useRealtimeTransactionsInvalidation,
+    useRealtimeTripsInvalidation,
+    useShipperDisplayNamesQuery,
+    useSuppliersQuery,
+    useTransactionsQuery,
+    useTripsQuery,
 } from "@/lib/queries";
+import { supabase } from "@/lib/supabase";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
+import { usePaginatedScroll } from "@/lib/usePaginatedScroll";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
     Modal,
@@ -65,7 +66,6 @@ import {
     type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { supabase } from "@/lib/supabase";
 
 type SupplyFilter = "all" | "asset" | "aggregated";
 type SortBy =
@@ -86,8 +86,62 @@ type DateFilter =
   | "custom";
 
 type TripsListLayout = "cards" | "table";
+type HistoryTripMetricId =
+  | "due_to_get"
+  | "no_due_to_get"
+  | "due_to_pay"
+  | "no_due_to_pay";
 
 const TRIPS_PAGE_BG = "#f4f5f7";
+
+function historyTripRevenue(
+  trip: TripRow,
+  currentOrganizationId: string | null | undefined,
+): number {
+  const isOwner =
+    currentOrganizationId != null &&
+    trip.organization_id != null &&
+    trip.organization_id === currentOrganizationId;
+  return trip.indent_id != null && !isOwner
+    ? Number(trip.supplier_rate ?? 0)
+    : Number(trip.client_price ?? 0);
+}
+
+function historyTripCost(
+  trip: TripRow,
+  currentOrganizationId: string | null | undefined,
+): number {
+  const isOwner =
+    currentOrganizationId != null &&
+    trip.organization_id != null &&
+    trip.organization_id === currentOrganizationId;
+  if (trip.indent_id != null && isOwner) {
+    return Number(trip.supplier_rate ?? 0);
+  }
+  return Number(trip.supplier_rate ?? 0);
+}
+
+function formatCompactINR(value: number): string {
+  const safe = Math.max(0, Number(value) || 0);
+  if (safe >= 10000000) return `₹${(safe / 10000000).toFixed(1)}Cr`;
+  if (safe >= 100000) return `₹${(safe / 100000).toFixed(1)}L`;
+  if (safe >= 1000) return `₹${(safe / 1000).toFixed(1)}K`;
+  return `₹${Math.round(safe)}`;
+}
+
+function historyTripDueState(
+  trip: TripRow,
+  ledgerRows: LedgerRow[],
+  currentOrganizationId: string | null | undefined,
+): { receivableDue: number; payableDue: number } {
+  const ledger = summarizeTripLedgerForHub(ledgerRows);
+  const receivableTarget = Math.max(historyTripRevenue(trip, currentOrganizationId), 0);
+  const payableTarget = Math.max(historyTripCost(trip, currentOrganizationId), 0);
+  return {
+    receivableDue: Math.max(receivableTarget - Math.max(ledger.receivedTotal, 0), 0),
+    payableDue: Math.max(payableTarget - Math.max(ledger.paidTotal, 0), 0),
+  };
+}
 
 export default function TripsScreen() {
   const { width } = useWindowDimensions();
@@ -116,6 +170,8 @@ export default function TripsScreen() {
   const [dateRangeFilter, setDateRangeFilter] = useState<DateFilter>("all");
   const [customDateFrom, setCustomDateFrom] = useState<string | null>(null);
   const [customDateTo, setCustomDateTo] = useState<string | null>(null);
+  const [activeHistoryMetricTab, setActiveHistoryMetricTab] =
+    useState<HistoryTripMetricId | null>(null);
   const [showDateRangePicker, setShowDateRangePicker] = useState(false);
   const [showSortModal, setShowSortModal] = useState(false);
   const [sortAnchorY, setSortAnchorY] = useState(0);
@@ -250,8 +306,19 @@ export default function TripsScreen() {
     [tripsByStatus, tripIdsWithDocuments],
   );
 
-  // Apply trip-type and text filters for both tabs; metric bucket applies only on Active.
-  const filtered = useMemo(() => {
+  const transactionsByTripId = useMemo(() => {
+    const map = new Map<string, LedgerRow[]>();
+    for (const tx of transactions) {
+      if (!tx.trip_id) continue;
+      const list = map.get(tx.trip_id);
+      if (list) list.push(tx);
+      else map.set(tx.trip_id, [tx]);
+    }
+    return map;
+  }, [transactions]);
+
+  // Apply trip-type and text filters for both tabs. Metric buckets are applied in a second pass.
+  const baseFilteredTrips = useMemo(() => {
     let list = tripsByStatus;
     if (!showCompletedList) {
       list = list.filter(
@@ -397,6 +464,37 @@ export default function TripsScreen() {
     customDateTo,
   ]);
 
+  const filtered = useMemo(() => {
+    if (!showCompletedList || activeHistoryMetricTab == null) {
+      return baseFilteredTrips;
+    }
+    return baseFilteredTrips.filter((trip) => {
+      const { receivableDue, payableDue } = historyTripDueState(
+        trip,
+        transactionsByTripId.get(trip.id) ?? [],
+        currentOrganization?.id ?? null,
+      );
+      switch (activeHistoryMetricTab) {
+        case "due_to_get":
+          return receivableDue > 0;
+        case "no_due_to_get":
+          return receivableDue <= 0;
+        case "due_to_pay":
+          return payableDue > 0;
+        case "no_due_to_pay":
+          return payableDue <= 0;
+        default:
+          return true;
+      }
+    });
+  }, [
+    activeHistoryMetricTab,
+    baseFilteredTrips,
+    currentOrganization?.id,
+    showCompletedList,
+    transactionsByTripId,
+  ]);
+
   const tripsTableResetKey = useMemo(
     () =>
       [
@@ -405,6 +503,7 @@ export default function TripsScreen() {
         searchQuery,
         tripFilter,
         activeMetricTab,
+        activeHistoryMetricTab ?? "",
         activeOpsTripIdsSorted.slice(0, 120),
         supplyFilter,
         sortBy,
@@ -420,6 +519,7 @@ export default function TripsScreen() {
       searchQuery,
       tripFilter,
       activeMetricTab,
+      activeHistoryMetricTab,
       activeOpsTripIdsSorted,
       supplyFilter,
       sortBy,
@@ -459,17 +559,6 @@ export default function TripsScreen() {
     return Array.from(types).sort();
   }, [trips]);
 
-  const transactionsByTripId = useMemo(() => {
-    const map = new Map<string, LedgerRow[]>();
-    for (const tx of transactions) {
-      if (!tx.trip_id) continue;
-      const list = map.get(tx.trip_id);
-      if (list) list.push(tx);
-      else map.set(tx.trip_id, [tx]);
-    }
-    return map;
-  }, [transactions]);
-
   const tripHubPartyMetaByTripId = useMemo(
     () =>
       buildTripHubPartyMetaByTripId(
@@ -482,13 +571,74 @@ export default function TripsScreen() {
     [trips, clients, suppliers, drivers, transactions],
   );
 
+  const historyMetricCards = useMemo(() => {
+    const base: Record<
+      HistoryTripMetricId,
+      { count: number; amount: number; title: string; hint: string }
+    > = {
+      due_to_get: {
+        count: 0,
+        amount: 0,
+        title: "Due to get",
+        hint: "Receivable pending",
+      },
+      no_due_to_get: {
+        count: 0,
+        amount: 0,
+        title: "No due to get",
+        hint: "Receivable cleared",
+      },
+      due_to_pay: {
+        count: 0,
+        amount: 0,
+        title: "Due to pay",
+        hint: "Payable pending",
+      },
+      no_due_to_pay: {
+        count: 0,
+        amount: 0,
+        title: "No due to pay",
+        hint: "Payable cleared",
+      },
+    };
+
+    if (!showCompletedList) return base;
+
+    for (const trip of baseFilteredTrips) {
+      const { receivableDue, payableDue } = historyTripDueState(
+        trip,
+        transactionsByTripId.get(trip.id) ?? [],
+        currentOrganization?.id ?? null,
+      );
+
+      if (receivableDue > 0) {
+        base.due_to_get.count += 1;
+        base.due_to_get.amount += receivableDue;
+      } else {
+        base.no_due_to_get.count += 1;
+      }
+
+      if (payableDue > 0) {
+        base.due_to_pay.count += 1;
+        base.due_to_pay.amount += payableDue;
+      } else {
+        base.no_due_to_pay.count += 1;
+      }
+    }
+
+    return base;
+  }, [baseFilteredTrips, currentOrganization?.id, showCompletedList, transactionsByTripId]);
+
   const mainTabs = useMemo(
     () => [
       {
         id: "active" as const,
         label: tr("active"),
         isActive: tripFilter === "Active",
-        onPress: () => setTripFilter("Active"),
+        onPress: () => {
+          setTripFilter("Active");
+          setActiveHistoryMetricTab(null);
+        },
       },
       {
         id: "history" as const,
@@ -953,7 +1103,6 @@ export default function TripsScreen() {
                     <View
                       style={[
                         styles.tripsSearchWrap,
-                        Platform.OS === "web" && styles.tripsSearchWrapWeb,
                         isLargeScreen && styles.tripsSearchWrapRow,
                       ]}
                     >
@@ -966,7 +1115,6 @@ export default function TripsScreen() {
                       <TextInput
                         style={[
                           styles.tripsSearchInput,
-                          Platform.OS === "web" && styles.tripsSearchInputWeb,
                         ]}
                         placeholder={isLargeScreen ? "Find by name..." : tr("searchTripsPlaceholder")}
                         placeholderTextColor={Theme.textSecondary}
@@ -983,7 +1131,6 @@ export default function TripsScreen() {
                       <TouchableOpacity
                         style={[
                           styles.tripsFilterIconBtn,
-                          Platform.OS === "web" && styles.tripsSupplyChipWeb,
                         ]}
                         onPress={(e) => {
                           // @ts-ignore - capture location for dropdown anchor on native
@@ -1296,7 +1443,6 @@ export default function TripsScreen() {
                   styles.tripsBodyDateRangeIconBtn,
                   dateRangeFilter === "custom" &&
                     styles.tripsDateRangeIconBtnActive,
-                  Platform.OS === "web" && styles.tripsSupplyChipWeb,
                 ]}
                 onPress={() => setShowDateRangePicker(true)}
                 activeOpacity={0.8}
@@ -1368,7 +1514,87 @@ export default function TripsScreen() {
                   );
                 })}
               </ScrollView>
-            ) : null}
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={[
+                  styles.tripMetricsGrid,
+                  isLargeScreen && styles.tripMetricsGridWeb,
+                ]}
+                style={styles.tripMetricsScroll}
+              >
+                {(
+                  [
+                    "due_to_get",
+                    "no_due_to_get",
+                    "due_to_pay",
+                    "no_due_to_pay",
+                  ] as HistoryTripMetricId[]
+                ).map((metricId) => {
+                  const metric = historyMetricCards[metricId];
+                  const showsAmount = metricId === "due_to_get" || metricId === "due_to_pay";
+                  const active = activeHistoryMetricTab === metricId;
+                  return (
+                    <TouchableOpacity
+                      key={metricId}
+                      style={[
+                        styles.tripMetricTile,
+                        styles.historyMetricTile,
+                        isLargeScreen && styles.tripMetricTileWeb,
+                        active && styles.tripMetricTileActive,
+                        showsAmount && metric.amount > 0 && styles.historyMetricTileAttention,
+                      ]}
+                      onPress={() =>
+                        setActiveHistoryMetricTab((current) =>
+                          current === metricId ? null : metricId,
+                        )
+                      }
+                      activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      accessibilityLabel={`${metric.title}, ${metric.count} trips`}
+                    >
+                      <View style={styles.historyMetricTopRow}>
+                        <Text
+                          style={[
+                            styles.tripMetricCount,
+                            (active || (showsAmount && metric.amount > 0)) &&
+                              styles.tripMetricCountActive,
+                          ]}
+                        >
+                          {metric.count}
+                        </Text>
+                        {showsAmount ? (
+                          <Text
+                            style={[
+                              styles.historyMetricAmount,
+                              metric.amount > 0 && styles.historyMetricAmountDue,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {formatCompactINR(metric.amount)}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <Text
+                        style={[
+                          styles.tripMetricTitle,
+                          (active || (showsAmount && metric.amount > 0)) &&
+                            styles.tripMetricTitleActive,
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {metric.title}
+                      </Text>
+                      <Text style={styles.tripMetricHint} numberOfLines={2}>
+                        {metric.hint}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
           </View>
 
           {filtered.length === 0 ? (
@@ -2021,6 +2247,30 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 6,
     elevation: 2,
+  },
+  historyMetricTile: {
+    justifyContent: "space-between",
+  },
+  historyMetricTileAttention: {
+    borderColor: Theme.teslaRed,
+    backgroundColor: Theme.screenBackground,
+  },
+  historyMetricTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  historyMetricAmount: {
+    marginTop: 2,
+    flexShrink: 1,
+    fontSize: 10,
+    fontWeight: "900",
+    color: Theme.textSecondary,
+    letterSpacing: -0.1,
+  },
+  historyMetricAmountDue: {
+    color: Theme.teslaRed,
   },
   tripMetricCount: {
     fontSize: 22,
