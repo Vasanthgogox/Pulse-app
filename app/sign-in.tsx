@@ -233,6 +233,7 @@ export default function SignIn() {
     <KeyboardAvoidingView
       style={[
         styles.container,
+        screen === 'LANDING' ? styles.containerLanding : null,
         isDesktop ? styles.containerDesktop : null,
         { paddingTop: insets.top, paddingBottom: insets.bottom },
       ]}
@@ -255,7 +256,9 @@ export default function SignIn() {
             <TouchableOpacity onPress={() => router.push('/(modals)/language-settings')} style={[styles.globeBtn, styles.globeBtnOnDark]}>
               <FontAwesome name="globe" size={16} color={Theme.textOnDark} />
             </TouchableOpacity>
-            <Text style={[styles.langText, styles.langTextOnDark]}>{currentLanguageLabel}</Text>
+            <Text style={[styles.langText, styles.langTextOnDark, styles.langPill]}>
+              {currentLanguageLabel}
+            </Text>
           </View>
         </View>
       ) : null}
@@ -289,6 +292,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Theme.screenBackground,
     paddingHorizontal: Layout.screenPaddingHorizontal,
+  },
+  containerLanding: {
+    backgroundColor: '#020617',
+    paddingHorizontal: 0,
   },
   containerDesktop: {
     backgroundColor: '#020617',
@@ -324,10 +331,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 12,
+    paddingBottom: 10,
+    backgroundColor: '#020617',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
   },
   brand: {
     fontSize: 28,
     fontWeight: '900',
+    fontStyle: 'italic',
     letterSpacing: -0.7,
     color: Theme.textPrimaryDark,
   },
@@ -377,6 +389,15 @@ const styles = StyleSheet.create({
   },
   langTextOnDark: {
     color: 'rgba(255,255,255,0.92)',
+  },
+  langPill: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    overflow: 'hidden',
   },
   landingWrap: {
     flex: 1,
@@ -463,6 +484,8 @@ const styles = StyleSheet.create({
   leftLogo: {
     fontSize: 44,
     fontWeight: '900',
+    fontStyle: 'italic',
+    letterSpacing: -1.1,
     color: Theme.textOnDark,
     marginBottom: 14,
   },
