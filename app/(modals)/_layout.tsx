@@ -42,6 +42,10 @@ export default function ModalsLayout() {
         name="post-detail"
         options={{ presentation: 'modal', title: 'Post' }}
       />
+      <Stack.Screen
+        name="story-detail"
+        options={{ presentation: 'fullScreenModal', headerShown: false }}
+      />
     </Stack>
   );
 }

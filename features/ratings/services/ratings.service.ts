@@ -59,6 +59,34 @@ export async function getRatingsForSupplier(supplierId: string): Promise<{
   return { error: null, ratings: (data ?? []) as RatingRow[] };
 }
 
+/** Bulk fetch supplier ratings for many suppliers (one query). */
+export async function getRatingsForSuppliers(supplierIds: string[]): Promise<{
+  error: Error | null;
+  bySupplierId: Record<string, RatingRow[]>;
+}> {
+  if (supplierIds.length === 0) {
+    return { error: null, bySupplierId: {} };
+  }
+  const { data, error } = await supabase()
+    .from('ratings')
+    .select('*')
+    .eq('rated_type', 'supplier')
+    .in('rated_id', supplierIds)
+    .order('created_at', { ascending: false });
+
+  if (error) return { error: new Error(error.message), bySupplierId: {} };
+  const rows = (data ?? []) as RatingRow[];
+  const bySupplierId: Record<string, RatingRow[]> = {};
+  for (const id of supplierIds) {
+    bySupplierId[id] = [];
+  }
+  for (const r of rows) {
+    if (!bySupplierId[r.rated_id]) bySupplierId[r.rated_id] = [];
+    bySupplierId[r.rated_id].push(r);
+  }
+  return { error: null, bySupplierId };
+}
+
 export async function getRatingsForDriver(driverId: string): Promise<{
   error: Error | null;
   ratings: RatingRow[];

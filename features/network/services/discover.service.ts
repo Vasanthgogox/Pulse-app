@@ -7,6 +7,10 @@ export interface DiscoverOrg {
   id: string;
   name: string;
   avatar_seed: string | null;
+  mutual_count?: number | null;
+  mutual_connections_count?: number | null;
+  rating?: number | null;
+  average_rating?: number | null;
   connection_status: 'none' | 'pending' | 'approved' | 'rejected' | string;
 }
 
