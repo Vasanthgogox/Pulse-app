@@ -93,20 +93,18 @@ export default function CreatePostScreen() {
       id: string;
       vehicle_number: string;
       vehicle_type: string | null;
+      capacity?: string | null;
+      vehicle_body_type?: string | null;
+      vehicle_brand?: string | null;
+      vehicle_model?: string | null;
+      type?: string | null;
       status?: string | null;
     }>;
     const isIdleStatus = (status: string | null | undefined) => {
       const s = (status ?? "").toLowerCase();
-      return (
-        s.length === 0 ||
-        s === "idle" ||
-        s === "available" ||
-        s === "active" ||
-        s === "free"
-      );
+      return s === "idle" || s === "available" || s === "free";
     };
-    const filtered = list.filter((v) => isIdleStatus(v.status));
-    return filtered.length > 0 ? filtered : list;
+    return list.filter((v) => (v.type ?? "owned").toLowerCase() === "owned" && isIdleStatus(v.status));
   }, [vehicles]);
 
   const broadcastableIndents = useMemo(() => {
@@ -223,7 +221,6 @@ export default function CreatePostScreen() {
         origin: origin.trim() || undefined,
         destination: destination.trim() || undefined,
         vehicleType: vehicleType || undefined,
-        loadDate: availability.trim() || undefined,
         expiresAt,
       });
       error = res.error;
@@ -615,9 +612,15 @@ export default function CreatePostScreen() {
                                 const next = prev === v.id ? null : v.id;
                                 if (next) {
                                   if (v.vehicle_type?.trim()) setVehicleType(v.vehicle_type.trim());
-                                  if (!availability.trim()) {
-                                    setAvailability(`Vehicle ${v.vehicle_number} available now`);
-                                  }
+                                  const vehicleBits = [
+                                    v.vehicle_type?.trim(),
+                                    v.capacity?.trim(),
+                                    v.vehicle_body_type?.trim(),
+                                    [v.vehicle_brand?.trim(), v.vehicle_model?.trim()].filter(Boolean).join(" "),
+                                  ].filter(Boolean);
+                                  setAvailability(
+                                    `Vehicle ${v.vehicle_number} available now${vehicleBits.length ? ` · ${vehicleBits.join(" · ")}` : ""}`,
+                                  );
                                 }
                                 return next;
                               });

@@ -26,6 +26,52 @@ export interface PostRow {
   view_count: number;
   bid_count: number;
   created_at: string;
+  circulation_target?: string | null;
+  visibility_scope?: string | null;
+  target_role?: string | null;
+  audience?: string | null;
+  viewer_role?: string | null;
+  visible_to?: string[] | null;
+}
+
+/**
+ * Client-side safety gate for feed visibility.
+ * Backend should enforce this; this guard prevents accidental overexposure when payload fields exist.
+ */
+export function isPostVisibleForOrg(
+  post: PostRow,
+  opts: { allowLoadPosts: boolean },
+): boolean {
+  if (post.type === 'LOAD' && !opts.allowLoadPosts) return false;
+
+  const normalize = (v: string | null | undefined) => (v ?? '').trim().toLowerCase();
+  const audienceSignals = [
+    normalize(post.circulation_target),
+    normalize(post.visibility_scope),
+    normalize(post.target_role),
+    normalize(post.audience),
+    normalize(post.viewer_role),
+  ].filter(Boolean);
+
+  if (
+    post.type === 'LOAD' &&
+    audienceSignals.some((s) => s.includes('supplier') || s.includes('carrier'))
+  ) {
+    return opts.allowLoadPosts;
+  }
+  if (post.type === 'LOAD' && audienceSignals.some((s) => s.includes('client'))) {
+    return false;
+  }
+  if (post.type === 'LOAD' && Array.isArray(post.visible_to)) {
+    const normalized = post.visible_to.map((v) => normalize(v));
+    if (normalized.some((v) => v.includes('supplier') || v.includes('carrier'))) {
+      return opts.allowLoadPosts;
+    }
+    if (normalized.some((v) => v.includes('client'))) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export interface CreatePostInput {
@@ -72,7 +118,9 @@ export async function createPost(
       content: input.content ?? null,
       origin: input.origin ?? null,
       destination: input.destination ?? null,
-      load_date: input.loadDate ?? null,
+      // `load_date` is only meaningful for LOAD posts.
+      // VEHICLE_AVAILABILITY can carry free-form availability text in `content`.
+      load_date: input.type === 'LOAD' ? input.loadDate ?? null : null,
       vehicle_type: input.vehicleType ?? null,
       weight_tonnes: input.weightTonnes ?? null,
       rate_offer: input.rateOffer ?? null,

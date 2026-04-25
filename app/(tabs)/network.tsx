@@ -16,7 +16,7 @@ import { InvitationsView } from "@/features/network/components/InvitationsView";
 import { LoadCenterView } from "@/features/network/components/LoadCenterView";
 import { ShareLoadSheet } from "@/features/network/components/ShareLoadSheet";
 import { StoryReel } from "@/features/network/components/StoryReel";
-import { type PostRow } from "@/features/network/services/posts.service";
+import { isPostVisibleForOrg, type PostRow } from "@/features/network/services/posts.service";
 import {
   useClientsQuery,
   useConnectionRequestsReceivedQuery,
@@ -41,6 +41,7 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -61,12 +62,14 @@ function NetworkStoryStrip({
   feedPosts,
   feedLoading,
   onCreatePost,
+  headerActions,
 }: {
   orgId: string;
   orgName: string;
   feedPosts: PostRow[];
   feedLoading: boolean;
   onCreatePost: () => void;
+  headerActions?: React.ReactNode;
 }) {
   const storyPosts = useMemo(() => feedPosts.filter(isStoryPost), [feedPosts]);
   if (feedLoading && storyPosts.length === 0) {
@@ -83,6 +86,7 @@ function NetworkStoryStrip({
       orgId={orgId}
       orgName={orgName}
       onCreatePost={onCreatePost}
+      headerActions={headerActions}
     />
   );
 }
@@ -95,14 +99,20 @@ export default function NetworkScreen() {
   const { currentOrganization: organization } = useOrganization();
   const orgId = organization?.id ?? null;
   const [refreshing, setRefreshing] = useState(false);
-  const [networkSegment, setNetworkSegment] = useState<"connections" | "invitations" | "load">("connections");
+  const [networkSegment, setNetworkSegment] = useState<"connections" | "invitations" | "load">("load");
   const [connSearch, setConnSearch] = useState("");
   const [connFilter, setConnFilter] = useState<ConnectionFilterTab>("ALL");
+  const [connSearchOpen, setConnSearchOpen] = useState(false);
   const [invSubTab, setInvSubTab] = useState<"received" | "sent">("received");
   const [invSearch, setInvSearch] = useState("");
+  const [invSearchOpen, setInvSearchOpen] = useState(false);
   const [discoverSearchOpen, setDiscoverSearchOpen] = useState(false);
   const [discoverSearch, setDiscoverSearch] = useState("");
   const [shareLoad, setShareLoad] = useState<IndentRow | null>(null);
+  const [recentAddedNames, setRecentAddedNames] = useState<string[]>([]);
+  const invitePulse = React.useRef(new Animated.Value(1)).current;
+  const recentPulse = React.useRef(new Animated.Value(1)).current;
+  const prevConnectionCountRef = React.useRef<number | null>(null);
 
   useEffect(() => {
     if (tabParam === "load") {
@@ -128,10 +138,79 @@ export default function NetworkScreen() {
     () => (receivedQ.data ?? []).filter((r) => r.status === "pending").length,
     [receivedQ.data],
   );
+  const totalConnections = useMemo(
+    () =>
+      ((clientsQ.data ?? []) as unknown[]).length +
+      ((suppliersQ.data ?? []) as unknown[]).length +
+      (driversQ.data ?? []).filter((d) => !d.left_at).length,
+    [clientsQ.data, suppliersQ.data, driversQ.data],
+  );
+  const newestConnectionNames = useMemo(() => {
+    const now = Date.now();
+    const recentWithinMs = 24 * 60 * 60 * 1000;
+    const names: string[] = [];
+
+    for (const c of (clientsQ.data ?? []) as Array<{ name?: string | null; created_at?: string | null }>) {
+      const created = c.created_at ? new Date(c.created_at).getTime() : 0;
+      if (created > 0 && now - created <= recentWithinMs && c.name?.trim()) {
+        names.push(c.name.trim().toUpperCase());
+      }
+    }
+    for (const s of (suppliersQ.data ?? []) as Array<{ name?: string | null; created_at?: string | null }>) {
+      const created = s.created_at ? new Date(s.created_at).getTime() : 0;
+      if (created > 0 && now - created <= recentWithinMs && s.name?.trim()) {
+        names.push(s.name.trim().toUpperCase());
+      }
+    }
+    for (const d of (driversQ.data ?? []) as Array<{ name?: string | null; left_at?: string | null; created_at?: string | null }>) {
+      if (d.left_at) continue;
+      const created = d.created_at ? new Date(d.created_at).getTime() : 0;
+      if (created > 0 && now - created <= recentWithinMs && d.name?.trim()) {
+        names.push(d.name.trim().toUpperCase());
+      }
+    }
+
+    return Array.from(new Set(names)).slice(0, 3);
+  }, [clientsQ.data, suppliersQ.data, driversQ.data]);
+
+  useEffect(() => {
+    const prev = prevConnectionCountRef.current;
+    if (prev == null) {
+      prevConnectionCountRef.current = totalConnections;
+      return;
+    }
+    if (totalConnections > prev) {
+      setRecentAddedNames(newestConnectionNames);
+    }
+    prevConnectionCountRef.current = totalConnections;
+  }, [totalConnections, newestConnectionNames]);
+
+  useEffect(() => {
+    const runPulse = (value: Animated.Value) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(value, { toValue: 1.08, duration: 650, useNativeDriver: true }),
+          Animated.timing(value, { toValue: 1, duration: 650, useNativeDriver: true }),
+        ]),
+      );
+    const inviteAnim = pendingCount > 0 ? runPulse(invitePulse) : null;
+    const recentAnim = recentAddedNames.length > 0 ? runPulse(recentPulse) : null;
+    inviteAnim?.start();
+    recentAnim?.start();
+    return () => {
+      inviteAnim?.stop();
+      recentAnim?.stop();
+      invitePulse.setValue(1);
+      recentPulse.setValue(1);
+    };
+  }, [pendingCount, recentAddedNames.length, invitePulse, recentPulse]);
 
   const onCreatePost = () => router.push("/(modals)/create-post");
-  const onOpenLoadCenter = () => setNetworkSegment("load");
-  const feedPosts = feedQ.data ?? [];
+  const allowLoadPosts = organization?.capabilities?.canBid ?? true;
+  const feedPosts = useMemo(
+    () => (feedQ.data ?? []).filter((post) => isPostVisibleForOrg(post, { allowLoadPosts })),
+    [feedQ.data, allowLoadPosts],
+  );
 
   const onRefresh = useCallback(async () => {
     if (!orgId) return;
@@ -166,63 +245,24 @@ export default function NetworkScreen() {
           <View style={styles.growBadge}>
             <Text style={styles.growBadgeText}>GROW MODE</Text>
           </View>
-        </View>
-        <View style={styles.segmentRow}>
           <Pressable
-            onPress={() => setNetworkSegment("connections")}
+            onPress={() => setNetworkSegment("load")}
             style={[
-              styles.segmentBtn,
-              networkSegment === "connections" && styles.segmentBtnActive,
-            ]}
-            hitSlop={6}
-          >
-            <Text
-              style={[
-                styles.segmentText,
-                networkSegment === "connections" && styles.segmentTextOn,
-              ]}
-            >
-              CONNECTIONS
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setNetworkSegment("invitations")}
-            style={[
-              styles.segmentBtn,
-              networkSegment === "invitations" && styles.segmentBtnActive,
-            ]}
-            hitSlop={6}
-          >
-            <View style={styles.segmentLabelInline}>
-              <Text
-                style={[
-                  styles.segmentText,
-                  networkSegment === "invitations" && styles.segmentTextOn,
-                ]}
-              >
-                INVITATIONS
-              </Text>
-              {pendingCount > 0 ? <View style={styles.segmentPendingDot} /> : null}
-            </View>
-          </Pressable>
-          <Pressable
-            onPress={onOpenLoadCenter}
-            style={[
-              styles.segmentBtn,
-              networkSegment === "load" && styles.segmentBtnActive,
+              styles.loadCenterReturnBtn,
+              networkSegment === "load" && styles.loadCenterReturnBtnOn,
             ]}
             hitSlop={6}
           >
             <View style={styles.segmentLabelInline}>
               <Truck
-                size={14}
+                size={12}
                 color={networkSegment === "load" ? Theme.textPrimaryDark : Theme.textSecondary}
                 strokeWidth={2.2}
               />
               <Text
                 style={[
-                  styles.segmentText,
-                  networkSegment === "load" && styles.segmentTextOn,
+                  styles.loadCenterReturnText,
+                  networkSegment === "load" && styles.loadCenterReturnTextOn,
                 ]}
               >
                 LOAD CENTER
@@ -230,75 +270,21 @@ export default function NetworkScreen() {
             </View>
           </Pressable>
         </View>
+        {recentAddedNames.length > 0 ? (
+          <Animated.View style={{ transform: [{ scale: recentPulse }] }}>
+            <Pressable
+              onPress={() => setNetworkSegment("connections")}
+              style={styles.recentAddedChip}
+            >
+              <Text style={styles.recentAddedLabel}>Recently added</Text>
+              <Text style={styles.recentAddedNames} numberOfLines={1}>
+                {recentAddedNames.join(", ")}
+              </Text>
+            </Pressable>
+          </Animated.View>
+        ) : null}
       </View>
 
-      {networkSegment === "connections" ? (
-        <View style={styles.hubTools}>
-          <View style={styles.hubSearchBox}>
-            <Search size={16} color={Theme.textSecondary} />
-            <TextInput
-              style={styles.hubSearchInput}
-              placeholder="Search connections…"
-              placeholderTextColor={Theme.textSecondary}
-              value={connSearch}
-              onChangeText={setConnSearch}
-              returnKeyType="search"
-            />
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterPillScroll}
-          >
-            {filterTabs.map((t) => {
-              const active = connFilter === t;
-              return (
-                <Pressable
-                  key={t}
-                  onPress={() => setConnFilter(t)}
-                  style={[styles.filterPill, active && styles.filterPillOn]}
-                >
-                  <Text style={[styles.filterPillText, active && styles.filterPillTextOn]}>
-                    {t}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </View>
-      ) : networkSegment === "invitations" ? (
-        <View style={styles.hubTools}>
-          <View style={styles.invSubRow}>
-            {(["received", "sent"] as const).map((k) => {
-              const on = invSubTab === k;
-              return (
-                <Pressable
-                  key={k}
-                  onPress={() => setInvSubTab(k)}
-                  style={[styles.invSubBtn, on && styles.invSubBtnOn]}
-                >
-                  <Text style={[styles.invSubText, on && styles.invSubTextOn]}>
-                    {k === "received" ? "RECEIVED" : "SENT"}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <View style={styles.hubSearchBox}>
-            <Search size={16} color={Theme.textSecondary} />
-            <TextInput
-              style={styles.hubSearchInput}
-              placeholder={
-                invSubTab === "received" ? "Search received…" : "Search sent invitations…"
-              }
-              placeholderTextColor={Theme.textSecondary}
-              value={invSearch}
-              onChangeText={setInvSearch}
-              returnKeyType="search"
-            />
-          </View>
-        </View>
-      ) : null}
     </View>
   );
 
@@ -335,6 +321,60 @@ export default function NetworkScreen() {
                   <Text style={styles.sectionKicker}>Operations pulse</Text>
                   <Text style={styles.sectionHeading}>Your connections</Text>
                 </View>
+              </View>
+              <View style={styles.inlineControlsRow}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.inlineFilterScroll}
+                  style={styles.inlineTabsWrap}
+                >
+                  {filterTabs.map((t) => {
+                    const active = connFilter === t;
+                    return (
+                      <Pressable
+                        key={t}
+                        onPress={() => setConnFilter(t)}
+                        style={[styles.inlineFilterPill, active && styles.inlineFilterPillOn]}
+                      >
+                        <Text style={[styles.inlineFilterPillText, active && styles.inlineFilterPillTextOn]}>
+                          {t}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+                {connSearchOpen ? (
+                  <View style={styles.inlineSearchBox}>
+                    <Search size={13} color={Theme.textSecondary} />
+                    <TextInput
+                      style={styles.inlineSearchInput}
+                      placeholder="Search…"
+                      placeholderTextColor={Theme.textSecondary}
+                      value={connSearch}
+                      onChangeText={setConnSearch}
+                      returnKeyType="search"
+                      autoFocus
+                    />
+                    <Pressable
+                      onPress={() => {
+                        setConnSearch("");
+                        setConnSearchOpen(false);
+                      }}
+                      hitSlop={8}
+                    >
+                      <Text style={styles.inlineSearchClose}>×</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => setConnSearchOpen(true)}
+                    style={({ pressed }) => [styles.inlineSearchIconBtn, pressed && { opacity: 0.72 }]}
+                    hitSlop={8}
+                  >
+                    <Search size={13} color={Theme.textPrimaryDark} strokeWidth={2.4} />
+                  </Pressable>
+                )}
               </View>
               <ConnectionsView
                 orgId={orgId}
@@ -412,6 +452,55 @@ export default function NetworkScreen() {
                 </View>
               </View>
             </View>
+            <View style={styles.inlineControlsRow}>
+              <View style={styles.invSubRowCompact}>
+                {(["received", "sent"] as const).map((k) => {
+                  const on = invSubTab === k;
+                  return (
+                    <Pressable
+                      key={k}
+                      onPress={() => setInvSubTab(k)}
+                      style={[styles.inlineFilterPill, on && styles.inlineFilterPillOn]}
+                    >
+                      <Text style={[styles.inlineFilterPillText, on && styles.inlineFilterPillTextOn]}>
+                        {k === "received" ? "RECEIVED" : "SENT"}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              {invSearchOpen ? (
+                <View style={styles.inlineSearchBox}>
+                  <Search size={13} color={Theme.textSecondary} />
+                  <TextInput
+                    style={styles.inlineSearchInput}
+                    placeholder={invSubTab === "received" ? "Search received…" : "Search sent…"}
+                    placeholderTextColor={Theme.textSecondary}
+                    value={invSearch}
+                    onChangeText={setInvSearch}
+                    returnKeyType="search"
+                    autoFocus
+                  />
+                  <Pressable
+                    onPress={() => {
+                      setInvSearch("");
+                      setInvSearchOpen(false);
+                    }}
+                    hitSlop={8}
+                  >
+                    <Text style={styles.inlineSearchClose}>×</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable
+                  onPress={() => setInvSearchOpen(true)}
+                  style={({ pressed }) => [styles.inlineSearchIconBtn, pressed && { opacity: 0.72 }]}
+                  hitSlop={8}
+                >
+                  <Search size={13} color={Theme.textPrimaryDark} strokeWidth={2.4} />
+                </Pressable>
+              )}
+            </View>
             <InvitationsView
               orgId={orgId}
               embedded
@@ -434,6 +523,56 @@ export default function NetworkScreen() {
       feedPosts={feedPosts}
       feedLoading={feedQ.isLoading}
       onCreatePost={onCreatePost}
+      headerActions={
+        <View style={styles.storyTopSwitchRow}>
+          <Pressable
+            onPress={() => setNetworkSegment("connections")}
+            style={[
+              styles.storyTopSwitchBtn,
+              networkSegment === "connections" && styles.storyTopSwitchBtnOn,
+            ]}
+            hitSlop={6}
+          >
+            <Text
+              style={[
+                styles.storyTopSwitchText,
+                networkSegment === "connections" && styles.storyTopSwitchTextOn,
+              ]}
+            >
+              CONNECTIONS
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setNetworkSegment("invitations")}
+            style={[
+              styles.storyTopSwitchBtn,
+              networkSegment === "invitations" && styles.storyTopSwitchBtnOn,
+            ]}
+            hitSlop={6}
+          >
+            <View style={styles.segmentLabelInline}>
+              <Text
+                style={[
+                  styles.storyTopSwitchText,
+                  networkSegment === "invitations" && styles.storyTopSwitchTextOn,
+                ]}
+              >
+                INVITATIONS
+              </Text>
+              {pendingCount > 0 ? (
+                <Animated.View
+                  style={[
+                    styles.storyInviteBadge,
+                    { transform: [{ scale: invitePulse }] },
+                  ]}
+                >
+                  <Text style={styles.storyInviteBadgeText}>{pendingCount}</Text>
+                </Animated.View>
+              ) : null}
+            </View>
+          </Pressable>
+        </View>
+      }
     />
   );
 
@@ -605,7 +744,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
   },
   sectionBlock: {
-    marginTop: 14,
+    marginTop: 10,
   },
   connectionsCard: {
     marginHorizontal: Layout.screenPaddingHorizontal,
@@ -641,6 +780,81 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingTop: 16,
     paddingBottom: 6,
+  },
+  inlineControlsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingBottom: 10,
+  },
+  inlineTabsWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  inlineFilterScroll: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingRight: 6,
+  },
+  inlineFilterPill: {
+    minHeight: 24,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    justifyContent: "center",
+  },
+  inlineFilterPillOn: {
+    backgroundColor: Theme.textPrimaryDark,
+    borderColor: Theme.textPrimaryDark,
+  },
+  inlineFilterPillText: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+    color: Theme.textSecondary,
+  },
+  inlineFilterPillTextOn: {
+    color: Theme.textOnDark,
+  },
+  inlineSearchIconBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  inlineSearchBox: {
+    minHeight: 28,
+    maxWidth: 210,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 9,
+    borderRadius: 14,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  inlineSearchInput: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    paddingVertical: 0,
+  },
+  inlineSearchClose: {
+    fontSize: 15,
+    lineHeight: 16,
+    fontWeight: "800",
+    color: Theme.textSecondary,
   },
   sectionHeadingRowCompact: {
     flexDirection: "row",
@@ -747,6 +961,32 @@ const styles = StyleSheet.create({
     gap: 12,
     flexWrap: "wrap",
   },
+  recentAddedChip: {
+    width: "100%",
+    marginTop: 2,
+    minHeight: 34,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceGray,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    justifyContent: "center",
+    gap: 2,
+  },
+  recentAddedLabel: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+    color: Theme.textSection,
+    textTransform: "uppercase",
+  },
+  recentAddedNames: {
+    fontSize: 11,
+    fontWeight: "700",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+  },
   hubEyebrowRow: {
     width: "100%",
     flexDirection: "row",
@@ -772,6 +1012,29 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: Theme.textOnPrimary,
     letterSpacing: 0.8,
+  },
+  loadCenterReturnBtn: {
+    marginLeft: "auto",
+    minHeight: 24,
+    paddingHorizontal: 9,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    justifyContent: "center",
+  },
+  loadCenterReturnBtnOn: {
+    borderColor: Theme.textPrimaryDark,
+    backgroundColor: Theme.surfaceGray,
+  },
+  loadCenterReturnText: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+    color: Theme.textSecondary,
+  },
+  loadCenterReturnTextOn: {
+    color: Theme.textPrimaryDark,
   },
   segmentRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   segmentBtn: {
@@ -799,6 +1062,48 @@ const styles = StyleSheet.create({
     height: 7,
     borderRadius: 4,
     backgroundColor: Theme.teslaRed,
+  },
+  storyInviteBadge: {
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: Theme.teslaRed,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  storyInviteBadgeText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: Theme.textOnPrimary,
+    letterSpacing: 0.2,
+  },
+  storyTopSwitchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  storyTopSwitchBtn: {
+    minHeight: 24,
+    paddingHorizontal: 9,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    justifyContent: "center",
+  },
+  storyTopSwitchBtnOn: {
+    borderColor: Theme.textPrimaryDark,
+    backgroundColor: Theme.surfaceGray,
+  },
+  storyTopSwitchText: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+    color: Theme.textSecondary,
+  },
+  storyTopSwitchTextOn: {
+    color: Theme.textPrimaryDark,
   },
   hubTools: {
     marginTop: 10,
@@ -840,6 +1145,7 @@ const styles = StyleSheet.create({
   },
   filterPillTextOn: { color: Theme.textOnDark },
   invSubRow: { flexDirection: "row", gap: 10, marginBottom: 2 },
+  invSubRowCompact: { flexDirection: "row", gap: 6, flex: 1, minWidth: 0 },
   invSubBtn: {
     paddingVertical: 8,
     paddingHorizontal: 4,
@@ -863,7 +1169,7 @@ const styles = StyleSheet.create({
   },
   invitationsCard: {
     marginHorizontal: Layout.screenPaddingHorizontal,
-    marginTop: 18,
+    marginTop: 10,
     backgroundColor: Theme.screenBackground,
     borderRadius: 32,
     borderWidth: 1,

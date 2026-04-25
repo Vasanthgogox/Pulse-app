@@ -7,7 +7,7 @@ import { BidSheet } from '@/features/network/components/BidSheet';
 import { useNetworkFeedQuery } from '@/lib/queries';
 import { useBidsForPostQuery, useAcceptBidMutation, useRejectBidMutation } from '@/lib/queries';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { type PostRow } from '@/features/network/services/posts.service';
+import { isPostVisibleForOrg, type PostRow } from '@/features/network/services/posts.service';
 import { type BidRow } from '@/features/network/services/bids.service';
 import { formatINR } from '@/lib/format';
 import { getInitials } from '@/lib/stringUtils';
@@ -121,9 +121,14 @@ export default function PostDetailScreen() {
   const acceptMutation = useAcceptBidMutation(postId ?? '');
   const rejectMutation = useRejectBidMutation(postId ?? '');
 
+  const allowLoadPosts = organization?.capabilities?.canBid ?? true;
+  const visiblePosts = useMemo(
+    () => (feedQ.data ?? []).filter((post) => isPostVisibleForOrg(post, { allowLoadPosts })),
+    [feedQ.data, allowLoadPosts],
+  );
   const post = useMemo(
-    () => (feedQ.data ?? []).find((p) => p.id === postId) ?? null,
-    [feedQ.data, postId],
+    () => visiblePosts.find((p) => p.id === postId) ?? null,
+    [visiblePosts, postId],
   );
 
   const isOwner = post?.organization_id === orgId;

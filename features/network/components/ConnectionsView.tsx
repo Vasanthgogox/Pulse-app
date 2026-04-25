@@ -114,7 +114,7 @@ function GridCard({ item }: { item: ConnectedOrg }) {
         </View>
         <View style={styles.gridBody}>
           <Text style={styles.gridName} numberOfLines={2}>
-            {item.name}
+            {item.name.toUpperCase()}
           </Text>
           <Text style={styles.gridHeadline} numberOfLines={2}>
             {roleSub}

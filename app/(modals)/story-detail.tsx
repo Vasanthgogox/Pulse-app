@@ -6,7 +6,7 @@ import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { BidSheet } from "@/features/network/components/BidSheet";
-import { type PostRow } from "@/features/network/services/posts.service";
+import { isPostVisibleForOrg, type PostRow } from "@/features/network/services/posts.service";
 import { formatINR } from "@/lib/format";
 import { getInitials } from "@/lib/stringUtils";
 import { useNetworkFeedQuery, useInvalidatePosts } from "@/lib/queries";
@@ -120,7 +120,11 @@ export default function StoryDetailScreen() {
   const invalidatePosts = useInvalidatePosts(orgId);
 
   const feedQ = useNetworkFeedQuery(orgId);
-  const allPosts = feedQ.data ?? [];
+  const allowLoadPosts = currentOrganization?.capabilities?.canBid ?? true;
+  const allPosts = useMemo(
+    () => (feedQ.data ?? []).filter((post) => isPostVisibleForOrg(post, { allowLoadPosts })),
+    [feedQ.data, allowLoadPosts],
+  );
 
   const isBusinessPost = (p: PostRow) =>
     p.type === "LOAD" || p.type === "VEHICLE_AVAILABILITY";
@@ -189,6 +193,13 @@ export default function StoryDetailScreen() {
   );
 
   const headline = post ? storyHeadline(post, Boolean(isLoad), Boolean(isVehicle)) : "";
+  const availabilityLabel = useMemo(() => {
+    if (!post || !isVehicle) return null;
+    const firstContentChunk = post.content?.split("·")[0]?.trim();
+    if (firstContentChunk) return firstContentChunk;
+    if (post.load_date?.trim()) return post.load_date.trim();
+    return null;
+  }, [post, isVehicle]);
 
   if (!post) {
     return (
@@ -302,7 +313,7 @@ export default function StoryDetailScreen() {
           </View>
         ) : null}
 
-        {isVehicle && (post.vehicle_type != null || post.load_date) ? (
+        {isVehicle && (post.vehicle_type != null || availabilityLabel) ? (
           <View style={styles.metaRow}>
             {post.vehicle_type ? (
               <View style={styles.metaChip}>
@@ -310,10 +321,10 @@ export default function StoryDetailScreen() {
                 <Text style={styles.metaChipText}>{post.vehicle_type}</Text>
               </View>
             ) : null}
-            {post.load_date ? (
+            {availabilityLabel ? (
               <View style={styles.metaChip}>
                 <Clock3 size={10} color={MUTED} />
-                <Text style={styles.metaChipText}>{post.load_date}</Text>
+                <Text style={styles.metaChipText}>{availabilityLabel}</Text>
               </View>
             ) : null}
           </View>

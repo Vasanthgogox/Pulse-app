@@ -5,7 +5,7 @@ import Theme from "@/constants/Theme";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { getInitials } from "@/lib/stringUtils";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
-import { CheckCircle2, Send, ShieldCheck, Star, Users, Zap } from "lucide-react-native";
+import { Check, CheckCircle2, Send, ShieldCheck, Star, Users, Zap } from "lucide-react-native";
 import React from "react";
 import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -109,7 +109,7 @@ export function HubConnectionListCard({
           </View>
 
           <Text style={styles.entityName} numberOfLines={1}>
-            {item.name}
+            {item.name.toUpperCase()}
           </Text>
           <Text style={styles.entitySubtitle} numberOfLines={2}>
             {item.role === "CLIENT"
@@ -119,15 +119,20 @@ export function HubConnectionListCard({
                 : "Fleet operations member"}
           </Text>
 
-          <View style={styles.cardMetaStack}>
+          <View style={[styles.cardMetaStack, mutuals === 0 && styles.cardMetaStackCompact]}>
+            {mutuals > 0 ? (
+              <View style={styles.metaChip}>
+                <Users size={10} color={Theme.textSecondary} strokeWidth={2.4} />
+                <Text style={styles.metaChipText} numberOfLines={1}>
+                  {`${mutuals} mutual${mutuals === 1 ? "" : "s"}`}
+                </Text>
+              </View>
+            ) : null}
             <View style={styles.metaChip}>
-              <Users size={10} color={Theme.textSecondary} strokeWidth={2.4} />
-              <Text style={styles.metaChipText} numberOfLines={1}>
-                {mutuals > 0 ? `${mutuals} mutual${mutuals === 1 ? "" : "s"}` : "Q network"}
-              </Text>
-            </View>
-            <View style={[styles.metaChip, item.is_integrated && styles.metaChipStrong]}>
-              <Text style={[styles.metaChipText, item.is_integrated && styles.metaChipTextStrong]} numberOfLines={1}>
+              {item.is_integrated ? (
+                <Check size={10} color={Theme.textPrimaryDark} strokeWidth={2.8} />
+              ) : null}
+              <Text style={styles.statusMetaChipText} numberOfLines={1}>
                 {item.is_integrated ? "Operational access" : "Not in app"}
               </Text>
             </View>
@@ -147,9 +152,9 @@ export function HubConnectionListCard({
               disabled={!canPressAction}
             >
               {item.actionLoading ? (
-                <ActivityIndicator size={12} color={Theme.textOnPrimary} />
+                <ActivityIndicator size={12} color={Theme.textPrimaryDark} />
               ) : (
-                <Send size={12} color={Theme.textOnPrimary} strokeWidth={2.4} />
+                <Send size={12} color={Theme.textPrimaryDark} strokeWidth={2.4} />
               )}
               <Text style={styles.inviteBtnText}>{item.actionLabel ?? "Send invite"}</Text>
             </Pressable>
@@ -183,7 +188,7 @@ export function HubConnectionGridCard({ item }: { item: HubConnectionItem }) {
           <View style={styles.gridOnlineDot} />
         </View>
         <Text style={styles.gridName} numberOfLines={2}>
-          {item.name}
+          {item.name.toUpperCase()}
         </Text>
       </View>
     </View>
@@ -424,6 +429,9 @@ const styles = StyleSheet.create({
     marginTop: 10,
     alignItems: "center",
   },
+  cardMetaStackCompact: {
+    marginTop: 8,
+  },
   metaChip: {
     minHeight: 22,
     maxWidth: "100%",
@@ -437,18 +445,17 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
   },
-  metaChipStrong: {
-    backgroundColor: Theme.textPrimaryDark,
-    borderColor: Theme.textPrimaryDark,
-  },
   metaChipText: {
     fontSize: 8,
     fontWeight: "700",
     fontStyle: "italic",
     color: Theme.textSecondary,
   },
-  metaChipTextStrong: {
-    color: Theme.textOnPrimary,
+  statusMetaChipText: {
+    fontSize: 8,
+    fontWeight: "700",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
   },
   metricStack: {
     marginTop: 12,
@@ -512,8 +519,9 @@ const styles = StyleSheet.create({
     color: Theme.textOnPrimary,
   },
   cardFooter: {
-    minHeight: 44,
+    minHeight: 52,
     paddingHorizontal: 8,
+    paddingVertical: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
     alignItems: "center",
@@ -521,38 +529,45 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
   },
   joinedBtn: {
-    minHeight: 27,
+    minHeight: 34,
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 6,
     borderWidth: 1,
-    borderColor: Theme.textPrimaryDark,
-    borderRadius: 14,
-    paddingHorizontal: 12,
+    borderColor: Theme.borderMedium,
+    borderRadius: 17,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     backgroundColor: Theme.screenBackground,
+    shadowColor: Theme.shadow,
+    shadowOpacity: 0.035,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
   },
   joinedBtnText: {
     fontSize: 10,
-    fontWeight: "600",
+    fontWeight: "700",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
   },
   inviteBtn: {
-    minHeight: 28,
+    minHeight: 34,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    backgroundColor: Theme.buttonSecondaryBackground,
+    gap: 6,
+    borderRadius: 17,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    backgroundColor: Theme.screenBackground,
     borderWidth: 1,
-    borderColor: Theme.buttonSecondaryBackground,
-    minWidth: 108,
+    borderColor: Theme.borderMedium,
+    minWidth: 118,
     shadowColor: Theme.shadow,
-    shadowOpacity: 0.045,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 3 },
     elevation: 1,
   },
   inviteBtnLoading: {
@@ -560,10 +575,10 @@ const styles = StyleSheet.create({
   },
   inviteBtnText: {
     fontSize: 10,
-    fontWeight: "600",
+    fontWeight: "700",
     fontStyle: "italic",
-    color: Theme.textOnPrimary,
-    letterSpacing: 0.1,
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.15,
   },
   handshakeBtn: {
     width: 40,

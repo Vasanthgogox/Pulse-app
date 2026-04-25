@@ -3,6 +3,7 @@
  * Reference layout: white cards, pill labels (SENT / role / status), inner grey band, relative time.
  */
 import Theme from "@/constants/Theme";
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Typography from "@/constants/Typography";
 import { getInitials } from "@/lib/stringUtils";
 import {
@@ -60,12 +61,33 @@ function HubCardIncoming({
   onReject: (id: string) => void;
 }) {
   const isPending = row.status === "pending";
+  const fromOrg = row as ConnectionRequestRow & {
+    from_org_avatar_url?: string | null;
+    from_org_avatar_seed?: string | null;
+  };
+  const ratingValue = (row as ConnectionRequestRow & { rating?: number | null; average_rating?: number | null }).rating
+    ?? (row as ConnectionRequestRow & { rating?: number | null; average_rating?: number | null }).average_rating
+    ?? null;
+  const rating =
+    typeof ratingValue === "number" && Number.isFinite(ratingValue)
+      ? `${ratingValue.toFixed(1)}★`
+      : "No rating";
   return (
     <View style={hubStyles.card}>
       <View style={hubStyles.inviteCover}>
         <View style={hubStyles.coverOrbLarge} />
         <View style={hubStyles.coverOrbSmall} />
         <View style={hubStyles.coverPlane} />
+        <View style={[hubStyles.coverRatingNode, rating === "No rating" && hubStyles.coverRatingNodeEmpty]}>
+          <Text
+            style={[
+              hubStyles.coverRatingText,
+              rating === "No rating" && hubStyles.coverRatingTextEmpty,
+            ]}
+          >
+            {rating}
+          </Text>
+        </View>
         <View style={hubStyles.cardHeader}>
           <View style={hubStyles.modeBadge}>
             <UserPlus2 size={10} color={Theme.textPrimaryDark} strokeWidth={2.4} />
@@ -82,18 +104,35 @@ function HubCardIncoming({
       </View>
       <View style={hubStyles.inviteBody}>
         <View style={hubStyles.avatar}>
-          <Text style={hubStyles.avatarTxt}>{getInitials(row.from_org_name ?? "?")}</Text>
+          <PartyAvatar
+            name={(row.from_org_name ?? "?").toUpperCase()}
+            avatarUrl={fromOrg.from_org_avatar_url ?? null}
+            avatarSeed={fromOrg.from_org_avatar_seed ?? null}
+            entityType="client"
+            size={62}
+            borderStyle={hubStyles.avatarImage}
+          />
         </View>
         <View style={hubStyles.innerText}>
           <Text style={hubStyles.name} numberOfLines={1}>
-            {row.from_org_name ?? "—"}
+            {(row.from_org_name ?? "—").toUpperCase()}
+          </Text>
+          <Text style={hubStyles.subtitle} numberOfLines={2}>
+            Wants to connect with your network
           </Text>
           <View style={hubStyles.metaRow}>
             <View style={hubStyles.metaChip}>
               <Text style={hubStyles.metaChipText}>{formatRelativeShort(row.created_at)} ago</Text>
             </View>
-            <View style={hubStyles.metaChipStrong}>
-              <Text style={hubStyles.metaChipStrongText}>Wants to sync</Text>
+            <View style={hubStyles.ratingChip}>
+              <Text
+                style={[
+                  hubStyles.ratingChipText,
+                  rating === "No rating" && hubStyles.ratingChipTextEmpty,
+                ]}
+              >
+                {rating}
+              </Text>
             </View>
           </View>
         </View>
@@ -135,12 +174,33 @@ function HubCardSent({
   onWithdraw: (id: string) => void;
 }) {
   const isPending = row.status === "pending";
+  const toOrg = row as ConnectionRequestRow & {
+    to_org_avatar_url?: string | null;
+    to_org_avatar_seed?: string | null;
+  };
+  const ratingValue = (row as ConnectionRequestRow & { rating?: number | null; average_rating?: number | null }).rating
+    ?? (row as ConnectionRequestRow & { rating?: number | null; average_rating?: number | null }).average_rating
+    ?? null;
+  const rating =
+    typeof ratingValue === "number" && Number.isFinite(ratingValue)
+      ? `${ratingValue.toFixed(1)}★`
+      : "No rating";
   return (
     <View style={hubStyles.card}>
       <View style={hubStyles.inviteCover}>
         <View style={hubStyles.coverOrbLarge} />
         <View style={hubStyles.coverOrbSmall} />
         <View style={hubStyles.coverPlane} />
+        <View style={[hubStyles.coverRatingNode, rating === "No rating" && hubStyles.coverRatingNodeEmpty]}>
+          <Text
+            style={[
+              hubStyles.coverRatingText,
+              rating === "No rating" && hubStyles.coverRatingTextEmpty,
+            ]}
+          >
+            {rating}
+          </Text>
+        </View>
         <View style={hubStyles.cardHeader}>
           <View style={hubStyles.modeBadge}>
             <Send size={10} color={Theme.textPrimaryDark} strokeWidth={2.4} />
@@ -157,18 +217,35 @@ function HubCardSent({
       </View>
       <View style={hubStyles.inviteBody}>
         <View style={hubStyles.avatar}>
-          <Text style={hubStyles.avatarTxt}>{getInitials(row.to_org_name ?? "?")}</Text>
+          <PartyAvatar
+            name={(row.to_org_name ?? "?").toUpperCase()}
+            avatarUrl={toOrg.to_org_avatar_url ?? null}
+            avatarSeed={toOrg.to_org_avatar_seed ?? null}
+            entityType="supplier"
+            size={62}
+            borderStyle={hubStyles.avatarImage}
+          />
         </View>
         <View style={hubStyles.innerText}>
           <Text style={hubStyles.name} numberOfLines={1}>
-            {row.to_org_name ?? "—"}
+            {(row.to_org_name ?? "—").toUpperCase()}
+          </Text>
+          <Text style={hubStyles.subtitle} numberOfLines={2}>
+            Invitation shared from your network hub
           </Text>
           <View style={hubStyles.metaRow}>
             <View style={hubStyles.metaChip}>
               <Text style={hubStyles.metaChipText}>{formatRelativeShort(row.created_at)} ago</Text>
             </View>
-            <View style={hubStyles.metaChipStrong}>
-              <Text style={hubStyles.metaChipStrongText}>Request sent</Text>
+            <View style={hubStyles.ratingChip}>
+              <Text
+                style={[
+                  hubStyles.ratingChipText,
+                  rating === "No rating" && hubStyles.ratingChipTextEmpty,
+                ]}
+              >
+                {rating}
+              </Text>
             </View>
           </View>
         </View>
@@ -523,6 +600,37 @@ const hubStyles = StyleSheet.create({
     opacity: 0.55,
     transform: [{ rotate: "-8deg" }],
   },
+  coverRatingNode: {
+    position: "absolute",
+    right: 8,
+    bottom: 8,
+    minHeight: 23,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+    borderRadius: 11,
+    backgroundColor: "rgba(255,255,255,0.86)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+  },
+  coverRatingNodeEmpty: {
+    minHeight: 18,
+    paddingHorizontal: 5,
+    borderRadius: 9,
+    backgroundColor: "rgba(255,255,255,0.72)",
+  },
+  coverRatingText: {
+    fontSize: 10,
+    fontWeight: "700",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+  },
+  coverRatingTextEmpty: {
+    fontSize: 7,
+    fontWeight: "700",
+    color: Theme.textMutedDemo,
+    letterSpacing: -0.1,
+  },
   cardHeader: {
     position: "absolute",
     top: 8,
@@ -549,7 +657,7 @@ const hubStyles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 7,
     borderRadius: 10,
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.screenBackground,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
   },
@@ -557,7 +665,7 @@ const hubStyles = StyleSheet.create({
     fontSize: 8,
     fontWeight: "600",
     fontStyle: "italic",
-    color: Theme.textPrimaryDark,
+    color: Theme.textSecondary,
   },
   roleBadge: {
     minHeight: 21,
@@ -565,8 +673,8 @@ const hubStyles = StyleSheet.create({
     paddingHorizontal: 7,
     borderRadius: 10,
     backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
   },
   roleBadgeText: {
     fontSize: 8,
@@ -604,7 +712,7 @@ const hubStyles = StyleSheet.create({
     borderRadius: 10,
   },
   statusPending: { backgroundColor: Theme.warningMuted },
-  statusMuted: { backgroundColor: Theme.surface },
+  statusMuted: { backgroundColor: Theme.screenBackground },
   statusPillText: {
     fontSize: 8,
     fontWeight: "600",
@@ -615,11 +723,11 @@ const hubStyles = StyleSheet.create({
   inviteBody: {
     flexDirection: "column",
     alignItems: "center",
-    minHeight: 118,
-    paddingHorizontal: 10,
+    minHeight: 122,
+    paddingHorizontal: 8,
     paddingTop: 0,
     paddingBottom: 10,
-    gap: 8,
+    gap: 7,
   },
   innerBand: {
     flexDirection: "row",
@@ -633,17 +741,20 @@ const hubStyles = StyleSheet.create({
     width: 62,
     height: 62,
     borderRadius: 22,
-    backgroundColor: Theme.liquidPillBg,
+    backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: Theme.liquidPillBorder,
+    borderWidth: 0,
     marginTop: -31,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.08,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 5 },
     elevation: 2,
+  },
+  avatarImage: {
+    borderWidth: 2,
+    borderColor: Theme.screenBackground,
   },
   avatarTxt: {
     fontSize: 16,
@@ -660,6 +771,16 @@ const hubStyles = StyleSheet.create({
     letterSpacing: -0.2,
     textAlign: "center",
     lineHeight: 15,
+  },
+  subtitle: {
+    fontSize: 9,
+    fontWeight: "400",
+    fontStyle: "italic",
+    color: Theme.textMutedDemo,
+    lineHeight: 12,
+    textAlign: "center",
+    marginTop: 2,
+    minHeight: 24,
   },
   timeLabel: { fontSize: 9, color: Theme.textSecondary, marginTop: 2, fontWeight: "400", fontStyle: "italic" },
   metaRow: {
@@ -702,7 +823,9 @@ const hubStyles = StyleSheet.create({
     minHeight: 30,
     paddingHorizontal: 12,
     borderRadius: 15,
-    backgroundColor: Theme.teslaRed,
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
     minWidth: 96,
     alignItems: "center",
     justifyContent: "center",
@@ -711,8 +834,26 @@ const hubStyles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "600",
     fontStyle: "italic",
-    color: "#fff",
+    color: Theme.teslaRed,
     letterSpacing: 0.1,
+  },
+  ratingChip: {
+    minHeight: 22,
+    justifyContent: "center",
+    paddingHorizontal: 8,
+    borderRadius: 11,
+    backgroundColor: Theme.screenBackground,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+  },
+  ratingChipText: {
+    fontSize: 8,
+    fontWeight: "600",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+  },
+  ratingChipTextEmpty: {
+    color: Theme.textMutedDemo,
   },
   incomingActions: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, flexWrap: "wrap" },
   rejectBtn: {
@@ -758,6 +899,7 @@ const hubStyles = StyleSheet.create({
     borderTopColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: Theme.screenBackground,
   },
 });
 
