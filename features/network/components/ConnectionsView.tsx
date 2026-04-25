@@ -1,236 +1,847 @@
 /**
- * Connections tab — connected orgs (integrated clients + suppliers).
- * LinkedIn-style cards with avatar, role badge, mutual count, actions.
+ * Connections tab — clients, suppliers, and fleet drivers.
+ * `hubMode`: Network screen layout (nested cards, shared header search/filters in parent).
  */
 import Theme from '@/constants/Theme';
-import { useClientsQuery, useSuppliersQuery } from '@/lib/queries';
+import {
+  averageScore,
+  getRatingsForDrivers,
+  getRatingsForSuppliers,
+} from '@/features/ratings';
+import {
+  HubConnectionListCard,
+  type HubConnectionItem,
+} from '@/features/network/components/NetworkConnectionHubCards';
+import { useClientsQuery, useDriversQuery, useSuppliersQuery } from '@/lib/queries';
 import { getInitials } from '@/lib/stringUtils';
-import { MessageCircle, Star, Zap } from 'lucide-react-native';
-import React, { useMemo, useState } from 'react';
+import {
+  CONNECTION_REQUEST_DAILY_LIMIT_MESSAGE,
+  createConnectionRequest,
+  getConnectionInviteeByPhone,
+  looksLikeConnectionRateLimitError,
+} from '@/services/connectionRequestsService';
+import {
+  LayoutGrid,
+  List,
+  MessageCircle,
+  Search,
+  Users,
+  Zap,
+} from 'lucide-react-native';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   FlatList,
   Pressable,
   RefreshControl,
+  Share,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
+
+export type ConnectionFilterTab = 'ALL' | 'CLIENT' | 'SUPPLIER' | 'DRIVER';
 
 interface ConnectionsViewProps {
   orgId: string;
   onRefresh?: () => void;
+  /** Render list without internal scroll (nested in parent ScrollView). */
+  embedded?: boolean;
+  /**
+   * Network hub: parent owns dark header search + filter pills; use hub card layout.
+   * Pass `hubSearch` + `hubFilter` (controlled).
+   */
+  hubMode?: boolean;
+  hubSearch?: string;
+  hubFilter?: ConnectionFilterTab;
 }
 
-const ROLE_COLORS: Record<string, string> = {
-  CLIENT: '#6366f1',
-  SUPPLIER: '#10b981',
-};
-
-const ORG_COLORS = [
-  '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e',
-  '#f59e0b', '#10b981', '#3b82f6', '#0ea5e9',
-];
-
-function orgColor(id: string): string {
+const COVER_TOKENS = [Theme.ledgerNetBarBg, Theme.textPrimaryDark, Theme.cinematicHeaderBg, Theme.primary, Theme.darkGreen, Theme.teslaRed] as const;
+function seedColor(id: string): string {
   let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h + id.charCodeAt(i)) % ORG_COLORS.length;
-  return ORG_COLORS[h];
+  for (let i = 0; i < id.length; i++) h = (h + id.charCodeAt(i)) % COVER_TOKENS.length;
+  return COVER_TOKENS[h];
 }
 
 interface ConnectedOrg {
   id: string;
   name: string;
-  role: 'CLIENT' | 'SUPPLIER';
+  role: 'CLIENT' | 'SUPPLIER' | 'DRIVER';
+  is_integrated: boolean;
+  avatar_url?: string | null;
+  avatar_seed?: string | null;
+  mutual_count?: number | null;
+  rating?: number | null;
   phone?: string | null;
   linked_organization_id?: string | null;
-  is_integrated: boolean;
 }
 
-function ConnectionCard({ item }: { item: ConnectedOrg }) {
-  const scale = React.useRef(new Animated.Value(1)).current;
-  const color = orgColor(item.id);
-  const roleColor = ROLE_COLORS[item.role] ?? '#6366f1';
+// ─── Grid Card (LinkedIn-style: cover + overlapping avatar) ───────────────────
 
-  const onPressIn = () => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start();
-  const onPressOut = () => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
+function GridCard({ item }: { item: ConnectedOrg }) {
+  const scale = React.useRef(new Animated.Value(1)).current;
+  const color = seedColor(item.id);
+  const isClient = item.role === 'CLIENT';
+  const isDriver = item.role === 'DRIVER';
+  const roleSub = isClient ? 'Client' : isDriver ? 'Driver' : 'Supplier';
+
+  const onIn = () => Animated.spring(scale, { toValue: 0.98, useNativeDriver: true }).start();
+  const onOut = () => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
 
   return (
-    <Pressable onPressIn={onPressIn} onPressOut={onPressOut}>
-      <Animated.View style={[styles.card, { transform: [{ scale }] }]}>
-        <View style={styles.cardLeft}>
-          {/* Avatar */}
-          <View style={[styles.avatar, { backgroundColor: color + '20' }]}>
-            <Text style={[styles.avatarText, { color }]}>{getInitials(item.name)}</Text>
-          </View>
-
-          <View style={styles.cardInfo}>
-            <View style={styles.nameRow}>
-              <Text style={styles.orgName} numberOfLines={1}>{item.name.toUpperCase()}</Text>
-              {item.is_integrated && (
-                <View style={styles.onlineIndicator}>
-                  <Zap size={8} color="#10b981" fill="#10b981" />
-                </View>
-              )}
-            </View>
-            <View style={styles.metaRow}>
-              <View style={[styles.roleBadge, { backgroundColor: roleColor + '18' }]}>
-                <Text style={[styles.roleText, { color: roleColor }]}>{item.role}</Text>
+    <Pressable onPressIn={onIn} onPressOut={onOut} style={styles.gridCardWrap}>
+      <Animated.View style={[styles.gridCard, { transform: [{ scale }] }]}>
+        <View style={[styles.gridCover, { backgroundColor: color }]} />
+        <View
+          style={[
+            styles.onlineIndicator,
+            { backgroundColor: item.is_integrated ? Theme.positive : Theme.borderMedium },
+          ]}
+        />
+        <View style={styles.gridAvatarOverlap}>
+          <View style={[styles.gridAvatar, { backgroundColor: color + '18', borderColor: Theme.screenBackground }]}>
+            <Text style={[styles.gridAvatarText, { color }]}>{getInitials(item.name)}</Text>
+            {item.is_integrated && (
+              <View style={styles.gridZapDot}>
+                <Zap size={7} color="#fff" fill="#fff" />
               </View>
-              {item.is_integrated && (
-                <Text style={styles.onApp}>On App</Text>
-              )}
-            </View>
+            )}
           </View>
         </View>
-
-        <Pressable style={styles.msgBtn} hitSlop={8}>
-          <MessageCircle size={16} color={Theme.primary} />
+        <View style={styles.gridBody}>
+          <Text style={styles.gridName} numberOfLines={2}>
+            {item.name}
+          </Text>
+          <Text style={styles.gridHeadline} numberOfLines={2}>
+            {roleSub}
+            {item.is_integrated ? ' · On Q' : ' · Not on app'}
+          </Text>
+          <View style={styles.gridMutualRow}>
+            <View style={[styles.gridMiniDot, { backgroundColor: color }]} />
+            <Text style={styles.gridMutualText} numberOfLines={1}>
+              In your Q network
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.gridRoleBadge,
+              {
+                backgroundColor: isClient
+                  ? 'rgba(26, 35, 126, 0.1)'
+                  : isDriver
+                    ? 'rgba(180, 83, 9, 0.12)'
+                    : 'rgba(21, 128, 61, 0.1)',
+                alignSelf: 'center',
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.gridRoleText,
+                {
+                  color: isClient ? Theme.primary : isDriver ? Theme.warning : Theme.positive,
+                },
+              ]}
+            >
+              {item.role}
+            </Text>
+          </View>
+        </View>
+        <Pressable style={styles.gridConnectOutline} hitSlop={8}>
+          <MessageCircle size={15} color={Theme.teslaRed} strokeWidth={2.2} />
+          <Text style={styles.gridConnectOutlineText}>Message</Text>
         </Pressable>
       </Animated.View>
     </Pressable>
   );
 }
 
-export function ConnectionsView({ orgId, onRefresh }: ConnectionsViewProps) {
+// ─── List Card ────────────────────────────────────────────────────────────────
+
+function ListCard({ item }: { item: ConnectedOrg }) {
+  const scale = React.useRef(new Animated.Value(1)).current;
+  const color = seedColor(item.id);
+  const isClient = item.role === 'CLIENT';
+  const isDriver = item.role === 'DRIVER';
+  const roleBg = isClient
+    ? 'rgba(26, 35, 126, 0.1)'
+    : isDriver
+      ? 'rgba(180, 83, 9, 0.12)'
+      : 'rgba(21, 128, 61, 0.1)';
+  const roleColor = isClient ? Theme.primary : isDriver ? Theme.warning : Theme.positive;
+
+  const onIn = () => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start();
+  const onOut = () => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
+
+  return (
+    <Pressable onPressIn={onIn} onPressOut={onOut}>
+      <Animated.View style={[styles.listCard, { transform: [{ scale }] }]}>
+        <View style={[styles.listAvatar, { backgroundColor: color + '18', borderColor: color + '30' }]}>
+          <Text style={[styles.listAvatarText, { color }]}>{getInitials(item.name)}</Text>
+          {item.is_integrated && (
+            <View style={styles.listZapDot}>
+              <Zap size={7} color="#fff" fill="#fff" />
+            </View>
+          )}
+        </View>
+
+        <View style={styles.listInfo}>
+          <Text style={styles.listName} numberOfLines={1}>{item.name.toUpperCase()}</Text>
+          <View style={styles.listBadges}>
+            <View
+              style={[
+                styles.roleBadge,
+                { backgroundColor: roleBg },
+              ]}
+            >
+              <Text style={[styles.roleText, { color: roleColor }]}>{item.role}</Text>
+            </View>
+            {item.is_integrated && (
+              <View style={styles.appBadge}>
+                <Zap size={8} color={Theme.positive} fill={Theme.positive} />
+                <Text style={styles.appBadgeText}>ON APP</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        <Pressable style={styles.listMsgBtn} hitSlop={10}>
+          <MessageCircle size={17} color={Theme.teslaRed} strokeWidth={2} />
+        </Pressable>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+/** For embedded parent ScrollView: non-scroll FlatList has no height; chunk into rows. */
+function chunkForGrid<T>(items: T[], columns: number): T[][] {
+  if (columns < 1) return [items];
+  const rows: T[][] = [];
+  for (let i = 0; i < items.length; i += columns) {
+    rows.push(items.slice(i, i + columns));
+  }
+  return rows;
+}
+
+export function ConnectionsView({
+  orgId,
+  onRefresh,
+  embedded,
+  hubMode = false,
+  hubSearch,
+  hubFilter,
+}: ConnectionsViewProps) {
+  const { width: windowWidth } = useWindowDimensions();
   const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<ConnectionFilterTab>('ALL');
+  const [isGrid, setIsGrid] = useState(!hubMode);
   const [refreshing, setRefreshing] = useState(false);
+  const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [supplierRatingsById, setSupplierRatingsById] = useState<Record<string, number | null>>({});
+  const [driverRatingsById, setDriverRatingsById] = useState<Record<string, number | null>>({});
+  const gridNumColumns = windowWidth >= 1200 ? 4 : windowWidth >= 900 ? 3 : 2;
+  const hubNumColumns = windowWidth >= 1280 ? 7 : windowWidth >= 1180 ? 5 : 2;
 
   const clientsQ = useClientsQuery(orgId);
   const suppliersQ = useSuppliersQuery(orgId);
+  const driversQ = useDriversQuery(orgId);
+
+  useEffect(() => {
+    let cancelled = false;
+    const supplierIds = ((suppliersQ.data ?? []) as { id: string }[]).map((s) => s.id);
+    if (supplierIds.length === 0) {
+      setSupplierRatingsById({});
+      return;
+    }
+    getRatingsForSuppliers(supplierIds).then(({ bySupplierId }) => {
+      if (cancelled) return;
+      const next: Record<string, number | null> = {};
+      supplierIds.forEach((id) => {
+        next[id] = averageScore(bySupplierId[id] ?? []);
+      });
+      setSupplierRatingsById(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [suppliersQ.data]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const driverIds = (driversQ.data ?? [])
+      .filter((d) => !d.left_at)
+      .map((d) => d.id);
+    if (driverIds.length === 0) {
+      setDriverRatingsById({});
+      return;
+    }
+    getRatingsForDrivers(driverIds).then(({ byDriverId }) => {
+      if (cancelled) return;
+      const next: Record<string, number | null> = {};
+      driverIds.forEach((id) => {
+        next[id] = averageScore(byDriverId[id] ?? []);
+      });
+      setDriverRatingsById(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [driversQ.data]);
+
+  const effectiveSearch = hubMode ? (hubSearch ?? '') : search;
+  const effectiveFilter: ConnectionFilterTab = hubMode ? (hubFilter ?? 'ALL') : filter;
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([clientsQ.refetch(), suppliersQ.refetch()]);
+    await Promise.all([clientsQ.refetch(), suppliersQ.refetch(), driversQ.refetch()]);
     setRefreshing(false);
     onRefresh?.();
   };
 
   const connections = useMemo<ConnectedOrg[]>(() => {
     const clients: ConnectedOrg[] = ((clientsQ.data ?? []) as {
-      id: string;
-      name: string;
-      phone?: string | null;
-      linked_organization_id?: string | null;
-      is_integrated?: boolean;
+      id: string; name: string; phone?: string | null; linked_organization_id?: string | null; is_integrated?: boolean; avatar_url?: string | null; avatar_seed?: string | null; mutual_count?: number | null; mutual_connections_count?: number | null; rating?: number | null; average_rating?: number | null;
     }[]).map((c) => ({
       id: c.id,
       name: c.name,
       role: 'CLIENT' as const,
-      phone: c.phone,
-      linked_organization_id: c.linked_organization_id,
-      is_integrated: c.is_integrated ?? false,
+      is_integrated: c.is_integrated ?? Boolean(c.linked_organization_id),
+      avatar_url: c.avatar_url ?? null,
+      avatar_seed: c.avatar_seed ?? null,
+      mutual_count: c.mutual_count ?? c.mutual_connections_count ?? null,
+      rating: c.rating ?? c.average_rating ?? null,
+      phone: c.phone ?? null,
+      linked_organization_id: c.linked_organization_id ?? null,
     }));
 
     const suppliers: ConnectedOrg[] = ((suppliersQ.data ?? []) as {
-      id: string;
-      name: string;
-      phone?: string | null;
-      linked_organization_id?: string | null;
-      is_integrated?: boolean;
+      id: string; name: string | null; phone?: string | null; linked_organization_id?: string | null; supplier_type?: string | null; is_integrated?: boolean; avatar_url?: string | null; avatar_seed?: string | null; mutual_count?: number | null; mutual_connections_count?: number | null; rating?: number | null; average_rating?: number | null;
     }[]).map((s) => ({
       id: s.id,
-      name: s.name,
+      name: s.name ?? "Supplier",
       role: 'SUPPLIER' as const,
-      phone: s.phone,
-      linked_organization_id: s.linked_organization_id,
-      is_integrated: s.is_integrated ?? false,
+      is_integrated: s.is_integrated ?? (s.supplier_type === "integrated" || Boolean(s.linked_organization_id)),
+      avatar_url: s.avatar_url ?? null,
+      avatar_seed: s.avatar_seed ?? null,
+      mutual_count: s.mutual_count ?? s.mutual_connections_count ?? null,
+      rating: s.rating ?? s.average_rating ?? supplierRatingsById[s.id] ?? null,
+      phone: s.phone ?? null,
+      linked_organization_id: s.linked_organization_id ?? null,
     }));
 
-    const all = [...clients, ...suppliers].sort((a, b) =>
-      a.name.localeCompare(b.name),
-    );
+    const driverRows = driversQ.data ?? [];
+    const drivers: ConnectedOrg[] = driverRows
+      .filter((d) => !d.left_at)
+      .map((d) => ({
+        id: `driver-${d.id}`,
+        name: d.name,
+        role: 'DRIVER' as const,
+        is_integrated: !!d.user_id,
+        avatar_url: d.avatar_url ?? null,
+        avatar_seed: d.avatar_seed ?? null,
+        mutual_count: (d as { mutual_count?: number | null; mutual_connections_count?: number | null }).mutual_count ??
+          (d as { mutual_count?: number | null; mutual_connections_count?: number | null }).mutual_connections_count ??
+          null,
+        rating: (d as { rating?: number | null; average_rating?: number | null }).rating ??
+          (d as { rating?: number | null; average_rating?: number | null }).average_rating ??
+          driverRatingsById[d.id] ??
+          null,
+        phone: (d as { phone?: string | null }).phone ?? null,
+      }));
 
-    if (!search.trim()) return all;
-    const q = search.toLowerCase();
-    return all.filter((c) => c.name.toLowerCase().includes(q));
-  }, [clientsQ.data, suppliersQ.data, search]);
+    let all = [...clients, ...suppliers, ...drivers].sort((a, b) => a.name.localeCompare(b.name));
+    if (effectiveFilter !== 'ALL') all = all.filter((c) => c.role === effectiveFilter);
+    if (effectiveSearch.trim()) {
+      const q = effectiveSearch.toLowerCase();
+      all = all.filter((c) => c.name.toLowerCase().includes(q));
+    }
+    return all;
+  }, [clientsQ.data, suppliersQ.data, driversQ.data, effectiveSearch, effectiveFilter, supplierRatingsById, driverRatingsById]);
 
-  const isLoading = clientsQ.isLoading || suppliersQ.isLoading;
+  const toHubItem = (c: ConnectedOrg): HubConnectionItem => ({
+    id: c.id,
+    name: c.name,
+    role: c.role,
+    is_integrated: c.is_integrated,
+    avatarUrl: c.avatar_url,
+    avatarSeed: c.avatar_seed,
+    entityType: c.role === 'DRIVER' ? 'driver' : c.role === 'SUPPLIER' ? 'supplier' : 'client',
+    mutualCount: c.mutual_count,
+    rating: c.rating,
+    actionLabel: c.is_integrated ? "Connected" : "Send invite",
+    actionLoading: invitingId === c.id,
+    actionDisabled: c.role === "DRIVER" && !c.phone,
+  });
+
+  const inviteOffAppParty = async (item: ConnectedOrg) => {
+    if (item.is_integrated) return;
+    if (!item.phone?.trim()) {
+      Alert.alert("Phone missing", `Add a phone number for ${item.name} before sending an invite.`);
+      return;
+    }
+
+    setInvitingId(item.id);
+    try {
+      const { invitee, error: lookupError } = await getConnectionInviteeByPhone(item.phone);
+      if (lookupError) throw lookupError;
+
+      if (invitee?.organization_id && item.role !== "DRIVER") {
+        const { error, alreadyInvited } = await createConnectionRequest(
+          orgId,
+          invitee.organization_id,
+          {
+            requestShipperClient: item.role === "CLIENT",
+            requestCarrierSupplier: item.role === "SUPPLIER",
+          },
+        );
+        if (error) throw error;
+        await Promise.all([clientsQ.refetch(), suppliersQ.refetch()]);
+        Alert.alert(
+          alreadyInvited ? "Request already sent" : "Request sent",
+          `${item.name} is on Q. We sent an in-app connection request.`,
+        );
+        return;
+      }
+
+      await Share.share({
+        message: `Hi ${item.name}, join me on Q to manage loads, trips, payments, and network requests together.`,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not send invite";
+      Alert.alert(
+        "Could not send invite",
+        looksLikeConnectionRateLimitError(message) ? CONNECTION_REQUEST_DAILY_LIMIT_MESSAGE : message,
+      );
+    } finally {
+      setInvitingId(null);
+    }
+  };
+
+  const isLoading = clientsQ.isLoading || suppliersQ.isLoading || driversQ.isLoading;
+  const total =
+    ((clientsQ.data ?? []) as unknown[]).length +
+    ((suppliersQ.data ?? []) as unknown[]).length +
+    (driversQ.data ?? []).filter((d) => !d.left_at).length;
+  const useHubLayout = hubMode;
+
+  const gridRows = useMemo(
+    () => chunkForGrid(connections, gridNumColumns),
+    [connections, gridNumColumns],
+  );
+  const hubRows = useMemo(
+    () => chunkForGrid(connections.slice(0, hubNumColumns * 2), hubNumColumns),
+    [connections, hubNumColumns],
+  );
+
+  const showChrome = !hubMode;
+
+  const embeddedBody = useHubLayout ? (
+    isLoading ? (
+      <View style={styles.embeddedLoading}>
+        <ActivityIndicator color={Theme.primary} size="small" />
+        <Text style={styles.embeddedLoadingText}>Loading your network…</Text>
+      </View>
+    ) : connections.length === 0 ? (
+      <View style={styles.embeddedEmptyWrap}>
+        <EmptyState />
+      </View>
+    ) : (
+      <View style={styles.hubGridEmbedded}>
+        {hubRows.map((row, ri) => (
+          <View key={`hub-row-${ri}`} style={styles.hubGridRow}>
+            {row.map((item) => (
+              <HubConnectionListCard
+                key={`hub-${item.role}-${item.id}`}
+                item={toHubItem(item)}
+                onActionPress={() => void inviteOffAppParty(item)}
+              />
+            ))}
+            {row.length < hubNumColumns
+              ? Array.from({ length: hubNumColumns - row.length }).map((_, i) => (
+                  <View key={`hub-spacer-${ri}-${i}`} style={styles.hubGridSpacer} />
+                ))
+              : null}
+          </View>
+        ))}
+      </View>
+    )
+  ) : isLoading ? (
+    <View style={styles.embeddedLoading}>
+      <ActivityIndicator color={Theme.primary} size="small" />
+      <Text style={styles.embeddedLoadingText}>Loading your network…</Text>
+    </View>
+  ) : connections.length === 0 ? (
+    <View style={styles.embeddedEmptyWrap}>
+      <EmptyState />
+    </View>
+  ) : isGrid ? (
+    <View style={styles.embeddedGridRoot}>
+      {gridRows.map((row, ri) => (
+        <View key={`conn-row-${ri}`} style={styles.gridRowEmbedded}>
+          {row.map((item) => (
+            <GridCard key={`grid-${item.role}-${item.id}`} item={item} />
+          ))}
+        </View>
+      ))}
+    </View>
+  ) : (
+    <View style={styles.listContentEmbedded}>
+      {connections.map((item) => (
+        <ListCard key={`list-${item.role}-${item.id}`} item={item} />
+      ))}
+    </View>
+  );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.searchBar}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search connections..."
-          placeholderTextColor={Theme.textSecondary}
-          value={search}
-          onChangeText={setSearch}
-          returnKeyType="search"
+    <View style={[styles.container, embedded && styles.containerEmbedded]}>
+      {showChrome ? (
+        <>
+          <View style={styles.statsBar}>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{total}</Text>
+              <Text style={styles.statLabel}>Total</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{(clientsQ.data ?? []).length}</Text>
+              <Text style={[styles.statLabel, { color: Theme.primary }]}>Clients</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{(suppliersQ.data ?? []).length}</Text>
+              <Text style={[styles.statLabel, { color: Theme.positive }]}>Suppliers</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>
+                {(driversQ.data ?? []).filter((d) => !d.left_at).length}
+              </Text>
+              <Text style={[styles.statLabel, { color: Theme.warning }]}>Drivers</Text>
+            </View>
+          </View>
+
+          <View style={styles.searchRow}>
+            <View style={styles.searchBox}>
+              <Search size={15} color={Theme.textSecondary} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search your network..."
+                placeholderTextColor={Theme.textSecondary}
+                value={search}
+                onChangeText={setSearch}
+                returnKeyType="search"
+              />
+            </View>
+            <Pressable
+              style={[styles.viewToggle, !isGrid && styles.viewToggleActive]}
+              onPress={() => setIsGrid(false)}
+            >
+              <List size={16} color={!isGrid ? '#fff' : Theme.textSecondary} />
+            </Pressable>
+            <Pressable
+              style={[styles.viewToggle, isGrid && styles.viewToggleActive]}
+              onPress={() => setIsGrid(true)}
+            >
+              <LayoutGrid size={16} color={isGrid ? '#fff' : Theme.textSecondary} />
+            </Pressable>
+          </View>
+
+          <View style={styles.filterRow}>
+            {(['ALL', 'CLIENT', 'SUPPLIER', 'DRIVER'] as ConnectionFilterTab[]).map((t) => (
+              <Pressable
+                key={t}
+                style={[styles.filterTab, filter === t && styles.filterTabActive]}
+                onPress={() => setFilter(t)}
+              >
+                <Text style={[styles.filterTabText, filter === t && styles.filterTabTextActive]}>
+                  {t}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      ) : null}
+
+      {embedded ? (
+        embeddedBody
+      ) : isLoading ? (
+        <ActivityIndicator color={Theme.primary} style={{ marginTop: 48 }} />
+      ) : useHubLayout ? (
+        <FlatList
+          key="hub-list"
+          data={connections}
+          keyExtractor={(item) => `hub-${item.role}-${item.id}`}
+          renderItem={({ item }) => <HubConnectionListCard item={toHubItem(item)} />}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          scrollEnabled
+          nestedScrollEnabled
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Theme.primary} />
+          }
+          ListEmptyComponent={<EmptyState />}
         />
-      </View>
-
-      <View style={styles.countRow}>
-        <Text style={styles.countText}>{connections.length} connections</Text>
-      </View>
-
-      {isLoading ? (
-        <ActivityIndicator color={Theme.primary} style={{ marginTop: 40 }} />
+      ) : isGrid ? (
+        <FlatList
+          key="grid"
+          data={connections}
+          keyExtractor={(item) => `grid-${item.role}-${item.id}`}
+          numColumns={gridNumColumns}
+          renderItem={({ item }) => <GridCard item={item} />}
+          contentContainerStyle={styles.gridList}
+          columnWrapperStyle={gridNumColumns > 1 ? styles.gridRow : undefined}
+          showsVerticalScrollIndicator={false}
+          scrollEnabled
+          nestedScrollEnabled
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Theme.primary} />
+          }
+          ListEmptyComponent={<EmptyState />}
+        />
       ) : (
         <FlatList
+          key="list"
           data={connections}
-          keyExtractor={(item) => `${item.role}-${item.id}`}
-          renderItem={({ item }) => <ConnectionCard item={item} />}
-          contentContainerStyle={styles.list}
+          keyExtractor={(item) => `list-${item.role}-${item.id}`}
+          renderItem={({ item }) => <ListCard item={item} />}
+          contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          scrollEnabled
+          nestedScrollEnabled
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={Theme.primary}
-            />
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Theme.primary} />
           }
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Star size={40} color={Theme.textSecondary} strokeWidth={1} />
-              <Text style={styles.emptyTitle}>No connections yet</Text>
-              <Text style={styles.emptySubtitle}>Discover and connect with clients & suppliers</Text>
-            </View>
-          }
+          ListEmptyComponent={<EmptyState />}
         />
       )}
     </View>
   );
 }
 
+function EmptyState() {
+  return (
+    <View style={styles.empty}>
+      <View style={styles.emptyIcon}>
+        <Users size={36} color={Theme.textSecondary} strokeWidth={1.5} />
+      </View>
+      <Text style={styles.emptyTitle}>No connections yet</Text>
+      <Text style={styles.emptySub}>
+        Use Discover to find clients and suppliers and invite them to your network
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Theme.surface },
-  searchBar: {
-    margin: 16,
+  containerEmbedded: { flex: 0, flexGrow: 0 },
+  embeddedLoading: {
+    minHeight: 120,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 32,
+    gap: 10,
+  },
+  embeddedLoadingText: { fontSize: 12, fontWeight: "600", color: Theme.textSecondary },
+  embeddedEmptyWrap: { minHeight: 200, paddingBottom: 16 },
+  embeddedGridRoot: { paddingBottom: 8 },
+  gridRowEmbedded: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingHorizontal: 8,
+  },
+  listContentEmbedded: { paddingHorizontal: 14, paddingBottom: 16, gap: 8 },
+  hubGridEmbedded: {
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 18,
+    gap: 12,
+  },
+  hubGridRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 12,
+  },
+  hubGridSpacer: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  statsBar: {
+    flexDirection: 'row',
+    backgroundColor: Theme.screenBackground,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.surfaceBorder,
+  },
+  statItem: { flex: 1, alignItems: 'center', gap: 2 },
+  statValue: { fontSize: 22, fontWeight: '900', color: Theme.textPrimary, letterSpacing: -0.5 },
+  statLabel: { fontSize: 9, fontWeight: '800', color: Theme.textSecondary, letterSpacing: 0.8, textTransform: 'uppercase' },
+  statDivider: { width: StyleSheet.hairlineWidth, backgroundColor: Theme.surfaceBorder, marginVertical: 4 },
+
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    margin: 14,
+  },
+  searchBox: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     backgroundColor: Theme.screenBackground,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderMedium,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 11,
   },
-  searchInput: {
-    fontSize: 14,
-    color: Theme.textPrimary,
-    fontWeight: '500',
-  },
-  countRow: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  countText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: Theme.textSecondary,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-  list: { paddingHorizontal: 16, paddingBottom: 32, gap: 8 },
-  card: {
+  searchInput: { flex: 1, fontSize: 14, color: Theme.textPrimary, fontWeight: '500' },
+  viewToggle: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 14,
-    padding: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderMedium,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewToggleActive: { backgroundColor: Theme.darkBackground, borderColor: Theme.darkBackground },
+
+  filterRow: { flexDirection: 'row', paddingHorizontal: 14, paddingBottom: 12, gap: 8 },
+  filterTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: Theme.screenBackground,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderMedium,
+  },
+  filterTabActive: { backgroundColor: Theme.teslaRed, borderColor: Theme.teslaRed },
+  filterTabText: { fontSize: 11, fontWeight: '800', color: Theme.textSecondary, letterSpacing: 0.5 },
+  filterTabTextActive: { color: Theme.textOnPrimary },
+
+  // Grid layout
+  gridList: { paddingHorizontal: 8, paddingBottom: 40 },
+  gridRow: { flexDirection: "row", gap: 0, alignItems: "flex-start" },
+  gridCardWrap: { flex: 1, padding: 4, minWidth: 0 },
+  gridCard: {
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.surfaceBorder,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 1 },
+    position: 'relative',
+    overflow: 'hidden',
+    paddingBottom: 12,
+  },
+  gridCover: {
+    height: 56,
+    width: '100%',
+  },
+  gridAvatarOverlap: {
+    marginTop: -32,
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  gridBody: { paddingHorizontal: 12, paddingTop: 4, alignItems: 'center' },
+  gridHeadline: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: Theme.textSecondary,
+    textAlign: 'center',
+    lineHeight: 14,
+    marginTop: 4,
+  },
+  gridMutualRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  gridMiniDot: { width: 6, height: 6, borderRadius: 3 },
+  gridMutualText: { fontSize: 9, fontWeight: '600', color: Theme.textSecondary, flex: 1 },
+  gridConnectOutline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginHorizontal: 10,
+    marginTop: 10,
+    paddingVertical: 9,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: Theme.teslaRed,
+  },
+  gridConnectOutlineText: { fontSize: 11, fontWeight: '800', color: Theme.teslaRed, letterSpacing: 0.2 },
+  onlineIndicator: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    zIndex: 3,
+  },
+  gridRoleBadge: {
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginTop: 8,
+  },
+  gridRoleText: { fontSize: 8, fontWeight: '900', letterSpacing: 0.5 },
+  gridAvatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    position: 'relative',
+  },
+  gridAvatarText: { fontSize: 16, fontWeight: '900', letterSpacing: -0.5 },
+  gridZapDot: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 17,
+    height: 17,
+    borderRadius: 9,
+    backgroundColor: Theme.positive,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: Theme.screenBackground,
+  },
+  gridName: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: Theme.textPrimary,
+    textAlign: 'center',
+    marginTop: 2,
+    lineHeight: 16,
+  },
+
+  // List layout
+  listContent: { paddingHorizontal: 14, paddingBottom: 40, gap: 8 },
+  listCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 16,
+    padding: 14,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.surfaceBorder,
     shadowColor: '#000',
@@ -238,63 +849,61 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 1 },
   },
-  cardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+  listAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1.5,
+    position: 'relative',
   },
-  avatarText: { fontSize: 14, fontWeight: '900', letterSpacing: -0.5 },
-  cardInfo: { flex: 1 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-  orgName: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: Theme.textPrimary,
-    letterSpacing: 0.3,
-    flex: 1,
-  },
-  onlineIndicator: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#10b98118',
+  listAvatarText: { fontSize: 14, fontWeight: '900', letterSpacing: -0.5 },
+  listZapDot: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: Theme.positive,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: Theme.screenBackground,
   },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  roleBadge: {
+  listInfo: { flex: 1, gap: 5 },
+  listName: { fontSize: 12, fontWeight: '900', color: Theme.textPrimary, letterSpacing: 0.3 },
+  listBadges: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  roleBadge: { borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 },
+  roleText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
+  appBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: `${Theme.positive}18`,
     borderRadius: 5,
-    paddingHorizontal: 7,
+    paddingHorizontal: 6,
     paddingVertical: 3,
   },
-  roleText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
-  onApp: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#10b981',
-  },
-  msgBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: Theme.primary + '12',
+  appBadgeText: { fontSize: 8, fontWeight: '900', color: Theme.positive, letterSpacing: 0.5 },
+  listMsgBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 11,
+    backgroundColor: 'rgba(232, 33, 39, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(232, 33, 39, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  empty: { alignItems: 'center', paddingTop: 60, gap: 10 },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: Theme.textPrimary,
-    letterSpacing: -0.3,
+
+  // Empty state
+  empty: { alignItems: 'center', paddingTop: 56, paddingHorizontal: 40, gap: 10 },
+  emptyIcon: {
+    width: 72, height: 72, borderRadius: 20,
+    backgroundColor: Theme.surface, alignItems: 'center', justifyContent: 'center', marginBottom: 4,
   },
-  emptySubtitle: {
-    fontSize: 13,
-    color: Theme.textSecondary,
-    textAlign: 'center',
-    paddingHorizontal: 40,
-  },
+  emptyTitle: { fontSize: 17, fontWeight: '800', color: Theme.textPrimary, letterSpacing: -0.3, textAlign: 'center' },
+  emptySub: { fontSize: 13, color: Theme.textSecondary, textAlign: 'center', lineHeight: 19 },
 });

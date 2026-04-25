@@ -3,7 +3,8 @@
  */
 import { supabase } from '@/lib/supabase';
 
-export type PostType = 'UPDATE' | 'LOAD';
+/** Pulse network: business-only. `UPDATE` is legacy (hidden in UI; migrate off DB when ready). */
+export type PostType = 'UPDATE' | 'LOAD' | 'VEHICLE_AVAILABILITY';
 
 export interface PostRow {
   id: string;

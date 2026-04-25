@@ -34,6 +34,7 @@ import {
     setInitialTripForDetail,
     updateTripSupplier
 } from "@/features/trips";
+import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { formatINR, formatMobileNumber } from "@/lib/format";
 import { validatePhone } from "@/lib/phoneValidation";
@@ -57,21 +58,26 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
-import { Building2, Package, Share2, Users, X } from "lucide-react-native";
+import { Building2, Package, Share2, Users, X, Zap } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform, Pressable, RefreshControl, Platform as RNPlatform, ScrollView,
-    Share, StyleSheet, Switch,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    useWindowDimensions,
-    View
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -172,6 +178,8 @@ interface LoadCenterViewProps {
   onCreateIndentPress: () => void;
   onIndentPress: (indent: IndentRow) => void;
   highlightedIndentId?: string | null;
+  /** Opens ShareLoadSheet to broadcast this indent to the Pulse network. */
+  onShareToNetwork?: (indent: IndentRow) => void;
 }
 
 const TESLA_BLACK = "#171A20";
@@ -182,6 +190,7 @@ export function LoadCenterView({
   onCreateIndentPress,
   onIndentPress,
   highlightedIndentId,
+  onShareToNetwork,
 }: LoadCenterViewProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -1698,13 +1707,21 @@ export function LoadCenterView({
                 </View>
               ) : (
                 <View style={useGridLayout ? styles.gridList : undefined}>
-                  <View style={styles.loadSectionRow}>
-                    <Text style={styles.loadSectionTitle}>
-                      Your active indents
-                    </Text>
-                    <View style={styles.loadSectionPill}>
-                      <Text style={styles.loadSectionPillText}>Live</Text>
+                  <View style={styles.loadSectionHeaderBlock}>
+                    <View style={styles.loadSectionRow}>
+                      <Text style={styles.loadSectionTitle}>
+                        Your active indents
+                      </Text>
+                      <View style={styles.loadSectionPill}>
+                        <Text style={styles.loadSectionPillText}>Live</Text>
+                      </View>
                     </View>
+                    {onShareToNetwork ? (
+                      <Text style={styles.loadSectionSub}>
+                        Indents not yet awarded: use Pulse to broadcast a 24h story
+                        to your network.
+                      </Text>
+                    ) : null}
                   </View>
                   {filteredHirePartnerLoads.map((load) => {
                     const status = (load.status || "").toLowerCase();
@@ -1729,6 +1746,10 @@ export function LoadCenterView({
                       isAwardedPendingTrip || hasDirectSupplier;
                     const statusPill = giveLoadStatusPillStyles(status);
                     const bidCount = quoteCounts[load.id] ?? 0;
+                    const showPulseToNetwork =
+                      Boolean(onShareToNetwork) &&
+                      indentCanBroadcastToPulseNetwork(load) &&
+                      !isDone;
                     return (
                       <View
                         key={load.id}
@@ -1884,6 +1905,19 @@ export function LoadCenterView({
                                   strokeWidth={2.2}
                                 />
                               </TouchableOpacity>
+                              {showPulseToNetwork && onShareToNetwork ? (
+                                <TouchableOpacity
+                                  style={styles.broadcastNetworkBtn}
+                                  onPress={() => onShareToNetwork(load)}
+                                  activeOpacity={0.85}
+                                  accessibilityLabel="Broadcast indent to Pulse network as story"
+                                >
+                                  <Zap size={13} color="#fff" fill="#fff" />
+                                  <Text style={styles.broadcastNetworkBtnText}>
+                                    Pulse
+                                  </Text>
+                                </TouchableOpacity>
+                              ) : null}
                               {isDone ? null : isAwaitingSupplierDeploy ? (
                                 <View style={styles.deployPendingWrap}>
                                   <Text style={styles.deployPendingText}>
@@ -2574,7 +2608,7 @@ export function LoadCenterView({
         }}
       >
         <KeyboardAvoidingView
-          behavior={RNPlatform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={styles.bidModalPage}
         >
           <View
@@ -3125,7 +3159,7 @@ export function LoadCenterView({
                                           "/(modals)/add-driver" as import("expo-router").Href,
                                         );
                                       },
-                                      RNPlatform.OS === "ios" ? 100 : 0,
+                                      Platform.OS === "ios" ? 100 : 0,
                                     );
                                   }}
                                   activeOpacity={0.9}
@@ -3226,7 +3260,7 @@ export function LoadCenterView({
                                           "/(modals)/add-vehicle" as import("expo-router").Href,
                                         );
                                       },
-                                      RNPlatform.OS === "ios" ? 100 : 0,
+                                      Platform.OS === "ios" ? 100 : 0,
                                     );
                                   }}
                                   activeOpacity={0.9}
@@ -3824,9 +3858,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: 0,
     paddingHorizontal: 2,
     width: "100%",
+  },
+  loadSectionHeaderBlock: {
+    width: "100%",
+    marginBottom: 12,
+  },
+  loadSectionSub: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    marginTop: 6,
+    paddingHorizontal: 2,
   },
   loadSectionTitle: {
     fontSize: 11,
@@ -4214,6 +4260,25 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
+  },
+  broadcastNetworkBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#6366f1",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    shadowColor: "#6366f1",
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  broadcastNetworkBtnText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#fff",
+    letterSpacing: 0.2,
   },
   loadCardId: {
     fontSize: 9,

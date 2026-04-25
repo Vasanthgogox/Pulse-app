@@ -30,6 +30,8 @@ export const ROUTES = {
   ADD_TRIP:       '/add-trip'       as const,
   CREATE_INDENT:  '/create-indent'  as const,
   LOAD_BOARD:     '/load-board'     as const,
+  /** Load Center + share indent to Pulse (story); use when Network is story-only. */
+  PULSE_LOADS:   '/pulse-loads'   as const,
 } as const;
 
 /** The three tabs that live in the bottom dock and are valid startup landing pages. */

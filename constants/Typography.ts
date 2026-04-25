@@ -37,6 +37,23 @@ export const Typography = {
     letterSpacing: 1.5,
     textTransform: "uppercase",
   } satisfies TextStyle,
+
+  /** Network main title (Allies Hub) on dark header — matches Tesla header weight. */
+  networkScreenTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+  } satisfies TextStyle,
+
+  /** Route / load line on network LOAD cards — paired with `LoadCardRouteRow` leg text. */
+  networkLoadRouteCity: {
+    fontSize: 15,
+    fontWeight: "900",
+    fontStyle: "italic",
+    letterSpacing: -0.25,
+    textTransform: "uppercase",
+  } satisfies TextStyle,
 } as const;
 
 export default Typography;

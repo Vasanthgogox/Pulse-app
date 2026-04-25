@@ -1,10 +1,13 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useMemo } from "react";
+import { MoreVertical, Share2 } from "lucide-react-native";
+import React, { useCallback, useMemo } from "react";
 import {
+  Alert,
   Image,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -13,7 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
-import { Theme } from "@/constants/Theme";
+import Theme from "@/constants/Theme";
 
 import type {
   PublicProfileEntity,
@@ -28,7 +31,9 @@ interface PublicProfileScreenProps {
   onBack: () => void;
 }
 
-const HERO_HEIGHT = 300;
+/** Hero block height (excludes status bar; identity overlaps scroll content). */
+const HERO_HEIGHT = 256;
+const METRICS_OVERLAP = 56;
 
 /**
  * Premium, modern "public preview" profile for clients, suppliers, and drivers.
@@ -77,10 +82,22 @@ export default function PublicProfileScreen({
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 64 }}
       >
-        <Hero entity={entity} insetsTop={insets.top} onBack={onBack} />
+        <Hero
+          entity={entity}
+          insetsTop={insets.top}
+          onBack={onBack}
+        />
 
         {/* Content area — floating island overlaps the hero */}
-        <View style={styles.content}>
+        <View
+          style={[
+            styles.content,
+            {
+              marginTop: -METRICS_OVERLAP,
+              paddingTop: METRICS_OVERLAP + 12,
+            },
+          ]}
+        >
           <MetricIsland metrics={entity.metrics} />
 
           <Section title="Professional Bio">
@@ -157,18 +174,33 @@ function Hero({
         ? "SUPPLIER"
         : "DRIVER";
 
+  const onShare = useCallback(async () => {
+    try {
+      await Share.share({
+        message: `${entity.name} — ${typeLabel} on Q`,
+        title: entity.name,
+      });
+    } catch {
+      /* user dismissed */
+    }
+  }, [entity.name, typeLabel]);
+
+  const onMore = useCallback(() => {
+    Alert.alert("Entity profile", "Additional actions will be available in a later release.", [
+      { text: "OK", style: "cancel" },
+    ]);
+  }, []);
+
   return (
-    <View style={[styles.hero, { height: HERO_HEIGHT + insetsTop }]}>
+    <View style={[styles.hero, { minHeight: HERO_HEIGHT + insetsTop }]}>
       <LinearGradient
-        colors={["#020617", "#0B1026", "#1E1B4B"]}
+        colors={["#0F172A", "#0B1026", "#1E1B4B"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
-      {/* Glow blob */}
       <View style={styles.heroGlow} />
 
-      {/* Top bar */}
       <View style={[styles.heroTopBar, { marginTop: insetsTop + 8 }]}>
         <TouchableOpacity
           style={styles.heroChipBtn}
@@ -179,54 +211,66 @@ function Hero({
           <FontAwesome name="chevron-left" size={16} color={Theme.textOnDark} />
         </TouchableOpacity>
         <View style={styles.heroTopRightGroup}>
-          <TouchableOpacity style={styles.heroChipBtn} activeOpacity={0.75}>
-            <FontAwesome name="share-alt" size={15} color={Theme.textOnDark} />
+          <TouchableOpacity
+            style={styles.heroChipBtn}
+            onPress={onShare}
+            activeOpacity={0.75}
+            accessibilityLabel="Share profile"
+          >
+            <Share2 size={18} color={Theme.textOnDark} strokeWidth={2.2} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.heroChipBtn} activeOpacity={0.75}>
-            <FontAwesome name="ellipsis-v" size={16} color={Theme.textOnDark} />
+          <TouchableOpacity
+            style={styles.heroChipBtn}
+            onPress={onMore}
+            activeOpacity={0.75}
+            accessibilityLabel="More options"
+          >
+            <MoreVertical size={18} color={Theme.textOnDark} strokeWidth={2.2} />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Identity segment — floats, will overlap content below */}
-      <View style={styles.heroIdentity}>
-        <View style={styles.avatarFrame}>
-          {entity.avatarUrl ? (
-            <Image source={{ uri: entity.avatarUrl }} style={styles.avatarImage} />
-          ) : (
-            <Text style={styles.avatarInitials}>{entity.initials}</Text>
-          )}
-          {entity.isVerified && (
-            <View style={styles.verifiedBadge}>
-              <FontAwesome name="check" size={10} color={Theme.textOnPrimary} />
-            </View>
-          )}
-        </View>
-        <View style={styles.heroIdentityText}>
-          <View style={styles.heroBadgeRow}>
-            <View style={styles.typeBadge}>
-              <Text style={styles.typeBadgeText}>{typeLabel}</Text>
-            </View>
-            {entity.isIntegrated && (
-              <View style={[styles.typeBadge, styles.activeBadge]}>
-                <View style={styles.activeDot} />
-                <Text style={styles.activeBadgeText}>ACTIVE ON APP</Text>
+      {/* Avatar + role pills in one row (target); name below. */}
+      <View style={styles.heroIdentityBlock}>
+        <View style={styles.heroIdentityRow}>
+          <View style={styles.avatarFrame}>
+            {entity.avatarUrl ? (
+              <Image source={{ uri: entity.avatarUrl }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarInitials}>{entity.initials}</Text>
+            )}
+            {entity.isVerified && (
+              <View style={styles.verifiedBadge}>
+                <FontAwesome name="check" size={10} color={Theme.textOnPrimary} />
               </View>
             )}
           </View>
-          <Text
-            style={styles.heroName}
-            numberOfLines={2}
-            allowFontScaling={false}
-          >
-            {entity.name}
-          </Text>
-          {entity.subtitle ? (
-            <Text style={styles.heroSubtitle} numberOfLines={1}>
-              {entity.subtitle}
-            </Text>
-          ) : null}
+          <View style={styles.heroPillsStack}>
+            <View style={styles.heroBadgeRow}>
+              <View style={styles.typeBadge}>
+                <Text style={styles.typeBadgeText}>{typeLabel}</Text>
+              </View>
+              {entity.isIntegrated ? (
+                <View style={[styles.typeBadge, styles.activeBadge]}>
+                  <View style={styles.activeDot} />
+                  <Text style={styles.activeBadgeText}>ACTIVE ON APP</Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
         </View>
+        <Text
+          style={styles.heroName}
+          numberOfLines={2}
+          allowFontScaling={false}
+        >
+          {entity.name}
+        </Text>
+        {entity.subtitle ? (
+          <Text style={styles.heroSubtitle} numberOfLines={1}>
+            {entity.subtitle}
+          </Text>
+        ) : null}
       </View>
     </View>
   );
@@ -241,40 +285,41 @@ function MetricIsland({
 }) {
   return (
     <View style={styles.islandShadow}>
-      <View style={styles.islandOuter}>
-        <View style={styles.islandInner}>
-          {metrics.map((m, idx) => {
-            const tintColor =
-              m.tint === "positive"
-                ? Theme.positive
-                : m.tint === "warning"
-                  ? Theme.warning
-                  : m.tint === "negative"
-                    ? Theme.negative
-                    : Theme.textOnDark;
-            return (
-              <View
-                key={`${m.label}-${idx}`}
-                style={[
-                  styles.islandCell,
-                  idx < metrics.length - 1 && styles.islandCellDivider,
-                ]}
-              >
-                <Text style={styles.islandLabel}>{m.label}</Text>
-                <View style={styles.islandValueRow}>
-                  <Text style={[styles.islandValue, { color: tintColor }]}>
-                    {m.value}
+      <View style={styles.islandPill}>
+        {metrics.map((m, idx) => {
+          const tintColor =
+            m.tint === "positive"
+              ? Theme.positive
+              : m.tint === "warning"
+                ? Theme.warning
+                : m.tint === "negative"
+                  ? Theme.negative
+                  : Theme.textOnPrimary;
+          return (
+            <View
+              key={`${m.label}-${idx}`}
+              style={[
+                styles.islandCell,
+                idx < metrics.length - 1 && styles.islandCellDivider,
+              ]}
+            >
+              <Text style={styles.islandLabel}>{m.label}</Text>
+              <View style={styles.islandValueRow}>
+                <Text
+                  style={[styles.islandValue, { color: tintColor }]}
+                  numberOfLines={1}
+                >
+                  {m.value}
+                </Text>
+                {m.suffix ? (
+                  <Text style={[styles.islandSuffix, { color: tintColor }]}>
+                    {m.suffix}
                   </Text>
-                  {m.suffix ? (
-                    <Text style={[styles.islandSuffix, { color: tintColor }]}>
-                      {m.suffix}
-                    </Text>
-                  ) : null}
-                </View>
+                ) : null}
               </View>
-            );
-          })}
-        </View>
+            </View>
+          );
+        })}
       </View>
     </View>
   );
@@ -431,10 +476,11 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  /* Hero */
+  /* Hero — midnight indigo; identity overlaps first cards */
   hero: {
     paddingHorizontal: 20,
-    overflow: "hidden",
+    paddingBottom: 8,
+    overflow: "visible",
   },
   heroGlow: {
     position: "absolute",
@@ -458,31 +504,36 @@ const styles = StyleSheet.create({
   heroChipBtn: {
     width: 40,
     height: 40,
-    borderRadius: 14,
-    backgroundColor: Theme.cinematicHeaderChipBg,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.1)",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.1)",
   },
-  heroIdentity: {
-    position: "absolute",
-    left: 20,
-    right: 20,
-    bottom: -62,
+  heroIdentityBlock: {
+    marginTop: 12,
+    paddingBottom: 4,
+  },
+  heroIdentityRow: {
     flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 16,
+    alignItems: "center",
+    gap: 14,
+  },
+  heroPillsStack: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
   },
   avatarFrame: {
-    width: 104,
-    height: 104,
-    borderRadius: 30,
+    width: 88,
+    height: 88,
+    borderRadius: 20,
     backgroundColor: Theme.textOnPrimary,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 4,
-    borderColor: Theme.cinematicHeaderBg,
+    borderWidth: 3,
+    borderColor: "rgba(255,255,255,0.25)",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 18 },
     shadowOpacity: 0.35,
@@ -490,9 +541,9 @@ const styles = StyleSheet.create({
     elevation: 14,
   },
   avatarImage: {
-    width: 96,
-    height: 96,
-    borderRadius: 26,
+    width: 82,
+    height: 82,
+    borderRadius: 16,
   },
   avatarInitials: {
     fontSize: 36,
@@ -514,56 +565,52 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: Theme.cinematicHeaderBg,
   },
-  heroIdentityText: {
-    flex: 1,
-    paddingBottom: 6,
-    gap: 6,
-    minWidth: 0,
-  },
   heroBadgeRow: {
     flexDirection: "row",
-    gap: 6,
     flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6,
   },
   typeBadge: {
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
-    backgroundColor: "rgba(99,102,241,0.22)",
+    backgroundColor: Theme.primary,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
+    borderColor: "rgba(255,255,255,0.12)",
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
   typeBadgeText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "900",
     letterSpacing: 1.2,
-    color: Theme.textOnDark,
+    color: Theme.textOnPrimary,
   },
   activeBadge: {
-    backgroundColor: "rgba(21,128,61,0.28)",
+    backgroundColor: Theme.darkGreen,
   },
   activeDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#34D399",
+    backgroundColor: Theme.positive,
   },
   activeBadgeText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "900",
-    letterSpacing: 1.2,
-    color: "#86EFAC",
+    letterSpacing: 0.6,
+    color: Theme.textOnPrimary,
   },
   heroName: {
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: "900",
     fontStyle: "italic",
     color: Theme.textOnPrimary,
-    letterSpacing: -0.6,
-    lineHeight: 30,
+    letterSpacing: -0.4,
+    lineHeight: 28,
+    marginTop: 14,
   },
   heroSubtitle: {
     fontSize: 12,
@@ -572,48 +619,42 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  /* Content wrapper */
+  /* Content wrapper — paddingTop from METRICS_OVERLAP in component */
   content: {
     paddingHorizontal: 20,
-    paddingTop: 82,
     gap: 28,
   },
 
-  /* Metric island */
+  /* Metric strip — single dark pill (TRUST TIER / TENURE / SYNC STATE) */
   islandShadow: {
-    shadowColor: Theme.cinematicHeaderBg,
-    shadowOffset: { width: 0, height: 22 },
-    shadowOpacity: 0.18,
-    shadowRadius: 34,
-    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.2,
+    shadowRadius: 24,
+    elevation: 8,
   },
-  islandOuter: {
-    padding: 6,
-    borderRadius: 32,
-    backgroundColor: Theme.cinematicHeaderBg,
-  },
-  islandInner: {
+  islandPill: {
     flexDirection: "row",
-    paddingVertical: 22,
-    paddingHorizontal: 4,
-    borderRadius: 26,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: 20,
+    backgroundColor: Theme.feedbackModalHeaderDriver,
+    paddingVertical: 18,
+    paddingHorizontal: 6,
   },
   islandCell: {
     flex: 1,
     alignItems: "center",
-    gap: 6,
+    gap: 4,
     paddingHorizontal: 4,
   },
   islandCellDivider: {
-    borderRightWidth: 1,
-    borderRightColor: "rgba(255,255,255,0.08)",
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: "rgba(255,255,255,0.12)",
   },
   islandLabel: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "900",
-    letterSpacing: 1.6,
-    color: Theme.primaryLight ?? "#A5B4FC",
+    letterSpacing: 1.2,
+    color: Theme.textSection,
   },
   islandValueRow: {
     flexDirection: "row",
@@ -621,13 +662,13 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   islandValue: {
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: "900",
     fontStyle: "italic",
-    letterSpacing: -0.4,
+    letterSpacing: -0.3,
   },
   islandSuffix: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "900",
   },
 
@@ -689,8 +730,10 @@ const styles = StyleSheet.create({
   factIconWrap: {
     width: 40,
     height: 40,
-    borderRadius: 14,
-    backgroundColor: Theme.surfaceLight,
+    borderRadius: 10,
+    backgroundColor: Theme.liquidPillBg,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -704,7 +747,7 @@ const styles = StyleSheet.create({
   factValue: {
     fontSize: 14,
     fontWeight: "800",
-    color: Theme.textPrimary,
+    color: Theme.textPrimaryDark,
     letterSpacing: -0.2,
   },
 
