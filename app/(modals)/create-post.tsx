@@ -8,7 +8,13 @@ import { createPost, type PostType } from "@/features/network/services/posts.ser
 import { getIndentDisplayNumber } from "@/features/indents";
 import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { useInvalidatePosts, useIndentsQuery, useDirectQuoteCountsQuery, useInvalidateIndents } from "@/lib/queries";
+import {
+  useInvalidatePosts,
+  useIndentsQuery,
+  useDirectQuoteCountsQuery,
+  useInvalidateIndents,
+  useVehiclesQuery,
+} from "@/lib/queries";
 import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
 import {
@@ -31,6 +37,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -54,6 +61,7 @@ function defaultExpiresAt(): string {
 export default function CreatePostScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const { currentOrganization: organization } = useOrganization();
   const orgId = organization?.id ?? null;
   const invalidatePosts = useInvalidatePosts(orgId);
@@ -62,7 +70,9 @@ export default function CreatePostScreen() {
   const [type, setType] = useState<"LOAD" | "VEHICLE_AVAILABILITY">("LOAD");
   /** Pick an org indent (not awarded) vs type route manually. */
   const [loadEntryMode, setLoadEntryMode] = useState<"pick" | "manual">("pick");
+  const [vehicleEntryMode, setVehicleEntryMode] = useState<"idle" | "manual">("idle");
   const [selectedIndentId, setSelectedIndentId] = useState<string | null>(null);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [loadSearch, setLoadSearch] = useState("");
 
   const [content, setContent] = useState("");
@@ -76,6 +86,26 @@ export default function CreatePostScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   const { data: indents = [], isLoading: indentsLoading } = useIndentsQuery(orgId);
+  const { data: vehicles = [], isLoading: vehiclesLoading } = useVehiclesQuery(orgId);
+
+  const idleVehicles = useMemo(() => {
+    const list = (vehicles ?? []) as Array<{
+      id: string;
+      vehicle_number: string;
+      vehicle_type: string | null;
+      capacity?: string | null;
+      vehicle_body_type?: string | null;
+      vehicle_brand?: string | null;
+      vehicle_model?: string | null;
+      type?: string | null;
+      status?: string | null;
+    }>;
+    const isIdleStatus = (status: string | null | undefined) => {
+      const s = (status ?? "").toLowerCase();
+      return s === "idle" || s === "available" || s === "free";
+    };
+    return list.filter((v) => (v.type ?? "owned").toLowerCase() === "owned" && isIdleStatus(v.status));
+  }, [vehicles]);
 
   const broadcastableIndents = useMemo(() => {
     const q = loadSearch.trim().toLowerCase();
@@ -127,8 +157,10 @@ export default function CreatePostScreen() {
   const canSubmitVehicle =
     type === "VEHICLE_AVAILABILITY" &&
     origin.trim().length > 0 &&
-    vehicleType.trim().length > 0 &&
+    (vehicleEntryMode === "idle" ? !!selectedVehicleId : vehicleType.trim().length > 0) &&
     availability.trim().length > 0;
+
+  const pickColumns = windowWidth >= 1100 ? 3 : windowWidth >= 760 ? 2 : 1;
 
   const canSubmit = (canSubmitLoadPick || canSubmitLoadManual || canSubmitVehicle) && !submitting;
 
@@ -189,7 +221,6 @@ export default function CreatePostScreen() {
         origin: origin.trim() || undefined,
         destination: destination.trim() || undefined,
         vehicleType: vehicleType || undefined,
-        loadDate: availability.trim() || undefined,
         expiresAt,
       });
       error = res.error;
@@ -252,6 +283,7 @@ export default function CreatePostScreen() {
             setType("VEHICLE_AVAILABILITY");
             setLoadEntryMode("pick");
             setSelectedIndentId(null);
+            setVehicleEntryMode("idle");
           }}
         >
           <MapPin
@@ -347,17 +379,26 @@ export default function CreatePostScreen() {
                   </Pressable>
                 </View>
               ) : (
-                broadcastableIndents.map((load) => (
-                  <BroadcastPickIndentCard
-                    key={load.id}
-                    load={load}
-                    selected={selectedIndentId === load.id}
-                    bidCount={quoteCounts[load.id] ?? 0}
-                    onPress={() =>
-                      setSelectedIndentId((prev) => (prev === load.id ? null : load.id))
-                    }
-                  />
-                ))
+                <View style={styles.pickGrid}>
+                  {broadcastableIndents.map((load) => (
+                    <View
+                      key={load.id}
+                      style={[
+                        styles.pickGridCell,
+                        { width: pickColumns === 3 ? "32%" : pickColumns === 2 ? "49%" : "100%" },
+                      ]}
+                    >
+                      <BroadcastPickIndentCard
+                        load={load}
+                        selected={selectedIndentId === load.id}
+                        bidCount={quoteCounts[load.id] ?? 0}
+                        onPress={() =>
+                          setSelectedIndentId((prev) => (prev === load.id ? null : load.id))
+                        }
+                      />
+                    </View>
+                  ))}
+                </View>
               )}
 
               <View style={styles.notesBlock}>
@@ -514,6 +555,93 @@ export default function CreatePostScreen() {
                 <Package size={12} color={Theme.primary} />
                 <Text style={styles.orgBadgeText}>{organization?.name}</Text>
               </View>
+              <View style={styles.vehicleModeRow}>
+                <Pressable
+                  style={[styles.vehicleModeBtn, vehicleEntryMode === "idle" && styles.vehicleModeBtnActive]}
+                  onPress={() => setVehicleEntryMode("idle")}
+                >
+                  <Text
+                    style={[
+                      styles.vehicleModeBtnText,
+                      vehicleEntryMode === "idle" && styles.vehicleModeBtnTextActive,
+                    ]}
+                  >
+                    Auto from idle vehicles
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.vehicleModeBtn, vehicleEntryMode === "manual" && styles.vehicleModeBtnActive]}
+                  onPress={() => {
+                    setVehicleEntryMode("manual");
+                    setSelectedVehicleId(null);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.vehicleModeBtnText,
+                      vehicleEntryMode === "manual" && styles.vehicleModeBtnTextActive,
+                    ]}
+                  >
+                    Enter manually
+                  </Text>
+                </Pressable>
+              </View>
+
+              {vehicleEntryMode === "idle" ? (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>IDLE VEHICLES *</Text>
+                  {vehiclesLoading ? (
+                    <View style={styles.loadListLoading}>
+                      <ActivityIndicator size="small" color={Theme.primary} />
+                      <Text style={styles.loadListLoadingText}>Loading idle vehicles…</Text>
+                    </View>
+                  ) : idleVehicles.length === 0 ? (
+                    <View style={styles.emptyPick}>
+                      <Text style={styles.emptySub}>No fleet vehicles found. Enter details manually.</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.idleVehicleGrid}>
+                      {idleVehicles.map((v) => {
+                        const on = selectedVehicleId === v.id;
+                        return (
+                          <Pressable
+                            key={v.id}
+                            style={[styles.idleVehicleCard, on && styles.idleVehicleCardOn]}
+                            onPress={() => {
+                              setSelectedVehicleId((prev) => {
+                                const next = prev === v.id ? null : v.id;
+                                if (next) {
+                                  if (v.vehicle_type?.trim()) setVehicleType(v.vehicle_type.trim());
+                                  const vehicleBits = [
+                                    v.vehicle_type?.trim(),
+                                    v.capacity?.trim(),
+                                    v.vehicle_body_type?.trim(),
+                                    [v.vehicle_brand?.trim(), v.vehicle_model?.trim()].filter(Boolean).join(" "),
+                                  ].filter(Boolean);
+                                  setAvailability(
+                                    `Vehicle ${v.vehicle_number} available now${vehicleBits.length ? ` · ${vehicleBits.join(" · ")}` : ""}`,
+                                  );
+                                }
+                                return next;
+                              });
+                            }}
+                          >
+                            <View style={styles.idleVehicleTop}>
+                              <Text style={styles.idleVehicleNumber} numberOfLines={1}>
+                                {v.vehicle_number}
+                              </Text>
+                              {on ? <Check size={12} color={Theme.primary} strokeWidth={3} /> : null}
+                            </View>
+                            <Text style={styles.idleVehicleMeta} numberOfLines={1}>
+                              {v.vehicle_type || "Vehicle type not set"}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  )}
+                </View>
+              ) : null}
               <View style={styles.routeSection}>
                 <View style={styles.fieldGroup}>
                   <View style={[styles.fieldDot, { backgroundColor: "#10b981" }]} />
@@ -557,7 +685,9 @@ export default function CreatePostScreen() {
                       style={[
                         styles.chip,
                         vehicleType === v && styles.chipActiveVehicleType,
+                        vehicleEntryMode === "idle" && selectedVehicleId && styles.chipDisabled,
                       ]}
+                      disabled={vehicleEntryMode === "idle" && !!selectedVehicleId}
                       onPress={() => setVehicleType(vehicleType === v ? "" : v)}
                     >
                       {vehicleType === v && <Check size={11} color="#fff" strokeWidth={3} />}
@@ -581,6 +711,7 @@ export default function CreatePostScreen() {
                   placeholderTextColor={Theme.textSecondary}
                   value={availability}
                   onChangeText={setAvailability}
+                  editable={!(vehicleEntryMode === "idle" && !!selectedVehicleId)}
                 />
               </View>
               <View style={styles.section}>
@@ -686,6 +817,33 @@ const styles = StyleSheet.create({
   typeBtnTextActive: { color: "#fff" },
   form: { flex: 1 },
   formContent: { padding: 16 },
+  vehicleModeRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  vehicleModeBtn: {
+    flex: 1,
+    minHeight: 34,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+  vehicleModeBtnActive: {
+    borderColor: Theme.textPrimaryDark,
+    backgroundColor: Theme.surfaceGray,
+  },
+  vehicleModeBtnText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+  },
+  vehicleModeBtnTextActive: {
+    color: Theme.textPrimaryDark,
+  },
   pickSection: { gap: 8 },
   sectionHeaderRow: {
     flexDirection: "row",
@@ -733,6 +891,52 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, fontSize: 14, fontWeight: "600", color: Theme.textPrimary, padding: 0 },
   loadListLoading: { paddingVertical: 32, alignItems: "center", gap: 10 },
   loadListLoadingText: { fontSize: 12, color: Theme.textSecondary, fontWeight: "600" },
+  pickGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  pickGridCell: {
+    minWidth: 0,
+  },
+  idleVehicleGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  idleVehicleCard: {
+    width: "49%",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    gap: 4,
+  },
+  idleVehicleCardOn: {
+    borderColor: Theme.primary,
+    backgroundColor: Theme.primary + "10",
+  },
+  idleVehicleTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  idleVehicleNumber: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimary,
+  },
+  idleVehicleMeta: {
+    fontSize: 10,
+    color: Theme.textSecondary,
+    fontStyle: "italic",
+  },
   emptyPick: {
     alignItems: "center",
     paddingVertical: 28,
@@ -857,6 +1061,9 @@ const styles = StyleSheet.create({
   chipActiveVehicleType: {
     backgroundColor: Theme.primary,
     borderColor: Theme.primary,
+  },
+  chipDisabled: {
+    opacity: 0.45,
   },
   chipText: {
     fontSize: 12,

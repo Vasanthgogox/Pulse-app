@@ -17,6 +17,7 @@ import {
   Check,
   Clock3,
   Compass,
+  MapPin,
   Search,
   Sparkles,
   Star,
@@ -57,6 +58,26 @@ interface RecommendationSignal {
 interface ScoredOrg extends DiscoverOrg {
   score: number;
   signals: RecommendationSignal[];
+}
+
+function getBusinessLocation(org: DiscoverOrg): string | null {
+  const candidate = (
+    org as DiscoverOrg & {
+      business_location?: string | null;
+      location?: string | null;
+      city?: string | null;
+      state?: string | null;
+      headquarters?: string | null;
+    }
+  );
+  const direct =
+    candidate.business_location ??
+    candidate.location ??
+    candidate.headquarters ??
+    null;
+  if (direct && direct.trim()) return direct.trim();
+  const cityState = [candidate.city, candidate.state].filter(Boolean).join(", ").trim();
+  return cityState || null;
 }
 
 function extractCity(location: string | null | undefined): string {
@@ -122,6 +143,7 @@ function OrgCard({ org, onConnect, onCancel, loading }: {
   const rating = typeof ratingValue === "number" && Number.isFinite(ratingValue)
     ? ratingValue.toFixed(1)
     : null;
+  const businessLocation = getBusinessLocation(org);
 
   const onIn = () => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start();
   const onOut = () => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
@@ -162,10 +184,13 @@ function OrgCard({ org, onConnect, onCancel, loading }: {
             borderStyle={styles.avatarImage}
           />
         </View>
-        <Text style={styles.orgName} numberOfLines={1}>{org.name}</Text>
-        <Text style={styles.orgHeadline} numberOfLines={2}>
-          {isRecommended ? "Recommended from your active lanes" : "Potential network partner"}
-        </Text>
+        <Text style={styles.orgName} numberOfLines={1}>{org.name.toUpperCase()}</Text>
+        <View style={styles.locationRow}>
+          <MapPin size={10} color={Theme.textMutedDemo} strokeWidth={2.4} />
+          <Text style={styles.locationText} numberOfLines={1}>
+            {businessLocation ?? "Not available"}
+          </Text>
+        </View>
       </View>
 
       <View style={styles.discoveryMetaStack}>
@@ -175,11 +200,13 @@ function OrgCard({ org, onConnect, onCancel, loading }: {
             {hasMutuals ? `${mutuals} mutual${mutuals === 1 ? "" : "s"}` : "No mutuals"}
           </Text>
         </View>
-        <View style={styles.discoveryMetaChip}>
-          <Text style={styles.discoveryMetaText} numberOfLines={1}>
-            {isRecommended ? "Active lane overlap" : "Potential ally"}
-          </Text>
-        </View>
+        {isRecommended ? (
+          <View style={styles.discoveryMetaChip}>
+            <Text style={styles.discoveryMetaText} numberOfLines={1}>
+              Active lane overlap
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.cardFooter}>
@@ -221,10 +248,10 @@ function OrgCard({ org, onConnect, onCancel, loading }: {
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator size={12} color={Theme.textOnPrimary} />
+              <ActivityIndicator size={12} color={Theme.textPrimaryDark} />
             ) : (
               <>
-                <UserPlus size={13} color={Theme.textOnPrimary} strokeWidth={2.5} />
+                <UserPlus size={13} color={Theme.textPrimaryDark} strokeWidth={2.5} />
                 <Text style={styles.connectBtnText}>Send request</Text>
               </>
             )}
@@ -691,11 +718,19 @@ const styles = StyleSheet.create({
     marginTop: 8,
     lineHeight: 15,
   },
-  orgHeadline: {
-    minHeight: 24,
-    marginTop: 2,
+  locationRow: {
+    minHeight: 14,
+    marginTop: 3,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    maxWidth: "100%",
+    paddingHorizontal: 4,
+  },
+  locationText: {
     fontSize: 9,
-    fontWeight: "400",
+    fontWeight: "500",
     fontStyle: "italic",
     color: Theme.textMutedDemo,
     lineHeight: 12,
@@ -706,7 +741,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     gap: 6,
     marginTop: 2,
-    marginBottom: 10,
+    marginBottom: 8,
     alignItems: "center",
   },
   discoveryMetaChip: {
@@ -819,23 +854,24 @@ const styles = StyleSheet.create({
   connectBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    backgroundColor: Theme.buttonSecondaryBackground,
+    gap: 6,
+    backgroundColor: Theme.screenBackground,
     borderWidth: 1,
-    borderColor: Theme.buttonSecondaryBackground,
-    borderRadius: 14,
-    paddingHorizontal: 12,
+    borderColor: Theme.borderMedium,
+    borderRadius: 17,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    minWidth: 112,
+    minHeight: 34,
+    minWidth: 118,
     justifyContent: 'center',
     shadowColor: Theme.shadow,
-    shadowOpacity: 0.035,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 3 },
     elevation: 1,
   },
   connectBtnLoading: { opacity: 0.7 },
-  connectBtnText: { fontSize: 10, fontWeight: '700', fontStyle: "italic", color: Theme.textOnPrimary, letterSpacing: 0.15 },
+  connectBtnText: { fontSize: 10, fontWeight: '700', fontStyle: "italic", color: Theme.textPrimaryDark, letterSpacing: 0.2 },
   cardFooter: {
     minHeight: 44,
     paddingHorizontal: 8,
@@ -845,19 +881,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   stateTag: {
-    minHeight: 27,
+    minHeight: 34,
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 6,
     borderWidth: 1,
-    borderColor: Theme.textPrimaryDark,
-    borderRadius: 14,
-    paddingHorizontal: 12,
+    borderColor: Theme.borderMedium,
+    borderRadius: 17,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     backgroundColor: Theme.screenBackground,
+    shadowColor: Theme.shadow,
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
   },
   stateTagText: {
     fontSize: 10,
-    fontWeight: "600",
+    fontWeight: "700",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
   },
@@ -868,12 +910,12 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   cancelRequestBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: Theme.borderMedium,
     shadowColor: Theme.shadow,

@@ -513,150 +513,124 @@ export default function ProfileScreen() {
 
         {viewMode === "main" ? (
           <>
-            <View
-              style={[
-                styles.cinematicHeader,
-                { paddingTop: insets.top + Layout.headerPaddingBelowInset },
-              ]}
-            >
-              <View style={styles.cinematicHeaderBg}>
-                <View style={styles.cinematicHeaderGlow} />
-                <View style={styles.cinematicHeaderMesh} />
-              </View>
-
-              <View style={styles.cinematicHeaderTopRow}>
-                <Pressable
-                  onPress={handleClose}
-                  style={({ pressed }) => [
-                    styles.headerChip,
-                    pressed && styles.headerChipPressed,
-                  ]}
-                  accessibilityRole="button"
-                  hitSlop={Layout.touchTargetHitSlop}
-                >
-                  <FontAwesome
-                    name="chevron-left"
-                    size={18}
-                    color={Theme.textOnDark}
-                  />
-                </Pressable>
-
-                <Text style={styles.cinematicHeaderTitle}>PROFILE</Text>
-
-                <Pressable
-                  onPress={handleEditProfile}
-                  style={({ pressed }) => [
-                    styles.headerChip,
-                    pressed && styles.headerChipPressed,
-                  ]}
-                  accessibilityRole="button"
-                  hitSlop={Layout.touchTargetHitSlop}
-                >
-                  <FontAwesome name="pencil" size={16} color={Theme.textOnDark} />
-                </Pressable>
-              </View>
-
-              <LinearGradient
-                colors={["#0f172a", "#111827", "#0f172a"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.heroGradient}
+            <View style={[styles.driverLikeTopBar, { paddingTop: insets.top + 8 }]}>
+              <Pressable
+                onPress={handleClose}
+                style={({ pressed }) => [styles.driverLikeTopBtn, pressed && { opacity: 0.8 }]}
+                accessibilityRole="button"
+                hitSlop={Layout.touchTargetHitSlop}
               >
-                <View style={styles.profileHero}>
-                  <View style={styles.avatarGlow} />
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.avatarTouch,
-                      pressed && styles.avatarTouchPressed,
-                    ]}
-                    onPress={handleEditProfile}
-                    accessibilityRole="button"
-                  >
-                    <View style={styles.avatarFrame}>
-                      <Image
-                        source={{
-                          uri: avatarUri,
-                        }}
-                        style={styles.avatar}
-                      />
-                    </View>
-                    <View style={styles.levelBadgeOnAvatar}>
-                      <Trophy size={11} color="#fff" />
-                      <Text style={styles.levelBadgeText}>Lv {currentLevel}</Text>
-                    </View>
-                    <View style={styles.avatarEditBadge}>
-                      <FontAwesome
-                        name="camera"
-                        size={14}
-                        color={Theme.textPrimaryDark}
-                      />
-                    </View>
-                  </Pressable>
-
-                  <Text numberOfLines={1} style={styles.nameText}>
-                    {displayName}
-                  </Text>
-                  <Text style={styles.tierKicker} numberOfLines={1}>
-                    {currentLevelConfig.tier} · {currentLevelConfig.name}
-                  </Text>
-
-                  {showFleetStars ? (
-                    <View style={styles.ratingPill}>
-                      <FleetStars value={fleetAvg!} />
-                      <Text style={styles.ratingNum}>
-                        {fleetAvg!.toFixed(1)} · {fleetCount} review{fleetCount === 1 ? "" : "s"} (fleet)
-                      </Text>
-                    </View>
-                  ) : (
-                    <View style={styles.ratingPillMuted}>
-                      {ratingsLoading && driverIds.length > 0 ? (
-                        <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
-                      ) : (
-                        <Text style={styles.ratingPillMutedText}>
-                          {driverIds.length === 0
-                            ? "Add drivers to see fleet service ratings"
-                            : "Not enough driver ratings yet"}
-                        </Text>
-                      )}
-                    </View>
-                  )}
-
-                  <Text style={styles.aboutText} numberOfLines={2}>
-                    {statusText}
-                  </Text>
-
-                  <Pressable
-                    onPress={() => setViewMode("roadmap")}
-                    style={({ pressed }) => [styles.xpCard, pressed && { opacity: 0.92 }]}
-                    accessibilityRole="button"
-                    accessibilityLabel="View operations roadmap"
-                  >
-                    <View style={styles.xpTop}>
-                      <Text style={styles.xpEyebrow}>EXPERIENCE</Text>
-                      <Text style={styles.xpPct}>{experiencePct}%</Text>
-                    </View>
-                    <View style={styles.xpTrack}>
-                      <LinearGradient
-                        colors={["#10b981", "#0ea5e9"]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={[styles.xpFill, { width: `${experiencePct}%` }]}
-                      />
-                    </View>
-                    <View style={styles.xpFooter}>
-                      <Text style={styles.xpFooterTxt}>
-                        {tripsLoading ? "…" : `${completedTrips} trips done`}
-                      </Text>
-                      <Text style={styles.xpFooterTxt}>
-                        {nextLevelConfig?.name ?? "Max rank"} next · tap roadmap
-                      </Text>
-                    </View>
-                  </Pressable>
-                </View>
-              </LinearGradient>
+                <ChevronLeft size={20} color={Theme.textOnDark} />
+              </Pressable>
+              <Text style={styles.driverLikeTopTitle}>PROFILE</Text>
+              <Pressable
+                onPress={handleEditProfile}
+                style={({ pressed }) => [styles.driverLikeTopBtn, pressed && { opacity: 0.8 }]}
+                accessibilityRole="button"
+                hitSlop={Layout.touchTargetHitSlop}
+              >
+                <FontAwesome name="pencil" size={15} color={Theme.textOnDark} />
+              </Pressable>
             </View>
 
-            <View style={styles.contentWrap}>
+            <View style={styles.contentWrapDriverLike}>
+              <LinearGradient
+                colors={["#0f172a", "#020617"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.driverLikeHero}
+              >
+                <View style={styles.avatarGlow} />
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.avatarTouch,
+                    pressed && styles.avatarTouchPressed,
+                  ]}
+                  onPress={handleEditProfile}
+                  accessibilityRole="button"
+                >
+                  <View style={styles.avatarFrame}>
+                    <Image
+                      source={{
+                        uri: avatarUri,
+                      }}
+                      style={styles.avatar}
+                    />
+                  </View>
+                  <View style={styles.levelBadgeOnAvatar}>
+                    <Trophy size={11} color="#fff" />
+                    <Text style={styles.levelBadgeText}>Lv {currentLevel}</Text>
+                  </View>
+                  <View style={styles.avatarEditBadge}>
+                    <FontAwesome
+                      name="camera"
+                      size={14}
+                      color={Theme.textPrimaryDark}
+                    />
+                  </View>
+                </Pressable>
+
+                <Text numberOfLines={1} style={styles.nameText}>
+                  {displayName}
+                </Text>
+                <Text style={styles.tierKicker} numberOfLines={1}>
+                  {currentLevelConfig.tier} · {currentLevelConfig.name}
+                </Text>
+
+                {showFleetStars ? (
+                  <View style={styles.ratingPill}>
+                    <FleetStars value={fleetAvg!} />
+                    <Text style={styles.ratingNum}>
+                      {fleetAvg!.toFixed(1)} · {fleetCount} review{fleetCount === 1 ? "" : "s"} (fleet)
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.ratingPillMuted}>
+                    {ratingsLoading && driverIds.length > 0 ? (
+                      <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
+                    ) : (
+                      <Text style={styles.ratingPillMutedText}>
+                        {driverIds.length === 0
+                          ? "Add drivers to see fleet service ratings"
+                          : "Not enough driver ratings yet"}
+                      </Text>
+                    )}
+                  </View>
+                )}
+
+                <Text style={styles.aboutText} numberOfLines={2}>
+                  {statusText}
+                </Text>
+
+                <Pressable
+                  onPress={() => setViewMode("roadmap")}
+                  style={({ pressed }) => [styles.xpCard, pressed && { opacity: 0.92 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="View operations roadmap"
+                >
+                  <View style={styles.xpTop}>
+                    <Text style={styles.xpEyebrow}>EXPERIENCE</Text>
+                    <Text style={styles.xpPct}>{experiencePct}%</Text>
+                  </View>
+                  <View style={styles.xpTrack}>
+                    <LinearGradient
+                      colors={["#10b981", "#0ea5e9"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={[styles.xpFill, { width: `${experiencePct}%` }]}
+                    />
+                  </View>
+                  <View style={styles.xpFooter}>
+                    <Text style={styles.xpFooterTxt}>
+                      {tripsLoading ? "…" : `${completedTrips} trips done`}
+                    </Text>
+                    <Text style={styles.xpFooterTxt}>
+                      {nextLevelConfig?.name ?? "Max rank"} next · tap roadmap
+                    </Text>
+                  </View>
+                </Pressable>
+              </LinearGradient>
+
               <View style={styles.statsGrid}>
                 <View style={styles.statTile}>
                   <Truck size={20} color={Theme.primary} />
@@ -874,6 +848,41 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingTop: 0,
     gap: 0,
+  },
+  driverLikeTopBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 12,
+    backgroundColor: Theme.cinematicHeaderBg,
+  },
+  driverLikeTopBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.cinematicHeaderChipBg,
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
+  },
+  driverLikeTopTitle: {
+    ...Typography.headerTitle,
+    color: Theme.textOnDark,
+    letterSpacing: 2.2,
+  },
+  contentWrapDriverLike: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 12,
+    gap: 14,
+  },
+  driverLikeHero: {
+    borderRadius: 38,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    overflow: "hidden",
   },
 
   cinematicHeader: {

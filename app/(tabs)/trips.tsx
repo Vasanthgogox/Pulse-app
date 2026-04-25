@@ -1066,11 +1066,14 @@ export default function TripsScreen() {
         >
           <View style={styles.tripsBodyFiltersBleed}>
             {tripFilter === "Active" ? (
-              <View
-                style={[
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={[
                   styles.tripMetricsGrid,
                   isLargeScreen && styles.tripMetricsGridWeb,
                 ]}
+                style={styles.tripMetricsScroll}
               >
                 {TRIP_METRIC_ORDER.map((metricId) => {
                   const count = metricCounts[metricId];
@@ -1113,7 +1116,7 @@ export default function TripsScreen() {
                     </TouchableOpacity>
                   );
                 })}
-              </View>
+              </ScrollView>
             ) : null}
 
             <View style={styles.tripsBodyDateFilterRow}>
@@ -1794,22 +1797,22 @@ const styles = StyleSheet.create({
   },
   tripMetricsGrid: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 8,
     paddingBottom: 10,
+    paddingRight: 8,
+  },
+  tripMetricsScroll: {
     marginBottom: 8,
+    paddingBottom: 2,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
   },
   tripMetricsGridWeb: {
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
     gap: 10,
   },
   tripMetricTile: {
-    flexBasis: "31%",
-    flexGrow: 1,
-    minWidth: "31%",
-    maxWidth: "48%",
+    width: 160,
     paddingVertical: 10,
     paddingHorizontal: 8,
     borderRadius: 14,
@@ -1818,10 +1821,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surface,
   },
   tripMetricTileWeb: {
-    flexBasis: "15.5%",
-    minWidth: "15%",
-    maxWidth: "16.5%",
-    flexGrow: 1,
+    width: 164,
   },
   tripMetricTileActive: {
     borderColor: Theme.primary,
