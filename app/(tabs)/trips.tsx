@@ -1017,52 +1017,54 @@ export default function TripsScreen() {
             <View style={styles.tripsInlineFilterPanel}>
               {Platform.OS !== "web" ? (
                 <>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.tabRowScrollContent}
-                    style={styles.tabRowScroll}
-                  >
-                    {mainTabs.map((tab) => (
-                      <TouchableOpacity
-                        key={tab.id}
-                        style={[styles.tab, tab.isActive && styles.tabActive]}
-                        onPress={tab.onPress}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={[styles.tabText, tab.isActive && styles.tabTextActive]}>
-                          {tab.label}
-                        </Text>
-                        {tab.isActive ? <View style={styles.tabUnderline} /> : null}
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.tabRowScrollContent}
-                    style={styles.tabRowScrollSub}
-                  >
-                    {subTabs.map((tab) => (
-                      <TouchableOpacity
-                        key={tab.id}
-                        style={[styles.tab, tab.isActive && styles.tabActive]}
-                        onPress={tab.onPress}
-                        activeOpacity={0.7}
-                      >
-                        <Text
-                          style={[
-                            styles.tabText,
-                            { fontSize: 7 },
-                            tab.isActive && styles.tabTextActive,
-                          ]}
+                  <View style={styles.tripsMobileTopFilterRow}>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.tabRowScrollContent}
+                      style={[styles.tabRowScroll, styles.tripsMobileMainTabs]}
+                    >
+                      {mainTabs.map((tab) => (
+                        <TouchableOpacity
+                          key={tab.id}
+                          style={[styles.tab, styles.tripsMobileTab, tab.isActive && styles.tabActive]}
+                          onPress={tab.onPress}
+                          activeOpacity={0.7}
                         >
-                          {tab.label}
-                        </Text>
-                        {tab.isActive ? <View style={styles.tabUnderline} /> : null}
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
+                          <Text style={[styles.tabText, tab.isActive && styles.tabTextActive]}>
+                            {tab.label}
+                          </Text>
+                          {tab.isActive ? <View style={styles.tabUnderline} /> : null}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.tabRowScrollContent}
+                      style={[styles.tabRowScrollSub, styles.tripsMobileSubTabs]}
+                    >
+                      {subTabs.map((tab) => (
+                        <TouchableOpacity
+                          key={tab.id}
+                          style={[styles.tab, styles.tripsMobileTab, tab.isActive && styles.tabActive]}
+                          onPress={tab.onPress}
+                          activeOpacity={0.7}
+                        >
+                          <Text
+                            style={[
+                              styles.tabText,
+                              styles.tripsMobileSubTabText,
+                              tab.isActive && styles.tabTextActive,
+                            ]}
+                          >
+                            {tab.label}
+                          </Text>
+                          {tab.isActive ? <View style={styles.tabUnderline} /> : null}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
                   <View style={styles.tripsToolbar}>
                     <View style={styles.tripsLayoutToggle} accessibilityRole="tablist">
                       <TouchableOpacity
@@ -1148,6 +1150,69 @@ export default function TripsScreen() {
                         activeOpacity={0.7}
                       >
                         <FontAwesome name="sort" size={12} color={Theme.textPrimaryDark} />
+                      </TouchableOpacity>
+                    </View>
+                    <View style={styles.tripsMobileDateInlineRow}>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.tripsDateChipsContent}
+                        style={styles.tripsDateChipsScroll}
+                      >
+                        {(
+                          [
+                            { id: "all" as const, label: tr("all") },
+                            { id: "today" as const, label: tr("todayTrips") },
+                            { id: "yesterday" as const, label: tr("yesterdayTrips") },
+                            { id: "this_week" as const, label: tr("thisWeekTrips") },
+                            { id: "this_month" as const, label: tr("thisMonthTrips") },
+                          ] as const
+                        ).map(({ id, label }) => (
+                          <TouchableOpacity
+                            key={id}
+                            style={[
+                              styles.tripsBodyDateChip,
+                              styles.tripsMobileDateChip,
+                              dateRangeFilter === id && styles.tripsBodyDateChipActive,
+                            ]}
+                            onPress={() => {
+                              setDateRangeFilter(id);
+                              setCustomDateFrom(null);
+                              setCustomDateTo(null);
+                            }}
+                            activeOpacity={0.85}
+                          >
+                            <Text
+                              style={[
+                                styles.tripsBodyDateChipText,
+                                dateRangeFilter === id && styles.tripsBodyDateChipTextActive,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {label}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                      <TouchableOpacity
+                        style={[
+                          styles.tripsBodyDateRangeIconBtn,
+                          dateRangeFilter === "custom" && styles.tripsDateRangeIconBtnActive,
+                        ]}
+                        onPress={() => setShowDateRangePicker(true)}
+                        activeOpacity={0.8}
+                        accessibilityLabel={tr("dateRangeLabel")}
+                        accessibilityRole="button"
+                      >
+                        <FontAwesome
+                          name="calendar"
+                          size={12}
+                          color={
+                            dateRangeFilter === "custom"
+                              ? Theme.textOnDark
+                              : Theme.textPrimaryDark
+                          }
+                        />
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -1356,112 +1421,6 @@ export default function TripsScreen() {
                 </View>
               )}
             </View>
-
-            {Platform.OS !== "web" ? (
-              <View style={styles.tripsBodyDateFilterRow}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.tripsDateChipsContent}
-                style={styles.tripsDateChipsScroll}
-              >
-                {(
-                  [
-                    { id: "all" as const, label: tr("all") },
-                    { id: "today" as const, label: tr("todayTrips") },
-                    { id: "yesterday" as const, label: tr("yesterdayTrips") },
-                    { id: "this_week" as const, label: tr("thisWeekTrips") },
-                    { id: "this_month" as const, label: tr("thisMonthTrips") },
-                  ] as const
-                ).map(({ id, label }) => (
-                  <TouchableOpacity
-                    key={id}
-                    style={[
-                      styles.tripsBodyDateChip,
-                      dateRangeFilter === id && styles.tripsBodyDateChipActive,
-                      Platform.OS === "web" && styles.tripsSupplyChipWeb,
-                    ]}
-                    onPress={() => {
-                      setDateRangeFilter(id);
-                      setCustomDateFrom(null);
-                      setCustomDateTo(null);
-                    }}
-                    activeOpacity={0.85}
-                  >
-                    <Text
-                      style={[
-                        styles.tripsBodyDateChipText,
-                        dateRangeFilter === id &&
-                          styles.tripsBodyDateChipTextActive,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-                {dateRangeFilter === "custom" && customDateFrom && customDateTo ? (
-                  <View
-                    style={[styles.tripsBodyDateChip, styles.tripsDateChipCustom]}
-                  >
-                    <FontAwesome
-                      name="calendar"
-                      size={9}
-                      color={Theme.textOnDark}
-                      style={styles.tripsDateChipCustomIcon}
-                    />
-                    <Text
-                      style={[
-                        styles.tripsDateChipText,
-                        styles.tripsDateChipTextActive,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {formatLedgerDate(customDateFrom).toUpperCase()} →{" "}
-                      {formatLedgerDate(customDateTo).toUpperCase()}
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() => {
-                        setDateRangeFilter("all");
-                        setCustomDateFrom(null);
-                        setCustomDateTo(null);
-                      }}
-                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                      style={styles.tripsDateChipCustomClose}
-                    >
-                      <FontAwesome
-                        name="times"
-                        size={9}
-                        color={Theme.textOnDark}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
-              </ScrollView>
-              <TouchableOpacity
-                style={[
-                  styles.tripsBodyDateRangeIconBtn,
-                  dateRangeFilter === "custom" &&
-                    styles.tripsDateRangeIconBtnActive,
-                ]}
-                onPress={() => setShowDateRangePicker(true)}
-                activeOpacity={0.8}
-                accessibilityLabel={tr("dateRangeLabel")}
-                accessibilityRole="button"
-              >
-                <FontAwesome
-                  name="calendar"
-                  size={12}
-                  color={
-                    dateRangeFilter === "custom"
-                      ? Theme.textOnDark
-                      : Theme.textPrimaryDark
-                  }
-                />
-              </TouchableOpacity>
-              </View>
-            ) : null}
-
             {tripFilter === "Active" ? (
               <ScrollView
                 horizontal
@@ -1748,11 +1707,40 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.separatorDark,
   },
+  tripsMobileTopFilterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 8,
+    paddingBottom: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+  },
+  tripsMobileMainTabs: {
+    flex: 0.75,
+    minWidth: 0,
+    borderBottomWidth: 0,
+  },
+  tripsMobileSubTabs: {
+    flex: 1.25,
+    minWidth: 0,
+    borderBottomWidth: 0,
+  },
+  tripsMobileTab: {
+    minWidth: 62,
+    paddingHorizontal: 8,
+    paddingVertical: 9,
+  },
+  tripsMobileSubTabText: {
+    fontSize: 7,
+    letterSpacing: 1.1,
+  },
   tabRowScrollContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingHorizontal: 0,
     paddingTop: 4,
     paddingBottom: 4,
   },
@@ -1795,10 +1783,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 8,
-    paddingBottom: 8,
+    paddingTop: 9,
+    paddingBottom: 9,
     backgroundColor: "transparent",
-    gap: 16,
+    gap: 8,
   },
   tripsLayoutToggle: {
     flexDirection: "row",
@@ -1823,8 +1811,8 @@ const styles = StyleSheet.create({
   tripsToolbarActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    flex: 1,
+    gap: 8,
+    flex: 0,
     minWidth: 0,
   },
   tripsSearchWrap: {
@@ -1871,6 +1859,17 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
+  },
+  tripsMobileDateInlineRow: {
+    flex: 1,
+    minWidth: 96,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  tripsMobileDateChip: {
+    paddingHorizontal: 9,
+    paddingVertical: 6,
   },
   tripsDateFilterRow: {
     flexDirection: "row",

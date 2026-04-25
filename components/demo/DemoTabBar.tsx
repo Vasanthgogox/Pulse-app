@@ -231,7 +231,7 @@ function AnimatedNavPill({
   );
 }
 
-export type DemoTabId = "finance" | "trips" | "network" | "resources";
+export type DemoTabId = "finance" | "trips" | "network" | "loadCenter" | "resources";
 
 interface DemoTabBarProps {
   activeTab: DemoTabId;
@@ -289,6 +289,7 @@ export function DemoTabBar({
   const isFiscal = activeTab === "finance";
   const isTrips = activeTab === "trips";
   const isNetwork = activeTab === "network";
+  const isLoadCenter = activeTab === "loadCenter";
   const displayName = (
     profile?.full_name ??
     profile?.displayName ??
@@ -334,6 +335,13 @@ export function DemoTabBar({
         subtitle: "MARKET",
         icon: "chart-line",
         active: isNetwork,
+      },
+      {
+        id: "loadCenter",
+        title: "LOAD",
+        subtitle: "CENTER",
+        icon: "truck-loading",
+        active: isLoadCenter,
       },
     ];
 
@@ -523,6 +531,49 @@ export function DemoTabBar({
                 </AnimatedTabIcon>
               </TouchableOpacity>
             </View>
+
+            {/* Column 4: Load Center */}
+            <View style={styles.dockColumn}>
+              <View
+                style={[
+                  styles.activePill,
+                  isLoadCenter && styles.activePillVisible,
+                ]}
+              >
+                <View style={styles.activePillAccent} />
+              </View>
+              <TouchableOpacity
+                style={styles.dockButton}
+                onPress={() => onTabChange("loadCenter")}
+                activeOpacity={0.9}
+                hitSlop={{
+                  top: Layout.touchTargetHitSlop,
+                  bottom: Layout.touchTargetHitSlop,
+                  left: Layout.touchTargetHitSlop,
+                  right: Layout.touchTargetHitSlop,
+                }}
+              >
+                <AnimatedTabIcon selected={isLoadCenter}>
+                  <FontAwesome5
+                    name="truck-loading"
+                    size={15}
+                    color={
+                      isLoadCenter ? Theme.textOnPrimary : Theme.textMutedDemo
+                    }
+                    solid={isLoadCenter}
+                  />
+                  <Text
+                    style={[
+                      styles.dockLabel,
+                      styles.dockLabelCompact,
+                      isLoadCenter && styles.dockLabelActive,
+                    ]}
+                  >
+                    LOAD
+                  </Text>
+                </AnimatedTabIcon>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
         <TouchableOpacity
@@ -560,17 +611,17 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "stretch",
     backgroundColor: "transparent",
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
   },
   mobileFooterRow: {
     width: "100%",
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   glassDock: {
     flex: 1,
-    height: Layout.tabBarHeight + 4,
+    height: Layout.tabBarHeight + 6,
     flexDirection: "row",
     alignItems: "stretch",
     justifyContent: "space-between",
@@ -586,8 +637,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   mobileEdgeBtn: {
-    width: 34,
-    height: 34,
+    width: 32,
+    height: 32,
     borderRadius: 10,
     backgroundColor: Theme.darkBackground,
     alignItems: "center",
@@ -596,8 +647,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.12)",
   },
   mobileProfileBtn: {
-    width: 34,
-    height: 34,
+    width: 32,
+    height: 32,
     borderRadius: 12,
     backgroundColor: "rgba(255,255,255,0.92)",
     borderWidth: 1,
@@ -660,7 +711,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    minWidth: 210,
+    minWidth: 230,
     paddingRight: 8,
   },
   webBrandLogo: {
@@ -672,15 +723,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   webBrandTitle: {
-    fontSize: 26,
+    fontSize: 34,
     fontWeight: "900",
     color: Theme.textPrimaryDark,
     fontStyle: "italic",
-    letterSpacing: -0.6,
-    lineHeight: 28,
+    letterSpacing: -1,
+    lineHeight: 36,
   },
   webBrandDotText: {
     color: Theme.darkGreen,
+    fontSize: 38,
+    lineHeight: 38,
   },
   webBrandSub: {
     marginTop: 1,
@@ -840,10 +893,10 @@ const styles = StyleSheet.create({
   },
   activePill: {
     position: "absolute",
-    top: 2.5,
-    left: 2.5,
-    right: 2.5,
-    bottom: 2.5,
+    top: 3,
+    left: 2,
+    right: 2,
+    bottom: 3,
     borderRadius: 18,
     backgroundColor: Theme.darkBackground,
     borderTopWidth: 1,
@@ -886,8 +939,11 @@ const styles = StyleSheet.create({
     fontSize: 7,
     fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 1,
+    letterSpacing: 0.7,
     color: Theme.textMutedDemo,
+  },
+  dockLabelCompact: {
+    letterSpacing: 0.55,
   },
   dockLabelActive: {
     color: Theme.textOnPrimary,

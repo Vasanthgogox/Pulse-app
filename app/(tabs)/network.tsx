@@ -6,15 +6,12 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
-import type { IndentRow } from "@/features/indents";
 import {
   ConnectionsView,
   type ConnectionFilterTab,
 } from "@/features/network/components/ConnectionsView";
 import { DiscoverView } from "@/features/network/components/DiscoverView";
 import { InvitationsView } from "@/features/network/components/InvitationsView";
-import { LoadCenterView } from "@/features/network/components/LoadCenterView";
-import { ShareLoadSheet } from "@/features/network/components/ShareLoadSheet";
 import { StoryReel } from "@/features/network/components/StoryReel";
 import { isPostVisibleForOrg, type PostRow } from "@/features/network/services/posts.service";
 import {
@@ -22,19 +19,15 @@ import {
   useConnectionRequestsReceivedQuery,
   useDriversQuery,
   useInvalidateNetwork,
-  useInvalidatePosts,
   useNetworkFeedQuery,
   useRealtimeNetworkInvalidation,
   useSuppliersQuery,
 } from "@/lib/queries";
-import { ROUTES } from "@/lib/routes";
-import type { Href } from "expo-router";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import {
   Activity,
   Compass,
   Search,
-  Truck,
   UserPlus2,
 } from "lucide-react-native";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -42,12 +35,14 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -93,13 +88,13 @@ function NetworkStoryStrip({
 
 export default function NetworkScreen() {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isWideNetwork = Platform.OS === "web" && width >= 1180;
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
-  const { tab: tabParam } = useLocalSearchParams<{ tab?: string }>();
   const { currentOrganization: organization } = useOrganization();
   const orgId = organization?.id ?? null;
   const [refreshing, setRefreshing] = useState(false);
-  const [networkSegment, setNetworkSegment] = useState<"connections" | "invitations" | "load">("load");
   const [connSearch, setConnSearch] = useState("");
   const [connFilter, setConnFilter] = useState<ConnectionFilterTab>("ALL");
   const [connSearchOpen, setConnSearchOpen] = useState(false);
@@ -108,48 +103,9 @@ export default function NetworkScreen() {
   const [invSearchOpen, setInvSearchOpen] = useState(false);
   const [discoverSearchOpen, setDiscoverSearchOpen] = useState(false);
   const [discoverSearch, setDiscoverSearch] = useState("");
-  const [shareLoad, setShareLoad] = useState<IndentRow | null>(null);
   const [recentAddedNames, setRecentAddedNames] = useState<string[]>([]);
-  const SEGMENT_ICON_WIDTH = 40;
-  const SEGMENT_ACTIVE_WIDTH = 172;
-  const connWidthAnim = React.useRef(
-    new Animated.Value(networkSegment === "connections" ? SEGMENT_ACTIVE_WIDTH : SEGMENT_ICON_WIDTH),
-  ).current;
-  const invWidthAnim = React.useRef(
-    new Animated.Value(networkSegment === "invitations" ? SEGMENT_ACTIVE_WIDTH : SEGMENT_ICON_WIDTH),
-  ).current;
-  const loadWidthAnim = React.useRef(
-    new Animated.Value(networkSegment === "load" ? SEGMENT_ACTIVE_WIDTH : SEGMENT_ICON_WIDTH),
-  ).current;
-  const invitePulse = React.useRef(new Animated.Value(1)).current;
   const recentPulse = React.useRef(new Animated.Value(1)).current;
   const prevConnectionCountRef = React.useRef<number | null>(null);
-
-  useEffect(() => {
-    if (tabParam === "load") {
-      setNetworkSegment("load");
-    }
-  }, [tabParam]);
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(connWidthAnim, {
-        toValue: networkSegment === "connections" ? SEGMENT_ACTIVE_WIDTH : SEGMENT_ICON_WIDTH,
-        duration: 220,
-        useNativeDriver: false,
-      }),
-      Animated.timing(invWidthAnim, {
-        toValue: networkSegment === "invitations" ? SEGMENT_ACTIVE_WIDTH : SEGMENT_ICON_WIDTH,
-        duration: 220,
-        useNativeDriver: false,
-      }),
-      Animated.timing(loadWidthAnim, {
-        toValue: networkSegment === "load" ? SEGMENT_ACTIVE_WIDTH : SEGMENT_ICON_WIDTH,
-        duration: 220,
-        useNativeDriver: false,
-      }),
-    ]).start();
-  }, [networkSegment, connWidthAnim, invWidthAnim, loadWidthAnim]);
 
   useRealtimeNetworkInvalidation(orgId);
   const receivedQ = useConnectionRequestsReceivedQuery(orgId);
@@ -158,7 +114,6 @@ export default function NetworkScreen() {
   const driversQ = useDriversQuery(orgId);
   const feedQ = useNetworkFeedQuery(orgId);
   const invalidateNetwork = useInvalidateNetwork(orgId);
-  const invalidatePosts = useInvalidatePosts(orgId);
 
   const filterTabs = useMemo(
     () => ["ALL", "CLIENT", "SUPPLIER", "DRIVER"] as ConnectionFilterTab[],
@@ -224,17 +179,13 @@ export default function NetworkScreen() {
           Animated.timing(value, { toValue: 1, duration: 650, useNativeDriver: true }),
         ]),
       );
-    const inviteAnim = pendingCount > 0 ? runPulse(invitePulse) : null;
     const recentAnim = recentAddedNames.length > 0 ? runPulse(recentPulse) : null;
-    inviteAnim?.start();
     recentAnim?.start();
     return () => {
-      inviteAnim?.stop();
       recentAnim?.stop();
-      invitePulse.setValue(1);
       recentPulse.setValue(1);
     };
-  }, [pendingCount, recentAddedNames.length, invitePulse, recentPulse]);
+  }, [recentAddedNames.length, recentPulse]);
 
   const onCreatePost = () => router.push("/(modals)/create-post");
   const allowLoadPosts = organization?.capabilities?.canBid ?? true;
@@ -273,7 +224,6 @@ export default function NetworkScreen() {
       {recentAddedNames.length > 0 ? (
         <Animated.View style={[styles.hubTopRow, { transform: [{ scale: recentPulse }] }]}>
           <Pressable
-            onPress={() => setNetworkSegment("connections")}
             style={styles.recentAddedChip}
           >
             <Text style={styles.recentAddedLabel}>Recently added</Text>
@@ -310,10 +260,10 @@ export default function NetworkScreen() {
         />
       }
     >
-      {networkSegment === "connections" ? (
-        <>
-          <View style={styles.sectionBlock}>
-            <View style={styles.connectionsCard}>
+      <>
+        <View style={[styles.networkMergedRow, !isWideNetwork && styles.networkMergedRowStack]}>
+          <View style={[styles.sectionBlock, isWideNetwork && styles.networkMergedPanePrimary]}>
+            <View style={[styles.connectionsCard, isWideNetwork && styles.networkMergedCard]}>
               <View style={styles.sectionHeadingRowSpread}>
                 <View style={styles.sectionHeadingRowCompact}>
                   <Activity size={14} color={Theme.textPrimaryDark} />
@@ -386,8 +336,95 @@ export default function NetworkScreen() {
               />
             </View>
           </View>
-          <View style={styles.sectionBlock}>
-            <View style={styles.discoverCard}>
+
+          <View style={[styles.sectionBlock, isWideNetwork && styles.networkMergedPaneSecondary]}>
+            <View style={[styles.invitationsCard, isWideNetwork && styles.networkMergedCard]}>
+              <View style={[styles.sectionHeadingRowSpread, styles.invitationsMergedHeader]}>
+                <View style={styles.sectionHeadingRowCompact}>
+                  <UserPlus2 size={15} color={Theme.textPrimaryDark} />
+                  <View style={styles.sectionTitleBlock}>
+                    <Text style={styles.sectionKicker}>Inbound mission protocol</Text>
+                    <Text style={styles.sectionHeading}>{pendingCount} pending syncs</Text>
+                  </View>
+                  <View style={styles.invitationsHeaderControls}>
+                    <View style={[styles.invSubRowCompact, styles.invSubRowCompactHeader]}>
+                      {(["received", "sent"] as const).map((k) => {
+                        const on = invSubTab === k;
+                        return (
+                          <Pressable
+                            key={k}
+                            onPress={() => setInvSubTab(k)}
+                            style={[
+                              styles.inlineFilterPill,
+                              styles.invHeaderTabPill,
+                              on && styles.inlineFilterPillOn,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.inlineFilterPillText,
+                                styles.invHeaderTabText,
+                                on && styles.inlineFilterPillTextOn,
+                              ]}
+                            >
+                              {k === "received" ? "RECEIVED" : "SENT"}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                </View>
+                {invSearchOpen ? (
+                  <View style={[styles.inlineSearchBox, styles.invHeaderSearchBox]}>
+                    <Search size={13} color={Theme.textSecondary} />
+                    <TextInput
+                      style={styles.inlineSearchInput}
+                      placeholder={invSubTab === "received" ? "Search received…" : "Search sent…"}
+                      placeholderTextColor={Theme.textSecondary}
+                      value={invSearch}
+                      onChangeText={setInvSearch}
+                      returnKeyType="search"
+                      autoFocus
+                    />
+                    <Pressable
+                      onPress={() => {
+                        setInvSearch("");
+                        setInvSearchOpen(false);
+                      }}
+                      hitSlop={8}
+                    >
+                      <Text style={styles.inlineSearchClose}>×</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => setInvSearchOpen(true)}
+                    style={({ pressed }) => [
+                      styles.inlineSearchIconBtn,
+                      styles.invHeaderSearchBtn,
+                      pressed && { opacity: 0.72 },
+                    ]}
+                    hitSlop={8}
+                  >
+                    <Search size={13} color={Theme.textPrimaryDark} strokeWidth={2.4} />
+                  </Pressable>
+                )}
+              </View>
+              <InvitationsView
+                orgId={orgId}
+                embedded
+                variant="hub"
+                subTab={invSubTab}
+                onSubTabChange={setInvSubTab}
+                search={invSearch}
+                onSearchChange={setInvSearch}
+              />
+            </View>
+          </View>
+
+          <View style={[styles.sectionBlock, isWideNetwork && styles.networkMergedPaneTertiary]}>
+            <View style={[styles.discoverCard, isWideNetwork && styles.networkMergedCard]}>
               <View style={styles.sectionHeadingRowSpread}>
                 <View style={styles.sectionHeadingRowCompact}>
                   <Compass size={14} color={Theme.textSecondary} />
@@ -440,80 +477,8 @@ export default function NetworkScreen() {
               />
             </View>
           </View>
-        </>
-      ) : networkSegment === "invitations" ? (
-        <View style={styles.sectionBlock}>
-          <View style={styles.invitationsCard}>
-            <View style={styles.sectionHeadingRowSpread}>
-              <View style={styles.sectionHeadingRowCompact}>
-                <UserPlus2 size={15} color={Theme.textPrimaryDark} />
-                <View style={styles.sectionTitleBlock}>
-                  <Text style={styles.sectionKicker}>Inbound mission protocol</Text>
-                  <Text style={styles.sectionHeading}>{pendingCount} pending syncs</Text>
-                </View>
-              </View>
-              <View style={styles.invitationsHeaderControls}>
-                <View style={[styles.invSubRowCompact, styles.invSubRowCompactHeader]}>
-                  {(["received", "sent"] as const).map((k) => {
-                    const on = invSubTab === k;
-                    return (
-                      <Pressable
-                        key={k}
-                        onPress={() => setInvSubTab(k)}
-                        style={[styles.inlineFilterPill, on && styles.inlineFilterPillOn]}
-                      >
-                        <Text style={[styles.inlineFilterPillText, on && styles.inlineFilterPillTextOn]}>
-                          {k === "received" ? "RECEIVED" : "SENT"}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-                {invSearchOpen ? (
-                  <View style={styles.inlineSearchBox}>
-                    <Search size={13} color={Theme.textSecondary} />
-                    <TextInput
-                      style={styles.inlineSearchInput}
-                      placeholder={invSubTab === "received" ? "Search received…" : "Search sent…"}
-                      placeholderTextColor={Theme.textSecondary}
-                      value={invSearch}
-                      onChangeText={setInvSearch}
-                      returnKeyType="search"
-                      autoFocus
-                    />
-                    <Pressable
-                      onPress={() => {
-                        setInvSearch("");
-                        setInvSearchOpen(false);
-                      }}
-                      hitSlop={8}
-                    >
-                      <Text style={styles.inlineSearchClose}>×</Text>
-                    </Pressable>
-                  </View>
-                ) : (
-                  <Pressable
-                    onPress={() => setInvSearchOpen(true)}
-                    style={({ pressed }) => [styles.inlineSearchIconBtn, pressed && { opacity: 0.72 }]}
-                    hitSlop={8}
-                  >
-                    <Search size={13} color={Theme.textPrimaryDark} strokeWidth={2.4} />
-                  </Pressable>
-                )}
-              </View>
-            </View>
-            <InvitationsView
-              orgId={orgId}
-              embedded
-              variant="hub"
-              subTab={invSubTab}
-              onSubTabChange={setInvSubTab}
-              search={invSearch}
-              onSearchChange={setInvSearch}
-            />
-          </View>
         </View>
-      ) : null}
+      </>
     </ScrollView>
   );
 
@@ -524,89 +489,6 @@ export default function NetworkScreen() {
       feedPosts={feedPosts}
       feedLoading={feedQ.isLoading}
       onCreatePost={onCreatePost}
-      headerActions={
-        <View style={styles.storyTopSwitchRow}>
-          <Animated.View style={[styles.storyTopSwitchAnimWrap, { width: connWidthAnim }]}>
-            <Pressable
-              onPress={() => setNetworkSegment("connections")}
-              style={[
-                styles.storyTopSwitchBtn,
-                networkSegment === "connections" && styles.storyTopSwitchBtnOn,
-              ]}
-              hitSlop={6}
-            >
-              <View style={styles.segmentLabelInline}>
-                <Activity
-                  size={12}
-                  color={networkSegment === "connections" ? Theme.textOnPrimary : Theme.textSecondary}
-                  strokeWidth={2.2}
-                />
-                {networkSegment === "connections" ? (
-                  <Text style={[styles.storyTopSwitchText, styles.storyTopSwitchTextOn]}>
-                    CONNECTIONS
-                  </Text>
-                ) : null}
-              </View>
-            </Pressable>
-          </Animated.View>
-          <Animated.View style={[styles.storyTopSwitchAnimWrap, { width: invWidthAnim }]}>
-            <Pressable
-              onPress={() => setNetworkSegment("invitations")}
-              style={[
-                styles.storyTopSwitchBtn,
-                networkSegment === "invitations" && styles.storyTopSwitchBtnOn,
-              ]}
-              hitSlop={6}
-            >
-              <View style={styles.segmentLabelInline}>
-                <UserPlus2
-                  size={12}
-                  color={networkSegment === "invitations" ? Theme.textOnPrimary : Theme.textSecondary}
-                  strokeWidth={2.2}
-                />
-                {networkSegment === "invitations" ? (
-                  <Text style={[styles.storyTopSwitchText, styles.storyTopSwitchTextOn]}>
-                    INVITATIONS
-                  </Text>
-                ) : null}
-                {pendingCount > 0 ? (
-                  <Animated.View
-                    style={[
-                      styles.storyInviteBadge,
-                      { transform: [{ scale: invitePulse }] },
-                    ]}
-                  >
-                    <Text style={styles.storyInviteBadgeText}>{pendingCount}</Text>
-                  </Animated.View>
-                ) : null}
-              </View>
-            </Pressable>
-          </Animated.View>
-          <Animated.View style={[styles.storyTopSwitchAnimWrap, { width: loadWidthAnim }]}>
-            <Pressable
-              onPress={() => setNetworkSegment("load")}
-              style={[
-                styles.storyTopSwitchBtn,
-                networkSegment === "load" && styles.storyTopSwitchBtnOn,
-              ]}
-              hitSlop={6}
-            >
-              <View style={styles.segmentLabelInline}>
-                <Truck
-                  size={12}
-                  color={networkSegment === "load" ? Theme.textOnPrimary : Theme.textSecondary}
-                  strokeWidth={2.2}
-                />
-                {networkSegment === "load" ? (
-                  <Text style={[styles.storyTopSwitchText, styles.storyTopSwitchTextOn]}>
-                    LOAD CENTER
-                  </Text>
-                ) : null}
-              </View>
-            </Pressable>
-          </Animated.View>
-        </View>
-      }
     />
   );
 
@@ -615,34 +497,7 @@ export default function NetworkScreen() {
       {broadcastStrip}
       {hubBar}
 
-      {networkSegment === "load" ? (
-        <View style={styles.loadEmbed}>
-          <LoadCenterView
-            contentTopPadding={0}
-            onCreateIndentPress={() => router.push(ROUTES.CREATE_INDENT as Href)}
-            onIndentPress={(indent) =>
-              router.push(`/indent/${indent.id}` as Href)
-            }
-            onShareToNetwork={(indent) => setShareLoad(indent)}
-          />
-        </View>
-      ) : (
-        scrollContent
-      )}
-
-      {orgId ? (
-        <ShareLoadSheet
-          visible={shareLoad !== null}
-          indent={shareLoad}
-          orgId={orgId}
-          onClose={() => setShareLoad(null)}
-          onSuccess={() => {
-            invalidatePosts();
-            invalidateNetwork();
-            setShareLoad(null);
-          }}
-        />
-      ) : null}
+      {scrollContent}
     </View>
   );
 }
@@ -653,14 +508,10 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     minHeight: 0,
   },
-  loadEmbed: {
-    flex: 1,
-    minHeight: 0,
-    backgroundColor: Theme.screenBackground,
-  },
   scroll: { flex: 1 },
   scrollContent: {
-    paddingTop: 0,
+    paddingTop: 4,
+    paddingBottom: 18,
     backgroundColor: Theme.screenBackground,
   },
   storyLoading: {
@@ -779,6 +630,32 @@ const styles = StyleSheet.create({
   },
   sectionBlock: {
     marginTop: 10,
+  },
+  networkMergedRow: {
+    marginHorizontal: 0,
+    marginTop: 14,
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 18,
+  },
+  networkMergedRowStack: {
+    marginHorizontal: 0,
+    flexDirection: "column",
+    gap: 18,
+  },
+  networkMergedPanePrimary: {
+    marginTop: 0,
+  },
+  networkMergedPaneSecondary: {
+    marginTop: 0,
+  },
+  networkMergedPaneTertiary: {
+    marginTop: 0,
+  },
+  networkMergedCard: {
+    marginHorizontal: Layout.screenPaddingHorizontal,
+    marginTop: 0,
+    marginBottom: 0,
   },
   connectionsCard: {
     marginHorizontal: Layout.screenPaddingHorizontal,
@@ -907,6 +784,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     minWidth: 0,
+    flex: 1,
   },
   sectionHeadingRowSpread: {
     flexDirection: "row",
@@ -1172,14 +1050,45 @@ const styles = StyleSheet.create({
   invSubRowCompactHeader: {
     flex: 0,
     alignItems: "center",
+    flexShrink: 0,
+  },
+  invitationsMergedHeader: {
+    alignItems: "center",
+    flexWrap: "nowrap",
+    minHeight: 48,
+    paddingBottom: 10,
+    justifyContent: "space-between",
   },
   invitationsHeaderControls: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 10,
     flexShrink: 0,
-    justifyContent: "flex-end",
-    marginLeft: 8,
+    justifyContent: "flex-start",
+    marginLeft: 10,
+    minWidth: 188,
+  },
+  invHeaderTabPill: {
+    minHeight: 28,
+    minWidth: 86,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+  invHeaderTabText: {
+    fontSize: 9,
+    letterSpacing: 0.65,
+  },
+  invHeaderSearchBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginLeft: "auto",
+    flexShrink: 0,
+  },
+  invHeaderSearchBox: {
+    marginLeft: "auto",
+    width: 220,
   },
   invSubBtn: {
     paddingVertical: 8,

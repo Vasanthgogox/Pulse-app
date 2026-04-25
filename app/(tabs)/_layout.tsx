@@ -32,6 +32,10 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
     : 'trips';
 
   const onTabChange = (tab: DemoTabId) => {
+    if (tab === 'loadCenter') {
+      router.push(ROUTES.PULSE_LOADS);
+      return;
+    }
     navigation.navigate(tab);
   };
 
@@ -64,7 +68,7 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
       right: 0,
       top: 0,
       zIndex: 100,
-      width: '100%',
+      width: '100%' as const,
     },
     !isDesktopWeb && {
       paddingBottom: insets.bottom > 0 ? 0 : 4,

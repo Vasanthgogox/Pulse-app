@@ -264,7 +264,8 @@ function RootOverlayTabBar() {
   const showOnRootScreens =
     pathname === '/pod-reconciliation' ||
     pathname === '/invoicing-execute' ||
-    pathname === '/log-incoming-pods';
+    pathname === '/log-incoming-pods' ||
+    pathname === ROUTES.PULSE_LOADS;
 
   useEffect(() => {
     if (showOnRootScreens) resetBarVisible();
@@ -272,8 +273,8 @@ function RootOverlayTabBar() {
 
   if (!showOnRootScreens) return null;
 
-  // These screens are reached from the Finance tab, so Finance stays active in the dock.
-  const activeTab: DemoTabId = 'finance';
+  // These screens are reached from header actions, so keep the matching nav item active.
+  const activeTab: DemoTabId = pathname === ROUTES.PULSE_LOADS ? 'loadCenter' : 'finance';
   const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
 
   const shellStyle = [
@@ -284,7 +285,7 @@ function RootOverlayTabBar() {
       right: 0,
       top: 0,
       zIndex: 100,
-      width: '100%',
+      width: '100%' as const,
     },
   ];
 
@@ -301,7 +302,9 @@ function RootOverlayTabBar() {
                   ? ROUTES.TABS.TRIPS
                   : tab === 'network'
                     ? ROUTES.TABS.NETWORK
-                    : ROUTES.TABS.RESOURCES) as '/'
+                    : tab === 'loadCenter'
+                      ? ROUTES.PULSE_LOADS
+                      : ROUTES.TABS.RESOURCES) as '/'
             )
           }
           onProfilePress={() => router.push('/(tabs)/profile')}
@@ -322,7 +325,9 @@ function RootOverlayTabBar() {
                 ? ROUTES.TABS.TRIPS
                 : tab === 'network'
                   ? ROUTES.TABS.NETWORK
-                  : ROUTES.TABS.RESOURCES) as '/'
+                  : tab === 'loadCenter'
+                    ? ROUTES.PULSE_LOADS
+                    : ROUTES.TABS.RESOURCES) as '/'
           )
         }
         onProfilePress={() => router.push('/(tabs)/profile')}
