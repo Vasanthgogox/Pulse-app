@@ -11,6 +11,7 @@ import {
 } from '@/components/driver/DriverSubScreenHeader';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { ROUTES } from '@/lib/routes';
 
 export default function DriverSettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -29,7 +30,7 @@ export default function DriverSettingsScreen() {
 
   const handleSignOut = async () => {
     await signOut();
-    router.replace('/sign-in');
+    router.replace(ROUTES.SIGN_IN_DIRECT);
   };
 
   return (

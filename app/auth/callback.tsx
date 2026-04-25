@@ -2,6 +2,7 @@ import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import Theme from "@/constants/Theme";
 import * as authService from "@/features/auth";
 import { supabase } from "@/lib/supabase";
+import { ROUTES } from "@/lib/routes";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert } from "react-native";
@@ -46,7 +47,7 @@ export default function AuthCallback() {
         const msg = e instanceof Error ? e.message : "Google sign in failed";
         if (mounted) {
           Alert.alert("Sign in failed", msg);
-          router.replace("/sign-in");
+          router.replace(ROUTES.SIGN_IN_DIRECT);
         }
       }
     })();

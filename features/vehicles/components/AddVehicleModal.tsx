@@ -3,6 +3,7 @@
  * Vehicle category (text chips) replaces legacy brand; body length uses a scroll picker + Other (manual).
  * When visible is true, shows as Ledger-style bottom-sheet popup; when undefined, full-screen wizard (e.g. route).
  */
+import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { WizardStepLayout } from "@/components/WizardStepLayout";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -98,6 +99,12 @@ export function AddVehicleModal({
   const [expiryDates, setExpiryDates] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [showCreateSuccess, setShowCreateSuccess] = useState(false);
+
+  const handleVehicleCreateSuccessOk = () => {
+    setShowCreateSuccess(false);
+    onClose();
+  };
 
   /** Reset form when modal is opened so we don't show previous vehicle data. */
   useEffect(() => {
@@ -471,14 +478,14 @@ export function AddVehicleModal({
       if (typeof p?.then === "function") {
         p.then(() => {
           setSubmitting(false);
-          onClose();
+          setShowCreateSuccess(true);
         }).catch((err: Error) => {
           setSubmitting(false);
           setError(err?.message ?? "Failed to add vehicle");
         });
       } else {
         setSubmitting(false);
-        onClose();
+        setShowCreateSuccess(true);
       }
       return;
     }
@@ -893,6 +900,16 @@ export function AddVehicleModal({
         </Modal>
         {renderBodyLengthPickerSheet()}
         {renderModelPickerSheet()}
+        <ThemedAlertModal
+          visible={showCreateSuccess}
+          title="Vehicle added successfully"
+          message=""
+          okText="OK"
+          onOk={handleVehicleCreateSuccessOk}
+          onRequestClose={handleVehicleCreateSuccessOk}
+          variant="neutral"
+          okVariant="primary"
+        />
       </>
     );
   }
@@ -924,6 +941,16 @@ export function AddVehicleModal({
       </WizardStepLayout>
       {renderBodyLengthPickerSheet()}
       {renderModelPickerSheet()}
+      <ThemedAlertModal
+        visible={showCreateSuccess}
+        title="Vehicle added successfully"
+        message=""
+        okText="OK"
+        onOk={handleVehicleCreateSuccessOk}
+        onRequestClose={handleVehicleCreateSuccessOk}
+        variant="neutral"
+        okVariant="primary"
+      />
     </>
   );
 }

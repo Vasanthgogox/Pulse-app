@@ -380,6 +380,28 @@ export function AddTripFormFields({
   const selectedSupplierRow = suppliers.find((s) => s.id === state.supplierId) ?? null;
   const selectedPartnerName =
     suppliers.find((s) => s.id === state.supplierId)?.name?.trim() ?? "";
+  const selectedAssetDriverName =
+    state.driverId != null
+      ? drivers.find((d) => d.id === state.driverId)?.name?.trim() ?? ""
+      : "";
+  const selectedAssetVehicleNumber =
+    state.vehicleId != null
+      ? formatIndianVehicleNumber(
+          vehicles.find((v) => v.id === state.vehicleId)?.vehicle_number ?? "",
+        ) || ""
+      : "";
+  const aggregateDriverDisplay = state.driverPhoneName?.trim() || state.driverPhone.trim();
+  const previewFooterValue = supplyIsAsset
+    ? state.assignLater
+      ? "Assign later"
+      : [selectedAssetDriverName, selectedAssetVehicleNumber]
+          .filter((part) => part.length > 0)
+          .join(" - ") || "—"
+    : state.assignLater
+      ? "Assign later"
+      : [aggregateDriverDisplay, state.aggregateVehicleText.trim()]
+          .filter((part) => part.length > 0)
+          .join(" - ") || "—";
   const busyFleetHintAsset =
     supplyIsAsset &&
     !state.assignLater &&
@@ -1696,18 +1718,7 @@ export function AddTripFormFields({
                         {supplyIsAsset ? "Asset" : "Aggregate"}
                       </Text>
                       <Text style={styles.previewFootRight} numberOfLines={1}>
-                        {supplyIsAsset
-                          ? state.vehicleId
-                            ? formatIndianVehicleNumber(
-                                vehicles.find((v) => v.id === state.vehicleId)
-                                  ?.vehicle_number ?? "",
-                              ) || "—"
-                            : state.assignLater
-                              ? "Assign later"
-                              : "—"
-                          : state.assignLater
-                            ? "Assign later"
-                            : state.aggregateVehicleText.trim() || "—"}
+                        {previewFooterValue}
                       </Text>
                     </View>
                   </View>
@@ -1820,18 +1831,7 @@ export function AddTripFormFields({
                 {supplyIsAsset ? "Asset" : "Aggregate"}
               </Text>
               <Text style={styles.previewFootRight} numberOfLines={1}>
-                {supplyIsAsset
-                  ? state.vehicleId
-                    ? formatIndianVehicleNumber(
-                        vehicles.find((v) => v.id === state.vehicleId)
-                          ?.vehicle_number ?? "",
-                      ) || "—"
-                    : state.assignLater
-                      ? "Assign later"
-                      : "—"
-                  : state.assignLater
-                    ? "Assign later"
-                    : state.aggregateVehicleText.trim() || "—"}
+                {previewFooterValue}
               </Text>
             </View>
             </View>

@@ -4,6 +4,7 @@
  * Driver Source: Organization Driver | Partner Driver (clean, scalable terminology).
  * When visible is true, shows as Ledger-style bottom-sheet popup; when undefined, full-screen wizard (e.g. route).
  */
+import { ThemedAlertModal } from '@/components/ThemedAlertModal';
 import { WizardStepLayout } from '@/components/WizardStepLayout';
 import { getAvatarUriForSeed } from '@/constants/DriverLevels';
 import Layout from '@/constants/Layout';
@@ -123,7 +124,13 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
   const [avatarLoadFailedByUserId, setAvatarLoadFailedByUserId] = useState<Record<string, boolean>>({});
   const [fleetWarningMatch, setFleetWarningMatch] = useState<ExistingDriverMatch | null>(null);
   const [importLoading, setImportLoading] = useState(false);
+  const [showDriverCreateSuccess, setShowDriverCreateSuccess] = useState(false);
   const searchIdRef = useRef(0);
+
+  const handleDriverSuccessOk = () => {
+    setShowDriverCreateSuccess(false);
+    onClose();
+  };
 
   const handleImportFromContacts = async () => {
     setError(null);
@@ -319,7 +326,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
           result
             .then(() => {
               setSubmitting(false);
-              onClose();
+              setShowDriverCreateSuccess(true);
             })
             .catch((err: Error) => {
               setSubmitting(false);
@@ -327,7 +334,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
             });
         } else {
           setSubmitting(false);
-          onClose();
+          setShowDriverCreateSuccess(true);
         }
       }
       return;
@@ -771,7 +778,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
                     result
                       .then(() => {
                         setSubmitting(false);
-                        onClose();
+                        setShowDriverCreateSuccess(true);
                       })
                       .catch((err: Error) => {
                         setSubmitting(false);
@@ -779,7 +786,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
                       });
                   } else {
                     setSubmitting(false);
-                    onClose();
+                    setShowDriverCreateSuccess(true);
                   }
                 }}
                 activeOpacity={0.8}
@@ -848,6 +855,7 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
           ? (reviewUseInvite ? t('sendInvitation') : t('addDriver'))
           : 'Continue';
     return (
+      <>
       <Modal
         visible
         transparent
@@ -909,10 +917,22 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
           {fleetWarningModal}
         </KeyboardAvoidingView>
       </Modal>
+      <ThemedAlertModal
+        visible={showDriverCreateSuccess}
+        title="Driver added successfully"
+        message=""
+        okText="OK"
+        onOk={handleDriverSuccessOk}
+        onRequestClose={handleDriverSuccessOk}
+        variant="neutral"
+        okVariant="primary"
+      />
+      </>
     );
   }
 
   return (
+    <>
     <WizardStepLayout
       title="Add Driver"
       stepLabel={step.title}
@@ -936,6 +956,17 @@ export function AddDriverModal({ onClose, onComplete, onAddDriver, visible, sala
       {renderStep()}
       {fleetWarningModal}
     </WizardStepLayout>
+    <ThemedAlertModal
+      visible={showDriverCreateSuccess}
+      title="Driver added successfully"
+      message=""
+      okText="OK"
+      onOk={handleDriverSuccessOk}
+      onRequestClose={handleDriverSuccessOk}
+      variant="neutral"
+      okVariant="primary"
+    />
+    </>
   );
 }
 

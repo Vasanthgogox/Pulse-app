@@ -25,17 +25,19 @@ import * as tripsService from "@/services/tripsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
+import { Pressable as HoldPressable } from "react-native-gesture-handler";
 import {
-    ActivityIndicator,
-    Image,
-    Linking,
-    Modal,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Image,
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -63,6 +65,12 @@ function formatTripDistanceForControl(
   if (!Number.isFinite(km) || km < 0) return "—";
   return `${Math.round(km).toLocaleString("en-IN")} KM`;
 }
+
+const HOLD_PRESS_RETENTION = 100;
+const holdCompleteWebStyle = {
+  touchAction: "none" as "none" | "auto" | "manipulation",
+  userSelect: "none" as "none" | "auto" | "text" | "contain" | "all",
+};
 
 export default function DriverControlScreen() {
   const insets = useSafeAreaInsets();
@@ -1017,10 +1025,15 @@ export default function DriverControlScreen() {
               ) : null}
               {podDocuments.length >= 1 || podSkipped ? (
                 <View style={styles.transitActions}>
-                  <Pressable
-                    style={styles.holdBtnWrap}
+                  <HoldPressable
                     onPressIn={startHold}
                     onPressOut={cancelHold}
+                    pressRetentionOffset={HOLD_PRESS_RETENTION}
+                    android_ripple={{ color: "transparent" }}
+                    style={[
+                      styles.holdBtnWrap,
+                      Platform.OS === "web" && holdCompleteWebStyle,
+                    ]}
                   >
                     <View
                       style={[
@@ -1050,7 +1063,7 @@ export default function DriverControlScreen() {
                         {isHolding ? "Releasing…" : "Hold to complete trip"}
                       </Text>
                     </View>
-                  </Pressable>
+                  </HoldPressable>
                 </View>
               ) : (
                 <Text style={[styles.podRequired, { color: colors.textMuted }]}>

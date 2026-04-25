@@ -1,6 +1,7 @@
-import { Alert } from 'react-native';
+import { useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
+import { ThemedAlertModal } from '@/components/ThemedAlertModal';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { AddDriverModal, type DriverFormData, inviteDriver, createDriver } from '@/features/drivers';
 import { queryKeys } from '@/lib/queryKeys';
@@ -15,6 +16,20 @@ export default function AddDriverScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { currentOrganization } = useOrganization();
+  const [themedInfo, setThemedInfo] = useState<{
+    title: string;
+    message: string;
+    variant: 'neutral' | 'warning';
+  } | null>(null);
+  /** Resolves the pending `handleInvite` Promise after the user dismisses the themed alert. */
+  const alertResolveRef = useRef<(() => void) | null>(null);
+
+  const onThemedInfoOk = () => {
+    setThemedInfo(null);
+    const resolve = alertResolveRef.current;
+    alertResolveRef.current = null;
+    resolve?.();
+  };
 
   /** Send Invitation — if driver has app account (same phone, role=driver) they see invite in-app; else create driver row. */
   const handleInvite = async (data: DriverFormData) => {
@@ -31,21 +46,28 @@ export default function AddDriverScreen() {
     await queryClient.refetchQueries({ queryKey: queryKeys.drivers.all(orgId) });
     if (!inviteSent) {
       if (inviteAlreadyExists) {
-        Alert.alert(
-          'Already invited',
-          `An invitation was already sent to this driver (${(inviteStatus ?? 'pending').toUpperCase()}).`,
-          [{ text: 'OK', onPress: () => closeModal(router as CloseModalRouter) }]
-        );
+        await new Promise<void>((resolve) => {
+          alertResolveRef.current = resolve;
+          setThemedInfo({
+            title: 'Already invited',
+            message: `An invitation was already sent to this driver (${(inviteStatus ?? 'pending').toUpperCase()}).`,
+            variant: 'warning',
+          });
+        });
         return;
       }
-      Alert.alert(
-        'Driver added',
-        "They'll see the invitation in the app once they sign up with this phone number (choose \"Driver\" when signing up). You can assign trips to them after they accept.",
-        [{ text: 'OK', onPress: () => closeModal(router as CloseModalRouter) }]
-      );
+      await new Promise<void>((resolve) => {
+        alertResolveRef.current = resolve;
+        setThemedInfo({
+          title: 'Driver added successfully',
+          message:
+            'They will see the invitation in the app once they sign up with this phone number (choose "Driver" when signing up). You can assign trips to them after they accept.',
+          variant: 'neutral',
+        });
+      });
       return;
     }
-    // Invite sent in-app: modal onClose runs after onComplete resolves.
+    // Invite sent in-app: AddDriverModal closes after onComplete resolves.
   };
 
   /** Add Driver (direct) — creates driver row without invite wording. */
@@ -59,11 +81,23 @@ export default function AddDriverScreen() {
   };
 
   return (
-    <AddDriverModal
-      onClose={() => closeModal(router as CloseModalRouter)}
-      onComplete={handleInvite}
-      onAddDriver={handleAddDriver}
-      salariedOnly
-    />
+    <>
+      <AddDriverModal
+        onClose={() => closeModal(router as CloseModalRouter)}
+        onComplete={handleInvite}
+        onAddDriver={handleAddDriver}
+        salariedOnly
+      />
+      <ThemedAlertModal
+        visible={themedInfo != null}
+        title={themedInfo?.title ?? ''}
+        message={themedInfo?.message ?? ''}
+        okText="OK"
+        variant={themedInfo?.variant === 'warning' ? 'warning' : 'neutral'}
+        okVariant="primary"
+        onOk={onThemedInfoOk}
+        onRequestClose={onThemedInfoOk}
+      />
+    </>
   );
 }

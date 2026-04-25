@@ -15,6 +15,7 @@ import {
   inviteeSuggestedCompanyName,
 } from "@/services/connectionRequestsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -68,6 +69,8 @@ interface AddClientModalProps {
   ) => Promise<ConnectionInviteeMatch | null>;
   /** When provided and search found someone, "Send invitation" calls this with their org id. */
   onSendInvitation?: (toOrgId: string) => Promise<void>;
+  /** "customer" (Customers tab) vs "client" (finance, indents) — success dialog copy. */
+  successEntity?: "customer" | "client";
 }
 
 const MIN_PHONE_LENGTH_FOR_SEARCH = 8;
@@ -82,9 +85,11 @@ export function AddClientModal({
   onRefreshOrganization,
   searchInviteeByPhone,
   onSendInvitation,
+  successEntity = "client",
 }: AddClientModalProps) {
   const { t } = useLanguage();
   const insets = useSafeAreaInsets();
+  const [showCreateSuccess, setShowCreateSuccess] = useState(false);
   const [organizationName, setOrganizationName] = useState("");
   const [contactPerson, setContactPerson] = useState("");
   const [phone, setPhone] = useState("");
@@ -212,6 +217,16 @@ export function AddClientModal({
     setError(null);
   };
 
+  const createSuccessTitle =
+    successEntity === "customer"
+      ? "Customer added successfully"
+      : "Client added successfully";
+
+  const handleCreateSuccessOk = () => {
+    setShowCreateSuccess(false);
+    onClose();
+  };
+
   const handleSubmit = () => {
     if (!canSubmit) return;
     setError(null);
@@ -225,14 +240,14 @@ export function AddClientModal({
     if (typeof p?.then === "function") {
       p.then(() => {
         setSubmitting(false);
-        onClose();
+        setShowCreateSuccess(true);
       }).catch((err: Error) => {
         setSubmitting(false);
         setError(err?.message ?? "Failed to add client");
       });
     } else {
       setSubmitting(false);
-      onClose();
+      setShowCreateSuccess(true);
     }
   };
 
@@ -433,49 +448,62 @@ export function AddClientModal({
       Layout.ledgerPanelMaxHeight,
     );
     return (
-      <Modal
-        visible
-        transparent
-        animationType="slide"
-        onRequestClose={onClose}
-        presentationStyle="overFullScreen"
-      >
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === "ios" ? "padding" : "padding"}
-          keyboardVerticalOffset={insets.top + 16}
+      <>
+        <Modal
+          visible
+          transparent
+          animationType="slide"
+          onRequestClose={onClose}
+          presentationStyle="overFullScreen"
         >
-          <View style={styles.backdrop}>
-            <TouchableOpacity
-              style={StyleSheet.absoluteFill}
-              onPress={onClose}
-              activeOpacity={1}
-            />
-            <View
-              style={[
-                styles.ledgerPanel,
-                {
-                  paddingBottom: insets.bottom + Layout.modalBottomPadding,
-                  height: panelHeight,
-                  maxHeight: panelHeight,
-                },
-              ]}
-            >
-              <ScrollView
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.ledgerPanelScrollContent}
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === "ios" ? "padding" : "padding"}
+            keyboardVerticalOffset={insets.top + 16}
+          >
+            <View style={styles.backdrop}>
+              <TouchableOpacity
+                style={StyleSheet.absoluteFill}
+                onPress={onClose}
+                activeOpacity={1}
+              />
+              <View
+                style={[
+                  styles.ledgerPanel,
+                  {
+                    paddingBottom: insets.bottom + Layout.modalBottomPadding,
+                    height: panelHeight,
+                    maxHeight: panelHeight,
+                  },
+                ]}
               >
-                {ledgerFormContent}
-              </ScrollView>
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.ledgerPanelScrollContent}
+                >
+                  {ledgerFormContent}
+                </ScrollView>
+              </View>
             </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+          </KeyboardAvoidingView>
+        </Modal>
+        <ThemedAlertModal
+          visible={showCreateSuccess}
+          title={createSuccessTitle}
+          message=""
+          okText="OK"
+          onOk={handleCreateSuccessOk}
+          onRequestClose={handleCreateSuccessOk}
+          variant="neutral"
+          okVariant="primary"
+        />
+      </>
     );
   }
 
   return (
+    <>
     <KeyboardAvoidingView
       style={styles.screenRoot}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -726,6 +754,17 @@ export function AddClientModal({
         </View>
       </View>
     </KeyboardAvoidingView>
+    <ThemedAlertModal
+      visible={showCreateSuccess}
+      title={createSuccessTitle}
+      message=""
+      okText="OK"
+      onOk={handleCreateSuccessOk}
+      onRequestClose={handleCreateSuccessOk}
+      variant="neutral"
+      okVariant="primary"
+    />
+    </>
   );
 }
 

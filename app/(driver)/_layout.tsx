@@ -81,7 +81,7 @@ export default function DriverAppLayout() {
 
     if (!user) {
       logDriverGate('redirect_sign_in_missing_user', {});
-      router.replace('/sign-in');
+      router.replace(ROUTES.SIGN_IN_DIRECT);
       return;
     }
 

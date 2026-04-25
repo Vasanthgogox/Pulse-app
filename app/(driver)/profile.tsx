@@ -9,6 +9,7 @@ import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { EditProfileModal } from '@/features/auth/components/EditProfileModal';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
+import { ROUTES } from '@/lib/routes';
 import * as driversService from '@/services/driversService';
 import * as tripsService from '@/services/tripsService';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -204,7 +205,7 @@ export default function DriverProfileScreen() {
 
   const handleSignOut = async () => {
     await signOut();
-    router.replace('/sign-in');
+    router.replace(ROUTES.SIGN_IN_DIRECT);
   };
 
   const pageBg = isDark ? colors.background : SLATE_50;

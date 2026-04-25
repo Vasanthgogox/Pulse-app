@@ -14,6 +14,7 @@ import {
   inviteeProfileIsDriver,
   inviteeSuggestedCompanyName,
 } from "@/services/connectionRequestsService";
+import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -80,6 +81,7 @@ export function AddSupplierModal({
 }: AddSupplierModalProps) {
   const { t } = useLanguage();
   const insets = useSafeAreaInsets();
+  const [showCreateSuccess, setShowCreateSuccess] = useState(false);
   const [name, setName] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [phone, setPhone] = useState("");
@@ -205,6 +207,11 @@ export function AddSupplierModal({
     setError(null);
   };
 
+  const handleCreateSuccessOk = () => {
+    setShowCreateSuccess(false);
+    onClose();
+  };
+
   const handleSubmit = () => {
     if (!canSubmit) return;
     setError(null);
@@ -218,14 +225,14 @@ export function AddSupplierModal({
     if (typeof p?.then === "function") {
       p.then(() => {
         setSubmitting(false);
-        onClose();
+        setShowCreateSuccess(true);
       }).catch((err: Error) => {
         setSubmitting(false);
         setError(err?.message ?? "Failed to add supplier");
       });
     } else {
       setSubmitting(false);
-      onClose();
+      setShowCreateSuccess(true);
     }
   };
 
@@ -432,49 +439,62 @@ export function AddSupplierModal({
       Layout.ledgerPanelMaxHeight,
     );
     return (
-      <Modal
-        visible
-        transparent
-        animationType="slide"
-        onRequestClose={onClose}
-        presentationStyle="overFullScreen"
-      >
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === "ios" ? "padding" : "padding"}
-          keyboardVerticalOffset={insets.top + 16}
+      <>
+        <Modal
+          visible
+          transparent
+          animationType="slide"
+          onRequestClose={onClose}
+          presentationStyle="overFullScreen"
         >
-          <View style={styles.backdrop}>
-            <TouchableOpacity
-              style={StyleSheet.absoluteFill}
-              onPress={onClose}
-              activeOpacity={1}
-            />
-            <View
-              style={[
-                styles.ledgerPanel,
-                {
-                  paddingBottom: insets.bottom + Layout.modalBottomPadding,
-                  height: panelHeight,
-                  maxHeight: panelHeight,
-                },
-              ]}
-            >
-              <ScrollView
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.ledgerPanelScrollContent}
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === "ios" ? "padding" : "padding"}
+            keyboardVerticalOffset={insets.top + 16}
+          >
+            <View style={styles.backdrop}>
+              <TouchableOpacity
+                style={StyleSheet.absoluteFill}
+                onPress={onClose}
+                activeOpacity={1}
+              />
+              <View
+                style={[
+                  styles.ledgerPanel,
+                  {
+                    paddingBottom: insets.bottom + Layout.modalBottomPadding,
+                    height: panelHeight,
+                    maxHeight: panelHeight,
+                  },
+                ]}
               >
-                {ledgerFormContent}
-              </ScrollView>
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.ledgerPanelScrollContent}
+                >
+                  {ledgerFormContent}
+                </ScrollView>
+              </View>
             </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+          </KeyboardAvoidingView>
+        </Modal>
+        <ThemedAlertModal
+          visible={showCreateSuccess}
+          title="Supplier added successfully"
+          message=""
+          okText="OK"
+          onOk={handleCreateSuccessOk}
+          onRequestClose={handleCreateSuccessOk}
+          variant="neutral"
+          okVariant="primary"
+        />
+      </>
     );
   }
 
   return (
+    <>
     <KeyboardAvoidingView
       style={styles.screenRoot}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -725,6 +745,17 @@ export function AddSupplierModal({
         </View>
       </View>
     </KeyboardAvoidingView>
+    <ThemedAlertModal
+      visible={showCreateSuccess}
+      title="Supplier added successfully"
+      message=""
+      okText="OK"
+      onOk={handleCreateSuccessOk}
+      onRequestClose={handleCreateSuccessOk}
+      variant="neutral"
+      okVariant="primary"
+    />
+    </>
   );
 }
 

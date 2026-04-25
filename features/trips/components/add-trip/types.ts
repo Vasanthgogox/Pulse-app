@@ -83,9 +83,15 @@ export interface AddTripCompleteOptions {
 }
 
 /** Result when create returns OTP (aggregate trip). */
+export interface AddTripSuccessDetails {
+  tripNumber: string;
+  routeLabel: string;
+}
+
 export interface AddTripCompleteResult {
   trip: { id: string };
   otp: { code: string; expires_at: string } | null;
+  successDetails?: AddTripSuccessDetails;
 }
 
 export interface AddTripModalProps {

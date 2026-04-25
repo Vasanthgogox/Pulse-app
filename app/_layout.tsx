@@ -51,7 +51,7 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   useEffect(() => {
     if (sessionExpired) {
       authService.signOut().catch(() => {});
-      router.replace('/sign-in');
+      router.replace(ROUTES.SIGN_IN_DIRECT);
     }
   }, [sessionExpired, router]);
 
