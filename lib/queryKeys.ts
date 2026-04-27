@@ -106,4 +106,13 @@ export const queryKeys = {
   discover: {
     search: (orgId: string, search: string) => ['q', 'discover', orgId, search] as const,
   },
+
+  orgMembers: {
+    all: (orgId: string) => ['q', 'org-members', orgId] as const,
+    list: (orgId: string) => ['q', 'org-members', orgId, 'list'] as const,
+  },
+
+  teamInvites: {
+    mine: () => ['q', 'team-invites', 'mine'] as const,
+  },
 } as const;

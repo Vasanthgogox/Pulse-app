@@ -61,3 +61,9 @@ export {
   useSalaryRequestsQuery,
   useTripSubcontractsQuery,
 } from './useFinanceEntityQueries';
+export {
+  useOrgMembersQuery,
+  useMyTeamInvitesQuery,
+  useInvalidateOrgMembers,
+  useInvalidateTeamInvites,
+} from './useOrgMembersQuery';

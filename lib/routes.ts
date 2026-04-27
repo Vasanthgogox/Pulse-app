@@ -26,6 +26,11 @@ export const ROUTES = {
 
   DRIVER_ROOT: '/(driver)' as const,
 
+  MODALS: {
+    TEAM:           '/(modals)/team'           as const,
+    INVITE_MEMBER:  '/(modals)/invite-member'  as const,
+  },
+
   // Full-screen flows (root-level stack)
   ADD_TRIP:       '/add-trip'       as const,
   CREATE_INDENT:  '/create-indent'  as const,
