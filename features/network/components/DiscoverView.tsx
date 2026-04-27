@@ -31,6 +31,7 @@ import {
   Alert,
   Animated,
   FlatList,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -290,6 +291,7 @@ export function DiscoverView({
   const [orgs, setOrgs] = useState<DiscoverOrg[]>([]);
   const [loading, setLoading] = useState(false);
   const [connecting, setConnecting] = useState<string | null>(null);
+  const [requestRoleModalOrg, setRequestRoleModalOrg] = useState<ScoredOrg | null>(null);
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -347,11 +349,17 @@ export function DiscoverView({
     return () => { if (timer.current) clearTimeout(timer.current); };
   }, [search, fetchOrgs]);
 
-  const handleConnect = async (org: ScoredOrg) => {
+  const closeRequestRoleModal = useCallback(() => {
+    if (connecting) return;
+    setRequestRoleModalOrg(null);
+  }, [connecting]);
+
+  const handleConnect = async (org: ScoredOrg, mode: "client" | "supplier") => {
     setConnecting(org.id);
+    setRequestRoleModalOrg(null);
     const { error, alreadyInvited } = await createConnectionRequest(orgId, org.id, {
-      requestShipperClient: true,
-      requestCarrierSupplier: false,
+      requestShipperClient: mode === "client",
+      requestCarrierSupplier: mode === "supplier",
     });
     setConnecting(null);
     if (error) {
@@ -459,7 +467,7 @@ export function DiscoverView({
                   <View key={item.org.id} style={[styles.radarCardCell, { width: radarCardWidth }]}>
                     <OrgCard
                       org={item.org}
-                      onConnect={() => void handleConnect(item.org)}
+                      onConnect={() => setRequestRoleModalOrg(item.org)}
                       onCancel={() => void handleCancelRequest(item.org)}
                       loading={connecting === item.org.id}
                     />
@@ -480,7 +488,7 @@ export function DiscoverView({
             return (
               <OrgCard
                 org={item.org}
-                onConnect={() => void handleConnect(item.org)}
+                onConnect={() => setRequestRoleModalOrg(item.org)}
                 onCancel={() => void handleCancelRequest(item.org)}
                 loading={connecting === item.org.id}
               />
@@ -509,6 +517,76 @@ export function DiscoverView({
           }
         />
       )}
+      <Modal
+        visible={Boolean(requestRoleModalOrg)}
+        transparent
+        animationType="fade"
+        onRequestClose={closeRequestRoleModal}
+      >
+        <View style={styles.requestRoleModalBackdrop}>
+          <Pressable
+            style={styles.requestRoleModalBackdropTouch}
+            onPress={closeRequestRoleModal}
+            disabled={Boolean(connecting)}
+          />
+          <View style={styles.requestRoleModalCard}>
+            <Text style={styles.requestRoleModalKicker}>Connection type</Text>
+            <Text style={styles.requestRoleModalTitle} numberOfLines={2}>
+              {requestRoleModalOrg ? `Invite ${requestRoleModalOrg.name}` : "Invite organization"}
+            </Text>
+            <Text style={styles.requestRoleModalSubTitle}>
+              Choose how this organization should be added to your network.
+            </Text>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.requestRoleOptionBtn,
+                pressed && styles.requestRoleOptionBtnPressed,
+              ]}
+              onPress={() =>
+                requestRoleModalOrg ? void handleConnect(requestRoleModalOrg, "client") : undefined
+              }
+              disabled={!requestRoleModalOrg || Boolean(connecting)}
+            >
+              <Text style={styles.requestRoleOptionTitle}>Add as client</Text>
+              <Text style={styles.requestRoleOptionDesc}>
+                They appear in your clients list after approval.
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.requestRoleOptionBtn,
+                pressed && styles.requestRoleOptionBtnPressed,
+              ]}
+              onPress={() =>
+                requestRoleModalOrg ? void handleConnect(requestRoleModalOrg, "supplier") : undefined
+              }
+              disabled={!requestRoleModalOrg || Boolean(connecting)}
+            >
+              <Text style={styles.requestRoleOptionTitle}>Add as supplier</Text>
+              <Text style={styles.requestRoleOptionDesc}>
+                They appear in your suppliers list after approval.
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.requestRoleCancelBtn,
+                pressed && styles.requestRoleCancelBtnPressed,
+              ]}
+              onPress={closeRequestRoleModal}
+              disabled={Boolean(connecting)}
+            >
+              {connecting ? (
+                <ActivityIndicator size={14} color={Theme.textPrimaryDark} />
+              ) : (
+                <Text style={styles.requestRoleCancelText}>Cancel</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -948,4 +1026,89 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 17, fontWeight: '800', color: Theme.textPrimary, letterSpacing: -0.3, textAlign: 'center' },
   emptySub: { fontSize: 13, color: Theme.textSecondary, textAlign: 'center', lineHeight: 20 },
+  requestRoleModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.44)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 18,
+  },
+  requestRoleModalBackdropTouch: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  requestRoleModalCard: {
+    width: "100%",
+    maxWidth: 400,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    gap: 10,
+    shadowColor: Theme.shadow,
+    shadowOpacity: 0.16,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 10,
+  },
+  requestRoleModalKicker: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  requestRoleModalTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    lineHeight: 20,
+  },
+  requestRoleModalSubTitle: {
+    fontSize: 12,
+    color: Theme.textSecondary,
+    lineHeight: 17,
+    marginBottom: 4,
+  },
+  requestRoleOptionBtn: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceGray,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  requestRoleOptionBtnPressed: {
+    opacity: 0.8,
+  },
+  requestRoleOptionTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  requestRoleOptionDesc: {
+    fontSize: 11,
+    color: Theme.textSecondary,
+    lineHeight: 15,
+  },
+  requestRoleCancelBtn: {
+    minHeight: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.screenBackground,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+  },
+  requestRoleCancelBtnPressed: {
+    opacity: 0.75,
+  },
+  requestRoleCancelText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
 });
