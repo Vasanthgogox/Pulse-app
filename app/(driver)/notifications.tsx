@@ -13,7 +13,10 @@ import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeCont
 import { getPendingOtpTrips } from '@/features/trips';
 import { getLatestAssignmentAuditByTripIds } from '@/features/trips/services/trip-assignment-audit.service';
 import { computeDriverCommissionForTrip } from '@/features/finance/aggregation/aggregateDrivers';
-import { DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY } from '@/lib/driverDashboardFlags';
+import {
+  DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY,
+  DRIVER_POST_MISSION_PENDING_SNAPSHOT_KEY,
+} from '@/lib/driverDashboardFlags';
 import { formatINR } from '@/lib/format';
 import {
   isActiveMission,
@@ -119,6 +122,15 @@ export default function DriverNotificationsScreen() {
     Record<string, string>
   >({});
   const [notifyOnlyAfterMission, setNotifyOnlyAfterMission] = useState(false);
+  const [postMissionSnapshotRows, setPostMissionSnapshotRows] = useState<
+    Array<{
+      trip: tripsService.TripRow;
+      assignerPersonDisplay: string;
+      assignedByOrgName: string;
+      requiresOtp: boolean;
+      commissionForTrip: number;
+    }>
+  >([]);
 
   const hasCompletedInitialFetch = useRef(false);
 
@@ -136,6 +148,29 @@ export default function DriverNotificationsScreen() {
       DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY,
     );
     setNotifyOnlyAfterMission(notifyRaw === '1');
+    if (notifyRaw === '1') {
+      const snapshotRaw = await AsyncStorage.getItem(
+        DRIVER_POST_MISSION_PENDING_SNAPSHOT_KEY,
+      );
+      if (snapshotRaw && snapshotRaw.trim() !== '') {
+        try {
+          const parsed = JSON.parse(snapshotRaw) as Array<{
+            trip: tripsService.TripRow;
+            assignerPersonDisplay: string;
+            assignedByOrgName: string;
+            requiresOtp: boolean;
+            commissionForTrip: number;
+          }>;
+          setPostMissionSnapshotRows(Array.isArray(parsed) ? parsed : []);
+        } catch {
+          setPostMissionSnapshotRows([]);
+        }
+      } else {
+        setPostMissionSnapshotRows([]);
+      }
+    } else {
+      setPostMissionSnapshotRows([]);
+    }
 
     try {
       const [driversRes, invitesRes, pendingTripsRes] = await Promise.all([
@@ -437,7 +472,9 @@ export default function DriverNotificationsScreen() {
     requiresOtp: boolean,
   ) => {
     await AsyncStorage.removeItem(DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY);
+    await AsyncStorage.removeItem(DRIVER_POST_MISSION_PENDING_SNAPSHOT_KEY);
     setNotifyOnlyAfterMission(false);
+    setPostMissionSnapshotRows([]);
     await AsyncStorage.setItem(DRIVER_NOTIFICATION_FOCUS_TRIP_KEY, trip.id);
     if (!requiresOtp) {
       await AsyncStorage.setItem(DRIVER_ACCEPTED_TRIP_ID_KEY, trip.id);
@@ -470,6 +507,12 @@ export default function DriverNotificationsScreen() {
     hasActiveAcceptedTrip ||
     notifyOnlyAfterMission ||
     hasInProgressMission;
+  const rowsForDisplay =
+    rowsWithMeta.length > 0
+      ? rowsWithMeta
+      : notifyOnlyAfterMission
+        ? postMissionSnapshotRows
+        : [];
 
   const listIntroSubtitle =
     notifyOnlyAfterMission && !hasActiveAcceptedTrip && !hasInProgressMission
@@ -512,7 +555,7 @@ export default function DriverNotificationsScreen() {
                 ? 'Unaccepted assignments are shown for reference only. Your accepted trip uses the main trip flow.'
                 : 'Trips waiting for you to accept or verify with OTP. Open one to continue on the dashboard.'}
           </Text>
-          {rowsWithMeta.length === 0 ? (
+          {rowsForDisplay.length === 0 ? (
             <View
               style={[
                 styles.emptyCard,
@@ -528,7 +571,7 @@ export default function DriverNotificationsScreen() {
               </Text>
             </View>
           ) : (
-            rowsWithMeta.map((item) => (
+            rowsForDisplay.map((item) => (
               <View
                 key={item.trip.id}
                 style={[
