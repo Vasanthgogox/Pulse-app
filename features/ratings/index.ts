@@ -2,6 +2,7 @@ export {
   createRating,
   getRatingsForTrip,
   getRatingsForSupplier,
+  getRatingsForSuppliers,
   getRatingsForDriver,
   getRatingsForDrivers,
   averageScore,

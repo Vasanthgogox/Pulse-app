@@ -1,34 +1,72 @@
+import { LEVELS_CONFIG } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import {
-    DEFAULT_USER_2D_AVATAR_SEED,
-    getUser2DAvatarUriForSeed,
+  DEFAULT_USER_2D_AVATAR_SEED,
+  getUser2DAvatarUriForSeed,
 } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
+import { useOrganization } from "@/contexts/OrganizationContext";
+import { averageScore, getRatingsForDrivers } from "@/features/ratings/services/ratings.service";
 import { EditProfileModal } from "@/features/auth";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { getCapabilitiesFromProfile } from "@/lib/capabilities";
+import { queryKeys } from "@/lib/queryKeys";
+import { useDriversQuery, useTripsQuery } from "@/lib/queries";
 import { ROUTES } from "@/lib/routes";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
 import {
-    Alert,
-    Image,
-    Linking,
-    Modal,
-    Pressable,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  BarChart3,
+  ChevronLeft,
+  Crown,
+  MapPin,
+  MousePointer2,
+  Star,
+  Truck,
+  Trophy,
+  Users,
+} from "lucide-react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Linking,
+  Modal,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+const SLATE_900 = "#0f172a";
+const AMBER_400 = "#fbbf24";
+const AMBER_500 = "#f59e0b";
+
+/** Commercial ops tiers — same trip thresholds as driver road map (parity). */
+const BUSINESS_ROADMAP = [
+  { tier: "Rookie", minTrips: 0, dot: Theme.textMuted },
+  { tier: "Pro", minTrips: 200, dot: "#3b82f6" },
+  { tier: "Veteran", minTrips: 1000, dot: AMBER_500 },
+  { tier: "Elite", minTrips: 2500, dot: "#9333ea" },
+  { tier: "Legend", minTrips: 5000, dot: "#0d9488" },
+] as const;
+
+function isTripDone(status: string) {
+  const s = (status || "").toLowerCase();
+  return s === "completed" || s === "delivered" || s === "done";
+}
+
+type ProfileViewMode = "main" | "roadmap";
 
 type ProfileItemRowProps = {
   icon: React.ComponentProps<typeof FontAwesome>["name"];
@@ -120,13 +158,182 @@ function ProfileItemRow({
   );
 }
 
+function FleetStars({ value }: { value: number }) {
+  const v = Math.round(value * 2) / 2;
+  return (
+    <View style={styles.fleetStarRow} accessibilityLabel={`${value.toFixed(1)} stars`}>
+      {[0, 1, 2, 3, 4].map((i) => {
+        const full = v >= i + 1;
+        const half = !full && v >= i + 0.5;
+        return (
+          <View key={i} style={styles.starSlot}>
+            {full || half ? (
+              <Star
+                size={14}
+                color={AMBER_400}
+                fill={full ? AMBER_400 : "transparent"}
+                strokeWidth={2}
+              />
+            ) : (
+              <Star size={14} color="rgba(255,255,255,0.25)" strokeWidth={1.5} />
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+type RoadmapPanelProps = {
+  completedTrips: number;
+  onBack: () => void;
+};
+
+function BusinessRoadmapPanel({ completedTrips, onBack }: RoadmapPanelProps) {
+  let activeRoadIdx = 0;
+  for (let i = BUSINESS_ROADMAP.length - 1; i >= 0; i--) {
+    if (completedTrips >= BUSINESS_ROADMAP[i].minTrips) {
+      activeRoadIdx = i;
+      break;
+    }
+  }
+  const nextRoad = BUSINESS_ROADMAP[activeRoadIdx + 1];
+  const cur = BUSINESS_ROADMAP[activeRoadIdx];
+  const tierProgressPct = nextRoad
+    ? Math.min(
+        100,
+        Math.round(
+          ((completedTrips - cur.minTrips) / Math.max(1, nextRoad.minTrips - cur.minTrips)) *
+            100,
+        ),
+      )
+    : 100;
+
+  return (
+    <View style={styles.roadmapWrap}>
+      <View style={styles.roadmapHeader}>
+        <Pressable
+          onPress={onBack}
+          style={({ pressed }) => [styles.roadmapBack, pressed && { opacity: 0.85 }]}
+          hitSlop={10}
+        >
+          <ChevronLeft size={22} color={Theme.textPrimary} />
+        </Pressable>
+        <Text style={styles.roadmapTitle}>Operations roadmap</Text>
+        <View style={{ width: 40 }} />
+      </View>
+      <LinearGradient colors={["#0f172a", "#020617"]} style={styles.roadmapHero}>
+        <View style={styles.roadmapWatermark}>
+          <MapPin size={100} color="rgba(255,255,255,0.05)" />
+        </View>
+        <View style={styles.rankRow}>
+          <LinearGradient colors={[AMBER_500, "#d97706"]} style={styles.crownBox}>
+            <Crown size={26} color="#fff" />
+          </LinearGradient>
+          <View>
+            <Text style={styles.roadmapEyebrow}>CURRENT TIER</Text>
+            <Text style={styles.roadmapTierName}>{cur.tier}</Text>
+          </View>
+        </View>
+        {nextRoad ? (
+          <View style={styles.roadmapProgBlock}>
+            <View style={styles.roadmapProgLabels}>
+              <Text style={styles.roadmapProgLeft}>Progress to {nextRoad.tier}</Text>
+              <Text style={styles.roadmapProgPct}>{tierProgressPct}%</Text>
+            </View>
+            <View style={styles.roadmapTrack}>
+              <View
+                style={[styles.roadmapFill, { width: `${tierProgressPct}%` }]}
+              />
+            </View>
+            <Text style={styles.roadmapSmall}>
+              {completedTrips} completed trips · next milestone {nextRoad.minTrips}
+            </Text>
+          </View>
+        ) : (
+          <Text style={styles.roadmapSmall}>You have reached the top tier. Keep the grid moving.</Text>
+        )}
+        <View style={styles.roadmapSteps}>
+          {BUSINESS_ROADMAP.map((step, i) => {
+            const past = i < activeRoadIdx;
+            const active = i === activeRoadIdx;
+            return (
+              <View key={step.tier} style={styles.roadmapStepRow}>
+                <View
+                  style={[
+                    styles.roadmapDot,
+                    past && { backgroundColor: "#10b981" },
+                    active && { backgroundColor: AMBER_400 },
+                    !past && !active && { backgroundColor: "#475569" },
+                  ]}
+                />
+                <View style={styles.roadmapStepText}>
+                  <Text style={styles.roadmapStepTitle}>{step.tier}</Text>
+                  <Text style={styles.roadmapStepSub}>{step.minTrips}+ trips</Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      </LinearGradient>
+    </View>
+  );
+}
+
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const { currentOrganization } = useOrganization();
+  const orgId = currentOrganization?.id ?? null;
   const { signOut, user, profile, refreshSession } = useAuth();
 
-  const USER_AVATAR_SEED_KEY = "@q-mobile/user-avatar-seed";
+  const { data: trips = [], isLoading: tripsLoading } = useTripsQuery(orgId);
+  const { data: drivers = [] } = useDriversQuery(orgId);
+
+  const driverIds = useMemo(() => drivers.map((d) => d.id), [drivers]);
+  const driverKey = driverIds.length ? driverIds.sort().join(",") : "";
+
+  const { data: fleetRatingData, isLoading: ratingsLoading } = useQuery({
+    queryKey: ["q", "profile", "fleetRatings", orgId ?? "", driverKey],
+    queryFn: async () => {
+      if (!orgId || driverIds.length === 0) {
+        return { avg: null as number | null, count: 0 };
+      }
+      const { error, byDriverId } = await getRatingsForDrivers(driverIds);
+      if (error) throw error;
+      const all = Object.values(byDriverId).flat();
+      return {
+        avg: averageScore(all),
+        count: all.length,
+      };
+    },
+    enabled: !!orgId && driverIds.length > 0,
+  });
+
+  const completedTrips = useMemo(
+    () => (trips ?? []).filter((t) => isTripDone(t.status ?? "")).length,
+    [trips],
+  );
+
+  const currentLevel = useMemo(
+    () => Math.min(1 + Math.floor(completedTrips / 2), 8),
+    [completedTrips],
+  );
+  const currentLevelConfig =
+    LEVELS_CONFIG.find((l) => l.level === currentLevel) ?? LEVELS_CONFIG[0];
+  const nextLevelConfig = LEVELS_CONFIG.find((l) => l.level === currentLevel + 1);
+
+  const experiencePct = useMemo(() => {
+    const nextTarget = nextLevelConfig?.type === "trips" ? nextLevelConfig.target : 0;
+    if (nextTarget > 0) {
+      return Math.min(100, Math.floor((completedTrips / nextTarget) * 100));
+    }
+    return nextLevelConfig ? 0 : 100;
+  }, [nextLevelConfig, completedTrips]);
+
+  const [viewMode, setViewMode] = useState<ProfileViewMode>("main");
   const [avatarSeed, setAvatarSeed] = useState(
     profile?.avatar_seed || DEFAULT_USER_2D_AVATAR_SEED,
   );
@@ -161,6 +368,22 @@ export default function ProfileScreen() {
   const [signOutLoading, setSignOutLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refreshSession();
+      if (orgId) {
+        await queryClient.invalidateQueries({ queryKey: queryKeys.trips.all(orgId) });
+        await queryClient.invalidateQueries({ queryKey: queryKeys.drivers.all(orgId) });
+        await queryClient.invalidateQueries({
+          queryKey: ["q", "profile", "fleetRatings", orgId],
+        });
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  }, [orgId, queryClient, refreshSession]);
+
   const handleEditProfile = () => {
     setShowEditProfileModal(true);
   };
@@ -192,7 +415,6 @@ export default function ProfileScreen() {
     profile?.displayName ||
     user?.email?.split("@")[0] ||
     "User";
-  const userCode = profile?.uid ?? user?.uid?.slice(0, 8).toUpperCase() ?? "—";
   const roleLabel = profile?.aggregated
     ? "Dispatcher + Fleet Owner"
     : "Fleet User";
@@ -231,6 +453,10 @@ export default function ProfileScreen() {
     Constants.expoConfig?.ios?.buildNumber ??
     Constants.expoConfig?.android?.versionCode ??
     "—";
+
+  const fleetAvg = fleetRatingData?.avg ?? null;
+  const fleetCount = fleetRatingData?.count ?? 0;
+  const showFleetStars = fleetAvg != null && fleetAvg > 0;
 
   useEffect(() => {
     let mounted = true;
@@ -271,180 +497,282 @@ export default function ProfileScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              setTimeout(() => setRefreshing(false), 400);
-            }}
+            onRefresh={() => void onRefresh()}
             tintColor={Theme.primary}
           />
         }
       >
-        <View
-          style={[
-            styles.cinematicHeader,
-            { paddingTop: insets.top + Layout.headerPaddingBelowInset },
-          ]}
-        >
-          <View style={styles.cinematicHeaderBg}>
-            <View style={styles.cinematicHeaderGlow} />
-            <View style={styles.cinematicHeaderMesh} />
+        {viewMode === "roadmap" ? (
+          <View style={{ paddingTop: insets.top + 8, paddingBottom: 8 }}>
+            <BusinessRoadmapPanel
+              completedTrips={completedTrips}
+              onBack={() => setViewMode("main")}
+            />
           </View>
+        ) : null}
 
-          <View style={styles.cinematicHeaderTopRow}>
-            <Pressable
-              onPress={handleClose}
-              style={({ pressed }) => [
-                styles.headerChip,
-                pressed && styles.headerChipPressed,
-              ]}
-              accessibilityRole="button"
-              hitSlop={Layout.touchTargetHitSlop}
-            >
-              <FontAwesome
-                name="chevron-left"
-                size={18}
-                color={Theme.textOnDark}
-              />
-            </Pressable>
-
-            <Text style={styles.cinematicHeaderTitle}>Profile</Text>
-
-            <Pressable
-              onPress={handleEditProfile}
-              style={({ pressed }) => [
-                styles.headerChip,
-                pressed && styles.headerChipPressed,
-              ]}
-              accessibilityRole="button"
-              hitSlop={Layout.touchTargetHitSlop}
-            >
-              <FontAwesome name="pencil" size={16} color={Theme.textOnDark} />
-            </Pressable>
-          </View>
-
-          <View style={styles.profileHero}>
-            <View style={styles.avatarGlow} />
-            <Pressable
-              style={({ pressed }) => [
-                styles.avatarTouch,
-                pressed && styles.avatarTouchPressed,
-              ]}
-              onPress={handleEditProfile}
-              accessibilityRole="button"
-            >
-              <View style={styles.avatarFrame}>
-                <Image
-                  source={{
-                    uri: avatarUri,
-                  }}
-                  style={styles.avatar}
-                />
-              </View>
-              <View style={styles.avatarEditBadge}>
-                <FontAwesome
-                  name="camera"
-                  size={14}
-                  color={Theme.textPrimaryDark}
-                />
-              </View>
-            </Pressable>
-
-            <Text numberOfLines={1} style={styles.nameText}>
-              {displayName}
-            </Text>
-            <Text style={styles.aboutText} numberOfLines={2}>
-              {statusText}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.contentWrap}>
-          <View style={styles.premiumCard}>
-            <View style={styles.premiumCardInner}>
-              <ProfileItemRow
-                icon="user"
-                label="Name"
-                value={displayName}
+        {viewMode === "main" ? (
+          <>
+            <View style={[styles.driverLikeTopBar, { paddingTop: insets.top + 8 }]}>
+              <Pressable
+                onPress={handleClose}
+                style={({ pressed }) => [styles.driverLikeTopBtn, pressed && { opacity: 0.8 }]}
+                accessibilityRole="button"
+                hitSlop={Layout.touchTargetHitSlop}
+              >
+                <ChevronLeft size={20} color={Theme.textOnDark} />
+              </Pressable>
+              <Text style={styles.driverLikeTopTitle}>PROFILE</Text>
+              <Pressable
                 onPress={handleEditProfile}
-                showChevron
-              />
-              <View style={styles.premiumDivider} />
-              <ProfileItemRow
-                icon="phone"
-                label="Phone"
-                value={phone}
-                onPress={handleDialPhone}
-                showChevron
-              />
-              <View style={styles.premiumDivider} />
-              <ProfileItemRow icon="envelope" label="Email" value={email} />
-              <View style={styles.premiumDivider} />
-              <ProfileItemRow
-                icon="building"
-                label="Company"
-                value={companyName}
-              />
+                style={({ pressed }) => [styles.driverLikeTopBtn, pressed && { opacity: 0.8 }]}
+                accessibilityRole="button"
+                hitSlop={Layout.touchTargetHitSlop}
+              >
+                <FontAwesome name="pencil" size={15} color={Theme.textOnDark} />
+              </Pressable>
             </View>
-          </View>
 
-          <View style={styles.premiumCard}>
-            <View style={styles.premiumCardInner}>
-              <ProfileItemRow icon="shield" label="Role" value={roleLabel} />
-              <View style={styles.premiumDivider} />
-              <ProfileItemRow icon="key" label="Access" value={accessLabel} />
+            <View style={styles.contentWrapDriverLike}>
+              <LinearGradient
+                colors={["#0f172a", "#020617"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.driverLikeHero}
+              >
+                <View style={styles.avatarGlow} />
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.avatarTouch,
+                    pressed && styles.avatarTouchPressed,
+                  ]}
+                  onPress={handleEditProfile}
+                  accessibilityRole="button"
+                >
+                  <View style={styles.avatarFrame}>
+                    <Image
+                      source={{
+                        uri: avatarUri,
+                      }}
+                      style={styles.avatar}
+                    />
+                  </View>
+                  <View style={styles.levelBadgeOnAvatar}>
+                    <Trophy size={11} color="#fff" />
+                    <Text style={styles.levelBadgeText}>Lv {currentLevel}</Text>
+                  </View>
+                  <View style={styles.avatarEditBadge}>
+                    <FontAwesome
+                      name="camera"
+                      size={14}
+                      color={Theme.textPrimaryDark}
+                    />
+                  </View>
+                </Pressable>
+
+                <Text numberOfLines={1} style={styles.nameText}>
+                  {displayName}
+                </Text>
+                <Text style={styles.tierKicker} numberOfLines={1}>
+                  {currentLevelConfig.tier} · {currentLevelConfig.name}
+                </Text>
+
+                {showFleetStars ? (
+                  <View style={styles.ratingPill}>
+                    <FleetStars value={fleetAvg!} />
+                    <Text style={styles.ratingNum}>
+                      {fleetAvg!.toFixed(1)} · {fleetCount} review{fleetCount === 1 ? "" : "s"} (fleet)
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.ratingPillMuted}>
+                    {ratingsLoading && driverIds.length > 0 ? (
+                      <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
+                    ) : (
+                      <Text style={styles.ratingPillMutedText}>
+                        {driverIds.length === 0
+                          ? "Add drivers to see fleet service ratings"
+                          : "Not enough driver ratings yet"}
+                      </Text>
+                    )}
+                  </View>
+                )}
+
+                <Text style={styles.aboutText} numberOfLines={2}>
+                  {statusText}
+                </Text>
+
+                <Pressable
+                  onPress={() => setViewMode("roadmap")}
+                  style={({ pressed }) => [styles.xpCard, pressed && { opacity: 0.92 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="View operations roadmap"
+                >
+                  <View style={styles.xpTop}>
+                    <Text style={styles.xpEyebrow}>EXPERIENCE</Text>
+                    <Text style={styles.xpPct}>{experiencePct}%</Text>
+                  </View>
+                  <View style={styles.xpTrack}>
+                    <LinearGradient
+                      colors={["#10b981", "#0ea5e9"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={[styles.xpFill, { width: `${experiencePct}%` }]}
+                    />
+                  </View>
+                  <View style={styles.xpFooter}>
+                    <Text style={styles.xpFooterTxt}>
+                      {tripsLoading ? "…" : `${completedTrips} trips done`}
+                    </Text>
+                    <Text style={styles.xpFooterTxt}>
+                      {nextLevelConfig?.name ?? "Max rank"} next · tap roadmap
+                    </Text>
+                  </View>
+                </Pressable>
+              </LinearGradient>
+
+              <View style={styles.statsGrid}>
+                <View style={styles.statTile}>
+                  <Truck size={20} color={Theme.primary} />
+                  <Text style={styles.statTileNum}>
+                    {tripsLoading ? "—" : completedTrips}
+                  </Text>
+                  <Text style={styles.statTileLbl}>TRIPS</Text>
+                </View>
+                <View style={styles.statTile}>
+                  <Star
+                    size={20}
+                    color={AMBER_500}
+                    fill={showFleetStars ? AMBER_500 : "transparent"}
+                  />
+                  <Text style={styles.statTileNum}>
+                    {ratingsLoading && driverIds.length > 0
+                      ? "…"
+                      : showFleetStars
+                        ? fleetAvg!.toFixed(1)
+                        : "—"}
+                  </Text>
+                  <Text style={styles.statTileLbl}>FLEET AVG</Text>
+                </View>
+                <View style={styles.statTile}>
+                  <Users size={20} color="#8b5cf6" />
+                  <Text style={styles.statTileNum}>{drivers.length}</Text>
+                  <Text style={styles.statTileLbl}>DRIVERS</Text>
+                </View>
+              </View>
+
+              <View style={styles.premiumCard}>
+                <View style={styles.premiumCardInner}>
+                  <View style={styles.interactiveRow}>
+                    <View style={styles.interactiveRowLeft}>
+                      <View style={styles.dashIcon}>
+                        <BarChart3 size={20} color={Theme.primary} />
+                      </View>
+                      <View>
+                        <Text style={styles.interactiveEyebrow}>OPERATIONS PULSE</Text>
+                        <Text style={styles.interactiveTitle}>Business dashboard</Text>
+                        <Text style={styles.interactiveSub}>
+                          Trips, fleet reputation, and tier progress update as your team runs loads.
+                        </Text>
+                      </View>
+                    </View>
+                    <MousePointer2 size={18} color={Theme.textMuted} />
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.premiumCard}>
+                <View style={styles.premiumCardInner}>
+                  <ProfileItemRow
+                    icon="user"
+                    label="Name"
+                    value={displayName}
+                    onPress={handleEditProfile}
+                    showChevron
+                  />
+                  <View style={styles.premiumDivider} />
+                  <ProfileItemRow
+                    icon="phone"
+                    label="Phone"
+                    value={phone}
+                    onPress={handleDialPhone}
+                    showChevron
+                  />
+                  <View style={styles.premiumDivider} />
+                  <ProfileItemRow icon="envelope" label="Email" value={email} />
+                  <View style={styles.premiumDivider} />
+                  <ProfileItemRow
+                    icon="building"
+                    label="Company"
+                    value={companyName}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.premiumCard}>
+                <View style={styles.premiumCardInner}>
+                  <ProfileItemRow icon="shield" label="Role" value={roleLabel} />
+                  <View style={styles.premiumDivider} />
+                  <ProfileItemRow icon="key" label="Access" value={accessLabel} />
+                </View>
+              </View>
+
+              <View style={styles.premiumCard}>
+                <View style={styles.premiumCardInner}>
+                  <ProfileItemRow
+                    icon="file-text-o"
+                    label="POD"
+                    value="Manage proof of delivery"
+                    onPress={() => router.push("/pod-reconciliation")}
+                    showChevron
+                  />
+                  <View style={styles.premiumDivider} />
+                  <ProfileItemRow
+                    icon="file-text"
+                    label="Invoice"
+                    value="Execute Invoicing"
+                    onPress={() => router.push("/invoicing-execute")}
+                    showChevron
+                  />
+                </View>
+              </View>
+
+              <View style={styles.premiumCard}>
+                <View style={styles.premiumCardInner}>
+                  <ProfileItemRow
+                    icon="cog"
+                    label="Settings"
+                    value="Branding & identity for invoice PDFs"
+                    onPress={() => router.push("/branding-settings")}
+                    showChevron
+                  />
+                  <View style={styles.premiumDivider} />
+                  <ProfileItemRow
+                    icon="info-circle"
+                    label="Version"
+                    value={`Version ${appVersion} (${buildNumber})`}
+                  />
+                </View>
+              </View>
+
+              <Pressable
+                onPress={openSignOutConfirm}
+                style={({ pressed }) => [
+                  styles.signOutBtn,
+                  pressed && styles.signOutBtnPressed,
+                ]}
+                accessibilityRole="button"
+              >
+                <FontAwesome
+                  name="sign-out"
+                  size={16}
+                  color={Theme.textOnDark}
+                />
+                <Text style={styles.signOutText}>Sign out</Text>
+              </Pressable>
             </View>
-          </View>
-
-          <View style={styles.premiumCard}>
-            <View style={styles.premiumCardInner}>
-              <ProfileItemRow
-                icon="file-text-o"
-                label="POD"
-                value="Manage proof of delivery"
-                onPress={() => router.push("/pod-reconciliation")}
-                showChevron
-              />
-              <View style={styles.premiumDivider} />
-              <ProfileItemRow
-                icon="file-text"
-                label="Invoice"
-                value="Execute Invoicing"
-                onPress={() => router.push("/invoicing-execute")}
-                showChevron
-              />
-            </View>
-          </View>
-
-          <View style={styles.premiumCard}>
-            <View style={styles.premiumCardInner}>
-              <ProfileItemRow
-                icon="cog"
-                label="Settings"
-                value="Branding & identity for invoice PDFs"
-                onPress={() => router.push("/branding-settings")}
-                showChevron
-              />
-              <View style={styles.premiumDivider} />
-              <ProfileItemRow
-                icon="info-circle"
-                label="Version"
-                value={`Version ${appVersion} (${buildNumber})`}
-              />
-            </View>
-          </View>
-
-          <Pressable
-            onPress={openSignOutConfirm}
-            style={({ pressed }) => [
-              styles.signOutBtn,
-              pressed && styles.signOutBtnPressed,
-            ]}
-            accessibilityRole="button"
-          >
-            <FontAwesome name="sign-out" size={16} color={Theme.textOnDark} />
-            <Text style={styles.signOutText}>Sign out</Text>
-          </Pressable>
-        </View>
+          </>
+        ) : null}
       </ScrollView>
 
       <EditProfileModal
@@ -521,11 +849,46 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     gap: 0,
   },
+  driverLikeTopBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 12,
+    backgroundColor: Theme.cinematicHeaderBg,
+  },
+  driverLikeTopBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.cinematicHeaderChipBg,
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
+  },
+  driverLikeTopTitle: {
+    ...Typography.headerTitle,
+    color: Theme.textOnDark,
+    letterSpacing: 2.2,
+  },
+  contentWrapDriverLike: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 12,
+    gap: 14,
+  },
+  driverLikeHero: {
+    borderRadius: 38,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    overflow: "hidden",
+  },
 
   cinematicHeader: {
     backgroundColor: Theme.cinematicHeaderBg,
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingBottom: 18,
+    paddingBottom: 0,
     overflow: "hidden",
   },
   cinematicHeaderBg: {
@@ -539,7 +902,7 @@ const styles = StyleSheet.create({
     height: 280,
     borderRadius: 280,
     backgroundColor: Theme.cinematicGlowRed,
-    opacity: 0.6,
+    opacity: 0.5,
   },
   cinematicHeaderMesh: {
     position: "absolute",
@@ -554,7 +917,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingBottom: 10,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   cinematicHeaderTitle: {
     ...Typography.headerTitle,
@@ -575,20 +938,41 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cinematicHeaderChipBgPressed,
   },
 
+  heroGradient: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    marginTop: 4,
+    paddingBottom: 20,
+  },
   profileHero: {
     alignItems: "center",
-    paddingTop: 6,
+    paddingTop: 8,
   },
   avatarGlow: {
     position: "absolute",
-    top: 14,
-    width: 124,
-    height: 124,
-    borderRadius: 28,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    top: 8,
+    width: 130,
+    height: 130,
+    borderRadius: 32,
+    backgroundColor: "rgba(255,255,255,0.05)",
   },
   avatarTouch: { marginBottom: Layout.spacingMedium },
   avatarTouchPressed: { transform: [{ scale: 0.98 }] },
+  levelBadgeOnAvatar: {
+    position: "absolute",
+    left: -4,
+    bottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#0d9488",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 3,
+    borderColor: SLATE_900,
+  },
+  levelBadgeText: { fontSize: 9, fontWeight: "900", color: "#fff", letterSpacing: 0.5 },
   avatarFrame: {
     width: 112,
     height: 112,
@@ -626,25 +1010,140 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   nameText: {
-    fontSize: 24,
-    fontWeight: "700",
+    fontSize: 25,
+    fontWeight: "800",
     color: Theme.textOnDark,
+    marginBottom: 2,
+  },
+  tierKicker: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.driverPrimary,
+    letterSpacing: 2.4,
+    marginBottom: 8,
+  },
+  ratingPill: {
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  ratingNum: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.75)",
+    marginTop: 2,
+  },
+  ratingPillMuted: {
+    minHeight: 32,
+    justifyContent: "center",
     marginBottom: 4,
   },
-  aboutText: {
+  ratingPillMutedText: {
     fontSize: 10,
-    color: Theme.textOnDarkMuted,
+    color: "rgba(255,255,255,0.45)",
     textAlign: "center",
-    paddingHorizontal: 16,
-    lineHeight: 14,
-    letterSpacing: 0.3,
   },
+  fleetStarRow: { flexDirection: "row", alignItems: "center", gap: 2 },
+  starSlot: { width: 16, height: 16, alignItems: "center", justifyContent: "center" },
+  aboutText: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.65)",
+    textAlign: "center",
+    paddingHorizontal: 20,
+    lineHeight: 16,
+    marginBottom: 12,
+  },
+  xpCard: {
+    width: "100%",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  xpTop: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
+  xpEyebrow: { fontSize: 9, fontWeight: "900", color: "rgba(148,163,184,0.95)", letterSpacing: 2 },
+  xpPct: { fontSize: 11, fontWeight: "900", color: "#5eead4" },
+  xpTrack: {
+    height: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(15,23,42,0.9)",
+    overflow: "hidden",
+  },
+  xpFill: { height: "100%", borderRadius: 999 },
+  xpFooter: { flexDirection: "row", justifyContent: "space-between", marginTop: 8 },
+  xpFooterTxt: { fontSize: 8, fontWeight: "700", color: "rgba(148,163,184,0.9)", letterSpacing: 0.6 },
 
   contentWrap: {
+    marginTop: -18,
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 18,
-    gap: 16,
+    paddingTop: 10,
+    gap: 14,
   },
+  statsGrid: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  statTile: {
+    flex: 1,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Theme.cinematicCardBorder,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    gap: 4,
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  statTileNum: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+  },
+  statTileLbl: {
+    fontSize: 7,
+    fontWeight: "900",
+    color: Theme.textSecondary,
+    letterSpacing: 1.2,
+  },
+  interactiveRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  interactiveRowLeft: { flex: 1, flexDirection: "row", gap: 12, minWidth: 0 },
+  interactiveEyebrow: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: Theme.textSecondary,
+    letterSpacing: 1.5,
+    marginBottom: 2,
+  },
+  interactiveTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  interactiveSub: {
+    fontSize: 11,
+    color: Theme.textSecondary,
+    lineHeight: 16,
+    marginTop: 4,
+  },
+  dashIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    backgroundColor: Theme.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   premiumCard: {
     backgroundColor: Theme.screenBackground,
     borderRadius: 24,
@@ -819,4 +1318,60 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Theme.textOnDark,
   },
+
+  roadmapWrap: { paddingHorizontal: Layout.screenPaddingHorizontal, gap: 10 },
+  roadmapHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  roadmapBack: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: Theme.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Theme.border,
+  },
+  roadmapTitle: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 2,
+  },
+  roadmapHero: {
+    borderRadius: 28,
+    padding: 20,
+    overflow: "hidden",
+  },
+  roadmapWatermark: {
+    position: "absolute",
+    right: 8,
+    top: 8,
+    opacity: 0.4,
+  },
+  rankRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
+  crownBox: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  roadmapEyebrow: { fontSize: 8, fontWeight: "900", color: "rgba(148,163,184,0.95)", letterSpacing: 2 },
+  roadmapTierName: { fontSize: 22, fontWeight: "900", color: "#fff", marginTop: 2 },
+  roadmapProgBlock: { marginBottom: 16 },
+  roadmapProgLabels: { flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
+  roadmapProgLeft: { fontSize: 10, fontWeight: "700", color: "rgba(255,255,255,0.7)" },
+  roadmapProgPct: { fontSize: 10, fontWeight: "900", color: AMBER_400 },
+  roadmapTrack: {
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    overflow: "hidden",
+  },
+  roadmapFill: { height: "100%", backgroundColor: AMBER_400, borderRadius: 999 },
+  roadmapSmall: { fontSize: 10, color: "rgba(255,255,255,0.5)", marginTop: 6 },
+  roadmapSteps: { gap: 8 },
+  roadmapStepRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  roadmapDot: { width: 10, height: 10, borderRadius: 5 },
+  roadmapStepText: { flex: 1 },
+  roadmapStepTitle: { fontSize: 12, fontWeight: "800", color: "#e2e8f0" },
+  roadmapStepSub: { fontSize: 9, color: "rgba(148,163,184,0.9)", marginTop: 2 },
 });

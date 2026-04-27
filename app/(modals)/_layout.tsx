@@ -34,6 +34,18 @@ export default function ModalsLayout() {
       />
       <Stack.Screen name="language-settings" />
       <Stack.Screen name="sms-otp-parsing" />
+      <Stack.Screen
+        name="create-post"
+        options={{ presentation: 'fullScreenModal', title: 'Create Post' }}
+      />
+      <Stack.Screen
+        name="post-detail"
+        options={{ presentation: 'modal', title: 'Post' }}
+      />
+      <Stack.Screen
+        name="story-detail"
+        options={{ presentation: 'fullScreenModal', headerShown: false }}
+      />
     </Stack>
   );
 }

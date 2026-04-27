@@ -9,7 +9,6 @@ import {
 } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useWallet } from "@/contexts/WalletContext";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { Command } from "lucide-react-native";
@@ -27,8 +26,8 @@ import {
 import Animated, {
   Easing,
   interpolate,
-  interpolateColor,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   withSequence,
   withSpring,
@@ -130,48 +129,38 @@ function AnimatedNavPill({
 }) {
   const hoverProgress = useSharedValue(0);
   const activeProgress = useSharedValue(active ? 1 : 0);
-  const expandProgress = useSharedValue(active ? 1 : 0);
+
+  const springCfg = { damping: 24, stiffness: 200, mass: 1 };
 
   useEffect(() => {
-    activeProgress.value = withTiming(active ? 1 : 0, {
-      duration: 240,
-      easing: Easing.out(Easing.cubic),
-    });
-    expandProgress.value = withTiming(active ? 1 : 0, {
-      duration: 260,
-      easing: Easing.out(Easing.cubic),
-    });
+    activeProgress.value = withSpring(active ? 1 : 0, springCfg);
+    if (active) hoverProgress.value = withSpring(0, springCfg);
   }, [active, activeProgress]);
 
-  const pillAnimatedStyle = useAnimatedStyle(() => {
-    const expanded = active ? 1 : expandProgress.value;
-    const bg = interpolateColor(
-      activeProgress.value,
-      [0, 1],
-      ["rgba(15,23,42,0)", "rgba(0,0,0,1)"],
-    );
-    const border = interpolateColor(
-      activeProgress.value,
-      [0, 1],
-      ["rgba(15,23,42,0.04)", "rgba(255,255,255,0.12)"],
-    );
+  // Single derived value — active always wins, hover fills in when idle.
+  // Both useAnimatedStyle hooks read this; no duplicate Math.max on the UI thread.
+  const expansionProgress = useDerivedValue(() =>
+    Math.max(activeProgress.value, hoverProgress.value)
+  );
+
+  const pillStyle = useAnimatedStyle(() => {
+    const p = expansionProgress.value;
+    const bgAlpha = activeProgress.value > hoverProgress.value
+      ? activeProgress.value          // active → full dark
+      : hoverProgress.value * 0.05;   // hover only → very subtle tint
+    const borderAlpha = activeProgress.value * 0.6 + hoverProgress.value * 0.08;
     return {
-      width: interpolate(expanded, [0, 1], [52, 184]),
-      backgroundColor: bg,
-      borderColor: border,
-      transform: [
-        { scale: 1 + hoverProgress.value * 0.02 + activeProgress.value * 0.01 },
-        { translateY: -hoverProgress.value * 1.5 },
-      ],
+      width: interpolate(p, [0, 1], [44, 160]),
+      backgroundColor: `rgba(15,23,42,${bgAlpha})`,
+      borderColor: `rgba(15,23,42,${borderAlpha})`,
     };
   });
 
-  const textAnimatedStyle = useAnimatedStyle(() => {
-    const expanded = active ? 1 : expandProgress.value;
+  const textStyle = useAnimatedStyle(() => {
+    const p = expansionProgress.value;
     return {
-      opacity: expanded,
-      width: interpolate(expanded, [0, 1], [0, 112]),
-      transform: [{ translateX: interpolate(expanded, [0, 1], [-8, 0]) }],
+      opacity: p,
+      transform: [{ translateX: interpolate(p, [0, 1], [-12, 0]) }],
     };
   });
 
@@ -179,50 +168,30 @@ function AnimatedNavPill({
     <Pressable
       onPress={onPress}
       onHoverIn={() => {
-        hoverProgress.value = withTiming(1, {
-          duration: 140,
-          easing: Easing.out(Easing.quad),
-        });
-        if (!active) {
-          expandProgress.value = withTiming(1, {
-            duration: 220,
-            easing: Easing.out(Easing.cubic),
-          });
-        }
+        if (!active) hoverProgress.value = withSpring(1, springCfg);
       }}
       onHoverOut={() => {
-        hoverProgress.value = withTiming(0, {
-          duration: 140,
-          easing: Easing.out(Easing.quad),
-        });
-        if (!active) {
-          expandProgress.value = withTiming(0, {
-            duration: 180,
-            easing: Easing.out(Easing.cubic),
-          });
-        }
+        if (!active) hoverProgress.value = withSpring(0, springCfg);
       }}
       style={styles.webNavPressable}
     >
-      <Animated.View style={[styles.webNavPill, pillAnimatedStyle]}>
-        <FontAwesome5
-          name={icon}
-          size={12}
-          color={active ? Theme.textOnPrimary : Theme.textMutedDemo}
-          solid={active}
-        />
-        <Animated.View style={[styles.webNavTextWrap, textAnimatedStyle]}>
-          <Text
-            numberOfLines={1}
-            style={[styles.webNavTitle, active && styles.webNavTitleActive]}
-          >
+      <Animated.View style={[styles.webNavPill, pillStyle]}>
+        {/* Fixed-width icon box — never shifts during expansion */}
+        <View style={styles.webNavIconBox}>
+          <FontAwesome5
+            name={icon}
+            size={16}
+            color={active ? Theme.textOnPrimary : Theme.textMutedDemo}
+            solid={active}
+          />
+        </View>
+        {/* Absolutely positioned text — revealed by the pill mask */}
+        <Animated.View style={[styles.webNavTextAbs, textStyle]}>
+          <Text numberOfLines={1} style={[styles.webNavTitle, active && styles.webNavTitleActive]}>
             {title}
           </Text>
           {subtitle ? (
-            <Text
-              numberOfLines={1}
-              style={[styles.webNavSub, active && styles.webNavSubActive]}
-            >
+            <Text numberOfLines={1} style={[styles.webNavSub, active && styles.webNavSubActive]}>
               {subtitle}
             </Text>
           ) : null}
@@ -232,7 +201,7 @@ function AnimatedNavPill({
   );
 }
 
-export type DemoTabId = "finance" | "trips" | "network" | "resources";
+export type DemoTabId = "finance" | "trips" | "network" | "loadCenter" | "resources";
 
 interface DemoTabBarProps {
   activeTab: DemoTabId;
@@ -246,7 +215,6 @@ export function DemoTabBar({
   onProfilePress,
 }: DemoTabBarProps) {
   const { profile } = useAuth();
-  const { balance } = useWallet();
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
 
   useEffect(() => {
@@ -291,6 +259,7 @@ export function DemoTabBar({
   const isFiscal = activeTab === "finance";
   const isTrips = activeTab === "trips";
   const isNetwork = activeTab === "network";
+  const isLoadCenter = activeTab === "loadCenter";
   const displayName = (
     profile?.full_name ??
     profile?.displayName ??
@@ -303,8 +272,6 @@ export function DemoTabBar({
       .slice(0, 2)
       .map((p) => p[0]?.toUpperCase())
       .join("") || "US";
-  const escrowFormatted =
-    balance > 0 ? `₹${(balance / 1000).toFixed(1)}K` : "₹125.0K";
 
   const dockBottom = insets.bottom;
   const verticalPad = Math.max(dockBottom / 4, 4);
@@ -339,21 +306,24 @@ export function DemoTabBar({
         icon: "chart-line",
         active: isNetwork,
       },
+      {
+        id: "loadCenter",
+        title: "LOAD",
+        subtitle: "CENTER",
+        icon: "truck-loading",
+        active: isLoadCenter,
+      },
     ];
 
     return (
-      <View style={styles.webTopShell}>
+      <View style={[styles.webTopShell, Platform.OS === "web" && ({ backdropFilter: "blur(24px)" } as any)]}>
         <View style={styles.webHeaderRow}>
           <View style={styles.webBrandWrap}>
-            <AnimatedPress style={styles.webBrandLogo} activeOpacity={1}>
-              <Command
-                size={13}
-                color={Theme.textOnPrimary}
-                strokeWidth={2.2}
-              />
-            </AnimatedPress>
             <View>
-              <Text style={styles.webBrandTitle}>PULSE</Text>
+              <Text style={styles.webBrandTitle}>
+                PULSE
+                <Text style={styles.webBrandDotText}>.</Text>
+              </Text>
             </View>
           </View>
 
@@ -371,12 +341,8 @@ export function DemoTabBar({
           </View>
 
           <View style={styles.webUtilityWrap}>
-            <View style={styles.webEscrowWrap}>
-              <Text style={styles.webEscrowLabel}>Escrow</Text>
-              <Text style={styles.webEscrowValue}>{escrowFormatted}</Text>
-            </View>
             <AnimatedPress style={styles.webBellBtn} activeOpacity={0.8}>
-              <FontAwesome5 name="bell" size={13} color={Theme.textMutedDemo} />
+              <FontAwesome5 name="bell" size={16} color="#64748b" />
             </AnimatedPress>
             <AnimatedPress
               onPress={onProfilePress}
@@ -412,7 +378,7 @@ export function DemoTabBar({
           accessibilityLabel="Control hub"
           accessibilityRole="button"
         >
-          <Command size={16} color={Theme.textOnPrimary} strokeWidth={2.25} />
+          <Command size={16} color="#ffffff" strokeWidth={2.2} />
         </TouchableOpacity>
 
         <View style={styles.glassDock}>
@@ -441,16 +407,11 @@ export function DemoTabBar({
                 <AnimatedTabIcon selected={isFiscal}>
                   <FontAwesome5
                     name="credit-card"
-                    size={16}
-                    color={isFiscal ? Theme.textOnPrimary : Theme.textMutedDemo}
+                    size={18}
+                    color={isFiscal ? "#ffffff" : "#94a3b8"}
                     solid={isFiscal}
                   />
-                  <Text
-                    style={[
-                      styles.dockLabel,
-                      isFiscal && styles.dockLabelActive,
-                    ]}
-                  >
+                  <Text style={[styles.dockLabel, isFiscal && styles.dockLabelActive]}>
                     {t("finance").toUpperCase()}
                   </Text>
                 </AnimatedTabIcon>
@@ -478,16 +439,11 @@ export function DemoTabBar({
                 <AnimatedTabIcon selected={isTrips}>
                   <FontAwesome5
                     name="route"
-                    size={16}
-                    color={isTrips ? Theme.textOnPrimary : Theme.textMutedDemo}
+                    size={18}
+                    color={isTrips ? "#ffffff" : "#94a3b8"}
                     solid={isTrips}
                   />
-                  <Text
-                    style={[
-                      styles.dockLabel,
-                      isTrips && styles.dockLabelActive,
-                    ]}
-                  >
+                  <Text style={[styles.dockLabel, isTrips && styles.dockLabelActive]}>
                     {t("trips").toUpperCase()}
                   </Text>
                 </AnimatedTabIcon>
@@ -518,19 +474,55 @@ export function DemoTabBar({
                 <AnimatedTabIcon selected={isNetwork}>
                   <FontAwesome5
                     name="users"
-                    size={16}
-                    color={
-                      isNetwork ? Theme.textOnPrimary : Theme.textMutedDemo
-                    }
+                    size={18}
+                    color={isNetwork ? "#ffffff" : "#94a3b8"}
                     solid={isNetwork}
+                  />
+                  <Text style={[styles.dockLabel, isNetwork && styles.dockLabelActive]}>
+                    {t("network").toUpperCase()}
+                  </Text>
+                </AnimatedTabIcon>
+              </TouchableOpacity>
+            </View>
+
+            {/* Column 4: Load Center */}
+            <View style={styles.dockColumn}>
+              <View
+                style={[
+                  styles.activePill,
+                  isLoadCenter && styles.activePillVisible,
+                ]}
+              >
+                <View style={styles.activePillAccent} />
+              </View>
+              <TouchableOpacity
+                style={styles.dockButton}
+                onPress={() => onTabChange("loadCenter")}
+                activeOpacity={0.9}
+                hitSlop={{
+                  top: Layout.touchTargetHitSlop,
+                  bottom: Layout.touchTargetHitSlop,
+                  left: Layout.touchTargetHitSlop,
+                  right: Layout.touchTargetHitSlop,
+                }}
+              >
+                <AnimatedTabIcon selected={isLoadCenter}>
+                  <FontAwesome5
+                    name="truck-loading"
+                    size={15}
+                    color={
+                      isLoadCenter ? Theme.textOnPrimary : Theme.textMutedDemo
+                    }
+                    solid={isLoadCenter}
                   />
                   <Text
                     style={[
                       styles.dockLabel,
-                      isNetwork && styles.dockLabelActive,
+                      styles.dockLabelCompact,
+                      isLoadCenter && styles.dockLabelActive,
                     ]}
                   >
-                    {t("network").toUpperCase()}
+                    LOAD
                   </Text>
                 </AnimatedTabIcon>
               </TouchableOpacity>
@@ -572,48 +564,51 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "stretch",
     backgroundColor: "transparent",
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
   },
   mobileFooterRow: {
     width: "100%",
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   glassDock: {
     flex: 1,
-    height: Layout.tabBarHeight + 4,
+    height: Layout.tabBarHeight + 6,
     flexDirection: "row",
     alignItems: "stretch",
     justifyContent: "space-between",
-    backgroundColor: "rgba(255,255,255,0.92)",
-    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "rgba(15,23,42,0.08)",
-    shadowColor: Theme.shadow,
+    borderColor: "rgba(15,23,42,0.05)",
+    shadowColor: "#0f172a",
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
     overflow: "hidden",
   },
   mobileEdgeBtn: {
-    width: 34,
-    height: 34,
+    width: 32,
+    height: 32,
     borderRadius: 10,
     backgroundColor: Theme.darkBackground,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
   },
   mobileProfileBtn: {
-    width: 34,
-    height: 34,
+    width: 32,
+    height: 32,
     borderRadius: 12,
     backgroundColor: "rgba(255,255,255,0.92)",
     borderWidth: 1,
-    borderColor: "rgba(15,23,42,0.08)",
+    borderColor: "rgba(203,213,225,0.5)",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -621,12 +616,12 @@ const styles = StyleSheet.create({
   mobileProfileAvatar: {
     width: "100%",
     height: "100%",
-    borderRadius: 12,
+    borderRadius: 16,
   },
   mobileAvatarText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: "900",
-    color: Theme.textPrimaryDark,
+    color: "#0f172a",
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
@@ -653,14 +648,18 @@ const styles = StyleSheet.create({
   },
   webTopShell: {
     width: "100%",
-    backgroundColor: "rgba(255,255,255,0.96)",
+    backgroundColor: "rgba(255,255,255,0.8)",
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(15,23,42,0.08)",
-    paddingHorizontal: 18,
-    paddingTop: 10,
-    paddingBottom: 10,
+    borderBottomColor: "#f1f5f9",
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 12,
     zIndex: 200,
     elevation: 20,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
   },
   webHeaderRow: {
     flexDirection: "row",
@@ -672,22 +671,29 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    minWidth: 184,
+    minWidth: 230,
+    paddingRight: 8,
   },
   webBrandLogo: {
     width: 36,
     height: 36,
-    borderRadius: 11,
-    backgroundColor: Theme.darkBackground,
+    borderRadius: 12,
+    backgroundColor: "#0f172a",
     alignItems: "center",
     justifyContent: "center",
   },
   webBrandTitle: {
-    fontSize: 14,
+    fontSize: 34,
     fontWeight: "900",
-    color: Theme.textPrimaryDark,
+    color: "#0f172a",
     fontStyle: "italic",
-    letterSpacing: -0.2,
+    letterSpacing: -1,
+    lineHeight: 36,
+  },
+  webBrandDotText: {
+    color: Theme.darkGreen,
+    fontSize: 38,
+    lineHeight: 38,
   },
   webBrandSub: {
     marginTop: 1,
@@ -700,11 +706,11 @@ const styles = StyleSheet.create({
   webNavPillGroup: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    backgroundColor: "rgba(15,23,42,0.04)",
+    gap: 6,
+    backgroundColor: "#f8fafc",
     borderWidth: 1,
-    borderColor: "rgba(15,23,42,0.08)",
-    borderRadius: 26,
+    borderColor: "rgba(226,232,240,0.6)",
+    borderRadius: 999,
     padding: 6,
     minWidth: 0,
     maxWidth: 520,
@@ -715,86 +721,67 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   webNavPill: {
-    minWidth: 56,
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    height: 44,
+    borderRadius: 999,
+    borderWidth: 1,
+    overflow: "hidden",
+    position: "relative",
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-start",
-    gap: 10,
-    borderWidth: 1,
-    borderColor: "rgba(15,23,42,0.04)",
-    overflow: "hidden",
   },
-  webNavPillActive: {
-    backgroundColor: Theme.darkBackground,
+  webNavIconBox: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
-  webNavTextWrap: {
-    alignItems: "flex-start",
-    minWidth: 0,
-    maxWidth: 112,
-    overflow: "hidden",
+  webNavTextAbs: {
+    position: "absolute",
+    left: 44,
+    top: 0,
+    bottom: 0,
+    width: 110,
+    justifyContent: "center",
   },
   webNavTitle: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "900",
-    color: Theme.textPrimaryDark,
+    color: "#0f172a",
     textTransform: "uppercase",
-    letterSpacing: 1.9,
+    letterSpacing: 1.8,
   },
   webNavTitleActive: {
-    color: Theme.textOnPrimary,
+    color: "#ffffff",
   },
   webNavSub: {
-    marginTop: 1,
+    marginTop: 2,
     fontSize: 8,
     fontWeight: "800",
-    color: Theme.textMutedDemo,
+    color: "#64748b",
     textTransform: "uppercase",
-    letterSpacing: 1.35,
+    letterSpacing: 0.8,
   },
   webNavSubActive: {
-    color: "rgba(255,255,255,0.8)",
+    color: Theme.teslaRed,
   },
   webUtilityWrap: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    minWidth: 214,
+    minWidth: 90,
     justifyContent: "flex-end",
-  },
-  webEscrowWrap: {
-    alignItems: "flex-end",
-    backgroundColor: "rgba(255,255,255,0.8)",
-    borderWidth: 1,
-    borderColor: "rgba(15,23,42,0.08)",
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  webEscrowLabel: {
-    fontSize: 7,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    color: Theme.textMutedDemo,
-  },
-  webEscrowValue: {
-    fontSize: 12,
-    fontWeight: "900",
-    color: Theme.primary,
-    marginTop: 1,
+    paddingRight: 6,
   },
   webBellBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 9,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(15,23,42,0.08)",
-    backgroundColor: "rgba(255,255,255,0.8)",
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
   },
   webAvatarBtn: {
     width: 36,
@@ -802,12 +789,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.primary,
+    backgroundColor: "#4f46e5",
+    shadowColor: "#4f46e5",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   webAvatarText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "900",
-    color: Theme.textOnPrimary,
+    color: "#ffffff",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
@@ -868,10 +860,10 @@ const styles = StyleSheet.create({
   },
   activePill: {
     position: "absolute",
-    top: 2.5,
-    left: 2.5,
-    right: 2.5,
-    bottom: 2.5,
+    top: 3,
+    left: 2,
+    right: 2,
+    bottom: 3,
     borderRadius: 18,
     backgroundColor: Theme.darkBackground,
     borderTopWidth: 1,
@@ -882,19 +874,17 @@ const styles = StyleSheet.create({
     opacity: 1,
   },
   activePillWeb: {
-    borderRadius: 18,
-    backgroundColor: Theme.darkBackground,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.12)",
+    borderRadius: 16,
+    backgroundColor: "#0f172a",
   },
   activePillAccent: {
     position: "absolute",
-    bottom: 0,
-    left: "28%",
-    right: "28%",
-    height: 3,
+    bottom: -4,
+    left: "30%",
+    right: "30%",
+    height: 4,
     borderRadius: 999,
-    backgroundColor: Theme.teslaRed,
+    backgroundColor: "#e11d48",
   },
   activePillAccentWeb: {
     bottom: 0,
@@ -911,14 +901,17 @@ const styles = StyleSheet.create({
     minHeight: Layout.minTouchTargetSize,
   },
   dockLabel: {
-    fontSize: 7,
+    fontSize: 9,
     fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 1,
+    letterSpacing: 0.7,
     color: Theme.textMutedDemo,
   },
+  dockLabelCompact: {
+    letterSpacing: 0.55,
+  },
   dockLabelActive: {
-    color: Theme.textOnPrimary,
+    color: "#ffffff",
   },
   dockLabelActiveWeb: {
     color: Theme.textPrimaryDark,

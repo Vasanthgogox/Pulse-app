@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Image, StyleSheet, Text, View, type ImageStyle, type StyleProp, type ViewStyle } from "react-native";
 import Theme from "@/constants/Theme";
 import {
@@ -7,6 +7,7 @@ import {
   partyAvatarHasRenderableOutput,
   partyInitialsFromName,
   resolvePartyDisplayUri,
+  resolvePartyPhotoUriAsync,
   type PartyEntityType,
 } from "@/lib/partyAvatarDisplay";
 
@@ -37,13 +38,38 @@ export function PartyAvatar({
   style,
   borderStyle,
 }: PartyAvatarProps) {
-  const uri = resolvePartyDisplayUri({
+  const [resolvedPhotoUri, setResolvedPhotoUri] = useState<string | null>(null);
+  const hasRawPhotoField = Boolean(
+    (organizationImageUrl ?? "").trim() || (avatarUrl ?? "").trim(),
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!hasRawPhotoField) {
+      setResolvedPhotoUri(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    resolvePartyPhotoUriAsync({
+      organizationImageUrl,
+      avatarUrl,
+    }).then((uri) => {
+      if (!cancelled) setResolvedPhotoUri(uri);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasRawPhotoField, organizationImageUrl, avatarUrl]);
+
+  const syncUri = resolvePartyDisplayUri({
     organizationImageUrl,
     organizationAvatarSeed,
     avatarUrl,
     avatarSeed,
     entityType,
   });
+  const uri = resolvedPhotoUri ?? syncUri;
   if (
     !partyAvatarHasRenderableOutput({
       name,
@@ -64,6 +90,8 @@ export function PartyAvatar({
     return (
       <Image
         source={{ uri }}
+        resizeMode="cover"
+        accessibilityIgnoresInvertColors
         style={[
           {
             width: size,
@@ -72,6 +100,7 @@ export function PartyAvatar({
             backgroundColor: Theme.surface,
             borderWidth: 1,
             borderColor: Theme.border,
+            overflow: "hidden",
           },
           borderStyle,
           style as StyleProp<ImageStyle>,

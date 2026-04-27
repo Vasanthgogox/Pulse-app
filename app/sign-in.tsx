@@ -10,6 +10,8 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -17,7 +19,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -35,10 +36,14 @@ export default function SignIn() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const params = useLocalSearchParams<{ email?: string | string[]; direct?: string }>();
-  const { width } = useWindowDimensions();
   const isOnline = useIsOnline();
   const { user, signIn } = useAuth();
   const { locale, localeOptions } = useLanguage();
+  const [webViewportWidth, setWebViewportWidth] = useState<number>(() => {
+    if (Platform.OS !== 'web') return 0;
+    if (typeof window === 'undefined') return 1280;
+    return window.innerWidth || 1280;
+  });
 
   const [screen, setScreen] = useState<ScreenState>(
     Platform.OS === 'web' && !params.direct ? 'LANDING' : 'SIGNIN'
@@ -51,8 +56,19 @@ export default function SignIn() {
   const [loading, setLoading] = useState(false);
   const [waitingForAuthState, setWaitingForAuthState] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
+  const [typedPulse, setTypedPulse] = useState('');
+  const businessIconPulse = useState(() => new Animated.Value(0))[0];
+  const driverIconPulse = useState(() => new Animated.Value(0))[0];
 
-  const isDesktop = width >= 1024;
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const handleResize = () => setWebViewportWidth(window.innerWidth || 1280);
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const isDesktop = Platform.OS === 'web' ? webViewportWidth >= 1024 : false;
 
   const currentLanguageLabel =
     localeOptions.find((o) => o.value === locale)?.labelNative ??
@@ -80,6 +96,53 @@ export default function SignIn() {
       setScreen('SIGNIN');
     }
   }, [params.email]);
+
+  useEffect(() => {
+    if (screen !== 'LANDING') {
+      setTypedPulse('');
+      return;
+    }
+    const full = 'PULSE';
+    let idx = 0;
+    setTypedPulse('');
+    const timer = setInterval(() => {
+      idx += 1;
+      setTypedPulse(full.slice(0, idx));
+      if (idx >= full.length) clearInterval(timer);
+    }, 260);
+    return () => clearInterval(timer);
+  }, [screen]);
+
+  useEffect(() => {
+    if (screen !== 'LANDING') return;
+    const runPulse = (value: Animated.Value, duration: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(value, {
+            toValue: 1,
+            duration,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(value, {
+            toValue: 0,
+            duration,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+    const businessAnim = runPulse(businessIconPulse, 1700);
+    const driverAnim = runPulse(driverIconPulse, 2100);
+    businessAnim.start();
+    driverAnim.start();
+    return () => {
+      businessAnim.stop();
+      driverAnim.stop();
+      businessIconPulse.setValue(0);
+      driverIconPulse.setValue(0);
+    };
+  }, [screen, businessIconPulse, driverIconPulse]);
 
   const handleSignIn = async () => {
     setSignInError(null);
@@ -123,7 +186,30 @@ export default function SignIn() {
         activeOpacity={0.9}
         onPress={() => router.push('/sign-up')}
       >
-        <FontAwesome name="building-o" size={52} color="#94a3b8" />
+        <Animated.View
+          style={{
+            transform: [
+              {
+                scale: businessIconPulse.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [1, 1.08],
+                }),
+              },
+              {
+                translateY: businessIconPulse.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, -3],
+                }),
+              },
+            ],
+            opacity: businessIconPulse.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.86, 1],
+            }),
+          }}
+        >
+          <FontAwesome name="building-o" size={52} color="#94a3b8" />
+        </Animated.View>
         <Text style={styles.modeTitle}>BUSINESS</Text>
         <Text style={styles.modeSubtitle}>Fleet management and company tools.</Text>
         <View style={styles.modePill}>
@@ -136,7 +222,30 @@ export default function SignIn() {
         activeOpacity={0.9}
         onPress={() => router.push('/driver-signup')}
       >
-        <FontAwesome name="truck" size={52} color={Theme.driverEmeraldDark} />
+        <Animated.View
+          style={{
+            transform: [
+              {
+                scale: driverIconPulse.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [1, 1.08],
+                }),
+              },
+              {
+                translateY: driverIconPulse.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, -3],
+                }),
+              },
+            ],
+            opacity: driverIconPulse.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.88, 1],
+            }),
+          }}
+        >
+          <FontAwesome name="truck" size={52} color={Theme.driverEmeraldDark} />
+        </Animated.View>
         <Text style={styles.modeTitle}>DRIVER</Text>
         <Text style={styles.modeSubtitle}>Earn money on every trip you take.</Text>
         <View style={[styles.modePill, styles.modePillDriver]}>
@@ -159,6 +268,12 @@ export default function SignIn() {
         </View>
       ) : null}
       <View style={[styles.rightPanel, isDesktop && styles.rightPanelDesktop]}>
+        {isDesktop ? (
+          <>
+            <View style={styles.rightPanelOrbA} />
+            <View style={styles.rightPanelOrbB} />
+          </>
+        ) : null}
         <Text style={[styles.formTitle, isDesktop && styles.formTitleDesktop]}>Sign in.</Text>
         <Text style={[styles.formSubtitle, isDesktop && styles.formSubtitleDesktop]}>
           Access your Pulse account dashboard.
@@ -233,6 +348,7 @@ export default function SignIn() {
     <KeyboardAvoidingView
       style={[
         styles.container,
+        screen === 'LANDING' ? styles.containerLanding : null,
         isDesktop ? styles.containerDesktop : null,
         { paddingTop: insets.top, paddingBottom: insets.bottom },
       ]}
@@ -247,7 +363,10 @@ export default function SignIn() {
 
       {screen === 'LANDING' ? (
         <View style={styles.topBar}>
-          <Text style={[styles.brand, styles.brandOnDark]}>PULSE<Text style={styles.logoDot}>.</Text></Text>
+          <Text style={[styles.brand, styles.brandOnDark]}>
+            {typedPulse}
+            <Text style={styles.logoDot}>.</Text>
+          </Text>
           <View style={styles.topActions}>
             <TouchableOpacity onPress={() => setScreen('SIGNIN')} style={[styles.topBtn, styles.topBtnOnDark]}>
               <Text style={styles.topBtnText}>Sign In</Text>
@@ -255,7 +374,9 @@ export default function SignIn() {
             <TouchableOpacity onPress={() => router.push('/(modals)/language-settings')} style={[styles.globeBtn, styles.globeBtnOnDark]}>
               <FontAwesome name="globe" size={16} color={Theme.textOnDark} />
             </TouchableOpacity>
-            <Text style={[styles.langText, styles.langTextOnDark]}>{currentLanguageLabel}</Text>
+            <Text style={[styles.langText, styles.langTextOnDark, styles.langPill]}>
+              {currentLanguageLabel}
+            </Text>
           </View>
         </View>
       ) : null}
@@ -289,6 +410,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Theme.screenBackground,
     paddingHorizontal: Layout.screenPaddingHorizontal,
+  },
+  containerLanding: {
+    backgroundColor: '#020617',
+    paddingHorizontal: 0,
   },
   containerDesktop: {
     backgroundColor: '#020617',
@@ -324,10 +449,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 12,
+    paddingBottom: 10,
+    backgroundColor: '#020617',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
   },
   brand: {
     fontSize: 28,
     fontWeight: '900',
+    fontStyle: 'italic',
     letterSpacing: -0.7,
     color: Theme.textPrimaryDark,
   },
@@ -377,6 +507,15 @@ const styles = StyleSheet.create({
   },
   langTextOnDark: {
     color: 'rgba(255,255,255,0.92)',
+  },
+  langPill: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    overflow: 'hidden',
   },
   landingWrap: {
     flex: 1,
@@ -463,6 +602,8 @@ const styles = StyleSheet.create({
   leftLogo: {
     fontSize: 44,
     fontWeight: '900',
+    fontStyle: 'italic',
+    letterSpacing: -1.1,
     color: Theme.textOnDark,
     marginBottom: 14,
   },
@@ -497,7 +638,26 @@ const styles = StyleSheet.create({
   rightPanelDesktop: {
     paddingHorizontal: 48,
     paddingVertical: 48,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#ffffff',
+    overflow: 'hidden',
+  },
+  rightPanelOrbA: {
+    position: 'absolute',
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    top: -70,
+    right: -50,
+    backgroundColor: 'rgba(16,185,129,0.12)',
+  },
+  rightPanelOrbB: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    bottom: -90,
+    left: -70,
+    backgroundColor: 'rgba(15,23,42,0.06)',
   },
   formTitle: {
     fontSize: 44,
@@ -506,7 +666,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.8,
   },
   formTitleDesktop: {
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
   },
   formSubtitle: {
     marginTop: 6,
@@ -515,7 +675,7 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   formSubtitleDesktop: {
-    color: 'rgba(148,163,184,0.9)',
+    color: Theme.textSecondary,
   },
   input: {
     backgroundColor: Theme.surface,
@@ -529,9 +689,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   inputDesktop: {
-    backgroundColor: '#020617',
-    borderColor: 'rgba(255,255,255,0.14)',
-    color: Theme.textOnDark,
+    backgroundColor: '#f8fafc',
+    borderColor: Theme.border,
+    color: Theme.textPrimaryDark,
   },
   passwordWrap: {
     position: 'relative',
@@ -567,7 +727,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   keepTextDesktop: {
-    color: 'rgba(148,163,184,0.75)',
+    color: Theme.textSecondary,
   },
   forgotText: {
     fontSize: 12,
@@ -627,7 +787,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   signUpMutedDesktop: {
-    color: 'rgba(148,163,184,0.75)',
+    color: Theme.textSecondary,
   },
   signUpLink: {
     fontSize: 13,

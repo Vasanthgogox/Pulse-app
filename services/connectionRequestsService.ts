@@ -21,6 +21,21 @@
  * - Re-invite after existing connection: duplicate insert prevented as above; existing client/supplier rows are updated by trigger when linked_organization_id already exists.
  */
 import { supabase } from '@/lib/supabase';
+
+/** Shown when backend enforces a daily cap on `connection_requests` (deploy in Q-unified-base). */
+export const CONNECTION_REQUEST_DAILY_LIMIT_MESSAGE =
+  "You've reached today's connection limit. Try again tomorrow.";
+
+export function looksLikeConnectionRateLimitError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes('limit') ||
+    m.includes('rate') ||
+    m.includes('too many') ||
+    (m.includes('max') && m.includes('request')) ||
+    m.includes('429')
+  );
+}
 import {
   normalizePhoneForInviteeLookup,
   uniqueNormalizedPhonesForLookup,
@@ -308,7 +323,7 @@ export async function getConnectionRequestsSent(orgId: string): Promise<{
  * Approve a connection request (caller must be member of to_organization_id).
  * Updates only when status is pending; trigger creates organization_relations and client/supplier rows.
  */
-export async function approveConnectionRequest(requestId: string): Promise<{
+export async function approveConnectionRequest(requestId: string, receivingOrgId?: string): Promise<{
   error: Error | null;
   updated: boolean;
 }> {
@@ -317,7 +332,8 @@ export async function approveConnectionRequest(requestId: string): Promise<{
   const userId = session?.user?.id;
   if (sessionError || !userId)
     return { error: new Error('Session expired. Please sign in again.'), updated: false };
-  const { data: updateData, error } = await supabase()
+
+  let query = supabase()
     .from('connection_requests')
     .update({
       status: 'approved',
@@ -325,8 +341,10 @@ export async function approveConnectionRequest(requestId: string): Promise<{
       responded_by: userId,
     })
     .eq('id', requestId)
-    .eq('status', 'pending')
-    .select('id');
+    .eq('status', 'pending');
+  if (receivingOrgId) query = query.eq('to_organization_id', receivingOrgId);
+
+  const { data: updateData, error } = await query.select('id');
   if (error) return { error: new Error(error.message), updated: false };
   const updated = Array.isArray(updateData) && updateData.length > 0;
   return { error: null, updated };
@@ -336,7 +354,7 @@ export async function approveConnectionRequest(requestId: string): Promise<{
  * Reject a connection request (caller must be member of to_organization_id).
  * Updates only when status is pending.
  */
-export async function rejectConnectionRequest(requestId: string): Promise<{
+export async function rejectConnectionRequest(requestId: string, receivingOrgId?: string): Promise<{
   error: Error | null;
   updated: boolean;
 }> {
@@ -345,7 +363,8 @@ export async function rejectConnectionRequest(requestId: string): Promise<{
   const userId = session?.user?.id;
   if (sessionError || !userId)
     return { error: new Error('Session expired. Please sign in again.'), updated: false };
-  const { data: updateData, error } = await supabase()
+
+  let query = supabase()
     .from('connection_requests')
     .update({
       status: 'rejected',
@@ -353,8 +372,10 @@ export async function rejectConnectionRequest(requestId: string): Promise<{
       responded_by: userId,
     })
     .eq('id', requestId)
-    .eq('status', 'pending')
-    .select('id');
+    .eq('status', 'pending');
+  if (receivingOrgId) query = query.eq('to_organization_id', receivingOrgId);
+
+  const { data: updateData, error } = await query.select('id');
   if (error) return { error: new Error(error.message), updated: false };
   const updated = Array.isArray(updateData) && updateData.length > 0;
   return { error: null, updated };
@@ -372,6 +393,22 @@ export async function cancelConnectionRequest(requestId: string): Promise<{
     .from('connection_requests')
     .delete()
     .eq('id', requestId)
+    .eq('status', 'pending')
+    .select('id');
+  if (error) return { error: new Error(error.message), deleted: false };
+  const deleted = Array.isArray(deleteData) && deleteData.length > 0;
+  return { error: null, deleted };
+}
+
+export async function cancelPendingConnectionRequestByOrgPair(
+  fromOrgId: string,
+  toOrgId: string,
+): Promise<{ error: Error | null; deleted: boolean }> {
+  const { data: deleteData, error } = await supabase()
+    .from('connection_requests')
+    .delete()
+    .eq('from_organization_id', fromOrgId)
+    .eq('to_organization_id', toOrgId)
     .eq('status', 'pending')
     .select('id');
   if (error) return { error: new Error(error.message), deleted: false };

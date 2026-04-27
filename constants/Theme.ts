@@ -52,6 +52,8 @@ export const Theme = {
   textBody: "#0f172a",
   /** Secondary, time ago (slate-400) */
   textSecondary: "#94a3b8",
+  /** Trips cards: origin/destination route — slightly darker than textSecondary for readability */
+  textRouteCard: "#64748b",
   /** Placeholders, chevrons */
   textMuted: "#94a3b8",
   /** Demo: labels, inactive tabs */

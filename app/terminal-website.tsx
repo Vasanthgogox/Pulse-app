@@ -329,7 +329,7 @@ const WEBSITE_HTML = `<!doctype html>
       </h2>
       <a href="/sign-in" target="_top" class="inline-block px-24 py-10 bg-emerald-600 text-white rounded-[5rem] font-black text-xl uppercase tracking-[0.2em] shadow-[0_40px_100px_rgba(16,185,129,0.4)] hover-float">Initialize Now</a>
     </div>
-    <div class="absolute inset-0 opacity-[0.02] pointer-events-none text-white font-black text-[35vw] select-none leading-none top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">PULSE.</div>
+    <div class="absolute inset-0 opacity-[0.02] pointer-events-none text-white font-black italic text-[35vw] select-none leading-none top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">PULSE.</div>
   </section>
 
   <footer class="py-16 page-pad bg-slate-950 border-t border-white/5 text-center">

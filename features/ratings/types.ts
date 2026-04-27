@@ -3,7 +3,7 @@
  */
 
 export type RaterType = 'client' | 'supplier' | 'organization';
-export type RatedType = 'supplier' | 'driver';
+export type RatedType = 'client' | 'supplier' | 'driver';
 
 export interface RatingRow {
   id: string;
