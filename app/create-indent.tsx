@@ -476,13 +476,6 @@ export default function CreateIndentScreen() {
     });
   }, []);
 
-  useEffect(() => {
-    const cp = parseFloat(String(form.client_price).replace(/,/g, ""));
-    if (!Number.isFinite(cp) || cp <= 0) return;
-    if ((form.supplier_target ?? "").trim() !== "") return;
-    update({ supplier_target: String(Math.round(cp * 0.9)) });
-  }, [form.client_price, form.supplier_target, update]);
-
   // Save draft whenever form changes and orgId is known.
   useEffect(() => {
     if (!orgId) return;
