@@ -10,9 +10,12 @@ import {
   cancelPendingConnectionRequestByOrgPair,
   CONNECTION_REQUEST_DAILY_LIMIT_MESSAGE,
   createConnectionRequest,
+  type ConnectionRequestRow,
   looksLikeConnectionRateLimitError,
 } from '@/services/connectionRequestsService';
-import { useIndentsQuery, useNetworkFeedQuery } from '@/lib/queries';
+import { useIndentsQuery, useInvalidateNetwork, useNetworkFeedQuery } from '@/lib/queries';
+import { queryKeys } from '@/lib/queryKeys';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Check,
   Clock3,
@@ -294,9 +297,11 @@ export function DiscoverView({
   const [requestRoleModalOrg, setRequestRoleModalOrg] = useState<ScoredOrg | null>(null);
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const queryClient = useQueryClient();
 
   const feedQ = useNetworkFeedQuery(orgId);
   const indentsQ = useIndentsQuery(orgId);
+  const invalidateNetwork = useInvalidateNetwork(orgId);
   const search = searchProp ?? internalSearch;
   const setSearch = onSearchChange ?? setInternalSearch;
 
@@ -357,7 +362,7 @@ export function DiscoverView({
   const handleConnect = async (org: ScoredOrg, mode: "client" | "supplier") => {
     setConnecting(org.id);
     setRequestRoleModalOrg(null);
-    const { error, alreadyInvited } = await createConnectionRequest(orgId, org.id, {
+    const { error, alreadyInvited, requestId } = await createConnectionRequest(orgId, org.id, {
       requestShipperClient: mode === "client",
       requestCarrierSupplier: mode === "supplier",
     });
@@ -372,9 +377,33 @@ export function DiscoverView({
     }
     if (alreadyInvited) {
       setOrgs((prev) => prev.map((o) => (o.id === org.id ? { ...o, connection_status: 'pending' } : o)));
+      invalidateNetwork();
       return;
     }
     setOrgs((prev) => prev.map((o) => (o.id === org.id ? { ...o, connection_status: 'pending' } : o)));
+    if (requestId) {
+      queryClient.setQueryData<ConnectionRequestRow[]>(
+        queryKeys.connectionRequests.sent(orgId),
+        (prev = []) => {
+          if (prev.some((r) => r.id === requestId)) return prev;
+          const optimistic: ConnectionRequestRow = {
+            id: requestId,
+            from_organization_id: orgId,
+            to_organization_id: org.id,
+            request_shipper_client: mode === "client",
+            request_carrier_supplier: mode === "supplier",
+            status: 'pending',
+            created_at: new Date().toISOString(),
+            responded_at: null,
+            responded_by: null,
+            from_org_name: '',
+            to_org_name: org.name,
+          };
+          return [optimistic, ...prev];
+        }
+      );
+    }
+    invalidateNetwork();
   };
 
   const handleCancelRequest = async (org: ScoredOrg) => {
@@ -389,6 +418,11 @@ export function DiscoverView({
       Alert.alert("Request already changed", "Refreshing the latest network state.");
     }
     setOrgs((prev) => prev.map((o) => (o.id === org.id ? { ...o, connection_status: "none" } : o)));
+    queryClient.setQueryData<ConnectionRequestRow[]>(
+      queryKeys.connectionRequests.sent(orgId),
+      (prev = []) => prev.filter((r) => !(r.to_organization_id === org.id && r.status === "pending"))
+    );
+    invalidateNetwork();
     void fetchOrgs(search);
   };
 
