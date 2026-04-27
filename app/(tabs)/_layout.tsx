@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { saveLastTabRoute } from '@/lib/lastRoute';
 import { ROUTES } from '@/lib/routes';
+import Layout from '@/constants/Layout';
 
 function DemoCustomTabBar(props: BottomTabBarProps) {
   const router = useRouter();
@@ -112,7 +113,7 @@ export default function TabLayout() {
           headerShown: false,
           tabBarShowLabel: false,
           tabBarStyle: { display: 'none' },
-          sceneStyle: isDesktopWeb ? { paddingTop: 68 } : undefined,
+          sceneStyle: isDesktopWeb ? { paddingTop: Layout.desktopTopNavOffset } : undefined,
         }}
       >
         <Tabs.Screen name="index" options={{ title: 'Home' }} />

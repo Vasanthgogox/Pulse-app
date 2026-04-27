@@ -3,6 +3,7 @@
  * Lives outside the Network tab so Network stays: connections, invites, discover, stories strip only.
  */
 import Theme from "@/constants/Theme";
+import Layout from "@/constants/Layout";
 import { LoadCenterView } from "@/features/network/components/LoadCenterView";
 import { ShareLoadSheet } from "@/features/network/components/ShareLoadSheet";
 import type { IndentRow } from "@/features/indents";
@@ -33,7 +34,12 @@ export default function PulseLoadsScreen() {
   }
 
   return (
-    <View style={[styles.root, { paddingTop: isDesktopWeb ? 68 : insets.top }]}>
+    <View
+      style={[
+        styles.root,
+        { paddingTop: isDesktopWeb ? Layout.desktopTopNavOffset : insets.top },
+      ]}
+    >
       <View style={styles.topBar}>
         <Pressable onPress={safeBack} hitSlop={12} style={styles.back}>
           <ArrowLeft size={22} color={Theme.textPrimaryDark} />
