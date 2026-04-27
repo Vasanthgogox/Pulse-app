@@ -324,8 +324,9 @@ export const PAYMENT_MODES = [
 ] as const;
 
 const LEDGER_LAST_PAYMENT_MODE_KEY = "@q/ledger_last_payment_mode";
+type FontAwesomeIconName = React.ComponentProps<typeof FontAwesome>["name"];
 
-const PAYMENT_MODE_ICON: Record<string, string> = {
+const PAYMENT_MODE_ICON: Record<string, FontAwesomeIconName> = {
   CASH: "money",
   UPI: "mobile",
   BANK: "bank",
@@ -346,7 +347,7 @@ const PAYMENT_MODE_LABEL_SHORT: Record<string, string> = {
   CREDIT: "Credit",
 };
 
-const PAYMENT_TYPE_ICON: Record<string, string> = {
+const PAYMENT_TYPE_ICON: Record<string, FontAwesomeIconName> = {
   "Trip Payment": "truck",
   "Advance Payment": "arrow-up",
   "Advance from Client": "arrow-up",
@@ -1016,7 +1017,7 @@ export function AddTransactionModal({
       if (missionTripFilterPayout === "aggregate" && payout !== "market") return false;
 
       const completed = isTripCompleted({
-        status: t.status ?? null,
+        status: t.status ?? "",
         completed_at: t.completed_at ?? null,
       });
       if (missionTripFilterLifecycle === "active" && completed) return false;
@@ -1166,7 +1167,14 @@ export function AddTransactionModal({
   const partyOptions = useMemo(() => {
     if (type === "in" && selectedTrip) {
       const lid = (selectedTrip as any).organization_id;
-      const isIntegrated = isCrossOrgIntegrationTrip(selectedTrip, viewerOrgId);
+      const isIntegrated = isCrossOrgIntegrationTrip(
+        {
+          organization_id: selectedTrip.organization_id ?? "",
+          indent_id: selectedTrip.indent_id ?? null,
+          supplier_id: selectedTrip.supplier_id ?? null,
+        },
+        viewerOrgId,
+      );
 
       if (isIntegrated) {
         const localCid =
@@ -1213,7 +1221,14 @@ export function AddTransactionModal({
     }
     if (type === "out" && selectedTrip) {
       const lid = (selectedTrip as any).organization_id;
-      const isIntegrated = isCrossOrgIntegrationTrip(selectedTrip, viewerOrgId);
+      const isIntegrated = isCrossOrgIntegrationTrip(
+        {
+          organization_id: selectedTrip.organization_id ?? "",
+          indent_id: selectedTrip.indent_id ?? null,
+          supplier_id: selectedTrip.supplier_id ?? null,
+        },
+        viewerOrgId,
+      );
 
       if (isIntegrated) {
         const localSid =
@@ -1600,7 +1615,7 @@ export function AddTransactionModal({
       setDriverIdForSalary(null);
   }, [visible, effectivePartyId]);
 
-  // When party (client/supplier) changes, clear trip if the selected trip is not for this party.
+  // Keep trip as the primary selector. If party/trip conflict, clear party instead of trip.
   // Skip when tripLocked — trip is fixed and party is derived from it.
   useEffect(() => {
     if (!visible || tripLocked || !effectivePartyIdForTrips || !tripId) return;
@@ -1626,11 +1641,15 @@ export function AddTransactionModal({
             (trip as { organization_id?: string }).organization_id ===
               supplierLinkedOrgId))) ||
       (isDriver && trip.driver_id === effectivePartyIdForTrips);
-    if (!tripMatches) setTripId(null);
+    if (!tripMatches) {
+      setPartyId(null);
+      if (partyId === "driver-salary") setDriverIdForSalary(null);
+    }
   }, [
     visible,
     effectivePartyIdForTrips,
     effectivePartyName,
+    partyId,
     tripId,
     safeTrips,
     safeSuppliers,
@@ -1858,7 +1877,14 @@ export function AddTransactionModal({
     if (tripLocked && selectedTrip) {
       const lid = (selectedTrip as { organization_id?: string | null })
         .organization_id;
-      const isIntegrated = isCrossOrgIntegrationTrip(selectedTrip, viewerOrgId);
+      const isIntegrated = isCrossOrgIntegrationTrip(
+        {
+          organization_id: selectedTrip.organization_id ?? "",
+          indent_id: selectedTrip.indent_id ?? null,
+          supplier_id: selectedTrip.supplier_id ?? null,
+        },
+        viewerOrgId,
+      );
 
       if (type === "in") {
         let localCid: string | null = null;
