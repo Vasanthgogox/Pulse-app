@@ -390,18 +390,12 @@ export default function ClientDetailScreen({
         setTrips(forClient);
         setSuppliers(suppliersRes.error ? [] : (suppliersRes.suppliers ?? []));
         setDrivers(driversRes.error ? [] : (driversRes.drivers ?? []));
-        const tripIds = new Set(forClient.map((t) => normId(t.id)));
         const forClientTx = allTx.filter((tx) => {
-          const linkedToClient =
+          return (
             tx.contact_type === "client" &&
             tx.contact_id != null &&
-            tx.contact_id === clientId;
-          const linkedToClientTrip =
-            tx.trip_id != null && tripIds.has(normId(tx.trip_id));
-          const partyMatches =
-            clientDisplayName !== "" &&
-            (tx.party_name || "").toLowerCase().trim() === clientDisplayName;
-          return linkedToClient || linkedToClientTrip || partyMatches;
+            tx.contact_id === clientId
+          );
         });
         setTransactions(forClientTx);
       })

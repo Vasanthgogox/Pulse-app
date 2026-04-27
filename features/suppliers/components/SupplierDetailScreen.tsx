@@ -343,19 +343,13 @@ export default function SupplierDetailScreen({
           [];
         const normId = (id: string | null | undefined) =>
           id == null ? "" : String(id).trim().toLowerCase();
-        const tripIds = new Set(merged.map((t) => normId(t.id)));
         const supplierNameKey = supplierDisplayName;
         const forSupplierTx = allTx.filter((tx) => {
-          const linked =
+          return (
             tx.contact_type === "supplier" &&
             tx.contact_id != null &&
-            normId(tx.contact_id) === normId(supplierId);
-          const linkedToTrip =
-            tx.trip_id != null && tripIds.has(normId(tx.trip_id));
-          const partyMatch =
-            supplierNameKey !== "" &&
-            (tx.party_name || "").toLowerCase().trim() === supplierNameKey;
-          return linked || linkedToTrip || partyMatch;
+            normId(tx.contact_id) === normId(supplierId)
+          );
         });
         setTransactions(forSupplierTx);
         setOrgDrivers(driversRes?.error ? [] : (driversRes.drivers ?? []));
