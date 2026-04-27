@@ -331,6 +331,16 @@ export function InvitationsView({
     [sent, search],
   );
 
+  const hubItems = subTab === "received" ? receivedFiltered : sentFiltered;
+  const hubRows = useMemo(() => {
+    const limited = hubItems.slice(0, hubNumColumns * 2);
+    const rows: ConnectionRequestRow[][] = [];
+    for (let i = 0; i < limited.length; i += hubNumColumns) {
+      rows.push(limited.slice(i, i + hubNumColumns));
+    }
+    return rows;
+  }, [hubItems, hubNumColumns]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await Promise.all([receivedQ.refetch(), sentQ.refetch()]);
@@ -443,16 +453,6 @@ export function InvitationsView({
       )}
     </>
   );
-
-  const hubItems = subTab === "received" ? receivedFiltered : sentFiltered;
-  const hubRows = useMemo(() => {
-    const limited = hubItems.slice(0, hubNumColumns * 2);
-    const rows: ConnectionRequestRow[][] = [];
-    for (let i = 0; i < limited.length; i += hubNumColumns) {
-      rows.push(limited.slice(i, i + hubNumColumns));
-    }
-    return rows;
-  }, [hubItems, hubNumColumns]);
 
   const hubList =
     hubItems.length === 0 ? (

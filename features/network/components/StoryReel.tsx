@@ -6,10 +6,11 @@ import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
 import { type PostRow } from "@/features/network/services/posts.service";
 import { getInitials } from "@/lib/stringUtils";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { Package, Plus, Radio, Truck } from "lucide-react-native";
-import React, { useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 interface StoryReelProps {
@@ -51,12 +52,36 @@ function previewText(post: PostRow): string {
   return "Network update";
 }
 
-function BroadcastCard({ post, onPress }: { post: PostRow; onPress: () => void }) {
+function timeAgoShort(iso: string | null | undefined): string {
+  if (!iso) return "now";
+  const ms = Date.now() - new Date(iso).getTime();
+  const mins = Math.max(1, Math.floor(ms / 60000));
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d`;
+}
+
+function storySeenKey(post: PostRow): string {
+  return `${post.organization_id}:${post.type}`;
+}
+
+function BroadcastCard({
+  post,
+  onPress,
+  seen,
+}: {
+  post: PostRow;
+  onPress: () => void;
+  seen: boolean;
+}) {
   const scale = useRef(new Animated.Value(1)).current;
   const color = seedColor(post.organization_id);
   const isLoad = post.type === "LOAD";
   const isVehicle = post.type === "VEHICLE_AVAILABILITY";
   const storyPreview = previewText(post);
+  const meta = `${isLoad ? "LOAD" : "CAPACITY"} · ${timeAgoShort(post.created_at)}`;
   const handlePressIn = () =>
     Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start();
   const handlePressOut = () =>
@@ -66,13 +91,17 @@ function BroadcastCard({ post, onPress }: { post: PostRow; onPress: () => void }
     <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
       <Animated.View style={[styles.storyItem, { transform: [{ scale }] }]}>
         <LinearGradient
-          colors={[withAlpha(color, "50"), withAlpha(color, "20")]}
+          colors={
+            seen
+              ? [withAlpha(Theme.textSection, "66"), withAlpha(Theme.textSection, "2A")]
+              : [withAlpha(color, "66"), withAlpha(color, "28")]
+          }
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.storyRing}
         >
           <View style={styles.storyAvatar}>
-            <Text style={styles.storyAvatarPreview} numberOfLines={3}>
+            <Text style={styles.storyAvatarPreview} numberOfLines={2}>
               {storyPreview}
             </Text>
             <View style={[styles.storyAvatarIconWrap, { borderColor: withAlpha(color, "44") }]}>
@@ -89,6 +118,9 @@ function BroadcastCard({ post, onPress }: { post: PostRow; onPress: () => void }
         <Text style={styles.storyName} numberOfLines={1}>
           {post.org_name.toUpperCase()}
         </Text>
+        <Text style={styles.storyMeta} numberOfLines={1}>
+          {meta}
+        </Text>
       </Animated.View>
     </Pressable>
   );
@@ -96,6 +128,42 @@ function BroadcastCard({ post, onPress }: { post: PostRow; onPress: () => void }
 
 export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryReelProps) {
   const router = useRouter();
+  const [seenKeys, setSeenKeys] = useState<Record<string, true>>({});
+  const seenStorageKey = `q:stories:seen:${orgId ?? "global"}`;
+
+  useEffect(() => {
+    let mounted = true;
+    AsyncStorage.getItem(seenStorageKey)
+      .then((raw) => {
+        if (!mounted) return;
+        if (!raw) {
+          setSeenKeys({});
+          return;
+        }
+        const parsed = JSON.parse(raw) as Record<string, true>;
+        setSeenKeys(parsed && typeof parsed === "object" ? parsed : {});
+      })
+      .catch(() => {
+        if (mounted) setSeenKeys({});
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [seenStorageKey]);
+
+  const markStorySeen = useCallback(
+    (post: PostRow) => {
+      const key = storySeenKey(post);
+      setSeenKeys((prev) => {
+        if (prev[key]) return prev;
+        const next = { ...prev, [key]: true };
+        AsyncStorage.setItem(seenStorageKey, JSON.stringify(next)).catch(() => {});
+        return next;
+      });
+    },
+    [seenStorageKey],
+  );
+
   const businessOnly = [...posts]
     .filter((p) => p.type === "LOAD" || p.type === "VEHICLE_AVAILABILITY")
     .sort(
@@ -145,7 +213,7 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
           <View style={styles.storyItem}>
             <View style={styles.launchRing}>
               <View style={styles.launchIcon}>
-              <Plus size={18} color={Theme.textOnPrimary} strokeWidth={2.5} />
+                <Plus size={18} color={Theme.textOnPrimary} strokeWidth={2.5} />
               </View>
             </View>
             <Text style={styles.storyName}>Mine</Text>
@@ -156,7 +224,9 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
           <BroadcastCard
             key={post.id}
             post={post}
-            onPress={() =>
+            seen={!!seenKeys[storySeenKey(post)]}
+            onPress={() => {
+              markStorySeen(post);
               router.push({
                 pathname: "/(modals)/story-detail",
                 params: {
@@ -165,8 +235,8 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
                   storyType: post.type,
                   queue: storyQueueIds,
                 },
-              })
-            }
+              });
+            }}
           />
         ))}
       </ScrollView>
@@ -177,8 +247,8 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
 const styles = StyleSheet.create({
   wrap: {
     backgroundColor: Theme.screenBackground,
-    paddingTop: 10,
-    paddingBottom: 10,
+    paddingTop: 12,
+    paddingBottom: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
   },
@@ -232,27 +302,27 @@ const styles = StyleSheet.create({
   },
   scroll: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    gap: 12,
-    alignItems: "flex-start",
+    gap: 14,
+    alignItems: "center",
     paddingRight: 24,
   },
   storyItem: {
-    width: 72,
+    width: 88,
     alignItems: "center",
-    paddingVertical: 2,
+    paddingVertical: 4,
   },
   storyRing: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     alignItems: "center",
     justifyContent: "center",
-    padding: 2,
+    padding: 2.5,
   },
   storyAvatar: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    width: 71,
+    height: 71,
+    borderRadius: 35.5,
     backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
@@ -261,32 +331,32 @@ const styles = StyleSheet.create({
     overflow: "visible",
   },
   storyAvatarPreview: {
-    width: "82%",
-    fontSize: 6.6,
+    width: "80%",
+    fontSize: 7.8,
     fontWeight: "700",
     fontStyle: "italic",
-    lineHeight: 8,
+    lineHeight: 10,
     color: Theme.textMutedDemo,
     textAlign: "center",
     opacity: 0.86,
-    letterSpacing: 0.05,
+    letterSpacing: 0.08,
   },
   storyAvatarIconWrap: {
     position: "absolute",
-    top: -4,
-    left: -4,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    top: -5,
+    right: -4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     borderWidth: 1,
     backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
   },
   launchRing: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     borderWidth: 1.5,
     borderColor: Theme.borderMedium,
     borderStyle: "dashed",
@@ -309,12 +379,22 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   storyName: {
-    marginTop: 6,
-    fontSize: 11,
+    marginTop: 7,
+    fontSize: 11.5,
     fontWeight: "800",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.1,
+    textAlign: "center",
+    width: "100%",
+  },
+  storyMeta: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+    letterSpacing: 0.25,
+    textTransform: "uppercase",
     textAlign: "center",
     width: "100%",
   },

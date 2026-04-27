@@ -278,6 +278,7 @@ export function LoadCenterView({
   const [localBidHistoryByIndentId, setLocalBidHistoryByIndentId] = useState<
     Record<string, { amount: number; updatedAt: string }[]>
   >({});
+  const isSingleRowHeader = Platform.OS === "web" && width >= 1200;
 
   const { data: indents = [], isLoading } = useIndentsQuery(orgId);
   const {
@@ -1535,10 +1536,20 @@ export function LoadCenterView({
         ]}
       >
         {/* Sub-tabs: GIVE LOAD | GET LOAD | CLAIMED */}
-        <View style={styles.loadFilterHeaderRow}>
-          <View style={styles.loadSubTabsWrap}>
+        <View
+          style={[
+            styles.loadFilterHeaderRow,
+            isSingleRowHeader && styles.loadFilterHeaderRowSingle,
+          ]}
+        >
+          <View
+            style={[
+              styles.loadSubTabsWrap,
+              isSingleRowHeader && styles.loadSubTabsWrapSingle,
+            ]}
+          >
             <SubTabs<LoadSubTab>
-              variant="dark"
+              variant="light"
               horizontalPadding={0}
               value={loadSubTab}
               onChange={setLoadSubTab}
@@ -1573,14 +1584,76 @@ export function LoadCenterView({
               <Text style={styles.loadMyNetworkBtnLabel}>Network</Text>
             </TouchableOpacity>
           ) : null}
+          {isSingleRowHeader ? (
+            <>
+              <View style={[styles.loadSearchWrap, styles.loadSearchWrapSingle]}>
+                <FontAwesome
+                  name="search"
+                  size={14}
+                  color={Theme.textOnDarkMuted}
+                  style={styles.loadSearchIcon}
+                />
+                <TextInput
+                  style={styles.loadSearchInput}
+                  placeholder="Find by route, ID or client..."
+                  placeholderTextColor={Theme.textOnDarkMuted}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+              {!isClaimedTab ? (
+                <View style={styles.loadTypeFilterWrap}>
+                  {statusTabsForRole.map((tab) => {
+                    const count = statusTabCounts[tab.id];
+                    const isActive = statusFilterTab === tab.id;
+                    const tabLabel =
+                      loadSubTab === "GIVE_LOAD" && tab.id === "OPEN"
+                        ? "Created"
+                        : tab.label;
+                    return (
+                      <TouchableOpacity
+                        key={tab.id}
+                        style={[
+                          styles.loadTypeFilterChip,
+                          isActive && styles.loadTypeFilterChipActive,
+                        ]}
+                        onPress={() => setStatusFilterTab(tab.id)}
+                        activeOpacity={0.8}
+                      >
+                        <Text
+                          style={[
+                            styles.loadTypeFilterChipText,
+                            isActive && styles.loadTypeFilterChipTextActive,
+                          ]}
+                        >
+                          {tabLabel}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.loadTypeFilterChipCount,
+                            isActive && styles.loadTypeFilterChipCountActive,
+                          ]}
+                        >
+                          {count}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : null}
+            </>
+          ) : null}
         </View>
         {/* Search + Status filters (same layout as Manage Network: search + filter chips) */}
-        <View
-          style={[
-            styles.loadSearchRow,
-            isClaimedTab && styles.loadSearchRowClaimed,
-          ]}
-        >
+        {!isSingleRowHeader ? (
+          <View
+            style={[
+              styles.loadSearchRow,
+              isClaimedTab && styles.loadSearchRowClaimed,
+            ]}
+          >
           <View style={styles.loadSearchWrap}>
             <FontAwesome
               name="search"
@@ -1638,7 +1711,8 @@ export function LoadCenterView({
               })}
             </View>
           ) : null}
-        </View>
+          </View>
+        ) : null}
       </View>
 
       {/* Content area: rounded top, light bg — reference overlap */}
@@ -3697,11 +3771,11 @@ const LOAD_BROADCAST_MUTED = "#829ab1";
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Theme.darkBackground },
   loadDarkHeader: {
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.screenBackground,
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: Theme.separatorDark,
+    borderBottomColor: Theme.borderLight,
   },
   loadDarkHeaderClaimed: {
     paddingBottom: 2,
@@ -3713,10 +3787,21 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     gap: 10,
   },
+  loadFilterHeaderRowSingle: {
+    alignItems: "center",
+    flexWrap: "nowrap",
+    gap: 8,
+  },
   loadSubTabsWrap: {
     flex: 1,
     minWidth: 0,
     paddingBottom: 2,
+  },
+  loadSubTabsWrapSingle: {
+    flex: 0,
+    minWidth: 340,
+    maxWidth: 420,
+    paddingBottom: 0,
   },
   loadMyNetworkBtn: {
     flexDirection: "row",
@@ -3728,14 +3813,14 @@ const styles = StyleSheet.create({
     minHeight: 40,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.borderOnDark,
-    backgroundColor: Theme.darkSurface,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
     flexShrink: 0,
     marginBottom: 2,
   },
   loadMyNetworkBtnLabel: {
     ...Typography.networkDarkHeaderNav,
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
     ...Platform.select({
       android: { includeFontPadding: false as const },
       default: {},
@@ -3775,12 +3860,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     height: 38,
-    backgroundColor: Theme.darkSurface,
+    backgroundColor: Theme.surface,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
+    borderColor: Theme.borderLight,
     borderRadius: 11,
     paddingHorizontal: 12,
     paddingVertical: 0,
+  },
+  loadSearchWrapSingle: {
+    flex: 1,
+    maxWidth: 560,
+    height: 36,
   },
   loadSearchIcon: { marginRight: 6 },
   loadSearchInput: {
@@ -3789,7 +3879,7 @@ const styles = StyleSheet.create({
     height: 18,
     fontSize: 11,
     lineHeight: 11,
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
     paddingVertical: 0,
     ...Platform.select({
       web: {
@@ -3801,10 +3891,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     flexShrink: 0,
-    backgroundColor: Theme.darkSurface,
+    backgroundColor: Theme.surface,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
+    borderColor: Theme.borderLight,
     paddingHorizontal: 6,
     paddingVertical: 4,
     gap: 3,
@@ -3818,25 +3908,27 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   loadTypeFilterChipActive: {
-    backgroundColor: "rgba(255,255,255,0.15)",
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.textPrimaryDark,
   },
   loadTypeFilterChipText: {
     fontSize: 8,
     fontWeight: "700",
-    color: Theme.textOnDarkMuted,
+    color: Theme.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   loadTypeFilterChipTextActive: {
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
   },
   loadTypeFilterChipCount: {
     fontSize: 8,
     fontWeight: "700",
-    color: Theme.textOnDarkMuted,
+    color: Theme.textSecondary,
   },
   loadTypeFilterChipCountActive: {
-    color: Theme.textOnDark,
+    color: Theme.textPrimaryDark,
   },
   loadContentWrap: {
     flex: 1,

@@ -9,7 +9,6 @@ import {
 } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useWallet } from "@/contexts/WalletContext";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { Command } from "lucide-react-native";
@@ -202,7 +201,7 @@ function AnimatedNavPill({
   );
 }
 
-export type DemoTabId = "finance" | "trips" | "network" | "resources";
+export type DemoTabId = "finance" | "trips" | "network" | "loadCenter" | "resources";
 
 interface DemoTabBarProps {
   activeTab: DemoTabId;
@@ -216,7 +215,6 @@ export function DemoTabBar({
   onProfilePress,
 }: DemoTabBarProps) {
   const { profile } = useAuth();
-  const { balance } = useWallet();
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
 
   useEffect(() => {
@@ -261,6 +259,7 @@ export function DemoTabBar({
   const isFiscal = activeTab === "finance";
   const isTrips = activeTab === "trips";
   const isNetwork = activeTab === "network";
+  const isLoadCenter = activeTab === "loadCenter";
   const displayName = (
     profile?.full_name ??
     profile?.displayName ??
@@ -273,8 +272,6 @@ export function DemoTabBar({
       .slice(0, 2)
       .map((p) => p[0]?.toUpperCase())
       .join("") || "US";
-  const escrowFormatted =
-    balance > 0 ? `₹${(balance / 1000).toFixed(1)}K` : "₹125.0K";
 
   const dockBottom = insets.bottom;
   const verticalPad = Math.max(dockBottom / 4, 4);
@@ -309,21 +306,24 @@ export function DemoTabBar({
         icon: "chart-line",
         active: isNetwork,
       },
+      {
+        id: "loadCenter",
+        title: "LOAD",
+        subtitle: "CENTER",
+        icon: "truck-loading",
+        active: isLoadCenter,
+      },
     ];
 
     return (
       <View style={[styles.webTopShell, Platform.OS === "web" && ({ backdropFilter: "blur(24px)" } as any)]}>
         <View style={styles.webHeaderRow}>
           <View style={styles.webBrandWrap}>
-            <AnimatedPress style={styles.webBrandLogo} activeOpacity={1}>
-              <Command
-                size={13}
-                color={Theme.textOnPrimary}
-                strokeWidth={2.2}
-              />
-            </AnimatedPress>
             <View>
-              <Text style={styles.webBrandTitle}>PULSE</Text>
+              <Text style={styles.webBrandTitle}>
+                PULSE
+                <Text style={styles.webBrandDotText}>.</Text>
+              </Text>
             </View>
           </View>
 
@@ -341,10 +341,6 @@ export function DemoTabBar({
           </View>
 
           <View style={styles.webUtilityWrap}>
-            <View style={styles.webEscrowWrap}>
-              <Text style={styles.webEscrowLabel}>Escrow</Text>
-              <Text style={styles.webEscrowValue}>{escrowFormatted}</Text>
-            </View>
             <AnimatedPress style={styles.webBellBtn} activeOpacity={0.8}>
               <FontAwesome5 name="bell" size={16} color="#64748b" />
             </AnimatedPress>
@@ -488,6 +484,49 @@ export function DemoTabBar({
                 </AnimatedTabIcon>
               </TouchableOpacity>
             </View>
+
+            {/* Column 4: Load Center */}
+            <View style={styles.dockColumn}>
+              <View
+                style={[
+                  styles.activePill,
+                  isLoadCenter && styles.activePillVisible,
+                ]}
+              >
+                <View style={styles.activePillAccent} />
+              </View>
+              <TouchableOpacity
+                style={styles.dockButton}
+                onPress={() => onTabChange("loadCenter")}
+                activeOpacity={0.9}
+                hitSlop={{
+                  top: Layout.touchTargetHitSlop,
+                  bottom: Layout.touchTargetHitSlop,
+                  left: Layout.touchTargetHitSlop,
+                  right: Layout.touchTargetHitSlop,
+                }}
+              >
+                <AnimatedTabIcon selected={isLoadCenter}>
+                  <FontAwesome5
+                    name="truck-loading"
+                    size={15}
+                    color={
+                      isLoadCenter ? Theme.textOnPrimary : Theme.textMutedDemo
+                    }
+                    solid={isLoadCenter}
+                  />
+                  <Text
+                    style={[
+                      styles.dockLabel,
+                      styles.dockLabelCompact,
+                      isLoadCenter && styles.dockLabelActive,
+                    ]}
+                  >
+                    LOAD
+                  </Text>
+                </AnimatedTabIcon>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
         <TouchableOpacity
@@ -525,17 +564,17 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "stretch",
     backgroundColor: "transparent",
-    paddingHorizontal: 12,
+    paddingHorizontal: 6,
   },
   mobileFooterRow: {
     width: "100%",
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 6,
   },
   glassDock: {
     flex: 1,
-    height: 64,
+    height: Layout.tabBarHeight + 6,
     flexDirection: "row",
     alignItems: "stretch",
     justifyContent: "space-between",
@@ -551,10 +590,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   mobileEdgeBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    backgroundColor: "#0f172a",
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: Theme.darkBackground,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#0f172a",
@@ -564,10 +603,10 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   mobileProfileBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    backgroundColor: "#e2e8f0",
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.92)",
     borderWidth: 1,
     borderColor: "rgba(203,213,225,0.5)",
     alignItems: "center",
@@ -632,7 +671,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    minWidth: 184,
+    minWidth: 230,
+    paddingRight: 8,
   },
   webBrandLogo: {
     width: 36,
@@ -643,11 +683,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   webBrandTitle: {
-    fontSize: 16,
+    fontSize: 34,
     fontWeight: "900",
     color: "#0f172a",
     fontStyle: "italic",
-    letterSpacing: -0.4,
+    letterSpacing: -1,
+    lineHeight: 36,
+  },
+  webBrandDotText: {
+    color: Theme.darkGreen,
+    fontSize: 38,
+    lineHeight: 38,
   },
   webBrandSub: {
     marginTop: 1,
@@ -717,36 +763,15 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   webNavSubActive: {
-    color: "#cbd5e1",
+    color: Theme.teslaRed,
   },
   webUtilityWrap: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    minWidth: 214,
+    gap: 10,
+    minWidth: 90,
     justifyContent: "flex-end",
-  },
-  webEscrowWrap: {
-    alignItems: "flex-end",
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  webEscrowLabel: {
-    fontSize: 9,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    color: "#64748b",
-  },
-  webEscrowValue: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: "#4f46e5",
-    marginTop: 1,
+    paddingRight: 6,
   },
   webBellBtn: {
     width: 36,
@@ -835,12 +860,14 @@ const styles = StyleSheet.create({
   },
   activePill: {
     position: "absolute",
-    top: 4,
-    left: 4,
-    right: 4,
-    bottom: 4,
-    borderRadius: 16,
-    backgroundColor: "#0f172a",
+    top: 3,
+    left: 2,
+    right: 2,
+    bottom: 3,
+    borderRadius: 18,
+    backgroundColor: Theme.darkBackground,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.12)",
     opacity: 0,
   },
   activePillVisible: {
@@ -877,8 +904,11 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
-    color: "#94a3b8",
+    letterSpacing: 0.7,
+    color: Theme.textMutedDemo,
+  },
+  dockLabelCompact: {
+    letterSpacing: 0.55,
   },
   dockLabelActive: {
     color: "#ffffff",

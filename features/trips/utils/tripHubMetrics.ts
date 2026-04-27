@@ -2,8 +2,10 @@ import type { TripRow } from "@/features/trips/services/trips.service";
 
 /**
  * Active Trips Control buckets (disjoint). Completed trips belong on the History tab only.
- * - `pod_pending` vs `unloading`: both use `at_drop` / arrived-at-destination; trips with any
- *   `trip_documents` row count as unloading (paperwork started), others as POD pending.
+ *
+ * End-of-run (drop-off) lane:
+ * - `unloading`: explicit `unloading` / `arrived` / `at_destination` without doc, or `at_drop` without doc (drop-off, POD not on file yet).
+ * - `delivered_docs_pending`: at destination with at least one `trip_documents` row (proof on file; trip still open / docs).
  */
 export type TripMetricId =
   | "unassigned"
@@ -11,7 +13,7 @@ export type TripMetricId =
   | "loading"
   | "in_transit"
   | "unloading"
-  | "pod_pending";
+  | "delivered_docs_pending";
 
 export const TRIP_METRIC_ORDER: TripMetricId[] = [
   "unassigned",
@@ -19,7 +21,7 @@ export const TRIP_METRIC_ORDER: TripMetricId[] = [
   "loading",
   "in_transit",
   "unloading",
-  "pod_pending",
+  "delivered_docs_pending",
 ];
 
 function normStatus(s: string | null | undefined): string {
@@ -40,10 +42,16 @@ export function classifyTripMetric(
 
   if (!hasDriver || s === "cancelled") return "unassigned";
 
-  const atDestination =
-    s === "at_drop" || s === "arrived" || s === "at_destination";
-  if (atDestination) {
-    return tripIdsWithAnyDocument.has(trip.id) ? "unloading" : "pod_pending";
+  if (s === "at_drop") {
+    return tripIdsWithAnyDocument.has(trip.id)
+      ? "delivered_docs_pending"
+      : "unloading";
+  }
+
+  if (s === "unloading" || s === "arrived" || s === "at_destination") {
+    return tripIdsWithAnyDocument.has(trip.id)
+      ? "delivered_docs_pending"
+      : "unloading";
   }
 
   if (
@@ -85,7 +93,7 @@ export function countTripsByMetric(
     loading: 0,
     in_transit: 0,
     unloading: 0,
-    pod_pending: 0,
+    delivered_docs_pending: 0,
   };
   for (const t of trips) {
     const m = classifyTripMetric(t, tripIdsWithAnyDocument);

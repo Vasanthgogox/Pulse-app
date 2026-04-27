@@ -13,11 +13,13 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { useRouter } from "expo-router";
 import { ArrowLeft } from "lucide-react-native";
 import React, { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function PulseLoadsScreen() {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isDesktopWeb = Platform.OS === "web" && width >= 1024;
   const router = useRouter();
   const safeBack = useSafeBack();
   const { currentOrganization: organization } = useOrganization();
@@ -31,7 +33,7 @@ export default function PulseLoadsScreen() {
   }
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
+    <View style={[styles.root, { paddingTop: isDesktopWeb ? 68 : insets.top }]}>
       <View style={styles.topBar}>
         <Pressable onPress={safeBack} hitSlop={12} style={styles.back}>
           <ArrowLeft size={22} color={Theme.textPrimaryDark} />

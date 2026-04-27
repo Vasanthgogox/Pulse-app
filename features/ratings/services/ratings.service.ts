@@ -12,17 +12,22 @@ export async function createRating(
 ): Promise<{ error: Error | null; rating: RatingRow | null }> {
   const { data: row, error } = await supabase()
     .from('ratings')
-    .insert({
-      organization_id: organizationId,
-      trip_id: data.trip_id,
-      rater_type: data.rater_type,
-      rater_id: data.rater_id,
-      rated_type: data.rated_type,
-      rated_id: data.rated_id,
-      score: Math.min(5, Math.max(1, data.score)),
-      comment: data.comment ?? null,
-      updated_at: new Date().toISOString(),
-    })
+    .upsert(
+      {
+        organization_id: organizationId,
+        trip_id: data.trip_id,
+        rater_type: data.rater_type,
+        rater_id: data.rater_id,
+        rated_type: data.rated_type,
+        rated_id: data.rated_id,
+        score: Math.min(5, Math.max(1, data.score)),
+        comment: data.comment ?? null,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict: 'trip_id,rater_type,rater_id,rated_type,rated_id',
+      }
+    )
     .select()
     .single();
 
@@ -53,6 +58,21 @@ export async function getRatingsForSupplier(supplierId: string): Promise<{
     .select('*')
     .eq('rated_type', 'supplier')
     .eq('rated_id', supplierId)
+    .order('created_at', { ascending: false });
+
+  if (error) return { error: new Error(error.message), ratings: [] };
+  return { error: null, ratings: (data ?? []) as RatingRow[] };
+}
+
+export async function getRatingsForClient(clientId: string): Promise<{
+  error: Error | null;
+  ratings: RatingRow[];
+}> {
+  const { data, error } = await supabase()
+    .from('ratings')
+    .select('*')
+    .eq('rated_type', 'client')
+    .eq('rated_id', clientId)
     .order('created_at', { ascending: false });
 
   if (error) return { error: new Error(error.message), ratings: [] };

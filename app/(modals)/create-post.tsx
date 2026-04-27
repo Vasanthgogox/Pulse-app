@@ -3,6 +3,7 @@
  * Expires in 24h. No social updates.
  */
 import Theme from "@/constants/Theme";
+import Layout from "@/constants/Layout";
 import { BroadcastPickIndentCard } from "@/features/network/components/BroadcastPickIndentCard";
 import { createPost, type PostType } from "@/features/network/services/posts.service";
 import { getIndentDisplayNumber } from "@/features/indents";
@@ -161,6 +162,8 @@ export default function CreatePostScreen() {
     availability.trim().length > 0;
 
   const pickColumns = windowWidth >= 1100 ? 3 : windowWidth >= 760 ? 2 : 1;
+  const isDesktop = windowWidth >= 1024;
+  const contentMaxWidth = isDesktop ? 1240 : undefined;
 
   const canSubmit = (canSubmitLoadPick || canSubmitLoadManual || canSubmitVehicle) && !submitting;
 
@@ -240,7 +243,7 @@ export default function CreatePostScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
+      <View style={[styles.header, isDesktop && styles.headerDesktop]}>
         <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
           <ArrowLeft size={20} color={Theme.textPrimary} />
         </Pressable>
@@ -258,49 +261,6 @@ export default function CreatePostScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.hintBox}>
-        <Text style={styles.hintText}>
-          Stories expire in 24 hours. Only load and vehicle availability — no personal or generic
-          updates. For loads, pick an open indent from Load Center or enter details manually.
-        </Text>
-      </View>
-
-      <View style={styles.typeSelector}>
-        <Pressable
-          style={[styles.typeBtn, type === "LOAD" && styles.typeBtnActiveLoad]}
-          onPress={() => {
-            setType("LOAD");
-          }}
-        >
-          <Truck size={16} color={type === "LOAD" ? "#fff" : Theme.textSecondary} />
-          <Text style={[styles.typeBtnText, type === "LOAD" && styles.typeBtnTextActive]}>
-            Load indent
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.typeBtn, type === "VEHICLE_AVAILABILITY" && styles.typeBtnActiveVehicle]}
-          onPress={() => {
-            setType("VEHICLE_AVAILABILITY");
-            setLoadEntryMode("pick");
-            setSelectedIndentId(null);
-            setVehicleEntryMode("idle");
-          }}
-        >
-          <MapPin
-            size={16}
-            color={type === "VEHICLE_AVAILABILITY" ? "#fff" : Theme.textSecondary}
-          />
-          <Text
-            style={[
-              styles.typeBtnText,
-              type === "VEHICLE_AVAILABILITY" && styles.typeBtnTextActive,
-            ]}
-          >
-            Vehicle free
-          </Text>
-        </Pressable>
-      </View>
-
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
@@ -308,10 +268,58 @@ export default function CreatePostScreen() {
       >
         <ScrollView
           style={styles.form}
-          contentContainerStyle={[styles.formContent, { paddingBottom: insets.bottom + 32 }]}
+          contentContainerStyle={[
+            styles.formContent,
+            { paddingBottom: insets.bottom + 32, alignItems: "center" },
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          <View style={[styles.canvas, contentMaxWidth ? { maxWidth: contentMaxWidth } : null]}>
+            <View style={styles.hintBox}>
+              <Text style={styles.hintText}>
+                Stories expire in 24 hours. Only load and vehicle availability — no personal or
+                generic updates. For loads, pick an open indent from Load Center or enter details
+                manually.
+              </Text>
+            </View>
+
+            <View style={[styles.typeSelector, isDesktop && styles.typeSelectorDesktop]}>
+              <Pressable
+                style={[styles.typeBtn, type === "LOAD" && styles.typeBtnActiveLoad]}
+                onPress={() => {
+                  setType("LOAD");
+                }}
+              >
+                <Truck size={15} color={type === "LOAD" ? "#fff" : Theme.textSecondary} />
+                <Text style={[styles.typeBtnText, type === "LOAD" && styles.typeBtnTextActive]}>
+                  Load indent
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.typeBtn, type === "VEHICLE_AVAILABILITY" && styles.typeBtnActiveVehicle]}
+                onPress={() => {
+                  setType("VEHICLE_AVAILABILITY");
+                  setLoadEntryMode("pick");
+                  setSelectedIndentId(null);
+                  setVehicleEntryMode("idle");
+                }}
+              >
+                <MapPin
+                  size={15}
+                  color={type === "VEHICLE_AVAILABILITY" ? "#fff" : Theme.textSecondary}
+                />
+                <Text
+                  style={[
+                    styles.typeBtnText,
+                    type === "VEHICLE_AVAILABILITY" && styles.typeBtnTextActive,
+                  ]}
+                >
+                  Vehicle free
+                </Text>
+              </Pressable>
+            </View>
+
           {type === "LOAD" && loadEntryMode === "pick" && (
             <View style={styles.pickSection}>
               <View style={styles.sectionHeaderRow}>
@@ -643,12 +651,12 @@ export default function CreatePostScreen() {
                 </View>
               ) : null}
               <View style={styles.routeSection}>
-                <View style={styles.fieldGroup}>
+                <View style={[styles.fieldGroup, styles.routeFieldRow]}>
                   <View style={[styles.fieldDot, { backgroundColor: "#10b981" }]} />
                   <View style={styles.fieldContent}>
                     <Text style={styles.fieldLabel}>CURRENT LOCATION *</Text>
                     <TextInput
-                      style={styles.fieldInput}
+                      style={[styles.fieldInput, styles.vehicleRouteInput]}
                       placeholder="Where is the equipment now?"
                       placeholderTextColor={Theme.textSecondary}
                       value={origin}
@@ -657,12 +665,13 @@ export default function CreatePostScreen() {
                     />
                   </View>
                 </View>
-                <View style={styles.fieldGroup}>
+                <View style={styles.routeDividerHorizontal} />
+                <View style={[styles.fieldGroup, styles.routeFieldRow]}>
                   <View style={[styles.fieldDot, { backgroundColor: Theme.primary }]} />
                   <View style={styles.fieldContent}>
                     <Text style={styles.fieldLabel}>PREFERRED LANE (OPTIONAL)</Text>
                     <TextInput
-                      style={styles.fieldInput}
+                      style={[styles.fieldInput, styles.vehicleRouteInput]}
                       placeholder="e.g. Delhi → Mumbai"
                       placeholderTextColor={Theme.textSecondary}
                       value={destination}
@@ -706,7 +715,7 @@ export default function CreatePostScreen() {
               <View style={styles.section}>
                 <Text style={styles.fieldLabel}>AVAILABILITY *</Text>
                 <TextInput
-                  style={styles.notesInput}
+                  style={styles.textareaInput}
                   placeholder="e.g. Free from 6pm today, or 12–15 Apr"
                   placeholderTextColor={Theme.textSecondary}
                   value={availability}
@@ -717,7 +726,7 @@ export default function CreatePostScreen() {
               <View style={styles.section}>
                 <Text style={styles.fieldLabel}>NOTES (OPTIONAL)</Text>
                 <TextInput
-                  style={styles.notesInput}
+                  style={styles.textareaInput}
                   placeholder="Contact preference, terms…"
                   placeholderTextColor={Theme.textSecondary}
                   value={content}
@@ -728,6 +737,7 @@ export default function CreatePostScreen() {
               </View>
             </View>
           )}
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -736,14 +746,22 @@ export default function CreatePostScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Theme.screenBackground },
+  canvas: {
+    width: "100%",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    gap: 10,
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.surfaceBorder,
+  },
+  headerDesktop: {
+    paddingHorizontal: 22,
   },
   backBtn: {
     width: 36,
@@ -754,40 +772,45 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerTitle: {
-    fontSize: 17,
-    fontWeight: "800",
+    fontSize: 16,
+    fontWeight: "900",
     color: Theme.textPrimary,
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
+    textTransform: "capitalize",
   },
   publishBtn: {
-    backgroundColor: Theme.primary,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    minWidth: 70,
+    backgroundColor: "#6b7280",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    minWidth: 64,
     alignItems: "center",
   },
   publishBtnDisabled: { opacity: 0.4 },
-  publishBtnText: { fontSize: 13, fontWeight: "800", color: "#fff" },
+  publishBtnText: { fontSize: 12, fontWeight: "800", color: "#fff", letterSpacing: 0.2 },
   hintBox: {
-    marginHorizontal: 16,
-    marginTop: 10,
-    padding: 10,
-    borderRadius: 10,
-    backgroundColor: Theme.primary + "12",
+    marginTop: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: Theme.surface,
     borderWidth: 1,
-    borderColor: Theme.borderMedium,
+    borderColor: Theme.surfaceBorder,
   },
   hintText: {
-    fontSize: 11,
+    fontSize: 10,
     color: Theme.textSecondary,
-    lineHeight: 16,
-    fontWeight: "600",
+    lineHeight: 14,
+    fontWeight: "500",
   },
   typeSelector: {
     flexDirection: "row",
-    margin: 16,
+    marginTop: 4,
+    marginBottom: 10,
     gap: 10,
+  },
+  typeSelectorDesktop: {
+    gap: 12,
   },
   typeBtn: {
     flex: 1,
@@ -795,9 +818,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    paddingVertical: 12,
+    paddingVertical: 11,
     borderRadius: 12,
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: Theme.borderMedium,
   },
@@ -810,31 +833,33 @@ const styles = StyleSheet.create({
     borderColor: Theme.primary,
   },
   typeBtnText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
     color: Theme.textSecondary,
+    letterSpacing: 0.2,
+    textTransform: "capitalize",
   },
   typeBtnTextActive: { color: "#fff" },
   form: { flex: 1 },
-  formContent: { padding: 16 },
+  formContent: { paddingTop: 10, paddingHorizontal: 0 },
   vehicleModeRow: {
     flexDirection: "row",
     gap: 8,
   },
   vehicleModeBtn: {
     flex: 1,
-    minHeight: 34,
-    borderRadius: 10,
+    minHeight: 36,
+    borderRadius: 9,
     borderWidth: 1,
     borderColor: Theme.borderMedium,
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 10,
   },
   vehicleModeBtnActive: {
     borderColor: Theme.textPrimaryDark,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: Theme.screenBackground,
   },
   vehicleModeBtnText: {
     fontSize: 11,
@@ -844,7 +869,7 @@ const styles = StyleSheet.create({
   vehicleModeBtnTextActive: {
     color: Theme.textPrimaryDark,
   },
-  pickSection: { gap: 8 },
+  pickSection: { gap: 8, width: "100%" },
   sectionHeaderRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -852,17 +877,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionKicker: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "900",
     color: Theme.textMuted,
     letterSpacing: 1.2,
     textTransform: "uppercase",
     marginBottom: 2,
   },
-  pickSectionTitle: { fontSize: 17, fontWeight: "900", color: Theme.textPrimary, letterSpacing: -0.3 },
-  sectionCount: { color: Theme.primary, fontSize: 15 },
+  pickSectionTitle: { fontSize: 28, fontWeight: "900", color: Theme.textPrimaryDark, letterSpacing: -0.6 },
+  sectionCount: { color: Theme.textPrimaryDark, fontSize: 22 },
   sectionSub: {
-    fontSize: 12,
+    fontSize: 11,
     color: Theme.textSecondary,
     lineHeight: 18,
     fontWeight: "500",
@@ -871,9 +896,9 @@ const styles = StyleSheet.create({
   },
   secondaryLink: { paddingVertical: 4, paddingHorizontal: 2 },
   secondaryLinkText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "800",
-    color: Theme.primary,
+    color: Theme.primaryText,
     textDecorationLine: "underline",
   },
   searchBar: {
@@ -881,11 +906,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     backgroundColor: Theme.surface,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: Theme.borderMedium,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 9,
     marginBottom: 8,
   },
   searchInput: { flex: 1, fontSize: 14, fontWeight: "600", color: Theme.textPrimary, padding: 0 },
@@ -896,6 +921,7 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     justifyContent: "space-between",
     alignItems: "flex-start",
+    gap: 8,
   },
   pickGridCell: {
     minWidth: 0,
@@ -939,7 +965,7 @@ const styles = StyleSheet.create({
   },
   emptyPick: {
     alignItems: "center",
-    paddingVertical: 28,
+    paddingVertical: 22,
     paddingHorizontal: 12,
     gap: 8,
   },
@@ -978,36 +1004,46 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: Theme.primary + "12",
+    backgroundColor: Theme.primary + "10",
     alignSelf: "flex-start",
-    borderRadius: 8,
+    borderRadius: 999,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 5,
     marginBottom: 4,
   },
   orgBadgeText: {
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "700",
     color: Theme.primary,
   },
   routeSection: {
-    backgroundColor: Theme.surface,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderMedium,
-    gap: 8,
+    backgroundColor: "#f7f8fb",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+    gap: 0,
   },
   fieldGroup: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 12,
+    gap: 10,
+  },
+  routeFieldRow: {
+    minHeight: 40,
+    justifyContent: "center",
+  },
+  routeDividerHorizontal: {
+    height: 1,
+    backgroundColor: Theme.surfaceBorder,
+    marginVertical: 2,
   },
   fieldDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginTop: 18,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: 11,
   },
   fieldContent: { flex: 1 },
   fieldLabel: {
@@ -1015,7 +1051,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: Theme.textSecondary,
     letterSpacing: 0.8,
-    marginBottom: 6,
+    marginBottom: 2,
   },
   fieldInput: {
     fontSize: 15,
@@ -1024,6 +1060,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderMedium,
     paddingBottom: 6,
+  },
+  vehicleRouteInput: {
+    borderBottomWidth: 0,
+    paddingBottom: 0,
+    fontSize: 30,
+    lineHeight: 34,
+    letterSpacing: -0.35,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
   },
   routeDivider: {
     width: 1,
@@ -1034,10 +1079,10 @@ const styles = StyleSheet.create({
   },
   section: { gap: 10 },
   sectionTitle: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "900",
-    color: Theme.textSecondary,
-    letterSpacing: 0.8,
+    color: Theme.textMuted,
+    letterSpacing: 1,
   },
   chipRow: {
     gap: 8,
@@ -1047,12 +1092,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: Theme.surface,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 7,
+    backgroundColor: "#f8fafc",
     borderWidth: 1,
-    borderColor: Theme.borderMedium,
+    borderColor: Theme.surfaceBorder,
   },
   chipActive: {
     backgroundColor: Theme.primary,
@@ -1066,7 +1111,7 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   chipText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     color: Theme.textSecondary,
   },
@@ -1112,5 +1157,19 @@ const styles = StyleSheet.create({
     padding: 12,
     textAlignVertical: "top",
     minHeight: 80,
+  },
+  textareaInput: {
+    fontSize: 15,
+    color: Theme.textPrimary,
+    fontWeight: "500",
+    lineHeight: 20,
+    backgroundColor: "#f3f5f9",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    textAlignVertical: "top",
+    minHeight: 68,
   },
 });

@@ -5,15 +5,64 @@
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
 import Theme from "@/constants/Theme";
-import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
+import {
+  AVATAR_BUCKET,
+  getSignedAvatarUrl,
+  LEGACY_AVATAR_BUCKET,
+  extractPathFromStorageUrl,
+} from "@/lib/avatarUpload";
 
 export type PartyEntityType = "client" | "supplier" | "driver";
 
-function firstDisplayableUrl(raw: string | null | undefined): string | null {
+/**
+ * Http(s) URLs safe to pass to `Image` without signing. Supabase object URLs for
+ * avatar buckets are omitted here so `resolvePartyPhotoUriAsync` supplies a signed URL.
+ * Bare storage paths are omitted (private bucket — public URL would not load).
+ */
+function firstDisplayableHttpUrl(raw: string | null | undefined): string | null {
   const u = (raw ?? "").trim();
   if (!u) return null;
-  if (u.startsWith("http://") || u.startsWith("https://")) return u;
-  return resolveAvatarPublicUrl(u);
+  if (u.startsWith("http://") || u.startsWith("https://")) {
+    const ref = extractPathFromStorageUrl(u);
+    if (ref && (ref.bucket === AVATAR_BUCKET || ref.bucket === LEGACY_AVATAR_BUCKET)) {
+      return null;
+    }
+    return u;
+  }
+  return null;
+}
+
+async function resolveOnePartyPhotoRaw(raw: string): Promise<string | null> {
+  const t = raw.trim();
+  if (!t) return null;
+  if (t.startsWith("http://") || t.startsWith("https://")) {
+    const ref = extractPathFromStorageUrl(t);
+    if (ref && (ref.bucket === AVATAR_BUCKET || ref.bucket === LEGACY_AVATAR_BUCKET)) {
+      return (await getSignedAvatarUrl(ref.path)) ?? t;
+    }
+    return t;
+  }
+  return (await getSignedAvatarUrl(t)) ?? null;
+}
+
+/**
+ * Signed (or public) URL for org/contact profile photos only — same priority as
+ * `resolvePartyDisplayUri` for photo fields, excluding seeds (those stay synchronous).
+ */
+export async function resolvePartyPhotoUriAsync(options: {
+  organizationImageUrl?: string | null;
+  avatarUrl?: string | null;
+}): Promise<string | null> {
+  const org = (options.organizationImageUrl ?? "").trim();
+  if (org) {
+    const u = await resolveOnePartyPhotoRaw(org);
+    if (u) return u;
+  }
+  const av = (options.avatarUrl ?? "").trim();
+  if (av) {
+    return await resolveOnePartyPhotoRaw(av);
+  }
+  return null;
 }
 
 /**
@@ -30,7 +79,7 @@ export function resolvePartyDisplayUri(options: {
   avatarSeed?: string | null;
   entityType?: PartyEntityType;
 }): string | null {
-  const orgPhoto = firstDisplayableUrl(options.organizationImageUrl);
+  const orgPhoto = firstDisplayableHttpUrl(options.organizationImageUrl);
   if (orgPhoto) return orgPhoto;
   const orgSeed = (options.organizationAvatarSeed ?? "").trim();
   if (orgSeed) {
@@ -38,7 +87,7 @@ export function resolvePartyDisplayUri(options: {
       ? getAvatarUriForSeed(orgSeed)
       : getUser2DAvatarUriForSeed(orgSeed);
   }
-  const contactPhoto = firstDisplayableUrl(options.avatarUrl);
+  const contactPhoto = firstDisplayableHttpUrl(options.avatarUrl);
   if (contactPhoto) return contactPhoto;
   const seed = (options.avatarSeed ?? "").trim();
   if (!seed) return null;

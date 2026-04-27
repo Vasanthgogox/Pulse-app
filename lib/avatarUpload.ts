@@ -14,7 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useState } from 'react';
 
 export const AVATAR_BUCKET = 'userprofiles';
-const LEGACY_AVATAR_BUCKET = 'avatars';
+export const LEGACY_AVATAR_BUCKET = 'avatars';
 const MAX_SIZE = 512;
 const QUALITY = 0.85;
 /** Signed URL expiry (seconds). Refresh before expiry when displaying. */
@@ -188,7 +188,7 @@ async function buildAvatarPathCandidates(path: string): Promise<string[]> {
   return Array.from(deduped);
 }
 
-function extractPathFromStorageUrl(
+export function extractPathFromStorageUrl(
   rawUrl: string
 ): { bucket: string; path: string } | null {
   try {
