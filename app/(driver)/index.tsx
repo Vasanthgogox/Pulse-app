@@ -708,12 +708,12 @@ export default function DriverRadarScreen() {
               if (prev == null) return prev;
               const trip = trips.find((t) => t.id === prev);
 
-              // If we found the trip and it's already started or completed, we can clear the "accepted" flag
-              // because the active mission flow will take over, or it's done.
+              // Keep DRIVER_ACCEPTED_TRIP_ID_KEY while the trip is in progress so Notifications + other
+              // screens can treat other assignments as passive. Only clear once the trip is completed.
               if (
                 !isOtpClaiming &&
                 trip &&
-                (isTripInProgress(trip) || isCompletedStatus(trip.status))
+                isCompletedStatus(trip.status)
               ) {
                 AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
                 return null;
@@ -3769,7 +3769,7 @@ export default function DriverRadarScreen() {
         ) : otpClaimTrip ? (
           renderOtpClaimCard(otpClaimTrip, { showCancel: true })
         ) : assignableTripsNotifyOnlyAfterMission &&
-          hasSingleAssignableIncomingTrip ? (
+          hasAssignableIncomingTrip ? (
           !isOnline ? (
             <View style={[styles.centerCardWrap, styles.offlineCardContent]}>
               <Text style={[styles.offlineCardTitle, { color: colors.text }]}>
@@ -3837,89 +3837,6 @@ export default function DriverRadarScreen() {
               </TouchableOpacity>
             </View>
           )
-        ) : assignableTripsNotifyOnlyAfterMission &&
-          hasMultipleAssignableIncomingTrips ? (
-          <View style={styles.driverSearchingEmptyWrap}>
-            <View
-              style={[
-                styles.centerCardWrap,
-                styles.centerCardConstraint,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  alignSelf: "center",
-                  maxWidth: 420,
-                  width: "100%",
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.offlineIconWrap,
-                  { backgroundColor: colors.emeraldMuted },
-                ]}
-              >
-                <FontAwesome name="bell" size={28} color={colors.emerald} />
-              </View>
-              <Text style={[styles.offlineCardTitle, { color: colors.text }]}>
-                Pending assignments
-              </Text>
-              <Text
-                style={[
-                  styles.offlineCardSubtitle,
-                  {
-                    color: colors.textMuted,
-                    marginTop: 8,
-                    textAlign: "center",
-                  },
-                ]}
-              >
-                You have {visibleAssignableIncomingTrips.length} trips in
-                Notifications. Accept or verify OTP there when you are ready for
-                your next trip.
-              </Text>
-              <TouchableOpacity
-                style={[
-                  styles.goOnlineBtn,
-                  { backgroundColor: colors.emerald, marginTop: 18 },
-                ]}
-                onPress={() => router.push("/(driver)/notifications")}
-                activeOpacity={0.85}
-              >
-                <FontAwesome
-                  name="bell"
-                  size={16}
-                  color={Theme.textOnPrimary}
-                  style={styles.goOnlineBtnIcon}
-                />
-                <Text style={styles.goOnlineBtnText}>Open notifications</Text>
-                <FontAwesome
-                  name="chevron-right"
-                  size={14}
-                  color={Theme.textOnPrimary}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.searchOfflineBtn,
-                  {
-                    marginTop: 14,
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                ]}
-                onPress={handleSetOffline}
-                activeOpacity={0.8}
-              >
-                <FontAwesome name="power-off" size={16} color={colors.text} />
-                <Text
-                  style={[styles.searchOfflineBtnText, { color: colors.text }]}
-                >
-                  Go offline
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
         ) : !effectiveFirstIncoming &&
           hasAssignableIncomingTrip &&
           !assignableTripsNotifyOnlyAfterMission ? (

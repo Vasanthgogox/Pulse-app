@@ -16,8 +16,10 @@ import { computeDriverCommissionForTrip } from '@/features/finance/aggregation/a
 import { DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY } from '@/lib/driverDashboardFlags';
 import { formatINR } from '@/lib/format';
 import {
+  isActiveMission,
   isAggregateTrip,
   isAssignedNotStarted,
+  isCompletedStatus,
   isRosterTrip,
 } from '@/lib/driverUtils';
 import { supabase } from '@/lib/supabase';
@@ -443,26 +445,46 @@ export default function DriverNotificationsScreen() {
     router.replace('/(driver)/');
   };
 
-  const resumeAcceptingTrips = async () => {
-    await AsyncStorage.removeItem(DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY);
-    setNotifyOnlyAfterMission(false);
-    await fetch({ pull: true });
-  };
-
   const onRefresh = () => {
     void fetch({ pull: true });
   };
+
+  /** True while any trip is live on the road (matches dashboard active mission). */
+  const hasInProgressMission = useMemo(
+    () =>
+      allTrips.some((t) => {
+        if (isCompletedStatus(String(t.status ?? ''))) return false;
+        return (
+          isActiveMission(String(t.status ?? '')) || !!t.started_at
+        );
+      }),
+    [allTrips],
+  );
 
   const hasActiveAcceptedTrip = Boolean(
     acceptedTripId && String(acceptedTripId).trim() !== '',
   );
 
+  /** During an active trip, or post-trip notify-only: list is read-only (no Accept). */
   const passiveAssignmentRows =
-    hasActiveAcceptedTrip || notifyOnlyAfterMission;
+    hasActiveAcceptedTrip ||
+    notifyOnlyAfterMission ||
+    hasInProgressMission;
+
+  const listIntroSubtitle =
+    notifyOnlyAfterMission && !hasActiveAcceptedTrip && !hasInProgressMission
+      ? 'Reference only while other trips are pending'
+      : hasInProgressMission || hasActiveAcceptedTrip
+        ? 'Focus on your active trip first'
+        : 'Accept or verify with OTP';
 
   return (
     <View style={[styles.root, { backgroundColor: pageBg }]}>
-      <DriverSubScreenHeader title="Notifications" subtitle="Accept or verify with OTP" onBack={goBack} />
+      <DriverSubScreenHeader
+        title="Notifications"
+        subtitle={listIntroSubtitle}
+        onBack={goBack}
+      />
 
       {loading ? (
         <View style={styles.loadingWrap}>
@@ -483,23 +505,11 @@ export default function DriverNotificationsScreen() {
           }
           showsVerticalScrollIndicator={false}
         >
-          {notifyOnlyAfterMission && !hasActiveAcceptedTrip ? (
-            <TouchableOpacity
-              style={[styles.resumeBanner, { borderColor: colors.border, backgroundColor: colors.surface }]}
-              onPress={() => void resumeAcceptingTrips()}
-              activeOpacity={0.88}
-            >
-              <FontAwesome name="play-circle" size={18} color={colors.emerald} />
-              <Text style={[styles.resumeBannerText, { color: colors.text }]}>
-                Resume accepting trips
-              </Text>
-            </TouchableOpacity>
-          ) : null}
           <Text style={[styles.intro, { color: colors.textMuted }]}>
-            {hasActiveAcceptedTrip
-              ? 'You already have an active accepted trip. Remaining assignments stay here as notifications.'
+            {hasInProgressMission || hasActiveAcceptedTrip
+              ? 'You already have an active trip. Remaining assignments stay here as notifications only.'
               : notifyOnlyAfterMission
-                ? 'Assignments are paused until you resume — then you can Accept or verify with OTP.'
+                ? 'Unaccepted assignments are shown for reference only. Your accepted trip uses the main trip flow.'
                 : 'Trips waiting for you to accept or verify with OTP. Open one to continue on the dashboard.'}
           </Text>
           {rowsWithMeta.length === 0 ? (
@@ -581,8 +591,10 @@ export default function DriverNotificationsScreen() {
                 {passiveAssignmentRows ? (
                   <View style={styles.cardFooter}>
                     <Text style={[styles.openHint, { color: colors.textMuted }]}>
-                      {notifyOnlyAfterMission && !hasActiveAcceptedTrip
-                        ? 'Paused — tap Resume accepting trips above'
+                      {notifyOnlyAfterMission &&
+                      !hasActiveAcceptedTrip &&
+                      !hasInProgressMission
+                        ? 'Notification only'
                         : 'Pending notification'}
                     </Text>
                   </View>
@@ -624,21 +636,6 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scrollContent: { paddingTop: 16, gap: 12 },
-  resumeBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 8,
-  },
-  resumeBannerText: {
-    fontSize: 15,
-    fontWeight: '700',
-    flex: 1,
-  },
   intro: {
     fontSize: 13,
     lineHeight: 18,
