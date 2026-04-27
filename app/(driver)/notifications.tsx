@@ -13,6 +13,7 @@ import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeCont
 import { getPendingOtpTrips } from '@/features/trips';
 import { getLatestAssignmentAuditByTripIds } from '@/features/trips/services/trip-assignment-audit.service';
 import { computeDriverCommissionForTrip } from '@/features/finance/aggregation/aggregateDrivers';
+import { DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY } from '@/lib/driverDashboardFlags';
 import { formatINR } from '@/lib/format';
 import {
   isAggregateTrip,
@@ -115,6 +116,7 @@ export default function DriverNotificationsScreen() {
   const [organizationNamesById, setOrganizationNamesById] = useState<
     Record<string, string>
   >({});
+  const [notifyOnlyAfterMission, setNotifyOnlyAfterMission] = useState(false);
 
   const hasCompletedInitialFetch = useRef(false);
 
@@ -128,6 +130,10 @@ export default function DriverNotificationsScreen() {
     else if (!hasCompletedInitialFetch.current) setLoading(true);
     const acceptedRaw = await AsyncStorage.getItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
     setAcceptedTripId(acceptedRaw && acceptedRaw !== '' ? acceptedRaw : null);
+    const notifyRaw = await AsyncStorage.getItem(
+      DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY,
+    );
+    setNotifyOnlyAfterMission(notifyRaw === '1');
 
     try {
       const [driversRes, invitesRes, pendingTripsRes] = await Promise.all([
@@ -428,11 +434,19 @@ export default function DriverNotificationsScreen() {
     trip: tripsService.TripRow,
     requiresOtp: boolean,
   ) => {
+    await AsyncStorage.removeItem(DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY);
+    setNotifyOnlyAfterMission(false);
     await AsyncStorage.setItem(DRIVER_NOTIFICATION_FOCUS_TRIP_KEY, trip.id);
     if (!requiresOtp) {
       await AsyncStorage.setItem(DRIVER_ACCEPTED_TRIP_ID_KEY, trip.id);
     }
     router.replace('/(driver)/');
+  };
+
+  const resumeAcceptingTrips = async () => {
+    await AsyncStorage.removeItem(DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY);
+    setNotifyOnlyAfterMission(false);
+    await fetch({ pull: true });
   };
 
   const onRefresh = () => {
@@ -442,6 +456,9 @@ export default function DriverNotificationsScreen() {
   const hasActiveAcceptedTrip = Boolean(
     acceptedTripId && String(acceptedTripId).trim() !== '',
   );
+
+  const passiveAssignmentRows =
+    hasActiveAcceptedTrip || notifyOnlyAfterMission;
 
   return (
     <View style={[styles.root, { backgroundColor: pageBg }]}>
@@ -466,10 +483,24 @@ export default function DriverNotificationsScreen() {
           }
           showsVerticalScrollIndicator={false}
         >
+          {notifyOnlyAfterMission && !hasActiveAcceptedTrip ? (
+            <TouchableOpacity
+              style={[styles.resumeBanner, { borderColor: colors.border, backgroundColor: colors.surface }]}
+              onPress={() => void resumeAcceptingTrips()}
+              activeOpacity={0.88}
+            >
+              <FontAwesome name="play-circle" size={18} color={colors.emerald} />
+              <Text style={[styles.resumeBannerText, { color: colors.text }]}>
+                Resume accepting trips
+              </Text>
+            </TouchableOpacity>
+          ) : null}
           <Text style={[styles.intro, { color: colors.textMuted }]}>
             {hasActiveAcceptedTrip
               ? 'You already have an active accepted trip. Remaining assignments stay here as notifications.'
-              : 'Trips waiting for you to accept or verify with OTP. Open one to continue on the dashboard.'}
+              : notifyOnlyAfterMission
+                ? 'Assignments are paused until you resume — then you can Accept or verify with OTP.'
+                : 'Trips waiting for you to accept or verify with OTP. Open one to continue on the dashboard.'}
           </Text>
           {rowsWithMeta.length === 0 ? (
             <View
@@ -496,7 +527,7 @@ export default function DriverNotificationsScreen() {
                     backgroundColor: colors.surface,
                     borderColor: colors.border,
                   },
-                  hasActiveAcceptedTrip && styles.cardStatic,
+                  passiveAssignmentRows && styles.cardStatic,
                 ]}
               >
                 <View style={styles.cardHeader}>
@@ -547,10 +578,12 @@ export default function DriverNotificationsScreen() {
                     ? `Est. earning ${formatINR(item.commissionForTrip)}`
                     : 'Est. earning · Salary'}
                 </Text>
-                {hasActiveAcceptedTrip ? (
+                {passiveAssignmentRows ? (
                   <View style={styles.cardFooter}>
                     <Text style={[styles.openHint, { color: colors.textMuted }]}>
-                      Pending notification
+                      {notifyOnlyAfterMission && !hasActiveAcceptedTrip
+                        ? 'Paused — tap Resume accepting trips above'
+                        : 'Pending notification'}
                     </Text>
                   </View>
                 ) : (
@@ -591,6 +624,21 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scrollContent: { paddingTop: 16, gap: 12 },
+  resumeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  resumeBannerText: {
+    fontSize: 15,
+    fontWeight: '700',
+    flex: 1,
+  },
   intro: {
     fontSize: 13,
     lineHeight: 18,

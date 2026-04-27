@@ -27,6 +27,7 @@ import {
     isCompletedStatus,
     isRosterTrip,
 } from "@/lib/driverUtils";
+import { DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY } from "@/lib/driverDashboardFlags";
 import { formatINR } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { darkMapStyle } from "@/lib/mapStyles";
@@ -545,6 +546,17 @@ export default function DriverRadarScreen() {
   );
   const [stopsExpanded, setStopsExpanded] = useState(false);
   const [justCompletedTrip, setJustCompletedTrip] = useState(false);
+  /** After completing a trip, keep remaining assignments notification-only on Home (mirrors behaviour during another active trip). */
+  const [
+    assignableTripsNotifyOnlyAfterMission,
+    setAssignableTripsNotifyOnlyAfterMission,
+  ] = useState(false);
+
+  const clearNotifyOnlyAfterMission = useCallback(() => {
+    setAssignableTripsNotifyOnlyAfterMission(false);
+    void AsyncStorage.removeItem(DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY);
+  }, []);
+
   const [isFullMapVisible, setIsFullMapVisible] = useState(false);
   const [inlineMapViewportHeight, setInlineMapViewportHeight] = useState(0);
   const [toastMessage, setToastMessage] = useState("You are online now.");
@@ -635,6 +647,9 @@ export default function DriverRadarScreen() {
   useEffect(() => {
     AsyncStorage.getItem(DRIVER_ACCEPTED_TRIP_ID_KEY).then((id) => {
       if (id != null && id !== "") setAcceptedTripId(id);
+    });
+    AsyncStorage.getItem(DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY).then((v) => {
+      if (v === "1") setAssignableTripsNotifyOnlyAfterMission(true);
     });
   }, []);
 
@@ -920,12 +935,14 @@ export default function DriverRadarScreen() {
       Promise.all([
         AsyncStorage.getItem(DRIVER_ACCEPTED_TRIP_ID_KEY),
         AsyncStorage.getItem(DRIVER_NOTIFICATION_FOCUS_TRIP_KEY),
-      ]).then(([acceptedId, focusTripId]) => {
+        AsyncStorage.getItem(DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY),
+      ]).then(([acceptedId, focusTripId, notifyOnly]) => {
         if (acceptedId != null && acceptedId !== "") setAcceptedTripId(acceptedId);
         if (focusTripId != null && focusTripId !== "") {
           setSelectedIncomingTripId(focusTripId);
           void AsyncStorage.removeItem(DRIVER_NOTIFICATION_FOCUS_TRIP_KEY);
         }
+        setAssignableTripsNotifyOnlyAfterMission(notifyOnly === "1");
       });
       if (profile?.uid) fetch();
     }, [profile?.uid, fetch]),
@@ -1021,6 +1038,7 @@ export default function DriverRadarScreen() {
   }, []);
 
   const handleAcceptMission = async (trip: tripsService.TripRow) => {
+    clearNotifyOnlyAfterMission();
     // OTP applies only to non-roster aggregate trips that require claim.
     const isAssetRosterTrip = isRosterTrip(trip);
     const requiresOtp =
@@ -1208,6 +1226,13 @@ export default function DriverRadarScreen() {
       }),
     [visibleIncomingTrips, acceptedTripId],
   );
+
+  useEffect(() => {
+    if (visibleAssignableIncomingTrips.length === 0) {
+      clearNotifyOnlyAfterMission();
+    }
+  }, [visibleAssignableIncomingTrips.length, clearNotifyOnlyAfterMission]);
+
   /** Canonical row for the accepted trip — survives pending→linked refresh lag after OTP claim. */
   const resolvedAcceptedIncomingTrip = useMemo(() => {
     if (!acceptedTripId || String(acceptedTripId).trim() === "") return null;
@@ -1253,9 +1278,13 @@ export default function DriverRadarScreen() {
   /**
    * Prefer accepted assignment first so we never flash the notification list during fetch lag.
    * Otherwise single assignable trip or picker selection among remaining trips.
+   * During post-completion notify-only mode, do not attach a primary incoming trip on Home (badge only);
+   * picker/OTP flows resume after flag clear (notifications "Resume" or Accept).
    */
   const effectiveFirstIncoming =
-    resolvedAcceptedIncomingTrip ?? pickerFocusedIncoming ?? otpFocusedIncoming;
+    resolvedAcceptedIncomingTrip ??
+    (assignableTripsNotifyOnlyAfterMission ? null : pickerFocusedIncoming) ??
+    otpFocusedIncoming;
 
   // Keep incoming assignments in explicit accept/reject state until the driver acts.
   // This prevents single asset-based assignments from auto-entering trip flow.
@@ -1844,7 +1873,8 @@ export default function DriverRadarScreen() {
     (otpClaimTripId && otpClaimTrip) ||
       (effectiveFirstIncoming &&
         (assignmentFeedback != null ||
-          (effectiveIncomingId !== String(acceptedTripId ?? "").toLowerCase() &&
+          (!assignableTripsNotifyOnlyAfterMission &&
+            effectiveIncomingId !== String(acceptedTripId ?? "").toLowerCase() &&
             effectiveIncomingId !== justClaimedTripIdRef.current &&
             effectiveIncomingId !== justClaimedOldTripIdRef.current &&
             !activeMission))),
@@ -1884,7 +1914,9 @@ export default function DriverRadarScreen() {
     activeMission ||
       isAcceptedIncomingFlow ||
       otpClaimTripId ||
-      (hasSingleAssignableIncomingTrip && effectiveFirstIncoming) ||
+      (hasSingleAssignableIncomingTrip &&
+        effectiveFirstIncoming &&
+        !assignableTripsNotifyOnlyAfterMission) ||
       assignmentFeedback != null,
   );
   const activeGuidanceStep = activeGuidanceTrip
@@ -1988,6 +2020,7 @@ export default function DriverRadarScreen() {
 
   const openOtpClaim = useCallback(
     (trip: tripsService.TripRow) => {
+      clearNotifyOnlyAfterMission();
       setAcceptError(null);
       setOtpError(null);
       setOtpValue("");
@@ -1997,7 +2030,7 @@ export default function DriverRadarScreen() {
       if (shouldShowMap) snapSheetToIndex(2);
       setTimeout(() => otpInputRef.current?.focus(), 150);
     },
-    [snapSheetToIndex, shouldShowMap],
+    [snapSheetToIndex, shouldShowMap, clearNotifyOnlyAfterMission],
   );
 
   // Clear OTP claim UI only on explicit cancel or after a successful claim feedback timeout.
@@ -3583,7 +3616,11 @@ export default function DriverRadarScreen() {
               trip={activeMission}
               commissionAmount={activeMissionCommission}
               onRefresh={fetch}
-              onTripCompleted={() => setJustCompletedTrip(true)}
+              onTripCompleted={() => {
+                setJustCompletedTrip(true);
+                setAssignableTripsNotifyOnlyAfterMission(true);
+                void AsyncStorage.setItem(DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY, "1");
+              }}
               onBackToDashboard={async () => {
                 await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
                 setAcceptedTripId(null);
@@ -3613,7 +3650,11 @@ export default function DriverRadarScreen() {
               trip={effectiveFirstIncoming}
               commissionAmount={newAssignmentCommission}
               onRefresh={fetch}
-              onTripCompleted={() => setJustCompletedTrip(true)}
+              onTripCompleted={() => {
+                setJustCompletedTrip(true);
+                setAssignableTripsNotifyOnlyAfterMission(true);
+                void AsyncStorage.setItem(DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY, "1");
+              }}
               onBackToDashboard={async () => {
                 await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
                 setAcceptedTripId(null);
@@ -3727,7 +3768,161 @@ export default function DriverRadarScreen() {
           </View>
         ) : otpClaimTrip ? (
           renderOtpClaimCard(otpClaimTrip, { showCancel: true })
-        ) : !effectiveFirstIncoming && hasAssignableIncomingTrip ? (
+        ) : assignableTripsNotifyOnlyAfterMission &&
+          hasSingleAssignableIncomingTrip ? (
+          !isOnline ? (
+            <View style={[styles.centerCardWrap, styles.offlineCardContent]}>
+              <Text style={[styles.offlineCardTitle, { color: colors.text }]}>
+                You are currently offline
+              </Text>
+              <Text
+                style={[styles.offlineCardSubtitle, { color: colors.textMuted }]}
+              >
+                Go online when you are ready for your next assignment.
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.searchOfflineBtn,
+                  {
+                    marginTop: 12,
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+                onPress={() => {
+                  setIsOnline(true);
+                  triggerSuccess("You are online now.");
+                  fetch();
+                  setLocationStatus("loading");
+                  fetchLocation();
+                  if (driver?.organization_id && driver?.id) {
+                    void driversService
+                      .updateDriver(driver.organization_id, driver.id, {
+                        status: "online",
+                      })
+                      .catch(() => {});
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <FontAwesome name="wifi" size={16} color={colors.text} />
+                <Text
+                  style={[styles.searchOfflineBtnText, { color: colors.text }]}
+                >
+                  Go online
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={[styles.driverSearchingEmptyWrap, { flexGrow: 1 }]}>
+              <TouchableOpacity
+                style={[
+                  styles.searchOfflineBtn,
+                  {
+                    marginTop: 8,
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    alignSelf: "center",
+                  },
+                ]}
+                onPress={handleSetOffline}
+                activeOpacity={0.8}
+              >
+                <FontAwesome name="power-off" size={16} color={colors.text} />
+                <Text
+                  style={[styles.searchOfflineBtnText, { color: colors.text }]}
+                >
+                  Go offline
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )
+        ) : assignableTripsNotifyOnlyAfterMission &&
+          hasMultipleAssignableIncomingTrips ? (
+          <View style={styles.driverSearchingEmptyWrap}>
+            <View
+              style={[
+                styles.centerCardWrap,
+                styles.centerCardConstraint,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  alignSelf: "center",
+                  maxWidth: 420,
+                  width: "100%",
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.offlineIconWrap,
+                  { backgroundColor: colors.emeraldMuted },
+                ]}
+              >
+                <FontAwesome name="bell" size={28} color={colors.emerald} />
+              </View>
+              <Text style={[styles.offlineCardTitle, { color: colors.text }]}>
+                Pending assignments
+              </Text>
+              <Text
+                style={[
+                  styles.offlineCardSubtitle,
+                  {
+                    color: colors.textMuted,
+                    marginTop: 8,
+                    textAlign: "center",
+                  },
+                ]}
+              >
+                You have {visibleAssignableIncomingTrips.length} trips in
+                Notifications. Accept or verify OTP there when you are ready for
+                your next trip.
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.goOnlineBtn,
+                  { backgroundColor: colors.emerald, marginTop: 18 },
+                ]}
+                onPress={() => router.push("/(driver)/notifications")}
+                activeOpacity={0.85}
+              >
+                <FontAwesome
+                  name="bell"
+                  size={16}
+                  color={Theme.textOnPrimary}
+                  style={styles.goOnlineBtnIcon}
+                />
+                <Text style={styles.goOnlineBtnText}>Open notifications</Text>
+                <FontAwesome
+                  name="chevron-right"
+                  size={14}
+                  color={Theme.textOnPrimary}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.searchOfflineBtn,
+                  {
+                    marginTop: 14,
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+                onPress={handleSetOffline}
+                activeOpacity={0.8}
+              >
+                <FontAwesome name="power-off" size={16} color={colors.text} />
+                <Text
+                  style={[styles.searchOfflineBtnText, { color: colors.text }]}
+                >
+                  Go offline
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : !effectiveFirstIncoming &&
+          hasAssignableIncomingTrip &&
+          !assignableTripsNotifyOnlyAfterMission ? (
           <View style={styles.centerCardConstraint}>
             <View style={[styles.centerCardWrap, styles.notificationListIntro]}>
               <Text style={[styles.notificationListTitle, { color: colors.text }]}>
