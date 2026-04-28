@@ -242,7 +242,7 @@ export default function NetworkScreen() {
     }
 
     return acc
-      .sort((a, b) => b.createdAt - a.createdAt)
+      .sort((a, b) => a.createdAt - b.createdAt)
       .slice(0, 5)
       .map((row) => {
         const { createdAt, ...rest } = row;
