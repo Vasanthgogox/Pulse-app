@@ -4,6 +4,8 @@
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
+import { PartyAvatar } from "@/components/PartyAvatar";
+import { useAuth } from "@/contexts/AuthContext";
 import { type PostRow } from "@/features/network/services/posts.service";
 import { getInitials } from "@/lib/stringUtils";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -82,6 +84,11 @@ function BroadcastCard({
   const isVehicle = post.type === "VEHICLE_AVAILABILITY";
   const storyPreview = previewText(post);
   const meta = `${isLoad ? "LOAD" : "CAPACITY"} · ${timeAgoShort(post.created_at)}`;
+  const rawPost = post as PostRow & {
+    org_avatar_url?: string | null;
+    avatar_url?: string | null;
+  };
+  const postAvatarUrl = rawPost.org_avatar_url ?? rawPost.avatar_url ?? null;
   const handlePressIn = () =>
     Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start();
   const handlePressOut = () =>
@@ -101,9 +108,14 @@ function BroadcastCard({
           style={styles.storyRing}
         >
           <View style={styles.storyAvatar}>
-            <Text style={styles.storyAvatarPreview} numberOfLines={2}>
-              {storyPreview}
-            </Text>
+            <PartyAvatar
+              name={post.org_name}
+              avatarUrl={postAvatarUrl}
+              avatarSeed={post.org_avatar_seed}
+              entityType="supplier"
+              size={64}
+              borderStyle={styles.storyAvatarImage}
+            />
             <View style={[styles.storyAvatarIconWrap, { borderColor: withAlpha(color, "44") }]}>
               {isLoad ? (
                 <Package size={12} color={color} strokeWidth={2.2} />
@@ -128,6 +140,7 @@ function BroadcastCard({
 
 export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryReelProps) {
   const router = useRouter();
+  const { profile } = useAuth();
   const [seenKeys, setSeenKeys] = useState<Record<string, true>>({});
   const seenStorageKey = `q:stories:seen:${orgId ?? "global"}`;
 
@@ -236,13 +249,25 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
           style={({ pressed }) => [pressed && { opacity: 0.92 }]}
         >
           <View style={styles.storyItem}>
-            <View style={styles.launchRing}>
-              <View style={styles.launchIcon}>
-                {hasOwnStories ? (
-                  <Text style={styles.mineCountText}>{ownStoryQueue.length}</Text>
-                ) : (
-                  <Plus size={18} color={Theme.textOnPrimary} strokeWidth={2.5} />
-                )}
+            <LinearGradient
+              colors={
+                hasOwnStories
+                  ? [withAlpha(Theme.primary, "A8"), withAlpha(Theme.darkGreen, "A8")]
+                  : [withAlpha(Theme.textSection, "66"), withAlpha(Theme.textSection, "2A")]
+              }
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.launchRing}
+            >
+              <View style={styles.launchAvatarWrap}>
+                <PartyAvatar
+                  name={profile?.displayName ?? profile?.full_name ?? "Mine"}
+                  avatarUrl={profile?.avatar_url ?? null}
+                  avatarSeed={profile?.avatar_seed ?? null}
+                  entityType="supplier"
+                  size={64}
+                  borderStyle={styles.storyAvatarImage}
+                />
               </View>
               <Pressable
                 style={styles.mineAddIconWrap}
@@ -254,7 +279,7 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
               >
                 <Plus size={12} color={Theme.textOnPrimary} strokeWidth={2.8} />
               </Pressable>
-            </View>
+            </LinearGradient>
             <Text style={styles.storyName}>Mine</Text>
             <Text style={styles.storyMeta} numberOfLines={1}>
               {hasOwnStories ? `${ownStoryQueue.length} ${ownStoryQueue.length > 1 ? "stories" : "story"}` : "Add story"}
@@ -371,6 +396,10 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     overflow: "visible",
   },
+  storyAvatarImage: {
+    borderWidth: 1.5,
+    borderColor: Theme.networkCardBackground,
+  },
   storyAvatarPreview: {
     width: "80%",
     fontSize: 7.8,
@@ -398,20 +427,20 @@ const styles = StyleSheet.create({
     width: 76,
     height: 76,
     borderRadius: 38,
-    borderWidth: 1.5,
-    borderColor: Theme.borderMedium,
-    borderStyle: "dashed",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.surface,
+    padding: 2.5,
   },
-  launchIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Theme.textPrimaryDark,
+  launchAvatarWrap: {
+    width: 71,
+    height: 71,
+    borderRadius: 35.5,
+    backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    overflow: "hidden",
   },
   mineAddIconWrap: {
     position: "absolute",
@@ -425,12 +454,6 @@ const styles = StyleSheet.create({
     borderColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
-  },
-  mineCountText: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: Theme.textOnPrimary,
-    letterSpacing: -0.3,
   },
   initials: {
     fontSize: 12,
