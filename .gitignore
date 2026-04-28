@@ -43,6 +43,8 @@ yarn-error.*
 
 # test coverage
 coverage/
+test-results/
+playwright-report/
 
 # logs
 *.log
@@ -56,3 +58,8 @@ tmp_*
 
 # IDE
 .idea/
+
+# python analytics workspace
+data-analytics/.venv/
+data-analytics/__pycache__/
+data-analytics/.pytest_cache/
