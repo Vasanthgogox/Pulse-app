@@ -17,6 +17,10 @@ import {
     humanizeAssignerDisplayName,
     resolveAssignerUserId,
 } from "@/lib/driverAssignerDisplay";
+import {
+  buildDriverTripNumberMap,
+  getDriverTripDisplayNumber,
+} from "@/lib/driverTripSequence";
 import { isAggregateTrip, tripEarningsForDriver } from "@/lib/driverUtils";
 import { formatLedgerDateTime, formatTime } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
@@ -640,6 +644,10 @@ export default function DriverTripsScreen() {
     () => splitLocationPrimarySecondary(selectedTrip?.drop_location),
     [selectedTrip?.drop_location],
   );
+  const driverTripNumberById = useMemo(
+    () => buildDriverTripNumberMap(trips),
+    [trips],
+  );
   const selectedTripAssigner = useMemo(
     () =>
       selectedTrip
@@ -657,7 +665,7 @@ export default function DriverTripsScreen() {
     const q = searchQuery.trim().toLowerCase();
     if (q) {
       list = list.filter((trip) => {
-        const ref = tripsService.getTripDisplayNumber(trip).toLowerCase();
+        const ref = getDriverTripDisplayNumber(trip, driverTripNumberById).toLowerCase();
         const pickup = (trip.pickup_area ?? "").toLowerCase();
         const drop = (trip.drop_location ?? "").toLowerCase();
         const status = (trip.status ?? "").toLowerCase();
@@ -679,7 +687,7 @@ export default function DriverTripsScreen() {
     });
 
     return list;
-  }, [trips, tripView, searchQuery]);
+  }, [trips, tripView, searchQuery, driverTripNumberById]);
   const historyTripsCount = useMemo(
     () => trips.filter((trip) => isCompleted(trip.status)).length,
     [trips],
@@ -731,7 +739,7 @@ export default function DriverTripsScreen() {
                     : { color: colors.textMuted },
                 ]}
               >
-                {tripsService.getTripDisplayNumber(item)}{" "}
+                {getDriverTripDisplayNumber(item, driverTripNumberById)}{" "}
                 <Text style={{ color: isDark ? colors.borderSubtle : "#e2e8f0" }}> • </Text>{" "}
                 {formatDate(item.pickup_date ?? item.created_at)}
               </Text>
@@ -1181,7 +1189,7 @@ export default function DriverTripsScreen() {
                     style={[styles.detailTitleRef, { color: colors.text }]}
                     numberOfLines={1}
                   >
-                    {tripsService.getTripDisplayNumber(selectedTrip)}
+                    {getDriverTripDisplayNumber(selectedTrip, driverTripNumberById)}
                   </Text>
                   <View
                     style={[
@@ -1205,7 +1213,7 @@ export default function DriverTripsScreen() {
                 ]}
                 onPress={() => {
                   void Share.share({
-                    message: `Trip ${tripsService.getTripDisplayNumber(selectedTrip)}`,
+                    message: `Trip ${getDriverTripDisplayNumber(selectedTrip, driverTripNumberById)}`,
                   }).catch(() => {});
                 }}
                 activeOpacity={0.75}
@@ -1726,7 +1734,7 @@ export default function DriverTripsScreen() {
                       accessibilityLabel="Export settlement reference"
                       onPress={() => {
                         void Share.share({
-                          message: `Settlement reference #${tripsService.getTripDisplayNumber(selectedTrip)}`,
+                          message: `Settlement reference #${getDriverTripDisplayNumber(selectedTrip, driverTripNumberById)}`,
                         }).catch(() => {});
                       }}
                     >

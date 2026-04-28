@@ -1,5 +1,9 @@
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import { getFleetAvatarUriForOrg } from '@/lib/fleetAvatar';
+import {
+  buildDriverTripNumberMap,
+  getDriverTripDisplayNumber,
+} from '@/lib/driverTripSequence';
 import { DriverInviteCard } from '@/components/driver/DriverInviteCard';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
@@ -143,6 +147,10 @@ export default function DriverRequestsScreen() {
     () => linkedDrivers.filter((d) => !d.left_at),
     [linkedDrivers]
   );
+  const driverTripNumberById = useMemo(
+    () => buildDriverTripNumberMap(allTrips),
+    [allTrips],
+  );
   const pastLinkedDrivers = useMemo(
     () =>
       linkedDrivers
@@ -260,7 +268,7 @@ export default function DriverRequestsScreen() {
             passbookByOrgId[orgId]?.orgName ??
             'Fleet',
           tripId: trip.id,
-          tripRef: tripsService.getTripDisplayNumber(trip),
+          tripRef: getDriverTripDisplayNumber(trip, driverTripNumberById),
           amount: Math.round(Number(e.amount) || 0),
           createdAt: e.created_at,
           paymentMode: derivePaymentMode(e.description) ?? 'BANK TRANSFER',
@@ -281,6 +289,7 @@ export default function DriverRequestsScreen() {
   }, [
     activeLinkedDrivers,
     allTrips,
+    driverTripNumberById,
     allLedger,
     connectedAcceptedInvites,
     passbookByOrgId,
