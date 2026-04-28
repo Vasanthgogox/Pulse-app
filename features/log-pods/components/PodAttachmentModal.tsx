@@ -21,6 +21,7 @@ import { supabase } from '@/lib/supabase';
 import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
 import type { MappedPodAttachment } from '@/services/logPodsService';
+import { isTripDocumentsMetaTableUnavailable } from '@/services/tripDocumentsService';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -222,14 +223,17 @@ export function PodAttachmentModal({
             firstUploadPath = data?.path ?? filePath;
           }
 
-          // Insert into trip_documents so the POD is visible in the standard Q-unified-base trip details
-          await supabase().from('trip_documents').insert({
+          // Insert into trip_documents so the POD is visible in trip detail (omit if DB not migrated).
+          const { error: metaInsertErr } = await supabase().from('trip_documents').insert({
             trip_id: tripId,
             file_name: fileObj.name,
             storage_path: data?.path ?? filePath,
             mime_type: fileObj.mimeType,
             size_bytes: fileObj.size,
           });
+          if (metaInsertErr && !isTripDocumentsMetaTableUnavailable(metaInsertErr)) {
+            throw metaInsertErr;
+          }
         }
 
         setFiles((prev) =>
