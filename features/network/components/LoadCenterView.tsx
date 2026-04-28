@@ -1638,7 +1638,7 @@ export function LoadCenterView({
                 <FontAwesome
                   name="search"
                   size={15}
-                  color={Theme.textPrimaryDark}
+                  color={Theme.textSecondary}
                   style={styles.loadSearchIcon}
                 />
                 <TextInput
@@ -1706,7 +1706,7 @@ export function LoadCenterView({
             <FontAwesome
               name="search"
               size={15}
-              color={Theme.textPrimaryDark}
+              color={Theme.textSecondary}
               style={styles.loadSearchIcon}
             />
             <TextInput
