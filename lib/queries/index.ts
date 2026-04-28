@@ -48,10 +48,15 @@ export {
   useBidsForPostQuery,
   useMyBidQuery,
   useSubmitBidMutation,
+  useUpdateBidMutation,
   useAcceptBidMutation,
   useRejectBidMutation,
   useWithdrawBidMutation,
 } from './useBidsQuery';
+export {
+  useStoryViewsQuery,
+  useRecordStoryViewMutation,
+} from './useStoryViewsQuery';
 export {
   useTripsWhereOrgIsClientQuery,
   useTripsWhereOrgIsSupplierQuery,

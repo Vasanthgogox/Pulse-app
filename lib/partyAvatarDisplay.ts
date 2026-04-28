@@ -97,16 +97,16 @@ export function resolvePartyDisplayUri(options: {
 }
 
 const PARTY_AVATAR_COLORS = [
-  Theme.primary,
-  Theme.primaryLight,
-  Theme.aggregatePillText,
-  Theme.darkGreen,
-  Theme.teslaRed,
-  Theme.textPrimary,
-  Theme.buttonSecondary,
-  Theme.integratedIcon,
-  Theme.iconSlate,
-  Theme.primaryText,
+  "#EEF2FF",
+  "#E0E7FF",
+  "#ECFEFF",
+  "#E0F2FE",
+  "#ECFDF5",
+  "#F0FDF4",
+  "#FEF3C7",
+  "#FFF7ED",
+  "#F3F4F6",
+  "#E5E7EB",
 ];
 
 /** True when we should not render initials / DiceBear fallback (blank, em dash, hyphen-only, etc.). */

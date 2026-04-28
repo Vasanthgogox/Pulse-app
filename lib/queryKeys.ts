@@ -106,6 +106,10 @@ export const queryKeys = {
     myBid: (postId: string, orgId: string) => ['q', 'bids', 'mine', postId, orgId] as const,
   },
 
+  storyViews: {
+    forPost: (postId: string) => ['q', 'story-views', postId] as const,
+  },
+
   discover: {
     search: (orgId: string, search: string) => ['q', 'discover', orgId, search] as const,
   },
