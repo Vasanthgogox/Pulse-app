@@ -358,6 +358,14 @@ export function FinanceSummarySection({
             onPress={() => onTabPress("cash")}
             style={styles.financeBalanceCard}
           >
+            <View style={styles.financeBalanceDecorIconWrap}>
+              <FontAwesome
+                name="book"
+                size={desktopParity ? 132 : 92}
+                color={Theme.textOnDark}
+                style={styles.financeBalanceDecorIcon}
+              />
+            </View>
             <View style={styles.financeBalanceTopRow}>
               <Text style={styles.financeBalanceEyebrow}>
                 Audited Operating Balance
@@ -433,11 +441,13 @@ export function FinanceSummarySection({
             </Text>
             <View style={styles.financeBalanceStatsRow}>
               <View style={styles.financeBalanceStat}>
-                <FontAwesome
-                  name="arrow-circle-down"
-                  size={13}
-                  color={Theme.darkGreen}
-                />
+                <View style={styles.financeBalanceStatIconIn}>
+                  <FontAwesome
+                    name="arrow-circle-down"
+                    size={desktopParity ? 15 : 13}
+                    color={Theme.textOnDark}
+                  />
+                </View>
                 <View>
                   <Text style={styles.financeBalanceStatLabel}>Incoming</Text>
                   <Text style={styles.financeBalanceStatValue}>
@@ -446,11 +456,13 @@ export function FinanceSummarySection({
                 </View>
               </View>
               <View style={styles.financeBalanceStat}>
-                <FontAwesome
-                  name="arrow-circle-up"
-                  size={13}
-                  color={Theme.teslaRed}
-                />
+                <View style={styles.financeBalanceStatIconOut}>
+                  <FontAwesome
+                    name="arrow-circle-up"
+                    size={desktopParity ? 15 : 13}
+                    color={Theme.textOnDark}
+                  />
+                </View>
                 <View>
                   <Text style={styles.financeBalanceStatLabel}>Outgoing</Text>
                   <Text style={styles.financeBalanceStatValue}>

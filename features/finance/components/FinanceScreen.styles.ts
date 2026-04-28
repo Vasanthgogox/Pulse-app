@@ -44,6 +44,17 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.financeHeroBorder,
     justifyContent: "space-between",
+    overflow: "hidden",
+    position: "relative",
+  },
+  financeBalanceDecorIconWrap: {
+    position: "absolute",
+    right: -18,
+    top: -22,
+    opacity: 0.12,
+  },
+  financeBalanceDecorIcon: {
+    transform: [{ rotate: "10deg" }],
   },
   financeBalanceTopRow: {
     flexDirection: "row",
@@ -148,6 +159,22 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     minWidth: 110,
+  },
+  financeBalanceStatIconIn: {
+    width: 26,
+    height: 26,
+    borderRadius: 9,
+    backgroundColor: Theme.darkGreen,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  financeBalanceStatIconOut: {
+    width: 26,
+    height: 26,
+    borderRadius: 9,
+    backgroundColor: Theme.teslaRed,
+    alignItems: "center",
+    justifyContent: "center",
   },
   financeBalanceStatLabel: {
     fontSize: 8,
