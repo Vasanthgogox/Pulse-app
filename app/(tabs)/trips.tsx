@@ -302,10 +302,14 @@ export default function TripsScreen() {
     },
   });
 
-  const metricCounts = useMemo(
-    () => countTripsByMetric(tripsByStatus, tripIdsWithDocuments),
-    [tripsByStatus, tripIdsWithDocuments],
-  );
+  const metricCounts = useMemo(() => {
+    const counts = countTripsByMetric(tripsByStatus, tripIdsWithDocuments);
+    if (!showCompletedList) {
+      const completedTripsCount = trips.filter((t) => isCompletedStatus(t.status)).length;
+      counts.delivered_docs_pending += completedTripsCount;
+    }
+    return counts;
+  }, [tripsByStatus, tripIdsWithDocuments, showCompletedList, trips]);
 
   const transactionsByTripId = useMemo(() => {
     const map = new Map<string, LedgerRow[]>();
@@ -322,9 +326,20 @@ export default function TripsScreen() {
   const baseFilteredTrips = useMemo(() => {
     let list = tripsByStatus;
     if (!showCompletedList) {
-      list = list.filter(
-        (t) => classifyTripMetric(t, tripIdsWithDocuments) === activeMetricTab,
-      );
+      if (activeMetricTab === "delivered_docs_pending") {
+        const deliveredDocsPendingTrips = tripsByStatus.filter(
+          (t) => classifyTripMetric(t, tripIdsWithDocuments) === activeMetricTab,
+        );
+        const completedTrips = trips.filter((t) => isCompletedStatus(t.status));
+        const seen = new Set(deliveredDocsPendingTrips.map((t) => t.id));
+        list = deliveredDocsPendingTrips.concat(
+          completedTrips.filter((t) => !seen.has(t.id)),
+        );
+      } else {
+        list = list.filter(
+          (t) => classifyTripMetric(t, tripIdsWithDocuments) === activeMetricTab,
+        );
+      }
     }
     if (supplyFilter !== "all") {
       list = list.filter((t) => {
@@ -456,6 +471,7 @@ export default function TripsScreen() {
     return sorted;
   }, [
     tripsByStatus,
+    trips,
     activeMetricTab,
     tripIdsWithDocuments,
     supplyFilter,
