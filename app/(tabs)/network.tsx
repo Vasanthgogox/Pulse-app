@@ -92,6 +92,8 @@ export default function NetworkScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isWideNetwork = Platform.OS === "web" && width >= 1180;
+  const isMobileLayout = width < 820;
+  const isCompactPhone = width < 420;
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const { currentOrganization: organization } = useOrganization();
@@ -395,20 +397,39 @@ export default function NetworkScreen() {
         <View style={[styles.networkMergedRow, !isWideNetwork && styles.networkMergedRowStack]}>
           <View style={[styles.sectionBlock, isWideNetwork && styles.networkMergedPanePrimary]}>
             <View style={[styles.connectionsCard, isWideNetwork && styles.networkMergedCard]}>
-              <View style={styles.sectionHeadingRowSpread}>
-                <View style={styles.sectionHeadingRowCompact}>
+              <View
+                style={[
+                  styles.sectionHeadingRowSpread,
+                  isMobileLayout && styles.sectionHeadingRowSpreadMobile,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.sectionHeadingRowCompact,
+                    isMobileLayout && styles.sectionHeadingRowCompactMobile,
+                  ]}
+                >
                   <Activity size={14} color={Theme.textPrimaryDark} />
                   <View style={styles.sectionTitleBlock}>
                     <Text style={styles.sectionKicker}>Operations pulse</Text>
                     <Text style={styles.sectionHeading}>Your connections</Text>
                   </View>
                 </View>
-                <View style={styles.connectionsHeaderControls}>
+                <View
+                  style={[
+                    styles.connectionsHeaderControls,
+                    isMobileLayout && styles.connectionsHeaderControlsMobile,
+                  ]}
+                >
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.inlineFilterScroll}
-                    style={[styles.inlineTabsWrap, styles.inlineTabsWrapHeader]}
+                    style={[
+                      styles.inlineTabsWrap,
+                      styles.inlineTabsWrapHeader,
+                      isMobileLayout && styles.inlineTabsWrapHeaderMobile,
+                    ]}
                   >
                     {filterTabs.map((t) => {
                       const active = connFilter === t;
@@ -470,14 +491,30 @@ export default function NetworkScreen() {
 
           <View style={[styles.sectionBlock, isWideNetwork && styles.networkMergedPaneSecondary]}>
             <View style={[styles.invitationsCard, isWideNetwork && styles.networkMergedCard]}>
-              <View style={[styles.sectionHeadingRowSpread, styles.invitationsMergedHeader]}>
-                <View style={styles.sectionHeadingRowCompact}>
+              <View
+                style={[
+                  styles.sectionHeadingRowSpread,
+                  styles.invitationsMergedHeader,
+                  isMobileLayout && styles.sectionHeadingRowSpreadMobile,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.sectionHeadingRowCompact,
+                    isMobileLayout && styles.sectionHeadingRowCompactMobile,
+                  ]}
+                >
                   <UserPlus2 size={15} color={Theme.textPrimaryDark} />
                   <View style={styles.sectionTitleBlock}>
                     <Text style={styles.sectionKicker}>Inbound mission protocol</Text>
                     <Text style={styles.sectionHeading}>{pendingCount} pending syncs</Text>
                   </View>
-                  <View style={styles.invitationsHeaderControls}>
+                  <View
+                    style={[
+                      styles.invitationsHeaderControls,
+                      isMobileLayout && styles.invitationsHeaderControlsMobile,
+                    ]}
+                  >
                     <View style={[styles.invSubRowCompact, styles.invSubRowCompactHeader]}>
                       {(["received", "sent"] as const).map((k) => {
                         const on = invSubTab === k;
@@ -507,7 +544,13 @@ export default function NetworkScreen() {
                   </View>
                 </View>
                 {invSearchOpen ? (
-                  <View style={[styles.inlineSearchBox, styles.invHeaderSearchBox]}>
+                  <View
+                    style={[
+                      styles.inlineSearchBox,
+                      styles.invHeaderSearchBox,
+                      isCompactPhone && styles.invHeaderSearchBoxCompact,
+                    ]}
+                  >
                     <Search size={13} color={Theme.textSecondary} />
                     <TextInput
                       style={styles.inlineSearchInput}
@@ -556,8 +599,18 @@ export default function NetworkScreen() {
 
           <View style={[styles.sectionBlock, isWideNetwork && styles.networkMergedPaneTertiary]}>
             <View style={[styles.discoverCard, isWideNetwork && styles.networkMergedCard]}>
-              <View style={styles.sectionHeadingRowSpread}>
-                <View style={styles.sectionHeadingRowCompact}>
+              <View
+                style={[
+                  styles.sectionHeadingRowSpread,
+                  isMobileLayout && styles.sectionHeadingRowSpreadMobile,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.sectionHeadingRowCompact,
+                    isMobileLayout && styles.sectionHeadingRowCompactMobile,
+                  ]}
+                >
                   <Compass size={14} color={Theme.textSecondary} />
                   <View style={styles.sectionTitleBlock}>
                     <Text style={styles.sectionKicker}>Discover potential allies</Text>
@@ -936,6 +989,10 @@ const styles = StyleSheet.create({
     flex: 0,
     maxWidth: 340,
   },
+  inlineTabsWrapHeaderMobile: {
+    flex: 1,
+    maxWidth: "100%" as const,
+  },
   connectionsHeaderControls: {
     flexDirection: "row",
     alignItems: "center",
@@ -943,6 +1000,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "flex-end",
     minWidth: 0,
+  },
+  connectionsHeaderControlsMobile: {
+    width: "100%" as const,
+    justifyContent: "space-between",
+    gap: 10,
   },
   inlineFilterScroll: {
     flexDirection: "row",
@@ -1015,6 +1077,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flex: 1,
   },
+  sectionHeadingRowCompactMobile: {
+    width: "100%" as const,
+  },
   sectionHeadingRowSpread: {
     flexDirection: "row",
     alignItems: "center",
@@ -1023,6 +1088,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingTop: 16,
     paddingBottom: 6,
+  },
+  sectionHeadingRowSpreadMobile: {
+    alignItems: "flex-start",
+    flexDirection: "column",
+    gap: 10,
   },
   sectionTitleBlock: {
     minWidth: 0,
@@ -1260,6 +1330,11 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     minWidth: 188,
   },
+  invitationsHeaderControlsMobile: {
+    marginLeft: 0,
+    minWidth: 0,
+    width: "100%" as const,
+  },
   invHeaderTabPill: {
     minHeight: 28,
     minWidth: 86,
@@ -1281,6 +1356,10 @@ const styles = StyleSheet.create({
   invHeaderSearchBox: {
     marginLeft: "auto",
     width: 220,
+  },
+  invHeaderSearchBoxCompact: {
+    marginLeft: 0,
+    width: "100%" as const,
   },
   invSubBtn: {
     paddingVertical: 8,

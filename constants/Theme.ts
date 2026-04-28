@@ -253,6 +253,33 @@ export const Theme = {
   feedbackModalStarActive: "#FBBF24",
   feedbackModalBackdrop: "rgba(0, 0, 0, 0.6)",
   feedbackModalBadgeRing: "#F59E0B",
+
+  // ---- Network UI grading (clean neutrals + semantic accents) ----
+  networkPageBackground: "#F8FAFC",
+  networkCardBackground: "#FFFFFF",
+  networkCardBorder: "#E2E8F0",
+  networkSectionLabel: "#64748B",
+  networkClientTintBg: "rgba(26,35,126,0.10)",
+  networkSupplierTintBg: "rgba(21,128,61,0.10)",
+  networkDriverTintBg: "rgba(180,83,9,0.12)",
+  networkMessageTintBg: "rgba(26,35,126,0.08)",
+  networkMessageTintBorder: "rgba(26,35,126,0.20)",
+
+  // ---- Finance unified-base parity cards ----
+  financeHeroBg: "#1D1D1F",
+  financeHeroBorder: "rgba(255,255,255,0.12)",
+  financeHeroRangeBg: "rgba(255,255,255,0.08)",
+  financeHeroRangeBorder: "rgba(255,255,255,0.22)",
+  financeCardBlueFrom: "#1d4ed8",
+  financeCardBlueTo: "#312e81",
+  financeCardOrangeFrom: "#ea580c",
+  financeCardOrangeTo: "#78350f",
+  financeCardSlateFrom: "#334155",
+  financeCardSlateTo: "#0f172a",
+  financeCardGreenFrom: "#059669",
+  financeCardGreenTo: "#115e59",
+  financeCardCashFrom: "#4f46e5",
+  financeCardCashTo: "#1e1b4b",
 } as const;
 
 export type ThemeColors = typeof Theme;

@@ -1,5 +1,5 @@
 [build]
-  command = "CI=1 npm run build:web"
+  command = "npm run build:web"
   publish = "dist"
 
 [[redirects]]

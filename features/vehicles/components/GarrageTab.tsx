@@ -67,6 +67,8 @@ export interface GarrageTabProps {
   refreshing?: boolean;
   onRefresh?: () => void;
   bottomInset?: number;
+  /** Desktop finance parity: hide summary strip under hero/cards. */
+  hideSummaryRow?: boolean;
 }
 
 function formatCurrency(amount: number): string {
@@ -96,6 +98,7 @@ export function GarrageTab({
   refreshing = false,
   onRefresh,
   bottomInset = 100,
+  hideSummaryRow = false,
 }: GarrageTabProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
@@ -247,7 +250,13 @@ export function GarrageTab({
 
   const marginPercent =
     totalRevenue > 0 ? Math.round((totalProfit / totalRevenue) * 100) : 0;
-  const stickyHeaderIndex = topContent ? 2 : 1;
+  const stickyHeaderIndex = topContent
+    ? hideSummaryRow
+      ? 1
+      : 2
+    : hideSummaryRow
+      ? 0
+      : 1;
 
   /** Format amount for subline: "₹179.0k" or full */
   const formatSubline = (amount: number) =>
@@ -279,21 +288,23 @@ export function GarrageTab({
         }
       >
         {topContent}
-        <View style={styles.receivablesSummaryRow}>
-          <View style={styles.receivablesSummaryCard}>
-            <Text style={styles.receivablesSummaryLabel}>Vehicle Revenue</Text>
-            <Text style={styles.receivablesSummaryRevenue}>
-              ₹{totalRevenue.toLocaleString("en-IN")}
-            </Text>
+        {!hideSummaryRow && (
+          <View style={styles.receivablesSummaryRow}>
+            <View style={styles.receivablesSummaryCard}>
+              <Text style={styles.receivablesSummaryLabel}>Vehicle Revenue</Text>
+              <Text style={styles.receivablesSummaryRevenue}>
+                ₹{totalRevenue.toLocaleString("en-IN")}
+              </Text>
+            </View>
+            <LiquidFillPill
+              percentage={marginPercent > 0 ? Math.min(100, marginPercent) : 0}
+              label="Margin"
+              valuePrefix={marginPercent > 0 ? "+" : ""}
+              valueSuffix="%"
+              displayValue={marginPercent}
+            />
           </View>
-          <LiquidFillPill
-            percentage={marginPercent > 0 ? Math.min(100, marginPercent) : 0}
-            label="Margin"
-            valuePrefix={marginPercent > 0 ? "+" : ""}
-            valueSuffix="%"
-            displayValue={marginPercent}
-          />
-        </View>
+        )}
         <View style={styles.listHeader}>
           <View style={styles.headerEntityCol}>
             <Text style={[styles.listHeaderCell, styles.ctHeaderLeft]} numberOfLines={1}>

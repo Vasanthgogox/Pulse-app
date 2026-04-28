@@ -44,7 +44,7 @@ export default function PulseLoadsScreen() {
         <Pressable onPress={safeBack} hitSlop={12} style={styles.back}>
           <ArrowLeft size={22} color={Theme.textPrimaryDark} />
         </Pressable>
-        <Text style={styles.title}>LOAD CENTER</Text>
+        {isDesktopWeb ? <View style={styles.topBarCenterSpacer} /> : <Text style={styles.title}>LOAD CENTER</Text>}
         <View style={styles.back} />
       </View>
       <LoadCenterView
@@ -81,6 +81,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Theme.borderLight,
   },
   back: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  topBarCenterSpacer: { flex: 1 },
   title: {
     fontSize: 11,
     fontWeight: "800",

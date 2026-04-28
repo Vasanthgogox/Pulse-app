@@ -4,7 +4,6 @@
  */
 import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
 import { SemanticAddIcon } from "@/components/SemanticAddIcon";
-import { SubTabs } from "@/components/SubTabs";
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -63,6 +62,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -72,6 +72,7 @@ import {
   ScrollView,
   Share,
   StyleSheet,
+  Easing,
   Switch,
   Text,
   TextInput,
@@ -214,6 +215,8 @@ export function LoadCenterView({
   }, [highlightedIndentId]);
 
   const [loadSubTab, setLoadSubTab] = useState<LoadSubTab>("GIVE_LOAD");
+  const [loadTabsWrapWidth, setLoadTabsWrapWidth] = useState(0);
+  const loadTabsActiveAnim = useRef(new Animated.Value(0)).current;
   const [statusFilterTab, setStatusFilterTab] =
     useState<StatusFilterTab>("OPEN");
   const [searchQuery, setSearchQuery] = useState("");
@@ -299,6 +302,16 @@ export function LoadCenterView({
   const queryClient = useQueryClient();
 
   const isClaimedTab = loadSubTab === "AWARDED";
+  const loadSubTabIndex = loadSubTab === "GIVE_LOAD" ? 0 : loadSubTab === "GET_LOAD" ? 1 : 2;
+  useEffect(() => {
+    Animated.timing(loadTabsActiveAnim, {
+      toValue: loadSubTabIndex,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [loadSubTabIndex, loadTabsActiveAnim]);
+
   const useGridLayout = width >= 1024;
 
   /** O(myQuotes.length): map indent_id -> quote for Find Work "Quote Sent" / "Update quote" and modal prefill. */
@@ -1548,29 +1561,64 @@ export function LoadCenterView({
               isSingleRowHeader && styles.loadSubTabsWrapSingle,
             ]}
           >
-            <SubTabs<LoadSubTab>
-              variant="light"
-              horizontalPadding={0}
-              value={loadSubTab}
-              onChange={setLoadSubTab}
-              items={[
-                {
-                  key: "GIVE_LOAD",
-                  label: "GIVE LOAD",
-                  badgeCount: hirePartnerLoads.length,
-                },
-                {
-                  key: "GET_LOAD",
-                  label: "GET LOAD",
-                  badgeCount: findWorkLoads.length,
-                },
-                {
-                  key: "AWARDED",
-                  label: "CLAIMED",
-                  badgeCount: awardedLoads.length,
-                },
-              ]}
-            />
+            <View
+              style={styles.loadMainTabsPillWrap}
+              onLayout={(e) => setLoadTabsWrapWidth(e.nativeEvent.layout.width)}
+            >
+              {loadTabsWrapWidth > 0 ? (
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.loadMainTabActiveBg,
+                    {
+                      width: (loadTabsWrapWidth - 8) / 3,
+                      transform: [
+                        {
+                          translateX: loadTabsActiveAnim.interpolate({
+                            inputRange: [0, 1, 2],
+                            outputRange: [0, (loadTabsWrapWidth - 8) / 3, ((loadTabsWrapWidth - 8) / 3) * 2],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                />
+              ) : null}
+              {[
+                { key: "GIVE_LOAD" as const, label: "GIVE LOAD", count: hirePartnerLoads.length },
+                { key: "GET_LOAD" as const, label: "GET LOAD", count: findWorkLoads.length },
+                { key: "AWARDED" as const, label: "CLAIMED", count: awardedLoads.length },
+              ].map((tab) => {
+                const active = loadSubTab === tab.key;
+                return (
+                  <TouchableOpacity
+                    key={tab.key}
+                    style={[styles.loadMainTabPill, active && styles.loadMainTabPillActive]}
+                    onPress={() => setLoadSubTab(tab.key)}
+                    activeOpacity={0.8}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text
+                      style={[
+                        styles.loadMainTabPillText,
+                        active && styles.loadMainTabPillTextActive,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {tab.label}
+                    </Text>
+                    {tab.count > 0 ? (
+                      <View style={[styles.loadMainTabBadge, active && styles.loadMainTabBadgeActive]}>
+                        <Text style={[styles.loadMainTabBadgeText, active && styles.loadMainTabBadgeTextActive]}>
+                          {tab.count}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
           {onMyNetworkPress ? (
             <TouchableOpacity
@@ -1589,14 +1637,14 @@ export function LoadCenterView({
               <View style={[styles.loadSearchWrap, styles.loadSearchWrapSingle]}>
                 <FontAwesome
                   name="search"
-                  size={14}
-                  color={Theme.textOnDarkMuted}
+                  size={15}
+                  color={Theme.textSecondary}
                   style={styles.loadSearchIcon}
                 />
                 <TextInput
                   style={styles.loadSearchInput}
-                  placeholder="Find by route, ID or client..."
-                  placeholderTextColor={Theme.textOnDarkMuted}
+                  placeholder="Search loads by route, load ID, client..."
+                  placeholderTextColor={Theme.textSecondary}
                   value={searchQuery}
                   onChangeText={setSearchQuery}
                   autoCapitalize="none"
@@ -1657,14 +1705,14 @@ export function LoadCenterView({
           <View style={styles.loadSearchWrap}>
             <FontAwesome
               name="search"
-              size={14}
-              color={Theme.textOnDarkMuted}
+              size={15}
+              color={Theme.textSecondary}
               style={styles.loadSearchIcon}
             />
             <TextInput
               style={styles.loadSearchInput}
-              placeholder="Find by route, ID or client..."
-              placeholderTextColor={Theme.textOnDarkMuted}
+              placeholder="Search loads by route, load ID, client..."
+              placeholderTextColor={Theme.textSecondary}
               value={searchQuery}
               onChangeText={setSearchQuery}
               autoCapitalize="none"
@@ -2824,7 +2872,9 @@ export function LoadCenterView({
                   }
                   placeholderTextColor={Theme.textMuted}
                   value={quoteAmount}
-                  onChangeText={setQuoteAmount}
+                  onChangeText={(raw) =>
+                    setQuoteAmount(raw.replace(/[^\d]/g, ""))
+                  }
                 />
                 {activeBidQuote ? (
                   <View style={styles.previousBidWrap}>
@@ -2909,12 +2959,22 @@ export function LoadCenterView({
                       return;
                     }
                     invalidateIndents(orgId);
-                    queryClient.invalidateQueries({
-                      queryKey: [
-                        ...queryKeys.indents.all(orgId),
-                        "my-direct-quotes",
-                      ],
-                    });
+                    await Promise.allSettled([
+                      queryClient.invalidateQueries({
+                        queryKey: [
+                          ...queryKeys.indents.all(orgId),
+                          "my-direct-quotes",
+                        ],
+                      }),
+                      queryClient.invalidateQueries({
+                        queryKey: ["indents", load.id, "direct-quotes"],
+                      }),
+                      queryClient.invalidateQueries({
+                        queryKey: ["indents", "quote-counts"],
+                      }),
+                      refetchMyQuotes(),
+                      refetchMarketIndents(),
+                    ]);
                     triggerSuccess(
                       hadExistingQuote ? "Quote updated" : "Offer Published",
                     );
@@ -3828,9 +3888,91 @@ const styles = StyleSheet.create({
   },
   loadSubTabsWrapSingle: {
     flex: 0,
-    minWidth: 340,
+    minWidth: 380,
     maxWidth: 420,
     paddingBottom: 0,
+  },
+  loadMainTabsPillWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    position: "relative",
+    backgroundColor: Theme.liquidPillBg,
+    borderWidth: 1,
+    borderColor: Theme.liquidPillBorder,
+    borderRadius: 999,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  loadMainTabActiveBg: {
+    position: "absolute",
+    left: 4,
+    top: 4,
+    bottom: 4,
+    borderRadius: 999,
+    backgroundColor: Theme.darkBackground,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.18,
+    shadowRadius: 7,
+    elevation: 3,
+  },
+  loadMainTabPill: {
+    minWidth: 0,
+    flex: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
+  },
+  loadMainTabPillActive: {
+    backgroundColor: "transparent",
+  },
+  loadMainTabPillText: {
+    fontSize: 8.5,
+    fontWeight: "900",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    flexShrink: 1,
+  },
+  loadMainTabPillTextActive: {
+    color: Theme.textOnDark,
+  },
+  loadMainTabBadge: {
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  loadMainTabBadgeActive: {
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  loadMainTabBadgeText: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+  },
+  loadMainTabBadgeTextActive: {
+    color: Theme.textOnDark,
   },
   loadMyNetworkBtn: {
     flexDirection: "row",
@@ -3889,19 +4031,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     height: 38,
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.screenBackground,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.textSecondary,
     borderRadius: 11,
     paddingHorizontal: 12,
     paddingVertical: 0,
   },
   loadSearchWrapSingle: {
     flex: 1,
-    maxWidth: 560,
+    maxWidth: 520,
+    minWidth: 300,
     height: 36,
+    marginHorizontal: 6,
   },
-  loadSearchIcon: { marginRight: 6 },
+  loadSearchIcon: { marginRight: 8 },
   loadSearchInput: {
     flex: 1,
     minWidth: 0,
@@ -3927,6 +4071,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 4,
     gap: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
   },
   loadTypeFilterChip: {
     paddingHorizontal: 7,
@@ -3940,6 +4089,11 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: Theme.textPrimaryDark,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.09,
+    shadowRadius: 4,
+    elevation: 1,
   },
   loadTypeFilterChipText: {
     fontSize: 8,

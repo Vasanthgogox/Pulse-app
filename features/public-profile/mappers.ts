@@ -10,9 +10,8 @@ import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import type {
-  PublicProfileEntity,
-  PublicProfileFact,
-  PublicProfileMetric,
+    PublicProfileEntity,
+    PublicProfileFact
 } from "./types";
 
 /** Build safe initials (max 2 letters) from a display name. */
@@ -112,7 +111,7 @@ export function clientToPublicEntity(c: ClientRow): PublicProfileEntity {
     synergyHeadline: isIntegrated ? "Live Shared Ledger" : "Invite to Shared Ledger",
     synergyBody: isIntegrated
       ? "Audit records sync both ways. Review variances, confirm payments, and close disputes in one place."
-      : "Connect this client on Q to unlock Compare & Verify and real-time shared ledger.",
+      : "Connect this client on Pulse to unlock Compare & Verify and real-time shared ledger.",
   };
 }
 
@@ -185,7 +184,7 @@ export function supplierToPublicEntity(s: SupplierRow): PublicProfileEntity {
     synergyHeadline: isIntegrated ? "Live Shared Ledger" : "Invite to Shared Ledger",
     synergyBody: isIntegrated
       ? "Every invoice and payment is mirrored across both books. Resolve variances with a tap."
-      : "Connect this supplier on Q so payments, freight adjustments, and proofs stay in sync automatically.",
+      : "Connect this supplier on Pulse so payments, freight adjustments, and proofs stay in sync automatically.",
   };
 }
 

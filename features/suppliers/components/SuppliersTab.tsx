@@ -73,6 +73,8 @@ export interface SuppliersTabProps {
   bottomInset?: number;
   /** When set, payables match trip Adjustment Registry (cost adjustments). */
   tripFinanceAdjustmentsByTripId?: Record<string, TripAdjustment[]>;
+  /** Desktop finance parity: hide summary strip under hero/cards. */
+  hideSummaryRow?: boolean;
 }
 
 export function SuppliersTab({
@@ -93,6 +95,7 @@ export function SuppliersTab({
   onRefresh,
   bottomInset = 100,
   tripFinanceAdjustmentsByTripId,
+  hideSummaryRow = false,
 }: SuppliersTabProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
@@ -224,7 +227,13 @@ export function SuppliersTab({
     totalPayables > 0
       ? Math.round(((totalPayables - totalDue) / totalPayables) * 100)
       : 0;
-  const stickyHeaderIndex = topContent ? 2 : 1;
+  const stickyHeaderIndex = topContent
+    ? hideSummaryRow
+      ? 1
+      : 2
+    : hideSummaryRow
+      ? 0
+      : 1;
 
   return (
     <View style={styles.wrap}>
@@ -250,19 +259,21 @@ export function SuppliersTab({
         }
       >
         {topContent}
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Total Due</Text>
-            <Text style={styles.summaryDue}>
-              ₹{totalDue.toLocaleString("en-IN")}
-            </Text>
+        {!hideSummaryRow && (
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Total Due</Text>
+              <Text style={styles.summaryDue}>
+                ₹{totalDue.toLocaleString("en-IN")}
+              </Text>
+            </View>
+            <LiquidFillPill
+              percentage={settledPercent}
+              label="Settled"
+              valueSuffix="%"
+            />
           </View>
-          <LiquidFillPill
-            percentage={settledPercent}
-            label="Settled"
-            valueSuffix="%"
-          />
-        </View>
+        )}
         <View style={styles.tableHeader}>
           <View style={styles.headerEntityCol}>
             <Text style={[styles.tableHeaderCell, styles.ctLeft]} numberOfLines={1}>

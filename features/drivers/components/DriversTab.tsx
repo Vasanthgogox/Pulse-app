@@ -61,6 +61,8 @@ export interface DriversTabProps {
   refreshing?: boolean;
   onRefresh?: () => void;
   bottomInset?: number;
+  /** Desktop finance parity: hide summary strip under hero/cards. */
+  hideSummaryRow?: boolean;
 }
 
 export function DriversTab({
@@ -80,6 +82,7 @@ export function DriversTab({
   refreshing = false,
   onRefresh,
   bottomInset = 100,
+  hideSummaryRow = false,
 }: DriversTabProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
@@ -229,7 +232,13 @@ export function DriversTab({
   const totalEarnings = totals.totalIn ?? 0;
   const settlementPercent =
     totalEarnings > 0 ? Math.round(((totalEarnings - totalPending) / totalEarnings) * 100) : 0;
-  const stickyHeaderIndex = topContent ? 2 : 1;
+  const stickyHeaderIndex = topContent
+    ? hideSummaryRow
+      ? 1
+      : 2
+    : hideSummaryRow
+      ? 0
+      : 1;
 
   return (
     <View style={styles.wrap}>
@@ -255,19 +264,21 @@ export function DriversTab({
         }
       >
         {topContent}
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Total Pending</Text>
-            <Text style={styles.summaryPending}>
-              ₹{totalPending.toLocaleString('en-IN')}
-            </Text>
+        {!hideSummaryRow && (
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Total Pending</Text>
+              <Text style={styles.summaryPending}>
+                ₹{totalPending.toLocaleString('en-IN')}
+              </Text>
+            </View>
+            <LiquidFillPill
+              percentage={settlementPercent}
+              label="Settled"
+              valueSuffix="%"
+            />
           </View>
-          <LiquidFillPill
-            percentage={settlementPercent}
-            label="Settled"
-            valueSuffix="%"
-          />
-        </View>
+        )}
         <View style={styles.tableHeader}>
           <View style={styles.headerEntityCol}>
             <Text style={[styles.tableHeaderCell, styles.ctLeft]} numberOfLines={1}>

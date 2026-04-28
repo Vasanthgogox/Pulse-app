@@ -5,6 +5,7 @@
  * Service-layer validation: single pass over inputs before Supabase calls.
  */
 import { validateEmail } from "@/lib/emailValidation";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   extractIndianMobileTenDigits,
   normalizeIndianPhoneForMetadata,
@@ -17,7 +18,10 @@ import {
     validateFullName,
     validatePassword,
 } from "@/lib/validation";
+import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
+import { Platform } from "react-native";
 
 export type UserRole = "user" | "driver";
 
@@ -121,22 +125,38 @@ export interface SignUpOptions {
   email: string;
   password: string;
   fullName?: string;
-  /** Phone (e.g. for drivers). Stored in user_metadata; backends can use it to link invited drivers. */
   phone?: string;
-  /** Optional trading / legal name; stored in profiles.company_name and used for default organization name. */
   companyName?: string;
   role?: UserRole;
-  /** Business model for the new org: asset, aggregate, or both. Default HYBRID. */
   operatingModel?: OperatingModel;
-  /** Street / building address of the company. */
   addressLine?: string;
-  /** City or district of the company. */
   city?: string;
-  /** Indian state name. */
   state?: string;
-  /** Zone auto-derived from state: NORTH | SOUTH | EAST | WEST | NORTHEAST. */
   zone?: string;
+  /** Legal structure of the business: Sole Proprietor, Partnership, Pvt Ltd, LLP, OPC, or Other. */
+  businessType?: string;
+  /** Number of employees band, e.g. "1-10", "11-50", "51-200", "201-500", "500+". */
+  employeeCount?: string;
+  /** When true the DB trigger skips org + membership creation (user is joining an existing org). */
+  skipOrgCreation?: boolean;
 }
+
+export interface PendingOAuthOnboardingMetadata {
+  fullName?: string;
+  phone?: string;
+  companyName?: string;
+  role?: UserRole;
+  operatingModel?: OperatingModel;
+  addressLine?: string;
+  city?: string;
+  state?: string;
+  zone?: string;
+  businessType?: string;
+  employeeCount?: string;
+  skipOrgCreation?: boolean;
+}
+
+const PENDING_OAUTH_METADATA_KEY = "@q_mobile_pending_oauth_metadata_v1";
 
 export async function signUp({
   email,
@@ -150,6 +170,9 @@ export async function signUp({
   city,
   state,
   zone,
+  businessType,
+  employeeCount,
+  skipOrgCreation,
 }: SignUpOptions): Promise<SignInResult> {
   const emailErr = validateEmail(email ?? "");
   if (emailErr) return { error: new Error(emailErr) };
@@ -189,6 +212,9 @@ export async function signUp({
     if (city?.trim()) metadata.city = city.trim();
     if (state?.trim()) metadata.state = state.trim();
     if (zone?.trim()) metadata.zone = zone.trim();
+    if (businessType?.trim()) metadata.business_type = businessType.trim();
+    if (employeeCount?.trim()) metadata.employee_count = employeeCount.trim();
+    if (skipOrgCreation) metadata.skip_org_creation = true;
     // Canonical E.164-style India (+91…) for profiles.phone and metadata; RPCs normalize to 10 digits for lookup.
     if (phone != null && phone !== "") {
       const e164 = normalizeIndianPhoneForMetadata(phone);
@@ -257,6 +283,170 @@ export async function signInWithPassword(
       };
     }
     return { error: e instanceof Error ? e : new Error("Sign in failed") };
+  }
+}
+
+function getGoogleRedirectTo(): string {
+  if (Platform.OS === "web" && typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}/auth/callback`;
+  }
+  return Linking.createURL("/auth/callback");
+}
+
+/** Google OAuth sign-in for web and native (Expo). */
+export async function signInWithGoogle(): Promise<SignInResult> {
+  try {
+    const redirectTo = getGoogleRedirectTo();
+
+    if (Platform.OS === "web") {
+      const { data, error } = await supabase().auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+        },
+      });
+      if (error) return { error: new Error(error.message || "Google sign in failed") };
+      if (!data?.url) return { error: new Error("Could not start Google sign in.") };
+      if (typeof window !== "undefined") {
+        window.location.assign(data.url);
+      }
+      return { error: null };
+    }
+
+    const { data, error } = await supabase().auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo,
+        skipBrowserRedirect: true,
+      },
+    });
+    if (error) return { error: new Error(error.message || "Google sign in failed") };
+    if (!data?.url) return { error: new Error("Could not start Google sign in.") };
+
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    if (result.type !== "success" || !result.url) {
+      return { error: new Error("Google sign in cancelled.") };
+    }
+
+    const parsed = Linking.parse(result.url);
+    const code = typeof parsed.queryParams?.code === "string" ? parsed.queryParams.code : null;
+    const oauthError =
+      typeof parsed.queryParams?.error_description === "string"
+        ? parsed.queryParams.error_description
+        : typeof parsed.queryParams?.error === "string"
+          ? parsed.queryParams.error
+          : null;
+
+    if (oauthError) return { error: new Error(oauthError) };
+    if (!code) return { error: new Error("Missing auth code from Google.") };
+
+    const { error: exchangeError } = await supabase().auth.exchangeCodeForSession(code);
+    if (exchangeError) {
+      return { error: new Error(exchangeError.message || "Google sign in failed") };
+    }
+
+    await applyPendingOAuthMetadata();
+    return { error: null };
+  } catch (e) {
+    if (isNetworkError(e)) {
+      return {
+        error: new Error(
+          "Cannot reach server. Check your internet connection and try again.",
+        ),
+      };
+    }
+    return { error: e instanceof Error ? e : new Error("Google sign in failed") };
+  }
+}
+
+export async function setPendingOAuthMetadata(
+  metadata: PendingOAuthOnboardingMetadata,
+): Promise<{ error: Error | null }> {
+  try {
+    await AsyncStorage.setItem(PENDING_OAUTH_METADATA_KEY, JSON.stringify(metadata));
+    return { error: null };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e : new Error("Could not save onboarding details."),
+    };
+  }
+}
+
+/**
+ * Applies any pending metadata intended for the next OAuth session.
+ * Current implementation is a no-op and kept for callback flow compatibility.
+ */
+export async function applyPendingOAuthMetadata(): Promise<void> {
+  let raw: string | null = null;
+  try {
+    raw = await AsyncStorage.getItem(PENDING_OAUTH_METADATA_KEY);
+  } catch {
+    raw = null;
+  }
+  if (!raw) return;
+
+  let pending: PendingOAuthOnboardingMetadata | null = null;
+  try {
+    pending = JSON.parse(raw) as PendingOAuthOnboardingMetadata;
+  } catch {
+    pending = null;
+  } finally {
+    await AsyncStorage.removeItem(PENDING_OAUTH_METADATA_KEY).catch(() => {});
+  }
+  if (!pending) return;
+
+  const authData: Record<string, unknown> = {};
+  const role = pending.role === "driver" ? "driver" : "user";
+  authData.role = role;
+  authData.operating_model = pending.operatingModel ?? "HYBRID";
+  if (pending.fullName?.trim()) authData.full_name = pending.fullName.trim();
+  if (pending.companyName?.trim()) authData.company_name = pending.companyName.trim();
+  if (pending.addressLine?.trim()) authData.address_line = pending.addressLine.trim();
+  if (pending.city?.trim()) authData.city = pending.city.trim();
+  if (pending.state?.trim()) authData.state = pending.state.trim();
+  if (pending.zone?.trim()) authData.zone = pending.zone.trim();
+  if (pending.businessType?.trim()) authData.business_type = pending.businessType.trim();
+  if (pending.employeeCount?.trim()) authData.employee_count = pending.employeeCount.trim();
+  if (pending.skipOrgCreation) authData.skip_org_creation = true;
+  if (pending.phone != null && pending.phone !== "") {
+    const e164 = normalizeIndianPhoneForMetadata(pending.phone);
+    if (e164) authData.phone = e164;
+  }
+
+  const { error: updateAuthError } = await supabase().auth.updateUser({ data: authData });
+  if (updateAuthError) {
+    throw new Error(updateAuthError.message || "Could not save onboarding details.");
+  }
+
+  const { data: userData } = await supabase().auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) return;
+
+  const profileUpdates: Record<string, unknown> = {};
+  if (pending.fullName?.trim()) profileUpdates.full_name = pending.fullName.trim();
+  if (pending.companyName?.trim()) profileUpdates.company_name = pending.companyName.trim();
+  if (pending.phone != null && pending.phone !== "") {
+    const e164 = normalizeIndianPhoneForMetadata(pending.phone);
+    if (e164) profileUpdates.phone = e164;
+  }
+  if (Object.keys(profileUpdates).length > 0) {
+    await supabase().from("profiles").update(profileUpdates).eq("id", userId);
+  }
+
+  if (!pending.skipOrgCreation) {
+    const orgUpdates: Record<string, unknown> = {};
+    if (pending.companyName?.trim()) orgUpdates.name = pending.companyName.trim();
+    if (pending.operatingModel) orgUpdates.operating_model = pending.operatingModel;
+    if (pending.addressLine?.trim()) orgUpdates.address_line = pending.addressLine.trim();
+    if (pending.city?.trim()) orgUpdates.city = pending.city.trim();
+    if (pending.state?.trim()) orgUpdates.state = pending.state.trim();
+    if (pending.zone?.trim()) orgUpdates.zone = pending.zone.trim();
+    if (pending.businessType?.trim()) orgUpdates.business_type = pending.businessType.trim();
+    if (pending.employeeCount?.trim()) orgUpdates.employee_count = pending.employeeCount.trim();
+    if (Object.keys(orgUpdates).length > 0) {
+      await supabase().from("organizations").update(orgUpdates).eq("owner_id", userId);
+    }
   }
 }
 
@@ -550,6 +740,47 @@ export async function getProfile(uid: string): Promise<AuthProfile | null> {
     return mapDbProfileToAuth(data);
   } catch {
     return null;
+  }
+}
+
+/**
+ * Self-heal for environments where DB auth trigger did not provision profiles.
+ * Upserts the current user's own profile using auth metadata under RLS (auth.uid() = id).
+ */
+export async function ensureCurrentUserProfile(): Promise<{ error: Error | null }> {
+  try {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase().auth.getUser();
+    if (userError || !user) {
+      return { error: new Error(userError?.message || "Not signed in") };
+    }
+
+    const mapped = mapSupabaseUserToAuth(user).profile;
+    const payload = {
+      id: user.id,
+      email: user.email ?? mapped.email,
+      full_name: mapped.full_name ?? mapped.displayName,
+      role: mapped.role,
+      aggregated: mapped.aggregated,
+      asset: mapped.asset,
+      company_name: mapped.company_name ?? null,
+      phone: mapped.phone ?? null,
+      avatar_url: mapped.avatar_url ?? null,
+      avatar_seed: mapped.avatar_seed ?? null,
+      bio: mapped.status_text ?? null,
+    };
+
+    const { error } = await supabase().from("profiles").upsert(payload, {
+      onConflict: "id",
+    });
+    if (error) return { error: new Error(error.message || "Profile provisioning failed") };
+    return { error: null };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e : new Error("Profile provisioning failed"),
+    };
   }
 }
 

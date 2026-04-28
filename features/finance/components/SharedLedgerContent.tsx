@@ -8,16 +8,19 @@ import Theme from "@/constants/Theme";
 import { getClientById } from "@/features/clients/services/clients.service";
 import { getSupplierById } from "@/features/suppliers/services/suppliers.service";
 import {
-  createTrip,
-  getTripDisplayNumber,
-  type CreateTripData,
-  type TripRow,
+    createTrip,
+    getTripDisplayNumber,
+    type CreateTripData,
+    type TripRow,
 } from "@/features/trips";
 import {
-  adjustedCost,
-  adjustedRevenue,
-  type TripAdjustment,
+    adjustedCost,
+    adjustedRevenue,
+    type TripAdjustment,
 } from "@/features/trips/services/tripAdjustments";
+import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
+import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
+import { supabase } from "@/lib/supabase";
 import {
     createConnectionRequest,
     getConnectionInviteeByPhone,
@@ -38,7 +41,6 @@ import {
     type SharedLedgerEntry,
 } from "@/services/sharedLedgerService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -55,21 +57,18 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { createLedgerEntry, type LedgerRow } from "../services/finance.service";
-import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
-import { supabase } from "@/lib/supabase";
-import {
-  SHARED_LEDGER_AWAITING_PARTNER_UPDATE,
-  SHARED_LEDGER_PARTNER_PENDING_LABEL,
-  inferSharedTxnLineKind,
-  type InternalTrip,
-  type ReconciledRow,
-  type ReconStatus,
-} from "./sharedLedgerTypes";
-import {
-  SharedLedgerCommandCenter,
-  type CommandTxnRow,
-} from "./SharedLedgerCommandCenter";
 import { LedgerReportModal } from "./LedgerReportModal";
+import {
+    SharedLedgerCommandCenter,
+    type CommandTxnRow,
+} from "./SharedLedgerCommandCenter";
+import {
+    inferSharedTxnLineKind,
+    SHARED_LEDGER_AWAITING_PARTNER_UPDATE,
+    SHARED_LEDGER_PARTNER_PENDING_LABEL,
+    type InternalTrip,
+    type ReconciledRow
+} from "./sharedLedgerTypes";
 
 export interface SharedTripData {
   tripId: string;
@@ -2030,7 +2029,7 @@ export function SharedLedgerContent({
   ]);
 
   const handleInviteToApp = useCallback(() => {
-    const message = `Join me on Q to sync our ledger and compare books with ${entity.name}. Download the Q app to get started.`;
+    const message = `Join me on Pulse to sync our ledger and compare books with ${entity.name}. Download the Q app to get started.`;
     Share.share({ message, title: "Invite to Q" }).catch(() => {});
   }, [entity.name]);
 
@@ -2054,7 +2053,7 @@ export function SharedLedgerContent({
           <View style={styles.notIntegratedLoading}>
             <ActivityIndicator size="small" color={Theme.primary} />
             <Text style={styles.notIntegratedLoadingText}>
-              Checking if {entity.name} is on Q…
+              Checking if {entity.name} is on Pulse…
             </Text>
           </View>
         )}
@@ -2095,7 +2094,7 @@ export function SharedLedgerContent({
         {inviteeStatus === "in_app" && (
           <>
             <Text style={styles.notIntegratedHint}>
-              {invitee?.full_name ?? entity.name} is on Q. Send a connection
+              {invitee?.full_name ?? entity.name} is on Pulse. Send a connection
               request to enable Compare & Verify.
             </Text>
             {pendingRequestSent ? (
@@ -2125,7 +2124,7 @@ export function SharedLedgerContent({
         {inviteeStatus === "not_in_app" && (
           <>
             <Text style={styles.notIntegratedHint}>
-              This contact isn’t on Q yet. Invite them to the app so you can
+              This contact isn’t on Pulse yet. Invite them to the app so you can
               connect later.
             </Text>
             <TouchableOpacity
