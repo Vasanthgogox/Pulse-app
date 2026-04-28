@@ -35,17 +35,12 @@ const ROLE_STYLES: Record<
   DRIVER: { bg: Theme.networkDriverTintBg, color: Theme.warning, label: "DRIVER" },
 };
 
-function seedColor(id: string): string {
-  const palette = [
-    Theme.ledgerNetBarBg,
-    Theme.textPrimaryDark,
-    Theme.primary,
-    Theme.positive,
-    Theme.teslaRed,
-  ];
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h + id.charCodeAt(i)) % palette.length;
-  return palette[h];
+function seedColor(_id: string): string {
+  return "#64748B";
+}
+
+function subtleAvatarBg(_id: string): string {
+  return "#F8FAFC";
 }
 
 /** Min height for horizontal hub connection row (carousel / side-scroll). Kept exported for callers & stable bundles. */
@@ -184,6 +179,7 @@ export function HubConnectionListCard({
 
 export function HubConnectionGridCard({ item }: { item: HubConnectionItem }) {
   const color = seedColor(item.id);
+  const avatarBg = subtleAvatarBg(item.id);
   const rs = ROLE_STYLES[item.role];
   return (
     <View style={styles.gridOuter}>
@@ -199,7 +195,7 @@ export function HubConnectionGridCard({ item }: { item: HubConnectionItem }) {
       </View>
       <View style={[styles.gridInner, { borderColor: Theme.borderLight }]}>
         <View style={styles.gridAvatarWrap}>
-          <View style={[styles.gridAvatar, { backgroundColor: color + "20" }]}>
+          <View style={[styles.gridAvatar, { backgroundColor: avatarBg }]}>
             <Text style={[styles.gridAvatarTxt, { color }]}>{getInitials(item.name)}</Text>
           </View>
           <View style={styles.gridOnlineDot} />
@@ -415,9 +411,8 @@ const styles = StyleSheet.create({
   },
   entityName: {
     fontSize: 12,
-    fontWeight: "700",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
+    fontWeight: "500",
+    color: "#475569",
     letterSpacing: -0.2,
     lineHeight: 15,
     textAlign: "center",
@@ -481,15 +476,13 @@ const styles = StyleSheet.create({
   },
   metaChipText: {
     fontSize: 8,
-    fontWeight: "700",
-    fontStyle: "italic",
+    fontWeight: "500",
     color: Theme.textSecondary,
   },
   statusMetaChipText: {
     fontSize: 8,
-    fontWeight: "700",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
+    fontWeight: "500",
+    color: "#64748B",
   },
   statusMetaChipTextIntegrated: {
     color: Theme.positive,
@@ -584,9 +577,9 @@ const styles = StyleSheet.create({
   },
   joinedBtnText: {
     fontSize: 10,
-    fontWeight: "700",
-    fontStyle: "italic",
+    fontWeight: "500",
     color: Theme.positive,
+    letterSpacing: 0.1,
   },
   inviteBtn: {
     minHeight: 34,
@@ -612,10 +605,9 @@ const styles = StyleSheet.create({
   },
   inviteBtnText: {
     fontSize: 10,
-    fontWeight: "700",
-    fontStyle: "italic",
+    fontWeight: "500",
     color: Theme.textOnPrimary,
-    letterSpacing: 0.15,
+    letterSpacing: 0.1,
   },
   handshakeBtn: {
     width: 40,
@@ -638,14 +630,14 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   rolePillSm: { paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6 },
-  rolePillSmText: { fontSize: 7, fontWeight: "900", letterSpacing: 0.4 },
+  rolePillSmText: { fontSize: 7, fontWeight: "600", letterSpacing: 0.25 },
   onAppPillSm: {
     backgroundColor: `${Theme.positive}14`,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
   },
-  onAppPillSmText: { fontSize: 7, fontWeight: "900", color: Theme.positive },
+  onAppPillSmText: { fontSize: 7, fontWeight: "600", color: Theme.positive, letterSpacing: 0.2 },
   gridInner: {
     backgroundColor: Theme.screenBackground,
     borderRadius: 16,
@@ -660,8 +652,10 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#EEF2F7",
   },
-  gridAvatarTxt: { fontSize: 14, fontWeight: "900" },
+  gridAvatarTxt: { fontSize: 14, fontWeight: "500", letterSpacing: 0.04, color: "#6B7280" },
   gridOnlineDot: {
     position: "absolute",
     right: 0,
@@ -675,9 +669,10 @@ const styles = StyleSheet.create({
   },
   gridName: {
     fontSize: 11,
-    fontWeight: "800",
-    color: Theme.textPrimary,
+    fontWeight: "500",
+    color: "#475569",
     textAlign: "center",
     lineHeight: 15,
+    letterSpacing: 0.1,
   },
 });
