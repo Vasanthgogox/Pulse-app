@@ -1,25 +1,37 @@
-/**
- * Treasury header + tab row + summary card (totals, search, filters).
- */
+import { DatePresetPillBar } from "@/components/DatePresetPillBar";
+import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useRouter } from "expo-router";
-import { Text, TouchableOpacity, View } from "react-native";
-import type { FinanceSubTab } from "../types";
+import { LinearGradient } from "expo-linear-gradient";
+import { useEffect, type ReactNode } from "react";
+import {
+    Platform,
+    Pressable,
+    Text,
+    View
+} from "react-native";
+import Animated, {
+    Easing,
+    interpolate,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSpring,
+    withTiming,
+} from "react-native-reanimated";
+import type {
+    FinancePeriodFilter,
+    FinanceSubTab,
+    LedgerCategory,
+} from "../types";
 import { styles } from "./FinanceScreen.styles";
 import { FinanceTabRow } from "./FinanceTabRow";
 import type { EntityListFilter } from "./TreasurySummaryCard";
 import { TreasurySummaryCard } from "./TreasurySummaryCard";
-import type { FinancePeriodFilter, LedgerCategory } from "../types";
-import { DatePresetPillBar } from "@/components/DatePresetPillBar";
 
 export type LedgerViewMode = "table" | "transaction";
 
 export interface FinanceSummarySectionProps {
-  /** Header title (e.g. translated "Treasury"). */
-  title?: string;
-  /** Header subtitle (e.g. translated "Financial Summary"). */
-  subtitle?: string;
   activeTab: FinanceSubTab;
   onTabPress: (tabId: FinanceSubTab) => void;
   screenWidth: number;
@@ -41,7 +53,9 @@ export interface FinanceSummarySectionProps {
   garagePeriod?: string;
   onGaragePeriodChange?: (v: string) => void;
   garageViewTab?: "vehicle" | "trips" | "revenue" | "profit";
-  onGarageViewTabChange?: (v: "vehicle" | "trips" | "revenue" | "profit") => void;
+  onGarageViewTabChange?: (
+    v: "vehicle" | "trips" | "revenue" | "profit",
+  ) => void;
   showPeriodFilter?: boolean;
   periodFilter?: FinancePeriodFilter;
   onPeriodFilterChange?: (p: FinancePeriodFilter) => void;
@@ -68,11 +82,280 @@ export interface FinanceSummarySectionProps {
   onLedgerCategoryChange?: (c: LedgerCategory) => void;
   onClearFilters?: () => void;
   isAnyFilterActive?: boolean;
+  auditedTotalIn?: number;
+  auditedTotalOut?: number;
+  onQuickCustomRange?: (fromIso: string, toIso: string) => void;
+  desktopCardMetrics?: Partial<
+    Record<
+      "cash" | "customers" | "suppliers" | "garage" | "drivers",
+      {
+        value: string;
+        count: number;
+        secondaryLabel: string;
+        secondaryValue: string;
+      }
+    >
+  >;
+}
+
+function formatAmount(value: number): string {
+  return `₹${value.toLocaleString("en-IN", {
+    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+  })}`;
+}
+
+function formatCompactAmount(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1000) {
+    const k = value / 1000;
+    const rounded = Number.isInteger(k) ? k.toFixed(0) : k.toFixed(1);
+    return `₹${rounded}k`;
+  }
+  return formatAmount(value);
+}
+
+function AnimatedFinanceHeroCard({
+  desktop,
+  onPress,
+  children,
+}: {
+  desktop: boolean;
+  onPress: () => void;
+  children: ReactNode;
+}) {
+  const hover = useSharedValue(0);
+  const press = useSharedValue(0);
+  const float = useSharedValue(0);
+
+  useEffect(() => {
+    if (!desktop) return;
+    float.value = withRepeat(
+      withTiming(1, { duration: 2600, easing: Easing.inOut(Easing.quad) }),
+      -1,
+      true,
+    );
+  }, [desktop, float]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: interpolate(hover.value, [0, 1], [0, -2]) },
+      {
+        scale:
+          interpolate(hover.value, [0, 1], [1, 1.006]) *
+          interpolate(press.value, [0, 1], [1, 0.992]),
+      },
+    ],
+  }));
+
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(hover.value, [0, 1], [0.1, 0.24]),
+    transform: [{ translateY: interpolate(float.value, [0, 1], [0, -4]) }],
+  }));
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onHoverIn={() => {
+        hover.value = withTiming(1, { duration: 150 });
+      }}
+      onHoverOut={() => {
+        hover.value = withTiming(0, { duration: 160 });
+      }}
+      onPressIn={() => {
+        press.value = withSpring(1, { damping: 16, stiffness: 260 });
+      }}
+      onPressOut={() => {
+        press.value = withSpring(0, { damping: 16, stiffness: 260 });
+      }}
+      style={styles.financeBalanceCardPressable}
+    >
+      <Animated.View style={[styles.financeBalanceCardGlow, glowStyle]} />
+      <Animated.View
+        style={[styles.financeBalanceCardInnerWrap, animatedStyle]}
+      >
+        {children}
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+function AnimatedFinanceCategoryCard({
+  label,
+  value,
+  icon,
+  gradient,
+  count,
+  secondaryLabel,
+  secondaryValue,
+  onPress,
+  style,
+  desktop,
+}: {
+  label: string;
+  value: string;
+  icon: string;
+  gradient: readonly [string, string];
+  count?: number;
+  secondaryLabel?: string;
+  secondaryValue?: string;
+  onPress: () => void;
+  style?: any;
+  desktop?: boolean;
+}) {
+  const hover = useSharedValue(0);
+  const press = useSharedValue(0);
+  const decorFloat = useSharedValue(0);
+
+  useEffect(() => {
+    decorFloat.value = withRepeat(
+      withTiming(1, { duration: 2200, easing: Easing.inOut(Easing.quad) }),
+      -1,
+      true,
+    );
+  }, [decorFloat]);
+
+  const cardAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: interpolate(hover.value, [0, 1], [0, -2]) },
+      {
+        scale:
+          interpolate(hover.value, [0, 1], [1, 1.018]) *
+          interpolate(press.value, [0, 1], [1, 0.985]),
+      },
+    ],
+  }));
+  const decorAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: interpolate(decorFloat.value, [0, 1], [0, -4]) },
+      { scale: interpolate(hover.value, [0, 1], [1, 1.06]) },
+    ],
+    opacity: interpolate(hover.value, [0, 1], [0.17, 0.24]),
+  }));
+  const iconBadgeAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: interpolate(hover.value, [0, 1], [1, 1.1]) },
+      { rotate: `${interpolate(hover.value, [0, 1], [0, -5])}deg` },
+    ],
+  }));
+  const ctaArrowAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: interpolate(hover.value, [0, 1], [0, 3]) }],
+  }));
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onHoverIn={() => {
+        hover.value = withTiming(1, { duration: 150 });
+      }}
+      onHoverOut={() => {
+        hover.value = withTiming(0, { duration: 160 });
+      }}
+      onPressIn={() => {
+        press.value = withSpring(1, { damping: 16, stiffness: 250 });
+      }}
+      onPressOut={() => {
+        press.value = withSpring(0, { damping: 16, stiffness: 250 });
+      }}
+      style={style}
+    >
+      <Animated.View
+        style={[styles.financeCategoryAnimatedWrap, cardAnimatedStyle]}
+      >
+        <LinearGradient
+          colors={gradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[
+            styles.financeCategoryCardGradient,
+            desktop && styles.financeCategoryCardGradientDesktop,
+          ]}
+        >
+          <Animated.View
+            style={[
+              styles.financeCategoryDecorIcon,
+              desktop && styles.financeCategoryDecorIconDesktop,
+              decorAnimatedStyle,
+            ]}
+          >
+            <FontAwesome
+              name={icon as any}
+              size={desktop ? 68 : 56}
+              color={Theme.textOnDark}
+            />
+          </Animated.View>
+          <View style={styles.financeCategoryTop}>
+            <Animated.View
+              style={[
+                styles.financeCategoryIconBadge,
+                desktop && styles.financeCategoryIconBadgeDesktop,
+                iconBadgeAnimatedStyle,
+              ]}
+            >
+              <FontAwesome
+                name={icon as any}
+                size={desktop ? 12 : 11}
+                color={Theme.textOnDark}
+              />
+            </Animated.View>
+            <Text
+              style={[
+                styles.financeCategoryTitle,
+                desktop && styles.financeCategoryTitleDesktop,
+              ]}
+            >
+              {label}
+            </Text>
+            <View style={styles.financeCategoryCountPill}>
+              <Text style={styles.financeCategoryCountText}>
+                {typeof count === "number"
+                  ? count.toLocaleString("en-IN")
+                  : "0"}
+              </Text>
+            </View>
+          </View>
+          <Text
+            style={[
+              styles.financeCategoryValue,
+              desktop && styles.financeCategoryValueDesktop,
+            ]}
+          >
+            {value}
+          </Text>
+          {secondaryLabel != null && secondaryValue != null && (
+            <View style={styles.financeCategorySecondaryRow}>
+              <Text style={styles.financeCategorySecondaryLabel}>
+                {secondaryLabel}
+              </Text>
+              <Text style={styles.financeCategorySecondaryValue}>
+                {secondaryValue}
+              </Text>
+            </View>
+          )}
+          <View style={styles.financeCategoryCtaRow}>
+            <Text
+              style={[
+                styles.financeCategoryCtaText,
+                desktop && styles.financeCategoryCtaTextDesktop,
+              ]}
+            >
+              Grid Profile
+            </Text>
+            <Animated.View style={ctaArrowAnimatedStyle}>
+              <FontAwesome
+                name="arrow-right"
+                size={desktop ? 12 : 11}
+                color={Theme.textOnDark}
+              />
+            </Animated.View>
+          </View>
+        </LinearGradient>
+      </Animated.View>
+    </Pressable>
+  );
 }
 
 export function FinanceSummarySection({
-  title = "Treasury",
-  subtitle = "Financial Summary",
   activeTab,
   onTabPress,
   screenWidth,
@@ -98,177 +381,395 @@ export function FinanceSummarySection({
   showPeriodFilter,
   periodFilter,
   onPeriodFilterChange,
-  datePreset,
   sourceFilter,
   onSourceFilterChange,
-  ledgerViewMode,
-  onLedgerViewModeChange,
-  customerViewMode,
-  onCustomerViewModeChange,
-  onAddClick,
   ledgerCategory,
   onLedgerCategoryChange,
   onClearFilters,
   isAnyFilterActive,
+  datePreset,
+  auditedTotalIn,
+  auditedTotalOut,
+  onQuickCustomRange,
+  desktopCardMetrics,
 }: FinanceSummarySectionProps) {
-  const router = useRouter();
   const { t } = useLanguage();
-  return (
-    <>
-      <View style={[styles.darkBlock, { paddingTop: 0 }]}>
-        <View style={styles.darkBlockContent}>
-          <TreasurySummaryCard
-            fullWidth
-            topContent={
-              <>
+  const auditedIn = auditedTotalIn ?? totalIn;
+  const auditedOut = auditedTotalOut ?? totalOut;
+  const auditedNet = auditedIn - auditedOut;
+  // Enable parity cards only on true desktop widths; keep mobile/tablet unchanged.
+  const desktopParity = Platform.OS === "web" && screenWidth >= 1024;
+  const desktopFourCardParity = Platform.OS === "web" && screenWidth >= 1024;
+  const heroDecorDrift = useSharedValue(0);
+  const heroStatPulse = useSharedValue(0);
+  const rangePills = [
+    { id: "RANGE" as FinancePeriodFilter, label: "All" },
+    { id: "TODAY" as FinancePeriodFilter, label: "Today" },
+    { id: "WEEK" as FinancePeriodFilter, label: "Last 7 Days" },
+    { id: "MONTH" as FinancePeriodFilter, label: "This Month" },
+  ];
+
+  useEffect(() => {
+    if (!desktopParity) return;
+    heroDecorDrift.value = withRepeat(
+      withTiming(1, { duration: 3200, easing: Easing.inOut(Easing.quad) }),
+      -1,
+      true,
+    );
+    heroStatPulse.value = withRepeat(
+      withTiming(1, { duration: 1700, easing: Easing.inOut(Easing.quad) }),
+      -1,
+      true,
+    );
+  }, [desktopParity, heroDecorDrift, heroStatPulse]);
+
+  const heroDecorAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: interpolate(heroDecorDrift.value, [0, 1], [0, -6]) },
+      { rotate: `${interpolate(heroDecorDrift.value, [0, 1], [10, 2])}deg` },
+      { scale: interpolate(heroDecorDrift.value, [0, 1], [1, 1.04]) },
+    ],
+    opacity: interpolate(heroDecorDrift.value, [0, 1], [0.12, 0.22]),
+  }));
+
+  const heroStatPulseStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: interpolate(heroStatPulse.value, [0, 1], [1, 1.06]) }],
+  }));
+
+  if (!desktopParity) {
+    return (
+      <>
+        <View style={[styles.darkBlock, { paddingTop: 0 }]}>
+          <View style={styles.darkBlockContent}>
+            <TreasurySummaryCard
+              fullWidth
+              topContent={
                 <FinanceTabRow
                   activeTab={activeTab}
                   onTabPress={onTabPress}
                   screenWidth={screenWidth}
                 />
-                {(activeTab as FinanceSubTab | "ledger") === "ledger" &&
-                  onLedgerViewModeChange != null &&
-                  ledgerViewMode != null && (
-                  <View style={styles.ledgerViewModeRow}>
-                    <TouchableOpacity
-                      style={[
-                        styles.ledgerViewModePill,
-                        ledgerViewMode === "table" && styles.ledgerViewModePillActive,
-                      ]}
-                      onPress={() => onLedgerViewModeChange("table")}
-                      activeOpacity={0.8}
-                    >
-                      <Text
+              }
+              totalIn={totalIn}
+              totalOut={totalOut}
+              labelIn={labelIn}
+              labelOut={labelOut}
+              cashDirectionFilter={cashDirectionFilter}
+              onCashInPress={onCashInPress}
+              onCashOutPress={onCashOutPress}
+              ledgerCategory={ledgerCategory}
+              onLedgerCategoryChange={onLedgerCategoryChange}
+              searchQuery={searchQuery}
+              onSearchChange={onSearchChange}
+              searchPlaceholder={searchPlaceholder}
+              onReportPress={onReportPress}
+              entityFilter={entityFilter}
+              onEntityFilterChange={onEntityFilterChange}
+              entityFilterLabels={entityFilterLabels}
+              garagePeriodOptions={garagePeriodOptions}
+              garagePeriod={garagePeriod}
+              onGaragePeriodChange={onGaragePeriodChange}
+              garageViewTab={garageViewTab}
+              onGarageViewTabChange={onGarageViewTabChange}
+              showPeriodFilter={showPeriodFilter}
+              periodFilter={periodFilter}
+              onPeriodFilterChange={onPeriodFilterChange}
+              sourceFilter={sourceFilter}
+              onSourceFilterChange={onSourceFilterChange}
+              amountAnimationResetKey={activeTab}
+              cashNetworkLayout
+              onClearFilters={onClearFilters}
+              isAnyFilterActive={isAnyFilterActive}
+            />
+          </View>
+        </View>
+        {datePreset != null && (
+          <View style={styles.financeDatePresetOutsideWrap}>
+            <DatePresetPillBar
+              variant="onLight"
+              period={datePreset.period}
+              onPeriodChange={datePreset.onPeriodChange}
+              onCustomRangePress={datePreset.onCustomRangePress}
+              customFrom={datePreset.customFrom}
+              customTo={datePreset.customTo}
+            />
+          </View>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <View style={styles.financeCardsBlock}>
+        <View style={styles.financeCardsGrid}>
+          <AnimatedFinanceHeroCard
+            desktop={desktopParity}
+            onPress={() => onTabPress("cash")}
+          >
+            <View
+              style={[
+                styles.financeBalanceCard,
+                desktopParity && styles.financeBalanceCardDesktop,
+              ]}
+            >
+              <Animated.View
+                style={[
+                  styles.financeBalanceDecorIconWrap,
+                  heroDecorAnimatedStyle,
+                ]}
+              >
+                <FontAwesome
+                  name="book"
+                  size={desktopParity ? 132 : 92}
+                  color={Theme.textOnDark}
+                  style={styles.financeBalanceDecorIcon}
+                />
+              </Animated.View>
+              <View style={styles.financeBalanceTopRow}>
+                <Text style={styles.financeBalanceEyebrow}>
+                  Audited Operating Balance
+                </Text>
+                {datePreset != null && (
+                  <View style={styles.financeRangeDesktopWrap}>
+                    <Text style={styles.financeRangeLabel}>Range</Text>
+                    <View style={styles.financeRangeDesktopPillRow}>
+                      {rangePills.map((pill) => {
+                        const active = datePreset.period === pill.id;
+                        return (
+                          <Pressable
+                            key={pill.id}
+                            onPress={() => datePreset.onPeriodChange(pill.id)}
+                            style={[
+                              styles.financeRangePill,
+                              styles.financeRangePillDesktop,
+                              active && styles.financeRangePillActive,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.financeRangePillText,
+                                active && styles.financeRangePillTextActive,
+                              ]}
+                            >
+                              {pill.label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                      <Pressable
+                        onPress={() => {
+                          if (onQuickCustomRange) {
+                            const now = new Date();
+                            const from = new Date(
+                              now.getFullYear(),
+                              now.getMonth() - 1,
+                              1,
+                            );
+                            const to = new Date(
+                              now.getFullYear(),
+                              now.getMonth(),
+                              0,
+                              23,
+                              59,
+                              59,
+                            );
+                            onQuickCustomRange(
+                              from.toISOString(),
+                              to.toISOString(),
+                            );
+                          }
+                        }}
                         style={[
-                          styles.ledgerViewModePillText,
-                          ledgerViewMode === "table" && styles.ledgerViewModePillTextActive,
+                          styles.financeRangePill,
+                          styles.financeRangePillDesktop,
+                          datePreset.period === "CUSTOM" &&
+                            styles.financeRangePillActive,
                         ]}
                       >
-                        {t("tableView")}
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.ledgerViewModePill,
-                        ledgerViewMode === "transaction" && styles.ledgerViewModePillActive,
-                      ]}
-                      onPress={() => onLedgerViewModeChange("transaction")}
-                      activeOpacity={0.8}
-                    >
-                      <Text
+                        <Text
+                          style={[
+                            styles.financeRangePillText,
+                            datePreset.period === "CUSTOM" &&
+                              styles.financeRangePillTextActive,
+                          ]}
+                        >
+                          Last Month
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => datePreset.onCustomRangePress()}
                         style={[
-                          styles.ledgerViewModePillText,
-                          ledgerViewMode === "transaction" && styles.ledgerViewModePillTextActive,
+                          styles.financeRangePill,
+                          styles.financeRangePillDesktop,
+                          styles.financeRangePillCustom,
                         ]}
                       >
-                        {t("transactionView")}
-                      </Text>
-                    </TouchableOpacity>
+                        <FontAwesome
+                          name="calendar"
+                          size={11}
+                          color={Theme.textOnDarkMuted}
+                        />
+                        <Text style={styles.financeRangePillText}>Custom</Text>
+                      </Pressable>
+                    </View>
                   </View>
                 )}
-              </>
-            }
-          filterRowRight={
-            activeTab === "customers" &&
-            onCustomerViewModeChange != null &&
-            customerViewMode != null
-              ? (() => {
-                  const active = (m: "matrix" | "table" | "ledger") =>
-                    customerViewMode === m ? Theme.textOnDark : Theme.textOnDarkMuted;
-                  return (
-                    <>
-                      <TouchableOpacity
-                        style={[
-                          styles.customerViewModeIconPill,
-                          customerViewMode === "matrix" && styles.ledgerViewModePillActive,
-                        ]}
-                        onPress={() => onCustomerViewModeChange("matrix")}
-                        activeOpacity={0.8}
-                        accessibilityLabel={t("matrix")}
-                        accessibilityRole="button"
-                      >
-                        <FontAwesome name="th-large" size={11} color={active("matrix")} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.customerViewModeIconPill,
-                          customerViewMode === "table" && styles.ledgerViewModePillActive,
-                        ]}
-                        onPress={() => onCustomerViewModeChange("table")}
-                        activeOpacity={0.8}
-                        accessibilityLabel={t("tableView")}
-                        accessibilityRole="button"
-                      >
-                        <FontAwesome name="table" size={11} color={active("table")} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.customerViewModeIconPill,
-                          customerViewMode === "ledger" && styles.ledgerViewModePillActive,
-                        ]}
-                        onPress={() => onCustomerViewModeChange("ledger")}
-                        activeOpacity={0.8}
-                        accessibilityLabel={t("ledger")}
-                        accessibilityRole="button"
-                      >
-                        <FontAwesome name="list" size={11} color={active("ledger")} />
-                      </TouchableOpacity>
-                    </>
-                  );
-                })()
-              : undefined
-          }
-          totalIn={totalIn}
-          totalOut={totalOut}
-          labelIn={labelIn}
-          labelOut={labelOut}
-          cashDirectionFilter={cashDirectionFilter}
-          onCashInPress={onCashInPress}
-          onCashOutPress={onCashOutPress}
-          ledgerCategory={ledgerCategory}
-          onLedgerCategoryChange={onLedgerCategoryChange}
-          searchQuery={searchQuery}
-          onSearchChange={onSearchChange}
-          searchPlaceholder={searchPlaceholder}
-          onReportPress={onReportPress}
-          entityFilter={entityFilter}
-          onEntityFilterChange={onEntityFilterChange}
-          entityFilterLabels={entityFilterLabels}
-          garagePeriodOptions={garagePeriodOptions}
-          garagePeriod={garagePeriod}
-          onGaragePeriodChange={onGaragePeriodChange}
-          garageViewTab={garageViewTab}
-          onGarageViewTabChange={onGarageViewTabChange}
-          showPeriodFilter={showPeriodFilter}
-          periodFilter={periodFilter}
-          onPeriodFilterChange={onPeriodFilterChange}
-          sourceFilter={sourceFilter}
-          onSourceFilterChange={onSourceFilterChange}
-          amountAnimationResetKey={activeTab}
-          cashNetworkLayout={
-            activeTab === "cash" ||
-            activeTab === "customers" ||
-            activeTab === "suppliers" ||
-            activeTab === "garage" ||
-            activeTab === "drivers"
-          }
-          onClearFilters={onClearFilters}
-          isAnyFilterActive={isAnyFilterActive}
-          />
+              </View>
+              <Text style={styles.financeBalanceValue}>
+                {formatAmount(auditedNet)}
+              </Text>
+              <View style={styles.financeBalanceStatsRow}>
+                <View style={styles.financeBalanceStat}>
+                  <Animated.View
+                    style={[
+                      styles.financeBalanceStatIconIn,
+                      heroStatPulseStyle,
+                    ]}
+                  >
+                    <FontAwesome
+                      name="arrow-circle-down"
+                      size={desktopParity ? 15 : 13}
+                      color={Theme.textOnDark}
+                    />
+                  </Animated.View>
+                  <View>
+                    <Text style={styles.financeBalanceStatLabel}>Incoming</Text>
+                    <Text style={styles.financeBalanceStatValue}>
+                      {formatAmount(auditedIn)}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.financeBalanceStat}>
+                  <Animated.View
+                    style={[
+                      styles.financeBalanceStatIconOut,
+                      heroStatPulseStyle,
+                    ]}
+                  >
+                    <FontAwesome
+                      name="arrow-circle-up"
+                      size={desktopParity ? 15 : 13}
+                      color={Theme.textOnDark}
+                    />
+                  </Animated.View>
+                  <View>
+                    <Text style={styles.financeBalanceStatLabel}>Outgoing</Text>
+                    <Text style={styles.financeBalanceStatValue}>
+                      {formatAmount(auditedOut)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          </AnimatedFinanceHeroCard>
+        </View>
+
+        <View
+          style={[
+            styles.financeCategoryCardsRow,
+            desktopFourCardParity && styles.financeCategoryCardsRowDesktopGrid,
+          ]}
+        >
+          {[
+            {
+              id: "cash" as FinanceSubTab,
+              label: "Cash",
+              value:
+                desktopCardMetrics?.cash?.value ??
+                formatCompactAmount(auditedNet),
+              icon: "money",
+              count: desktopCardMetrics?.cash?.count ?? 0,
+              secondaryLabel:
+                desktopCardMetrics?.cash?.secondaryLabel ?? "Total Outstanding",
+              secondaryValue:
+                desktopCardMetrics?.cash?.secondaryValue ??
+                formatAmount(auditedOut),
+              gradient: [
+                Theme.financeCardCashFrom,
+                Theme.financeCardCashTo,
+              ] as const,
+            },
+            {
+              id: "customers" as FinanceSubTab,
+              label: "Client Revenue",
+              value: desktopCardMetrics?.customers?.value ?? "₹45k",
+              icon: "building",
+              count: desktopCardMetrics?.customers?.count ?? 0,
+              secondaryLabel:
+                desktopCardMetrics?.customers?.secondaryLabel ?? "Outstanding",
+              secondaryValue:
+                desktopCardMetrics?.customers?.secondaryValue ?? "₹0",
+              gradient: [
+                Theme.financeCardBlueFrom,
+                Theme.financeCardBlueTo,
+              ] as const,
+            },
+            {
+              id: "suppliers" as FinanceSubTab,
+              label: "Supplier Payables",
+              value: desktopCardMetrics?.suppliers?.value ?? "₹14k",
+              icon: "industry",
+              count: desktopCardMetrics?.suppliers?.count ?? 0,
+              secondaryLabel:
+                desktopCardMetrics?.suppliers?.secondaryLabel ?? "Outstanding",
+              secondaryValue:
+                desktopCardMetrics?.suppliers?.secondaryValue ?? "₹0",
+              gradient: [
+                Theme.financeCardOrangeFrom,
+                Theme.financeCardOrangeTo,
+              ] as const,
+            },
+            {
+              id: "garage" as FinanceSubTab,
+              label: "Vehicle Opex",
+              value: desktopCardMetrics?.garage?.value ?? "₹22.0k",
+              icon: "truck",
+              count: desktopCardMetrics?.garage?.count ?? 0,
+              secondaryLabel:
+                desktopCardMetrics?.garage?.secondaryLabel ?? "Total Expense",
+              secondaryValue:
+                desktopCardMetrics?.garage?.secondaryValue ?? "₹0",
+              gradient: [
+                Theme.financeCardSlateFrom,
+                Theme.financeCardSlateTo,
+              ] as const,
+            },
+            {
+              id: "drivers" as FinanceSubTab,
+              label: "Fleet Payroll",
+              value: desktopCardMetrics?.drivers?.value ?? "₹0.0k",
+              icon: "user",
+              count: desktopCardMetrics?.drivers?.count ?? 0,
+              secondaryLabel:
+                desktopCardMetrics?.drivers?.secondaryLabel ?? "Pending",
+              secondaryValue:
+                desktopCardMetrics?.drivers?.secondaryValue ?? "₹0",
+              gradient: [
+                Theme.financeCardGreenFrom,
+                Theme.financeCardGreenTo,
+              ] as const,
+            },
+          ].map((card) => (
+            <AnimatedFinanceCategoryCard
+              key={card.id}
+              label={card.label}
+              value={card.value}
+              icon={card.icon}
+              gradient={card.gradient}
+              count={card.count}
+              secondaryLabel={card.secondaryLabel}
+              secondaryValue={card.secondaryValue}
+              onPress={() => onTabPress(card.id)}
+              desktop={desktopParity}
+              style={[
+                styles.financeCategoryCard,
+                desktopFourCardParity && styles.financeCategoryCardDesktop,
+              ]}
+            />
+          ))}
         </View>
       </View>
-      {datePreset != null && (
-        <View style={styles.financeDatePresetOutsideWrap}>
-          <DatePresetPillBar
-            variant="onLight"
-            period={datePreset.period}
-            onPeriodChange={datePreset.onPeriodChange}
-            onCustomRangePress={datePreset.onCustomRangePress}
-            customFrom={datePreset.customFrom}
-            customTo={datePreset.customTo}
-          />
-        </View>
-      )}
     </>
   );
 }

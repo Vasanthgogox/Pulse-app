@@ -3,13 +3,17 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Animated,
+  Easing,
   Image,
   Modal,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -58,6 +62,8 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
   const { profile } = useAuth();
   const { currentOrganization } = useOrganization();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const isWebDesktop = Platform.OS === "web" && windowWidth >= 1024;
   const router = useRouter();
   const capabilities = getCapabilitiesFromProfile(
     profile ? { role: profile.role, aggregated: profile.aggregated, asset: profile.asset } : null,
@@ -76,6 +82,33 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
+  const heroDecorProgress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!isWebDesktop) {
+      heroDecorProgress.stopAnimation();
+      heroDecorProgress.setValue(0);
+      return;
+    }
+    const decorLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(heroDecorProgress, {
+          toValue: 1,
+          duration: 3200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(heroDecorProgress, {
+          toValue: 0,
+          duration: 3200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    decorLoop.start();
+    return () => decorLoop.stop();
+  }, [heroDecorProgress, isWebDesktop]);
 
   const load = useCallback(() => {
     if (!vehicleId || !currentOrganization?.id) {
@@ -241,7 +274,6 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
     () => missionRows.reduce((s, r) => s + r.profit, 0),
     [missionRows],
   );
-  const health = contractValue > 0 ? Math.round((profit / contractValue) * 100) : 0;
 
   const handleVehicleEntrySubmit = useCallback(
     (data: Parameters<typeof createLedgerEntry>[1]) => {
@@ -298,6 +330,28 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
     .join(' ') || vehicle.vehicle_type || '—';
 
   const truckImage = getVehicleTypeImage(vehicle.vehicle_type);
+  const heroDecorAnimatedStyle = isWebDesktop
+    ? {
+        opacity: heroDecorProgress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.16, 0.3],
+        }),
+        transform: [
+          {
+            translateY: heroDecorProgress.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, -6],
+            }),
+          },
+          {
+            rotate: heroDecorProgress.interpolate({
+              inputRange: [0, 1],
+              outputRange: ["10deg", "4deg"],
+            }),
+          },
+        ],
+      }
+    : undefined;
 
   return (
     <View style={[styles.wrap, { paddingTop: insets.top }]}>
@@ -355,6 +409,11 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
         }
       >
         <View style={styles.scorecard}>
+          {isWebDesktop ? (
+            <Animated.View style={[styles.scorecardDecorIconWrap, heroDecorAnimatedStyle]}>
+              <FontAwesome name="book" size={120} color={Theme.textOnDark} style={styles.scorecardDecorIcon} />
+            </Animated.View>
+          ) : null}
           <View style={styles.scorecardTop}>
             <View style={styles.scorecardLeft}>
               <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
@@ -362,15 +421,6 @@ export default function VehicleDetailScreen({ vehicleId, onBack }: VehicleDetail
               <Text style={styles.scorecardAmount}>
                 {formatINR(contractValue)}
               </Text>
-            </View>
-            <View style={styles.healthCircle}>
-              <View
-                style={[
-                  styles.healthCircleFill,
-                  { height: `${Math.min(100, health)}%` },
-                ]}
-              />
-              <Text style={styles.healthCircleText}>{health}%</Text>
             </View>
           </View>
           <View style={styles.scorecardGrid}>
@@ -713,6 +763,14 @@ const styles = StyleSheet.create({
     padding: 32,
     marginBottom: 24,
     overflow: "hidden",
+  },
+  scorecardDecorIconWrap: {
+    position: "absolute",
+    right: -14,
+    top: -16,
+  },
+  scorecardDecorIcon: {
+    transform: [{ rotate: "12deg" }],
   },
   scorecardTop: {
     flexDirection: "row",

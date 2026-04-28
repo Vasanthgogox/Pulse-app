@@ -10,16 +10,13 @@ import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { getDriversByOrganization, type DriverRow } from "@/features/drivers";
 import {
-    getDriversByOrganization,
-    type DriverRow,
-} from "@/features/drivers";
-import {
-    getTransactionsByOrganization,
-    LedgerReportModal,
-    SharedLedgerContent,
-    type LedgerEntry,
-    type LedgerRow,
+  getTransactionsByOrganization,
+  LedgerReportModal,
+  SharedLedgerContent,
+  type LedgerEntry,
+  type LedgerRow,
 } from "@/features/finance";
 import { LedgerTransactionListView } from "@/features/finance/components/LedgerTransactionListView";
 import { TreasuryDetailLayout } from "@/features/finance/components/TreasuryDetailLayout";
@@ -27,21 +24,24 @@ import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPer
 import type { FinancePeriodFilter } from "@/features/finance/types";
 import { allocateAmountsToLargestDueTrips } from "@/features/finance/utils/allocateToLargestDue";
 import {
-    getSuppliersByOrganization,
-    type SupplierRow,
+  getSuppliersByOrganization,
+  type SupplierRow,
 } from "@/features/suppliers/services/suppliers.service";
 import { adjustedRevenue } from "@/features/trips/services/tripAdjustments";
 import {
-    getTripDisplayNumber,
-    getTripsByOrganization,
-    getTripsWhereOrgIsSupplier,
-    type TripRow,
+  getTripDisplayNumber,
+  getTripsByOrganization,
+  getTripsWhereOrgIsSupplier,
+  type TripRow,
 } from "@/features/trips/services/trips.service";
-import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
+import {
+  buildUniqueLinkedOrgIdMap,
+  isLoadBasedTrip,
+} from "@/features/trips/visibility/tripVisibility";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
-    canAccessFinance,
-    getCapabilitiesFromProfile,
+  canAccessFinance,
+  getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
 import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatINR, formatLedgerDate } from "@/lib/format";
@@ -52,18 +52,20 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    Alert,
-    Image,
-    Modal,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    Share,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    useWindowDimensions,
-    View
+  Alert,
+  Animated,
+  Easing,
+  Image,
+  Modal,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -117,13 +119,17 @@ function mergeTripOwnerWithSupplierCopy(
   const ownerSid = (owner.supplier_id ?? "").trim();
   const altSid = (supplierCopy.supplier_id ?? "").trim();
   const supplier_id =
-    ownerSid || altSid ? ownerSid || altSid : owner.supplier_id ?? supplierCopy.supplier_id ?? null;
+    ownerSid || altSid
+      ? ownerSid || altSid
+      : (owner.supplier_id ?? supplierCopy.supplier_id ?? null);
 
   const ownerSn = (owner.supplier_name ?? "").trim();
   const altSn = (supplierCopy.supplier_name ?? "").trim();
   let supplier_name = owner.supplier_name ?? supplierCopy.supplier_name;
-  if (ownerSn && !isUuidLikeString(ownerSn)) supplier_name = owner.supplier_name;
-  else if (altSn && !isUuidLikeString(altSn)) supplier_name = supplierCopy.supplier_name;
+  if (ownerSn && !isUuidLikeString(ownerSn))
+    supplier_name = owner.supplier_name;
+  else if (altSn && !isUuidLikeString(altSn))
+    supplier_name = supplierCopy.supplier_name;
 
   return { ...owner, supplier_id, supplier_name };
 }
@@ -136,7 +142,10 @@ function supplierPartyAvatarProps(
   trip: TripRow,
   displayName: string,
   supplierById: Map<string, SupplierRow>,
-  linkedOrgBySupplierOrgId: Record<string, { avatarUrl?: string; avatarSeed?: string }>,
+  linkedOrgBySupplierOrgId: Record<
+    string,
+    { avatarUrl?: string; avatarSeed?: string }
+  >,
   partnerOrgBrandingByTripOwnerOrgId: Record<string, PartnerOrgBranding>,
 ): {
   name: string;
@@ -244,17 +253,21 @@ export default function ClientDetailScreen({
   >({});
   const fetchedPartnerOrgIdsRef = useRef<Set<string>>(new Set());
   const [transactions, setTransactions] = useState<LedgerRow[]>([]);
-  const [orgTrips, setOrgTrips] = useState<TripRow[]>([]);
+  const [, setOrgTrips] = useState<TripRow[]>([]);
   const [showReportModal, setShowReportModal] = useState(false);
   /** Bumps SharedLedgerContent to open PDF/Excel (Shared tab) from header download. */
-  const [sharedLedgerDownloadSignal, setSharedLedgerDownloadSignal] = useState(0);
+  const [sharedLedgerDownloadSignal, setSharedLedgerDownloadSignal] =
+    useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash" | "shared">("trips");
-  const [tripDatePeriod, setTripDatePeriod] = useState<FinancePeriodFilter>("RANGE");
+  const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash" | "shared">(
+    "trips",
+  );
+  const [tripDatePeriod, setTripDatePeriod] =
+    useState<FinancePeriodFilter>("RANGE");
   const [tripCustomFrom, setTripCustomFrom] = useState<string | null>(null);
   const [tripCustomTo, setTripCustomTo] = useState<string | null>(null);
   const [tripDateModalVisible, setTripDateModalVisible] = useState(false);
@@ -265,8 +278,14 @@ export default function ClientDetailScreen({
   const { width: windowWidth } = useWindowDimensions();
   /** Full trip grid only on wide web; narrow web uses the compact column set (matches finance shared ledger). */
   const isWebDesktop = Platform.OS === "web" && windowWidth >= 1024;
-  const webContentGutter = Platform.OS === "web" ? (windowWidth >= 1600 ? 10 : windowWidth >= 1280 ? 12 : 16) : Layout.screenPaddingHorizontal;
-  const [profileEditMode, setProfileEditMode] = useState(false);
+  const webContentGutter =
+    Platform.OS === "web"
+      ? windowWidth >= 1600
+        ? 10
+        : windowWidth >= 1280
+          ? 12
+          : 16
+      : Layout.screenPaddingHorizontal;
   const [editOrgName, setEditOrgName] = useState("");
   const [editContactPerson, setEditContactPerson] = useState("");
   const [editPhone, setEditPhone] = useState("");
@@ -278,6 +297,7 @@ export default function ClientDetailScreen({
   const [isInApp, setIsInApp] = useState(false);
   const [sendingInvitation, setSendingInvitation] = useState(false);
   const initialLoadDoneRef = useRef(false);
+  const heroDecorProgress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     setIsLinked(false);
@@ -306,12 +326,44 @@ export default function ClientDetailScreen({
       });
   }, [client?.phone]);
 
+  useEffect(() => {
+    if (!isWebDesktop) {
+      heroDecorProgress.stopAnimation();
+      heroDecorProgress.setValue(0);
+      return;
+    }
+
+    const decorLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(heroDecorProgress, {
+          toValue: 1,
+          duration: 3200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(heroDecorProgress, {
+          toValue: 0,
+          duration: 3200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    decorLoop.start();
+
+    return () => {
+      decorLoop.stop();
+    };
+  }, [heroDecorProgress, isWebDesktop]);
+
   const load = useCallback(() => {
     if (!clientId || !currentOrganization?.id) {
       setLoading(false);
       return;
     }
-    if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current)
+      setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
     Promise.all([
@@ -333,81 +385,84 @@ export default function ClientDetailScreen({
           suppliersRes,
           driversRes,
         ]) => {
-        if (clientRes.error) {
-          setError(clientRes.error.message);
-          setClient(null);
-        } else {
-          setClient(clientRes.client ?? null);
-        }
-        const ownerTrips = tripsRes.error ? [] : (tripsRes.trips ?? []);
-        const supplierTrips = supplierTripsRes.error
-          ? []
-          : (supplierTripsRes.trips ?? []);
-        const byId = new Map<string, TripRow>();
-        for (const t of ownerTrips) byId.set(t.id, t);
-        for (const t of supplierTrips) {
-          const existing = byId.get(t.id);
-          if (existing) {
-            byId.set(t.id, mergeTripOwnerWithSupplierCopy(existing, t));
+          if (clientRes.error) {
+            setError(clientRes.error.message);
+            setClient(null);
           } else {
-            byId.set(t.id, t);
+            setClient(clientRes.client ?? null);
           }
-        }
-        const allTrips = Array.from(byId.values());
-        setOrgTrips(allTrips);
-        const clientDisplayName = (
-          clientRes.client?.name ||
-          clientRes.client?.contact_person ||
-          ""
-        )
-          .toLowerCase()
-          .trim();
-        const normId = (id: string | null | undefined) =>
-          id == null ? "" : String(id).trim().toLowerCase();
-        const linkedOrgId = clientRes.client?.linked_organization_id ?? null;
-        const linkedClientIdByOrgId = buildUniqueLinkedOrgIdMap(
-          clientsRes.error ? [] : (clientsRes.clients ?? []),
-        );
-        const allTx = txRes.error ? [] : (txRes.transactions ?? []);
-        // Include trips by client_id/name OR by any client transaction (so DUE shows even if trip.client_id is wrong)
-        const tripIdsFromClientTx = new Set(
-          allTx
-            .filter(
-              (tx) =>
-                tx.contact_type === "client" &&
-                tx.contact_id === clientId &&
-                tx.trip_id != null,
-            )
-            .map((tx) => normId(tx.trip_id)),
-        );
-        const forClient = allTrips.filter((t) => {
-          const matchesDirect =
-            t.client_id === clientId ||
-            (clientDisplayName !== "" &&
-              (t.client_name || "").toLowerCase().trim() ===
-                clientDisplayName);
-          const matchesTx = tripIdsFromClientTx.has(normId(t.id));
-          const matchesLinkedOrg =
-            clientRes.client?.is_integrated === true &&
-            linkedOrgId &&
-            isLoadBasedTrip(t) &&
-            t.organization_id &&
-            t.organization_id === linkedOrgId &&
-            linkedClientIdByOrgId.get(linkedOrgId) === clientId;
-          return matchesDirect || matchesTx || matchesLinkedOrg;
-        });
-        setTrips(forClient);
-        setSuppliers(suppliersRes.error ? [] : (suppliersRes.suppliers ?? []));
-        setDrivers(driversRes.error ? [] : (driversRes.drivers ?? []));
-        const forClientTx = allTx.filter((tx) => {
-          return (
-            tx.contact_type === "client" &&
-            tx.contact_id != null &&
-            tx.contact_id === clientId
+          const ownerTrips = tripsRes.error ? [] : (tripsRes.trips ?? []);
+          const supplierTrips = supplierTripsRes.error
+            ? []
+            : (supplierTripsRes.trips ?? []);
+          const byId = new Map<string, TripRow>();
+          for (const t of ownerTrips) byId.set(t.id, t);
+          for (const t of supplierTrips) {
+            const existing = byId.get(t.id);
+            if (existing) {
+              byId.set(t.id, mergeTripOwnerWithSupplierCopy(existing, t));
+            } else {
+              byId.set(t.id, t);
+            }
+          }
+          const allTrips = Array.from(byId.values());
+          setOrgTrips(allTrips);
+          const clientDisplayName = (
+            clientRes.client?.name ||
+            clientRes.client?.contact_person ||
+            ""
+          )
+            .toLowerCase()
+            .trim();
+          const normId = (id: string | null | undefined) =>
+            id == null ? "" : String(id).trim().toLowerCase();
+          const linkedOrgId = clientRes.client?.linked_organization_id ?? null;
+          const linkedClientIdByOrgId = buildUniqueLinkedOrgIdMap(
+            clientsRes.error ? [] : (clientsRes.clients ?? []),
           );
-        });
-        setTransactions(forClientTx);
-      })
+          const allTx = txRes.error ? [] : (txRes.transactions ?? []);
+          // Include trips by client_id/name OR by any client transaction (so DUE shows even if trip.client_id is wrong)
+          const tripIdsFromClientTx = new Set(
+            allTx
+              .filter(
+                (tx) =>
+                  tx.contact_type === "client" &&
+                  tx.contact_id === clientId &&
+                  tx.trip_id != null,
+              )
+              .map((tx) => normId(tx.trip_id)),
+          );
+          const forClient = allTrips.filter((t) => {
+            const matchesDirect =
+              t.client_id === clientId ||
+              (clientDisplayName !== "" &&
+                (t.client_name || "").toLowerCase().trim() ===
+                  clientDisplayName);
+            const matchesTx = tripIdsFromClientTx.has(normId(t.id));
+            const matchesLinkedOrg =
+              clientRes.client?.is_integrated === true &&
+              linkedOrgId &&
+              isLoadBasedTrip(t) &&
+              t.organization_id &&
+              t.organization_id === linkedOrgId &&
+              linkedClientIdByOrgId.get(linkedOrgId) === clientId;
+            return matchesDirect || matchesTx || matchesLinkedOrg;
+          });
+          setTrips(forClient);
+          setSuppliers(
+            suppliersRes.error ? [] : (suppliersRes.suppliers ?? []),
+          );
+          setDrivers(driversRes.error ? [] : (driversRes.drivers ?? []));
+          const forClientTx = allTx.filter((tx) => {
+            return (
+              tx.contact_type === "client" &&
+              tx.contact_id != null &&
+              tx.contact_id === clientId
+            );
+          });
+          setTransactions(forClientTx);
+        },
+      )
       .finally(() => {
         setLoading(false);
         initialLoadDoneRef.current = true;
@@ -425,12 +480,7 @@ export default function ClientDetailScreen({
   const supplierDisplayById = useMemo(() => {
     const m = new Map<string, string>();
     for (const s of suppliers) {
-      const label = (
-        s.name ||
-        s.company_name ||
-        s.contact_person ||
-        ""
-      ).trim();
+      const label = (s.name || s.company_name || s.contact_person || "").trim();
       if (!label) continue;
       m.set(String(s.id).trim().toLowerCase(), label);
     }
@@ -560,7 +610,9 @@ export default function ClientDetailScreen({
     if (client) {
       setEditOrgName(client.name ?? "");
       setEditContactPerson(client.contact_person ?? "");
-      setEditPhone(isPlaceholderPhone(client.phone) ? "" : client.phone ?? "");
+      setEditPhone(
+        isPlaceholderPhone(client.phone) ? "" : (client.phone ?? ""),
+      );
       setEditEmail(client.email ?? "");
       setEditAddress(client.address ?? "");
       setEditGstin(client.gstin ?? "");
@@ -575,7 +627,9 @@ export default function ClientDetailScreen({
         if (mounted) setProfileAvatarUri(null);
         return;
       }
-      const { profile } = await getLinkedOrgProfile(client.linked_organization_id);
+      const { profile } = await getLinkedOrgProfile(
+        client.linked_organization_id,
+      );
       if (!profile) {
         if (mounted) setProfileAvatarUri(null);
         return;
@@ -590,7 +644,10 @@ export default function ClientDetailScreen({
         return;
       }
       if (profile.avatarSeed?.trim()) {
-        if (mounted) setProfileAvatarUri(getUser2DAvatarUriForSeed(profile.avatarSeed.trim()));
+        if (mounted)
+          setProfileAvatarUri(
+            getUser2DAvatarUriForSeed(profile.avatarSeed.trim()),
+          );
         return;
       }
       if (mounted) setProfileAvatarUri(null);
@@ -600,27 +657,6 @@ export default function ClientDetailScreen({
       mounted = false;
     };
   }, [client?.linked_organization_id]);
-
-  const ledgerEntries: LedgerEntry[] = useMemo(() => {
-    const rows: LedgerEntry[] = transactions.map((tx) => {
-      const amountIn = Number(tx.amount_in ?? 0);
-      const amountOut = Number(tx.amount_out ?? 0);
-      const isIn = amountIn > 0;
-      const amount = isIn ? amountIn : amountOut;
-      const desc =
-        (tx.party_name || "—").trim() +
-        (tx.trip_number ? ` · ${tx.trip_number}` : "");
-      return {
-        id: tx.id,
-        desc: desc || "ENTRY",
-        date: formatLedgerDate(tx.transaction_date || tx.created_at),
-        amount,
-        isCredit: isIn,
-      };
-    });
-    rows.sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0));
-    return rows;
-  }, [transactions]);
 
   const tripOptions = useMemo(
     () =>
@@ -664,10 +700,6 @@ export default function ClientDetailScreen({
     return m;
   }, [trips]);
 
-  const handleExportLedger = () => {
-    Alert.alert(t("exportLedger"), t("exportComingSoon"));
-  };
-
   const handleEditSave = async (patch: UpdateClientData) => {
     if (!currentOrganization?.id || !client) return;
     const { error: err, client: updated } = await updateClient(
@@ -681,57 +713,6 @@ export default function ClientDetailScreen({
     }
   };
 
-  const handleInlineSaveProfile = async () => {
-    if (!client) return;
-    await handleEditSave({
-      organization_name: editOrgName,
-      contact_person: editContactPerson,
-      phone: editPhone,
-      email: editEmail,
-      address: editAddress,
-      gstin: editGstin,
-      pan_number: editPan,
-    });
-    setProfileEditMode(false);
-    triggerSuccess();
-  };
-
-  const handleSyncLatestFromPlatform = async () => {
-    if (!currentOrganization?.id || !client) return;
-    const linkedId = client.linked_organization_id ?? undefined;
-    if (linkedId) {
-      const { error: profileErr, profile } = await getLinkedOrgProfile(linkedId);
-      if (!profileErr && profile) {
-        const { organizationName, contactPerson, phone } = profile;
-        const { error: updateErr, client: updated } = await updateClient(
-          currentOrganization.id,
-          client.id,
-          {
-            organization_name: organizationName,
-            contact_person: contactPerson || undefined,
-            phone: phone || undefined,
-          },
-        );
-        if (!updateErr && updated) {
-          setClient(updated);
-          return {
-            organizationName: updated.name,
-            contactPerson: updated.contact_person ?? "",
-            phone: updated.phone ?? "",
-          };
-        }
-      }
-    }
-    const { error: err, client: latest } = await getClientDetails(client.id);
-    if (err || !latest) return;
-    setClient(latest);
-    return {
-      organizationName: latest.name,
-      contactPerson: latest.contact_person ?? "",
-      phone: latest.phone ?? "",
-    };
-  };
-
   const triggerSuccess = useCallback((title = "NODE_SYNCED") => {
     setSuccessTitle(title);
     setShowSuccess(true);
@@ -743,9 +724,8 @@ export default function ClientDetailScreen({
     if (!currentOrganization?.id || !client?.phone) return;
     setSendingInvitation(true);
     try {
-      const { createConnectionRequest, getConnectionInviteeByPhone } = await import(
-        "@/services/connectionRequestsService"
-      );
+      const { createConnectionRequest, getConnectionInviteeByPhone } =
+        await import("@/services/connectionRequestsService");
       const { invitee, error: lookupError } = await getConnectionInviteeByPhone(
         client.phone,
       );
@@ -786,7 +766,7 @@ export default function ClientDetailScreen({
 
   // TRANSACTION LEDGER — Aggressive consolidation & tally, O(n). Must run before any early return (Rules of Hooks).
   const {
-    rows: ledgerProtocolRows,
+    rows: _ledgerProtocolRows,
     totalBilledConsolidated,
     totalPendingConsolidated,
     tripIdToDue,
@@ -926,7 +906,6 @@ export default function ClientDetailScreen({
     const unlinkedTx = transactions.filter((tx) => !linkedTxIds.has(tx.id));
     for (const tx of unlinkedTx) {
       const amountIn = Number(tx.amount_in ?? 0);
-      const amountOut = Number(tx.amount_out ?? 0);
       if (amountIn > 0) {
         finalRows.push({
           id: `adj-${tx.id}`,
@@ -947,7 +926,6 @@ export default function ClientDetailScreen({
       (s, r) => s + (r.missionId !== "ADJ" ? r.sales : 0),
       0,
     );
-    const totalPaid = finalRows.reduce((s, r) => s + r.paid, 0);
     const totalPending = finalRows.reduce((s, r) => s + r.due, 0);
 
     if (finalRows.length === 0) {
@@ -1018,7 +996,10 @@ export default function ClientDetailScreen({
     tripFinanceAdjRecord,
   ]);
   const tripTransactionMetaById = useMemo(() => {
-    const byTrip: Record<string, { count: number; lastTxnDate: string | null }> = {};
+    const byTrip: Record<
+      string,
+      { count: number; lastTxnDate: string | null }
+    > = {};
     for (const tx of transactions) {
       if (!tx.trip_id) continue;
       const key = String(tx.trip_id).trim().toLowerCase();
@@ -1030,7 +1011,10 @@ export default function ClientDetailScreen({
         continue;
       }
       current.count += 1;
-      if (candidateDate && (!current.lastTxnDate || candidateDate > current.lastTxnDate)) {
+      if (
+        candidateDate &&
+        (!current.lastTxnDate || candidateDate > current.lastTxnDate)
+      ) {
         current.lastTxnDate = candidateDate;
       }
     }
@@ -1084,7 +1068,14 @@ export default function ClientDetailScreen({
           contact_id: clientId,
           contact_type: "client" as const,
         })),
-    [client?.contact_person, client?.name, clientId, currentOrganization?.id, missionRows, t],
+    [
+      client?.contact_person,
+      client?.name,
+      clientId,
+      currentOrganization?.id,
+      missionRows,
+      t,
+    ],
   );
 
   const reportTransactions = useMemo(
@@ -1093,17 +1084,18 @@ export default function ClientDetailScreen({
   );
   const tripTableReport = useMemo(() => {
     if (detailSubTab !== "trips") return undefined;
-    const billTo =
-      client?.name || client?.contact_person || t("client");
+    const billTo = client?.name || client?.contact_person || t("client");
     const rows = missionRows.map((row) => {
       const key = String(row.trip.id).trim().toLowerCase();
-      const meta = tripTransactionMetaById[key] ?? { count: 0, lastTxnDate: null };
+      const meta = tripTransactionMetaById[key] ?? {
+        count: 0,
+        lastTxnDate: null,
+      };
       const expenseCaptured = tripExpenseById[key] ?? 0;
       const supplierRate = Number(row.trip.supplier_rate ?? 0);
       const hasSupplierRef =
         !!row.trip.supplier_id ||
-        (!!row.trip.supplier_name &&
-          !isUuidLikeString(row.trip.supplier_name));
+        (!!row.trip.supplier_name && !isUuidLikeString(row.trip.supplier_name));
       const isAggregateTrip = hasSupplierRef || isLoadBasedTrip(row.trip);
       const supplierName = isAggregateTrip
         ? aggregateSupplierLabel(row.trip)
@@ -1115,7 +1107,8 @@ export default function ClientDetailScreen({
       );
       const cost = supplierRate > 0 ? supplierRate : expenseCaptured;
       const pnl = row.sales - cost;
-      const margin = row.sales > 0 ? `${((pnl / row.sales) * 100).toFixed(1)}%` : "0.0%";
+      const margin =
+        row.sales > 0 ? `${((pnl / row.sales) * 100).toFixed(1)}%` : "0.0%";
       return {
         trip: row.missionId,
         route: row.route,
@@ -1161,7 +1154,10 @@ export default function ClientDetailScreen({
 
   if (loading) {
     return (
-      <CenteredLoadingView message={t("loadingClient")} color={Theme.teslaRed} />
+      <CenteredLoadingView
+        message={t("loadingClient")}
+        color={Theme.teslaRed}
+      />
     );
   }
 
@@ -1180,9 +1176,11 @@ export default function ClientDetailScreen({
   const sales = totalBilledConsolidated;
   const paid = sales - totalPendingConsolidated;
   const due = totalPendingConsolidated;
-  const health = sales > 0 ? Math.round((paid / sales) * 100) : 0;
   const profileWarehouses = (() => {
-    const byPickup = new Map<string, { id: string; name: string; address: string }>();
+    const byPickup = new Map<
+      string,
+      { id: string; name: string; address: string }
+    >();
     for (const trip of trips) {
       const pickup = (trip.pickup_area ?? "").trim();
       if (!pickup) continue;
@@ -1197,7 +1195,16 @@ export default function ClientDetailScreen({
     return Array.from(byPickup.values()).slice(0, 8);
   })();
   const profileContracts = (() => {
-    const laneMap = new Map<string, { id: string; pickup: string; destination: string; price: number; count: number }>();
+    const laneMap = new Map<
+      string,
+      {
+        id: string;
+        pickup: string;
+        destination: string;
+        price: number;
+        count: number;
+      }
+    >();
     for (const trip of trips) {
       const pickup = (trip.pickup_area ?? "").trim();
       const destination = (trip.drop_location ?? "").trim();
@@ -1233,7 +1240,34 @@ export default function ClientDetailScreen({
     { id: "cash" as const, label: "Cash Flow" },
     { id: "shared" as const, label: "Shared" },
   ];
-
+  const heroDecorAnimatedStyle = isWebDesktop
+    ? {
+        opacity: heroDecorProgress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.1, 0.2],
+        }),
+        transform: [
+          {
+            translateY: heroDecorProgress.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, -6],
+            }),
+          },
+          {
+            rotate: heroDecorProgress.interpolate({
+              inputRange: [0, 1],
+              outputRange: ["10deg", "4deg"],
+            }),
+          },
+          {
+            scale: heroDecorProgress.interpolate({
+              inputRange: [0, 1],
+              outputRange: [1, 1.04],
+            }),
+          },
+        ],
+      }
+    : undefined;
   return (
     <View style={[styles.wrap, { paddingTop: insets.top }]}>
       {/* Header */}
@@ -1243,7 +1277,11 @@ export default function ClientDetailScreen({
           onPress={onBack}
           activeOpacity={0.8}
         >
-          <FontAwesome name="chevron-left" size={20} color={Theme.textPrimaryDark} />
+          <FontAwesome
+            name="chevron-left"
+            size={20}
+            color={Theme.textPrimaryDark}
+          />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>
@@ -1258,7 +1296,11 @@ export default function ClientDetailScreen({
             activeOpacity={0.8}
             accessibilityLabel="View public profile"
           >
-            <FontAwesome name="id-card-o" size={15} color={Theme.textPrimaryDark} />
+            <FontAwesome
+              name="id-card-o"
+              size={15}
+              color={Theme.textPrimaryDark}
+            />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.profileBtn}
@@ -1267,9 +1309,16 @@ export default function ClientDetailScreen({
             accessibilityLabel="Client profile"
           >
             {profileAvatarUri ? (
-              <Image source={{ uri: profileAvatarUri }} style={styles.headerAvatarImage} />
+              <Image
+                source={{ uri: profileAvatarUri }}
+                style={styles.headerAvatarImage}
+              />
             ) : (
-              <FontAwesome name="user" size={16} color={Theme.textPrimaryDark} />
+              <FontAwesome
+                name="user"
+                size={16}
+                color={Theme.textPrimaryDark}
+              />
             )}
           </TouchableOpacity>
           <TouchableOpacity
@@ -1288,7 +1337,11 @@ export default function ClientDetailScreen({
                 : "Download report"
             }
           >
-            <FontAwesome name="cloud-download" size={18} color={Theme.textOnPrimary} />
+            <FontAwesome
+              name="cloud-download"
+              size={18}
+              color={Theme.textOnPrimary}
+            />
           </TouchableOpacity>
         </View>
       </View>
@@ -1301,9 +1354,10 @@ export default function ClientDetailScreen({
             paddingHorizontal: webContentGutter,
           },
           {
-            paddingBottom: canAddTransaction && detailSubTab !== "shared"
-              ? Layout.fabBottomOffset + Layout.fabSize + insets.bottom
-              : Layout.fabBottomOffset + insets.bottom,
+            paddingBottom:
+              canAddTransaction && detailSubTab !== "shared"
+                ? Layout.fabBottomOffset + Layout.fabSize + insets.bottom
+                : Layout.fabBottomOffset + insets.bottom,
           },
         ]}
         showsVerticalScrollIndicator={false}
@@ -1320,35 +1374,60 @@ export default function ClientDetailScreen({
         }
       >
         {/* Scorecard — same metrics row as Trips / Cash Flow (above tab content). */}
-        <View style={styles.scorecard}>
-          <View style={styles.scorecardTop}>
-            <View style={styles.scorecardLeft}>
-              <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
-              <Text style={styles.scorecardSalesLabel}>TOTAL SALES</Text>
-              <Text style={styles.scorecardAmount}>
-                {formatINR(sales)}
-              </Text>
+        <View style={isWebDesktop ? styles.scorecardDesktopRow : undefined}>
+          <View
+            style={[
+              styles.scorecard,
+              isWebDesktop && styles.scorecardWebDesktop,
+              isWebDesktop && styles.scorecardHeroPane,
+            ]}
+          >
+            {isWebDesktop ? (
+              <Animated.View
+                style={[styles.scorecardDecorIconWrap, heroDecorAnimatedStyle]}
+              >
+                <FontAwesome
+                  name="book"
+                  size={120}
+                  color={Theme.textOnDark}
+                  style={styles.scorecardDecorIcon}
+                />
+              </Animated.View>
+            ) : null}
+            <View
+              style={[
+                styles.scorecardTop,
+                isWebDesktop && styles.scorecardTopWebDesktop,
+              ]}
+            >
+              <View style={styles.scorecardLeft}>
+                <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
+                <Text style={styles.scorecardSalesLabel}>TOTAL SALES</Text>
+                <Text style={styles.scorecardAmount}>{formatINR(sales)}</Text>
+              </View>
             </View>
-            <View style={styles.healthCircle}>
+            <View
+              style={[
+                styles.scorecardGrid,
+                isWebDesktop && styles.scorecardGridWebDesktop,
+              ]}
+            >
+              <View style={isWebDesktop ? styles.scorecardGridStat : undefined}>
+                <Text style={styles.scorecardGridLabelPaid}>RECEIVED</Text>
+                <Text style={styles.scorecardGridPaid}>{formatINR(paid)}</Text>
+              </View>
               <View
                 style={[
-                  styles.healthCircleFill,
-                  { height: `${Math.min(100, health)}%` },
+                  styles.scorecardGridRight,
+                  isWebDesktop && styles.scorecardGridStat,
                 ]}
-              />
-              <Text style={styles.healthCircleText}>{health}%</Text>
+              >
+                <Text style={styles.scorecardGridLabelDue}>DUE</Text>
+                <Text style={styles.scorecardGridDue}>{formatINR(due)}</Text>
+              </View>
             </View>
           </View>
-          <View style={styles.scorecardGrid}>
-            <View>
-              <Text style={styles.scorecardGridLabelPaid}>RECEIVED</Text>
-              <Text style={styles.scorecardGridPaid}>{formatINR(paid)}</Text>
-            </View>
-            <View style={styles.scorecardGridRight}>
-              <Text style={styles.scorecardGridLabelDue}>DUE</Text>
-              <Text style={styles.scorecardGridDue}>{formatINR(due)}</Text>
-            </View>
-          </View>
+          {null}
         </View>
 
         {/* Tab switcher */}
@@ -1356,7 +1435,10 @@ export default function ClientDetailScreen({
           {tabConfig.map((tab) => (
             <TouchableOpacity
               key={tab.id}
-              style={[styles.tabItem, detailSubTab === tab.id && styles.tabItemActive]}
+              style={[
+                styles.tabItem,
+                detailSubTab === tab.id && styles.tabItemActive,
+              ]}
               onPress={() => setDetailSubTab(tab.id)}
               activeOpacity={0.8}
             >
@@ -1393,8 +1475,18 @@ export default function ClientDetailScreen({
 
         {/* Tab: Trips — Sales, Received, Due; tap row to open trip detail */}
         {detailSubTab === "trips" && (
-          <View style={[styles.tableCard, isWebDesktop && styles.tableCardWebDesktop]}>
-            <View style={[styles.tableHeader, isWebDesktop && styles.tableHeaderWebDesktop]}>
+          <View
+            style={[
+              styles.tableCard,
+              isWebDesktop && styles.tableCardWebDesktop,
+            ]}
+          >
+            <View
+              style={[
+                styles.tableHeader,
+                isWebDesktop && styles.tableHeaderWebDesktop,
+              ]}
+            >
               {isWebDesktop ? (
                 <View style={styles.clientColWebDesktop}>
                   <Text style={[styles.th, styles.thWebDesktop]}>Client</Text>
@@ -1420,77 +1512,133 @@ export default function ClientDetailScreen({
                   <Text style={[styles.th, styles.thWebDesktop]}>Driver</Text>
                 </View>
               ) : null}
-              <View style={[styles.headerAmountCol, isWebDesktop && styles.amountColWebDesktop]}>
-                <Text style={[styles.th, styles.thSales, isWebDesktop && styles.thWebDesktop]}>
+              <View
+                style={[
+                  styles.headerAmountCol,
+                  isWebDesktop && styles.amountColWebDesktop,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.th,
+                    styles.thSales,
+                    isWebDesktop && styles.thWebDesktop,
+                  ]}
+                >
                   Sales
                 </Text>
               </View>
               {isWebDesktop ? (
-                <View style={[styles.headerAmountCol, styles.amountColWebDesktop]}>
-                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop]}>
+                <View
+                  style={[styles.headerAmountCol, styles.amountColWebDesktop]}
+                >
+                  <Text
+                    style={[styles.th, styles.thRight, styles.thWebDesktop]}
+                  >
                     Cost
                   </Text>
                 </View>
               ) : null}
               {isWebDesktop ? (
-                <View style={[styles.headerAmountCol, styles.amountColWebDesktop]}>
-                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop, { textAlign: "right" as const }]}>
+                <View
+                  style={[styles.headerAmountCol, styles.amountColWebDesktop]}
+                >
+                  <Text
+                    style={[
+                      styles.th,
+                      styles.thRight,
+                      styles.thWebDesktop,
+                      { textAlign: "right" as const },
+                    ]}
+                  >
                     P&L
                   </Text>
                 </View>
               ) : null}
-              <View style={[styles.headerAmountCol, isWebDesktop && styles.amountColWebDesktop]}>
-                <Text style={[styles.th, styles.thRight, isWebDesktop && styles.thWebDesktop]}>
+              <View
+                style={[
+                  styles.headerAmountCol,
+                  isWebDesktop && styles.amountColWebDesktop,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.th,
+                    styles.thRight,
+                    isWebDesktop && styles.thWebDesktop,
+                  ]}
+                >
                   Received
                 </Text>
               </View>
-              <View style={[styles.headerAmountCol, isWebDesktop && styles.amountColWebDesktop]}>
-                <Text style={[styles.th, styles.thRight, isWebDesktop && styles.thWebDesktop]}>
+              <View
+                style={[
+                  styles.headerAmountCol,
+                  isWebDesktop && styles.amountColWebDesktop,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.th,
+                    styles.thRight,
+                    isWebDesktop && styles.thWebDesktop,
+                  ]}
+                >
                   Due
                 </Text>
               </View>
               {isWebDesktop ? (
-                <View style={[styles.headerAmountCol, styles.amountColWebDesktop]}>
-                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop]}>
+                <View
+                  style={[styles.headerAmountCol, styles.amountColWebDesktop]}
+                >
+                  <Text
+                    style={[styles.th, styles.thRight, styles.thWebDesktop]}
+                  >
                     Txns
                   </Text>
                 </View>
               ) : null}
               {isWebDesktop ? (
-                <View style={[styles.headerAmountCol, styles.amountColWebDesktop]}>
-                  <Text style={[styles.th, styles.thRight, styles.thWebDesktop]}>
+                <View
+                  style={[styles.headerAmountCol, styles.amountColWebDesktop]}
+                >
+                  <Text
+                    style={[styles.th, styles.thRight, styles.thWebDesktop]}
+                  >
                     Last Txn
                   </Text>
                 </View>
               ) : null}
             </View>
             {missionRows.length > 0 ? (
-            missionRows.map((row) => (
+              missionRows.map((row) => (
                 <TouchableOpacity
-                key={row.trip.id}
-                style={[styles.tableRow, isWebDesktop && styles.tableRowWebDesktop]}
-                onPress={() => {
-                  const q = new URLSearchParams();
-                  q.set("entryContext", "client");
-                  q.set("clientIdFromContext", client.id);
-                  q.set(
-                    "clientNameFromContext",
-                    clientName,
-                  );
-                  router.push(`/trip/${row.trip.id}?${q.toString()}`);
-                }}
-                activeOpacity={0.7}
+                  key={row.trip.id}
+                  style={[
+                    styles.tableRow,
+                    isWebDesktop && styles.tableRowWebDesktop,
+                  ]}
+                  onPress={() => {
+                    const q = new URLSearchParams();
+                    q.set("entryContext", "client");
+                    q.set("clientIdFromContext", client.id);
+                    q.set("clientNameFromContext", clientName);
+                    router.push(`/trip/${row.trip.id}?${q.toString()}`);
+                  }}
+                  activeOpacity={0.7}
                 >
                   {(() => {
-                    const meta = tripTransactionMetaById[String(row.trip.id).trim().toLowerCase()] ?? {
+                    const meta = tripTransactionMetaById[
+                      String(row.trip.id).trim().toLowerCase()
+                    ] ?? {
                       count: 0,
                       lastTxnDate: null,
                     };
-                    const supplierNameRaw = row.trip.supplier_name?.trim() ?? "";
+                    const supplierNameRaw =
+                      row.trip.supplier_name?.trim() ?? "";
                     const hasSupplierRef =
                       !!row.trip.supplier_id ||
-                      (!!supplierNameRaw &&
-                        !isUuidLikeString(supplierNameRaw));
+                      (!!supplierNameRaw && !isUuidLikeString(supplierNameRaw));
                     const isAggregateTrip =
                       hasSupplierRef || isLoadBasedTrip(row.trip);
                     const supplierName = isAggregateTrip
@@ -1505,12 +1653,17 @@ export default function ClientDetailScreen({
                       clientName,
                     );
                     const expenseCaptured =
-                      tripExpenseById[String(row.trip.id).trim().toLowerCase()] ?? 0;
+                      tripExpenseById[
+                        String(row.trip.id).trim().toLowerCase()
+                      ] ?? 0;
                     const supplierRate = Number(row.trip.supplier_rate ?? 0);
-                    const tripCost = supplierRate > 0 ? supplierRate : expenseCaptured;
+                    const tripCost =
+                      supplierRate > 0 ? supplierRate : expenseCaptured;
                     const tripPnl = row.sales - tripCost;
-                    const marginPct = row.sales > 0 ? (tripPnl / row.sales) * 100 : 0;
-                    const tripDateIso = row.trip.pickup_date ?? row.trip.created_at;
+                    const marginPct =
+                      row.sales > 0 ? (tripPnl / row.sales) * 100 : 0;
+                    const tripDateIso =
+                      row.trip.pickup_date ?? row.trip.created_at;
                     const supplierAv = supplierPartyAvatarProps(
                       row.trip,
                       supplierColumnTitle,
@@ -1518,216 +1671,317 @@ export default function ClientDetailScreen({
                       linkedOrgDisplayMap,
                       partnerOrgBrandingByOrgId,
                     );
-                    const driverIdKey = (row.trip.driver_id ?? "").trim().toLowerCase();
-                    const driverRow = driverIdKey ? driverById.get(driverIdKey) : undefined;
+                    const driverIdKey = (row.trip.driver_id ?? "")
+                      .trim()
+                      .toLowerCase();
+                    const driverRow = driverIdKey
+                      ? driverById.get(driverIdKey)
+                      : undefined;
                     const driverName =
                       (row.trip.driver_display_name ?? "").trim() ||
                       (driverRow?.name ?? "").trim() ||
                       "—";
                     return (
                       <>
-                  {isWebDesktop && client ? (
-                    <View style={styles.clientColWebDesktop}>
-                      <View style={styles.tdPartyAvatarRow}>
-                        <PartyAvatar
-                          name={clientName}
-                          organizationImageUrl={
-                            client.linked_organization_id
-                              ? linkedOrgDisplayMap[client.linked_organization_id]
-                                  ?.avatarUrl
-                              : undefined
-                          }
-                          organizationAvatarSeed={
-                            client.linked_organization_id
-                              ? linkedOrgDisplayMap[client.linked_organization_id]
-                                  ?.avatarSeed
-                              : undefined
-                          }
-                          avatarUrl={client.avatar_url}
-                          avatarSeed={client.avatar_seed}
-                          entityType="client"
-                          size={TRIP_TABLE_AVATAR}
-                        />
-                        <View style={styles.tdPartyTextStack}>
-                          <Text style={styles.tdPartyWebDesktop} numberOfLines={1}>
-                            {clientName}
+                        {isWebDesktop && client ? (
+                          <View style={styles.clientColWebDesktop}>
+                            <View style={styles.tdPartyAvatarRow}>
+                              <PartyAvatar
+                                name={clientName}
+                                organizationImageUrl={
+                                  client.linked_organization_id
+                                    ? linkedOrgDisplayMap[
+                                        client.linked_organization_id
+                                      ]?.avatarUrl
+                                    : undefined
+                                }
+                                organizationAvatarSeed={
+                                  client.linked_organization_id
+                                    ? linkedOrgDisplayMap[
+                                        client.linked_organization_id
+                                      ]?.avatarSeed
+                                    : undefined
+                                }
+                                avatarUrl={client.avatar_url}
+                                avatarSeed={client.avatar_seed}
+                                entityType="client"
+                                size={TRIP_TABLE_AVATAR}
+                              />
+                              <View style={styles.tdPartyTextStack}>
+                                <Text
+                                  style={styles.tdPartyWebDesktop}
+                                  numberOfLines={1}
+                                >
+                                  {clientName}
+                                </Text>
+                                <Text
+                                  style={styles.tdPartyHintWebDesktop}
+                                  numberOfLines={1}
+                                >
+                                  {(client.contact_person ?? "").trim() || "—"}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+                        ) : null}
+                        <View
+                          style={[
+                            styles.tdMission,
+                            isWebDesktop && styles.tdTripColWebDesktop,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.tdMissionId,
+                              isWebDesktop && styles.tdMissionIdWebDesktop,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {row.missionId}
                           </Text>
-                          <Text style={styles.tdPartyHintWebDesktop} numberOfLines={1}>
-                            {(client.contact_person ?? "").trim() || "—"}
+                          <Text
+                            style={[
+                              styles.tdRoute,
+                              isWebDesktop && styles.tdRouteWebDesktop,
+                            ]}
+                            numberOfLines={isWebDesktop ? 3 : 1}
+                          >
+                            {row.route}
                           </Text>
-                        </View>
-                      </View>
-                    </View>
-                  ) : null}
-                  <View
-                    style={[
-                      styles.tdMission,
-                      isWebDesktop && styles.tdTripColWebDesktop,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.tdMissionId,
-                        isWebDesktop && styles.tdMissionIdWebDesktop,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {row.missionId}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.tdRoute,
-                        isWebDesktop && styles.tdRouteWebDesktop,
-                      ]}
-                      numberOfLines={isWebDesktop ? 3 : 1}
-                    >
-                      {row.route}
-                    </Text>
-                    {isWebDesktop ? (
-                      <Text style={styles.tdMissionDateWeb} numberOfLines={1}>
-                        {formatTripTableDate(tripDateIso)}
-                      </Text>
-                    ) : null}
-                  </View>
-                  {isWebDesktop ? (
-                    <View style={styles.partyColWebDesktop}>
-                      <View style={styles.tdPartyAvatarRow}>
-                        <PartyAvatar
-                          name={supplierAv.name}
-                          organizationImageUrl={supplierAv.organizationImageUrl}
-                          organizationAvatarSeed={supplierAv.organizationAvatarSeed}
-                          avatarUrl={supplierAv.avatarUrl}
-                          avatarSeed={supplierAv.avatarSeed}
-                          entityType="supplier"
-                          size={TRIP_TABLE_AVATAR}
-                        />
-                        <View style={styles.tdPartyTextStack}>
-                          <Text style={styles.tdPartyWebDesktop} numberOfLines={1}>
-                            {supplierColumnTitle}
-                          </Text>
-                          {isAggregateTrip ? (
-                            <Text style={styles.tdPartyHintWebDesktop} numberOfLines={1}>
-                              {supplierColumnSameAsClient
-                                ? "Same org as client"
-                                : isLoadBasedTrip(row.trip)
-                                  ? "Partner"
-                                  : "Aggregate"}{" "}
-                              · Margin {marginPct.toFixed(1)}%
-                            </Text>
-                          ) : supplierRate <= 0 && expenseCaptured > 0 ? (
-                            <Text style={styles.tdPartyHintWebDesktop} numberOfLines={1}>
-                              Asset · Expense captured: {formatINR(expenseCaptured)}
-                            </Text>
-                          ) : (
-                            <Text style={styles.tdPartyHintWebDesktop} numberOfLines={1}>
-                              Asset
-                            </Text>
-                          )}
-                        </View>
-                      </View>
-                    </View>
-                  ) : null}
-                  {isWebDesktop ? (
-                    <View style={styles.driverColWebDesktop}>
-                      <View style={styles.tdPartyAvatarRow}>
-                        <PartyAvatar
-                          name={driverName}
-                          avatarUrl={(driverRow?.avatar_url ?? "").trim() || null}
-                          avatarSeed={(driverRow?.avatar_seed ?? "").trim() || null}
-                          entityType="driver"
-                          size={TRIP_TABLE_AVATAR}
-                        />
-                        <View style={styles.tdPartyTextStack}>
-                          <Text style={styles.tdPartyWebDesktop} numberOfLines={2}>
-                            {driverName}
-                          </Text>
-                          {(row.trip.vehicle_display_number ?? "").trim() ? (
-                            <Text style={styles.tdPartyHintWebDesktop} numberOfLines={1}>
-                              {(row.trip.vehicle_display_number ?? "").trim()}
+                          {isWebDesktop ? (
+                            <Text
+                              style={styles.tdMissionDateWeb}
+                              numberOfLines={1}
+                            >
+                              {formatTripTableDate(tripDateIso)}
                             </Text>
                           ) : null}
                         </View>
-                      </View>
-                    </View>
-                  ) : null}
-                  <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
-                    <Text
-                      numberOfLines={1}
-                      style={[
-                        styles.td,
-                        styles.tdSales,
-                        isWebDesktop && styles.tdAmountWebDesktop,
-                      ]}
-                    >
-                      {formatINR(row.sales)}
-                    </Text>
-                  </View>
-                  {isWebDesktop ? (
-                    <View style={[styles.amountCol, styles.amountColWebDesktop]}>
-                      <Text
-                        numberOfLines={1}
-                        style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}
-                      >
-                        {formatINR(tripCost)}
-                      </Text>
-                    </View>
-                  ) : null}
-                  {isWebDesktop ? (
-                    <View style={[styles.amountCol, styles.amountColWebDesktop]}>
-                      <Text
-                        numberOfLines={1}
-                        style={[
-                          styles.td,
-                          styles.tdRight,
-                          styles.tdAmountWebDesktop,
-                          tripPnl >= 0 ? styles.tdGreen : styles.tdRed,
-                          { textAlign: "right" as const },
-                        ]}
-                      >
-                        {formatINR(tripPnl)}
-                      </Text>
-                    </View>
-                  ) : null}
-                  <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
-                    <Text
-                      numberOfLines={1}
-                      style={[
-                        styles.td,
-                        styles.tdRight,
-                        styles.tdGreen,
-                        isWebDesktop && styles.tdAmountWebDesktop,
-                      ]}
-                    >
-                      {formatINR(row.paid)}
-                    </Text>
-                  </View>
-                  <View style={[styles.amountCol, isWebDesktop && styles.amountColWebDesktop]}>
-                    <Text
-                      numberOfLines={1}
-                      style={[
-                        styles.td,
-                        styles.tdRight,
-                        row.due > 0 ? styles.tdRed : styles.tdAmountMuted,
-                        isWebDesktop && styles.tdAmountWebDesktop,
-                      ]}
-                    >
-                      {formatINR(row.due)}
-                    </Text>
-                  </View>
-                  {isWebDesktop ? (
-                    <View style={[styles.amountCol, styles.amountColWebDesktop]}>
-                      <Text numberOfLines={1} style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
-                        {meta.count}
-                      </Text>
-                    </View>
-                  ) : null}
-                  {isWebDesktop ? (
-                    <View style={[styles.amountCol, styles.amountColWebDesktop]}>
-                      <Text numberOfLines={1} style={[styles.td, styles.tdRight, styles.tdAmountWebDesktop]}>
-                        {meta.lastTxnDate ? formatLedgerDate(meta.lastTxnDate) : "—"}
-                      </Text>
-                    </View>
-                  ) : null}
+                        {isWebDesktop ? (
+                          <View style={styles.partyColWebDesktop}>
+                            <View style={styles.tdPartyAvatarRow}>
+                              <PartyAvatar
+                                name={supplierAv.name}
+                                organizationImageUrl={
+                                  supplierAv.organizationImageUrl
+                                }
+                                organizationAvatarSeed={
+                                  supplierAv.organizationAvatarSeed
+                                }
+                                avatarUrl={supplierAv.avatarUrl}
+                                avatarSeed={supplierAv.avatarSeed}
+                                entityType="supplier"
+                                size={TRIP_TABLE_AVATAR}
+                              />
+                              <View style={styles.tdPartyTextStack}>
+                                <Text
+                                  style={styles.tdPartyWebDesktop}
+                                  numberOfLines={1}
+                                >
+                                  {supplierColumnTitle}
+                                </Text>
+                                {isAggregateTrip ? (
+                                  <Text
+                                    style={styles.tdPartyHintWebDesktop}
+                                    numberOfLines={1}
+                                  >
+                                    {supplierColumnSameAsClient
+                                      ? "Same org as client"
+                                      : isLoadBasedTrip(row.trip)
+                                        ? "Partner"
+                                        : "Aggregate"}{" "}
+                                    · Margin {marginPct.toFixed(1)}%
+                                  </Text>
+                                ) : supplierRate <= 0 && expenseCaptured > 0 ? (
+                                  <Text
+                                    style={styles.tdPartyHintWebDesktop}
+                                    numberOfLines={1}
+                                  >
+                                    Asset · Expense captured:{" "}
+                                    {formatINR(expenseCaptured)}
+                                  </Text>
+                                ) : (
+                                  <Text
+                                    style={styles.tdPartyHintWebDesktop}
+                                    numberOfLines={1}
+                                  >
+                                    Asset
+                                  </Text>
+                                )}
+                              </View>
+                            </View>
+                          </View>
+                        ) : null}
+                        {isWebDesktop ? (
+                          <View style={styles.driverColWebDesktop}>
+                            <View style={styles.tdPartyAvatarRow}>
+                              <PartyAvatar
+                                name={driverName}
+                                avatarUrl={
+                                  (driverRow?.avatar_url ?? "").trim() || null
+                                }
+                                avatarSeed={
+                                  (driverRow?.avatar_seed ?? "").trim() || null
+                                }
+                                entityType="driver"
+                                size={TRIP_TABLE_AVATAR}
+                              />
+                              <View style={styles.tdPartyTextStack}>
+                                <Text
+                                  style={styles.tdPartyWebDesktop}
+                                  numberOfLines={2}
+                                >
+                                  {driverName}
+                                </Text>
+                                {(
+                                  row.trip.vehicle_display_number ?? ""
+                                ).trim() ? (
+                                  <Text
+                                    style={styles.tdPartyHintWebDesktop}
+                                    numberOfLines={1}
+                                  >
+                                    {(
+                                      row.trip.vehicle_display_number ?? ""
+                                    ).trim()}
+                                  </Text>
+                                ) : null}
+                              </View>
+                            </View>
+                          </View>
+                        ) : null}
+                        <View
+                          style={[
+                            styles.amountCol,
+                            isWebDesktop && styles.amountColWebDesktop,
+                          ]}
+                        >
+                          <Text
+                            numberOfLines={1}
+                            style={[
+                              styles.td,
+                              styles.tdSales,
+                              isWebDesktop && styles.tdAmountWebDesktop,
+                            ]}
+                          >
+                            {formatINR(row.sales)}
+                          </Text>
+                        </View>
+                        {isWebDesktop ? (
+                          <View
+                            style={[
+                              styles.amountCol,
+                              styles.amountColWebDesktop,
+                            ]}
+                          >
+                            <Text
+                              numberOfLines={1}
+                              style={[
+                                styles.td,
+                                styles.tdRight,
+                                styles.tdAmountWebDesktop,
+                              ]}
+                            >
+                              {formatINR(tripCost)}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {isWebDesktop ? (
+                          <View
+                            style={[
+                              styles.amountCol,
+                              styles.amountColWebDesktop,
+                            ]}
+                          >
+                            <Text
+                              numberOfLines={1}
+                              style={[
+                                styles.td,
+                                styles.tdRight,
+                                styles.tdAmountWebDesktop,
+                                tripPnl >= 0 ? styles.tdGreen : styles.tdRed,
+                                { textAlign: "right" as const },
+                              ]}
+                            >
+                              {formatINR(tripPnl)}
+                            </Text>
+                          </View>
+                        ) : null}
+                        <View
+                          style={[
+                            styles.amountCol,
+                            isWebDesktop && styles.amountColWebDesktop,
+                          ]}
+                        >
+                          <Text
+                            numberOfLines={1}
+                            style={[
+                              styles.td,
+                              styles.tdRight,
+                              styles.tdGreen,
+                              isWebDesktop && styles.tdAmountWebDesktop,
+                            ]}
+                          >
+                            {formatINR(row.paid)}
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.amountCol,
+                            isWebDesktop && styles.amountColWebDesktop,
+                          ]}
+                        >
+                          <Text
+                            numberOfLines={1}
+                            style={[
+                              styles.td,
+                              styles.tdRight,
+                              row.due > 0 ? styles.tdRed : styles.tdAmountMuted,
+                              isWebDesktop && styles.tdAmountWebDesktop,
+                            ]}
+                          >
+                            {formatINR(row.due)}
+                          </Text>
+                        </View>
+                        {isWebDesktop ? (
+                          <View
+                            style={[
+                              styles.amountCol,
+                              styles.amountColWebDesktop,
+                            ]}
+                          >
+                            <Text
+                              numberOfLines={1}
+                              style={[
+                                styles.td,
+                                styles.tdRight,
+                                styles.tdAmountWebDesktop,
+                              ]}
+                            >
+                              {meta.count}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {isWebDesktop ? (
+                          <View
+                            style={[
+                              styles.amountCol,
+                              styles.amountColWebDesktop,
+                            ]}
+                          >
+                            <Text
+                              numberOfLines={1}
+                              style={[
+                                styles.td,
+                                styles.tdRight,
+                                styles.tdAmountWebDesktop,
+                              ]}
+                            >
+                              {meta.lastTxnDate
+                                ? formatLedgerDate(meta.lastTxnDate)
+                                : "—"}
+                            </Text>
+                          </View>
+                        ) : null}
                       </>
                     );
                   })()}
@@ -1776,14 +2030,17 @@ export default function ClientDetailScreen({
               entity={{
                 id: client.id,
                 name: clientName,
-                linked_organization_id: client.linked_organization_id ?? undefined,
+                linked_organization_id:
+                  client.linked_organization_id ?? undefined,
                 avatar_url: client.avatar_url ?? undefined,
               }}
               entityType="CLIENT"
               trips={trips}
               transactions={transactions}
               organizationId={currentOrganization?.id ?? null}
-              integrated={Boolean(client.is_integrated || client.linked_organization_id)}
+              integrated={Boolean(
+                client.is_integrated || client.linked_organization_id,
+              )}
               embeddedInOverlay={true}
               externalDownloadRequest={sharedLedgerDownloadSignal}
               onRefresh={load}
@@ -1828,7 +2085,12 @@ export default function ClientDetailScreen({
               const q = new URLSearchParams({
                 entityType: "CLIENT",
                 entityId: clientId,
-                partyName: (client?.name || client?.contact_person || t("client")).trim() || t("client"),
+                partyName:
+                  (
+                    client?.name ||
+                    client?.contact_person ||
+                    t("client")
+                  ).trim() || t("client"),
                 partyContext: "customers",
                 partyId: clientId,
                 defaultType: "in",
@@ -1859,7 +2121,9 @@ export default function ClientDetailScreen({
         visible={showReportModal}
         onClose={() => setShowReportModal(false)}
         transactions={reportTransactions}
-        title={clientName ? `${t("ledgerFor")}${clientName}` : t("ledgerReport")}
+        title={
+          clientName ? `${t("ledgerFor")}${clientName}` : t("ledgerReport")
+        }
         customReport={tripTableReport}
       />
       <Modal
@@ -1868,7 +2132,9 @@ export default function ClientDetailScreen({
         presentationStyle="pageSheet"
         onRequestClose={() => setShowProfileModal(false)}
       >
-        <View style={[styles.profileModalWrap, { paddingBottom: insets.bottom }]}>
+        <View
+          style={[styles.profileModalWrap, { paddingBottom: insets.bottom }]}
+        >
           <CounterpartyProfileSystemCard
             visible={showProfileModal}
             type="client"
@@ -1881,8 +2147,14 @@ export default function ClientDetailScreen({
             billingAddress={client?.address}
             gridVolumeLabel={formatINR(sales)}
             networkTrustLabel="94.2%"
-            isIntegrated={Boolean(client?.is_integrated || client?.linked_organization_id || isInApp)}
-            entityDisplayId={client?.display_id ?? client?.id?.slice(0, 8) ?? null}
+            isIntegrated={Boolean(
+              client?.is_integrated ||
+              client?.linked_organization_id ||
+              isInApp,
+            )}
+            entityDisplayId={
+              client?.display_id ?? client?.id?.slice(0, 8) ?? null
+            }
             warehouses={profileWarehouses}
             contracts={profileContracts}
             onClose={() => setShowProfileModal(false)}
@@ -1903,7 +2175,11 @@ export default function ClientDetailScreen({
                 activeOpacity={0.8}
                 disabled={sendingInvitation}
               >
-                <FontAwesome name="paper-plane" size={14} color={Theme.primary} />
+                <FontAwesome
+                  name="paper-plane"
+                  size={14}
+                  color={Theme.primary}
+                />
                 <Text style={styles.profileSecondaryBtnText}>
                   {sendingInvitation ? "Sending..." : "Send request"}
                 </Text>
@@ -1912,14 +2188,20 @@ export default function ClientDetailScreen({
             {!client?.linked_organization_id && isInApp && isLinked && (
               <View style={[styles.profileSecondaryBtn, { opacity: 0.7 }]}>
                 <FontAwesome name="check" size={14} color={Theme.primary} />
-                <Text style={styles.profileSecondaryBtnText}>Invitation sent</Text>
+                <Text style={styles.profileSecondaryBtnText}>
+                  Invitation sent
+                </Text>
               </View>
             )}
             {!client?.linked_organization_id && !isInApp && (
               <TouchableOpacity
                 style={[
                   styles.profileEditBtn,
-                  { backgroundColor: Theme.surface, borderWidth: 1, borderColor: Theme.borderLight },
+                  {
+                    backgroundColor: Theme.surface,
+                    borderWidth: 1,
+                    borderColor: Theme.borderLight,
+                  },
                 ]}
                 onPress={() => {
                   const message = `Join me on Pulse to sync our ledger and compare books with ${clientName}. Download the Q app to get started.`;
@@ -1927,8 +2209,17 @@ export default function ClientDetailScreen({
                 }}
                 activeOpacity={0.8}
               >
-                <FontAwesome name="link" size={14} color={Theme.textPrimaryDark} />
-                <Text style={[styles.profileEditBtnText, { color: Theme.textPrimaryDark }]}>
+                <FontAwesome
+                  name="link"
+                  size={14}
+                  color={Theme.textPrimaryDark}
+                />
+                <Text
+                  style={[
+                    styles.profileEditBtnText,
+                    { color: Theme.textPrimaryDark },
+                  ]}
+                >
                   {t("linkToAppAccount")}
                 </Text>
               </TouchableOpacity>
@@ -2320,11 +2611,45 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     overflow: "hidden",
   },
+  scorecardDesktopRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 20,
+    marginBottom: 16,
+  },
+  scorecardWebDesktop: {
+    borderRadius: 34,
+    paddingHorizontal: 26,
+    paddingVertical: 24,
+    minHeight: 236,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    marginBottom: 0,
+  },
+  scorecardHeroPane: {
+    flexBasis: 0,
+    flexGrow: 2.2,
+    flexShrink: 1,
+  },
+  scorecardDecorIconWrap: {
+    position: "absolute",
+    right: -14,
+    top: -16,
+    opacity: 1,
+  },
+  scorecardDecorIcon: {
+    transform: [{ rotate: "12deg" }],
+  },
   scorecardTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
     marginBottom: 8,
+  },
+  scorecardTopWebDesktop: {
+    marginBottom: 20,
+    gap: 16,
+    alignItems: "center",
   },
   scorecardLeft: { flex: 1 },
   scorecardLabel: {
@@ -2347,6 +2672,43 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: Theme.textOnDark,
     marginTop: 4,
+  },
+  scorecardConfigCard: {
+    width: 250,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  scorecardConfigTitle: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.financeCardBlueFrom,
+    letterSpacing: 0.9,
+    textTransform: "uppercase",
+  },
+  scorecardConfigRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.08)",
+    paddingTop: 10,
+  },
+  scorecardConfigLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  scorecardConfigValue: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textOnDark,
   },
   healthCircle: {
     width: 56,
@@ -2378,6 +2740,21 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.1)",
   },
+  scorecardGridWebDesktop: {
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 0,
+    paddingTop: 18,
+  },
+  scorecardGridStat: {
+    minWidth: 0,
+    flex: 1,
+  },
+  scorecardGridDivider: {
+    width: 1,
+    height: 48,
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
   scorecardGridRight: { alignItems: "flex-end" },
   scorecardGridLabelPaid: {
     fontSize: 8,
@@ -2404,6 +2781,119 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: Theme.teslaRed,
     marginTop: 4,
+  },
+  scorecardGridLabelNeutral: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.66)",
+    letterSpacing: 0.6,
+  },
+  scorecardGridNeutral: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    marginTop: 4,
+  },
+  scorecardProfileCard: {
+    flexBasis: 0,
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 300,
+    maxWidth: 380,
+    borderRadius: 34,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    paddingHorizontal: 22,
+    paddingVertical: 20,
+    justifyContent: "space-between",
+    gap: 14,
+  },
+  scorecardProfileHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
+  scorecardProfileAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: Theme.surfaceGray,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  scorecardProfileAvatarImage: {
+    width: "100%",
+    height: "100%",
+  },
+  scorecardProfileMeta: {
+    flex: 1,
+  },
+  scorecardProfileRatingBadge: {
+    minWidth: 74,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  scorecardProfileRatingValue: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    lineHeight: 14,
+  },
+  scorecardProfileRatingLabel: {
+    marginTop: 1,
+    fontSize: 7,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    textAlign: "center",
+  },
+  scorecardProfileName: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  scorecardProfileSub: {
+    marginTop: 2,
+    fontSize: 10,
+    color: Theme.textMuted,
+  },
+  scorecardProfileHint: {
+    fontSize: 9,
+    color: Theme.textMuted,
+    lineHeight: 13,
+    marginTop: 2,
+  },
+  scorecardConfigValueDark: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  scorecardSyncBtn: {
+    marginTop: 6,
+    borderRadius: 18,
+    backgroundColor: Theme.darkBackground,
+    minHeight: 46,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+  scorecardSyncBtnText: {
+    color: Theme.textOnDark,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.7,
   },
   tabRow: {
     flexDirection: "row",
@@ -2683,7 +3173,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.teslaRed,
   },
-  cashCardBody: { flex: 1, minWidth: 0, marginLeft: 12, justifyContent: "center" },
+  cashCardBody: {
+    flex: 1,
+    minWidth: 0,
+    marginLeft: 12,
+    justifyContent: "center",
+  },
   cashCardWhy: {
     fontSize: 11,
     fontWeight: "700",

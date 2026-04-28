@@ -11,67 +11,67 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { LedgerReportModal } from "@/features/finance";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
-import { LedgerReportModal } from "@/features/finance";
-import type { TripRow } from "@/features/trips";
-import { buildTripHubPartyMetaByTripId } from "@/features/trips";
 import {
-    summarizeTripLedgerForHub,
-    TripsHubTableView,
-    TripsHubTripCard,
-    tripFinanceAdjForHubLookup,
-    tripHubCost,
-    tripHubDue,
-    tripHubRevenue,
-} from "@/features/trips/components/TripsHubViews";
+  buildTripHubPartyMetaByTripId,
+  summarizeTripLedgerForHub,
+  TripsHubTableView,
+  TripsHubTripCard,
+  tripFinanceAdjForHubLookup,
+  tripHubCost,
+  tripHubDue,
+  tripHubRevenue,
+  type TripRow,
+} from "@/features/trips";
 import {
-    classifyTripMetric,
-    countTripsByMetric,
-    isTripCancelledForHub,
-    TRIP_METRIC_ORDER,
-    type TripMetricId,
+  classifyTripMetric,
+  countTripsByMetric,
+  isTripCancelledForHub,
+  TRIP_METRIC_ORDER,
+  type TripMetricId,
 } from "@/features/trips/utils/tripHubMetrics";
 import { canAccessTrips, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { queryKeys } from "@/lib/queryKeys";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatLedgerDate } from "@/lib/format";
 import {
-    useAssignmentAuditQuery,
-    useClientsQuery,
-    useDriversQuery,
-    useRealtimeTransactionsInvalidation,
-    useRealtimeTripsInvalidation,
-    useShipperDisplayNamesQuery,
-    useSuppliersQuery,
-    useTransactionsQuery,
-    useTripFinanceAdjustmentsMap,
-    useTripsQuery,
+  useAssignmentAuditQuery,
+  useClientsQuery,
+  useDriversQuery,
+  useRealtimeTransactionsInvalidation,
+  useRealtimeTripsInvalidation,
+  useShipperDisplayNamesQuery,
+  useSuppliersQuery,
+  useTransactionsQuery,
+  useTripFinanceAdjustmentsMap,
+  useTripsQuery,
 } from "@/lib/queries";
 import { supabase } from "@/lib/supabase";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
-import { LinearGradient } from "expo-linear-gradient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-    Modal,
-    NativeScrollEvent,
-    NativeSyntheticEvent,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    useWindowDimensions,
-    View,
-    type TextStyle,
-    type ViewStyle,
+  Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  useWindowDimensions,
+  View,
+  type TextStyle,
+  type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -126,7 +126,10 @@ function historyTripDueState(
     0,
   );
   return {
-    receivableDue: Math.max(receivableTarget - Math.max(ledger.receivedTotal, 0), 0),
+    receivableDue: Math.max(
+      receivableTarget - Math.max(ledger.receivedTotal, 0),
+      0,
+    ),
     payableDue: Math.max(payableTarget - Math.max(ledger.paidTotal, 0), 0),
   };
 }
@@ -224,12 +227,18 @@ export default function TripsScreen() {
       }),
     ]);
     setRefreshing(false);
-  }, [refetchTrips, refetchTransactions, refetchAssignment, queryClient, orgId]);
+  }, [
+    refetchTrips,
+    refetchTransactions,
+    refetchAssignment,
+    queryClient,
+    orgId,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
       onRefresh();
-    }, [onRefresh])
+    }, [onRefresh]),
   );
 
   const loading = tripsLoading;
@@ -264,8 +273,7 @@ export default function TripsScreen() {
           trips.filter((t) => isCompletedStatus(t.status))
         : trips.filter(
             (t) =>
-              !isCompletedStatus(t.status) &&
-              !isTripCancelledForHub(t.status),
+              !isCompletedStatus(t.status) && !isTripCancelledForHub(t.status),
           ),
     [showCompletedList, trips],
   );
@@ -278,7 +286,13 @@ export default function TripsScreen() {
   }, [showCompletedList, tripsByStatus]);
 
   const { data: tripIdsWithDocuments = new Set<string>() } = useQuery({
-    queryKey: ["q", "trips", "doc-trip-ids", orgId ?? "", activeOpsTripIdsSorted],
+    queryKey: [
+      "q",
+      "trips",
+      "doc-trip-ids",
+      orgId ?? "",
+      activeOpsTripIdsSorted,
+    ],
     enabled: !!orgId && activeOpsTripIdsSorted.length > 0,
     staleTime: 60_000,
     queryFn: async () => {
@@ -560,7 +574,10 @@ export default function TripsScreen() {
 
   const [tripsTablePageSize, setTripsTablePageSize] = useState<25 | 50>(25);
   const [tripsTablePage, setTripsTablePage] = useState(0);
-  const tripsTableTotalPages = Math.max(1, Math.ceil(filtered.length / tripsTablePageSize));
+  const tripsTableTotalPages = Math.max(
+    1,
+    Math.ceil(filtered.length / tripsTablePageSize),
+  );
   const tripsTablePageSafe = Math.min(tripsTablePage, tripsTableTotalPages - 1);
   const tripsTableVisible = useMemo(() => {
     if (listLayout !== "table") return filtered;
@@ -603,7 +620,11 @@ export default function TripsScreen() {
   );
 
   const tripLedgerExportReport = useMemo(() => {
-    const columns: Array<{ key: string; label: string; align?: "left" | "right" | "center" }> = [
+    const columns: Array<{
+      key: string;
+      label: string;
+      align?: "left" | "right" | "center";
+    }> = [
       { key: "rowType", label: "Type", align: "center" },
       { key: "trip", label: "Trip" },
       { key: "date", label: "Date", align: "center" },
@@ -625,23 +646,37 @@ export default function TripsScreen() {
     const rows: Array<Record<string, string | number | null | undefined>> = [];
     const orgId = currentOrganization?.id ?? null;
     for (const trip of filtered) {
-      const tripRef = (trip.display_trip_id ?? trip.trip_number ?? trip.id).trim();
+      const tripRef = (
+        trip.display_trip_id ??
+        trip.trip_number ??
+        trip.id
+      ).trim();
       const route = `${(trip.pickup_area ?? "—").trim()} → ${(trip.drop_location ?? "—").trim()}`;
       const stage = getStageLabelForTrip(trip);
       const tripDate = (() => {
         const raw =
-          trip.pickup_date ?? trip.started_at ?? trip.completed_at ?? trip.created_at ?? "";
+          trip.pickup_date ??
+          trip.started_at ??
+          trip.completed_at ??
+          trip.created_at ??
+          "";
         return raw ? formatLedgerDate(raw) : "—";
       })();
-      const clientName = (shipperNameByTripId[trip.id] ?? trip.client_name ?? "—").trim() || "—";
+      const clientName =
+        (shipperNameByTripId[trip.id] ?? trip.client_name ?? "—").trim() || "—";
       const supplierName =
-        (tripHubPartyMetaByTripId.get(trip.id)?.displaySupplierName ?? trip.supplier_name ?? "—")
-          .trim() || "—";
-      const txns = [...(transactionsByTripId.get(trip.id) ?? [])].sort((a, b) => {
-        const da = String(a.transaction_date ?? a.created_at ?? "");
-        const db = String(b.transaction_date ?? b.created_at ?? "");
-        return db.localeCompare(da);
-      });
+        (
+          tripHubPartyMetaByTripId.get(trip.id)?.displaySupplierName ??
+          trip.supplier_name ??
+          "—"
+        ).trim() || "—";
+      const txns = [...(transactionsByTripId.get(trip.id) ?? [])].sort(
+        (a, b) => {
+          const da = String(a.transaction_date ?? a.created_at ?? "");
+          const db = String(b.transaction_date ?? b.created_at ?? "");
+          return db.localeCompare(da);
+        },
+      );
       const ledger = summarizeTripLedgerForHub(txns);
       const rowAdj = tripFinanceAdjForHubLookup(tripFinanceAdjForHub, trip.id);
       const salesValue = Math.max(tripHubRevenue(trip, orgId, rowAdj), 0);
@@ -676,7 +711,10 @@ export default function TripsScreen() {
           date: formatLedgerDate(txn.transaction_date || txn.created_at || ""),
           status: (txn.reconciliation_status ?? "").toString().toUpperCase(),
           route: "",
-          party: (txn.party_name ?? txn.driver_name ?? txn.contact_type ?? "—").toString().trim() || "—",
+          party:
+            (txn.party_name ?? txn.driver_name ?? txn.contact_type ?? "—")
+              .toString()
+              .trim() || "—",
           supplier: "",
           salesValue: "",
           supplierCost: "",
@@ -685,7 +723,9 @@ export default function TripsScreen() {
           pendingRecv: "",
           pendingPay: "",
           txnMode: (txn.payment_mode ?? "").toString().trim().toUpperCase(),
-          reference: (txn.payment_reference ?? txn.trip_number ?? "").toString().trim(),
+          reference: (txn.payment_reference ?? txn.trip_number ?? "")
+            .toString()
+            .trim(),
           txnIn: Number(txn.amount_in ?? 0),
           txnOut: Number(txn.amount_out ?? 0),
         });
@@ -859,10 +899,7 @@ export default function TripsScreen() {
           title: tr("tripMetricDeliveredDocsPending"),
           hint: tr("tripMetricHintDeliveredDocsPending"),
         },
-      }) satisfies Record<
-        TripMetricId,
-        { title: string; hint: string }
-      >,
+      }) satisfies Record<TripMetricId, { title: string; hint: string }>,
     [tr],
   );
 
@@ -961,16 +998,10 @@ export default function TripsScreen() {
           ) : isPayableDue ? (
             <>
               <View
-                style={[
-                  styles.historyWmLightBlobA,
-                  styles.historyWmPayBlobA,
-                ]}
+                style={[styles.historyWmLightBlobA, styles.historyWmPayBlobA]}
               />
               <View
-                style={[
-                  styles.historyWmLightBlobB,
-                  styles.historyWmPayBlobB,
-                ]}
+                style={[styles.historyWmLightBlobB, styles.historyWmPayBlobB]}
               />
             </>
           ) : isReceivableCleared || isPayableCleared ? (
@@ -999,7 +1030,9 @@ export default function TripsScreen() {
             <Text
               style={[
                 styles.metricBentoValue,
-                active ? styles.tripMetricCountActive : styles.metricBentoValueOnDark,
+                active
+                  ? styles.tripMetricCountActive
+                  : styles.metricBentoValueOnDark,
               ]}
             >
               {metric.count}
@@ -1053,12 +1086,7 @@ export default function TripsScreen() {
   }
 
   return (
-    <View
-      style={[
-        styles.container,
-        { paddingTop: screenTopPad },
-      ]}
-    >
+    <View style={[styles.container, { paddingTop: screenTopPad }]}>
       <Modal
         visible={showSortModal}
         transparent
@@ -1303,7 +1331,7 @@ export default function TripsScreen() {
           scrollEventThrottle={
             listLayout === "table"
               ? 100
-              : tabBarScrollProps.scrollEventThrottle ?? 64
+              : (tabBarScrollProps.scrollEventThrottle ?? 64)
           }
           refreshControl={
             <RefreshControl
@@ -1338,10 +1366,17 @@ export default function TripsScreen() {
                         accessibilityRole="tab"
                         accessibilityState={{ selected: tab.isActive }}
                       >
-                        <Text style={[styles.tabText, tab.isActive && styles.tabTextActive]}>
+                        <Text
+                          style={[
+                            styles.tabText,
+                            tab.isActive && styles.tabTextActive,
+                          ]}
+                        >
                           {tab.label}
                         </Text>
-                        {tab.isActive ? <View style={styles.tabUnderline} /> : null}
+                        {tab.isActive ? (
+                          <View style={styles.tabUnderline} />
+                        ) : null}
                       </TouchableOpacity>
                     ))}
                     <View style={styles.tripsFilterGroupSeparator} />
@@ -1378,39 +1413,56 @@ export default function TripsScreen() {
                     contentContainerStyle={styles.tripsToolbarScrollContent}
                     style={styles.tripsToolbarScroll}
                   >
-                    <View style={styles.tripsLayoutToggle} accessibilityRole="tablist">
+                    <View
+                      style={styles.tripsLayoutToggle}
+                      accessibilityRole="tablist"
+                    >
                       <TouchableOpacity
                         style={[
                           styles.tripsLayoutToggleBtn,
-                          listLayout === "cards" && styles.tripsLayoutToggleBtnActive,
+                          listLayout === "cards" &&
+                            styles.tripsLayoutToggleBtnActive,
                         ]}
                         onPress={() => setListLayout("cards")}
                         activeOpacity={0.85}
                         accessibilityRole="tab"
-                        accessibilityState={{ selected: listLayout === "cards" }}
+                        accessibilityState={{
+                          selected: listLayout === "cards",
+                        }}
                         accessibilityLabel={tr("tripsViewCards")}
                       >
                         <FontAwesome
                           name="th-large"
                           size={14}
-                          color={listLayout === "cards" ? Theme.textPrimaryDark : Theme.textSecondary}
+                          color={
+                            listLayout === "cards"
+                              ? Theme.textOnDark
+                              : Theme.textSecondary
+                          }
                         />
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[
                           styles.tripsLayoutToggleBtn,
-                          listLayout === "table" && styles.tripsLayoutToggleBtnActive,
+                          listLayout === "table" &&
+                            styles.tripsLayoutToggleBtnActive,
                         ]}
                         onPress={() => setListLayout("table")}
                         activeOpacity={0.85}
                         accessibilityRole="tab"
-                        accessibilityState={{ selected: listLayout === "table" }}
+                        accessibilityState={{
+                          selected: listLayout === "table",
+                        }}
                         accessibilityLabel={tr("tripsViewTable")}
                       >
                         <FontAwesome
                           name="list"
                           size={14}
-                          color={listLayout === "table" ? Theme.textPrimaryDark : Theme.textSecondary}
+                          color={
+                            listLayout === "table"
+                              ? Theme.textOnDark
+                              : Theme.textSecondary
+                          }
                         />
                       </TouchableOpacity>
                     </View>
@@ -1428,10 +1480,12 @@ export default function TripsScreen() {
                         style={styles.tripsSearchIcon}
                       />
                       <TextInput
-                        style={[
-                          styles.tripsSearchInput,
-                        ]}
-                        placeholder={isLargeScreen ? "Find by name..." : tr("searchTripsPlaceholder")}
+                        style={[styles.tripsSearchInput]}
+                        placeholder={
+                          isLargeScreen
+                            ? "Find by name..."
+                            : tr("searchTripsPlaceholder")
+                        }
                         placeholderTextColor={Theme.textSecondary}
                         value={searchQuery}
                         onChangeText={setSearchQuery}
@@ -1444,17 +1498,24 @@ export default function TripsScreen() {
                     </View>
                     <View style={styles.tripsToolbarActions}>
                       <TouchableOpacity
-                        style={[
-                          styles.tripsFilterIconBtn,
-                        ]}
+                        style={[styles.tripsFilterIconBtn]}
                         onPress={(e) => {
-                          // @ts-expect-error RN may expose measureInWindow on target
                           const target = e.currentTarget;
-                          if (target && typeof target.measureInWindow === "function") {
-                            target.measureInWindow((_x: number, y: number, _w: number, h: number) => {
-                              setSortAnchorY(y + h + 6);
-                              setShowSortModal(true);
-                            });
+                          if (
+                            target &&
+                            typeof target.measureInWindow === "function"
+                          ) {
+                            target.measureInWindow(
+                              (
+                                _x: number,
+                                y: number,
+                                _w: number,
+                                h: number,
+                              ) => {
+                                setSortAnchorY(y + h + 6);
+                                setShowSortModal(true);
+                              },
+                            );
                           } else {
                             setSortAnchorY(100);
                             setShowSortModal(true);
@@ -1462,16 +1523,29 @@ export default function TripsScreen() {
                         }}
                         activeOpacity={0.7}
                       >
-                        <FontAwesome name="sort" size={12} color={Theme.textPrimaryDark} />
+                        <FontAwesome
+                          name="sort"
+                          size={12}
+                          color={Theme.textPrimaryDark}
+                        />
                       </TouchableOpacity>
                     </View>
                     {(
                       [
                         { id: "all" as const, label: tr("all") },
                         { id: "today" as const, label: tr("todayTrips") },
-                        { id: "yesterday" as const, label: tr("yesterdayTrips") },
-                        { id: "this_week" as const, label: tr("thisWeekTrips") },
-                        { id: "this_month" as const, label: tr("thisMonthTrips") },
+                        {
+                          id: "yesterday" as const,
+                          label: tr("yesterdayTrips"),
+                        },
+                        {
+                          id: "this_week" as const,
+                          label: tr("thisWeekTrips"),
+                        },
+                        {
+                          id: "this_month" as const,
+                          label: tr("thisMonthTrips"),
+                        },
                       ] as const
                     ).map(({ id, label }) => (
                       <TouchableOpacity
@@ -1479,7 +1553,8 @@ export default function TripsScreen() {
                         style={[
                           styles.tripsBodyDateChip,
                           styles.tripsMobileDateChip,
-                          dateRangeFilter === id && styles.tripsBodyDateChipActive,
+                          dateRangeFilter === id &&
+                            styles.tripsBodyDateChipActive,
                         ]}
                         onPress={() => {
                           setDateRangeFilter(id);
@@ -1491,7 +1566,8 @@ export default function TripsScreen() {
                         <Text
                           style={[
                             styles.tripsBodyDateChipText,
-                            dateRangeFilter === id && styles.tripsBodyDateChipTextActive,
+                            dateRangeFilter === id &&
+                              styles.tripsBodyDateChipTextActive,
                           ]}
                           numberOfLines={1}
                         >
@@ -1502,7 +1578,8 @@ export default function TripsScreen() {
                     <TouchableOpacity
                       style={[
                         styles.tripsBodyDateRangeIconBtn,
-                        dateRangeFilter === "custom" && styles.tripsDateRangeIconBtnActive,
+                        dateRangeFilter === "custom" &&
+                          styles.tripsDateRangeIconBtnActive,
                       ]}
                       onPress={() => setShowDateRangePicker(true)}
                       activeOpacity={0.8}
@@ -1522,209 +1599,186 @@ export default function TripsScreen() {
                   </ScrollView>
                 </>
               ) : (
-                <View style={styles.tripsInlineFilterRowWeb}>
-                  <View style={styles.tripsTabClusterWeb}>
-                    {mainTabs.map((tab) => (
-                      <TouchableOpacity
-                        key={tab.id}
-                        style={[styles.tabWebCompact, tab.isActive && styles.tabActive]}
-                        onPress={tab.onPress}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={[styles.tabText, tab.isActive && styles.tabTextActive]}>{tab.label}</Text>
-                        {tab.isActive ? <View style={styles.tabUnderline} /> : null}
-                      </TouchableOpacity>
-                    ))}
-                    <View style={styles.tripsFilterGroupSeparator} />
-                    {subTabs.map((tab) => (
-                      <TouchableOpacity
-                        key={tab.id}
-                        style={[
-                          styles.tabSubPill,
-                          styles.tabSubPillWeb,
-                          tab.isActive && styles.tabSubPillActive,
-                        ]}
-                        onPress={tab.onPress}
-                        activeOpacity={0.7}
-                        accessibilityRole="tab"
-                        accessibilityState={{ selected: tab.isActive }}
-                      >
-                        <Text
-                          style={[
-                            styles.tabSubPillText,
-                            tab.isActive && styles.tabSubPillTextActive,
-                          ]}
-                        >
-                          {tab.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                  <View style={styles.tripsToolbarWeb}>
-                    <View style={styles.tripsLayoutToggle} accessibilityRole="tablist">
-                      <TouchableOpacity
-                        style={[
-                          styles.tripsLayoutToggleBtn,
-                          listLayout === "cards" && styles.tripsLayoutToggleBtnActive,
-                        ]}
-                        onPress={() => setListLayout("cards")}
-                        activeOpacity={0.85}
-                        accessibilityRole="tab"
-                        accessibilityState={{ selected: listLayout === "cards" }}
-                        accessibilityLabel={tr("tripsViewCards")}
-                      >
-                        <FontAwesome
-                          name="th-large"
-                          size={14}
-                          color={listLayout === "cards" ? Theme.textPrimaryDark : Theme.textSecondary}
-                        />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.tripsLayoutToggleBtn,
-                          listLayout === "table" && styles.tripsLayoutToggleBtnActive,
-                        ]}
-                        onPress={() => setListLayout("table")}
-                        activeOpacity={0.85}
-                        accessibilityRole="tab"
-                        accessibilityState={{ selected: listLayout === "table" }}
-                        accessibilityLabel={tr("tripsViewTable")}
-                      >
-                        <FontAwesome
-                          name="list"
-                          size={14}
-                          color={listLayout === "table" ? Theme.textPrimaryDark : Theme.textSecondary}
-                        />
-                      </TouchableOpacity>
-                    </View>
-                    <View style={[styles.tripsSearchWrap, styles.tripsSearchWrapWeb, styles.tripsSearchWrapRow]}>
-                      <FontAwesome
-                        name="search"
-                        size={12}
-                        color={Theme.textSecondary}
-                        style={styles.tripsSearchIcon}
-                      />
-                      <TextInput
-                        style={[styles.tripsSearchInput, styles.tripsSearchInputWeb]}
-                        placeholder={isLargeScreen ? "Find by name..." : tr("searchTripsPlaceholder")}
-                        placeholderTextColor={Theme.textSecondary}
-                        value={searchQuery}
-                        onChangeText={setSearchQuery}
-                        returnKeyType="search"
-                        autoCorrect={false}
-                        spellCheck={false}
-                        autoComplete="off"
-                        maxLength={120}
-                      />
-                    </View>
-                    <View style={styles.tripsToolbarActions}>
-                      <TouchableOpacity
-                        style={[styles.tripsFilterIconBtn, styles.tripsSupplyChipWeb]}
-                        onPress={(e) => {
-                          // @ts-expect-error RN may expose measureInWindow on target
-                          const target = e.currentTarget;
-                          if (target && typeof target.measureInWindow === "function") {
-                            target.measureInWindow((_x: number, y: number, _w: number, h: number) => {
-                              setSortAnchorY(y + h + 6);
-                              setShowSortModal(true);
-                            });
-                          } else {
-                            setSortAnchorY(100);
-                            setShowSortModal(true);
-                          }
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        <FontAwesome name="sort" size={12} color={Theme.textPrimaryDark} />
-                      </TouchableOpacity>
-                    </View>
-                    <View style={styles.tripsDateInlineRowWeb}>
-                      {(
-                        [
-                          { id: "all" as const, label: tr("all") },
-                          { id: "today" as const, label: tr("todayTrips") },
-                          { id: "yesterday" as const, label: tr("yesterdayTrips") },
-                          { id: "this_week" as const, label: tr("thisWeekTrips") },
-                          { id: "this_month" as const, label: tr("thisMonthTrips") },
-                        ] as const
-                      ).map(({ id, label }) => (
+                <View style={styles.tripsInlineFilterPanelWeb}>
+                  <View style={styles.tripsBottomHeaderRowWeb}>
+                    <View style={styles.tripsTabClusterWeb}>
+                      {subTabs.map((tab) => (
                         <TouchableOpacity
-                          key={id}
+                          key={tab.id}
                           style={[
-                            styles.tripsBodyDateChip,
-                            dateRangeFilter === id && styles.tripsBodyDateChipActive,
-                            styles.tripsSupplyChipWeb,
+                            styles.tabSubPill,
+                            styles.tripsScopePillWeb,
+                            tab.isActive && styles.tripsScopePillActiveWeb,
                           ]}
-                          onPress={() => {
-                            setDateRangeFilter(id);
-                            setCustomDateFrom(null);
-                            setCustomDateTo(null);
-                          }}
-                          activeOpacity={0.85}
+                          onPress={tab.onPress}
+                          activeOpacity={0.75}
+                          accessibilityRole="tab"
+                          accessibilityState={{ selected: tab.isActive }}
                         >
                           <Text
                             style={[
-                              styles.tripsBodyDateChipText,
-                              dateRangeFilter === id && styles.tripsBodyDateChipTextActive,
+                              styles.tabSubPillText,
+                              styles.tripsScopePillTextWeb,
+                              tab.isActive &&
+                                styles.tripsScopePillTextActiveWeb,
                             ]}
-                            numberOfLines={1}
                           >
-                            {label}
+                            {tab.label}
                           </Text>
                         </TouchableOpacity>
                       ))}
-                      {dateRangeFilter === "custom" && customDateFrom && customDateTo ? (
-                        <View style={[styles.tripsBodyDateChip, styles.tripsDateChipCustom]}>
-                          <FontAwesome
-                            name="calendar"
-                            size={9}
-                            color={Theme.textOnDark}
-                            style={styles.tripsDateChipCustomIcon}
-                          />
-                          <Text
-                            style={[
-                              styles.tripsDateChipText,
-                              styles.tripsDateChipTextActive,
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {formatLedgerDate(customDateFrom).toUpperCase()} →{" "}
-                            {formatLedgerDate(customDateTo).toUpperCase()}
-                          </Text>
-                          <TouchableOpacity
-                            onPress={() => {
-                              setDateRangeFilter("all");
-                              setCustomDateFrom(null);
-                              setCustomDateTo(null);
-                            }}
-                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                            style={styles.tripsDateChipCustomClose}
-                          >
-                            <FontAwesome name="times" size={9} color={Theme.textOnDark} />
-                          </TouchableOpacity>
-                        </View>
-                      ) : null}
-                      <TouchableOpacity
+                    </View>
+                    <View style={styles.tripsToolbarWeb}>
+                      <View
                         style={[
-                          styles.tripsBodyDateRangeIconBtn,
-                          dateRangeFilter === "custom" && styles.tripsDateRangeIconBtnActive,
-                          styles.tripsSupplyChipWeb,
+                          styles.tripsSearchWrap,
+                          styles.tripsSearchWrapWeb,
+                          styles.tripsSearchWrapWebCompact,
                         ]}
-                        onPress={() => setShowDateRangePicker(true)}
-                        activeOpacity={0.8}
-                        accessibilityLabel={tr("dateRangeLabel")}
-                        accessibilityRole="button"
                       >
                         <FontAwesome
-                          name="calendar"
+                          name="search"
                           size={12}
-                          color={
-                            dateRangeFilter === "custom"
-                              ? Theme.textOnDark
-                              : Theme.textPrimaryDark
-                          }
+                          color={Theme.textSecondary}
+                          style={styles.tripsSearchIcon}
                         />
-                      </TouchableOpacity>
+                        <TextInput
+                          style={[
+                            styles.tripsSearchInput,
+                            styles.tripsSearchInputWeb,
+                          ]}
+                          placeholder={
+                            isLargeScreen
+                              ? "Find by name..."
+                              : tr("searchTripsPlaceholder")
+                          }
+                          placeholderTextColor={Theme.textSecondary}
+                          value={searchQuery}
+                          onChangeText={setSearchQuery}
+                          returnKeyType="search"
+                          autoCorrect={false}
+                          spellCheck={false}
+                          autoComplete="off"
+                          maxLength={120}
+                        />
+                      </View>
+                      <View style={styles.tripsToolbarActions}>
+                        <TouchableOpacity
+                          style={[
+                            styles.tripsFilterIconBtn,
+                            styles.tripsSupplyChipWeb,
+                          ]}
+                          onPress={(e) => {
+                            const target = e.currentTarget;
+                            if (
+                              target &&
+                              typeof target.measureInWindow === "function"
+                            ) {
+                              target.measureInWindow(
+                                (
+                                  _x: number,
+                                  y: number,
+                                  _w: number,
+                                  h: number,
+                                ) => {
+                                  setSortAnchorY(y + h + 6);
+                                  setShowSortModal(true);
+                                },
+                              );
+                            } else {
+                              setSortAnchorY(100);
+                              setShowSortModal(true);
+                            }
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <FontAwesome
+                            name="sort"
+                            size={12}
+                            color={Theme.textPrimaryDark}
+                          />
+                        </TouchableOpacity>
+                      </View>
+                      <View style={styles.tripsMainTabsRowWeb}>
+                        <View style={styles.tripsMainTabsPillWrap}>
+                          {mainTabs.map((tab) => (
+                            <TouchableOpacity
+                              key={tab.id}
+                              style={[
+                                styles.tripsMainPillWeb,
+                                tab.isActive && styles.tripsMainPillActiveWeb,
+                              ]}
+                              onPress={tab.onPress}
+                              activeOpacity={0.75}
+                              accessibilityRole="tab"
+                              accessibilityState={{ selected: tab.isActive }}
+                            >
+                              <Text
+                                style={[
+                                  styles.tripsMainPillTextWeb,
+                                  tab.isActive &&
+                                    styles.tripsMainPillTextActiveWeb,
+                                ]}
+                              >
+                                {tab.label}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                        <View
+                          style={styles.tripsLayoutToggle}
+                          accessibilityRole="tablist"
+                        >
+                          <TouchableOpacity
+                            style={[
+                              styles.tripsLayoutToggleBtn,
+                              listLayout === "cards" &&
+                                styles.tripsLayoutToggleBtnActive,
+                            ]}
+                            onPress={() => setListLayout("cards")}
+                            activeOpacity={0.85}
+                            accessibilityRole="tab"
+                            accessibilityState={{
+                              selected: listLayout === "cards",
+                            }}
+                            accessibilityLabel={tr("tripsViewCards")}
+                          >
+                            <FontAwesome
+                              name="th-large"
+                              size={14}
+                              color={
+                                listLayout === "cards"
+                                  ? Theme.textOnDark
+                                  : Theme.textSecondary
+                              }
+                            />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[
+                              styles.tripsLayoutToggleBtn,
+                              listLayout === "table" &&
+                                styles.tripsLayoutToggleBtnActive,
+                            ]}
+                            onPress={() => setListLayout("table")}
+                            activeOpacity={0.85}
+                            accessibilityRole="tab"
+                            accessibilityState={{
+                              selected: listLayout === "table",
+                            }}
+                            accessibilityLabel={tr("tripsViewTable")}
+                          >
+                            <FontAwesome
+                              name="list"
+                              size={14}
+                              color={
+                                listLayout === "table"
+                                  ? Theme.textOnDark
+                                  : Theme.textSecondary
+                              }
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
                     </View>
                   </View>
                 </View>
@@ -1740,11 +1794,24 @@ export default function TripsScreen() {
                 ]}
                 style={styles.tripMetricsScroll}
               >
-                <View style={styles.tripMetricsGroupColumn}>
-                  <Text style={styles.metricGroupLabel} accessibilityRole="header">
+                <View
+                  style={[
+                    styles.tripMetricsGroupColumn,
+                    isLargeScreen && styles.tripMetricsGroupColumnIntakeWeb,
+                  ]}
+                >
+                  <Text
+                    style={styles.metricGroupLabel}
+                    accessibilityRole="header"
+                  >
                     {tr("tripsHubMetricGroupIntake")}
                   </Text>
-                  <View style={styles.tripMetricsBundleRail}>
+                  <View
+                    style={[
+                      styles.tripMetricsBundleRail,
+                      isLargeScreen && styles.tripMetricsBundleRailWeb,
+                    ]}
+                  >
                     {TRIP_METRIC_ORDER.slice(0, 1).map((metricId) => {
                       const count = metricCounts[metricId];
                       const active = activeMetricTab === metricId;
@@ -1816,11 +1883,24 @@ export default function TripsScreen() {
                     })}
                   </View>
                 </View>
-                <View style={styles.tripMetricsGroupColumn}>
-                  <Text style={styles.metricGroupLabel} accessibilityRole="header">
+                <View
+                  style={[
+                    styles.tripMetricsGroupColumn,
+                    isLargeScreen && styles.tripMetricsGroupColumnInMotionWeb,
+                  ]}
+                >
+                  <Text
+                    style={styles.metricGroupLabel}
+                    accessibilityRole="header"
+                  >
                     {tr("tripsHubMetricGroupInMotion")}
                   </Text>
-                  <View style={styles.tripMetricsBundleRail}>
+                  <View
+                    style={[
+                      styles.tripMetricsBundleRail,
+                      isLargeScreen && styles.tripMetricsBundleRailWeb,
+                    ]}
+                  >
                     {activeInMotionIds.map((metricId) => {
                       const count = metricCounts[metricId];
                       const active = activeMetricTab === metricId;
@@ -1903,24 +1983,157 @@ export default function TripsScreen() {
                 ]}
                 style={styles.tripMetricsScroll}
               >
-                <View style={styles.tripMetricsGroupColumn}>
-                  <Text style={styles.metricGroupLabel} accessibilityRole="header">
+                <View
+                  style={[
+                    styles.tripMetricsGroupColumn,
+                    isLargeScreen && styles.tripMetricsGroupColumnWeb,
+                  ]}
+                >
+                  <Text
+                    style={styles.metricGroupLabel}
+                    accessibilityRole="header"
+                  >
                     {tr("tripsHubMetricGroupReceivable")}
                   </Text>
-                  <View style={styles.tripHistoryPairRail}>
-                    {historyReceivableIds.map((id) => renderHistoryMetricButton(id))}
+                  <View
+                    style={[
+                      styles.tripHistoryPairRail,
+                      isLargeScreen && styles.tripHistoryPairRailWeb,
+                    ]}
+                  >
+                    {historyReceivableIds.map((id) =>
+                      renderHistoryMetricButton(id),
+                    )}
                   </View>
                 </View>
-                <View style={styles.tripMetricsGroupColumn}>
-                  <Text style={styles.metricGroupLabel} accessibilityRole="header">
+                <View
+                  style={[
+                    styles.tripMetricsGroupColumn,
+                    isLargeScreen && styles.tripMetricsGroupColumnWeb,
+                  ]}
+                >
+                  <Text
+                    style={styles.metricGroupLabel}
+                    accessibilityRole="header"
+                  >
                     {tr("tripsHubMetricGroupPayable")}
                   </Text>
-                  <View style={styles.tripHistoryPairRail}>
-                    {historyPayableIds.map((id) => renderHistoryMetricButton(id))}
+                  <View
+                    style={[
+                      styles.tripHistoryPairRail,
+                      isLargeScreen && styles.tripHistoryPairRailWeb,
+                    ]}
+                  >
+                    {historyPayableIds.map((id) =>
+                      renderHistoryMetricButton(id),
+                    )}
                   </View>
                 </View>
               </ScrollView>
             )}
+            {isLargeScreen ? (
+              <View style={styles.tripsDateInlineRowWeb}>
+                {(
+                  [
+                    { id: "all" as const, label: tr("all") },
+                    { id: "today" as const, label: tr("todayTrips") },
+                    { id: "yesterday" as const, label: tr("yesterdayTrips") },
+                    { id: "this_week" as const, label: tr("thisWeekTrips") },
+                    { id: "this_month" as const, label: tr("thisMonthTrips") },
+                  ] as const
+                ).map(({ id, label }) => (
+                  <TouchableOpacity
+                    key={id}
+                    style={[
+                      styles.tripsBodyDateChip,
+                      dateRangeFilter === id && styles.tripsBodyDateChipActive,
+                      styles.tripsSupplyChipWeb,
+                    ]}
+                    onPress={() => {
+                      setDateRangeFilter(id);
+                      setCustomDateFrom(null);
+                      setCustomDateTo(null);
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Text
+                      style={[
+                        styles.tripsBodyDateChipText,
+                        dateRangeFilter === id &&
+                          styles.tripsBodyDateChipTextActive,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                {dateRangeFilter === "custom" &&
+                customDateFrom &&
+                customDateTo ? (
+                  <View
+                    style={[
+                      styles.tripsBodyDateChip,
+                      styles.tripsDateChipCustom,
+                    ]}
+                  >
+                    <FontAwesome
+                      name="calendar"
+                      size={9}
+                      color={Theme.textOnDark}
+                      style={styles.tripsDateChipCustomIcon}
+                    />
+                    <Text
+                      style={[
+                        styles.tripsDateChipText,
+                        styles.tripsDateChipTextActive,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {formatLedgerDate(customDateFrom).toUpperCase()} →{" "}
+                      {formatLedgerDate(customDateTo).toUpperCase()}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setDateRangeFilter("all");
+                        setCustomDateFrom(null);
+                        setCustomDateTo(null);
+                      }}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      style={styles.tripsDateChipCustomClose}
+                    >
+                      <FontAwesome
+                        name="times"
+                        size={9}
+                        color={Theme.textOnDark}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+                <TouchableOpacity
+                  style={[
+                    styles.tripsBodyDateRangeIconBtn,
+                    dateRangeFilter === "custom" &&
+                      styles.tripsDateRangeIconBtnActive,
+                    styles.tripsSupplyChipWeb,
+                  ]}
+                  onPress={() => setShowDateRangePicker(true)}
+                  activeOpacity={0.8}
+                  accessibilityLabel={tr("dateRangeLabel")}
+                  accessibilityRole="button"
+                >
+                  <FontAwesome
+                    name="calendar"
+                    size={12}
+                    color={
+                      dateRangeFilter === "custom"
+                        ? Theme.textOnDark
+                        : Theme.textPrimaryDark
+                    }
+                  />
+                </TouchableOpacity>
+              </View>
+            ) : null}
           </View>
 
           {filtered.length === 0 ? (
@@ -1940,17 +2153,21 @@ export default function TripsScreen() {
                         key={n}
                         style={[
                           styles.tripsTablePageSizePill,
-                          tripsTablePageSize === n && styles.tripsTablePageSizePillActive,
+                          tripsTablePageSize === n &&
+                            styles.tripsTablePageSizePillActive,
                         ]}
                         onPress={() => setTripsTablePageSize(n as 25 | 50)}
                         activeOpacity={0.85}
                         accessibilityRole="button"
-                        accessibilityState={{ selected: tripsTablePageSize === n }}
+                        accessibilityState={{
+                          selected: tripsTablePageSize === n,
+                        }}
                       >
                         <Text
                           style={[
                             styles.tripsTablePageSizeText,
-                            tripsTablePageSize === n && styles.tripsTablePageSizeTextActive,
+                            tripsTablePageSize === n &&
+                              styles.tripsTablePageSizeTextActive,
                           ]}
                         >
                           {n}
@@ -1961,7 +2178,8 @@ export default function TripsScreen() {
                   <TouchableOpacity
                     style={[
                       styles.tripsTablePageNavBtn,
-                      tripsTablePageSafe <= 0 && styles.tripsTablePageNavBtnDisabled,
+                      tripsTablePageSafe <= 0 &&
+                        styles.tripsTablePageNavBtnDisabled,
                     ]}
                     onPress={() => setTripsTablePage((p) => Math.max(0, p - 1))}
                     disabled={tripsTablePageSafe <= 0}
@@ -1976,7 +2194,9 @@ export default function TripsScreen() {
                         styles.tripsTablePageNavBtnDisabled,
                     ]}
                     onPress={() =>
-                      setTripsTablePage((p) => Math.min(tripsTableTotalPages - 1, p + 1))
+                      setTripsTablePage((p) =>
+                        Math.min(tripsTableTotalPages - 1, p + 1),
+                      )
                     }
                     disabled={tripsTablePageSafe >= tripsTableTotalPages - 1}
                     activeOpacity={0.85}
@@ -2031,17 +2251,21 @@ export default function TripsScreen() {
                         key={`bottom-${n}`}
                         style={[
                           styles.tripsTablePageSizePill,
-                          tripsTablePageSize === n && styles.tripsTablePageSizePillActive,
+                          tripsTablePageSize === n &&
+                            styles.tripsTablePageSizePillActive,
                         ]}
                         onPress={() => setTripsTablePageSize(n as 25 | 50)}
                         activeOpacity={0.85}
                         accessibilityRole="button"
-                        accessibilityState={{ selected: tripsTablePageSize === n }}
+                        accessibilityState={{
+                          selected: tripsTablePageSize === n,
+                        }}
                       >
                         <Text
                           style={[
                             styles.tripsTablePageSizeText,
-                            tripsTablePageSize === n && styles.tripsTablePageSizeTextActive,
+                            tripsTablePageSize === n &&
+                              styles.tripsTablePageSizeTextActive,
                           ]}
                         >
                           {n}
@@ -2052,7 +2276,8 @@ export default function TripsScreen() {
                   <TouchableOpacity
                     style={[
                       styles.tripsTablePageNavBtn,
-                      tripsTablePageSafe <= 0 && styles.tripsTablePageNavBtnDisabled,
+                      tripsTablePageSafe <= 0 &&
+                        styles.tripsTablePageNavBtnDisabled,
                     ]}
                     onPress={() => setTripsTablePage((p) => Math.max(0, p - 1))}
                     disabled={tripsTablePageSafe <= 0}
@@ -2067,7 +2292,9 @@ export default function TripsScreen() {
                         styles.tripsTablePageNavBtnDisabled,
                     ]}
                     onPress={() =>
-                      setTripsTablePage((p) => Math.min(tripsTableTotalPages - 1, p + 1))
+                      setTripsTablePage((p) =>
+                        Math.min(tripsTableTotalPages - 1, p + 1),
+                      )
                     }
                     disabled={tripsTablePageSafe >= tripsTableTotalPages - 1}
                     activeOpacity={0.85}
@@ -2396,6 +2623,12 @@ const styles = StyleSheet.create({
     outlineStyle: "none",
     outlineWidth: 0,
   } as unknown as ViewStyle,
+  tripsSearchWrapWebCompact: {
+    flex: 0,
+    width: 240,
+    minWidth: 220,
+    maxWidth: 260,
+  },
   tripsSearchIcon: { marginRight: 8 },
   tripsSearchInput: {
     flex: 1,
@@ -2814,11 +3047,123 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingVertical: 8,
   },
+  tripsInlineFilterPanelWeb: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 10,
+    paddingBottom: 10,
+    gap: 10,
+  },
+  tripsTopHeaderRowWeb: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    minHeight: 36,
+  },
+  tripsMainTabsRowWeb: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  tripsTopHeaderSpacer: {
+    flex: 1,
+  },
+  tripsMainTabsPillWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 4,
+    borderRadius: 999,
+    backgroundColor: Theme.liquidPillBg,
+    borderWidth: 1,
+    borderColor: Theme.liquidPillBorder,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  tripsMainPillWeb: {
+    minWidth: 94,
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
+  },
+  tripsMainPillActiveWeb: {
+    backgroundColor: Theme.darkBackground,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.16,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  tripsMainPillTextWeb: {
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.4,
+    color: Theme.textMuted,
+  },
+  tripsMainPillTextActiveWeb: {
+    color: Theme.textOnDark,
+  },
+  tripsBottomHeaderRowWeb: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
   tripsTabClusterWeb: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     flexShrink: 0,
+    backgroundColor: Theme.liquidPillBg,
+    borderWidth: 1,
+    borderColor: Theme.liquidPillBorder,
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 9,
+    elevation: 1,
+  },
+  tripsScopePillWeb: {
+    minWidth: 86,
+    backgroundColor: "transparent",
+    borderColor: "transparent",
+    borderWidth: 1,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
+  },
+  tripsScopePillActiveWeb: {
+    backgroundColor: Theme.surface,
+    borderColor: Theme.borderLight,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.09,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  tripsScopePillTextWeb: {
+    color: Theme.textMuted,
+    letterSpacing: 1.4,
+  },
+  tripsScopePillTextActiveWeb: {
+    color: Theme.textPrimaryDark,
   },
   tabWebCompact: {
     minWidth: 66,
@@ -2843,8 +3188,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    flex: 1,
+    flexShrink: 1,
     minWidth: 0,
+    justifyContent: "flex-end",
     paddingHorizontal: 0,
     paddingVertical: 0,
     backgroundColor: "transparent",
@@ -2872,12 +3218,28 @@ const styles = StyleSheet.create({
   tripMetricsGridWeb: {
     justifyContent: "flex-start",
     gap: 12,
+    width: "100%" as const,
   },
   tripMetricsGroupColumn: {
     flexDirection: "column",
     alignItems: "flex-start",
     flexShrink: 0,
     marginRight: 4,
+  },
+  tripMetricsGroupColumnWeb: {
+    flex: 1,
+    minWidth: 0,
+    marginRight: 0,
+  },
+  tripMetricsGroupColumnIntakeWeb: {
+    flex: 1.1,
+    minWidth: 0,
+    marginRight: 0,
+  },
+  tripMetricsGroupColumnInMotionWeb: {
+    flex: 4.9,
+    minWidth: 0,
+    marginRight: 0,
   },
   metricGroupLabel: {
     fontSize: 9,
@@ -2892,25 +3254,31 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "nowrap",
     alignItems: "stretch",
-    gap: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     backgroundColor: "rgba(15, 23, 42, 0.06)",
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "rgba(15, 23, 42, 0.08)",
   },
+  tripMetricsBundleRailWeb: {
+    width: "100%" as const,
+  },
   tripHistoryPairRail: {
     flexDirection: "row",
     flexWrap: "nowrap",
     alignItems: "stretch",
-    gap: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     backgroundColor: "rgba(15, 23, 42, 0.06)",
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "rgba(15, 23, 42, 0.08)",
+  },
+  tripHistoryPairRailWeb: {
+    width: "100%" as const,
   },
   tripMetricBento: {
     backgroundColor: "transparent",
@@ -2936,9 +3304,10 @@ const styles = StyleSheet.create({
   },
   tripMetricTile: {
     width: 188,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 20,
+    minHeight: Platform.OS === "web" ? 118 : 102,
+    paddingVertical: Platform.OS === "web" ? 18 : 14,
+    paddingHorizontal: 16,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
@@ -2949,7 +3318,11 @@ const styles = StyleSheet.create({
     borderColor: Theme.darkBackground,
   },
   tripMetricTileWeb: {
-    width: 198,
+    flex: 1,
+    flexBasis: 0,
+    width: "auto" as const,
+    minWidth: 110,
+    minHeight: 124,
   },
   tripMetricTileHeroWeb: {
     width: 248,
@@ -2977,31 +3350,31 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     minHeight: 0,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
     zIndex: 1,
     width: "100%" as const,
     flexDirection: "column",
   },
   /** Bento tile typography — tuned for 188px card width, left-aligned, even vertical rhythm. */
   metricBentoValue: {
-    fontSize: 20,
+    fontSize: Platform.OS === "web" ? 24 : 20,
     fontWeight: "900",
     fontStyle: "italic",
     letterSpacing: -0.4,
-    lineHeight: 24,
-    marginBottom: 4,
+    lineHeight: Platform.OS === "web" ? 28 : 24,
+    marginBottom: 5,
     textAlign: "left" as const,
   },
   metricBentoValueOnDark: {
     color: Theme.textOnDark,
   },
   metricBentoLabel: {
-    fontSize: 9.5,
+    fontSize: 10.5,
     fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 0.4,
-    lineHeight: 12,
+    lineHeight: 13.5,
     textAlign: "left" as const,
     width: "100%" as const,
   },
@@ -3012,9 +3385,9 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.97)",
   },
   metricBentoSubtext: {
-    fontSize: 8.5,
+    fontSize: 9.5,
     fontWeight: "500",
-    lineHeight: 11.5,
+    lineHeight: 12.5,
     textAlign: "left" as const,
     width: "100%" as const,
   },
@@ -3100,14 +3473,14 @@ const styles = StyleSheet.create({
   historyMetricAmount: {
     marginTop: 0,
     flexShrink: 1,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "900",
     color: Theme.textSecondary,
     letterSpacing: -0.1,
   },
   historyMetricAmountBento: {
-    fontSize: 9.5,
-    lineHeight: 12,
+    fontSize: 10.5,
+    lineHeight: 13.5,
   },
   historyMetricAmountDue: {
     color: Theme.teslaRed,
