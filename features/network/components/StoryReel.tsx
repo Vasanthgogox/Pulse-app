@@ -178,7 +178,7 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
     if (p.organization_id === orgId) ownStories.push(p);
     else otherStories.push(p);
   }
-  const ordered = [...ownStories, ...otherStories];
+  const ordered = [...otherStories];
   for (const p of ordered) {
     const storyKey = `${p.organization_id}:${p.type}`;
     if (!seenStoryKeys.has(storyKey)) {
@@ -187,7 +187,14 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
     }
     if (stories.length >= 20) break;
   }
+  const ownStoryQueue = [...ownStories].sort(
+    (a, b) =>
+      new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime(),
+  );
+  const latestOwnStory = ownStoryQueue[0];
   const storyQueueIds = stories.map((s) => s.id).join(",");
+  const ownStoryQueueIds = ownStoryQueue.map((s) => s.id).join(",");
+  const hasOwnStories = ownStoryQueue.length > 0;
 
   return (
     <View style={styles.wrap}>
@@ -209,15 +216,49 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
       >
-        <Pressable onPress={onCreatePost} style={({ pressed }) => [pressed && { opacity: 0.92 }]}>
+        <Pressable
+          onPress={() => {
+            if (!latestOwnStory) {
+              onCreatePost();
+              return;
+            }
+            markStorySeen(latestOwnStory);
+            router.push({
+              pathname: "/(modals)/story-detail",
+              params: {
+                postId: latestOwnStory.id,
+                orgId: latestOwnStory.organization_id,
+                storyType: latestOwnStory.type,
+                queue: ownStoryQueueIds,
+              },
+            });
+          }}
+          style={({ pressed }) => [pressed && { opacity: 0.92 }]}
+        >
           <View style={styles.storyItem}>
             <View style={styles.launchRing}>
               <View style={styles.launchIcon}>
-                <Plus size={18} color={Theme.textOnPrimary} strokeWidth={2.5} />
+                {hasOwnStories ? (
+                  <Text style={styles.mineCountText}>{ownStoryQueue.length}</Text>
+                ) : (
+                  <Plus size={18} color={Theme.textOnPrimary} strokeWidth={2.5} />
+                )}
               </View>
+              <Pressable
+                style={styles.mineAddIconWrap}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  router.push("/(modals)/create-post");
+                }}
+                hitSlop={8}
+              >
+                <Plus size={12} color={Theme.textOnPrimary} strokeWidth={2.8} />
+              </Pressable>
             </View>
             <Text style={styles.storyName}>Mine</Text>
-            <Text style={styles.storyMeta} numberOfLines={1}>Add story</Text>
+            <Text style={styles.storyMeta} numberOfLines={1}>
+              {hasOwnStories ? `${ownStoryQueue.length} ${ownStoryQueue.length > 1 ? "stories" : "story"}` : "Add story"}
+            </Text>
           </View>
         </Pressable>
         {stories.map((post) => (
@@ -371,6 +412,25 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.textPrimaryDark,
     alignItems: "center",
     justifyContent: "center",
+  },
+  mineAddIconWrap: {
+    position: "absolute",
+    right: 12,
+    bottom: 2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: Theme.primary,
+    borderWidth: 1.5,
+    borderColor: Theme.screenBackground,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mineCountText: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: Theme.textOnPrimary,
+    letterSpacing: -0.3,
   },
   initials: {
     fontSize: 12,

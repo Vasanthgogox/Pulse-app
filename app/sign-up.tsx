@@ -1,40 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
-import { useRouter, Link } from 'expo-router';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Keyboard,
-  KeyboardAvoidingView,
-  LayoutAnimation,
-  Platform,
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  UIManager,
-  useWindowDimensions,
-} from 'react-native';
-
-// Layout animation: no-op in New Architecture; only enable on Android when using old arch to avoid warning.
-const isNewArch = typeof (global as unknown as { __turboModuleProxy?: unknown }).__turboModuleProxy !== 'undefined';
-if (Platform.OS === 'android' && !isNewArch && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
-import Layout from '@/constants/Layout';
-import { validateEmail } from '@/lib/emailValidation';
-import {
-  extractIndianMobileTenDigits,
-  isPhoneValid,
-  normalizeIndianPhoneForMetadata,
-  validatePhone,
-} from '@/lib/phoneValidation';
-import { formatMobileNumber } from '@/lib/format';
-import { VALIDATION, maxLength, validateFullName, validatePassword } from '@/lib/validation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
 import {
@@ -42,6 +6,49 @@ import {
   checkOrganizationNameTaken,
   type OperatingModel,
 } from '@/features/auth';
+import { validateEmail } from '@/lib/emailValidation';
+import { formatMobileNumber } from '@/lib/format';
+import INDIA_LOCATIONS from '@/lib/indiaLocations.json';
+import {
+  extractIndianMobileTenDigits,
+  isPhoneValid,
+  normalizeIndianPhoneForMetadata,
+  validatePhone,
+} from '@/lib/phoneValidation';
+import { VALIDATION, maxLength, validateFullName, validatePassword } from '@/lib/validation';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { useRouter } from 'expo-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+type Zone = 'NORTH' | 'SOUTH' | 'EAST' | 'WEST' | 'NORTHEAST';
+type IndiaLocation = { city: string; state: string; zone: Zone };
+
+const ALL_LOCATIONS = INDIA_LOCATIONS as IndiaLocation[];
+
+const ZONE_LABELS: Record<Zone, string> = {
+  NORTH: 'North Zone',
+  SOUTH: 'South Zone',
+  EAST: 'East Zone',
+  WEST: 'West Zone',
+  NORTHEAST: 'Northeast Zone',
+};
+
+const ITEM_HEIGHT = 58;
 
 const OPERATING_MODELS: { value: OperatingModel; label: string }[] = [
   { value: 'ASSET_BASED', label: 'Asset' },
@@ -49,117 +56,87 @@ const OPERATING_MODELS: { value: OperatingModel; label: string }[] = [
   { value: 'HYBRID', label: 'Both' },
 ];
 
+const STEP_CONTENT = [
+  { title: 'Welcome aboard', subtitle: 'To sign up or log in, enter your number.' },
+  { title: 'Business details', subtitle: 'Enter your name, company and operating model.' },
+  { title: 'Create your account', subtitle: 'Enter email and password to finish sign up.' },
+  { title: "You're in", subtitle: 'Your account is ready. You can start using the app.' },
+];
+
+const LIGHT = {
+  background: '#ffffff',
+  surface: '#f8fafc',
+  border: '#e2e8f0',
+  text: '#0f172a',
+  textMuted: '#64748b',
+  inputBg: '#ffffff',
+  placeholder: '#94a3b8',
+  accent: Theme.driverEmerald,
+  buttonPrimary: Theme.driverEmerald,
+};
+
 export default function SignUp() {
   const insets = useSafeAreaInsets();
-  const { signUp } = useAuth();
-  const isOnline = useIsOnline();
+  const { width } = useWindowDimensions();
   const router = useRouter();
+  const isOnline = useIsOnline();
+  const { signUp } = useAuth();
+  const scrollRef = useRef<ScrollView>(null);
+  const isDesktop = width >= 1024;
+  const pageWidth = isDesktop ? Math.min(560, width - 120) : width;
+
+  const [step, setStep] = useState(0);
   const [operatingModel, setOperatingModel] = useState<OperatingModel>('HYBRID');
   const [fullName, setFullName] = useState('');
   const [companyName, setCompanyName] = useState('');
+  const [addressLine, setAddressLine] = useState('');
+  const [selectedLocation, setSelectedLocation] = useState<IndiaLocation | null>(null);
+  const [cityPickerOpen, setCityPickerOpen] = useState(false);
+  const [citySearch, setCitySearch] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  /** Inline "phone already registered" check (debounced when user enters valid phone). */
+
   const [phoneExistsCheck, setPhoneExistsCheck] = useState<{
     loading: boolean;
     exists: boolean;
     email?: string;
     masked_email?: string;
   } | null>(null);
-  const phoneCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const companyCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [companyNameTakenCheck, setCompanyNameTakenCheck] = useState<{
     loading: boolean;
     taken: boolean;
   } | null>(null);
-  const scrollRef = useRef<ScrollView>(null);
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const fieldYRef = useRef({ fullName: 0, company: 0, phone: 0, email: 0, password: 0, confirmPassword: 0 });
-  const { width } = useWindowDimensions();
-  const isDesktopLayout = width >= 1024;
-  /** Small phones (under ~390pt): tighter padding and typography. */
-  const isCompact = width < 390;
-  /** Stack business-model chips vertically for readability and 44pt+ tap targets. */
-  const useStackedModelChips = width < 440;
-  /** Large phone / small tablet: slightly roomier horizontal padding (still mobile layout). */
-  const isLargeMobile = width >= 600 && width < 1024;
-  const screenPaddingH = isDesktopLayout
-    ? 0
-    : isCompact
-      ? 12
-      : isLargeMobile
-        ? Math.min(28, Math.floor(width * 0.06))
-        : Layout.screenPaddingHorizontal;
-  const titleFontSize = isDesktopLayout ? 40 : isCompact ? 26 : width < 430 ? 28 : 32;
-  const formCardPadding = isDesktopLayout ? 0 : isCompact ? 14 : isLargeMobile ? 24 : 20;
-  const formCardRadius = isCompact ? 18 : 24;
 
-  /** Extra scroll offset so focused field stays above keyboard. Use larger offset on iOS when focusing password so the field stays above the "Strong Password" / autofill bar. */
-  const SCROLL_OFFSET_DEFAULT = 100;
-  const SCROLL_OFFSET_PASSWORD_IOS = 220;
+  const phoneCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const companyCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const scrollToField = (name: keyof typeof fieldYRef.current) => {
-    const isPasswordOnIos = name === 'password' && Platform.OS === 'ios';
-    const baseOffset = isCompact ? 72 : SCROLL_OFFSET_DEFAULT;
-    const offset = isPasswordOnIos ? SCROLL_OFFSET_PASSWORD_IOS : baseOffset;
-    setTimeout(() => {
-      const y = fieldYRef.current[name];
-      scrollRef.current?.scrollTo({
-        y: Math.max(0, y - offset),
-        animated: true,
-      });
-    }, 80);
+  const goToPage = (index: number) => {
+    setStep(index);
+    scrollRef.current?.scrollTo({ x: index * pageWidth, animated: true });
   };
 
-  useEffect(() => {
-    const show = (e: { endCoordinates: { height: number } }) => {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setKeyboardHeight(e.endCoordinates.height);
-      setKeyboardVisible(true);
-    };
-    const hide = () => {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setKeyboardVisible(false);
-      setKeyboardHeight(0);
-    };
-    const subShow = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      show
-    );
-    const subHide = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      hide
-    );
-    return () => {
-      subShow.remove();
-      subHide.remove();
-    };
-  }, []);
+  const phoneInlineError = (() => {
+    const t = phone.trim();
+    if (t.length === 0) return null;
+    if (!isPhoneValid(phone)) return 'Enter a valid 10-digit number.';
+    return null;
+  })();
 
   useEffect(() => {
     const raw = phone.trim();
     if (!raw || !isPhoneValid(phone)) {
       setPhoneExistsCheck(null);
-      if (phoneCheckTimeoutRef.current) {
-        clearTimeout(phoneCheckTimeoutRef.current);
-        phoneCheckTimeoutRef.current = null;
-      }
+      if (phoneCheckTimeoutRef.current) clearTimeout(phoneCheckTimeoutRef.current);
       return;
     }
-    if (!isOnline) {
-      setPhoneExistsCheck(null);
-      return;
-    }
+    if (!isOnline) return;
     if (phoneCheckTimeoutRef.current) clearTimeout(phoneCheckTimeoutRef.current);
     setPhoneExistsCheck((prev) => (prev ? { ...prev, loading: true } : { loading: true, exists: false }));
     phoneCheckTimeoutRef.current = setTimeout(async () => {
-      phoneCheckTimeoutRef.current = null;
       const result = await checkExistingUserByPhone(phone);
       setPhoneExistsCheck({
         loading: false,
@@ -169,10 +146,7 @@ export default function SignUp() {
       });
     }, 600);
     return () => {
-      if (phoneCheckTimeoutRef.current) {
-        clearTimeout(phoneCheckTimeoutRef.current);
-        phoneCheckTimeoutRef.current = null;
-      }
+      if (phoneCheckTimeoutRef.current) clearTimeout(phoneCheckTimeoutRef.current);
     };
   }, [phone, isOnline]);
 
@@ -180,602 +154,451 @@ export default function SignUp() {
     const raw = companyName.trim();
     if (!raw) {
       setCompanyNameTakenCheck(null);
-      if (companyCheckTimeoutRef.current) {
-        clearTimeout(companyCheckTimeoutRef.current);
-        companyCheckTimeoutRef.current = null;
-      }
+      if (companyCheckTimeoutRef.current) clearTimeout(companyCheckTimeoutRef.current);
       return;
     }
-    const lenErr = maxLength(
-      VALIDATION.COMPANY_NAME_MAX_LENGTH,
-      `Company name must be at most ${VALIDATION.COMPANY_NAME_MAX_LENGTH} characters.`,
-    )(raw);
-    if (lenErr) {
-      setCompanyNameTakenCheck(null);
-      if (companyCheckTimeoutRef.current) {
-        clearTimeout(companyCheckTimeoutRef.current);
-        companyCheckTimeoutRef.current = null;
-      }
-      return;
-    }
-    if (!isOnline) {
-      setCompanyNameTakenCheck(null);
-      return;
-    }
+    if (!isOnline) return;
     if (companyCheckTimeoutRef.current) clearTimeout(companyCheckTimeoutRef.current);
-    setCompanyNameTakenCheck((prev) =>
-      prev ? { ...prev, loading: true } : { loading: true, taken: false },
-    );
+    setCompanyNameTakenCheck((prev) => (prev ? { ...prev, loading: true } : { loading: true, taken: false }));
     companyCheckTimeoutRef.current = setTimeout(async () => {
-      companyCheckTimeoutRef.current = null;
       const result = await checkOrganizationNameTaken(raw);
-      setCompanyNameTakenCheck({
-        loading: false,
-        taken: !result.error && result.taken,
-      });
+      setCompanyNameTakenCheck({ loading: false, taken: !result.error && result.taken });
     }, 600);
     return () => {
-      if (companyCheckTimeoutRef.current) {
-        clearTimeout(companyCheckTimeoutRef.current);
-        companyCheckTimeoutRef.current = null;
-      }
+      if (companyCheckTimeoutRef.current) clearTimeout(companyCheckTimeoutRef.current);
     };
   }, [companyName, isOnline]);
 
-  const handleSignUp = async () => {
-    setErrorMsg(null);
-    if (!isOnline) {
-      setErrorMsg('Connect to the internet to create an account.');
-      return;
-    }
-    const trimmedEmail = email.trim();
-    const emailErr = validateEmail(email);
-    if (emailErr) {
-      setErrorMsg(emailErr);
-      return;
-    }
-    const passwordErr = validatePassword(password);
-    if (passwordErr) {
-      setErrorMsg(passwordErr);
-      return;
-    }
-    if (password !== confirmPassword) {
-      setErrorMsg('Passwords do not match.');
-      return;
-    }
-    const fullNameErr = validateFullName(false)(fullName);
-    if (fullNameErr) {
-      setErrorMsg(fullNameErr);
-      return;
-    }
-    const companyTrim = companyName.trim();
-    if (companyTrim.length === 0) {
-      setErrorMsg('Please enter company name.');
-      return;
-    }
-    const companyErr = maxLength(
-      VALIDATION.COMPANY_NAME_MAX_LENGTH,
-      `Company name must be at most ${VALIDATION.COMPANY_NAME_MAX_LENGTH} characters.`,
-    )(companyTrim);
-    if (companyErr) {
-      setErrorMsg(companyErr);
-      return;
-    }
-    if (companyNameTakenCheck?.taken) {
-      setErrorMsg('Company name already exists.');
-      return;
-    }
-    if (companyNameTakenCheck?.loading) {
-      setLoading(true);
-      const dup = await checkOrganizationNameTaken(companyTrim);
-      setLoading(false);
-      if (dup.error) {
-        setErrorMsg(dup.error.message);
-        return;
-      }
-      if (dup.taken) {
-        setErrorMsg('Company name already exists.');
-        return;
-      }
-    }
-    if (!trimmedEmail) {
-      setErrorMsg('Please enter email.');
-      return;
-    }
-    if (!extractIndianMobileTenDigits(phone)) {
-      setErrorMsg('Please enter your phone number.');
-      return;
-    }
+  const continuePhoneStep = async () => {
+    if (!isOnline) return Alert.alert('No internet', 'Connect to the internet to continue.');
+    if (!phone.trim()) return Alert.alert('Required', 'Enter your 10-digit mobile number.');
     const phoneErr = validatePhone(phone);
-    if (phoneErr) {
-      setErrorMsg(phoneErr);
-      return;
-    }
-    const storedPhone = normalizeIndianPhoneForMetadata(phone);
-    if (!storedPhone) {
-      setErrorMsg('Please enter a valid phone number.');
-      return;
-    }
+    if (phoneErr) return Alert.alert('Invalid', phoneErr);
     setLoading(true);
-    const existing = await checkExistingUserByPhone(storedPhone);
+    const existing = await checkExistingUserByPhone(phone);
     setLoading(false);
-    if (existing.error) {
-      setErrorMsg(existing.error.message);
-      return;
-    }
+    if (existing.error) return Alert.alert('Check failed', existing.error.message);
     if (existing.exists && existing.email) {
       Alert.alert(
         'Account already exists',
         existing.masked_email
-          ? `Sign in with ${existing.masked_email}. We've filled your email—enter your password.`
-          : 'An account with this phone already exists. Sign in below—we\'ve filled your email.',
-        [
-          {
-            text: 'OK',
-            onPress: () =>
-              router.replace(`/sign-in?direct=1&email=${encodeURIComponent(existing.email!)}`),
-          },
-        ]
+          ? `Sign in with ${existing.masked_email}.`
+          : 'An account with this phone already exists.',
+        [{ text: 'Sign in', onPress: () => router.replace(`/sign-in?direct=1&email=${encodeURIComponent(existing.email!)}`) }],
       );
       return;
     }
+    goToPage(1);
+  };
 
+  const filteredLocations = useMemo(() => {
+    const q = citySearch.trim().toLowerCase();
+    if (!q) return ALL_LOCATIONS;
+    return ALL_LOCATIONS.filter(
+      (l) => l.city.toLowerCase().includes(q) || l.state.toLowerCase().includes(q),
+    );
+  }, [citySearch]);
+
+  const continueBusinessStep = () => {
+    const fullNameErr = validateFullName(false)(fullName);
+    if (fullNameErr) return Alert.alert('Invalid', fullNameErr);
+    const companyTrim = companyName.trim();
+    if (!companyTrim) return Alert.alert('Required', 'Please enter company name.');
+    const companyErr = maxLength(
+      VALIDATION.COMPANY_NAME_MAX_LENGTH,
+      `Company name must be at most ${VALIDATION.COMPANY_NAME_MAX_LENGTH} characters.`,
+    )(companyTrim);
+    if (companyErr) return Alert.alert('Invalid', companyErr);
+    if (companyNameTakenCheck?.taken) return Alert.alert('Invalid', 'Company name already exists.');
+    const normalizedCity = citySearch.trim().toLowerCase();
+    const inferredLocation =
+      selectedLocation ??
+      (normalizedCity ? ALL_LOCATIONS.find((loc) => loc.city.toLowerCase() === normalizedCity) ?? null : null);
+    if (!inferredLocation) return Alert.alert('Required', 'Please select your city.');
+    if (!selectedLocation) setSelectedLocation(inferredLocation);
+    setCityPickerOpen(false);
+    setCitySearch('');
+    goToPage(2);
+  };
+
+  const createAccount = async () => {
+    if (!isOnline) return Alert.alert('No internet', 'Connect to the internet to create an account.');
+    const emailErr = validateEmail(email);
+    if (emailErr) return Alert.alert('Invalid', emailErr);
+    const passwordErr = validatePassword(password);
+    if (passwordErr) return Alert.alert('Invalid', passwordErr);
+    if (password !== confirmPassword) return Alert.alert('Invalid', 'Passwords do not match.');
+    const storedPhone = normalizeIndianPhoneForMetadata(phone);
+    if (!storedPhone || !extractIndianMobileTenDigits(phone)) return Alert.alert('Invalid', 'Enter a valid phone number.');
+    const companyTrim = companyName.trim();
     setLoading(true);
+    const dup = await checkOrganizationNameTaken(companyTrim);
+    if (dup.error) {
+      setLoading(false);
+      return Alert.alert('Error', dup.error.message);
+    }
+    if (dup.taken) {
+      setLoading(false);
+      return Alert.alert('Invalid', 'Company name already exists.');
+    }
     const { error } = await signUp(
-      trimmedEmail,
+      email.trim(),
       password,
       fullName.trim() || undefined,
       'user',
       operatingModel,
       storedPhone,
       companyTrim,
+      addressLine.trim() || undefined,
+      selectedLocation?.city,
+      selectedLocation?.state,
+      selectedLocation?.zone,
     );
     setLoading(false);
-    if (error) {
-      const isNetwork = error.message.includes('Cannot reach server');
-      setErrorMsg(
-        isNetwork
-          ? 'Cannot reach server. Check your internet connection and try again.'
-          : error.message
-      );
-      return;
-    }
-    router.replace('/');
+    if (error) return Alert.alert('Error', error.message);
+    goToPage(3);
   };
 
-  /** On iOS, keyboard height does not include the "Strong Password" / autofill bar (~50–88pt). Add extra inset so the password field can scroll above it. */
-  const KEYBOARD_BOTTOM_INSET =
-    Platform.OS === 'ios' ? (isCompact ? 96 : 88) : isCompact ? 48 : 40;
-
-  const scrollContentStyle = [
-    styles.scrollContent,
-    isCompact && styles.scrollContentCompact,
-    keyboardVisible && {
-      flexGrow: 0,
-      justifyContent: 'flex-start' as const,
-      paddingBottom: keyboardHeight + KEYBOARD_BOTTOM_INSET + (isCompact ? 20 : 0),
-    },
-  ];
-
-  const form = (
-    <View
-      style={[
-        styles.formCard,
-        isDesktopLayout && styles.formCardDesktop,
-        !isDesktopLayout && {
-          padding: formCardPadding,
-          borderRadius: formCardRadius,
-          maxWidth: isLargeMobile ? 520 : '100%',
-        },
-      ]}
-    >
-      <Text
-        style={[
-          styles.title,
-          isDesktopLayout && styles.titleDesktop,
-          !isDesktopLayout && { fontSize: titleFontSize },
-        ]}
-      >
-        Create Account
-      </Text>
-      <Text
-        style={[
-          styles.subtitle,
-          isDesktopLayout && styles.subtitleDesktop,
-          isCompact && !isDesktopLayout && styles.subtitleCompact,
-        ]}
-      >
-        Enter your details to get started.
-      </Text>
-
-      {errorMsg ? (
-        <View style={styles.errorAlert}>
-          <FontAwesome name="exclamation-circle" size={18} color={Theme.negative} style={styles.errorIcon} />
-          <Text style={styles.errorText}>{errorMsg}</Text>
-        </View>
-      ) : null}
-
-      <View
-        style={styles.inputWrap}
-        onLayout={(e) => { fieldYRef.current.fullName = e.nativeEvent.layout.y; }}
-      >
-        <TextInput
-          style={[styles.input, isDesktopLayout && styles.inputDesktop, styles.inputNoMargin]}
-          placeholder="Full Name"
-          placeholderTextColor={Theme.textMuted}
-          value={fullName}
-          onChangeText={setFullName}
-          onFocus={() => scrollToField('fullName')}
-          autoCapitalize="words"
-          autoCorrect={false}
-          spellCheck={false}
-          autoComplete="name"
-          editable={!loading}
-        />
-      </View>
-
-      <View
-        style={styles.inputWrap}
-        onLayout={(e) => { fieldYRef.current.company = e.nativeEvent.layout.y; }}
-      >
-        <TextInput
-          style={[styles.input, isDesktopLayout && styles.inputDesktop, styles.inputNoMargin]}
-          placeholder="Company Name"
-          placeholderTextColor={Theme.textMuted}
-          value={companyName}
-          onChangeText={setCompanyName}
-          onFocus={() => scrollToField('company')}
-          autoCapitalize="words"
-          autoCorrect={false}
-          spellCheck={false}
-          autoComplete="organization"
-          editable={!loading}
-        />
-      </View>
-      {companyName.trim().length > 0 ? (
-        companyNameTakenCheck?.loading ? (
-          <Text style={styles.phoneExistsHint}>Checking company name...</Text>
-        ) : companyNameTakenCheck?.taken ? (
-          <Text style={[styles.phoneExistsText, styles.companyTakenHint]}>
-            Company name already exists.
-          </Text>
-        ) : null
-      ) : null}
-
-      <View
-        style={styles.inputWrap}
-        onLayout={(e) => { fieldYRef.current.phone = e.nativeEvent.layout.y; }}
-      >
-        <View
-          style={[
-            styles.phoneFieldShell,
-            isDesktopLayout && styles.phoneFieldShellDesktop,
-          ]}
-        >
-          <Text
-            style={[styles.phoneDialCode, isDesktopLayout && styles.phoneDialCodeDesktop]}
-            accessibilityRole="text"
-          >
-            +91
-          </Text>
-          <TextInput
-            style={[
-              styles.phoneNationalInput,
-              isDesktopLayout && styles.phoneNationalInputDesktop,
-            ]}
-            placeholder="98765 43210"
-            placeholderTextColor={Theme.textMuted}
-            value={phone}
-            onChangeText={(text) => setPhone(formatMobileNumber(text))}
-            maxLength={10}
-            onFocus={() => scrollToField('phone')}
-            keyboardType="phone-pad"
-            autoCorrect={false}
-            spellCheck={false}
-            autoComplete="tel-national"
-            editable={!loading}
-          />
-        </View>
-      </View>
-      {phoneExistsCheck?.loading ? (
-        <Text style={styles.phoneExistsHint}>Checking...</Text>
-      ) : phoneExistsCheck?.exists ? (
-        <View style={styles.phoneExistsRow}>
-          <Text style={styles.phoneExistsText}>This number is already registered.</Text>
-        </View>
-      ) : null}
-
-      <Text style={[styles.label, isDesktopLayout && styles.labelDesktop]}>Business model</Text>
-      <View
-        style={[
-          styles.modelRow,
-          useStackedModelChips && styles.modelRowStacked,
-        ]}
-      >
-        {OPERATING_MODELS.map(({ value, label }) => {
-          const isActive = operatingModel === value;
-          return (
-            <TouchableOpacity
-              key={value}
-              style={[
-                styles.modelChip,
-                useStackedModelChips && styles.modelChipStacked,
-                isActive && styles.modelChipActive,
-              ]}
-              onPress={() => setOperatingModel(value)}
-              disabled={loading}
-            >
-              <Text
-                style={[
-                  styles.modelChipText,
-                  isDesktopLayout && styles.modelChipTextDesktop,
-                  isActive && styles.modelChipTextActive,
-                  isCompact && !isDesktopLayout && styles.modelChipTextCompact,
-                ]}
-              >
-                {label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      <View
-        style={styles.inputWrap}
-        onLayout={(e) => { fieldYRef.current.email = e.nativeEvent.layout.y; }}
-      >
-        <TextInput
-          style={[styles.input, isDesktopLayout && styles.inputDesktop, styles.inputNoMargin]}
-          placeholder="Email Address"
-          placeholderTextColor={Theme.textMuted}
-          value={email}
-          onChangeText={setEmail}
-          onFocus={() => scrollToField('email')}
-          autoCapitalize="none"
-          autoCorrect={false}
-          spellCheck={false}
-          keyboardType="email-address"
-          autoComplete="email"
-          editable={!loading}
-        />
-      </View>
-
-      <View
-        style={[styles.passwordRow, styles.inputWrap]}
-        onLayout={(e) => { fieldYRef.current.password = e.nativeEvent.layout.y; }}
-      >
-        <TextInput
-          style={[styles.inputPassword, isDesktopLayout && styles.inputPasswordDesktop]}
-          placeholder="Password"
-          placeholderTextColor={Theme.textMuted}
-          value={password}
-          onChangeText={setPassword}
-          onFocus={() => scrollToField('password')}
-          secureTextEntry={!showPassword}
-          autoCorrect={false}
-          spellCheck={false}
-          autoComplete="new-password"
-          textContentType="newPassword"
-          editable={!loading}
-        />
-        <TouchableOpacity
-          style={styles.eyeButton}
-          onPress={() => setShowPassword((p) => !p)}
-          disabled={loading}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <FontAwesome name={showPassword ? 'eye-slash' : 'eye'} size={18} color={isDesktopLayout ? 'rgba(148,163,184,0.8)' : Theme.textMuted} />
-        </TouchableOpacity>
-      </View>
-
-      <View
-        style={[styles.passwordRow, styles.inputWrap]}
-        onLayout={(e) => { fieldYRef.current.confirmPassword = e.nativeEvent.layout.y; }}
-      >
-        <TextInput
-          style={[styles.inputPassword, isDesktopLayout && styles.inputPasswordDesktop]}
-          placeholder="Confirm Password"
-          placeholderTextColor={Theme.textMuted}
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          onFocus={() => scrollToField('confirmPassword')}
-          secureTextEntry={!showPassword}
-          autoCorrect={false}
-          spellCheck={false}
-          autoComplete="new-password"
-          textContentType="newPassword"
-          editable={!loading}
-        />
-        <TouchableOpacity
-          style={styles.eyeButton}
-          onPress={() => setShowPassword((p) => !p)}
-          disabled={loading}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <FontAwesome name={showPassword ? 'eye-slash' : 'eye'} size={18} color={isDesktopLayout ? 'rgba(148,163,184,0.8)' : Theme.textMuted} />
-        </TouchableOpacity>
-      </View>
-
-      <TouchableOpacity
-        style={[styles.button, (loading || !isOnline) && styles.buttonDisabled]}
-        onPress={handleSignUp}
-        disabled={loading || !isOnline}
-      >
-        {loading ? (
-          <ActivityIndicator color={Theme.textOnPrimary} />
-        ) : (
-          <Text style={styles.buttonText}>Create Account</Text>
-        )}
-      </TouchableOpacity>
-
-      <View style={styles.footer}>
-        <Text style={styles.footerMuted}>Already have an account? </Text>
-        <Link href="/sign-in?direct=1" asChild>
-          <TouchableOpacity disabled={loading} activeOpacity={0.8}>
-            <Text style={styles.footerLink}>Sign In</Text>
-          </TouchableOpacity>
-        </Link>
-      </View>
-      <View style={styles.footer}>
-        <Text style={styles.footerMuted}>Driver? </Text>
-        <Link href="/driver-signup" asChild>
-          <TouchableOpacity disabled={loading} activeOpacity={0.8}>
-            <Text style={styles.footerLink}>Sign up as driver</Text>
-          </TouchableOpacity>
-        </Link>
-      </View>
-      {Platform.OS === 'web' ? (
-        <View style={styles.footer}>
-          <Link href="/terminal-website" asChild>
-            <TouchableOpacity disabled={loading} activeOpacity={0.8}>
-              <Text style={styles.footerLink}>← Back to website</Text>
-            </TouchableOpacity>
-          </Link>
-        </View>
-      ) : null}
-    </View>
-  );
+  const handleBack = () => {
+    if (step > 0) {
+      goToPage(step - 1);
+      return;
+    }
+    router.back();
+  };
 
   return (
     <KeyboardAvoidingView
-      style={[
-        styles.container,
-        isDesktopLayout && styles.containerDesktop,
-        Platform.OS === 'web' && styles.containerWeb,
-        {
-          paddingTop: insets.top,
-          paddingBottom: insets.bottom,
-          paddingHorizontal: screenPaddingH,
-        },
-      ]}
-      behavior={
-        Platform.OS === 'web'
-          ? undefined
-          : Platform.OS === 'ios'
-            ? 'padding'
-            : 'padding'
-      }
-      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : Platform.OS === 'android' ? insets.top + 12 : 0}
+      style={[styles.container, { paddingTop: insets.top }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 20 : 0}
     >
-      {!isOnline ? (
-        <View style={[styles.offlineBanner, { paddingTop: insets.top + 10 }]}>
-          <Text style={styles.offlineText}>No internet connection. Connect to create an account.</Text>
-        </View>
+      {!isDesktop ? (
+        <>
+          <TouchableOpacity
+            style={[styles.backLink, { paddingTop: insets.top + 8 }]}
+            onPress={handleBack}
+            hitSlop={12}
+          >
+            <FontAwesome name="chevron-left" size={20} color={LIGHT.textMuted} />
+            <Text style={styles.backLinkText}>{step === 0 ? 'Back' : 'Previous'}</Text>
+          </TouchableOpacity>
+          <View style={styles.brandRow}>
+            <Text style={styles.brandText}>PULSE.</Text>
+          </View>
+        </>
       ) : null}
-      {isDesktopLayout ? (
-        <View style={styles.desktopShell}>
-          <View style={[styles.desktopBrandPane, width < 1200 && styles.desktopBrandPaneNarrow]}>
-            <Text style={styles.brandLogo}>PULSE<Text style={styles.brandLogoDot}>.</Text></Text>
-            <Text style={styles.brandTag}>Business Hub Onboarding</Text>
-            <Text style={styles.brandTitle}>Build your workspace.</Text>
-            <Text style={styles.brandDescription}>
-              Organize your fleet and logistics manifest with Pulse intelligence.
+
+      <View style={isDesktop ? styles.panelShell : styles.mobileFlowShell}>
+        {isDesktop ? (
+          <View style={styles.leftPanel}>
+            <Text style={styles.leftLogo}>PULSE<Text style={styles.logoDot}>.</Text></Text>
+            <Text style={styles.leftTag}>Business Hub Onboarding</Text>
+            <Text style={styles.leftTitle}>Build your workspace.</Text>
+            <Text style={styles.leftSubtitle}>
+              Organize your fleet and logistics operations with Pulse.
             </Text>
           </View>
-          <View style={styles.desktopFormPane}>
-            <ScrollView
-              ref={scrollRef}
-              contentContainerStyle={[
-                styles.desktopScroll,
-                width < 1200 && styles.desktopScrollNarrow,
-              ]}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
+        ) : null}
+
+        <View style={isDesktop ? styles.rightPanel : styles.mobileRightPanel}>
+          {isDesktop ? (
+            <TouchableOpacity style={[styles.backLink, styles.backLinkDesktop]} onPress={handleBack} hitSlop={12}>
+              <FontAwesome name="chevron-left" size={20} color={LIGHT.textMuted} />
+              <Text style={styles.backLinkText}>{step === 0 ? 'Back' : 'Previous'}</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          <ScrollView
+        ref={scrollRef}
+        horizontal
+        pagingEnabled
+        scrollEnabled={false}
+        showsHorizontalScrollIndicator={false}
+        style={[styles.pagesScroller, isDesktop && styles.pagesScrollerDesktop]}
+        contentContainerStyle={styles.pagesWrap}
+        keyboardShouldPersistTaps="handled"
+          >
+            <View style={[styles.page, { width: pageWidth }]}>
+          <View style={styles.pageContent}>
+            <Text style={styles.mainTitle}>{STEP_CONTENT[0].title}</Text>
+            <Text style={styles.subTitle}>{STEP_CONTENT[0].subtitle}</Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.fieldLabel}>Phone</Text>
+              <View style={[styles.inputRow, phoneInlineError && styles.inputRowError]}>
+                <Text style={styles.flagIcon}>🇮🇳</Text>
+                <Text style={styles.dialCode}>+91</Text>
+                <TextInput
+                  style={styles.phoneInput}
+                  placeholder="000 000 0000"
+                  placeholderTextColor={LIGHT.placeholder}
+                  value={phone}
+                  onChangeText={(text) => setPhone(formatMobileNumber(text))}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  editable={!loading}
+                />
+              </View>
+              {phoneInlineError ? <Text style={styles.fieldError}>{phoneInlineError}</Text> : null}
+              {phoneExistsCheck?.loading ? (
+                <Text style={styles.phoneHint}>Checking...</Text>
+              ) : phoneExistsCheck?.exists ? (
+                <Text style={styles.phoneHint}>This number is already registered.</Text>
+              ) : null}
+            </View>
+            <TouchableOpacity
+              style={[styles.primaryBtn, (!isPhoneValid(phone) || loading) && styles.primaryBtnDisabled]}
+              onPress={continuePhoneStep}
+              disabled={!isPhoneValid(phone) || loading}
             >
-              {form}
-            </ScrollView>
+              <Text style={styles.primaryBtnText}>Continue</Text>
+            </TouchableOpacity>
           </View>
         </View>
-      ) : (
-        <ScrollView
-          ref={scrollRef}
-          contentContainerStyle={scrollContentStyle}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          showsVerticalScrollIndicator={keyboardVisible}
-          bounces={!keyboardVisible}
-        >
-          <View style={[styles.mobileWrap, isCompact && styles.mobileWrapCompact]}>
-            {form}
+
+            <View style={[styles.page, { width: pageWidth }]}>
+          <View style={styles.pageContent}>
+            <Text style={styles.mainTitle}>{STEP_CONTENT[1].title}</Text>
+            <Text style={styles.subTitle}>{STEP_CONTENT[1].subtitle}</Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.fieldLabel}>Full name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Your name"
+                placeholderTextColor={LIGHT.placeholder}
+                value={fullName}
+                onChangeText={setFullName}
+                editable={!loading}
+              />
+            </View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.fieldLabel}>Company name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Company"
+                placeholderTextColor={LIGHT.placeholder}
+                value={companyName}
+                onChangeText={setCompanyName}
+                editable={!loading}
+              />
+              {companyNameTakenCheck?.loading ? <Text style={styles.phoneHint}>Checking company...</Text> : null}
+              {companyNameTakenCheck?.taken ? <Text style={styles.fieldError}>Company name already exists.</Text> : null}
+            </View>
+            <Text style={styles.fieldLabel}>Business model</Text>
+            <View style={styles.modelRow}>
+              {OPERATING_MODELS.map(({ value, label }) => (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.modelChip, operatingModel === value && styles.modelChipActive]}
+                  onPress={() => setOperatingModel(value)}
+                  disabled={loading}
+                >
+                  <Text style={[styles.modelChipText, operatingModel === value && styles.modelChipTextActive]}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.fieldLabel}>Address / Street</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Building, street, area"
+                placeholderTextColor={LIGHT.placeholder}
+                value={addressLine}
+                onChangeText={setAddressLine}
+                editable={!loading}
+              />
+            </View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.fieldLabel}>City / District <Text style={{ color: Theme.destructive }}>*</Text></Text>
+              <View style={styles.cityFieldWrap}>
+                <View style={[styles.input, styles.citySearchInputWrap, cityPickerOpen && styles.citySearchInputWrapActive]}>
+                  <FontAwesome name="search" size={15} color={LIGHT.textMuted} style={styles.searchIconInline} />
+                  <TextInput
+                    style={styles.citySearchInput}
+                    placeholder="Search & select city"
+                    placeholderTextColor={LIGHT.placeholder}
+                    value={cityPickerOpen ? citySearch : (selectedLocation?.city ?? '')}
+                    onFocus={() => {
+                      setCityPickerOpen(true);
+                      setCitySearch(selectedLocation?.city ?? '');
+                    }}
+                    onChangeText={(text) => {
+                      setCityPickerOpen(true);
+                      setCitySearch(text);
+                    }}
+                    editable={!loading}
+                    autoCapitalize="words"
+                    clearButtonMode="while-editing"
+                  />
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (cityPickerOpen) {
+                        setCityPickerOpen(false);
+                        setCitySearch('');
+                      } else {
+                        setCityPickerOpen(true);
+                        setCitySearch(selectedLocation?.city ?? '');
+                      }
+                    }}
+                    hitSlop={10}
+                    disabled={loading}
+                  >
+                    <FontAwesome name={cityPickerOpen ? 'chevron-up' : 'chevron-down'} size={14} color={LIGHT.textMuted} />
+                  </TouchableOpacity>
+                </View>
+                {selectedLocation && !cityPickerOpen ? (
+                  <Text style={styles.selectorSubText} numberOfLines={1}>{selectedLocation.state}</Text>
+                ) : null}
+                {cityPickerOpen ? (
+                  <View style={styles.inlineDropdown}>
+                    <FlatList
+                      data={filteredLocations}
+                      keyExtractor={(_, i) => String(i)}
+                      keyboardShouldPersistTaps="handled"
+                      getItemLayout={(_, index) => ({ length: ITEM_HEIGHT, offset: ITEM_HEIGHT * index, index })}
+                      initialNumToRender={20}
+                      maxToRenderPerBatch={20}
+                      removeClippedSubviews
+                      renderItem={({ item }) => (
+                        <TouchableOpacity
+                          style={[styles.stateItem, selectedLocation?.city === item.city && selectedLocation?.state === item.state && styles.stateItemActive]}
+                          onPress={() => {
+                            setSelectedLocation(item);
+                            setCityPickerOpen(false);
+                            setCitySearch('');
+                          }}
+                        >
+                          <View>
+                            <Text style={[styles.stateItemText, selectedLocation?.city === item.city && selectedLocation?.state === item.state && styles.stateItemTextActive]}>
+                              {item.city}
+                            </Text>
+                            <Text style={styles.stateZoneBadge}>{item.state}</Text>
+                          </View>
+                          <View style={styles.zonePill}>
+                            <Text style={styles.zonePillText}>{item.zone}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      )}
+                      ItemSeparatorComponent={() => <View style={styles.stateSep} />}
+                      ListEmptyComponent={<Text style={styles.emptyText}>No results found</Text>}
+                    />
+                  </View>
+                ) : null}
+              </View>
+            </View>
+            {selectedLocation ? (
+              <View style={styles.zoneBadgeRow}>
+                <Text style={styles.zoneBadgeLabel}>Zone</Text>
+                <View style={styles.zoneBadge}>
+                  <Text style={styles.zoneBadgeText}>{ZONE_LABELS[selectedLocation.zone]}</Text>
+                </View>
+              </View>
+            ) : null}
+            <TouchableOpacity style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]} onPress={continueBusinessStep} disabled={loading}>
+              <Text style={styles.primaryBtnText}>Continue</Text>
+            </TouchableOpacity>
           </View>
-        </ScrollView>
-      )}
+        </View>
+
+            <View style={[styles.page, { width: pageWidth }]}>
+          <View style={styles.pageContent}>
+            <Text style={styles.mainTitle}>{STEP_CONTENT[2].title}</Text>
+            <Text style={styles.subTitle}>{STEP_CONTENT[2].subtitle}</Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.fieldLabel}>Email</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="you@example.com"
+                placeholderTextColor={LIGHT.placeholder}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                editable={!loading}
+              />
+            </View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.fieldLabel}>Password</Text>
+              <View style={styles.passwordRow}>
+                <TextInput
+                  style={styles.inputPassword}
+                  placeholder="At least 6 characters"
+                  placeholderTextColor={LIGHT.placeholder}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  editable={!loading}
+                />
+                <TouchableOpacity onPress={() => setShowPassword((v) => !v)} style={styles.eyeButton}>
+                  <FontAwesome name={showPassword ? 'eye-slash' : 'eye'} size={20} color={LIGHT.textMuted} />
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.fieldLabel}>Confirm password</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Re-enter password"
+                placeholderTextColor={LIGHT.placeholder}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry={!showPassword}
+                editable={!loading}
+              />
+            </View>
+            <TouchableOpacity style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]} onPress={createAccount} disabled={loading}>
+              {loading ? <ActivityIndicator color={Theme.textOnPrimary} /> : <Text style={styles.primaryBtnText}>Create account</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+
+            <View style={[styles.page, { width: pageWidth }]}>
+          <View style={styles.pageContent}>
+            <View style={styles.crownWrap}>
+              <FontAwesome name="check-circle" size={48} color={LIGHT.accent} />
+            </View>
+            <Text style={styles.mainTitle}>{STEP_CONTENT[3].title}</Text>
+            <Text style={styles.subTitle}>{STEP_CONTENT[3].subtitle}</Text>
+            <TouchableOpacity style={styles.primaryBtn} onPress={() => router.replace('/')}>
+              <Text style={styles.primaryBtnText}>Go to app</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.linkRow} onPress={() => router.replace('/sign-in?direct=1')}>
+              <Text style={styles.linkText}>Already have an account? Sign in</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.linkRow} onPress={() => router.push('/driver-signup')}>
+              <Text style={styles.linkText}>Driver? Sign up as driver</Text>
+            </TouchableOpacity>
+          </View>
+            </View>
+          </ScrollView>
+
+          <View style={[styles.stepIndicator, { paddingBottom: insets.bottom + 8 }]}>
+            {STEP_CONTENT.map((_, i) => (
+              <View key={i} style={[styles.stepDot, i === step && styles.stepDotActive, i < step && styles.stepDotDone]} />
+            ))}
+          </View>
+        </View>
+      </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  container: { flex: 1, backgroundColor: LIGHT.background },
+  mobileFlowShell: { flex: 1 },
+  panelShell: {
     flex: 1,
-    width: '100%',
-    maxWidth: '100%',
-    backgroundColor: '#020617',
-  },
-  containerWeb: {
-    alignSelf: 'stretch',
-    minHeight: '100%',
-  } as const,
-  containerDesktop: {
-    paddingHorizontal: 0,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingTop: 24,
-    paddingBottom: 24,
-  },
-  scrollContentCompact: {
-    paddingTop: 16,
-    paddingBottom: 16,
-  },
-  mobileWrap: {
-    width: '100%',
-    maxWidth: '100%',
-    alignItems: 'center',
-    minWidth: 0,
-  },
-  mobileWrapCompact: {
-    alignSelf: 'stretch',
-  },
-  desktopShell: {
-    flex: 1,
-    width: '100%',
-    maxWidth: '100%',
-    minWidth: 0,
     flexDirection: 'row',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 0,
-    overflow: 'hidden',
-    marginVertical: 0,
     backgroundColor: '#020617',
   },
-  desktopBrandPane: {
+  leftPanel: {
     flex: 1,
-    minWidth: 0,
     backgroundColor: '#000000',
     paddingHorizontal: 52,
     paddingVertical: 48,
     justifyContent: 'center',
   },
-  desktopBrandPaneNarrow: {
-    paddingHorizontal: 32,
-    paddingVertical: 36,
-  },
-  desktopFormPane: {
-    flex: 1,
-    minWidth: 0,
-    backgroundColor: '#0f172a',
-  },
-  desktopScroll: {
-    paddingHorizontal: 48,
-    paddingVertical: 48,
-  },
-  desktopScrollNarrow: {
-    paddingHorizontal: 28,
-    paddingVertical: 36,
-  },
-  brandLogo: {
+  leftLogo: {
     fontSize: 44,
     fontWeight: '900',
     fontStyle: 'italic',
@@ -783,10 +606,10 @@ const styles = StyleSheet.create({
     color: Theme.textOnDark,
     marginBottom: 14,
   },
-  brandLogoDot: {
+  logoDot: {
     color: Theme.driverPrimary,
   },
-  brandTag: {
+  leftTag: {
     fontSize: 11,
     textTransform: 'uppercase',
     letterSpacing: 2,
@@ -794,309 +617,127 @@ const styles = StyleSheet.create({
     color: 'rgba(148,163,184,0.75)',
     marginBottom: 18,
   },
-  brandTitle: {
+  leftTitle: {
     fontSize: 40,
     fontWeight: '900',
     color: Theme.textOnDark,
     letterSpacing: -0.8,
     marginBottom: 12,
   },
-  brandDescription: {
+  leftSubtitle: {
     fontSize: 15,
     lineHeight: 24,
     color: 'rgba(148,163,184,0.75)',
     maxWidth: 420,
   },
-  formCard: {
-    width: '100%',
-    maxWidth: 520,
-    alignSelf: 'center',
-    minWidth: 0,
-    backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.border,
-    borderRadius: 24,
-    padding: 22,
-  },
-  formCardDesktop: {
-    maxWidth: 9999,
-    borderWidth: 0,
-    borderRadius: 0,
-    padding: 0,
-    backgroundColor: 'transparent',
-  },
-  offlineBanner: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: Theme.authPrimary,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    zIndex: 1,
-  },
-  offlineText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  inner: {
-    width: '100%',
-  },
-  title: {
-    fontSize: 36,
-    fontWeight: '900',
-    color: Theme.textPrimaryDark,
-    marginBottom: 6,
-    letterSpacing: -0.8,
-  },
-  titleDesktop: {
-    color: Theme.textOnDark,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: Theme.textMuted,
-    marginBottom: 14,
-  },
-  subtitleDesktop: {
-    color: 'rgba(148,163,184,0.9)',
-  },
-  subtitleCompact: {
-    fontSize: 13,
-    lineHeight: 19,
-    marginBottom: 12,
-  },
-  inputDesktop: {
-    backgroundColor: '#020617',
-    borderColor: 'rgba(255,255,255,0.14)',
-    color: Theme.textOnDark,
-  },
-  errorAlert: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: Theme.negativeMuted,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.negative,
-    padding: 12,
-    marginBottom: 14,
-  },
-  errorIcon: {
-    marginRight: 12,
-    marginTop: 2,
-  },
-  errorText: {
+  rightPanel: {
     flex: 1,
-    minWidth: 0,
-    fontSize: 13,
-    fontWeight: '500',
-    color: Theme.negative,
+    backgroundColor: '#ffffff',
   },
-  label: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Theme.textMuted,
-    marginBottom: 8,
-    letterSpacing: 1,
-  },
-  labelDesktop: {
-    color: 'rgba(148,163,184,0.9)',
-  },
-  modelRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 14,
-  },
-  modelRowStacked: {
-    flexDirection: 'column',
-    gap: 8,
-  },
-  modelChip: {
+  mobileRightPanel: {
     flex: 1,
-    minHeight: Layout.minTouchTargetSize,
-    paddingVertical: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.border,
-    backgroundColor: Theme.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  modelChipStacked: {
-    flex: 0,
-    alignSelf: 'stretch',
-    width: '100%',
-  },
-  modelChipActive: {
-    backgroundColor: Theme.driverPrimary,
-    borderColor: Theme.driverPrimary,
-  },
-  modelChipText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Theme.textMuted,
-  },
-  modelChipTextDesktop: {
-    color: 'rgba(148,163,184,0.85)',
-  },
-  modelChipTextActive: {
-    color: '#ffffff',
-  },
-  modelChipTextCompact: {
-    fontSize: 15,
-  },
-  input: {
-    backgroundColor: Theme.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.border,
-    padding: 16,
-    fontSize: 16,
-    color: Theme.textPrimaryDark,
-    marginBottom: 16,
-  },
-  inputWrap: {
-    marginBottom: 12,
-  },
-  inputNoMargin: {
-    marginBottom: 0,
-  },
-  phoneFieldShell: {
+  backLink: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 24, paddingBottom: 8 },
+  backLinkDesktop: { paddingHorizontal: 0, alignSelf: 'center', width: 560, paddingTop: 16 },
+  backLinkText: { fontSize: 14, color: LIGHT.textMuted, fontWeight: '600' },
+  brandRow: { paddingHorizontal: 24, paddingBottom: 4 },
+  brandText: { fontSize: 28, fontWeight: '900', fontStyle: 'italic', letterSpacing: -0.8, color: Theme.driverPrimary },
+  pagesWrap: { flexGrow: 1 },
+  pagesScroller: { flex: 1 },
+  pagesScrollerDesktop: { width: 560, alignSelf: 'center' },
+  page: { flex: 1, paddingHorizontal: 24, paddingTop: 24, justifyContent: 'flex-start' },
+  pageContent: { maxWidth: 360, alignSelf: 'center', width: '100%' },
+  mainTitle: { fontSize: 28, fontWeight: '800', color: LIGHT.text, marginBottom: 10, letterSpacing: -0.5, textAlign: 'center' },
+  subTitle: { fontSize: 16, color: LIGHT.text, opacity: 0.85, marginBottom: 24, lineHeight: 22, textAlign: 'center' },
+  fieldLabel: { fontSize: 12, fontWeight: '700', color: LIGHT.textMuted, marginBottom: 8, letterSpacing: 0.5 },
+  inputGroup: { marginBottom: 16 },
+  inputRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: LIGHT.inputBg, borderRadius: 12, borderWidth: 1, borderColor: LIGHT.border },
+  inputRowError: { borderColor: Theme.destructive },
+  flagIcon: { fontSize: 24, marginLeft: 14, marginRight: 6 },
+  dialCode: { fontSize: 16, fontWeight: '600', color: LIGHT.text, marginRight: 8 },
+  phoneInput: { flex: 1, minHeight: 48, paddingVertical: 14, paddingHorizontal: 12, fontSize: 16, color: LIGHT.text },
+  input: { minHeight: 48, paddingVertical: 14, paddingHorizontal: 14, fontSize: 16, color: LIGHT.text, backgroundColor: LIGHT.inputBg, borderRadius: 12, borderWidth: 1, borderColor: LIGHT.border },
+  inputPassword: { flex: 1, minHeight: 48, paddingVertical: 14, paddingHorizontal: 14, paddingRight: 48, fontSize: 16, color: LIGHT.text, backgroundColor: LIGHT.inputBg, borderRadius: 12, borderWidth: 1, borderColor: LIGHT.border },
+  passwordRow: { flexDirection: 'row', alignItems: 'center' },
+  eyeButton: { position: 'absolute', right: 12, padding: 8 },
+  modelRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  modelChip: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: LIGHT.border, backgroundColor: LIGHT.surface, alignItems: 'center' },
+  modelChipActive: { backgroundColor: LIGHT.accent, borderColor: LIGHT.accent },
+  modelChipText: { fontSize: 14, fontWeight: '600', color: LIGHT.textMuted },
+  modelChipTextActive: { color: '#fff' },
+  primaryBtn: { backgroundColor: LIGHT.buttonPrimary, borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 8 },
+  primaryBtnDisabled: { opacity: 0.6 },
+  primaryBtnText: { fontSize: 15, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
+  fieldError: { fontSize: 12, color: Theme.destructive, marginTop: 6, marginLeft: 2 },
+  phoneHint: { fontSize: 12, color: LIGHT.textMuted, marginTop: 6, marginLeft: 2 },
+  crownWrap: { width: 88, height: 88, borderRadius: 44, backgroundColor: LIGHT.surface, borderWidth: 1, borderColor: LIGHT.border, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: 24 },
+  linkRow: { marginTop: 14, alignSelf: 'center' },
+  linkText: { fontSize: 14, color: LIGHT.accent, fontWeight: '600' },
+  stepIndicator: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, paddingTop: 16 },
+  stepDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: LIGHT.border },
+  stepDotActive: { backgroundColor: LIGHT.accent, width: 24 },
+  stepDotDone: { backgroundColor: LIGHT.accent, opacity: 0.6 },
+  // City picker trigger
+  stateSelector: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 10, minHeight: 48 },
+  stateSelectorText: { fontSize: 15, color: LIGHT.text, fontWeight: '500' },
+  stateSelectorPlaceholder: { fontSize: 15, color: LIGHT.placeholder },
+  selectorSubText: { fontSize: 12, color: LIGHT.textMuted, marginTop: 1 },
+  // Zone badge (auto-filled display)
+  zoneBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
+  zoneBadgeLabel: { fontSize: 12, fontWeight: '700', color: LIGHT.textMuted, letterSpacing: 0.5 },
+  zoneBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, backgroundColor: LIGHT.surface, borderWidth: 1, borderColor: LIGHT.border },
+  zoneBadgeText: { fontSize: 13, fontWeight: '600', color: LIGHT.accent },
+  cityFieldWrap: { width: '100%' },
+  citySearchInputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Theme.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.border,
+    minHeight: 50,
     paddingHorizontal: 12,
-    minHeight: 54,
-    marginBottom: 16,
-  },
-  phoneFieldShellDesktop: {
-    backgroundColor: '#020617',
-    borderColor: 'rgba(255,255,255,0.14)',
-  },
-  phoneDialCode: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Theme.textPrimaryDark,
-    paddingVertical: 12,
-    paddingRight: 12,
-    marginRight: 4,
-    borderRightWidth: 1,
-    borderRightColor: Theme.border,
-  },
-  phoneDialCodeDesktop: {
-    color: Theme.textOnDark,
-    borderRightColor: 'rgba(255,255,255,0.14)',
-  },
-  phoneNationalInput: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 16,
-    fontWeight: '600',
-    color: Theme.textPrimaryDark,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
+    marginBottom: 0,
     ...Platform.select({
       web: { outlineStyle: 'none' } as object,
     }),
   },
-  phoneNationalInputDesktop: {
-    color: Theme.textOnDark,
+  citySearchInputWrapActive: {
+    borderColor: '#cbd5e1',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
-  companyTakenHint: {
-    marginTop: -4,
-    marginBottom: 8,
+  searchIconInline: { marginRight: 8 },
+  citySearchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: LIGHT.text,
+    paddingVertical: 10,
+    ...Platform.select({
+      web: { outlineStyle: 'none' } as object,
+    }),
   },
-  phoneExistsHint: {
-    fontSize: 13,
-    color: Theme.textMuted,
-    marginTop: -4,
-    marginBottom: 8,
-  },
-  phoneExistsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    marginTop: -8,
-    marginBottom: 12,
-  },
-  phoneExistsText: {
-    fontSize: 13,
-    color: Theme.driverEmerald,
-  },
-  phoneExistsLink: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Theme.authPrimary,
-    textDecorationLine: 'underline',
-  },
-  passwordRow: {
-    position: 'relative',
-    marginBottom: 12,
-  },
-  inputPassword: {
-    backgroundColor: Theme.surface,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: Theme.border,
-    paddingHorizontal: 16,
-    paddingVertical: 15,
-    paddingRight: 48,
-    fontSize: 16,
-    color: Theme.textPrimaryDark,
-  },
-  inputPasswordDesktop: {
-    backgroundColor: '#020617',
-    borderColor: 'rgba(255,255,255,0.14)',
-    color: Theme.textOnDark,
-  },
-  eyeButton: {
-    position: 'absolute',
-    right: 16,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-  },
-  button: {
-    backgroundColor: Theme.driverPrimary,
-    borderRadius: 999,
-    paddingVertical: 16,
-    alignItems: 'center',
+  inlineDropdown: {
     marginTop: 8,
-    shadowColor: Theme.driverPrimary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 14,
-    elevation: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#dbe3ee',
+    backgroundColor: '#fff',
+    maxHeight: 320,
+    overflow: 'hidden',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
   },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonText: {
-    color: Theme.textOnPrimary,
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  footer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 14,
-  },
-  footerMuted: {
-    fontSize: 13,
-    color: Theme.textMuted,
-    fontWeight: '500',
-  },
-  footerLink: {
-    fontSize: 13,
-    color: Theme.driverEmerald,
-    fontWeight: '700',
-  },
+  // List items
+  stateItem: { height: ITEM_HEIGHT, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  stateItemActive: { backgroundColor: 'rgba(15,23,42,0.04)' },
+  stateItemText: { fontSize: 15, color: LIGHT.text, fontWeight: '500' },
+  stateItemTextActive: { color: LIGHT.text, fontWeight: '700' },
+  stateZoneBadge: { fontSize: 12, color: LIGHT.textMuted, marginTop: 2 },
+  stateSep: { height: 1, backgroundColor: LIGHT.border, marginHorizontal: 16 },
+  zonePill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: LIGHT.surface, borderWidth: 1, borderColor: LIGHT.border },
+  zonePillText: { fontSize: 10, fontWeight: '700', color: LIGHT.textMuted, letterSpacing: 0.3 },
+  emptyText: { textAlign: 'center', color: LIGHT.textMuted, paddingVertical: 32, fontSize: 14 },
 });
