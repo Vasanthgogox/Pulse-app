@@ -15,6 +15,10 @@ import {
 } from "@/features/drivers/hooks/useTripControl";
 import { computeDriverCommissionForTrip } from "@/features/finance/aggregation/aggregateDrivers";
 import { useDriverAvatarUri } from "@/lib/avatarUpload";
+import {
+  buildDriverTripNumberMap,
+  getDriverTripDisplayNumber,
+} from "@/lib/driverTripSequence";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatINR } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
@@ -131,6 +135,9 @@ export default function DriverControlScreen() {
   } = useDriverLocation(tripId);
 
   const [completedTripsCount, setCompletedTripsCount] = useState(0);
+  const [driverTripNumberById, setDriverTripNumberById] = useState<
+    Record<string, string>
+  >({});
   const [linkedDriverIds, setLinkedDriverIds] = useState<string[]>([]);
   const [linkedDriversLoaded, setLinkedDriversLoaded] = useState(false);
 
@@ -147,6 +154,7 @@ export default function DriverControlScreen() {
       if (drivers.length === 0) return;
       tripsService.getTripsByDriverIds(drivers.map((d) => d.id)).then((tRes) => {
         const tripsList = tRes.trips ?? [];
+        setDriverTripNumberById(buildDriverTripNumberMap(tripsList));
         const count = tripsList.filter((t) =>
           tripsService.isTripCompleted(t),
         ).length;
@@ -351,7 +359,7 @@ export default function DriverControlScreen() {
               style={[styles.welcomeTitle, { color: colors.text }]}
               numberOfLines={1}
             >
-              {tripsService.getTripDisplayNumber(trip)}
+              {getDriverTripDisplayNumber(trip, driverTripNumberById)}
             </Text>
           </View>
         </View>
@@ -449,7 +457,7 @@ export default function DriverControlScreen() {
                 Trip
               </Text>
               <Text style={[styles.cardTripId, { color: colors.text }]}>
-                {tripsService.getTripDisplayNumber(trip)}
+                {getDriverTripDisplayNumber(trip, driverTripNumberById)}
               </Text>
             </View>
             <View

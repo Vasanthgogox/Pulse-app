@@ -20,6 +20,10 @@ import {
 import {
     phonePeMetaDate
 } from '@/lib/driverGpayTransactions';
+import {
+  buildDriverTripNumberMap,
+  getDriverTripDisplayNumber,
+} from '@/lib/driverTripSequence';
 import { isAggregateTrip, tripEarningsForDriver } from '@/lib/driverUtils';
 import { getFleetAvatarUriForOrg } from '@/lib/fleetAvatar';
 import { usePreventScreenCapture } from '@/lib/usePreventScreenCapture';
@@ -248,6 +252,10 @@ export default function DriverWalletScreen() {
       return db - da;
     });
   }, [trips]);
+  const driverTripNumberById = useMemo(
+    () => buildDriverTripNumberMap(trips),
+    [trips],
+  );
 
   /** O(n): one pass over ledgerEntries → settlement totals per trip_id + non-trip entries. */
   const { receivedByTripId, nonTripLedgerEntries } = useMemo(() => {
@@ -1139,7 +1147,7 @@ export default function DriverWalletScreen() {
 
       return {
         trip,
-        id: tripsService.getTripDisplayNumber(trip),
+        id: getDriverTripDisplayNumber(trip, driverTripNumberById),
         rawDate: trip.completed_at ?? trip.updated_at ?? trip.created_at ?? '',
         date: formatTransactionDateSection(trip.completed_at ?? trip.updated_at ?? trip.created_at ?? ''),
         amount: Math.round(
@@ -1158,7 +1166,7 @@ export default function DriverWalletScreen() {
         fleetPendingLedger: fleetPendingLedger ?? null,
       };
     });
-  }, [completedTrips, receivedByTripId, salaryRequestOrgOptions, latestCreditLedgerByTripId, derivePaymentMode, latestFleetPaidPendingLedgerByTripId]);
+  }, [completedTrips, receivedByTripId, salaryRequestOrgOptions, latestCreditLedgerByTripId, derivePaymentMode, latestFleetPaidPendingLedgerByTripId, driverTripNumberById]);
 
   const filteredTripJourneyItems = useMemo(() => {
     const search = journeySearch.trim().toLowerCase();
@@ -1299,7 +1307,7 @@ export default function DriverWalletScreen() {
       const orgName =
         salaryRequestOrgOptions.find((o) => String(o.orgId ?? '') === String(trip.organization_id ?? ''))?.orgName ?? 'Fleet';
       const haystack = [
-        tripsService.getTripDisplayNumber(trip),
+        getDriverTripDisplayNumber(trip, driverTripNumberById),
         trip.pickup_area ?? '',
         trip.drop_location ?? '',
         orgName,
@@ -1393,7 +1401,7 @@ export default function DriverWalletScreen() {
         return;
       }
 
-      const rawDescription = sourceLedger?.description ?? `Trip ${tripsService.getTripDisplayNumber(trip)}`;
+      const rawDescription = sourceLedger?.description ?? `Trip ${getDriverTripDisplayNumber(trip, driverTripNumberById)}`;
       // Remove the "pending verification" token so the settled receipt looks clean.
       const settledDescription = rawDescription.replace(/\s*\|\s*Sync\s*:\s*FLEET_PAID_PENDING\s*/i, '').trim();
 
@@ -1437,7 +1445,7 @@ export default function DriverWalletScreen() {
         load();
       }
     },
-    [linkedDrivers, profile?.uid, load]
+    [linkedDrivers, profile?.uid, load, driverTripNumberById]
   );
 
   /** Confirm then mark trip as paid. */
@@ -2448,7 +2456,7 @@ export default function DriverWalletScreen() {
                       const routeSummary = [trip.pickup_area?.trim(), trip.drop_location?.trim()]
                         .filter(Boolean)
                         .join(' → ');
-                      const tripRef = tripsService.getTripDisplayNumber(trip);
+                      const tripRef = getDriverTripDisplayNumber(trip, driverTripNumberById);
                       const receivedAmt = receivedByTripId[trip.id] ?? 0;
                       const listDivider = isDark ? colors.borderSubtle : Theme.borderMedium;
                       const isLastTrip = idx === trips.length - 1;
@@ -2687,7 +2695,7 @@ export default function DriverWalletScreen() {
       message={
         markPaidConfirmState
           ? (() => {
-              const tripDisplay = tripsService.getTripDisplayNumber(markPaidConfirmState.trip);
+              const tripDisplay = getDriverTripDisplayNumber(markPaidConfirmState.trip, driverTripNumberById);
               const amountStr = `₹${Math.round(markPaidConfirmState.amount).toLocaleString('en-IN')}`;
               const sourceDesc = markPaidConfirmState.sourceLedger?.description ?? null;
               if (!sourceDesc) {

@@ -32,6 +32,10 @@ import {
   DRIVER_POST_MISSION_PENDING_SNAPSHOT_KEY,
 } from "@/lib/driverDashboardFlags";
 import {
+  buildDriverTripNumberMap,
+  getDriverTripDisplayNumber,
+} from "@/lib/driverTripSequence";
+import {
   buildAssignerDisplayForTrip,
   resolveAssignerUserId,
 } from "@/lib/driverAssignerDisplay";
@@ -647,8 +651,9 @@ export default function DriverRadarScreen() {
             });
             if (disappearedLabels.length > 0)
               setReassignedTripLabels(disappearedLabels);
+            const seqByTrip = buildDriverTripNumberMap(trips);
             previousTripsRef.current = new Map(
-              trips.map((t) => [t.id, tripsService.getTripDisplayNumber(t)]),
+              trips.map((t) => [t.id, getDriverTripDisplayNumber(t, seqByTrip)]),
             );
             setAllTrips(trips);
             const normalizedDriverStatus = String(
@@ -1176,6 +1181,10 @@ export default function DriverRadarScreen() {
       mergedIncomingTrips.filter((trip) => !notificationHistoryTripIds.has(trip.id)),
     [mergedIncomingTrips, notificationHistoryTripIds],
   );
+  const driverTripNumberById = useMemo(
+    () => buildDriverTripNumberMap([...allTrips, ...pendingOtpTrips]),
+    [allTrips, pendingOtpTrips],
+  );
   /** Trips still needing accept/OTP — excludes the trip we've already accepted (trip progress owns it). */
   const visibleAssignableIncomingTrips = useMemo(
     () =>
@@ -1460,7 +1469,7 @@ export default function DriverRadarScreen() {
             >
               <View style={styles.notificationSelectHeader}>
                 <Text style={[styles.notificationSelectTripId, { color: colors.text }]}>
-                  {tripsService.getTripDisplayNumber(item.trip)}
+                  {getDriverTripDisplayNumber(item.trip, driverTripNumberById)}
                 </Text>
                 {item.requiresOtp ? (
                   <View
@@ -3456,7 +3465,7 @@ export default function DriverRadarScreen() {
                 ]}
               >
                 <Text style={[styles.offlineCardTitle, { color: colors.text }]}>
-                  {tripsService.getTripDisplayNumber(trip)}
+                  {getDriverTripDisplayNumber(trip, driverTripNumberById)}
                 </Text>
                 {otpClaimTripId != null &&
                 String(otpClaimTripId).toLowerCase() ===
@@ -3822,7 +3831,7 @@ export default function DriverRadarScreen() {
                   >
                     <View style={styles.notificationSelectHeader}>
                       <Text style={[styles.notificationSelectTripId, { color: colors.text }]}>
-                        {tripsService.getTripDisplayNumber(item.trip)}
+                        {getDriverTripDisplayNumber(item.trip, driverTripNumberById)}
                       </Text>
                       {item.requiresOtp ? (
                         <View
@@ -3929,7 +3938,7 @@ export default function DriverRadarScreen() {
                       { color: colors.textMuted },
                     ]}
                   >
-                    {tripsService.getTripDisplayNumber(item.trip)} -{" "}
+                    {getDriverTripDisplayNumber(item.trip, driverTripNumberById)} -{" "}
                     {item.reason === "declined"
                       ? "declined"
                       : "moved after another trip was accepted"}

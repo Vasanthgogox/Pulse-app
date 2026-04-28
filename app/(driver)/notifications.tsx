@@ -17,6 +17,10 @@ import {
   DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY,
   DRIVER_POST_MISSION_PENDING_SNAPSHOT_KEY,
 } from '@/lib/driverDashboardFlags';
+import {
+  buildDriverTripNumberMap,
+  getDriverTripDisplayNumber,
+} from '@/lib/driverTripSequence';
 import { formatINR } from '@/lib/format';
 import {
   isActiveMission,
@@ -230,6 +234,10 @@ export default function DriverNotificationsScreen() {
         return String(trip.id).toLowerCase() !== acceptedTripId.toLowerCase();
       }),
     [mergedIncomingTrips, acceptedTripId],
+  );
+  const driverTripNumberById = useMemo(
+    () => buildDriverTripNumberMap([...allTrips, ...pendingOtpTrips]),
+    [allTrips, pendingOtpTrips],
   );
 
   useEffect(() => {
@@ -585,7 +593,7 @@ export default function DriverNotificationsScreen() {
               >
                 <View style={styles.cardHeader}>
                   <Text style={[styles.tripId, { color: colors.text }]}>
-                    {tripsService.getTripDisplayNumber(item.trip)}
+                    {getDriverTripDisplayNumber(item.trip, driverTripNumberById)}
                   </Text>
                   {item.requiresOtp ? (
                     <View

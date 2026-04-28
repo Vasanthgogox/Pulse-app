@@ -16,6 +16,10 @@ import {
 import { phonePeMetaDate } from '@/lib/driverGpayTransactions';
 import { isAggregateTrip, tripEarningsForDriver } from '@/lib/driverUtils';
 import { getFleetAvatarUriForOrg } from '@/lib/fleetAvatar';
+import {
+  buildDriverTripNumberMap,
+  getDriverTripDisplayNumber,
+} from '@/lib/driverTripSequence';
 import { usePreventScreenCapture } from '@/lib/usePreventScreenCapture';
 import * as driversService from '@/services/driversService';
 import * as salaryRequestsService from '@/services/salaryRequestsService';
@@ -408,6 +412,10 @@ export default function DriverPassbookDetailScreen() {
       return db - da;
     });
   }, [tripsForOrg]);
+  const driverTripNumberById = useMemo(
+    () => buildDriverTripNumberMap(tripsForOrg),
+    [tripsForOrg],
+  );
 
   const hasFleetPaidPendingToken = useCallback((raw?: string | null) => {
     const s = (raw ?? '').trim();
@@ -549,7 +557,7 @@ export default function DriverPassbookDetailScreen() {
 
       return {
         trip,
-        id: tripsService.getTripDisplayNumber(trip),
+        id: getDriverTripDisplayNumber(trip, driverTripNumberById),
         rawDate: trip.completed_at ?? trip.updated_at ?? trip.created_at ?? '',
         date: formatTransactionDateSection(trip.completed_at ?? trip.updated_at ?? trip.created_at ?? ''),
         amount: Math.round(
@@ -579,6 +587,7 @@ export default function DriverPassbookDetailScreen() {
     derivePaymentMode,
     latestFleetPaidPendingLedgerByTripId,
     orgName,
+    driverTripNumberById,
   ]);
 
   const filteredTripJourneyItems = useMemo(() => {
@@ -621,7 +630,7 @@ export default function DriverPassbookDetailScreen() {
     const search = journeySearch.trim().toLowerCase();
     return receivedTrips.filter((trip) => {
       const haystack = [
-        tripsService.getTripDisplayNumber(trip),
+        getDriverTripDisplayNumber(trip, driverTripNumberById),
         trip.pickup_area ?? '',
         trip.drop_location ?? '',
         orgName,
@@ -630,7 +639,7 @@ export default function DriverPassbookDetailScreen() {
         .toLowerCase();
       return search.length === 0 || haystack.includes(search);
     });
-  }, [receivedTrips, journeySearch, orgName]);
+  }, [receivedTrips, journeySearch, orgName, driverTripNumberById]);
 
   const filteredCashSections = useMemo(() => {
     const list = [...filteredCashTrips]
@@ -750,7 +759,7 @@ export default function DriverPassbookDetailScreen() {
         Alert.alert('Error', 'Missing driver or organization.');
         return;
       }
-      const rawDescription = sourceLedger?.description ?? `Trip ${tripsService.getTripDisplayNumber(trip)}`;
+      const rawDescription = sourceLedger?.description ?? `Trip ${getDriverTripDisplayNumber(trip, driverTripNumberById)}`;
       const settledDescription = rawDescription.replace(/\s*\|\s*Sync\s*:\s*FLEET_PAID_PENDING\s*/i, '').trim();
 
       setMarkPaidLoadingTripId(trip.id);
@@ -793,7 +802,7 @@ export default function DriverPassbookDetailScreen() {
         load();
       }
     },
-    [driver?.id, profile?.uid, load],
+    [driver?.id, profile?.uid, load, driverTripNumberById],
   );
 
   const confirmMarkAsPaid = useCallback(
@@ -1215,7 +1224,7 @@ export default function DriverPassbookDetailScreen() {
                   >
                     {trips.map((trip, idx) => {
                       const routeSummary = [trip.pickup_area?.trim(), trip.drop_location?.trim()].filter(Boolean).join(' → ');
-                      const tripRef = tripsService.getTripDisplayNumber(trip);
+                      const tripRef = getDriverTripDisplayNumber(trip, driverTripNumberById);
                       const receivedAmt = receivedByTripId[trip.id] ?? 0;
                       const listDivider = isDark ? colors.borderSubtle : Theme.borderMedium;
                       const isLastTrip = idx === trips.length - 1;
@@ -1624,7 +1633,7 @@ export default function DriverPassbookDetailScreen() {
       message={
         markPaidConfirmState
           ? (() => {
-              const tripDisplay = tripsService.getTripDisplayNumber(markPaidConfirmState.trip);
+              const tripDisplay = getDriverTripDisplayNumber(markPaidConfirmState.trip, driverTripNumberById);
               const amountStr = `₹${Math.round(markPaidConfirmState.amount).toLocaleString('en-IN')}`;
               const sourceDesc = markPaidConfirmState.sourceLedger?.description ?? null;
               const mode = derivePaymentMode(sourceDesc) ?? 'BANK TRANSFER';

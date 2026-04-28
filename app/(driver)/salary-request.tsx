@@ -14,6 +14,10 @@ import { useIsOnline } from '@/contexts/NetworkContext';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import { tripEarningsForDriver } from '@/lib/driverUtils';
 import { getFleetAvatarUriForOrg } from '@/lib/fleetAvatar';
+import {
+  buildDriverTripNumberMap,
+  getDriverTripDisplayNumber,
+} from '@/lib/driverTripSequence';
 import { showAppAlert } from '@/lib/appAlert';
 import { VALIDATION } from '@/lib/validation';
 import * as driversService from '@/services/driversService';
@@ -303,6 +307,10 @@ export default function SalaryRequestScreen() {
       return db - da;
     });
   }, [trips]);
+  const driverTripNumberById = useMemo(
+    () => buildDriverTripNumberMap(trips),
+    [trips],
+  );
 
   const receivedByTripId = useMemo(() => {
     const byTrip: Record<string, number> = {};
@@ -1095,7 +1103,7 @@ export default function SalaryRequestScreen() {
                           />
                           <View style={styles.tripSelectText}>
                             <Text style={[styles.tripSelectTitle, { color: colors.text }]} numberOfLines={1}>
-                              {tripsService.getTripDisplayNumber(t)}
+                              {getDriverTripDisplayNumber(t, driverTripNumberById)}
                             </Text>
                             <Text style={[styles.tripSelectSubtitle, { color: colors.textMuted }]} numberOfLines={1}>
                               {date} · ₹{earned.toLocaleString('en-IN')}
