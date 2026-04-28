@@ -32,12 +32,19 @@ function getEmailFromParams(params: { email?: string | string[] }): string {
   return '';
 }
 
+function getOAuthErrorFromParams(params: { oauth_error?: string | string[] }): string {
+  const e = params.oauth_error;
+  if (typeof e === 'string') return e;
+  if (Array.isArray(e) && e[0]) return e[0];
+  return '';
+}
+
 export default function SignIn() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const params = useLocalSearchParams<{ email?: string | string[]; direct?: string }>();
+  const params = useLocalSearchParams<{ email?: string | string[]; direct?: string; oauth_error?: string | string[] }>();
   const isOnline = useIsOnline();
-  const { user, signIn } = useAuth();
+  const { user, signIn, signInWithGoogle } = useAuth();
   const { locale, localeOptions } = useLanguage();
   const [webViewportWidth, setWebViewportWidth] = useState<number>(() => {
     if (Platform.OS !== 'web') return 0;
@@ -54,6 +61,7 @@ export default function SignIn() {
   const [showPass, setShowPass] = useState(false);
   const [keepSignedIn, setKeepSignedInState] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [waitingForAuthState, setWaitingForAuthState] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
   const [typedPulse, setTypedPulse] = useState('');
@@ -96,6 +104,14 @@ export default function SignIn() {
       setScreen('SIGNIN');
     }
   }, [params.email]);
+
+  useEffect(() => {
+    const oauthError = getOAuthErrorFromParams(params);
+    if (oauthError) {
+      setSignInError(oauthError);
+      setScreen('SIGNIN');
+    }
+  }, [params.oauth_error]);
 
   useEffect(() => {
     if (screen !== 'LANDING') {
@@ -176,6 +192,30 @@ export default function SignIn() {
       Alert.alert('Sign in failed', msg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setSignInError(null);
+    setWaitingForAuthState(false);
+    if (!isOnline) {
+      setSignInError("Connect to the internet to sign in.");
+      return;
+    }
+    try {
+      setGoogleLoading(true);
+      const { error } = await signInWithGoogle(keepSignedIn);
+      if (error) {
+        setSignInError(error.message);
+        return;
+      }
+      setWaitingForAuthState(true);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Google sign in failed.";
+      setSignInError(msg);
+      Alert.alert("Sign in failed", msg);
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -331,6 +371,21 @@ export default function SignIn() {
             <ActivityIndicator color={Theme.textOnPrimary} />
           ) : (
             <Text style={styles.primaryBtnText}>Enter Dashboard</Text>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={handleGoogleSignIn}
+          style={[styles.googleBtn, (googleLoading || loading || waitingForAuthState || !isOnline) && styles.disabledBtn]}
+          disabled={googleLoading || loading || waitingForAuthState || !isOnline}
+        >
+          {googleLoading ? (
+            <ActivityIndicator color={Theme.textPrimaryDark} />
+          ) : (
+            <>
+              <FontAwesome name="google" size={14} color={Theme.textPrimaryDark} />
+              <Text style={styles.googleBtnText}>Continue with Google</Text>
+            </>
           )}
         </TouchableOpacity>
 
@@ -752,6 +807,24 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1,
     textTransform: 'uppercase',
+  },
+  googleBtn: {
+    marginTop: 10,
+    borderRadius: 999,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.networkCardBackground,
+  },
+  googleBtnText: {
+    color: Theme.textPrimaryDark,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.3,
   },
   logoDot: {
     color: Theme.driverPrimary,

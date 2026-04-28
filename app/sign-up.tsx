@@ -4,6 +4,7 @@ import { useIsOnline } from '@/contexts/NetworkContext';
 import {
   checkExistingUserByPhone,
   checkOrganizationNameTaken,
+  setPendingOAuthMetadata,
   type OperatingModel,
 } from '@/features/auth';
 import { validateEmail } from '@/lib/emailValidation';
@@ -155,7 +156,7 @@ export default function SignUp() {
   const { width } = useWindowDimensions();
   const router = useRouter();
   const isOnline = useIsOnline();
-  const { signUp } = useAuth();
+  const { signUp, signInWithGoogle } = useAuth();
   const scrollRef = useRef<ScrollView>(null);
   const isDesktop = width >= 1024;
   const pageWidth = isDesktop ? Math.min(560, width - 120) : width;
@@ -200,6 +201,7 @@ export default function SignUp() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const phoneInlineError = (() => {
@@ -384,6 +386,50 @@ export default function SignUp() {
     setLoading(false);
     if (error) return Alert.alert('Error', error.message);
     goToPage(5);
+  };
+
+  const continueWithGoogle = async () => {
+    if (!isOnline) return Alert.alert('No internet', 'Connect to continue.');
+    const trimmedName = fullName.trim();
+    if (trimmedName) {
+      const nameErr = validateFullName(true)(trimmedName);
+      if (nameErr) return Alert.alert('Invalid', nameErr);
+    }
+    const storedPhone = normalizeIndianPhoneForMetadata(phone);
+    if (!storedPhone || !extractIndianMobileTenDigits(phone)) {
+      return Alert.alert('Invalid', 'Enter a valid phone number.');
+    }
+
+    setGoogleLoading(true);
+
+    if (!orgJoinMode) {
+      const dup = await checkOrganizationNameTaken(orgName.trim());
+      if (dup.error) { setGoogleLoading(false); return Alert.alert('Error', dup.error.message); }
+      if (dup.taken) { setGoogleLoading(false); return Alert.alert('Taken', 'This company name was just registered. Please choose another.'); }
+    }
+
+    const pending = await setPendingOAuthMetadata({
+      fullName: trimmedName || undefined,
+      phone: storedPhone,
+      companyName: orgJoinMode ? undefined : orgName.trim(),
+      role: 'user',
+      operatingModel: orgJoinMode ? undefined : operatingModel,
+      addressLine: orgJoinMode ? undefined : addressLine.trim() || undefined,
+      city: orgJoinMode ? undefined : selectedLocation?.city,
+      state: orgJoinMode ? undefined : selectedLocation?.state,
+      zone: orgJoinMode ? undefined : selectedLocation?.zone,
+      businessType: orgJoinMode ? undefined : businessType ?? undefined,
+      employeeCount: orgJoinMode ? undefined : employeeCount ?? undefined,
+      skipOrgCreation: orgJoinMode ? true : undefined,
+    });
+    if (pending.error) {
+      setGoogleLoading(false);
+      return Alert.alert('Error', pending.error.message);
+    }
+
+    const { error } = await signInWithGoogle(true);
+    setGoogleLoading(false);
+    if (error) return Alert.alert('Error', error.message);
   };
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -802,9 +848,28 @@ export default function SignUp() {
                 <TouchableOpacity
                   style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
                   onPress={createAccount}
-                  disabled={loading}
+                  disabled={loading || googleLoading}
                 >
                   {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Create account</Text>}
+                </TouchableOpacity>
+
+                <View style={styles.altRow}>
+                  <Text style={styles.altText}>or</Text>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.googleBtn, (loading || googleLoading) && styles.primaryBtnDisabled]}
+                  onPress={continueWithGoogle}
+                  disabled={loading || googleLoading}
+                >
+                  {googleLoading ? (
+                    <ActivityIndicator color={C.text} />
+                  ) : (
+                    <>
+                      <FontAwesome name="google" size={14} color={C.text} />
+                      <Text style={styles.googleBtnText}>Continue with Google</Text>
+                    </>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
@@ -1031,6 +1096,19 @@ const styles = StyleSheet.create({
   altRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 16 },
   altText: { fontSize: 13, color: C.muted },
   altLink: { fontSize: 13, color: C.accent, fontWeight: '700' },
+  googleBtn: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    backgroundColor: C.bg,
+    marginTop: 8,
+  },
+  googleBtnText: { fontSize: 15, fontWeight: '700', color: C.text, letterSpacing: 0.2 },
 
   // Success page
   successInner: { alignItems: 'center', justifyContent: 'center', flex: 1, paddingTop: 40 },
