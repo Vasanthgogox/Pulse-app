@@ -4,7 +4,6 @@
  */
 import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
 import { SemanticAddIcon } from "@/components/SemanticAddIcon";
-import { SubTabs } from "@/components/SubTabs";
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -63,6 +62,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -72,6 +72,7 @@ import {
   ScrollView,
   Share,
   StyleSheet,
+  Easing,
   Switch,
   Text,
   TextInput,
@@ -214,6 +215,8 @@ export function LoadCenterView({
   }, [highlightedIndentId]);
 
   const [loadSubTab, setLoadSubTab] = useState<LoadSubTab>("GIVE_LOAD");
+  const [loadTabsWrapWidth, setLoadTabsWrapWidth] = useState(0);
+  const loadTabsActiveAnim = useRef(new Animated.Value(0)).current;
   const [statusFilterTab, setStatusFilterTab] =
     useState<StatusFilterTab>("OPEN");
   const [searchQuery, setSearchQuery] = useState("");
@@ -299,6 +302,16 @@ export function LoadCenterView({
   const queryClient = useQueryClient();
 
   const isClaimedTab = loadSubTab === "AWARDED";
+  const loadSubTabIndex = loadSubTab === "GIVE_LOAD" ? 0 : loadSubTab === "GET_LOAD" ? 1 : 2;
+  useEffect(() => {
+    Animated.timing(loadTabsActiveAnim, {
+      toValue: loadSubTabIndex,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [loadSubTabIndex, loadTabsActiveAnim]);
+
   const useGridLayout = width >= 1024;
 
   /** O(myQuotes.length): map indent_id -> quote for Find Work "Quote Sent" / "Update quote" and modal prefill. */
@@ -1548,29 +1561,58 @@ export function LoadCenterView({
               isSingleRowHeader && styles.loadSubTabsWrapSingle,
             ]}
           >
-            <SubTabs<LoadSubTab>
-              variant="light"
-              horizontalPadding={0}
-              value={loadSubTab}
-              onChange={setLoadSubTab}
-              items={[
-                {
-                  key: "GIVE_LOAD",
-                  label: "GIVE LOAD",
-                  badgeCount: hirePartnerLoads.length,
-                },
-                {
-                  key: "GET_LOAD",
-                  label: "GET LOAD",
-                  badgeCount: findWorkLoads.length,
-                },
-                {
-                  key: "AWARDED",
-                  label: "CLAIMED",
-                  badgeCount: awardedLoads.length,
-                },
-              ]}
-            />
+            <View
+              style={styles.loadMainTabsPillWrap}
+              onLayout={(e) => setLoadTabsWrapWidth(e.nativeEvent.layout.width)}
+            >
+              {loadTabsWrapWidth > 0 ? (
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.loadMainTabActiveBg,
+                    {
+                      width: (loadTabsWrapWidth - 8) / 3,
+                      transform: [
+                        {
+                          translateX: loadTabsActiveAnim.interpolate({
+                            inputRange: [0, 1, 2],
+                            outputRange: [0, (loadTabsWrapWidth - 8) / 3, ((loadTabsWrapWidth - 8) / 3) * 2],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                />
+              ) : null}
+              {[
+                { key: "GIVE_LOAD" as const, label: "GIVE LOAD", count: hirePartnerLoads.length },
+                { key: "GET_LOAD" as const, label: "GET LOAD", count: findWorkLoads.length },
+                { key: "AWARDED" as const, label: "CLAIMED", count: awardedLoads.length },
+              ].map((tab) => {
+                const active = loadSubTab === tab.key;
+                return (
+                  <TouchableOpacity
+                    key={tab.key}
+                    style={[styles.loadMainTabPill, active && styles.loadMainTabPillActive]}
+                    onPress={() => setLoadSubTab(tab.key)}
+                    activeOpacity={0.8}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text style={[styles.loadMainTabPillText, active && styles.loadMainTabPillTextActive]}>
+                      {tab.label}
+                    </Text>
+                    {tab.count > 0 ? (
+                      <View style={[styles.loadMainTabBadge, active && styles.loadMainTabBadgeActive]}>
+                        <Text style={[styles.loadMainTabBadgeText, active && styles.loadMainTabBadgeTextActive]}>
+                          {tab.count}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
           {onMyNetworkPress ? (
             <TouchableOpacity
@@ -3802,6 +3844,77 @@ const styles = StyleSheet.create({
     minWidth: 340,
     maxWidth: 420,
     paddingBottom: 0,
+  },
+  loadMainTabsPillWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    position: "relative",
+    backgroundColor: Theme.liquidPillBg,
+    borderWidth: 1,
+    borderColor: Theme.liquidPillBorder,
+    borderRadius: 999,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+  },
+  loadMainTabActiveBg: {
+    position: "absolute",
+    left: 4,
+    top: 4,
+    bottom: 4,
+    borderRadius: 999,
+    backgroundColor: Theme.darkBackground,
+  },
+  loadMainTabPill: {
+    minWidth: 0,
+    flex: 1,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
+  },
+  loadMainTabPillActive: {
+    backgroundColor: "transparent",
+  },
+  loadMainTabPillText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
+  loadMainTabPillTextActive: {
+    color: Theme.textOnDark,
+  },
+  loadMainTabBadge: {
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  loadMainTabBadgeActive: {
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  loadMainTabBadgeText: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+  },
+  loadMainTabBadgeTextActive: {
+    color: Theme.textOnDark,
   },
   loadMyNetworkBtn: {
     flexDirection: "row",
