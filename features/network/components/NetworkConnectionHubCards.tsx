@@ -5,7 +5,7 @@ import Theme from "@/constants/Theme";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { getInitials } from "@/lib/stringUtils";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
-import { Check, CheckCircle2, Send, ShieldCheck, Star, Users, Zap } from "lucide-react-native";
+import { Check, CheckCircle2, MapPin, Send, ShieldCheck, Star, Users, Zap } from "lucide-react-native";
 import React from "react";
 import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -21,6 +21,7 @@ export type HubConnectionItem = {
   entityType?: PartyEntityType;
   mutualCount?: number | null;
   rating?: number | null;
+  locationLabel?: string | null;
   actionLabel?: string;
   actionLoading?: boolean;
   actionDisabled?: boolean;
@@ -123,13 +124,12 @@ export function HubConnectionListCard({
           <Text style={styles.entityName} numberOfLines={1}>
             {item.name.toUpperCase()}
           </Text>
-          <Text style={styles.entitySubtitle} numberOfLines={2}>
-            {item.role === "CLIENT"
-              ? "Shipping demand partner"
-              : item.role === "SUPPLIER"
-                ? "Capacity supply partner"
-                : "Fleet operations member"}
-          </Text>
+          <View style={styles.locationRow}>
+            <MapPin size={10} color={Theme.textMutedDemo} strokeWidth={2.4} />
+            <Text style={styles.entitySubtitle} numberOfLines={1}>
+              {item.locationLabel ?? "Not available"}
+            </Text>
+          </View>
 
           <View style={[styles.cardMetaStack, mutuals === 0 && styles.cardMetaStackCompact]}>
             {mutuals > 0 ? (
@@ -420,13 +420,21 @@ const styles = StyleSheet.create({
   },
   entitySubtitle: {
     fontSize: 9,
-    fontWeight: "400",
+    fontWeight: "500",
     fontStyle: "italic",
     color: Theme.textMutedDemo,
     lineHeight: 12,
     textAlign: "center",
-    marginTop: 2,
-    minHeight: 24,
+  },
+  locationRow: {
+    minHeight: 14,
+    marginTop: 3,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    maxWidth: "100%",
+    paddingHorizontal: 4,
   },
   heroAvatar: {
     width: 62,
