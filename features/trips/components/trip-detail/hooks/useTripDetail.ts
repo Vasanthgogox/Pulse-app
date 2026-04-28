@@ -534,7 +534,8 @@ export function useTripDetail({
     refetchTransactionsRef.current();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useRealtimeTrip(trip?.id ?? null, handleRealtimeTripUpdate);
+  // Subscribe immediately using route tripId so realtime starts even before trip row is loaded.
+  useRealtimeTrip(tripId ?? null, handleRealtimeTripUpdate);
 
   // ── Data loaders ──────────────────────────────────────────────────────────
   const load = useCallback(() => {
@@ -666,6 +667,27 @@ export function useTripDetail({
     setFinanceRefreshKey((k) => k + 1);
     refetchTransactionsRef.current();
   }, [load, loadAdjustments, loadAssignmentAudit, loadTripDocuments]);
+
+  // Fallback polling for active journeys (covers cases where browser realtime channel is delayed).
+  useEffect(() => {
+    if (!tripId || !trip) return;
+    const status = String(trip.status ?? "").toLowerCase();
+    const isActiveJourney =
+      status === "assigned" ||
+      status === "in_progress" ||
+      status === "in_transit" ||
+      status === "pickup" ||
+      status === "picked_up" ||
+      status === "at_drop";
+    if (!isActiveJourney || trip.completed_at) return;
+
+    const intervalMs = 3000;
+    const timer = setInterval(() => {
+      isRefreshingRef.current = true;
+      load();
+    }, intervalMs);
+    return () => clearInterval(timer);
+  }, [tripId, trip?.id, trip?.status, trip?.completed_at, load]);
 
   /** Immediate refresh after assignment/reassignment actions. */
   const handleAssignmentUpdated = useCallback(() => {

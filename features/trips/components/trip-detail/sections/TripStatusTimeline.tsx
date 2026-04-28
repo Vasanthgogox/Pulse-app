@@ -77,8 +77,8 @@ function getJourneySegmentProgress(trip: TripRow): 0 | 1 | 2 | 3 | 4 {
     return 4;
   }
   if (s === "arrived" || s === "at_destination" || s === "at_drop") return 3;
-  if (s === "in_transit" || s === "intransit" || s === "transit") return 2;
-  if (s === "in_progress" && trip.started_at) return 2;
+  if (s === "in_transit" || s === "intransit" || s === "transit") return 3;
+  if (s === "in_progress" && trip.started_at) return 3;
   if (
     s === "in_progress" ||
     s === "picked_up" ||
@@ -87,8 +87,9 @@ function getJourneySegmentProgress(trip: TripRow): 0 | 1 | 2 | 3 | 4 {
     s === "dispatched" ||
     s === "confirmed_arrival"
   ) {
-    return 1;
+    return 2;
   }
+  if (s === "assigned" || s === "draft" || s === "pending_acceptance") return 1;
   return 0;
 }
 
