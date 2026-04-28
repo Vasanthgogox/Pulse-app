@@ -7,6 +7,8 @@
  */
 import type { FinancialRowData, AggregationTotals } from './types';
 import type { LedgerTx, TripForCustomer, ClientLike, TripPartyMap, IndentForAggregation } from './types';
+import { adjustedRevenue } from '@/features/trips/services/tripAdjustments';
+import type { TripAdjustment } from '@/features/trips/services/tripAdjustments';
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from '@/features/trips/visibility/tripVisibility';
 import { allocateAmountsToLargestDueTrips } from '@/features/finance/utils/allocateToLargestDue';
 
@@ -36,12 +38,22 @@ interface ClientTripInfo {
   amountPaid: number;
 }
 
+function adjustmentsForTrip(
+  adjustmentsByTripId: Record<string, TripAdjustment[]> | undefined,
+  tripId: string | undefined,
+): TripAdjustment[] {
+  if (!adjustmentsByTripId || !tripId) return [];
+  return adjustmentsByTripId[normId(tripId)] ?? [];
+}
+
 export function aggregateCustomers(
   clients: ClientLike[],
   trips: TripForCustomer[],
   transactions: LedgerTx[],
   tripPartyMap?: TripPartyMap | null,
-  indents?: IndentForAggregation[]
+  indents?: IndentForAggregation[],
+  /** When provided, billed amounts match trip detail / Adjustment Registry (revenue adjustments). */
+  adjustmentsByTripId?: Record<string, TripAdjustment[]>,
 ): { rows: FinancialRowData[]; totals: AggregationTotals } {
   const ledgerByClientId: Record<string, { received: number; pending: number }> = {};
   const ledgerByPartyName: Record<string, { displayName: string; received: number; pending: number }> = {};
@@ -144,9 +156,14 @@ export function aggregateCustomers(
     //    match), always use client_price — even if trip has indent_id. Client Detail uses same rule.
     //    Removed: if (t.indent_id != null) useSupplierRate = true — that incorrectly used supplier_rate for
     //    our own indent-origin trips, causing billing/due mismatch (e.g. 44k vs 47k, 21k vs 24k).
-    const billedAmount = useSupplierRate
+    const baseBilled = useSupplierRate
       ? Number(t.supplier_rate ?? 0)
       : Number(t.client_price ?? 0);
+    const adj = adjustmentsForTrip(adjustmentsByTripId, (t as { id?: string }).id);
+    const billedAmount =
+      adjustmentsByTripId !== undefined
+        ? adjustedRevenue(baseBilled, adj)
+        : baseBilled;
     if (!billedAmount) continue;
 
     tripCount[clientId] = (tripCount[clientId] ?? 0) + 1;

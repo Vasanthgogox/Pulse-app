@@ -210,3 +210,46 @@ export function adjustedCost(baseCost: number, adjustments: TripAdjustment[]): n
   );
   return Math.max(0, baseCost + delta);
 }
+
+/** Normalize trip id for adjustment map lookups (aligned with finance aggregation). */
+export function normTripFinanceAdjustmentKey(id: string | null | undefined): string {
+  return id == null ? "" : String(id).trim().toLowerCase();
+}
+
+const ADJ_FETCH_CHUNK = 90;
+
+/**
+ * Load persisted trip finance adjustments for many trips (batched `.in` queries).
+ * Returns a map keyed by {@link normTripFinanceAdjustmentKey}(trip_id).
+ */
+export async function fetchTripFinanceAdjustmentsByTripIds(
+  tripIds: string[],
+): Promise<Map<string, TripAdjustment[]>> {
+  const out = new Map<string, TripAdjustment[]>();
+  const uniq = [...new Set(tripIds.filter(Boolean).map((id) => String(id)))];
+  if (uniq.length === 0) return out;
+
+  for (let i = 0; i < uniq.length; i += ADJ_FETCH_CHUNK) {
+    const chunk = uniq.slice(i, i + ADJ_FETCH_CHUNK);
+    try {
+      const { data, error } = await supabase()
+        .from("trip_finance_adjustments")
+        .select(
+          "id, trip_id, organization_id, type, impact, amount, reason, mission_key, created_at",
+        )
+        .in("trip_id", chunk)
+        .order("created_at", { ascending: true });
+      if (error || !data?.length) continue;
+      for (const row of data as TripFinanceAdjustmentRowDb[]) {
+        const adj = rowFromRemote(row);
+        const key = normTripFinanceAdjustmentKey(adj.trip_id);
+        const list = out.get(key) ?? [];
+        list.push(adj);
+        out.set(key, list);
+      }
+    } catch {
+      /* offline / RLS — leave partial */
+    }
+  }
+  return out;
+}

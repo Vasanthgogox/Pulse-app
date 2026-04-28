@@ -23,6 +23,7 @@ import type { ReactNode } from "react";
 import { Platform, Text, View, useWindowDimensions } from "react-native";
 import type { LedgerRow } from "../services/finance.service";
 import type { FinanceSubTab } from "../types";
+import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import { styles } from "./FinanceScreen.styles";
 import { FinanceKanbanTab } from "./FinanceKanbanTab";
 import type { FinancialRowData } from "./FinancialRow";
@@ -101,6 +102,8 @@ export interface FinanceTabBodyProps {
   bottomInset?: number;
   profileImages: Record<string, string>;
   linkedOrgDisplayMap: Record<string, LinkedOrgDisplay>;
+  /** Loaded trip finance adjustments (undefined while loading — aggregation uses raw rates). */
+  tripFinanceAdjustmentsByTripId?: Record<string, TripAdjustment[]>;
 }
 
 export function FinanceTabBody({
@@ -144,6 +147,7 @@ export function FinanceTabBody({
   bottomInset = 120,
   profileImages,
   linkedOrgDisplayMap,
+  tripFinanceAdjustmentsByTripId,
 }: FinanceTabBodyProps) {
   const { width: windowWidth } = useWindowDimensions();
   // Kanban only for Web desktop (large screens); mobile/native/tablet uses standard list
@@ -234,6 +238,7 @@ export function FinanceTabBody({
         refreshing={refreshing}
         onRefresh={onRefresh}
         bottomInset={bottomInset}
+        tripFinanceAdjustmentsByTripId={tripFinanceAdjustmentsByTripId}
       />
     );
   }
@@ -261,6 +266,7 @@ export function FinanceTabBody({
         refreshing={refreshing}
         onRefresh={onRefresh}
         bottomInset={bottomInset}
+        tripFinanceAdjustmentsByTripId={tripFinanceAdjustmentsByTripId}
       />
     );
   }

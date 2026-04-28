@@ -18,6 +18,7 @@ import {
 import type { TripDetailMap } from "@/features/finance/components/LedgerTransactionListView";
 import type { EntityListFilter } from "@/features/finance/components/TreasurySummaryCard";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
+import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { formatLedgerDate } from "@/lib/format";
@@ -1798,6 +1799,8 @@ export interface CustomersTabProps {
   refreshing?: boolean;
   onRefresh?: () => void;
   bottomInset?: number;
+  /** When set, billed totals match trip Adjustment Registry (revenue adjustments). */
+  tripFinanceAdjustmentsByTripId?: Record<string, TripAdjustment[]>;
 }
 
 export function CustomersTab({
@@ -1819,6 +1822,7 @@ export function CustomersTab({
   refreshing = false,
   onRefresh,
   bottomInset = 100,
+  tripFinanceAdjustmentsByTripId,
 }: CustomersTabProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const insets = useSafeAreaInsets();
@@ -1859,8 +1863,22 @@ export function CustomersTab({
   );
 
   const { rows, totals } = useMemo(() => {
-    return aggregateCustomers(clients, allTrips, transactions, tripPartyMap, indentsProp);
-  }, [clients, allTrips, transactions, tripPartyMap, indentsProp]);
+    return aggregateCustomers(
+      clients,
+      allTrips,
+      transactions,
+      tripPartyMap,
+      indentsProp,
+      tripFinanceAdjustmentsByTripId,
+    );
+  }, [
+    clients,
+    allTrips,
+    transactions,
+    tripPartyMap,
+    indentsProp,
+    tripFinanceAdjustmentsByTripId,
+  ]);
 
   const q = searchQuery.trim().toLowerCase();
   const filteredRows = useMemo(() => {

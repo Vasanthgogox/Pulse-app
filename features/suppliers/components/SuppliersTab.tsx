@@ -10,6 +10,7 @@ import type { EntityListFilter } from "@/features/finance/components/TreasurySum
 import { aggregateSuppliers, type FinancialRowData, type TripPartyMap } from "@/features/finance/aggregation";
 import type { DirectQuoteForAggregation, IndentForAggregation } from "@/features/finance/aggregation/types";
 import { getTripsByOrganization, type TripRow } from "@/features/trips";
+import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import { usePaginatedScroll } from "@/lib/usePaginatedScroll";
 import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
@@ -81,6 +82,8 @@ export interface SuppliersTabProps {
   refreshing?: boolean;
   onRefresh?: () => void;
   bottomInset?: number;
+  /** When set, payables match trip Adjustment Registry (cost adjustments). */
+  tripFinanceAdjustmentsByTripId?: Record<string, TripAdjustment[]>;
 }
 
 export function SuppliersTab({
@@ -102,6 +105,7 @@ export function SuppliersTab({
   refreshing = false,
   onRefresh,
   bottomInset = 100,
+  tripFinanceAdjustmentsByTripId,
 }: SuppliersTabProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
@@ -154,8 +158,18 @@ export function SuppliersTab({
       tripPartyMap,
       indentsProp,
       directQuotesProp,
+      tripFinanceAdjustmentsByTripId,
     );
-  }, [suppliers, trips, transactions, tripsWhereOrgIsClient, tripPartyMap, indentsProp, directQuotesProp]);
+  }, [
+    suppliers,
+    trips,
+    transactions,
+    tripsWhereOrgIsClient,
+    tripPartyMap,
+    indentsProp,
+    directQuotesProp,
+    tripFinanceAdjustmentsByTripId,
+  ]);
 
   const q = searchQuery.trim().toLowerCase();
   const filteredRows = useMemo(() => {

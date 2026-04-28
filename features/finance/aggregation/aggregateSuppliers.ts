@@ -10,6 +10,11 @@
  */
 import type { FinancialRowData, AggregationTotals } from './types';
 import type { LedgerTx, TripForSupplier, SupplierLike, TripPartyMap, IndentForAggregation, DirectQuoteForAggregation } from './types';
+import {
+  adjustedCost,
+  adjustedRevenue,
+  type TripAdjustment,
+} from '@/features/trips/services/tripAdjustments';
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from '@/features/trips/visibility/tripVisibility';
 
 /** Trip with organization_id (trip owner); used for "trips where we are the client". client_price = amount we were billed (use for due). */
@@ -31,6 +36,15 @@ function normId(id: string | null | undefined): string {
   return id == null ? '' : String(id).trim();
 }
 
+function adjustmentsForTrip(
+  adjustmentsByTripId: Record<string, TripAdjustment[]> | undefined,
+  tripId: string | undefined,
+): TripAdjustment[] {
+  if (!adjustmentsByTripId || !tripId) return [];
+  const k = String(tripId).trim().toLowerCase();
+  return adjustmentsByTripId[k] ?? [];
+}
+
 export function aggregateSuppliers(
   suppliers: SupplierLike[],
   trips: TripForSupplier[],
@@ -38,7 +52,9 @@ export function aggregateSuppliers(
   tripsWhereOrgIsClient?: TripWhereOrgIsClient[],
   tripPartyMap?: TripPartyMap | null,
   indents?: IndentForAggregation[],
-  directQuotes?: DirectQuoteForAggregation[]
+  directQuotes?: DirectQuoteForAggregation[],
+  /** When provided, trip payables match Adjustment Registry (cost vs revenue where applicable). */
+  adjustmentsByTripId?: Record<string, TripAdjustment[]>,
 ): { rows: FinancialRowData[]; totals: AggregationTotals } {
   const dueFromTrips: Record<string, number> = {};
   const sourced: Record<string, number> = {};
@@ -66,7 +82,11 @@ export function aggregateSuppliers(
   // O(trips): attribute each trip to supplier by supplier_id (normalized) or by supplier_name (aggregated trip = partner rate as due).
   for (let i = 0; i < trips.length; i++) {
     const t = trips[i];
-    const rate = Number(t.supplier_rate ?? 0);
+    const tid = (t as { id?: string }).id;
+    const adj = adjustmentsForTrip(adjustmentsByTripId, tid);
+    const rawRate = Number(t.supplier_rate ?? 0);
+    const rate =
+      adjustmentsByTripId !== undefined ? adjustedCost(rawRate, adj) : rawRate;
     const tripSupplierIdNorm = normId(t.supplier_id);
     let sid: string | null =
       (tripSupplierIdNorm && normalizedIdToRawId[tripSupplierIdNorm]) ?? null;
@@ -89,7 +109,13 @@ export function aggregateSuppliers(
     if (!ownerOrgId) continue;
     const sid = supplierIdByLinkedOrgId.get(ownerOrgId) ?? null;
     if (!sid) continue;
-    const amount = Number(t.client_price ?? 0) || Number(t.supplier_rate ?? 0);
+    const tid = (t as { id?: string }).id;
+    const adj = adjustmentsForTrip(adjustmentsByTripId, tid);
+    const baseAmt = Number(t.client_price ?? 0) || Number(t.supplier_rate ?? 0);
+    const amount =
+      adjustmentsByTripId !== undefined
+        ? adjustedRevenue(baseAmt, adj)
+        : baseAmt;
     dueFromTrips[sid] = (dueFromTrips[sid] ?? 0) + amount;
     sourced[sid] = (sourced[sid] ?? 0) + 1;
   }

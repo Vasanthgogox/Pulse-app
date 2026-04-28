@@ -41,6 +41,8 @@ import {
 import { formatINR, formatLedgerDate } from "@/lib/format";
 import { tripDayIso } from "@/lib/dateRangePresets";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
+import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
+import { adjustedCost } from "@/features/trips/services/tripAdjustments";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
 import { useFocusEffect } from "@react-navigation/native";
@@ -127,6 +129,14 @@ export default function SupplierDetailScreen({
   const canAddTransaction = canAccessFinance(capabilities);
   const [supplier, setSupplier] = useState<SupplierRow | null>(null);
   const [trips, setTrips] = useState<TripRow[]>([]);
+  const tripIdsForFinanceAdj = useMemo(
+    () => trips.map((t) => String(t.id)).filter(Boolean),
+    [trips],
+  );
+  const { record: tripFinanceAdjRecord } = useTripFinanceAdjustmentsMap(
+    currentOrganization?.id ?? null,
+    tripIdsForFinanceAdj,
+  );
   const [transactions, setTransactions] = useState<LedgerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -468,9 +478,13 @@ export default function SupplierDetailScreen({
     const allocatedOutByTripId = allocateAmountsToLargestDueTrips(
       trips.map((t) => {
         const key = norm(t.id);
+        const base =
+          Number(t.supplier_rate ?? 0) || Number(t.client_price ?? 0);
+        const adj = tripFinanceAdjRecord[key] ?? [];
+        const sales = adjustedCost(base, adj);
         return {
           tripId: key,
-          sales: Number(t.supplier_rate ?? t.client_price ?? 0),
+          sales,
           paid: outByTripId[key] ?? 0,
         };
       }),
@@ -494,7 +508,10 @@ export default function SupplierDetailScreen({
     > = {};
     for (const t of trips) {
       const key = norm(t.id);
-      const sales = Number(t.supplier_rate ?? t.client_price ?? 0);
+      const base =
+        Number(t.supplier_rate ?? 0) || Number(t.client_price ?? 0);
+      const adj = tripFinanceAdjRecord[key] ?? [];
+      const sales = adjustedCost(base, adj);
       const paid = allocatedOutByTripId[key] ?? 0;
       const due = Math.max(0, sales - paid);
       const rawId = getTripDisplayNumber(t) || "—";
@@ -554,7 +571,10 @@ export default function SupplierDetailScreen({
     const tripIdToDue: Record<string, number> = {};
     for (const t of trips) {
       const key = norm(t.id);
-      const sales = Number(t.supplier_rate ?? t.client_price ?? 0);
+      const base =
+        Number(t.supplier_rate ?? 0) || Number(t.client_price ?? 0);
+      const adj = tripFinanceAdjRecord[key] ?? [];
+      const sales = adjustedCost(base, adj);
       const paid = allocatedOutByTripId[key] ?? 0;
       tripIdToDue[t.id] = Math.max(0, sales - paid);
     }
@@ -571,7 +591,7 @@ export default function SupplierDetailScreen({
       tripIdToDue,
       paidByTripId: allocatedOutByTripId,
     };
-  }, [trips, transactions, supplierId, linkedOrgId]);
+  }, [trips, transactions, supplierId, linkedOrgId, tripFinanceAdjRecord]);
 
   const tripDateOpts = useMemo(
     () => ({ customFrom: tripCustomFrom, customTo: tripCustomTo }),
@@ -590,7 +610,10 @@ export default function SupplierDetailScreen({
       id == null ? "" : String(id).trim().toLowerCase();
     return tripsForMissionTable.map((t) => {
       const key = norm(t.id);
-      const sales = Number(t.supplier_rate ?? t.client_price ?? 0);
+      const base =
+        Number(t.supplier_rate ?? 0) || Number(t.client_price ?? 0);
+      const adj = tripFinanceAdjRecord[key] ?? [];
+      const sales = adjustedCost(base, adj);
       const paid = paidByTripId[key] ?? 0;
       const due = tripIdToDue[t.id] ?? 0;
       return {
@@ -602,7 +625,7 @@ export default function SupplierDetailScreen({
         due,
       };
     });
-  }, [tripsForMissionTable, paidByTripId, tripIdToDue]);
+  }, [tripsForMissionTable, paidByTripId, tripIdToDue, tripFinanceAdjRecord]);
   const tripTransactionMetaById = useMemo(() => {
     const byTrip: Record<string, { count: number; lastTxnDate: string | null }> = {};
     for (const tx of transactions) {

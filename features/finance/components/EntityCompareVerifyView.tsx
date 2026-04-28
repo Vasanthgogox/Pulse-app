@@ -8,6 +8,11 @@ import Theme from "@/constants/Theme";
 import { getClientById } from "@/features/clients/services/clients.service";
 import { getSupplierById } from "@/features/suppliers/services/suppliers.service";
 import { getTripDisplayNumber, type TripRow } from "@/features/trips";
+import {
+  adjustedCost,
+  adjustedRevenue,
+  type TripAdjustment,
+} from "@/features/trips/services/tripAdjustments";
 import { supabase } from "@/lib/supabase";
 import {
   isCrossOrgIntegrationTrip,
@@ -32,6 +37,7 @@ import {
     type DisputeRow,
 } from "@/services/sharedLedgerService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
@@ -132,6 +138,7 @@ function buildInternalTrips(
   transactions: LedgerRow[],
   entityId: string,
   entityType: "CLIENT" | "SUPPLIER",
+  adjustmentByTripKey?: Map<string, TripAdjustment[]>,
 ): Map<string, InternalTrip> {
   const norm = (id: string | null | undefined) =>
     id == null ? "" : String(id).trim().toLowerCase();
@@ -167,14 +174,21 @@ function buildInternalTrips(
   const map = new Map<string, InternalTrip>();
   for (const t of trips) {
     const key = norm(t.id);
+    const adj = adjustmentByTripKey?.get(key) ?? [];
     const outAmt = outByTripId[key] ?? 0;
     // CLIENT = what we charged them (client_price).
     // SUPPLIER = what we owe them (supplier_rate). client_price only as last-resort fallback.
-    const tripSales = Number(
+    const rawSales = Number(
       entityType === "CLIENT"
         ? (t.client_price ?? 0)
         : (t.supplier_rate ?? t.client_price ?? 0),
     );
+    const tripSales =
+      adjustmentByTripKey != null
+        ? entityType === "SUPPLIER"
+          ? adjustedCost(rawSales, adj)
+          : adjustedRevenue(rawSales, adj)
+        : rawSales;
     // For supplier: if trip has no rate, use amount we paid so Total Billing reflects it.
     const sales =
       entityType === "SUPPLIER" && tripSales === 0 && outAmt > 0
@@ -389,12 +403,33 @@ export function EntityCompareVerifyView({
     [trips, organizationId],
   );
 
+  const compareTripIdsForAdj = useMemo(
+    () => sharedLedgerTrips.map((t) => String(t.id)).filter(Boolean),
+    [sharedLedgerTrips],
+  );
+  const { map: compareTripAdjMap } = useTripFinanceAdjustmentsMap(
+    organizationId ?? null,
+    compareTripIdsForAdj,
+  );
+
   const internalMap = useMemo(
     () =>
       sharedLedgerTrips.length && txs.length >= 0
-        ? buildInternalTrips(sharedLedgerTrips, txs, entity.id, entityType)
+        ? buildInternalTrips(
+            sharedLedgerTrips,
+            txs,
+            entity.id,
+            entityType,
+            compareTripAdjMap ?? undefined,
+          )
         : new Map(),
-    [sharedLedgerTrips, txs, entity.id, entityType],
+    [
+      sharedLedgerTrips,
+      txs,
+      entity.id,
+      entityType,
+      compareTripAdjMap,
+    ],
   );
 
   // When partner is non-integrated: fetch contact phone, then check if they're in app (by phone lookup).

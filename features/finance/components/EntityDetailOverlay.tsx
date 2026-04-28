@@ -14,6 +14,10 @@ import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
 import { getRatingsForDriver, type RatingRow } from "@/features/ratings/services/ratings.service";
 import { getTripDisplayNumber, type TripRow } from "@/features/trips";
+import {
+  adjustedCost,
+  adjustedRevenue,
+} from "@/features/trips/services/tripAdjustments";
 import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import {
     getExpenseGroupedForTrip,
@@ -23,6 +27,10 @@ import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import { isAggregateTrip } from "@/lib/driverUtils";
+import {
+  adjustmentsForTripId,
+  useTripFinanceAdjustmentsMap,
+} from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import {
     formatINR,
     formatIndianVehicleNumber,
@@ -814,6 +822,15 @@ export function EntityDetailOverlay({
 
   const n = Math.max(1, trips.length);
 
+  const tripIdsForFinanceAdj = useMemo(
+    () => (trips ?? []).map((t) => String(t.id)).filter(Boolean),
+    [trips],
+  );
+  const { record: tripFinanceAdjRecord } = useTripFinanceAdjustmentsMap(
+    organizationId ?? null,
+    tripIdsForFinanceAdj,
+  );
+
   // CLIENT/SUPPLIER: always one row per trip; aggregate transactions into PAID/DUE so trip rows stay visible and due updates
   const rowsFromCustomerSupplier =
     isCustomerOrSupplier && trips.length > 0
@@ -878,17 +895,25 @@ export function EntityDetailOverlay({
               t.organization_id != null &&
               t.organization_id === linkedOrgId &&
               !isOwnerClient;
-            const sales = Number(
-              entityType === "CLIENT"
-                ? isIntegratedShipperClient
-                  ? (t.supplier_rate ?? 0)
-                  : (t.client_price ?? 0)
-                : entityType === "SUPPLIER"
-                  ? isTripWhereWeAreClient
-                    ? (t.client_price ?? t.supplier_rate ?? 0)
-                    : (t.supplier_rate ?? 0)
-                  : (t.client_price ?? t.supplier_rate ?? 0),
-            );
+            const adj = adjustmentsForTripId(tripFinanceAdjRecord, t.id);
+            let sales: number;
+            if (entityType === "CLIENT") {
+              const base = isIntegratedShipperClient
+                ? Number(t.supplier_rate ?? 0)
+                : Number(t.client_price ?? 0);
+              sales = adjustedRevenue(base, adj);
+            } else if (entityType === "SUPPLIER") {
+              if (isTripWhereWeAreClient) {
+                const base =
+                  Number(t.client_price ?? 0) ||
+                  Number(t.supplier_rate ?? 0);
+                sales = adjustedRevenue(base, adj);
+              } else {
+                sales = adjustedCost(Number(t.supplier_rate ?? 0), adj);
+              }
+            } else {
+              sales = Number(t.client_price ?? t.supplier_rate ?? 0);
+            }
             const outByTrip = outByTripId[key] ?? 0;
             const inByTrip = paidByTripId[key] ?? 0;
             // CLIENT: received = only cash from client (inByTrip); pending = sale - received. Expenses (outByTrip) do not reduce received. SUPPLIER: paid = amount paid to supplier (out); due = sales - paid.
