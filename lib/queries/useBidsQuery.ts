@@ -3,6 +3,7 @@ import {
   getBidsForPost,
   getMyBidForPost,
   submitBid,
+  updateBid,
   acceptBid,
   rejectBid,
   withdrawBid,
@@ -45,6 +46,20 @@ export function useSubmitBidMutation(postId: string | null, orgId: string | null
         qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
         qc.invalidateQueries({ queryKey: queryKeys.bids.myBid(postId, orgId ?? '') });
         qc.invalidateQueries({ queryKey: queryKeys.posts.detail(postId) });
+      }
+    },
+  });
+}
+
+export function useUpdateBidMutation(postId: string | null, orgId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ bidId, amount, note }: { bidId: string; amount: number; note?: string }) =>
+      updateBid(bidId, orgId!, amount, note),
+    onSuccess: () => {
+      if (postId) {
+        qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
+        qc.invalidateQueries({ queryKey: queryKeys.bids.myBid(postId, orgId ?? '') });
       }
     },
   });
