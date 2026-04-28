@@ -10,12 +10,12 @@ import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 import { UserPlus2, Zap } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Animated,
-    Pressable,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Animated,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 
 const MAX_RECENT = 5;
@@ -182,7 +182,7 @@ export function RecentAddedStrip({ orgId, items, onAfterInAppSuccess, layout = "
                       <Pressable
                         onPress={() => void onInvite(item)}
                         disabled={!canPress}
-                        accessibilityLabel={`Connect or invite ${item.name}`}
+                        accessibilityLabel={`Send app invite to ${item.name}`}
                         style={({ pressed }) => [
                           styles.connectBtn,
                           !canPress && styles.connectBtnDisabled,
@@ -193,7 +193,7 @@ export function RecentAddedStrip({ orgId, items, onAfterInAppSuccess, layout = "
                         {busy ? (
                           <ActivityIndicator size="small" color={Theme.textOnDark} />
                         ) : (
-                          <Text style={styles.connectBtnText}>Connect</Text>
+                          <Text style={styles.connectBtnText}>Send invite</Text>
                         )}
                       </Pressable>
                     )}
