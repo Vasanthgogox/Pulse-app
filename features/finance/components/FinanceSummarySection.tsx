@@ -80,6 +80,17 @@ export interface FinanceSummarySectionProps {
   auditedTotalIn?: number;
   auditedTotalOut?: number;
   onQuickCustomRange?: (fromIso: string, toIso: string) => void;
+  desktopCardMetrics?: Partial<
+    Record<
+      "cash" | "customers" | "suppliers" | "garage" | "drivers",
+      {
+        value: string;
+        count: number;
+        secondaryLabel: string;
+        secondaryValue: string;
+      }
+    >
+  >;
 }
 
 function formatAmount(value: number): string {
@@ -167,6 +178,9 @@ function AnimatedFinanceCategoryCard({
   value,
   icon,
   gradient,
+  count,
+  secondaryLabel,
+  secondaryValue,
   onPress,
   style,
   desktop,
@@ -175,6 +189,9 @@ function AnimatedFinanceCategoryCard({
   value: string;
   icon: string;
   gradient: readonly [string, string];
+  count?: number;
+  secondaryLabel?: string;
+  secondaryValue?: string;
   onPress: () => void;
   style?: any;
   desktop?: boolean;
@@ -280,6 +297,11 @@ function AnimatedFinanceCategoryCard({
             >
               {label}
             </Text>
+            <View style={styles.financeCategoryCountPill}>
+              <Text style={styles.financeCategoryCountText}>
+                {typeof count === "number" ? count.toLocaleString("en-IN") : "0"}
+              </Text>
+            </View>
           </View>
           <Text
             style={[
@@ -289,6 +311,16 @@ function AnimatedFinanceCategoryCard({
           >
             {value}
           </Text>
+          {secondaryLabel != null && secondaryValue != null && (
+            <View style={styles.financeCategorySecondaryRow}>
+              <Text style={styles.financeCategorySecondaryLabel}>
+                {secondaryLabel}
+              </Text>
+              <Text style={styles.financeCategorySecondaryValue}>
+                {secondaryValue}
+              </Text>
+            </View>
+          )}
           <View style={styles.financeCategoryCtaRow}>
             <Text
               style={[
@@ -348,6 +380,7 @@ export function FinanceSummarySection({
   auditedTotalIn,
   auditedTotalOut,
   onQuickCustomRange,
+  desktopCardMetrics,
 }: FinanceSummarySectionProps) {
   const { t } = useLanguage();
   const auditedIn = auditedTotalIn ?? totalIn;
@@ -599,8 +632,13 @@ export function FinanceSummarySection({
             {
               id: "cash" as FinanceSubTab,
               label: "Cash",
-              value: formatCompactAmount(auditedNet),
+              value: desktopCardMetrics?.cash?.value ?? formatCompactAmount(auditedNet),
               icon: "money",
+              count: desktopCardMetrics?.cash?.count ?? 0,
+              secondaryLabel:
+                desktopCardMetrics?.cash?.secondaryLabel ?? "Total Outstanding",
+              secondaryValue:
+                desktopCardMetrics?.cash?.secondaryValue ?? formatAmount(auditedOut),
               gradient: [
                 Theme.financeCardCashFrom,
                 Theme.financeCardCashTo,
@@ -609,8 +647,13 @@ export function FinanceSummarySection({
             {
               id: "customers" as FinanceSubTab,
               label: "Client Revenue",
-              value: "₹45k",
+              value: desktopCardMetrics?.customers?.value ?? "₹45k",
               icon: "building",
+              count: desktopCardMetrics?.customers?.count ?? 0,
+              secondaryLabel:
+                desktopCardMetrics?.customers?.secondaryLabel ?? "Outstanding",
+              secondaryValue:
+                desktopCardMetrics?.customers?.secondaryValue ?? "₹0",
               gradient: [
                 Theme.financeCardBlueFrom,
                 Theme.financeCardBlueTo,
@@ -619,8 +662,13 @@ export function FinanceSummarySection({
             {
               id: "suppliers" as FinanceSubTab,
               label: "Supplier Payables",
-              value: "₹14k",
+              value: desktopCardMetrics?.suppliers?.value ?? "₹14k",
               icon: "industry",
+              count: desktopCardMetrics?.suppliers?.count ?? 0,
+              secondaryLabel:
+                desktopCardMetrics?.suppliers?.secondaryLabel ?? "Outstanding",
+              secondaryValue:
+                desktopCardMetrics?.suppliers?.secondaryValue ?? "₹0",
               gradient: [
                 Theme.financeCardOrangeFrom,
                 Theme.financeCardOrangeTo,
@@ -629,8 +677,13 @@ export function FinanceSummarySection({
             {
               id: "garage" as FinanceSubTab,
               label: "Vehicle Opex",
-              value: "₹22.0k",
+              value: desktopCardMetrics?.garage?.value ?? "₹22.0k",
               icon: "truck",
+              count: desktopCardMetrics?.garage?.count ?? 0,
+              secondaryLabel:
+                desktopCardMetrics?.garage?.secondaryLabel ?? "Total Expense",
+              secondaryValue:
+                desktopCardMetrics?.garage?.secondaryValue ?? "₹0",
               gradient: [
                 Theme.financeCardSlateFrom,
                 Theme.financeCardSlateTo,
@@ -639,8 +692,13 @@ export function FinanceSummarySection({
             {
               id: "drivers" as FinanceSubTab,
               label: "Fleet Payroll",
-              value: "₹0.0k",
+              value: desktopCardMetrics?.drivers?.value ?? "₹0.0k",
               icon: "user",
+              count: desktopCardMetrics?.drivers?.count ?? 0,
+              secondaryLabel:
+                desktopCardMetrics?.drivers?.secondaryLabel ?? "Pending",
+              secondaryValue:
+                desktopCardMetrics?.drivers?.secondaryValue ?? "₹0",
               gradient: [
                 Theme.financeCardGreenFrom,
                 Theme.financeCardGreenTo,
@@ -653,6 +711,9 @@ export function FinanceSummarySection({
               value={card.value}
               icon={card.icon}
               gradient={card.gradient}
+              count={card.count}
+              secondaryLabel={card.secondaryLabel}
+              secondaryValue={card.secondaryValue}
               onPress={() => onTabPress(card.id)}
               desktop={desktopParity}
               style={[

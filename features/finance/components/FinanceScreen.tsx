@@ -531,6 +531,161 @@ export function FinanceScreen() {
         return { in: t("totalCashIn"), out: t("totalCashOut") };
     }
   }, [financeSubTab, t]);
+
+  const formatCompactRupee = useCallback(
+    (value: number | null | undefined): string => {
+      const safeValue = Number(value ?? 0);
+      const abs = Math.abs(safeValue);
+      if (abs >= 100000) return `₹${(safeValue / 100000).toFixed(1)}L`;
+      if (abs >= 1000) return `₹${(safeValue / 1000).toFixed(1)}k`;
+      return `₹${safeValue.toLocaleString("en-IN")}`;
+    },
+    [],
+  );
+
+  const desktopCardMetrics = useMemo(() => {
+    const allTrips = [...tripRows, ...tripsWhereOrgIsSupplier];
+    const customersAgg = aggregateCustomers(
+      clientRows,
+      allTrips,
+      ledgerTransactions ?? [],
+      tripPartyMap,
+      indentsForFinance,
+    );
+    const suppliersAgg = aggregateSuppliers(
+      supplierRows,
+      allTripsForLedger,
+      ledgerTransactions ?? [],
+      tripsWhereOrgIsClient,
+      tripPartyMap,
+      indentsForFinance,
+      acceptedDirectQuotes,
+    );
+    const offersForAggregation: Record<string, DriverOfferForAggregation> = {};
+    Object.entries(driverOffers).forEach(([driverId, offer]) => {
+      offersForAggregation[driverId] = {
+        payableAmount: offer.payableAmount ?? null,
+        commissionPercent: offer.commissionPercent ?? null,
+        commissionPerKm: offer.commissionPerKm ?? null,
+      };
+    });
+    const driversAgg = aggregateDrivers(
+      driverRows,
+      tripRows,
+      ledgerTransactions ?? [],
+      offersForAggregation,
+      tripPartyMap,
+    );
+    const garageVehicles = buildVehiclePnLList(
+      vehicleRows,
+      tripRows,
+      ledgerTransactions ?? null,
+      garagePeriod,
+      getTripDisplayNumber,
+      currentOrganization?.id ?? null,
+    );
+
+    const customersOutstanding = customersAgg.rows.reduce(
+      (sum, row) => sum + Number(row.pending ?? 0),
+      0,
+    );
+    const activeCustomersCount = customersAgg.rows.filter(
+      (row) =>
+        Number(row.trips ?? 0) > 0 ||
+        Number(row.received ?? 0) > 0 ||
+        Number(row.pending ?? 0) > 0,
+    ).length;
+    const suppliersOutstanding = suppliersAgg.rows.reduce(
+      (sum, row) => sum + Number(row.due ?? 0),
+      0,
+    );
+    const activeSuppliersCount = suppliersAgg.rows.filter(
+      (row) =>
+        Number(row.trips ?? 0) > 0 ||
+        Number(row.paid ?? 0) > 0 ||
+        Number(row.due ?? 0) > 0,
+    ).length;
+    const driverPending = driversAgg.rows.reduce(
+      (sum, row) => sum + Number(row.pending ?? 0),
+      0,
+    );
+    const activeDriversCount = driversAgg.rows.filter(
+      (row) =>
+        Number(row.trips ?? 0) > 0 ||
+        Number(row.paid ?? 0) > 0 ||
+        Number(row.pending ?? 0) > 0,
+    ).length;
+    const garageExpense = garageVehicles.reduce(
+      (sum, row) => sum + Number(row.expense ?? 0),
+      0,
+    );
+    const garageSales = garageVehicles.reduce(
+      (sum, row) => sum + Number(row.sales ?? 0),
+      0,
+    );
+    const activeGarageVehiclesCount = garageVehicles.filter(
+      (row) =>
+        Number(row.trips ?? 0) > 0 ||
+        Number(row.sales ?? 0) > 0 ||
+        Number(row.expense ?? 0) > 0,
+    ).length;
+    const activeCashCount = (ledgerTransactions ?? []).filter(
+      (row) => Number(row.amount_in ?? 0) > 0 || Number(row.amount_out ?? 0) > 0,
+    ).length;
+
+    return {
+      cash: {
+        value: formatCompactRupee(ledgerTotalsData.totalIn - ledgerTotalsData.totalOut),
+        count: activeCashCount,
+        secondaryLabel: "Total Outstanding",
+        secondaryValue: formatCompactRupee(ledgerTotalsData.totalOut),
+      },
+      customers: {
+        value: formatCompactRupee(customersAgg.totals.totalReceived),
+        count: activeCustomersCount,
+        secondaryLabel: "Outstanding",
+        secondaryValue: formatCompactRupee(customersOutstanding),
+      },
+      suppliers: {
+        value: formatCompactRupee(suppliersAgg.totals.totalPaid),
+        count: activeSuppliersCount,
+        secondaryLabel: "Outstanding",
+        secondaryValue: formatCompactRupee(suppliersOutstanding),
+      },
+      garage: {
+        value: formatCompactRupee(garageSales),
+        count: activeGarageVehiclesCount,
+        secondaryLabel: "Total Expense",
+        secondaryValue: formatCompactRupee(garageExpense),
+      },
+      drivers: {
+        value: formatCompactRupee(driversAgg.totals.totalPaid),
+        count: activeDriversCount,
+        secondaryLabel: "Pending",
+        secondaryValue: formatCompactRupee(driverPending),
+      },
+    } as const;
+  }, [
+    acceptedDirectQuotes,
+    allTripsForLedger,
+    clientRows,
+    currentOrganization?.id,
+    driverOffers,
+    driverRows,
+    garagePeriod,
+    getTripDisplayNumber,
+    indentsForFinance,
+    ledgerTotalsData.totalIn,
+    ledgerTotalsData.totalOut,
+    ledgerTransactions,
+    supplierRows,
+    tripPartyMap,
+    tripRows,
+    tripsWhereOrgIsClient,
+    tripsWhereOrgIsSupplier,
+    vehicleRows,
+    formatCompactRupee,
+  ]);
   const reportTitle = useMemo(() => {
     switch (financeSubTab) {
       case "customers":
@@ -1325,6 +1480,7 @@ export function FinanceScreen() {
         isAnyFilterActive={isAnyFilterActive}
         auditedTotalIn={ledgerTotalsData.totalIn}
         auditedTotalOut={ledgerTotalsData.totalOut}
+        desktopCardMetrics={desktopCardMetrics}
       />
       <View style={styles.tableScroll}>
         <View style={styles.tableScrollInner}>
