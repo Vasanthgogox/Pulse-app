@@ -1,5 +1,5 @@
 /**
- * Recently added — avatars, role, status, and connect / On Q (matches network hub semantics).
+ * Recently added — avatars, role, status, and invite / On Q (matches network hub semantics).
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -182,7 +182,7 @@ export function RecentAddedStrip({ orgId, items, onAfterInAppSuccess, layout = "
                       <Pressable
                         onPress={() => void onInvite(item)}
                         disabled={!canPress}
-                        accessibilityLabel={`Connect or invite ${item.name}`}
+                        accessibilityLabel={`Send app invite to ${item.name}`}
                         style={({ pressed }) => [
                           styles.connectBtn,
                           !canPress && styles.connectBtnDisabled,
@@ -193,7 +193,7 @@ export function RecentAddedStrip({ orgId, items, onAfterInAppSuccess, layout = "
                         {busy ? (
                           <ActivityIndicator size="small" color={Theme.textOnDark} />
                         ) : (
-                          <Text style={styles.connectBtnText}>Connect</Text>
+                          <Text style={styles.connectBtnText}>Send invite</Text>
                         )}
                       </Pressable>
                     )}
