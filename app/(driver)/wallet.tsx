@@ -330,6 +330,33 @@ export default function DriverWalletScreen() {
     return byTrip;
   }, [ledgerEntries, hasFleetPaidPendingToken, isLegacyFleetPendingEvidence]);
 
+  // Cash balance:
+  // - trip-related cash includes verified settlements.
+  // - if a trip is fleet-marked paid but not yet verified, show that pending-paid amount immediately.
+  // - once settlement exists for a trip, skip pending-paid for that trip to avoid double counting.
+  // - non-trip ledger entries (salary/reimbursement/etc) still affect cash as before.
+  const totalReceived = useMemo(() => {
+    const verifiedTripReceived = Object.values(receivedByTripId).reduce(
+      (sum, amount) => sum + (Number(amount) || 0),
+      0,
+    );
+    const pendingTripReceived = Object.entries(
+      latestFleetPaidPendingLedgerByTripId,
+    ).reduce((sum, [tripId, entry]) => {
+      if ((receivedByTripId[tripId] ?? 0) > 0) return sum;
+      return sum + (Number(entry.amount) || 0);
+    }, 0);
+    const nonTripReceived = nonTripLedgerEntries.reduce(
+      (sum, e) => sum + (Number(e.amount) || 0),
+      0,
+    );
+    return Math.round(verifiedTripReceived + pendingTripReceived + nonTripReceived);
+  }, [
+    receivedByTripId,
+    latestFleetPaidPendingLedgerByTripId,
+    nonTripLedgerEntries,
+  ]);
+
   const extractUtr = useCallback((raw?: string | null) => {
     const s = (raw ?? '').trim();
     if (!s) return null;
@@ -971,20 +998,6 @@ export default function DriverWalletScreen() {
     }
     return bySection;
   }, [receivedTrips]);
-
-  // Cash balance:
-  // - trip-related cash is only counted once the driver verifies (verified entries are type === 'settlement').
-  // - non-trip ledger entries (salary/reimbursement/etc) still affect cash as before.
-  const totalReceived = Math.round(
-    ledgerEntries.reduce((sum, e) => {
-      const tid = e.trip_id?.trim() || null;
-      const amt = Number(e.amount) || 0;
-      if (tid) {
-        return e.type === 'settlement' ? sum + amt : sum;
-      }
-      return sum + amt;
-    }, 0),
-  );
 
   /** Cash card: pulse + watermark motion (reference wallet hero). */
   const cashCardSparklePulse = useSharedValue(0);
