@@ -958,17 +958,20 @@ export default function DriverTripsScreen() {
               onPress={() => setTripView("active")}
               activeOpacity={0.8}
             >
-              <Text
-                style={[
-                  styles.segmentLabel,
-                  {
-                    color:
-                      tripView === "active" ? colors.emerald : colors.textMuted,
-                  },
-                ]}
-              >
-                Active
-              </Text>
+              <View style={styles.segmentLabelRow}>
+                <Text
+                  style={[
+                    styles.segmentLabel,
+                    {
+                      color:
+                        tripView === "active" ? colors.emerald : colors.textMuted,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  Active
+                </Text>
+              </View>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
@@ -984,17 +987,42 @@ export default function DriverTripsScreen() {
               onPress={() => setTripView("history")}
               activeOpacity={0.8}
             >
-              <Text
-                style={[
-                  styles.segmentLabel,
-                  {
-                    color:
-                      tripView === "history" ? colors.emerald : colors.textMuted,
-                  },
-                ]}
-              >
-                History
-              </Text>
+              <View style={styles.segmentLabelRow}>
+                <Text
+                  style={[
+                    styles.segmentLabel,
+                    {
+                      color:
+                        tripView === "history" ? colors.emerald : colors.textMuted,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  History
+                </Text>
+                <View
+                  style={[
+                    styles.segmentCountBadge,
+                    {
+                      backgroundColor:
+                        tripView === "history" ? colors.emerald : colors.surface,
+                      borderColor: tripView === "history" ? colors.emerald : colors.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.segmentCountBadgeText,
+                      {
+                        color:
+                          tripView === "history" ? colors.textOnPrimary : colors.textMuted,
+                      },
+                    ]}
+                  >
+                    {historyTripsCount}
+                  </Text>
+                </View>
+              </View>
             </TouchableOpacity>
           </View>
         </View>
@@ -1862,8 +1890,30 @@ const styles = StyleSheet.create({
   segmentLabel: {
     fontSize: 10,
     fontWeight: "900",
-    letterSpacing: 2,
+    letterSpacing: 1.2,
     textTransform: "uppercase",
+  },
+  segmentLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    minWidth: 0,
+  },
+  segmentCountBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1,
+    paddingHorizontal: 5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  segmentCountBadgeText: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.2,
+    lineHeight: 11,
   },
   toolbarFooter: {
     flexDirection: "row",
