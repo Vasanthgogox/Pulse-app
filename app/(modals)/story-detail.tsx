@@ -296,12 +296,14 @@ export default function StoryDetailScreen() {
 
   // Record view (fire-and-forget, once per post per session)
   const recordView = useRecordStoryViewMutation();
+  const recordViewMutate = recordView.mutate;
   useEffect(() => {
     if (!post || isOwnPost || !myOrgId) return;
     if (recordedViewsRef.current.has(post.id)) return;
     recordedViewsRef.current.add(post.id);
-    recordView.mutate({ postId: post.id, orgId: myOrgId, orgName: currentOrganization?.name ?? "" });
-  }, [post?.id, isOwnPost, myOrgId]);
+    if (__DEV__) console.log('[story-views] recording view for post', post.id, 'org', myOrgId);
+    recordViewMutate({ postId: post.id, orgId: myOrgId, orgName: currentOrganization?.name ?? "" });
+  }, [post?.id, isOwnPost, myOrgId, recordViewMutate]);
 
   // Fetch viewers (own posts only)
   const viewsQ = useStoryViewsQuery(isOwnPost ? (post?.id ?? null) : null, isOwnPost);

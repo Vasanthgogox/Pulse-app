@@ -16,14 +16,24 @@ export async function recordStoryView(
 ): Promise<void> {
   const { data: session } = await supabase().auth.getSession();
   const userId = session?.session?.user?.id;
-  if (!userId) return;
+  if (!userId) {
+    if (__DEV__) console.warn('[story-views] recordStoryView skipped — no authenticated user');
+    return;
+  }
+  if (!postId || !orgId) {
+    if (__DEV__) console.warn('[story-views] recordStoryView skipped — missing postId or orgId', { postId, orgId });
+    return;
+  }
 
-  await supabase()
+  const { error } = await supabase()
     .from('story_views')
-    .upsert(
-      { post_id: postId, viewer_org_id: orgId, viewer_org_name: orgName, viewer_user_id: userId, viewed_at: new Date().toISOString() },
-      { onConflict: 'post_id,viewer_org_id', ignoreDuplicates: true },
-    );
+    .insert({ post_id: postId, viewer_org_id: orgId, viewer_org_name: orgName, viewer_user_id: userId, viewed_at: new Date().toISOString() });
+
+  if (error) {
+    // 23505 = unique_violation — already viewed, keep first view time, ignore
+    if ((error as { code?: string }).code === '23505') return;
+    if (__DEV__) console.error('[story-views] recordStoryView failed:', error.message, error);
+  }
 }
 
 export async function getStoryViews(
