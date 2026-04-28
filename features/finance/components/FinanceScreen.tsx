@@ -1499,8 +1499,8 @@ export function FinanceScreen() {
         onLedgerViewModeChange={undefined}
         onClearFilters={handleClearFilters}
         isAnyFilterActive={isAnyFilterActive}
-        auditedTotalIn={ledgerTotalsData.totalIn}
-        auditedTotalOut={ledgerTotalsData.totalOut}
+        auditedTotalIn={bannerTotals.totalIn}
+        auditedTotalOut={bannerTotals.totalOut}
         desktopCardMetrics={desktopCardMetrics}
       />
       <View style={styles.tableScroll}>
