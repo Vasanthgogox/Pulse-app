@@ -1611,8 +1611,7 @@ const styles = StyleSheet.create({
   searchRow: {
     flexDirection: "row",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderWidth: 0,
     borderRadius: 10,
     paddingHorizontal: 10,
     marginBottom: 10,

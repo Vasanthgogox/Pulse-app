@@ -189,8 +189,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceForm,
     borderRadius: 4,
     paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderWidth: 0,
   },
   searchIcon: {
     marginRight: 8,

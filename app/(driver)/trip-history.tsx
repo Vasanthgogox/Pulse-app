@@ -1962,7 +1962,7 @@ const styles = StyleSheet.create({
   searchWrap: {
     flex: 1,
     minHeight: 54,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     borderRadius: 26,
     flexDirection: "row",
     alignItems: "center",
