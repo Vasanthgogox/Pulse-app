@@ -2,58 +2,57 @@
  * Trips hub — compact card grid and audit-style table for the main Trips tab.
  * Styling aligns with fleet hub / reference; data bindings mirror TripExpandableCard.
  */
-import { PartyAvatar } from "@/components/PartyAvatar";
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Theme from "@/constants/Theme";
 import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
+import {
+    adjustedCost,
+    adjustedRevenue,
+    type TripAdjustment,
+} from "@/features/trips/services/tripAdjustments";
 import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import { isAggregateTrip } from "@/lib/driverUtils";
-import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
 import {
-  isBlankOrPlaceholderPartyName,
-  partyAvatarHasRenderableOutput,
-  resolvePartyDisplayUri,
-} from "@/lib/partyAvatarDisplay";
-import {
-  formatINR,
-  formatLedgerDate,
-  formatLedgerDateTime,
+    formatINR,
+    formatLedgerDate,
+    formatLedgerDateTime,
 } from "@/lib/format";
+import {
+    isBlankOrPlaceholderPartyName,
+    partyAvatarHasRenderableOutput,
+    resolvePartyDisplayUri,
+} from "@/lib/partyAvatarDisplay";
+import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  Image,
-  Share,
-  LayoutAnimation,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  UIManager,
-  useWindowDimensions,
-  View,
-  type ViewStyle,
+    Image,
+    LayoutAnimation,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    Share,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    UIManager,
+    useWindowDimensions,
+    View,
+    type ViewStyle,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
+    Easing,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withTiming,
 } from "react-native-reanimated";
-import {
-  adjustedCost,
-  adjustedRevenue,
-  type TripAdjustment,
-} from "@/features/trips/services/tripAdjustments";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getTripDisplayNumber, type TripRow } from "../services/trips.service";
 import type { TripHubPartyMeta } from "../utils/tripHubPartyMeta";
 

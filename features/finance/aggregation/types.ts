@@ -54,8 +54,8 @@ export interface TripForSupplier {
 }
 
 /**
- * Minimal indent shape for finance aggregation (pre-trip amount visibility).
- * Included in customers/suppliers passes when an indent has not yet been converted to a trip.
+ * Minimal indent shape for finance aggregation (pre-trip amount visibility on the Customers tab).
+ * Supplier payables use trips only once an indent is converted.
  */
 export interface IndentForAggregation {
   id: string;

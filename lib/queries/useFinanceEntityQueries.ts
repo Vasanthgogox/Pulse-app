@@ -56,7 +56,7 @@ export function useIndentsForFinanceQuery(orgId: string | null) {
 
 /**
  * Accepted direct quotes for indents owned by this org.
- * Used to populate supplier due amounts before a trip is created (indent awarded state).
+ * Available for screens that need awarded-quote data; supplier Finance tab payables use trips only.
  */
 export function useAcceptedDirectQuotesForFinanceQuery(orgId: string | null) {
   return useQuery({

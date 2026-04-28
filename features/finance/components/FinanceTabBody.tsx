@@ -9,7 +9,6 @@ import type {
     DriverOffer,
     DriverRow,
 } from "@/features/drivers/services/drivers.service";
-import type { DirectQuoteRow } from "@/features/indents/services/direct-quotes.service";
 import type { IndentRow } from "@/features/indents/services/indents.service";
 import { SuppliersTab } from "@/features/suppliers/components/SuppliersTab";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
@@ -65,8 +64,6 @@ export interface FinanceTabBodyProps {
   tripsWhereOrgIsSupplier?: TripRow[];
   /** Pre-trip indents for finance aggregation (pending/quoted/awarded). */
   indentsForFinance?: IndentRow[];
-  /** Accepted direct quotes on this org's indents (awarded, pre-deploy). */
-  acceptedDirectQuotes?: DirectQuoteRow[];
   vehicleRows: VehicleRow[];
   driverRows: DriverRow[];
   driverOffers: Record<string, DriverOffer>;
@@ -124,7 +121,6 @@ export function FinanceTabBody({
   tripsWhereOrgIsClient,
   tripsWhereOrgIsSupplier,
   indentsForFinance,
-  acceptedDirectQuotes,
   vehicleRows,
   driverRows,
   driverOffers,
@@ -250,8 +246,6 @@ export function FinanceTabBody({
         suppliers={supplierRows}
         trips={tripRows}
         tripsWhereOrgIsClient={tripsWhereOrgIsClient}
-        indents={indentsForFinance}
-        directQuotes={acceptedDirectQuotes}
         transactions={ledgerTransactions ?? undefined}
         parentLoading={entitiesLoading}
         onTotals={onTabTotals}

@@ -188,7 +188,6 @@ export function FinanceScreen() {
     entitiesLoading,
     garagePeriodOptions,
     indentsForFinance,
-    acceptedDirectQuotes,
     setPendingDriverSalaryRequests,
   } = entities;
 
@@ -657,8 +656,6 @@ export function FinanceScreen() {
         ledgerRows,
         tripsWhereOrgIsClient,
         tripPartyMap,
-        indentsForFinance,
-        acceptedDirectQuotes,
         tripFinanceAdjustmentsByTripId,
       );
       let filteredRows = rows;
@@ -902,7 +899,6 @@ export function FinanceScreen() {
       }),
     );
   }, [
-    acceptedDirectQuotes,
     clients,
     currentOrganization?.id,
     driverOffers,
@@ -1372,7 +1368,6 @@ export function FinanceScreen() {
               tripsWhereOrgIsClient={financeFilteredTripsWhereOrgIsClient}
               tripsWhereOrgIsSupplier={financeFilteredTripsWhereOrgIsSupplier}
               indentsForFinance={indentsForFinance}
-              acceptedDirectQuotes={acceptedDirectQuotes}
               vehicleRows={vehicleRows}
               driverRows={driverRows}
               driverOffers={driverOffers}
