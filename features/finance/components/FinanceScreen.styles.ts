@@ -34,6 +34,29 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
   },
+  financeBalanceCardPressable: {
+    flex: 1,
+    position: "relative",
+  },
+  financeBalanceCardInnerWrap: {
+    flex: 1,
+  },
+  financeBalanceCardGlow: {
+    position: "absolute",
+    left: 18,
+    right: 18,
+    top: 10,
+    height: 24,
+    borderRadius: 14,
+    backgroundColor: "rgba(99,102,241,0.45)",
+    zIndex: 0,
+    ...Platform.select({
+      web: {
+        filter: "blur(22px)",
+      } as any,
+      default: {},
+    }),
+  },
   financeBalanceCard: {
     flex: 1,
     minHeight: 170,
@@ -177,6 +200,10 @@ export const styles = StyleSheet.create({
     backgroundColor: Theme.darkGreen,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: Theme.darkGreen,
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
   },
   financeBalanceStatIconOut: {
     width: 26,
@@ -185,6 +212,10 @@ export const styles = StyleSheet.create({
     backgroundColor: Theme.teslaRed,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: Theme.teslaRed,
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
   },
   financeBalanceStatLabel: {
     fontSize: 8,
@@ -284,6 +315,10 @@ export const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.24)",
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#ffffff",
+    shadowOpacity: 0.22,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 1 },
   },
   financeCategoryIconBadgeDesktop: {
     ...Platform.select({

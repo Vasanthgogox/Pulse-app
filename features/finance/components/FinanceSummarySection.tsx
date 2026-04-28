@@ -3,7 +3,7 @@ import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { LinearGradient } from "expo-linear-gradient";
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Platform, Pressable, Text, TouchableOpacity, View } from "react-native";
 import Animated, {
     Easing,
@@ -99,6 +99,69 @@ function formatCompactAmount(value: number): string {
   return formatAmount(value);
 }
 
+function AnimatedFinanceHeroCard({
+  desktop,
+  onPress,
+  children,
+}: {
+  desktop: boolean;
+  onPress: () => void;
+  children: ReactNode;
+}) {
+  const hover = useSharedValue(0);
+  const press = useSharedValue(0);
+  const float = useSharedValue(0);
+
+  useEffect(() => {
+    if (!desktop) return;
+    float.value = withRepeat(
+      withTiming(1, { duration: 2600, easing: Easing.inOut(Easing.quad) }),
+      -1,
+      true,
+    );
+  }, [desktop, float]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: interpolate(hover.value, [0, 1], [0, -2]) },
+      {
+        scale:
+          interpolate(hover.value, [0, 1], [1, 1.006]) *
+          interpolate(press.value, [0, 1], [1, 0.992]),
+      },
+    ],
+  }));
+
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(hover.value, [0, 1], [0.1, 0.24]),
+    transform: [{ translateY: interpolate(float.value, [0, 1], [0, -4]) }],
+  }));
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onHoverIn={() => {
+        hover.value = withTiming(1, { duration: 150 });
+      }}
+      onHoverOut={() => {
+        hover.value = withTiming(0, { duration: 160 });
+      }}
+      onPressIn={() => {
+        press.value = withSpring(1, { damping: 16, stiffness: 260 });
+      }}
+      onPressOut={() => {
+        press.value = withSpring(0, { damping: 16, stiffness: 260 });
+      }}
+      style={styles.financeBalanceCardPressable}
+    >
+      <Animated.View style={[styles.financeBalanceCardGlow, glowStyle]} />
+      <Animated.View style={[styles.financeBalanceCardInnerWrap, animatedStyle]}>
+        {children}
+      </Animated.View>
+    </Pressable>
+  );
+}
+
 function AnimatedFinanceCategoryCard({
   label,
   value,
@@ -146,7 +209,10 @@ function AnimatedFinanceCategoryCard({
     opacity: interpolate(hover.value, [0, 1], [0.17, 0.24]),
   }));
   const iconBadgeAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: interpolate(hover.value, [0, 1], [1, 1.08]) }],
+    transform: [
+      { scale: interpolate(hover.value, [0, 1], [1, 1.1]) },
+      { rotate: `${interpolate(hover.value, [0, 1], [0, -5])}deg` },
+    ],
   }));
   const ctaArrowAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: interpolate(hover.value, [0, 1], [0, 3]) }],
@@ -290,12 +356,41 @@ export function FinanceSummarySection({
   // Enable parity cards only on true desktop widths; keep mobile/tablet unchanged.
   const desktopParity = Platform.OS === "web" && screenWidth >= 1024;
   const desktopFourCardParity = Platform.OS === "web" && screenWidth >= 1024;
+  const heroDecorDrift = useSharedValue(0);
+  const heroStatPulse = useSharedValue(0);
   const rangePills = [
     { id: "RANGE" as FinancePeriodFilter, label: "All" },
     { id: "TODAY" as FinancePeriodFilter, label: "Today" },
     { id: "WEEK" as FinancePeriodFilter, label: "Last 7 Days" },
     { id: "MONTH" as FinancePeriodFilter, label: "This Month" },
   ];
+
+  useEffect(() => {
+    if (!desktopParity) return;
+    heroDecorDrift.value = withRepeat(
+      withTiming(1, { duration: 3200, easing: Easing.inOut(Easing.quad) }),
+      -1,
+      true,
+    );
+    heroStatPulse.value = withRepeat(
+      withTiming(1, { duration: 1700, easing: Easing.inOut(Easing.quad) }),
+      -1,
+      true,
+    );
+  }, [desktopParity, heroDecorDrift, heroStatPulse]);
+
+  const heroDecorAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: interpolate(heroDecorDrift.value, [0, 1], [0, -6]) },
+      { rotate: `${interpolate(heroDecorDrift.value, [0, 1], [10, 2])}deg` },
+      { scale: interpolate(heroDecorDrift.value, [0, 1], [1, 1.04]) },
+    ],
+    opacity: interpolate(heroDecorDrift.value, [0, 1], [0.12, 0.22]),
+  }));
+
+  const heroStatPulseStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: interpolate(heroStatPulse.value, [0, 1], [1, 1.06]) }],
+  }));
 
   if (!desktopParity) {
     return (
@@ -364,21 +459,23 @@ export function FinanceSummarySection({
     <>
       <View style={styles.financeCardsBlock}>
         <View style={styles.financeCardsGrid}>
-          <Pressable
-            onPress={() => onTabPress("cash")}
-            style={[
-              styles.financeBalanceCard,
-              desktopParity && styles.financeBalanceCardDesktop,
-            ]}
-          >
-            <View style={styles.financeBalanceDecorIconWrap}>
+          <AnimatedFinanceHeroCard desktop={desktopParity} onPress={() => onTabPress("cash")}>
+            <View
+              style={[
+                styles.financeBalanceCard,
+                desktopParity && styles.financeBalanceCardDesktop,
+              ]}
+            >
+            <Animated.View
+              style={[styles.financeBalanceDecorIconWrap, heroDecorAnimatedStyle]}
+            >
               <FontAwesome
                 name="book"
                 size={desktopParity ? 132 : 92}
                 color={Theme.textOnDark}
                 style={styles.financeBalanceDecorIcon}
               />
-            </View>
+            </Animated.View>
             <View style={styles.financeBalanceTopRow}>
               <Text style={styles.financeBalanceEyebrow}>
                 Audited Operating Balance
@@ -454,13 +551,15 @@ export function FinanceSummarySection({
             </Text>
             <View style={styles.financeBalanceStatsRow}>
               <View style={styles.financeBalanceStat}>
-                <View style={styles.financeBalanceStatIconIn}>
+                <Animated.View
+                  style={[styles.financeBalanceStatIconIn, heroStatPulseStyle]}
+                >
                   <FontAwesome
                     name="arrow-circle-down"
                     size={desktopParity ? 15 : 13}
                     color={Theme.textOnDark}
                   />
-                </View>
+                </Animated.View>
                 <View>
                   <Text style={styles.financeBalanceStatLabel}>Incoming</Text>
                   <Text style={styles.financeBalanceStatValue}>
@@ -469,13 +568,15 @@ export function FinanceSummarySection({
                 </View>
               </View>
               <View style={styles.financeBalanceStat}>
-                <View style={styles.financeBalanceStatIconOut}>
+                <Animated.View
+                  style={[styles.financeBalanceStatIconOut, heroStatPulseStyle]}
+                >
                   <FontAwesome
                     name="arrow-circle-up"
                     size={desktopParity ? 15 : 13}
                     color={Theme.textOnDark}
                   />
-                </View>
+                </Animated.View>
                 <View>
                   <Text style={styles.financeBalanceStatLabel}>Outgoing</Text>
                   <Text style={styles.financeBalanceStatValue}>
@@ -484,7 +585,8 @@ export function FinanceSummarySection({
                 </View>
               </View>
             </View>
-          </Pressable>
+            </View>
+          </AnimatedFinanceHeroCard>
         </View>
 
         <View
