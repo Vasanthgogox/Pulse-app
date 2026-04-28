@@ -1314,6 +1314,7 @@ export function FinanceScreen() {
           customFrom: financeCustomRangeFrom,
           customTo: financeCustomRangeTo,
         }}
+        onQuickCustomRange={setFinanceCustomRange}
         sourceFilter={financeSubTab === "cash" ? sourceSupplyFilter : undefined}
         onSourceFilterChange={
           financeSubTab === "cash" ? setSourceSupplyFilter : undefined
@@ -1322,6 +1323,8 @@ export function FinanceScreen() {
         onLedgerViewModeChange={undefined}
         onClearFilters={handleClearFilters}
         isAnyFilterActive={isAnyFilterActive}
+        auditedTotalIn={ledgerTotalsData.totalIn}
+        auditedTotalOut={ledgerTotalsData.totalOut}
       />
       <View style={styles.tableScroll}>
         <View style={styles.tableScrollInner}>

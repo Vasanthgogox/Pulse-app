@@ -1,13 +1,16 @@
-import { StyleSheet } from 'react-native';
-import Theme from '@/constants/Theme';
-import { Layout } from '@/constants/Layout';
-import { CUSTOMERS_SUPPLIERS, LEDGER } from '@/features/finance/constants/tableColumns';
-import { MIN_FISCAL_TAB_WIDTH } from '../types';
+import { Layout } from "@/constants/Layout";
+import Theme from "@/constants/Theme";
+import {
+    CUSTOMERS_SUPPLIERS,
+    LEDGER,
+} from "@/features/finance/constants/tableColumns";
+import { Platform, StyleSheet } from "react-native";
+import { MIN_FISCAL_TAB_WIDTH } from "../types";
 
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
-    width: '100%',
+    width: "100%",
     minWidth: 0,
     backgroundColor: Theme.screenBackground,
   },
@@ -18,6 +21,295 @@ export const styles = StyleSheet.create({
     padding: 24,
   },
   message: { fontSize: 16, color: Theme.textSecondary },
+  financeCardsBlock: {
+    backgroundColor: Theme.screenBackground,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 8,
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
+  financeCardsGrid: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  financeBalanceCard: {
+    flex: 1,
+    minHeight: 170,
+    backgroundColor: Theme.financeHeroBg,
+    borderRadius: 30,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    borderWidth: 1,
+    borderColor: Theme.financeHeroBorder,
+    justifyContent: "space-between",
+  },
+  financeBalanceTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  financeBalanceEyebrow: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: Theme.primaryLight,
+    textTransform: "uppercase",
+    letterSpacing: 2,
+    flexShrink: 1,
+  },
+  financeBalanceRangeBadge: {
+    borderWidth: 1,
+    borderColor: Theme.financeHeroRangeBorder,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: Theme.financeHeroRangeBg,
+  },
+  financeBalanceRangeText: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  financeRangeBar: {
+    marginTop: 8,
+    gap: 6,
+  },
+  financeRangeDesktopWrap: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    marginLeft: 14,
+  },
+  financeRangeDesktopPillRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  financeRangeLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
+  financeRangePill: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.financeHeroRangeBorder,
+    backgroundColor: Theme.financeHeroRangeBg,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    minHeight: 34,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  financeRangePillDesktop: {
+    minHeight: 32,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  financeRangePillCustom: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  financeRangePillActive: {
+    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.screenBackground,
+  },
+  financeRangePillText: {
+    fontSize: 8,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+    color: Theme.textOnDarkMuted,
+  },
+  financeRangePillTextActive: {
+    color: Theme.textPrimaryDark,
+  },
+  financeBalanceValue: {
+    fontSize: 42,
+    fontWeight: "900",
+    color: Theme.textOnDark,
+    letterSpacing: -1.3,
+    marginTop: 8,
+  },
+  financeBalanceStatsRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 6,
+    flexWrap: "wrap",
+  },
+  financeBalanceStat: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minWidth: 110,
+  },
+  financeBalanceStatLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  financeBalanceStatValue: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+  },
+  financeCategoryCardsRow: {
+    flexDirection: "row",
+    gap: 10,
+    flexWrap: "nowrap",
+  },
+  financeCategoryCardsRowDesktopGrid: {
+    ...Platform.select({
+      web: {
+        flexDirection: "row",
+        flexWrap: "nowrap",
+        alignItems: "stretch",
+        width: "100%",
+      } as any,
+      default: {},
+    }),
+  },
+  financeCategoryCard: {
+    flex: 1,
+    minWidth: 0,
+    height: 124,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Theme.financeHeroBorder,
+    overflow: "hidden",
+  },
+  financeCategoryCardDesktop: {
+    ...Platform.select({
+      web: {
+        flex: 1,
+        minWidth: 0,
+        height: 236,
+        borderRadius: 24,
+      } as any,
+      default: {},
+    }),
+  },
+  financeCategoryAnimatedWrap: {
+    flex: 1,
+    minHeight: 0,
+  },
+  financeCategoryCardGradient: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    justifyContent: "space-between",
+    position: "relative",
+  },
+  financeCategoryCardGradientDesktop: {
+    ...Platform.select({
+      web: {
+        paddingHorizontal: 18,
+        paddingVertical: 16,
+      } as any,
+      default: {},
+    }),
+  },
+  financeCategoryDecorIcon: {
+    position: "absolute",
+    right: 10,
+    top: 7,
+    opacity: 0.17,
+  },
+  financeCategoryDecorIconDesktop: {
+    ...Platform.select({
+      web: {
+        right: 12,
+        top: 10,
+      } as any,
+      default: {},
+    }),
+  },
+  financeCategoryTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minWidth: 0,
+  },
+  financeCategoryIconBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 7,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.24)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  financeCategoryIconBadgeDesktop: {
+    ...Platform.select({
+      web: {
+        width: 24,
+        height: 24,
+        borderRadius: 9,
+      } as any,
+      default: {},
+    }),
+  },
+  financeCategoryTitle: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.textOnDarkMuted,
+    textTransform: "uppercase",
+    letterSpacing: 1.25,
+    flexShrink: 1,
+  },
+  financeCategoryTitleDesktop: {
+    ...Platform.select({
+      web: {
+        fontSize: 9,
+        letterSpacing: 1.35,
+      } as any,
+      default: {},
+    }),
+  },
+  financeCategoryValue: {
+    fontSize: 36,
+    fontWeight: "900",
+    color: Theme.textOnDark,
+    letterSpacing: -1.1,
+  },
+  financeCategoryValueDesktop: {
+    ...Platform.select({
+      web: {
+        fontSize: 46,
+        letterSpacing: -1.4,
+      } as any,
+      default: {},
+    }),
+  },
+  financeCategoryCtaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  financeCategoryCtaText: {
+    fontSize: 8,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+    color: Theme.textOnDark,
+  },
+  financeCategoryCtaTextDesktop: {
+    ...Platform.select({
+      web: {
+        fontSize: 9,
+      } as any,
+      default: {},
+    }),
+  },
 
   darkBlock: {
     backgroundColor: "#000000",
@@ -191,7 +483,7 @@ export const styles = StyleSheet.create({
   },
 
   /** minHeight: 0 lets flex children shrink so inner ScrollView can scroll (web + native). */
-  tableScroll: { flex: 1, width: '100%', minWidth: 0, minHeight: 0 },
+  tableScroll: { flex: 1, width: "100%", minWidth: 0, minHeight: 0 },
   tableScrollInner: { flex: 1, minHeight: 0, minWidth: 0 },
   tableContent: {
     paddingHorizontal: 0,
@@ -202,9 +494,9 @@ export const styles = StyleSheet.create({
   ledgerCardWrap: {
     flex: 1,
     minHeight: 0,
-    width: '100%',
+    width: "100%",
     minWidth: 0,
-    alignSelf: 'stretch',
+    alignSelf: "stretch",
     marginHorizontal: 0,
     marginBottom: 8,
   },
@@ -616,13 +908,23 @@ export const styles = StyleSheet.create({
   /** Ledger: spacer so header columns align with body (chevron column width) */
   thLedgerSpacer: { width: LEDGER.chevronWidth, minWidth: LEDGER.chevronWidth },
   /** Customers tab column widths — source of truth for all 4 entity tabs. First col padding matches row cellNode. */
-  thNodeCust: { flex: CUSTOMERS_SUPPLIERS.node, minWidth: 0, paddingLeft: 0, paddingRight: 8 },
+  thNodeCust: {
+    flex: CUSTOMERS_SUPPLIERS.node,
+    minWidth: 0,
+    paddingLeft: 0,
+    paddingRight: 8,
+  },
   thTripsCust: { flex: CUSTOMERS_SUPPLIERS.trips, minWidth: 0 },
   thMissionCust: { flex: CUSTOMERS_SUPPLIERS.mission, minWidth: 0 },
   thCreditCust: { flex: CUSTOMERS_SUPPLIERS.credit, minWidth: 0 },
   thDebitCust: { flex: CUSTOMERS_SUPPLIERS.debit, minWidth: 0 },
   /** Drivers tab: same 5-column flex as Customers (DRIVER | TRIPS | EARNINGS | PAID | DUE). */
-  thDriverNode: { flex: CUSTOMERS_SUPPLIERS.node, minWidth: 0, paddingLeft: 0, paddingRight: 8 },
+  thDriverNode: {
+    flex: CUSTOMERS_SUPPLIERS.node,
+    minWidth: 0,
+    paddingLeft: 0,
+    paddingRight: 8,
+  },
   thDriverTrips: { flex: CUSTOMERS_SUPPLIERS.trips, minWidth: 0 },
   thDriverEarnings: { flex: CUSTOMERS_SUPPLIERS.mission, minWidth: 0 },
   thDriverPaid: { flex: CUSTOMERS_SUPPLIERS.credit, minWidth: 0 },
