@@ -24,6 +24,7 @@ import {
 import { isAggregateTrip, tripEarningsForDriver } from "@/lib/driverUtils";
 import { formatLedgerDateTime, formatTime } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
+import { getOptimalRoute } from "@/services/routingService";
 import { supabase } from "@/lib/supabase";
 import * as driversService from "@/services/driversService";
 import * as tripsService from "@/services/tripsService";
@@ -196,27 +197,48 @@ function splitLocationPrimarySecondary(location: string | null | undefined): {
 
 /** Duration from started_at→completed_at, or estimated_duration, or "—". Never returns "0 H". */
 function formatDurationForTrip(trip: tripsService.TripRow): string {
+  const estimated = trip.estimated_duration?.trim();
   if (trip.started_at && trip.completed_at) {
     const start = new Date(trip.started_at).getTime();
     const end = new Date(trip.completed_at).getTime();
     const hours = (end - start) / (1000 * 60 * 60);
-    if (hours < 0) return "—";
-    if (hours < 0.05) return "—"; // avoid showing "0 H"
+    if (hours < 0 || hours < 0.05) {
+      // If lifecycle timestamps are too close/noisy, prefer DB ETA.
+      if (estimated) return formatEstimatedDuration(estimated);
+      return "—";
+    }
     if (hours >= 24) {
       const d = Math.floor(hours / 24);
       const h = Math.round(hours % 24);
       return h > 0 ? `${d}D ${h}H` : `${d}D`;
     }
     const hRounded = Math.round(hours * 10) / 10;
-    return hRounded > 0 ? `${hRounded}H` : "—";
+    if (hRounded > 0) return `${hRounded}H`;
+    if (estimated) return formatEstimatedDuration(estimated);
+    return "—";
   }
-  const estimated = trip.estimated_duration?.trim();
   if (estimated) {
     const asNum = parseFloat(estimated.replace(/[^0-9.]/g, ""));
     if (Number.isNaN(asNum) || asNum <= 0) return "—";
     return formatEstimatedDuration(estimated);
   }
   return "—";
+}
+
+function toEtaInterval(durationSeconds: number): string {
+  const totalSeconds = Math.max(0, Math.round(durationSeconds));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}
+
+function parseTripCoordinate(value: unknown): number | null {
+  if (value == null) return null;
+  if (typeof value === "string" && value.trim() === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 interface MissionLogEntry {
@@ -444,6 +466,9 @@ export default function DriverTripsScreen() {
   const [selectedTrip, setSelectedTrip] = useState<tripsService.TripRow | null>(
     null,
   );
+  const [routeMetricsByTripId, setRouteMetricsByTripId] = useState<
+    Record<string, { distance: number; estimated_duration: string }>
+  >({});
   const [pressedCardId, setPressedCardId] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<"journey" | "settlement">(
     "journey",
@@ -457,6 +482,58 @@ export default function DriverTripsScreen() {
     setExpandedLogIndex(null);
     setDetailTab("journey");
   }, [selectedTrip?.id]);
+
+  useEffect(() => {
+    const trip = selectedTrip;
+    if (!trip) return;
+
+    const tripId = String(trip.id ?? "").trim();
+    const hasDistance = trip.distance != null && String(trip.distance).trim() !== "";
+    const hasEta =
+      trip.estimated_duration != null && trip.estimated_duration.trim() !== "";
+    if (!tripId || (hasDistance && hasEta)) return;
+
+    const pickupLat = parseTripCoordinate(trip.pickup_lat);
+    const pickupLon = parseTripCoordinate(trip.pickup_lon);
+    const dropLat = parseTripCoordinate(trip.drop_lat);
+    const dropLon = parseTripCoordinate(trip.drop_lon);
+    const hasCoords =
+      pickupLat != null &&
+      pickupLon != null &&
+      dropLat != null &&
+      dropLon != null;
+    if (!hasCoords) return;
+
+    let cancelled = false;
+    const hydrateRouteMetrics = async () => {
+      const route = await getOptimalRoute(
+        { latitude: pickupLat, longitude: pickupLon },
+        { latitude: dropLat, longitude: dropLon },
+      );
+      if (cancelled || !route) return;
+
+      const distanceKm = Math.max(1, Math.round(route.distance / 1000));
+      const etaInterval = toEtaInterval(route.duration);
+
+      setRouteMetricsByTripId((prev) => ({
+        ...prev,
+        [tripId]: { distance: distanceKm, estimated_duration: etaInterval },
+      }));
+
+      const { trip: updated } = await tripsService.updateTripRouteMetrics(tripId, {
+        distance: hasDistance ? undefined : distanceKm,
+        estimated_duration: hasEta ? undefined : etaInterval,
+      });
+      if (cancelled || !updated) return;
+
+      setTrips((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
+      setSelectedTrip((prev) => (prev?.id === updated.id ? updated : prev));
+    };
+    void hydrateRouteMetrics();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTrip]);
 
   const fetch = useCallback(() => {
     if (!profile?.uid) {
@@ -655,6 +732,24 @@ export default function DriverTripsScreen() {
         : "Fleet dispatcher",
     [selectedTrip, assignerByTripId],
   );
+  const selectedTripRouteFallback = useMemo(() => {
+    if (!selectedTrip) return null;
+    return routeMetricsByTripId[String(selectedTrip.id)] ?? null;
+  }, [selectedTrip, routeMetricsByTripId]);
+  const selectedTripDistanceDisplay = useMemo(() => {
+    if (!selectedTrip) return "—";
+    return formatDistance(selectedTrip.distance ?? selectedTripRouteFallback?.distance);
+  }, [selectedTrip, selectedTripRouteFallback]);
+  const selectedTripDurationDisplay = useMemo(() => {
+    if (!selectedTrip) return "—";
+    if (selectedTrip.estimated_duration?.trim()) {
+      return formatDurationForTrip(selectedTrip);
+    }
+    if (selectedTripRouteFallback?.estimated_duration) {
+      return formatEstimatedDuration(selectedTripRouteFallback.estimated_duration);
+    }
+    return formatDurationForTrip(selectedTrip);
+  }, [selectedTrip, selectedTripRouteFallback]);
   const filteredTrips = useMemo(() => {
     let list = [...trips];
 
@@ -715,7 +810,18 @@ export default function DriverTripsScreen() {
             borderColor: isDark ? colors.borderSubtle : "rgba(16, 185, 129, 0.12)",
           },
         ]}
-        onPress={() => setSelectedTrip(item)}
+        onPress={() => {
+          setSelectedTrip(item);
+          void tripsService.getTripById(item.id).then((res) => {
+            if (!res.trip) return;
+            setTrips((prev) =>
+              prev.map((row) => (row.id === res.trip!.id ? res.trip! : row)),
+            );
+            setSelectedTrip((prev) =>
+              prev?.id === res.trip!.id ? res.trip! : prev,
+            );
+          });
+        }}
         onPressIn={() => setPressedCardId(item.id)}
         onPressOut={() => setPressedCardId(null)}
         activeOpacity={1}
@@ -1294,7 +1400,7 @@ export default function DriverTripsScreen() {
                         <View>
                           <Text style={styles.tdHeroMetaKicker}>Distance</Text>
                           <Text style={styles.tdHeroMetaValue}>
-                            {formatDistance(selectedTrip.distance)}
+                            {selectedTripDistanceDisplay}
                           </Text>
                         </View>
                       </View>
@@ -1305,7 +1411,7 @@ export default function DriverTripsScreen() {
                         <View>
                           <Text style={styles.tdHeroMetaKicker}>Duration</Text>
                           <Text style={styles.tdHeroMetaValue}>
-                            {formatDurationForTrip(selectedTrip)}
+                            {selectedTripDurationDisplay}
                           </Text>
                         </View>
                       </View>
