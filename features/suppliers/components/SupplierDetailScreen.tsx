@@ -49,6 +49,8 @@ import Layout from "@/constants/Layout";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Animated,
+  Easing,
   Image,
   Modal,
   Platform,
@@ -154,6 +156,7 @@ export default function SupplierDetailScreen({
   const isWebDesktop = Platform.OS === "web" && windowWidth >= 1024;
   const webContentGutter = Platform.OS === "web" ? (windowWidth >= 1600 ? 10 : windowWidth >= 1280 ? 12 : 16) : Layout.screenPaddingHorizontal;
   const initialLoadDoneRef = useRef(false);
+  const heroDecorProgress = useRef(new Animated.Value(0)).current;
 
   const clientById = useMemo(() => {
     const m = new Map<string, ClientRow>();
@@ -187,6 +190,32 @@ export default function SupplierDetailScreen({
         setIsInApp(false);
       });
   }, [supplier?.phone]);
+
+  useEffect(() => {
+    if (!isWebDesktop) {
+      heroDecorProgress.stopAnimation();
+      heroDecorProgress.setValue(0);
+      return;
+    }
+    const decorLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(heroDecorProgress, {
+          toValue: 1,
+          duration: 3200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(heroDecorProgress, {
+          toValue: 0,
+          duration: 3200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    decorLoop.start();
+    return () => decorLoop.stop();
+  }, [heroDecorProgress, isWebDesktop]);
 
   const handleSendInvitation = useCallback(async () => {
     if (!currentOrganization?.id || !supplier?.phone) return;
@@ -845,7 +874,6 @@ export default function SupplierDetailScreen({
   const contractValue = totalBilledConsolidated;
   const paid = contractValue - totalPendingConsolidated;
   const due = totalPendingConsolidated;
-  const health = contractValue > 0 ? Math.round((paid / contractValue) * 100) : 0;
   const lockedPartyName = supplierName.trim() || t("supplier");
 
   const tabConfig = [
@@ -853,6 +881,28 @@ export default function SupplierDetailScreen({
     { id: "cash" as const, label: "Cash Flow" },
     { id: "shared" as const, label: "Shared" },
   ];
+  const heroDecorAnimatedStyle = isWebDesktop
+    ? {
+        opacity: heroDecorProgress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.16, 0.3],
+        }),
+        transform: [
+          {
+            translateY: heroDecorProgress.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, -6],
+            }),
+          },
+          {
+            rotate: heroDecorProgress.interpolate({
+              inputRange: [0, 1],
+              outputRange: ["10deg", "4deg"],
+            }),
+          },
+        ],
+      }
+    : undefined;
 
   return (
     <View style={[styles.wrap, { paddingTop: insets.top }]}>
@@ -934,29 +984,25 @@ export default function SupplierDetailScreen({
           />
         }
       >
-        <View style={styles.scorecard}>
-          <View style={styles.scorecardTop}>
+        <View style={[styles.scorecard, isWebDesktop && styles.scorecardWebDesktop]}>
+          {isWebDesktop ? (
+            <Animated.View style={[styles.scorecardDecorIconWrap, heroDecorAnimatedStyle]}>
+              <FontAwesome name="book" size={120} color={Theme.textOnDark} style={styles.scorecardDecorIcon} />
+            </Animated.View>
+          ) : null}
+          <View style={[styles.scorecardTop, isWebDesktop && styles.scorecardTopWebDesktop]}>
             <View style={styles.scorecardLeft}>
               <Text style={styles.scorecardLabel}>FINANCIAL OVERVIEW</Text>
               <Text style={styles.scorecardSalesLabel}>CONTRACT VALUE</Text>
               <Text style={styles.scorecardAmount}>{formatINR(contractValue)}</Text>
             </View>
-            <View style={styles.healthCircle}>
-              <View
-                style={[
-                  styles.healthCircleFill,
-                  { height: `${Math.min(100, health)}%` },
-                ]}
-              />
-              <Text style={styles.healthCircleText}>{health}%</Text>
-            </View>
           </View>
-          <View style={styles.scorecardGrid}>
-            <View>
+          <View style={[styles.scorecardGrid, isWebDesktop && styles.scorecardGridWebDesktop]}>
+            <View style={isWebDesktop ? styles.scorecardGridStat : undefined}>
               <Text style={styles.scorecardGridLabelPaid}>PAID</Text>
               <Text style={styles.scorecardGridPaid}>{formatINR(paid)}</Text>
             </View>
-            <View style={styles.scorecardGridRight}>
+            <View style={[styles.scorecardGridRight, isWebDesktop && styles.scorecardGridStat]}>
               <Text style={styles.scorecardGridLabelDue}>DUE</Text>
               <Text style={styles.scorecardGridDue}>{formatINR(due)}</Text>
             </View>
@@ -1812,11 +1858,31 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     overflow: "hidden",
   },
+  scorecardWebDesktop: {
+    borderRadius: 34,
+    paddingHorizontal: 26,
+    paddingVertical: 24,
+    minHeight: 236,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    marginBottom: 16,
+  },
+  scorecardDecorIconWrap: {
+    position: "absolute",
+    right: -14,
+    top: -16,
+  },
+  scorecardDecorIcon: {
+    transform: [{ rotate: "12deg" }],
+  },
   scorecardTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
     marginBottom: 8,
+  },
+  scorecardTopWebDesktop: {
+    marginBottom: 20,
   },
   scorecardLeft: { flex: 1 },
   scorecardLabel: {
@@ -1869,6 +1935,16 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.1)",
+  },
+  scorecardGridWebDesktop: {
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 0,
+    paddingTop: 18,
+  },
+  scorecardGridStat: {
+    minWidth: 0,
+    flex: 1,
   },
   scorecardGridRight: { alignItems: "flex-end" },
   scorecardGridLabelPaid: {
