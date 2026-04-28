@@ -210,11 +210,11 @@ export function RecentAddedStrip({ orgId, items, onAfterInAppSuccess, layout = "
 
 const styles = StyleSheet.create({
   hubBar: {
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.networkPageBackground,
     paddingTop: 8,
     paddingBottom: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
+    borderBottomColor: Theme.networkCardBorder,
   },
   hubBarSplit: {
     width: "100%",
@@ -233,8 +233,8 @@ const styles = StyleSheet.create({
     width: "100%",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Theme.cinematicCardBorder,
-    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.networkCardBorder,
+    backgroundColor: Theme.networkCardBackground,
     paddingTop: 12,
     paddingBottom: 4,
     paddingHorizontal: 12,
@@ -260,13 +260,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.networkCardBorder,
   },
   kicker: {
     fontSize: 9,
     fontWeight: "900",
     letterSpacing: 1.4,
-    color: Theme.textSection,
+    color: Theme.networkSectionLabel,
     textTransform: "uppercase",
   },
   itemList: {
@@ -281,10 +281,10 @@ const styles = StyleSheet.create({
   },
   itemRowDivider: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
+    borderBottomColor: Theme.networkCardBorder,
   },
   avatarBorder: {
-    borderColor: Theme.borderLight,
+    borderColor: Theme.networkCardBorder,
   },
   itemBody: {
     flex: 1,
@@ -309,9 +309,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: Theme.networkPageBackground,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.networkCardBorder,
   },
   rolePillText: {
     fontSize: 8,
@@ -322,12 +322,12 @@ const styles = StyleSheet.create({
   ratingText: {
     fontSize: 9,
     fontWeight: "700",
-    color: Theme.textSecondary,
+    color: Theme.networkSectionLabel,
   },
   subline: {
     fontSize: 10,
     fontWeight: "600",
-    color: Theme.textSection,
+    color: Theme.textSecondary,
     lineHeight: 14,
   },
   itemAction: {
@@ -343,9 +343,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: Theme.positiveMuted,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.positive,
   },
   onQPillText: {
     fontSize: 10,
@@ -358,21 +358,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: Theme.surfaceForm,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.networkCardBorder,
   },
   mutedPillText: {
     fontSize: 9,
     fontWeight: "800",
-    color: Theme.textSection,
+    color: Theme.networkSectionLabel,
   },
   connectBtn: {
     minWidth: 86,
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
-    backgroundColor: Theme.textPrimaryDark,
+    backgroundColor: Theme.primary,
     borderWidth: 1,
-    borderColor: Theme.textPrimaryDark,
+    borderColor: Theme.primary,
     alignItems: "center",
     justifyContent: "center",
   },

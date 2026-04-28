@@ -253,6 +253,17 @@ export const Theme = {
   feedbackModalStarActive: "#FBBF24",
   feedbackModalBackdrop: "rgba(0, 0, 0, 0.6)",
   feedbackModalBadgeRing: "#F59E0B",
+
+  // ---- Network UI grading (clean neutrals + semantic accents) ----
+  networkPageBackground: "#F8FAFC",
+  networkCardBackground: "#FFFFFF",
+  networkCardBorder: "#E2E8F0",
+  networkSectionLabel: "#64748B",
+  networkClientTintBg: "rgba(26,35,126,0.10)",
+  networkSupplierTintBg: "rgba(21,128,61,0.10)",
+  networkDriverTintBg: "rgba(180,83,9,0.12)",
+  networkMessageTintBg: "rgba(26,35,126,0.08)",
+  networkMessageTintBorder: "rgba(26,35,126,0.20)",
 } as const;
 
 export type ThemeColors = typeof Theme;

@@ -30,9 +30,9 @@ const ROLE_STYLES: Record<
   HubConnectionRole,
   { bg: string; color: string; label: string }
 > = {
-  CLIENT: { bg: Theme.surface, color: Theme.textPrimaryDark, label: "CLIENT" },
-  SUPPLIER: { bg: Theme.surface, color: Theme.textPrimaryDark, label: "SUPPLIER" },
-  DRIVER: { bg: Theme.surface, color: Theme.textPrimaryDark, label: "DRIVER" },
+  CLIENT: { bg: Theme.networkClientTintBg, color: Theme.primary, label: "CLIENT" },
+  SUPPLIER: { bg: Theme.networkSupplierTintBg, color: Theme.positive, label: "SUPPLIER" },
+  DRIVER: { bg: Theme.networkDriverTintBg, color: Theme.warning, label: "DRIVER" },
 };
 
 function seedColor(id: string): string {
@@ -100,8 +100,8 @@ export function HubConnectionListCard({
               {item.is_integrated ? "LIVE" : "INVITE"}
             </Text>
           </View>
-          <View style={styles.coverRoleChip}>
-            <Text style={styles.coverRoleText}>{rs.label}</Text>
+          <View style={[styles.coverRoleChip, { backgroundColor: rs.bg }]}>
+            <Text style={[styles.coverRoleText, { color: rs.color }]}>{rs.label}</Text>
           </View>
           <View style={[styles.coverRatingNode, !rating && styles.coverRatingNodeEmpty]}>
             {rating ? (
@@ -145,11 +145,11 @@ export function HubConnectionListCard({
                 </Text>
               </View>
             ) : null}
-            <View style={styles.metaChip}>
+            <View style={[styles.metaChip, item.is_integrated && styles.metaChipIntegrated]}>
               {item.is_integrated ? (
-                <Check size={10} color={Theme.textPrimaryDark} strokeWidth={2.8} />
+                <Check size={10} color={Theme.positive} strokeWidth={2.8} />
               ) : null}
-              <Text style={styles.statusMetaChipText} numberOfLines={1}>
+              <Text style={[styles.statusMetaChipText, item.is_integrated && styles.statusMetaChipTextIntegrated]} numberOfLines={1}>
                 {item.is_integrated ? "Operational access" : "Not in app"}
               </Text>
             </View>
@@ -159,7 +159,7 @@ export function HubConnectionListCard({
         <View style={styles.cardFooter}>
           {item.is_integrated ? (
             <View style={styles.joinedBtn}>
-              <CheckCircle2 size={13} color={Theme.textPrimaryDark} strokeWidth={2.4} />
+              <CheckCircle2 size={13} color={Theme.positive} strokeWidth={2.4} />
               <Text style={styles.joinedBtnText}>Connected</Text>
             </View>
           ) : (
@@ -169,9 +169,9 @@ export function HubConnectionListCard({
               disabled={!canPressAction}
             >
               {item.actionLoading ? (
-                <ActivityIndicator size={12} color={Theme.textPrimaryDark} />
+                <ActivityIndicator size={12} color={Theme.textOnPrimary} />
               ) : (
-                <Send size={12} color={Theme.textPrimaryDark} strokeWidth={2.4} />
+                <Send size={12} color={Theme.textOnPrimary} strokeWidth={2.4} />
               )}
               <Text style={styles.inviteBtnText}>{item.actionLabel ?? "Send invite"}</Text>
             </Pressable>
@@ -226,11 +226,11 @@ const styles = StyleSheet.create({
   },
   cardOuter: {
     flex: 1,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.networkCardBackground,
     borderRadius: 18,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.networkCardBorder,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.055,
     shadowRadius: 16,
@@ -247,8 +247,8 @@ const styles = StyleSheet.create({
     height: 82,
     overflow: "hidden",
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
-    backgroundColor: Theme.surfaceGray,
+    borderBottomColor: Theme.networkCardBorder,
+    backgroundColor: Theme.networkPageBackground,
   },
   coverOrbLarge: {
     position: "absolute",
@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
     borderRadius: 66,
     top: -20,
     left: -28,
-    backgroundColor: Theme.borderLight,
+    backgroundColor: "rgba(148,163,184,0.18)",
     transform: [{ rotate: "-10deg" }],
   },
   coverOrbSmall: {
@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
     borderRadius: 46,
     right: -22,
     bottom: -16,
-    backgroundColor: Theme.surface,
+    backgroundColor: "rgba(255,255,255,0.72)",
     transform: [{ rotate: "14deg" }],
   },
   coverPlane: {
@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     right: 28,
     top: 10,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: "rgba(255,255,255,0.68)",
     opacity: 0.55,
     transform: [{ rotate: "-8deg" }],
   },
@@ -291,9 +291,9 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 6,
     borderRadius: 10,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.networkCardBackground,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.networkCardBorder,
   },
   coverWidgetText: {
     fontSize: 7,
@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     backgroundColor: Theme.screenBackground,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.networkCardBorder,
   },
   coverRoleText: {
     fontSize: 7,
@@ -333,7 +333,7 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     backgroundColor: "rgba(255,255,255,0.86)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.networkCardBorder,
   },
   coverRatingNodeEmpty: {
     minHeight: 18,
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 6,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.networkCardBorder,
   },
   rolePillText: { fontSize: 8, fontWeight: "600", fontStyle: "italic", letterSpacing: 0.2 },
   onAppPill: {
@@ -438,7 +438,7 @@ const styles = StyleSheet.create({
     height: 62,
     borderRadius: 31,
     overflow: "hidden",
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.networkCardBackground,
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "center",
@@ -451,7 +451,7 @@ const styles = StyleSheet.create({
   },
   heroAvatarImage: {
     borderWidth: 2,
-    borderColor: Theme.screenBackground,
+    borderColor: Theme.networkCardBackground,
   },
   cardMetaStack: {
     width: "100%",
@@ -471,9 +471,13 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 8,
     borderRadius: 11,
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.networkPageBackground,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.networkCardBorder,
+  },
+  metaChipIntegrated: {
+    backgroundColor: Theme.positiveMuted,
+    borderColor: Theme.positive,
   },
   metaChipText: {
     fontSize: 8,
@@ -487,6 +491,9 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
   },
+  statusMetaChipTextIntegrated: {
+    color: Theme.positive,
+  },
   metricStack: {
     marginTop: 12,
   },
@@ -497,7 +504,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
+    borderTopColor: Theme.networkCardBorder,
   },
   metricLabel: {
     fontSize: 8,
@@ -556,7 +563,7 @@ const styles = StyleSheet.create({
     borderTopColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.networkCardBackground,
   },
   joinedBtn: {
     minHeight: 34,
@@ -564,11 +571,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     borderWidth: 1,
-    borderColor: Theme.borderMedium,
+    borderColor: Theme.positive,
     borderRadius: 17,
     paddingHorizontal: 14,
     paddingVertical: 7,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.positiveMuted,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.035,
     shadowRadius: 6,
@@ -579,7 +586,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "700",
     fontStyle: "italic",
-    color: Theme.textPrimaryDark,
+    color: Theme.positive,
   },
   inviteBtn: {
     minHeight: 34,
@@ -590,9 +597,9 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     paddingHorizontal: 14,
     paddingVertical: 7,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.primary,
     borderWidth: 1,
-    borderColor: Theme.borderMedium,
+    borderColor: Theme.primary,
     minWidth: 118,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.04,
@@ -607,7 +614,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "700",
     fontStyle: "italic",
-    color: Theme.textPrimaryDark,
+    color: Theme.textOnPrimary,
     letterSpacing: 0.15,
   },
   handshakeBtn: {
