@@ -2872,7 +2872,9 @@ export function LoadCenterView({
                   }
                   placeholderTextColor={Theme.textMuted}
                   value={quoteAmount}
-                  onChangeText={setQuoteAmount}
+                  onChangeText={(raw) =>
+                    setQuoteAmount(raw.replace(/[^\d]/g, ""))
+                  }
                 />
                 {activeBidQuote ? (
                   <View style={styles.previousBidWrap}>
@@ -2957,12 +2959,22 @@ export function LoadCenterView({
                       return;
                     }
                     invalidateIndents(orgId);
-                    queryClient.invalidateQueries({
-                      queryKey: [
-                        ...queryKeys.indents.all(orgId),
-                        "my-direct-quotes",
-                      ],
-                    });
+                    await Promise.allSettled([
+                      queryClient.invalidateQueries({
+                        queryKey: [
+                          ...queryKeys.indents.all(orgId),
+                          "my-direct-quotes",
+                        ],
+                      }),
+                      queryClient.invalidateQueries({
+                        queryKey: ["indents", load.id, "direct-quotes"],
+                      }),
+                      queryClient.invalidateQueries({
+                        queryKey: ["indents", "quote-counts"],
+                      }),
+                      refetchMyQuotes(),
+                      refetchMarketIndents(),
+                    ]);
                     triggerSuccess(
                       hadExistingQuote ? "Quote updated" : "Offer Published",
                     );

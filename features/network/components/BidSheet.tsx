@@ -2,8 +2,11 @@
  * BidSheet — bottom sheet modal for submitting a bid on a load post.
  */
 import Theme from '@/constants/Theme';
+import { createDirectQuote } from '@/features/indents/services/direct-quotes.service';
+import { getMarketIndentsForOrganization } from '@/features/indents/services/indents.service';
 import { type PostRow } from '@/features/network/services/posts.service';
 import { useSubmitBidMutation } from '@/lib/queries';
+import { queryKeys } from '@/lib/queryKeys';
 import { formatINR } from '@/lib/format';
 import {
   MessageSquare,
@@ -14,8 +17,8 @@ import {
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
-  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -23,9 +26,9 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface BidSheetProps {
@@ -38,12 +41,21 @@ interface BidSheetProps {
 
 export function BidSheet({ visible, post, orgId, onClose, onSuccess }: BidSheetProps) {
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [success, setSuccess] = useState(false);
   const translateY = useRef(new Animated.Value(400)).current;
 
   const mutation = useSubmitBidMutation(post?.id ?? null, orgId);
+  const parsedAmount = Number(amount.replace(/,/g, '').trim() || '0');
+  const canSubmit = Number.isFinite(parsedAmount) && parsedAmount > 0 && !mutation.isPending;
+
+  const handleAmountChange = (raw: string) => {
+    // Keep amount stable across web/native keyboards and prevent malformed values.
+    const digitsOnly = raw.replace(/[^\d]/g, '');
+    setAmount(digitsOnly);
+  };
 
   useEffect(() => {
     if (visible) {
@@ -66,21 +78,143 @@ export function BidSheet({ visible, post, orgId, onClose, onSuccess }: BidSheetP
   }, [visible]);
 
   const handleSubmit = async () => {
-    const parsed = parseFloat(amount.replace(/,/g, ''));
-    if (!post || isNaN(parsed) || parsed <= 0) return;
+    if (!post || !canSubmit) return;
 
-    const res = await mutation.mutateAsync({ amount: parsed, note: note.trim() || undefined });
-    if (res.alreadyBid) {
-      onClose();
+    // Keep existing post-bid flow, and also mirror into direct_quotes so
+    // owner-side indent views show this as "quoted" using the existing logic.
+    const matchAndUpsertDirectQuote = async (): Promise<{ linked: boolean; error?: string }> => {
+      if (!orgId) return { linked: false, error: 'Organization is required' };
+      const marketRes = await getMarketIndentsForOrganization(orgId);
+      if (marketRes.error) {
+        return { linked: false, error: marketRes.error.message };
+      }
+      const norm = (v: string | null | undefined) =>
+        (v ?? '')
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, ' ');
+      const short = (v: string | null | undefined) =>
+        norm(v).split(',')[0]?.trim() ?? '';
+      const hasTokenOverlap = (a: string | null | undefined, b: string | null | undefined) => {
+        const tokensA = norm(a)
+          .split(/[\s,/-]+/)
+          .filter((t) => t.length >= 3);
+        const tokensB = new Set(
+          norm(b)
+            .split(/[\s,/-]+/)
+            .filter((t) => t.length >= 3),
+        );
+        if (tokensA.length === 0 || tokensB.size === 0) return false;
+        return tokensA.some((t) => tokensB.has(t));
+      };
+      const postOrigin = norm(post.origin);
+      const postDestination = norm(post.destination);
+      const postOriginShort = short(post.origin);
+      const postDestinationShort = short(post.destination);
+      const postVehicleType = norm(post.vehicle_type);
+      const postMaterial = norm(post.material);
+      const postOwnerOrgId = norm(post.organization_id);
+      const postLoadDate = post.load_date ? String(post.load_date).slice(0, 10) : null;
+      const targetAmount = Number(post.rate_offer ?? parsedAmount ?? 0);
+
+      const ranked = (marketRes.indents ?? [])
+        .filter((indent) => norm(indent.organization_id) === postOwnerOrgId)
+        .map((indent) => {
+          const indentOrigin = norm(indent.pickup_area);
+          const indentDest = norm(indent.drop_location);
+          const indentOriginShort = short(indent.pickup_area);
+          const indentDestShort = short(indent.drop_location);
+          const indentVehicle = norm(indent.vehicle_type);
+          const indentMaterial = norm(indent.load_type);
+          const indentDate = indent.pickup_date ? String(indent.pickup_date).slice(0, 10) : null;
+          const indentTarget = Number(indent.supplier_target ?? indent.client_price ?? 0);
+          const routeStrongMatch =
+            (indentOrigin && (indentOrigin === postOrigin || indentOrigin.includes(postOrigin) || postOrigin.includes(indentOrigin))) ||
+            (indentDest && (indentDest === postDestination || indentDest.includes(postDestination) || postDestination.includes(indentDest)));
+
+          let score = 0;
+          if (indentOrigin && indentOrigin === postOrigin) score += 4;
+          else if (indentOriginShort && indentOriginShort === postOriginShort) score += 2;
+          else if (hasTokenOverlap(indent.pickup_area, post.origin)) score += 1;
+          if (indentDest && indentDest === postDestination) score += 4;
+          else if (indentDestShort && indentDestShort === postDestinationShort) score += 2;
+          else if (hasTokenOverlap(indent.drop_location, post.destination)) score += 1;
+          if (postVehicleType && indentVehicle && indentVehicle === postVehicleType) score += 2;
+          if (postMaterial && indentMaterial && indentMaterial === postMaterial) score += 2;
+          if (postLoadDate && indentDate && indentDate === postLoadDate) score += 2;
+          if (targetAmount > 0 && indentTarget > 0) {
+            const pctDelta = Math.abs(indentTarget - targetAmount) / targetAmount;
+            if (pctDelta <= 0.1) score += 2;
+            else if (pctDelta <= 0.25) score += 1;
+          }
+          return { indent, score, routeStrongMatch };
+        })
+        .filter((row) => row.score >= 4 || row.routeStrongMatch)
+        .sort((a, b) => b.score - a.score);
+
+      const matchedIndent = ranked[0]?.indent;
+
+      if (!matchedIndent?.id) {
+        return {
+          linked: false,
+          error:
+            'Could not map this post to a visible indent. Please place/update quote from Load Center for this load.',
+        };
+      }
+      const quoteRes = await createDirectQuote(
+        matchedIndent.id,
+        orgId,
+        parsedAmount,
+        note.trim() || null,
+      );
+      if (quoteRes.error) {
+        return { linked: false, error: quoteRes.error.message };
+      }
+      await Promise.allSettled([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.indents.market(orgId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [...queryKeys.indents.all(orgId), 'my-direct-quotes'],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['indents', matchedIndent.id, 'direct-quotes'],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['indents', 'quote-counts'],
+        }),
+      ]);
+      return { linked: true };
+    };
+
+    const res = await mutation.mutateAsync({
+      amount: parsedAmount,
+      note: note.trim() || undefined,
+    });
+    if (res.error) return;
+
+    // Always try direct quote sync, including duplicate post-bid attempts.
+    // submitBid() can return alreadyBid=true (unique constraint), but supplier
+    // still expects quote amount updates to reflect on indent views.
+    const linkRes = await matchAndUpsertDirectQuote();
+    if (!linkRes.linked) {
+      Alert.alert(
+        res.alreadyBid ? 'Bid already exists' : 'Bid saved',
+        `Submitted to post feed, but indent quote sync failed: ${
+          linkRes.error ?? 'No matching indent found.'
+        }`,
+      );
+      if (res.alreadyBid) {
+        onClose();
+      }
       return;
     }
-    if (!res.error) {
-      setSuccess(true);
-      setTimeout(() => {
-        onSuccess?.();
-        onClose();
-      }, 1200);
-    }
+
+    setSuccess(true);
+    setTimeout(() => {
+      onSuccess?.();
+      onClose();
+    }, 1200);
   };
 
   if (!post) return null;
@@ -92,20 +226,19 @@ export function BidSheet({ visible, post, orgId, onClose, onSuccess }: BidSheetP
       animationType="fade"
       onRequestClose={onClose}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.overlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+      <View style={styles.overlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.kvContainer}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.kvContainer}
+        >
+          <Animated.View
+            style={[
+              styles.sheet,
+              { paddingBottom: insets.bottom + 16, transform: [{ translateY }] },
+            ]}
           >
-            <Animated.View
-              style={[
-                styles.sheet,
-                { paddingBottom: insets.bottom + 16, transform: [{ translateY }] },
-              ]}
-            >
               {/* Handle */}
               <View style={styles.handle} />
 
@@ -168,9 +301,10 @@ export function BidSheet({ visible, post, orgId, onClose, onSuccess }: BidSheetP
                         style={styles.amountInput}
                         placeholder="0"
                         placeholderTextColor={Theme.textSecondary}
-                        keyboardType="numeric"
+                        keyboardType={Platform.OS === 'web' ? 'numeric' : 'number-pad'}
                         value={amount}
-                        onChangeText={setAmount}
+                        onChangeText={handleAmountChange}
+                        autoFocus
                         returnKeyType="next"
                         selectTextOnFocus
                       />
@@ -200,10 +334,10 @@ export function BidSheet({ visible, post, orgId, onClose, onSuccess }: BidSheetP
                   <Pressable
                     style={[
                       styles.submitBtn,
-                      (!amount || mutation.isPending) && styles.submitBtnDisabled,
+                      (!canSubmit || mutation.isPending) && styles.submitBtnDisabled,
                     ]}
                     onPress={handleSubmit}
-                    disabled={!amount || mutation.isPending}
+                    disabled={!canSubmit}
                   >
                     {mutation.isPending ? (
                       <ActivityIndicator color="#fff" />
@@ -211,7 +345,7 @@ export function BidSheet({ visible, post, orgId, onClose, onSuccess }: BidSheetP
                       <>
                         <ThumbsUp size={16} color="#fff" />
                         <Text style={styles.submitBtnText}>
-                          Submit Bid {amount ? `— ₹${parseFloat(amount.replace(/,/g, '') || '0').toLocaleString('en-IN')}` : ''}
+                          Submit Bid {canSubmit ? `— ₹${parsedAmount.toLocaleString('en-IN')}` : ''}
                         </Text>
                       </>
                     )}
@@ -222,10 +356,9 @@ export function BidSheet({ visible, post, orgId, onClose, onSuccess }: BidSheetP
                   )}
                 </>
               )}
-            </Animated.View>
-          </KeyboardAvoidingView>
-        </View>
-      </TouchableWithoutFeedback>
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
@@ -338,6 +471,14 @@ const styles = StyleSheet.create({
     color: Theme.textPrimary,
     paddingHorizontal: 16,
     letterSpacing: -1,
+    borderWidth: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+        outlineWidth: 0,
+        boxShadow: 'none',
+      } as any,
+    }),
   },
   noteContainer: {
     flexDirection: 'row',
