@@ -96,6 +96,9 @@ interface AuthContextType {
     city?: string,
     state?: string,
     zone?: string,
+    businessType?: string,
+    employeeCount?: string,
+    skipOrgCreation?: boolean,
   ) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
@@ -381,6 +384,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     city?: string,
     state?: string,
     zone?: string,
+    businessType?: string,
+    employeeCount?: string,
+    skipOrgCreation?: boolean,
   ) => {
     const result = await authService.signUp({
       email,
@@ -394,6 +400,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       city,
       state,
       zone,
+      businessType,
+      employeeCount,
+      skipOrgCreation,
     });
     if (!result.error) {
       await refreshSession();

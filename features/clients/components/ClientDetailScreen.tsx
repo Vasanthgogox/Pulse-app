@@ -1,80 +1,79 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { CounterpartyProfileSystemCard } from "@/components/CounterpartyProfileSystemCard";
 import { DatePresetPillBar } from "@/components/DatePresetPillBar";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
-import { PartyAvatar } from "@/components/PartyAvatar";
-import { CounterpartyProfileSystemCard } from "@/components/CounterpartyProfileSystemCard";
 import { FinanceFAB } from "@/components/FinanceFAB";
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
-  LedgerReportModal,
-  SharedLedgerContent,
-  getTransactionsByOrganization,
-  type LedgerEntry,
-  type LedgerRow,
+    getDriversByOrganization,
+    type DriverRow,
+} from "@/features/drivers";
+import {
+    getTransactionsByOrganization,
+    LedgerReportModal,
+    SharedLedgerContent,
+    type LedgerEntry,
+    type LedgerRow,
 } from "@/features/finance";
-import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPeriod";
-import type { FinancePeriodFilter } from "@/features/finance/types";
 import { LedgerTransactionListView } from "@/features/finance/components/LedgerTransactionListView";
 import { TreasuryDetailLayout } from "@/features/finance/components/TreasuryDetailLayout";
+import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPeriod";
+import type { FinancePeriodFilter } from "@/features/finance/types";
 import { allocateAmountsToLargestDueTrips } from "@/features/finance/utils/allocateToLargestDue";
 import {
-  getTripDisplayNumber,
-  getTripsByOrganization,
-  getTripsWhereOrgIsSupplier,
-  type TripRow,
+    getSuppliersByOrganization,
+    type SupplierRow,
+} from "@/features/suppliers/services/suppliers.service";
+import { adjustedRevenue } from "@/features/trips/services/tripAdjustments";
+import {
+    getTripDisplayNumber,
+    getTripsByOrganization,
+    getTripsWhereOrgIsSupplier,
+    type TripRow,
 } from "@/features/trips/services/trips.service";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
-import {
-  canAccessFinance,
-  getCapabilitiesFromProfile,
-} from "@/lib/capabilities";
-import { formatINR, formatLedgerDate } from "@/lib/format";
-import { tripDayIso } from "@/lib/dateRangePresets";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
-import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
+import {
+    canAccessFinance,
+    getCapabilitiesFromProfile,
+} from "@/lib/capabilities";
+import { tripDayIso } from "@/lib/dateRangePresets";
+import { formatINR, formatLedgerDate } from "@/lib/format";
+import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
+import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
-  Image,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    Alert,
+    Image,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    Share,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    useWindowDimensions,
+    View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
 import {
-  getClientDetails,
-  getClientsByOrganization,
-  getLinkedOrgProfile,
-  updateClient,
-  type ClientRow,
-  type UpdateClientData,
+    getClientDetails,
+    getClientsByOrganization,
+    getLinkedOrgProfile,
+    updateClient,
+    type ClientRow,
+    type UpdateClientData,
 } from "../services/clients.service";
-import {
-  getSuppliersByOrganization,
-  type SupplierRow,
-} from "@/features/suppliers/services/suppliers.service";
-import {
-  getDriversByOrganization,
-  type DriverRow,
-} from "@/features/drivers";
-import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
-import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
-import { adjustedRevenue } from "@/features/trips/services/tripAdjustments";
 
 /** UUID-shaped strings are not valid human supplier names (avoid showing raw ids). */
 function isUuidLikeString(value: string | null | undefined): boolean {
@@ -1793,7 +1792,7 @@ export default function ClientDetailScreen({
                 triggerSuccess("CONNECTION_REQUESTED");
               }}
               onInviteToApp={() => {
-                const message = `Join me on Q to sync our ledger and compare books with ${clientName}. Download the Q app to get started.`;
+                const message = `Join me on Pulse to sync our ledger and compare books with ${clientName}. Download the Q app to get started.`;
                 Share.share({ message, title: "Invite to Q" })
                   .then(() => {
                     triggerSuccess("INVITE_SENT");
@@ -1923,7 +1922,7 @@ export default function ClientDetailScreen({
                   { backgroundColor: Theme.surface, borderWidth: 1, borderColor: Theme.borderLight },
                 ]}
                 onPress={() => {
-                  const message = `Join me on Q to sync our ledger and compare books with ${clientName}. Download the Q app to get started.`;
+                  const message = `Join me on Pulse to sync our ledger and compare books with ${clientName}. Download the Q app to get started.`;
                   Share.share({ message, title: "Invite to Q" });
                 }}
                 activeOpacity={0.8}

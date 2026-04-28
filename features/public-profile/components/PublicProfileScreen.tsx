@@ -4,14 +4,14 @@ import { useRouter } from "expo-router";
 import { MoreVertical, Share2 } from "lucide-react-native";
 import React, { useCallback, useMemo } from "react";
 import {
-  Alert,
-  Image,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Alert,
+    Image,
+    ScrollView,
+    Share,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -19,9 +19,9 @@ import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import Theme from "@/constants/Theme";
 
 import type {
-  PublicProfileEntity,
-  PublicProfileFact,
-  PublicProfileMetric,
+    PublicProfileEntity,
+    PublicProfileFact,
+    PublicProfileMetric,
 } from "../types";
 
 interface PublicProfileScreenProps {
@@ -177,7 +177,7 @@ function Hero({
   const onShare = useCallback(async () => {
     try {
       await Share.share({
-        message: `${entity.name} — ${typeLabel} on Q`,
+        message: `${entity.name} — ${typeLabel} on Pulse`,
         title: entity.name,
       });
     } catch {

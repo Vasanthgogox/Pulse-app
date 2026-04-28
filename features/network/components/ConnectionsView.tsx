@@ -4,15 +4,15 @@
  */
 import Theme from '@/constants/Theme';
 import {
-  averageScore,
-  getRatingsForDrivers,
-  getRatingsForSuppliers,
-} from '@/features/ratings';
-import {
   HubConnectionListCard,
   type HubConnectionItem,
 } from "@/features/network/components/NetworkConnectionHubCards";
 import { runConnectionInvite } from "@/features/network/utils/connectionInvite.util";
+import {
+  averageScore,
+  getRatingsForDrivers,
+  getRatingsForSuppliers,
+} from '@/features/ratings';
 import { useClientsQuery, useDriversQuery, useSuppliersQuery } from '@/lib/queries';
 import { getInitials } from '@/lib/stringUtils';
 import {
@@ -112,7 +112,7 @@ function GridCard({ item }: { item: ConnectedOrg }) {
           </Text>
           <Text style={styles.gridHeadline} numberOfLines={2}>
             {roleSub}
-            {item.is_integrated ? ' · On Q' : ' · Not on app'}
+            {item.is_integrated ? ' · on Pulse' : ' · Not on app'}
           </Text>
           <View style={styles.gridMutualRow}>
             <View style={[styles.gridMiniDot, { backgroundColor: color }]} />
@@ -380,9 +380,9 @@ export function ConnectionsView({
 
     setInvitingId(item.id);
     try {
-      await runConnectionInvite(orgId, item, () =>
-        Promise.all([clientsQ.refetch(), suppliersQ.refetch()]),
-      );
+      await runConnectionInvite(orgId, item, async () => {
+        await Promise.all([clientsQ.refetch(), suppliersQ.refetch()]);
+      });
     } finally {
       setInvitingId(null);
     }

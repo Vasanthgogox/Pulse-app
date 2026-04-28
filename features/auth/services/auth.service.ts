@@ -121,21 +121,20 @@ export interface SignUpOptions {
   email: string;
   password: string;
   fullName?: string;
-  /** Phone (e.g. for drivers). Stored in user_metadata; backends can use it to link invited drivers. */
   phone?: string;
-  /** Optional trading / legal name; stored in profiles.company_name and used for default organization name. */
   companyName?: string;
   role?: UserRole;
-  /** Business model for the new org: asset, aggregate, or both. Default HYBRID. */
   operatingModel?: OperatingModel;
-  /** Street / building address of the company. */
   addressLine?: string;
-  /** City or district of the company. */
   city?: string;
-  /** Indian state name. */
   state?: string;
-  /** Zone auto-derived from state: NORTH | SOUTH | EAST | WEST | NORTHEAST. */
   zone?: string;
+  /** Legal structure of the business: Sole Proprietor, Partnership, Pvt Ltd, LLP, OPC, or Other. */
+  businessType?: string;
+  /** Number of employees band, e.g. "1-10", "11-50", "51-200", "201-500", "500+". */
+  employeeCount?: string;
+  /** When true the DB trigger skips org + membership creation (user is joining an existing org). */
+  skipOrgCreation?: boolean;
 }
 
 export async function signUp({
@@ -150,6 +149,9 @@ export async function signUp({
   city,
   state,
   zone,
+  businessType,
+  employeeCount,
+  skipOrgCreation,
 }: SignUpOptions): Promise<SignInResult> {
   const emailErr = validateEmail(email ?? "");
   if (emailErr) return { error: new Error(emailErr) };
@@ -189,6 +191,9 @@ export async function signUp({
     if (city?.trim()) metadata.city = city.trim();
     if (state?.trim()) metadata.state = state.trim();
     if (zone?.trim()) metadata.zone = zone.trim();
+    if (businessType?.trim()) metadata.business_type = businessType.trim();
+    if (employeeCount?.trim()) metadata.employee_count = employeeCount.trim();
+    if (skipOrgCreation) metadata.skip_org_creation = true;
     // Canonical E.164-style India (+91…) for profiles.phone and metadata; RPCs normalize to 10 digits for lookup.
     if (phone != null && phone !== "") {
       const e164 = normalizeIndianPhoneForMetadata(phone);

@@ -1,21 +1,21 @@
 /**
- * Recently added — avatars, role, status, and connect / On Q (matches network hub semantics).
+ * Recently added — avatars, role, status, and connect / on Pulse (matches network hub semantics).
  */
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { PartyAvatar } from "@/components/PartyAvatar";
 import type { ConnectedOrg } from "@/features/network/components/ConnectionsView";
 import { runConnectionInvite } from "@/features/network/utils/connectionInvite.util";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 import { UserPlus2, Zap } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Animated,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
+    ActivityIndicator,
+    Animated,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
 } from "react-native";
 
 const MAX_RECENT = 5;
@@ -34,7 +34,7 @@ function entityTypeForRole(role: ConnectedOrg["role"]): PartyEntityType {
 
 function statusSubline(item: ConnectedOrg): string {
   if (item.is_integrated) {
-    return "On Q · operational access";
+    return "on Pulse · operational access";
   }
   if (!item.phone?.trim()) {
     return "Phone required to invite";
@@ -170,9 +170,9 @@ export function RecentAddedStrip({ orgId, items, onAfterInAppSuccess, layout = "
                   </View>
                   <View style={styles.itemAction}>
                     {item.is_integrated ? (
-                      <View style={styles.onQPill} accessibilityLabel={`${item.name} on Q`}>
+                      <View style={styles.onQPill} accessibilityLabel={`${item.name} on Pulse`}>
                         <Zap size={12} color={Theme.positive} fill={Theme.positive} />
-                        <Text style={styles.onQPillText}>On Q</Text>
+                        <Text style={styles.onQPillText}>on Pulse</Text>
                       </View>
                     ) : !item.phone?.trim() ? (
                       <View style={styles.mutedPill}>

@@ -10,13 +10,15 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { ClientRiskBadge } from "@/features/ai";
+import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
 import { getRatingsForDriver, type RatingRow } from "@/features/ratings/services/ratings.service";
+import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import { getTripDisplayNumber, type TripRow } from "@/features/trips";
 import {
-  adjustedCost,
-  adjustedRevenue,
+    adjustedCost,
+    adjustedRevenue,
 } from "@/features/trips/services/tripAdjustments";
 import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import {
@@ -24,13 +26,7 @@ import {
     getExpenseLinesForTripPnL,
 } from "@/features/vehicles/pnl";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
-import type { ClientRow } from "@/features/clients/services/clients.service";
-import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import { isAggregateTrip } from "@/lib/driverUtils";
-import {
-  adjustmentsForTripId,
-  useTripFinanceAdjustmentsMap,
-} from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import {
     formatINR,
     formatIndianVehicleNumber,
@@ -39,6 +35,11 @@ import {
     formatLedgerDateTime,
     formatRelative,
 } from "@/lib/format";
+import {
+    adjustmentsForTripId,
+    useTripFinanceAdjustmentsMap,
+} from "@/lib/queries/useTripFinanceAdjustmentsQuery";
+import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import type { SalaryRequestWithDriverRow } from "@/services/salaryRequestsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
@@ -67,7 +68,6 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
-import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import type { DriverOfferForAggregation } from "../aggregation";
 import {
     buildMonthlyDriverStatement,
@@ -1927,7 +1927,7 @@ export function EntityDetailOverlay({
               triggerSuccess("CONNECTION_REQUESTED");
             }}
             onInviteToApp={() => {
-              const message = `Join me on Q to sync our ledger and compare books with ${
+              const message = `Join me on Pulse to sync our ledger and compare books with ${
                 entity.name ?? "—"
               }. Download the Q app to get started.`;
               Share.share({ message, title: "Invite to Q" })

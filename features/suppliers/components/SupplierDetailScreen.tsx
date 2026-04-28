@@ -1,24 +1,31 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { CounterpartyProfileSystemCard } from "@/components/CounterpartyProfileSystemCard";
 import { DatePresetPillBar } from "@/components/DatePresetPillBar";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
-import { PartyAvatar } from "@/components/PartyAvatar";
-import { CounterpartyProfileSystemCard } from "@/components/CounterpartyProfileSystemCard";
 import { FinanceFAB } from "@/components/FinanceFAB";
+import { PartyAvatar } from "@/components/PartyAvatar";
+import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
-  LedgerReportModal,
-  SharedLedgerContent,
-  getTransactionsByOrganization,
-  type LedgerEntry,
-  type LedgerRow,
-} from "@/features/finance";
-import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPeriod";
-import type { FinancePeriodFilter } from "@/features/finance/types";
+    getClientsByOrganization,
+    type ClientRow,
+} from "@/features/clients/services/clients.service";
 import { getDriversByOrganization, type DriverRow } from "@/features/drivers";
+import {
+    getTransactionsByOrganization,
+    LedgerReportModal,
+    SharedLedgerContent,
+    type LedgerEntry,
+    type LedgerRow,
+} from "@/features/finance";
 import { LedgerTransactionListView } from "@/features/finance/components/LedgerTransactionListView";
+import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPeriod";
+import { getTripSubcontracts } from "@/features/finance/services/tripSubcontracts.service";
+import type { FinancePeriodFilter } from "@/features/finance/types";
 import { allocateAmountsToLargestDueTrips } from "@/features/finance/utils/allocateToLargestDue";
 import { EditSupplierModal } from "@/features/suppliers/components/EditSupplierModal";
 import {
@@ -28,47 +35,40 @@ import {
     getTripsWhereOrgIsSupplier,
     type TripRow,
 } from "@/features/trips";
-import { getTripSubcontracts } from "@/features/finance/services/tripSubcontracts.service";
-import {
-  getClientsByOrganization,
-  type ClientRow,
-} from "@/features/clients/services/clients.service";
+import { adjustedCost } from "@/features/trips/services/tripAdjustments";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
+import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
     canAccessFinance,
     getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
-import { formatINR, formatLedgerDate } from "@/lib/format";
 import { tripDayIso } from "@/lib/dateRangePresets";
-import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
+import { formatINR, formatLedgerDate } from "@/lib/format";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
-import { adjustedCost } from "@/features/trips/services/tripAdjustments";
-import { getSignedAvatarUrl } from "@/lib/avatarUpload";
-import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
+import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import Layout from "@/constants/Layout";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
-  Image,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    Alert,
+    Image,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    Share,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
 import {
     getLinkedOrgProfileForSupplier,
-    getSuppliersByOrganization,
     getSupplierDetails,
+    getSuppliersByOrganization,
     updateSupplier,
     type SupplierRow,
     type UpdateSupplierData,
@@ -1297,7 +1297,7 @@ export default function SupplierDetailScreen({
                 triggerSuccess("CONNECTION_REQUESTED");
               }}
               onInviteToApp={() => {
-                const message = `Join me on Q to sync our ledger and compare books with ${supplierName}. Download the Q app to get started.`;
+                const message = `Join me on Pulse to sync our ledger and compare books with ${supplierName}. Download the Q app to get started.`;
                 Share.share({ message, title: "Invite to Q" })
                   .then(() => {
                     // After sharing, show a friendlier message
@@ -1443,7 +1443,7 @@ export default function SupplierDetailScreen({
               <TouchableOpacity
                 style={styles.profileSecondaryBtn}
                 onPress={() => {
-                  const message = `Join me on Q to sync our ledger and compare books with ${supplierName}. Download the Q app to get started.`;
+                  const message = `Join me on Pulse to sync our ledger and compare books with ${supplierName}. Download the Q app to get started.`;
                   Share.share({ message, title: "Invite to Q" });
                 }}
                 activeOpacity={0.8}
