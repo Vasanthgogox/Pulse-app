@@ -3050,6 +3050,11 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.liquidPillBg,
     borderWidth: 1,
     borderColor: Theme.liquidPillBorder,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
   },
   tripsMainPillWeb: {
     minWidth: 94,
@@ -3066,6 +3071,11 @@ const styles = StyleSheet.create({
   },
   tripsMainPillActiveWeb: {
     backgroundColor: Theme.darkBackground,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.16,
+    shadowRadius: 6,
+    elevation: 2,
   },
   tripsMainPillTextWeb: {
     fontSize: 9,
@@ -3094,6 +3104,11 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 6,
     paddingVertical: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 9,
+    elevation: 1,
   },
   tripsScopePillWeb: {
     minWidth: 86,
@@ -3112,9 +3127,9 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surface,
     borderColor: Theme.borderLight,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.09,
+    shadowRadius: 4,
     elevation: 1,
   },
   tripsScopePillTextWeb: {
@@ -3263,8 +3278,8 @@ const styles = StyleSheet.create({
   },
   tripMetricTile: {
     width: 188,
-    minHeight: 118,
-    paddingVertical: 18,
+    minHeight: Platform.OS === "web" ? 118 : 102,
+    paddingVertical: Platform.OS === "web" ? 18 : 14,
     paddingHorizontal: 16,
     borderRadius: 22,
     borderWidth: 1,
@@ -3317,11 +3332,11 @@ const styles = StyleSheet.create({
   },
   /** Bento tile typography — tuned for 188px card width, left-aligned, even vertical rhythm. */
   metricBentoValue: {
-    fontSize: 24,
+    fontSize: Platform.OS === "web" ? 24 : 20,
     fontWeight: "900",
     fontStyle: "italic",
     letterSpacing: -0.4,
-    lineHeight: 28,
+    lineHeight: Platform.OS === "web" ? 28 : 24,
     marginBottom: 5,
     textAlign: "left" as const,
   },

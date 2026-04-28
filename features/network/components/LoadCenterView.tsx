@@ -1599,7 +1599,13 @@ export function LoadCenterView({
                     accessibilityRole="tab"
                     accessibilityState={{ selected: active }}
                   >
-                    <Text style={[styles.loadMainTabPillText, active && styles.loadMainTabPillTextActive]}>
+                    <Text
+                      style={[
+                        styles.loadMainTabPillText,
+                        active && styles.loadMainTabPillTextActive,
+                      ]}
+                      numberOfLines={1}
+                    >
                       {tab.label}
                     </Text>
                     {tab.count > 0 ? (
@@ -1631,14 +1637,14 @@ export function LoadCenterView({
               <View style={[styles.loadSearchWrap, styles.loadSearchWrapSingle]}>
                 <FontAwesome
                   name="search"
-                  size={14}
-                  color={Theme.textOnDarkMuted}
+                  size={15}
+                  color={Theme.textPrimaryDark}
                   style={styles.loadSearchIcon}
                 />
                 <TextInput
                   style={styles.loadSearchInput}
-                  placeholder="Find by route, ID or client..."
-                  placeholderTextColor={Theme.textOnDarkMuted}
+                  placeholder="Search loads by route, load ID, client..."
+                  placeholderTextColor={Theme.textSecondary}
                   value={searchQuery}
                   onChangeText={setSearchQuery}
                   autoCapitalize="none"
@@ -1699,14 +1705,14 @@ export function LoadCenterView({
           <View style={styles.loadSearchWrap}>
             <FontAwesome
               name="search"
-              size={14}
-              color={Theme.textOnDarkMuted}
+              size={15}
+              color={Theme.textPrimaryDark}
               style={styles.loadSearchIcon}
             />
             <TextInput
               style={styles.loadSearchInput}
-              placeholder="Find by route, ID or client..."
-              placeholderTextColor={Theme.textOnDarkMuted}
+              placeholder="Search loads by route, load ID, client..."
+              placeholderTextColor={Theme.textSecondary}
               value={searchQuery}
               onChangeText={setSearchQuery}
               autoCapitalize="none"
@@ -3841,7 +3847,7 @@ const styles = StyleSheet.create({
   },
   loadSubTabsWrapSingle: {
     flex: 0,
-    minWidth: 340,
+    minWidth: 380,
     maxWidth: 420,
     paddingBottom: 0,
   },
@@ -3855,6 +3861,11 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 4,
     paddingVertical: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
   },
   loadMainTabActiveBg: {
     position: "absolute",
@@ -3863,12 +3874,17 @@ const styles = StyleSheet.create({
     bottom: 4,
     borderRadius: 999,
     backgroundColor: Theme.darkBackground,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.18,
+    shadowRadius: 7,
+    elevation: 3,
   },
   loadMainTabPill: {
     minWidth: 0,
     flex: 1,
     borderRadius: 999,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     flexDirection: "row",
     alignItems: "center",
@@ -3884,11 +3900,12 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   loadMainTabPillText: {
-    fontSize: 9,
+    fontSize: 8.5,
     fontWeight: "900",
     color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 1.1,
+    letterSpacing: 0.8,
+    flexShrink: 1,
   },
   loadMainTabPillTextActive: {
     color: Theme.textOnDark,
@@ -3973,19 +3990,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     height: 38,
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.screenBackground,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.textSecondary,
     borderRadius: 11,
     paddingHorizontal: 12,
     paddingVertical: 0,
   },
   loadSearchWrapSingle: {
     flex: 1,
-    maxWidth: 560,
+    maxWidth: 520,
+    minWidth: 300,
     height: 36,
+    marginHorizontal: 6,
   },
-  loadSearchIcon: { marginRight: 6 },
+  loadSearchIcon: { marginRight: 8 },
   loadSearchInput: {
     flex: 1,
     minWidth: 0,
@@ -4011,6 +4030,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 4,
     gap: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
   },
   loadTypeFilterChip: {
     paddingHorizontal: 7,
@@ -4024,6 +4048,11 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: Theme.textPrimaryDark,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.09,
+    shadowRadius: 4,
+    elevation: 1,
   },
   loadTypeFilterChipText: {
     fontSize: 8,
