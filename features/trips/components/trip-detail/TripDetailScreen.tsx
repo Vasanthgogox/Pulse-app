@@ -185,24 +185,33 @@ interface VehiclePreviewDoc {
 }
 
 /** Step 1–4 and display label from trip status (aligned with driver app flow). */
-function trackingStepAndLabel(status: string | null | undefined): {
+function trackingStepAndLabel(
+  status: string | null | undefined,
+  startedAt?: string | null,
+): {
   step: number;
+  total: number;
   label: string;
 } {
   const s = (status ?? "").toLowerCase();
   if (s === "completed" || s === "delivered" || s === "done")
-    return { step: 4, label: "Completed" };
+    return { step: 6, total: 6, label: "Completed" };
   if (s === "arrived" || s === "at_destination" || s === "at_drop")
-    return { step: 3, label: "Arrived" };
+    return { step: 5, total: 6, label: "At drop-off" };
+  if (s === "in_transit" || s === "transit" || (s === "in_progress" && !!startedAt))
+    return { step: 4, total: 6, label: "In transit" };
   if (
     s === "in_progress" ||
-    s === "in_transit" ||
     s === "dispatched" ||
     s === "picked_up" ||
-    s === "pickup"
+    s === "pickup" ||
+    s === "at_pickup" ||
+    s === "confirmed_arrival"
   )
-    return { step: 2, label: "In progress" };
-  return { step: 1, label: "Assigned" };
+    return { step: 3, total: 6, label: "At pickup" };
+  if (s === "assigned")
+    return { step: 2, total: 6, label: "Head to pickup" };
+  return { step: 1, total: 6, label: "Assigned" };
 }
 
 /** Unified row for Driver Activity Timeline: assignment audit or driver status change. */
@@ -1832,14 +1841,17 @@ export default function TripDetailScreen({
             </View>
           </View>
           {(() => {
-            const { step, label } = trackingStepAndLabel(trip.status);
+            const { step, total, label } = trackingStepAndLabel(
+              trip.status,
+              trip.started_at,
+            );
             return (
               <View style={styles.trackingPageCurrentStepWrap}>
                 <Text style={styles.trackingPageCurrentStepLabel}>
                   Current step
                 </Text>
                 <Text style={styles.trackingPageCurrentStepValue}>
-                  Step {step} of 4 — {label}
+                  Step {step} of {total} — {label}
                 </Text>
               </View>
             );
@@ -2753,14 +2765,17 @@ export default function TripDetailScreen({
           </View>
         </View>
         {(() => {
-          const { step, label } = trackingStepAndLabel(trip?.status ?? "draft");
+          const { step, total, label } = trackingStepAndLabel(
+            trip?.status ?? "draft",
+            trip?.started_at,
+          );
           return (
             <View style={styles.trackingPageCurrentStepWrap}>
               <Text style={styles.trackingPageCurrentStepLabel}>
                 Current step
               </Text>
               <Text style={styles.trackingPageCurrentStepValue}>
-                Step {step} of 4 — {label}
+                Step {step} of {total} — {label}
               </Text>
             </View>
           );
@@ -3269,14 +3284,17 @@ export default function TripDetailScreen({
                     </View>
                   </View>
                   {(() => {
-                    const { step, label } = trackingStepAndLabel(trip.status);
+                    const { step, total, label } = trackingStepAndLabel(
+                      trip.status,
+                      trip.started_at,
+                    );
                     return (
                       <View style={styles.trackingPageCurrentStepWrap}>
                         <Text style={styles.trackingPageCurrentStepLabel}>
                           Current step
                         </Text>
                         <Text style={styles.trackingPageCurrentStepValue}>
-                          Step {step} of 4 — {label}
+                          Step {step} of {total} — {label}
                         </Text>
                       </View>
                     );
