@@ -76,9 +76,11 @@ function getJourneySegmentProgress(trip: TripRow): 0 | 1 | 2 | 3 | 4 {
   if (s === "completed" || s === "delivered" || s === "done" || !!trip.completed_at) {
     return 4;
   }
+  // Keep journey bars aligned with driver app:
+  // Head to Drop-off already shows 3/4 bars filled.
   if (s === "arrived" || s === "at_destination" || s === "at_drop") return 3;
-  if (s === "in_transit" || s === "intransit" || s === "transit") return 2;
-  if (s === "in_progress" && trip.started_at) return 2;
+  if (s === "in_transit" || s === "intransit" || s === "transit") return 3;
+  if (s === "in_progress" && trip.started_at) return 3;
   if (
     s === "in_progress" ||
     s === "picked_up" ||
