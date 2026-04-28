@@ -31,6 +31,7 @@ import { canAssignTrip, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import { useShipperDisplayNamesQuery, useTransactionsQuery, useTripSubcontractsQuery } from "@/lib/queries";
+import { queryKeys } from "@/lib/queryKeys";
 import * as driverLocationService from "@/services/driverLocationService";
 import type { DisputeRow } from "@/services/sharedLedgerService";
 import {
@@ -50,6 +51,7 @@ import type * as ExpoLocationTypes from "expo-location";
 import { useRouter } from "expo-router";
 import { ReceiptText } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
     ActivityIndicator,
     Alert,
@@ -240,6 +242,7 @@ export default function TripDetailScreen({
   const { t } = useLanguage();
   const { profile, user } = useAuth();
   const { currentOrganization } = useOrganization();
+  const queryClient = useQueryClient();
   const [trip, setTrip] = useState<TripRow | null>(null);
   const { data: shipperNameByTripId = {} } = useShipperDisplayNamesQuery(currentOrganization?.id ?? null);
   const displayClientName = trip ? (shipperNameByTripId[trip.id] ?? trip.client_name ?? undefined) : undefined;
@@ -2653,8 +2656,11 @@ export default function TripDetailScreen({
           : undefined,
       );
       loadAdjustments();
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.tripFinanceAdjustmentsRoot],
+      });
     },
-    [trip, currentOrganization?.id, loadAdjustments],
+    [trip, currentOrganization?.id, loadAdjustments, queryClient],
   );
   const handleRemoveAdjustment = useCallback(
     async (adjustmentId: string) => {
@@ -2662,8 +2668,11 @@ export default function TripDetailScreen({
       const tripId = trip.id;
       await removeTripAdjustment(tripId, adjustmentId);
       loadAdjustments();
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.tripFinanceAdjustmentsRoot],
+      });
     },
-    [trip?.id, loadAdjustments],
+    [trip?.id, loadAdjustments, queryClient],
   );
 
   const trackingTabContent = !trip ? null : (

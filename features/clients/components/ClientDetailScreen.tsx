@@ -73,6 +73,8 @@ import {
   type DriverRow,
 } from "@/features/drivers";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
+import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
+import { adjustedRevenue } from "@/features/trips/services/tripAdjustments";
 
 /** UUID-shaped strings are not valid human supplier names (avoid showing raw ids). */
 function isUuidLikeString(value: string | null | undefined): boolean {
@@ -222,6 +224,14 @@ export default function ClientDetailScreen({
   const canAddTransaction = canAccessFinance(capabilities);
   const [client, setClient] = useState<ClientRow | null>(null);
   const [trips, setTrips] = useState<TripRow[]>([]);
+  const tripIdsForFinanceAdj = useMemo(
+    () => trips.map((t) => String(t.id)).filter(Boolean),
+    [trips],
+  );
+  const { record: tripFinanceAdjRecord } = useTripFinanceAdjustmentsMap(
+    currentOrganization?.id ?? null,
+    tripIdsForFinanceAdj,
+  );
   /** Supplier rows for resolving aggregate `supplier_id` → display name in trip table. */
   const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
   const [drivers, setDrivers] = useState<DriverRow[]>([]);
@@ -820,12 +830,24 @@ export default function ClientDetailScreen({
     }
     // Pass 1b: Attribute unlinked client payments to the trip with the largest due (so payment applies to the trip that needs it most).
     // For client receivables, only amount_in (receipts) counts as paid; we do not add amount_out here.
+    const linkedOrgIdForAdj = client?.linked_organization_id ?? null;
     const allocatedPaidByTripId = allocateAmountsToLargestDueTrips(
       trips.map((t) => {
         const key = norm(t.id);
+        const isIntegratedShipperClient =
+          client?.is_integrated === true &&
+          linkedOrgIdForAdj != null &&
+          isLoadBasedTrip(t) &&
+          t.organization_id != null &&
+          t.organization_id === linkedOrgIdForAdj;
+        const base = isIntegratedShipperClient
+          ? Number(t.supplier_rate ?? 0)
+          : Number(t.client_price ?? 0);
+        const adj = tripFinanceAdjRecord[key] ?? [];
+        const sales = adjustedRevenue(base, adj);
         return {
           tripId: key,
-          sales: Number(t.client_price ?? 0),
+          sales,
           paid: paidByTripId[key] ?? 0,
         };
       }),
@@ -860,9 +882,11 @@ export default function ClientDetailScreen({
         isLoadBasedTrip(t) &&
         t.organization_id != null &&
         t.organization_id === linkedOrgId;
-      const sales = Number(
-        isIntegratedShipperClient ? t.supplier_rate ?? 0 : t.client_price ?? 0,
-      );
+      const base = isIntegratedShipperClient
+        ? Number(t.supplier_rate ?? 0)
+        : Number(t.client_price ?? 0);
+      const adj = tripFinanceAdjRecord[key] ?? [];
+      const sales = adjustedRevenue(base, adj);
       const paid = allocatedPaidByTripId[key] ?? 0;
       const due = Math.max(0, sales - paid);
       tripIdToDue[t.id] = due;
@@ -945,7 +969,7 @@ export default function ClientDetailScreen({
       tripIdToDue,
       paidByTripId: allocatedPaidByTripId,
     };
-  }, [trips, transactions, clientId]);
+  }, [trips, transactions, clientId, client, tripFinanceAdjRecord]);
 
   const tripDateOpts = useMemo(
     () => ({ customFrom: tripCustomFrom, customTo: tripCustomTo }),
@@ -964,21 +988,25 @@ export default function ClientDetailScreen({
       id == null ? "" : String(id).trim().toLowerCase();
     const linkedOrgId = client?.linked_organization_id ?? null;
     return tripsForMissionTable.map((t) => {
+      const key = norm(t.id);
       const isIntegratedShipperClient =
         client?.is_integrated === true &&
         linkedOrgId != null &&
         isLoadBasedTrip(t) &&
         t.organization_id != null &&
         t.organization_id === linkedOrgId;
+      const base = isIntegratedShipperClient
+        ? Number(t.supplier_rate ?? 0)
+        : Number(t.client_price ?? 0);
+      const adj = tripFinanceAdjRecord[key] ?? [];
+      const sales = adjustedRevenue(base, adj);
       return {
         trip: t,
         missionId: getTripDisplayNumber(t),
         route:
           `${t.pickup_area ?? ""} → ${t.drop_location ?? ""}`.trim() || "—",
-        sales: isIntegratedShipperClient
-          ? Number(t.supplier_rate ?? 0)
-          : Number(t.client_price ?? 0),
-        paid: paidByTripId[norm(t.id)] ?? 0,
+        sales,
+        paid: paidByTripId[key] ?? 0,
         due: tripIdToDue[t.id] ?? 0,
       };
     });
@@ -988,6 +1016,7 @@ export default function ClientDetailScreen({
     tripIdToDue,
     client?.linked_organization_id,
     client?.is_integrated,
+    tripFinanceAdjRecord,
   ]);
   const tripTransactionMetaById = useMemo(() => {
     const byTrip: Record<string, { count: number; lastTxnDate: string | null }> = {};

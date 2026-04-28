@@ -324,8 +324,9 @@ export const PAYMENT_MODES = [
 ] as const;
 
 const LEDGER_LAST_PAYMENT_MODE_KEY = "@q/ledger_last_payment_mode";
+type FontAwesomeIconName = React.ComponentProps<typeof FontAwesome>["name"];
 
-const PAYMENT_MODE_ICON: Record<string, string> = {
+const PAYMENT_MODE_ICON: Record<string, FontAwesomeIconName> = {
   CASH: "money",
   UPI: "mobile",
   BANK: "bank",
@@ -346,7 +347,7 @@ const PAYMENT_MODE_LABEL_SHORT: Record<string, string> = {
   CREDIT: "Credit",
 };
 
-const PAYMENT_TYPE_ICON: Record<string, string> = {
+const PAYMENT_TYPE_ICON: Record<string, FontAwesomeIconName> = {
   "Trip Payment": "truck",
   "Advance Payment": "arrow-up",
   "Advance from Client": "arrow-up",
@@ -963,6 +964,10 @@ export function AddTransactionModal({
     if (fromMission) return fromMission as TripOption;
     return null;
   }, [tripId, safeTrips, ledgerMissionTripsBase]);
+  const selectedTripPayoutMode = useMemo(
+    () => (selectedTrip ? resolveTripLedgerTripType(selectedTrip) : null),
+    [selectedTrip],
+  );
   const tripNumber = selectedTrip?.trip_number ?? null;
 
   const tripFinancialSnapshot = useMemo(() => {
@@ -1016,7 +1021,7 @@ export function AddTransactionModal({
       if (missionTripFilterPayout === "aggregate" && payout !== "market") return false;
 
       const completed = isTripCompleted({
-        status: t.status ?? null,
+        status: t.status ?? "",
         completed_at: t.completed_at ?? null,
       });
       if (missionTripFilterLifecycle === "active" && completed) return false;
@@ -1166,7 +1171,14 @@ export function AddTransactionModal({
   const partyOptions = useMemo(() => {
     if (type === "in" && selectedTrip) {
       const lid = (selectedTrip as any).organization_id;
-      const isIntegrated = isCrossOrgIntegrationTrip(selectedTrip, viewerOrgId);
+      const isIntegrated = isCrossOrgIntegrationTrip(
+        {
+          organization_id: selectedTrip.organization_id ?? "",
+          indent_id: selectedTrip.indent_id ?? null,
+          supplier_id: selectedTrip.supplier_id ?? null,
+        },
+        viewerOrgId,
+      );
 
       if (isIntegrated) {
         const localCid =
@@ -1213,9 +1225,17 @@ export function AddTransactionModal({
     }
     if (type === "out" && selectedTrip) {
       const lid = (selectedTrip as any).organization_id;
-      const isIntegrated = isCrossOrgIntegrationTrip(selectedTrip, viewerOrgId);
+      const payoutMode = selectedTripPayoutMode ?? resolveTripLedgerTripType(selectedTrip);
+      const isIntegrated = isCrossOrgIntegrationTrip(
+        {
+          organization_id: selectedTrip.organization_id ?? "",
+          indent_id: selectedTrip.indent_id ?? null,
+          supplier_id: selectedTrip.supplier_id ?? null,
+        },
+        viewerOrgId,
+      );
 
-      if (isIntegrated) {
+      if (isIntegrated && payoutMode === "market") {
         const localSid =
           linkedSupplierIdByOrgId instanceof Map
             ? linkedSupplierIdByOrgId.get(lid)
@@ -1223,22 +1243,16 @@ export function AddTransactionModal({
         if (localSid) {
           const supplier = safeSuppliers.find((s) => s.id === localSid);
           if (supplier) return [supplier];
-          if (
-            (defaultPartyId === localSid || lockedPartyId === localSid) &&
-            (defaultPartyName || lockedPartyName)
-          ) {
-            return [
-              {
-                id: localSid,
-                name: (lockedPartyName || defaultPartyName) as string,
-              },
-            ];
-          }
+          const resolvedSupplierName =
+            (selectedTrip as { supplier_name?: string | null }).supplier_name?.trim() ||
+            (lockedPartyName || defaultPartyName || "").trim() ||
+            "Supplier";
+          return [{ id: localSid, name: resolvedSupplierName }];
         }
       }
 
       const outOptions: PartyOption[] = [];
-      if (selectedTrip.supplier_id) {
+      if (payoutMode === "market" && selectedTrip.supplier_id) {
         const sup = safeSuppliers.find(
           (s) => s.id === selectedTrip.supplier_id!,
         );
@@ -1298,6 +1312,7 @@ export function AddTransactionModal({
   }, [
     type,
     selectedTrip,
+    selectedTripPayoutMode,
     safeClients,
     safeSuppliers,
     safeDrivers,
@@ -1330,12 +1345,34 @@ export function AddTransactionModal({
           safeDrivers.find((d) => d.id === cashOutPayeeId)?.name ??
           safeSuppliers.find((s) => s.id === cashOutPayeeId)?.name ??
           null);
+  const supplierCategorySelected =
+    type === "out" &&
+    category != null &&
+    SUPPLIER_CATEGORIES.includes(category as SupplierCategory);
+  const associatedSupplierNameForOut =
+    type === "out" && selectedTrip
+      ? (() => {
+          const sid = resolveLocalSupplierPartyIdFromTrip(selectedTrip);
+          if (sid) {
+            const supplierName = safeSuppliers.find((s) => s.id === sid)?.name?.trim();
+            if (supplierName) return supplierName;
+          }
+          const tripSupplierName = (
+            selectedTrip as { supplier_name?: string | null }
+          ).supplier_name?.trim();
+          return tripSupplierName || null;
+        })()
+      : null;
 
   const effectivePartyName =
     isPartyLocked && type === "in"
       ? lockedPartyName
       : type === "out" && cashOutPayeeName?.trim()
         ? cashOutPayeeName.trim()
+        : type === "out" &&
+            supplierCategorySelected &&
+            associatedSupplierNameForOut?.trim()
+          ? associatedSupplierNameForOut.trim()
         : isPartyLocked
           ? lockedPartyName
           : partyId
@@ -1600,7 +1637,7 @@ export function AddTransactionModal({
       setDriverIdForSalary(null);
   }, [visible, effectivePartyId]);
 
-  // When party (client/supplier) changes, clear trip if the selected trip is not for this party.
+  // Keep trip as the primary selector. If party/trip conflict, clear party instead of trip.
   // Skip when tripLocked — trip is fixed and party is derived from it.
   useEffect(() => {
     if (!visible || tripLocked || !effectivePartyIdForTrips || !tripId) return;
@@ -1626,11 +1663,15 @@ export function AddTransactionModal({
             (trip as { organization_id?: string }).organization_id ===
               supplierLinkedOrgId))) ||
       (isDriver && trip.driver_id === effectivePartyIdForTrips);
-    if (!tripMatches) setTripId(null);
+    if (!tripMatches) {
+      setPartyId(null);
+      if (partyId === "driver-salary") setDriverIdForSalary(null);
+    }
   }, [
     visible,
     effectivePartyIdForTrips,
     effectivePartyName,
+    partyId,
     tripId,
     safeTrips,
     safeSuppliers,
@@ -1858,7 +1899,15 @@ export function AddTransactionModal({
     if (tripLocked && selectedTrip) {
       const lid = (selectedTrip as { organization_id?: string | null })
         .organization_id;
-      const isIntegrated = isCrossOrgIntegrationTrip(selectedTrip, viewerOrgId);
+      const selectedTripMode = selectedTripPayoutMode ?? resolveTripLedgerTripType(selectedTrip);
+      const isIntegrated = isCrossOrgIntegrationTrip(
+        {
+          organization_id: selectedTrip.organization_id ?? "",
+          indent_id: selectedTrip.indent_id ?? null,
+          supplier_id: selectedTrip.supplier_id ?? null,
+        },
+        viewerOrgId,
+      );
 
       if (type === "in") {
         let localCid: string | null = null;
@@ -1884,7 +1933,7 @@ export function AddTransactionModal({
         }
       } else {
         let localSid: string | null = null;
-        if (isIntegrated && lid != null) {
+        if (isIntegrated && selectedTripMode === "market" && lid != null) {
           localSid =
             (linkedSupplierIdByOrgId instanceof Map
               ? linkedSupplierIdByOrgId.get(lid)
@@ -1896,6 +1945,7 @@ export function AddTransactionModal({
           derivedContactType = "supplier";
           derivedPartyName =
             safeSuppliers.find((s) => s.id === localSid)?.name ??
+            (selectedTrip as { supplier_name?: string | null }).supplier_name ??
             lockedPartyName ??
             defaultPartyName ??
             null;
@@ -1911,21 +1961,32 @@ export function AddTransactionModal({
             lockedPartyName ??
             null;
         } else {
-          derivedContactId =
-            selectedTrip.supplier_id ?? selectedTrip.driver_id ?? null;
-          derivedContactType = selectedTrip.supplier_id
-            ? "supplier"
-            : selectedTrip.driver_id
-              ? "driver"
-              : null;
-          derivedPartyName = selectedTrip.supplier_id
-            ? (safeSuppliers.find((s) => s.id === selectedTrip!.supplier_id!)?.name ??
-              (selectedTrip as { supplier_name?: string }).supplier_name ??
-              null)
-            : selectedTrip.driver_id
-              ? (safeDrivers.find((d) => d.id === selectedTrip!.driver_id!)?.name ??
+          const preferredOutId =
+            selectedTripMode === "asset"
+              ? (selectedTrip.driver_id ?? selectedTrip.supplier_id ?? null)
+              : (selectedTrip.supplier_id ?? selectedTrip.driver_id ?? null);
+          derivedContactId = preferredOutId;
+          derivedContactType =
+            selectedTripMode === "asset"
+              ? selectedTrip.driver_id
+                ? "driver"
+                : selectedTrip.supplier_id
+                  ? "supplier"
+                  : null
+              : selectedTrip.supplier_id
+                ? "supplier"
+                : selectedTrip.driver_id
+                  ? "driver"
+                  : null;
+          derivedPartyName =
+            derivedContactType === "supplier"
+              ? (safeSuppliers.find((s) => s.id === selectedTrip!.supplier_id!)?.name ??
+                (selectedTrip as { supplier_name?: string }).supplier_name ??
                 null)
-              : null;
+              : derivedContactType === "driver"
+                ? (safeDrivers.find((d) => d.id === selectedTrip!.driver_id!)?.name ??
+                  null)
+                : null;
         }
       }
     }
@@ -3098,10 +3159,10 @@ export function AddTransactionModal({
           <View style={styles.ledgerV2HeaderTitleBlock}>
             <Text style={styles.ledgerV2Title}>Ledger sync</Text>
             <Text style={styles.ledgerV2Sub} numberOfLines={1}>
-              {entryContextLabel
-                ? `Context · ${entryContextLabel}`
-                : effectivePartyName
-                  ? `Party · ${effectivePartyName}`
+              {effectivePartyName
+                ? `Party · ${effectivePartyName}`
+                : entryContextLabel
+                  ? `Context · ${entryContextLabel}`
                   : "Global network"}
             </Text>
           </View>

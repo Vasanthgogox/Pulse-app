@@ -53,6 +53,7 @@ import {
 import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatIndianVehicleNumber, formatLedgerDate } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
+import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import { updateSalaryRequestStatus } from "@/services/salaryRequestsService";
 import { useQueryClient } from "@tanstack/react-query";
@@ -187,7 +188,6 @@ export function FinanceScreen() {
     entitiesLoading,
     garagePeriodOptions,
     indentsForFinance,
-    acceptedDirectQuotes,
     setPendingDriverSalaryRequests,
   } = entities;
 
@@ -254,6 +254,27 @@ export function FinanceScreen() {
     () => allTripsForLedger.filter(tripMatchesFinanceDate),
     [allTripsForLedger, tripMatchesFinanceDate],
   );
+
+  const financeTripIdsForAdjustments = useMemo(() => {
+    const ids = new Set<string>();
+    for (const t of allTripsForLedger) {
+      if (t?.id) ids.add(String(t.id));
+    }
+    for (const t of tripsWhereOrgIsClient) {
+      if (t?.id) ids.add(String(t.id));
+    }
+    return [...ids];
+  }, [allTripsForLedger, tripsWhereOrgIsClient]);
+
+  const { record: tripFinanceAdjRecord, isLoading: tripFinanceAdjLoading } =
+    useTripFinanceAdjustmentsMap(
+      currentOrganization?.id ?? null,
+      financeTripIdsForAdjustments,
+    );
+  /** Until adjustments load, keep aggregation on raw trip rates (same as pre-registry). */
+  const tripFinanceAdjustmentsByTripId = tripFinanceAdjLoading
+    ? undefined
+    : tripFinanceAdjRecord;
 
   const financeTripOptionIds = useMemo(
     () => new Set(financeFilteredAllTripsForLedger.map((t) => t.id)),
@@ -571,6 +592,7 @@ export function FinanceScreen() {
         ledgerRows,
         tripPartyMap,
         indentsForFinance,
+        tripFinanceAdjustmentsByTripId,
       );
       let filteredRows = rows;
       if (q) {
@@ -634,8 +656,7 @@ export function FinanceScreen() {
         ledgerRows,
         tripsWhereOrgIsClient,
         tripPartyMap,
-        indentsForFinance,
-        acceptedDirectQuotes,
+        tripFinanceAdjustmentsByTripId,
       );
       let filteredRows = rows;
       if (q) {
@@ -878,7 +899,6 @@ export function FinanceScreen() {
       }),
     );
   }, [
-    acceptedDirectQuotes,
     clients,
     currentOrganization?.id,
     driverOffers,
@@ -897,6 +917,7 @@ export function FinanceScreen() {
     tripRows,
     tripsWhereOrgIsClient,
     tripsWhereOrgIsSupplier,
+    tripFinanceAdjustmentsByTripId,
     vehicleRows,
   ]);
   const bannerTotals = financeSubTab === "cash" ? ledgerTotalsData : tabTotals;
@@ -1347,7 +1368,6 @@ export function FinanceScreen() {
               tripsWhereOrgIsClient={financeFilteredTripsWhereOrgIsClient}
               tripsWhereOrgIsSupplier={financeFilteredTripsWhereOrgIsSupplier}
               indentsForFinance={indentsForFinance}
-              acceptedDirectQuotes={acceptedDirectQuotes}
               vehicleRows={vehicleRows}
               driverRows={driverRows}
               driverOffers={driverOffers}
@@ -1377,6 +1397,7 @@ export function FinanceScreen() {
               }
               profileImages={profileImages}
               linkedOrgDisplayMap={linkedOrgDisplayMap}
+              tripFinanceAdjustmentsByTripId={tripFinanceAdjustmentsByTripId}
             />
           </View>
         </View>

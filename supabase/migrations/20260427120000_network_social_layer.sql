@@ -80,6 +80,14 @@ CREATE TRIGGER trg_bids_updated_at
 ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bids  ENABLE ROW LEVEL SECURITY;
 
+-- Re-runnable safety for environments where policies already exist.
+DROP POLICY IF EXISTS "posts_select" ON public.posts;
+DROP POLICY IF EXISTS "posts_insert" ON public.posts;
+DROP POLICY IF EXISTS "posts_update" ON public.posts;
+DROP POLICY IF EXISTS "bids_select" ON public.bids;
+DROP POLICY IF EXISTS "bids_insert" ON public.bids;
+DROP POLICY IF EXISTS "bids_update" ON public.bids;
+
 -- Posts: org members can read their own org's posts + all active posts
 CREATE POLICY "posts_select" ON public.posts
   FOR SELECT USING (is_active = true);

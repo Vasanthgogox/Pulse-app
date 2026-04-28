@@ -46,6 +46,14 @@ export default function ModalsLayout() {
         name="story-detail"
         options={{ presentation: 'fullScreenModal', headerShown: false }}
       />
+      <Stack.Screen
+        name="team"
+        options={{ presentation: 'fullScreenModal', title: 'Team Members' }}
+      />
+      <Stack.Screen
+        name="invite-member"
+        options={{ presentation: 'fullScreenModal', title: 'Invite Member' }}
+      />
     </Stack>
   );
 }

@@ -12,14 +12,19 @@ import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
+import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import { LedgerReportModal } from "@/features/finance";
+import type { TripRow } from "@/features/trips";
+import { buildTripHubPartyMetaByTripId } from "@/features/trips";
 import {
-    buildTripHubPartyMetaByTripId,
     summarizeTripLedgerForHub,
     TripsHubTableView,
     TripsHubTripCard,
-    type TripRow,
-} from "@/features/trips";
+    tripFinanceAdjForHubLookup,
+    tripHubCost,
+    tripHubDue,
+    tripHubRevenue,
+} from "@/features/trips/components/TripsHubViews";
 import {
     classifyTripMetric,
     countTripsByMetric,
@@ -28,6 +33,7 @@ import {
     type TripMetricId,
 } from "@/features/trips/utils/tripHubMetrics";
 import { canAccessTrips, getCapabilitiesFromProfile } from "@/lib/capabilities";
+import { queryKeys } from "@/lib/queryKeys";
 import { isAggregateTrip } from "@/lib/driverUtils";
 import { formatLedgerDate } from "@/lib/format";
 import {
@@ -39,6 +45,7 @@ import {
     useShipperDisplayNamesQuery,
     useSuppliersQuery,
     useTransactionsQuery,
+    useTripFinanceAdjustmentsMap,
     useTripsQuery,
 } from "@/lib/queries";
 import { supabase } from "@/lib/supabase";
@@ -95,33 +102,6 @@ type HistoryTripMetricId =
 
 const TRIPS_PAGE_BG = "#f4f5f7";
 
-function historyTripRevenue(
-  trip: TripRow,
-  currentOrganizationId: string | null | undefined,
-): number {
-  const isOwner =
-    currentOrganizationId != null &&
-    trip.organization_id != null &&
-    trip.organization_id === currentOrganizationId;
-  return trip.indent_id != null && !isOwner
-    ? Number(trip.supplier_rate ?? 0)
-    : Number(trip.client_price ?? 0);
-}
-
-function historyTripCost(
-  trip: TripRow,
-  currentOrganizationId: string | null | undefined,
-): number {
-  const isOwner =
-    currentOrganizationId != null &&
-    trip.organization_id != null &&
-    trip.organization_id === currentOrganizationId;
-  if (trip.indent_id != null && isOwner) {
-    return Number(trip.supplier_rate ?? 0);
-  }
-  return Number(trip.supplier_rate ?? 0);
-}
-
 function formatCompactINR(value: number): string {
   const safe = Math.max(0, Number(value) || 0);
   if (safe >= 10000000) return `₹${(safe / 10000000).toFixed(1)}Cr`;
@@ -134,10 +114,17 @@ function historyTripDueState(
   trip: TripRow,
   ledgerRows: LedgerRow[],
   currentOrganizationId: string | null | undefined,
+  adjustments?: TripAdjustment[] | null,
 ): { receivableDue: number; payableDue: number } {
   const ledger = summarizeTripLedgerForHub(ledgerRows);
-  const receivableTarget = Math.max(historyTripRevenue(trip, currentOrganizationId), 0);
-  const payableTarget = Math.max(historyTripCost(trip, currentOrganizationId), 0);
+  const receivableTarget = Math.max(
+    tripHubRevenue(trip, currentOrganizationId, adjustments),
+    0,
+  );
+  const payableTarget = Math.max(
+    tripHubCost(trip, currentOrganizationId, adjustments),
+    0,
+  );
   return {
     receivableDue: Math.max(receivableTarget - Math.max(ledger.receivedTotal, 0), 0),
     payableDue: Math.max(payableTarget - Math.max(ledger.paidTotal, 0), 0),
@@ -208,6 +195,12 @@ export default function TripsScreen() {
   const { data: drivers = [] } = useDriversQuery(orgId);
   const linkedOrgByOrganizationId = useLinkedOrgProfileMap(clients, suppliers);
   const tripIds = useMemo(() => trips.map((t) => t.id), [trips]);
+  const { record: tripFinanceAdjRecord, isLoading: tripFinanceAdjLoading } =
+    useTripFinanceAdjustmentsMap(orgId, tripIds);
+  /** Until loaded, hub uses raw trip rates (same as trip list before this feature). */
+  const tripFinanceAdjForHub = tripFinanceAdjLoading
+    ? undefined
+    : tripFinanceAdjRecord;
   const { refetch: refetchAssignment } = useAssignmentAuditQuery(tripIds);
 
   useRealtimeTripsInvalidation(orgId);
@@ -225,6 +218,9 @@ export default function TripsScreen() {
       refetchAssignment(),
       queryClient.invalidateQueries({
         queryKey: ["q", "trips", "doc-trip-ids", orgId],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: [...queryKeys.tripFinanceAdjustmentsRoot],
       }),
     ]);
     setRefreshing(false);
@@ -306,10 +302,14 @@ export default function TripsScreen() {
     },
   });
 
-  const metricCounts = useMemo(
-    () => countTripsByMetric(tripsByStatus, tripIdsWithDocuments),
-    [tripsByStatus, tripIdsWithDocuments],
-  );
+  const metricCounts = useMemo(() => {
+    const counts = countTripsByMetric(tripsByStatus, tripIdsWithDocuments);
+    if (!showCompletedList) {
+      const completedTripsCount = trips.filter((t) => isCompletedStatus(t.status)).length;
+      counts.delivered_docs_pending += completedTripsCount;
+    }
+    return counts;
+  }, [tripsByStatus, tripIdsWithDocuments, showCompletedList, trips]);
 
   const transactionsByTripId = useMemo(() => {
     const map = new Map<string, LedgerRow[]>();
@@ -326,9 +326,20 @@ export default function TripsScreen() {
   const baseFilteredTrips = useMemo(() => {
     let list = tripsByStatus;
     if (!showCompletedList) {
-      list = list.filter(
-        (t) => classifyTripMetric(t, tripIdsWithDocuments) === activeMetricTab,
-      );
+      if (activeMetricTab === "delivered_docs_pending") {
+        const deliveredDocsPendingTrips = tripsByStatus.filter(
+          (t) => classifyTripMetric(t, tripIdsWithDocuments) === activeMetricTab,
+        );
+        const completedTrips = trips.filter((t) => isCompletedStatus(t.status));
+        const seen = new Set(deliveredDocsPendingTrips.map((t) => t.id));
+        list = deliveredDocsPendingTrips.concat(
+          completedTrips.filter((t) => !seen.has(t.id)),
+        );
+      } else {
+        list = list.filter(
+          (t) => classifyTripMetric(t, tripIdsWithDocuments) === activeMetricTab,
+        );
+      }
     }
     if (supplyFilter !== "all") {
       list = list.filter((t) => {
@@ -440,9 +451,14 @@ export default function TripsScreen() {
             new Date(b.pickup_date || b.created_at).getTime()
           );
         case "revenue_desc":
-          return (b.client_price || 0) - (a.client_price || 0);
-        case "revenue_asc":
-          return (a.client_price || 0) - (b.client_price || 0);
+        case "revenue_asc": {
+          const orgSort = currentOrganization?.id ?? null;
+          const adjA = tripFinanceAdjForHubLookup(tripFinanceAdjForHub, a.id);
+          const adjB = tripFinanceAdjForHubLookup(tripFinanceAdjForHub, b.id);
+          const va = tripHubRevenue(a, orgSort, adjA);
+          const vb = tripHubRevenue(b, orgSort, adjB);
+          return sortBy === "revenue_desc" ? vb - va : va - vb;
+        }
         case "client_asc":
           return (a.client_name || "").localeCompare(b.client_name || "");
         case "client_desc":
@@ -455,6 +471,7 @@ export default function TripsScreen() {
     return sorted;
   }, [
     tripsByStatus,
+    trips,
     activeMetricTab,
     tripIdsWithDocuments,
     supplyFilter,
@@ -467,6 +484,8 @@ export default function TripsScreen() {
     dateRangeFilter,
     customDateFrom,
     customDateTo,
+    currentOrganization?.id,
+    tripFinanceAdjForHub,
   ]);
 
   const filtered = useMemo(() => {
@@ -474,10 +493,12 @@ export default function TripsScreen() {
       return baseFilteredTrips;
     }
     return baseFilteredTrips.filter((trip) => {
+      const adj = tripFinanceAdjForHubLookup(tripFinanceAdjForHub, trip.id);
       const { receivableDue, payableDue } = historyTripDueState(
         trip,
         transactionsByTripId.get(trip.id) ?? [],
         currentOrganization?.id ?? null,
+        adj,
       );
       switch (activeHistoryMetricTab) {
         case "due_to_get":
@@ -498,6 +519,7 @@ export default function TripsScreen() {
     currentOrganization?.id,
     showCompletedList,
     transactionsByTripId,
+    tripFinanceAdjForHub,
   ]);
 
   const tripsTableResetKey = useMemo(
@@ -621,8 +643,9 @@ export default function TripsScreen() {
         return db.localeCompare(da);
       });
       const ledger = summarizeTripLedgerForHub(txns);
-      const salesValue = Math.max(historyTripRevenue(trip, orgId), 0);
-      const supplierCost = Math.max(historyTripCost(trip, orgId), 0);
+      const rowAdj = tripFinanceAdjForHubLookup(tripFinanceAdjForHub, trip.id);
+      const salesValue = Math.max(tripHubRevenue(trip, orgId, rowAdj), 0);
+      const supplierCost = Math.max(tripHubCost(trip, orgId, rowAdj), 0);
       const received = Math.max(ledger.receivedTotal, 0);
       const paid = Math.max(ledger.paidTotal, 0);
       const pendingRecv = Math.max(salesValue - received, 0);
@@ -695,6 +718,7 @@ export default function TripsScreen() {
     shipperNameByTripId,
     transactionsByTripId,
     tripHubPartyMetaByTripId,
+    tripFinanceAdjForHub,
   ]);
 
   const historyMetricCards = useMemo(() => {
@@ -731,10 +755,12 @@ export default function TripsScreen() {
     if (!showCompletedList) return base;
 
     for (const trip of baseFilteredTrips) {
+      const adj = tripFinanceAdjForHubLookup(tripFinanceAdjForHub, trip.id);
       const { receivableDue, payableDue } = historyTripDueState(
         trip,
         transactionsByTripId.get(trip.id) ?? [],
         currentOrganization?.id ?? null,
+        adj,
       );
 
       if (receivableDue > 0) {
@@ -753,7 +779,13 @@ export default function TripsScreen() {
     }
 
     return base;
-  }, [baseFilteredTrips, currentOrganization?.id, showCompletedList, transactionsByTripId]);
+  }, [
+    baseFilteredTrips,
+    currentOrganization?.id,
+    showCompletedList,
+    transactionsByTripId,
+    tripFinanceAdjForHub,
+  ]);
 
   const mainTabs = useMemo(
     () => [
@@ -1976,6 +2008,7 @@ export default function TripsScreen() {
                     currentOrganizationId={currentOrganization?.id ?? null}
                     getStageLabel={getStageLabelForTrip}
                     transactionsByTripId={transactionsByTripId}
+                    financeAdjustmentsByTripId={tripFinanceAdjForHub}
                     onOpenTripDetails={(trip) =>
                       router.push(`/trip/${trip.id}` as const)
                     }
@@ -2062,6 +2095,10 @@ export default function TripsScreen() {
                     <TripsHubTripCard
                       trip={t}
                       currentOrganizationId={currentOrganization?.id ?? null}
+                      financeAdjustments={tripFinanceAdjForHubLookup(
+                        tripFinanceAdjForHub,
+                        t.id,
+                      )}
                       displayClientName={displayClientName}
                       displaySupplierName={party?.displaySupplierName ?? ""}
                       clientAvatarUrl={party?.clientAvatarUrl ?? null}
