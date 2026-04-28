@@ -128,6 +128,14 @@ export interface SignUpOptions {
   role?: UserRole;
   /** Business model for the new org: asset, aggregate, or both. Default HYBRID. */
   operatingModel?: OperatingModel;
+  /** Street / building address of the company. */
+  addressLine?: string;
+  /** City or district of the company. */
+  city?: string;
+  /** Indian state name. */
+  state?: string;
+  /** Zone auto-derived from state: NORTH | SOUTH | EAST | WEST | NORTHEAST. */
+  zone?: string;
 }
 
 export async function signUp({
@@ -138,6 +146,10 @@ export async function signUp({
   companyName,
   role = "user",
   operatingModel: operatingModelOption,
+  addressLine,
+  city,
+  state,
+  zone,
 }: SignUpOptions): Promise<SignInResult> {
   const emailErr = validateEmail(email ?? "");
   if (emailErr) return { error: new Error(emailErr) };
@@ -173,6 +185,10 @@ export async function signUp({
     if (fullName?.trim()) metadata.full_name = fullName.trim();
     if (companyName != null && companyName.trim())
       metadata.company_name = companyName.trim();
+    if (addressLine?.trim()) metadata.address_line = addressLine.trim();
+    if (city?.trim()) metadata.city = city.trim();
+    if (state?.trim()) metadata.state = state.trim();
+    if (zone?.trim()) metadata.zone = zone.trim();
     // Canonical E.164-style India (+91…) for profiles.phone and metadata; RPCs normalize to 10 digits for lookup.
     if (phone != null && phone !== "") {
       const e164 = normalizeIndianPhoneForMetadata(phone);
