@@ -217,13 +217,9 @@ function getSupabase(): SupabaseClient {
     },
   });
 
-  // Global auth error recovery: when token refresh fails (e.g. stale token from another device),
-  // clear local session so the app shows sign-in instead of surfacing an error.
-  c.auth.onAuthStateChange((event, session) => {
-    if (event === 'TOKEN_REFRESHED' && !session) {
-      void c.auth.signOut({ scope: 'local' });
-    }
-  });
+  // Auth error recovery is handled entirely by AuthContext.onAuthStateChange.
+  // A global TOKEN_REFRESHED handler here would race with AuthContext and cause
+  // spurious sign-outs during normal token refresh cycles.
 
   return c;
 }
