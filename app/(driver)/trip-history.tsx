@@ -12,9 +12,15 @@ import {
     useDriverThemeColors,
 } from "@/contexts/DriverThemeContext";
 import { useDriverAvatarUri } from "@/lib/avatarUpload";
+import {
+  humanizeAssignerDisplayName,
+  resolveAssignerUserId,
+} from "@/lib/driverAssignerDisplay";
 import { isAggregateTrip, tripEarningsForDriver } from "@/lib/driverUtils";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { formatLedgerDateTime, formatTime } from "@/lib/format";
+import { supabase } from "@/lib/supabase";
+import { getLatestAssignmentAuditByTripIds } from "@/features/trips/services/trip-assignment-audit.service";
 import * as driversService from "@/services/driversService";
 import * as tripsService from "@/services/tripsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -122,6 +128,13 @@ function isPickupProgressStatus(status: string) {
 function isAtDropStatus(status: string) {
   const s = (status || "").toLowerCase();
   return s === "at_drop";
+}
+
+const UUID_V4_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function normalizeAssignerName(raw: unknown): string | null {
+  return humanizeAssignerDisplayName(String(raw ?? ""));
 }
 
 function getTripStageBadgeLabel(trip: tripsService.TripRow): string {
@@ -411,6 +424,15 @@ export default function DriverTripsScreen() {
   const { avatarUri } = useDriverAvatarUri();
   const [_driver, setDriver] = useState<driversService.DriverRow | null>(null);
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
+  const [assignmentActorByTripId, setAssignmentActorByTripId] = useState<
+    Record<string, string>
+  >({});
+  const [assignerNamesByUserId, setAssignerNamesByUserId] = useState<
+    Record<string, string>
+  >({});
+  const [assignerDisplayByTripId, setAssignerDisplayByTripId] = useState<
+    Record<string, string>
+  >({});
   const [loading, setLoading] = useState(true);
   const [_refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
@@ -477,6 +499,120 @@ export default function DriverTripsScreen() {
     return () => sub.remove();
   }, [profile?.uid, fetch]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadAssignmentActors = async () => {
+      const tripIds = trips
+        .map((trip) => String(trip.id ?? "").trim())
+        .filter((id) => id.length > 0);
+      if (tripIds.length === 0) {
+        if (!cancelled) setAssignmentActorByTripId({});
+        return;
+      }
+      const { byTripId } = await getLatestAssignmentAuditByTripIds(tripIds);
+      if (cancelled) return;
+      const next: Record<string, string> = {};
+      byTripId.forEach((value, key) => {
+        const actorId = String(value.changed_by ?? "").trim();
+        if (actorId) next[key] = actorId;
+      });
+      setAssignmentActorByTripId(next);
+    };
+    void loadAssignmentActors();
+    return () => {
+      cancelled = true;
+    };
+  }, [trips]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadAssignerSources = async () => {
+      const tripIds = trips
+        .map((trip) => String(trip.id ?? "").trim())
+        .filter((id) => id.length > 0);
+      if (tripIds.length === 0) {
+        if (!cancelled) {
+          setAssignerNamesByUserId({});
+          setAssignerDisplayByTripId({});
+        }
+        return;
+      }
+
+      const { data: assignerRpcRows, error: assignerRpcError } = await supabase().rpc(
+        "get_trip_assigner_displays_for_driver",
+        { p_trip_ids: tripIds },
+      );
+      if (!cancelled && !assignerRpcError && Array.isArray(assignerRpcRows)) {
+        const byTrip: Record<string, string> = {};
+        for (const row of assignerRpcRows as Array<{
+          trip_id?: string;
+          display_name?: string | null;
+        }>) {
+          const tid = row.trip_id != null ? String(row.trip_id) : "";
+          const dn = normalizeAssignerName(row.display_name ?? "");
+          if (tid && dn) byTrip[tid] = dn;
+        }
+        setAssignerDisplayByTripId(byTrip);
+      }
+
+      const userIds = Array.from(
+        new Set(
+          trips
+            .map((trip) => resolveAssignerUserId(trip, assignmentActorByTripId))
+            .filter((id) => id.length > 0),
+        ),
+      );
+      if (userIds.length === 0) {
+        if (!cancelled) setAssignerNamesByUserId({});
+        return;
+      }
+      const { data, error } = await supabase()
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", userIds);
+      if (!cancelled && !error) {
+        const byId: Record<string, string> = {};
+        for (const row of
+          (data ?? []) as Array<{
+            id: string;
+            full_name?: string | null;
+            email?: string | null;
+          }>) {
+          const fallbackEmailName =
+            (row.email ?? "").trim().split("@")[0]?.trim() || "Dispatcher";
+          byId[row.id] = (row.full_name ?? "").trim() || fallbackEmailName;
+        }
+        setAssignerNamesByUserId(byId);
+      }
+    };
+    void loadAssignerSources();
+    return () => {
+      cancelled = true;
+    };
+  }, [trips, assignmentActorByTripId]);
+
+  const assignerByTripId = useMemo(() => {
+    const byTrip: Record<string, string> = {};
+    for (const trip of trips) {
+      const tripMeta = trip as tripsService.TripRow &
+        Record<string, string | number | boolean | null | undefined>;
+      const tid = String(trip.id ?? "").trim();
+      if (!tid) continue;
+      const fromRpc = normalizeAssignerName(assignerDisplayByTripId[tid] ?? "");
+      const fromTrip =
+        normalizeAssignerName(tripMeta.assigned_by_name) ??
+        normalizeAssignerName(tripMeta.assigned_by_user_name) ??
+        normalizeAssignerName(tripMeta.dispatcher_name) ??
+        normalizeAssignerName(tripMeta.created_by_name);
+      const assignerUserId = resolveAssignerUserId(trip, assignmentActorByTripId).trim();
+      const fromProfiles = normalizeAssignerName(
+        assignerNamesByUserId[assignerUserId] ?? "",
+      );
+      byTrip[tid] = fromRpc ?? fromTrip ?? fromProfiles ?? "Fleet dispatcher";
+    }
+    return byTrip;
+  }, [trips, assignerDisplayByTripId, assignmentActorByTripId, assignerNamesByUserId]);
+
   const getEarning = (trip: tripsService.TripRow) => {
     const amount = tripEarningsForDriver(trip);
     if (amount <= 0) return isAggregateTrip(trip) ? "SALARY" : "—";
@@ -503,6 +639,13 @@ export default function DriverTripsScreen() {
   const selectedTripDropParts = useMemo(
     () => splitLocationPrimarySecondary(selectedTrip?.drop_location),
     [selectedTrip?.drop_location],
+  );
+  const selectedTripAssigner = useMemo(
+    () =>
+      selectedTrip
+        ? assignerByTripId[String(selectedTrip.id)] ?? "Fleet dispatcher"
+        : "Fleet dispatcher",
+    [selectedTrip, assignerByTripId],
   );
   const filteredTrips = useMemo(() => {
     let list = [...trips];
@@ -553,6 +696,8 @@ export default function DriverTripsScreen() {
     const pickupParts = splitLocationPrimarySecondary(item.pickup_area);
     const dropParts = splitLocationPrimarySecondary(item.drop_location);
     const corridorHint = [pickupParts.secondary, dropParts.secondary].filter(Boolean).join(" · ");
+    const assignerDisplay =
+      assignerByTripId[String(item.id)] ?? "Fleet dispatcher";
     return (
       <TouchableOpacity
         style={[
@@ -618,6 +763,12 @@ export default function DriverTripsScreen() {
                   {corridorHint}
                 </Text>
               ) : null}
+              <Text
+                style={[styles.cardAssignedByLine, { color: colors.textMuted }]}
+                numberOfLines={1}
+              >
+                Assigned by {assignerDisplay}
+              </Text>
             </View>
             <View
               style={[
@@ -1122,6 +1273,13 @@ export default function DriverTripsScreen() {
                           </Text>
                         </View>
                       </View>
+                    </View>
+                    <View style={styles.tdHeroAssignerRow}>
+                      <ShieldCheck size={14} color={Theme.driverPrimary} />
+                      <Text style={styles.tdHeroAssignerLabel}>Assigned by</Text>
+                      <Text style={styles.tdHeroAssignerValue} numberOfLines={1}>
+                        {selectedTripAssigner}
+                      </Text>
                     </View>
                   </View>
                   <View style={[styles.tdHeroAccentBar, { backgroundColor: colors.emerald }]} />
@@ -1826,6 +1984,13 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     opacity: 0.62,
   },
+  cardAssignedByLine: {
+    marginTop: 6,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    opacity: 0.9,
+  },
   badgeRef: {
     paddingHorizontal: 14,
     paddingVertical: 7,
@@ -2123,6 +2288,29 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#ffffff",
     letterSpacing: 0.5,
+  },
+  tdHeroAssignerRow: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(255,255,255,0.16)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  tdHeroAssignerLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "rgba(148,163,184,0.95)",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+  },
+  tdHeroAssignerValue: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#ffffff",
   },
   tdHeroAccentBar: {
     position: "absolute",
