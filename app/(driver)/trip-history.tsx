@@ -1,30 +1,32 @@
+import {
+    driverBodyPrimary,
+    driverBodySecondary,
+} from "@/constants/DriverTypography";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
-import {
-  driverBodyPrimary,
-  driverBodySecondary,
-} from "@/constants/DriverTypography";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDriverAvatar } from "@/contexts/DriverAvatarContext";
 import {
     useDriverTheme,
     useDriverThemeColors,
 } from "@/contexts/DriverThemeContext";
+import { getLatestAssignmentAuditByTripIds } from "@/features/trips/services/trip-assignment-audit.service";
 import { useDriverAvatarUri } from "@/lib/avatarUpload";
 import {
-  humanizeAssignerDisplayName,
-  resolveAssignerUserId,
+    humanizeAssignerDisplayName,
+    resolveAssignerUserId,
 } from "@/lib/driverAssignerDisplay";
 import { isAggregateTrip, tripEarningsForDriver } from "@/lib/driverUtils";
-import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { formatLedgerDateTime, formatTime } from "@/lib/format";
+import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { supabase } from "@/lib/supabase";
-import { getLatestAssignmentAuditByTripIds } from "@/features/trips/services/trip-assignment-audit.service";
 import * as driversService from "@/services/driversService";
 import * as tripsService from "@/services/tripsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import {
     ArrowDownToLine,
     Banknote,
@@ -44,8 +46,6 @@ import {
     Sparkles,
     Wallet,
 } from "lucide-react-native";
-import { useFocusEffect } from "@react-navigation/native";
-import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
     AppState,

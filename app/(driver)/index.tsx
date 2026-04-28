@@ -1543,8 +1543,8 @@ export default function DriverRadarScreen() {
     const fromList = incomingNotificationsWithMeta.find(
       (item) => item.trip.id === effectiveFirstIncoming.id,
     );
-    if (fromList?.assignedByName?.trim())
-      return fromList.assignedByName.trim();
+    if (fromList?.assignerPersonDisplay?.trim())
+      return fromList.assignerPersonDisplay.trim();
     return buildAssignerDisplayForTrip(
       effectiveFirstIncoming,
       invites,
@@ -1555,7 +1555,7 @@ export default function DriverRadarScreen() {
         assignerDisplayByTripId,
         organizationNamesById,
       },
-    ).assignedByName;
+    ).assignerPersonDisplay;
   }, [
     effectiveFirstIncoming,
     incomingNotificationsWithMeta,
