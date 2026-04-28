@@ -89,6 +89,16 @@ function formatAmount(value: number): string {
   })}`;
 }
 
+function formatCompactAmount(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1000) {
+    const k = value / 1000;
+    const rounded = Number.isInteger(k) ? k.toFixed(0) : k.toFixed(1);
+    return `₹${rounded}k`;
+  }
+  return formatAmount(value);
+}
+
 function AnimatedFinanceCategoryCard({
   label,
   value,
@@ -356,7 +366,10 @@ export function FinanceSummarySection({
         <View style={styles.financeCardsGrid}>
           <Pressable
             onPress={() => onTabPress("cash")}
-            style={styles.financeBalanceCard}
+            style={[
+              styles.financeBalanceCard,
+              desktopParity && styles.financeBalanceCardDesktop,
+            ]}
           >
             <View style={styles.financeBalanceDecorIconWrap}>
               <FontAwesome
@@ -481,6 +494,16 @@ export function FinanceSummarySection({
           ]}
         >
           {[
+            {
+              id: "cash" as FinanceSubTab,
+              label: "Cash",
+              value: formatCompactAmount(auditedNet),
+              icon: "money",
+              gradient: [
+                Theme.financeCardCashFrom,
+                Theme.financeCardCashTo,
+              ] as const,
+            },
             {
               id: "customers" as FinanceSubTab,
               label: "Client Revenue",

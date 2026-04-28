@@ -47,6 +47,16 @@ export const styles = StyleSheet.create({
     overflow: "hidden",
     position: "relative",
   },
+  financeBalanceCardDesktop: {
+    ...Platform.select({
+      web: {
+        minHeight: 236,
+        paddingHorizontal: 24,
+        paddingVertical: 20,
+      } as any,
+      default: {},
+    }),
+  },
   financeBalanceDecorIconWrap: {
     position: "absolute",
     right: -18,
@@ -218,8 +228,8 @@ export const styles = StyleSheet.create({
       web: {
         flex: 1,
         minWidth: 0,
-        height: 236,
-        borderRadius: 24,
+        height: 170,
+        borderRadius: 20,
       } as any,
       default: {},
     }),
