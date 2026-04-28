@@ -785,7 +785,7 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     position: 'relative',
   },
-  gridAvatarText: { fontSize: 16, fontWeight: '500', letterSpacing: 0, color: '#6B7280' },
+  gridAvatarText: { fontSize: 13, fontWeight: '400', letterSpacing: 0.24, color: '#6B7280' },
   gridZapDot: {
     position: 'absolute',
     bottom: 2,
@@ -834,7 +834,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     position: 'relative',
   },
-  listAvatarText: { fontSize: 14, fontWeight: '500', letterSpacing: 0, color: '#6B7280' },
+  listAvatarText: { fontSize: 11, fontWeight: '400', letterSpacing: 0.2, color: '#6B7280' },
   listZapDot: {
     position: 'absolute',
     bottom: -2,

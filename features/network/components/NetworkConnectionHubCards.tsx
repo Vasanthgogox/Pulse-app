@@ -655,7 +655,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#EEF2F7",
   },
-  gridAvatarTxt: { fontSize: 14, fontWeight: "500", letterSpacing: 0.04, color: "#6B7280" },
+  gridAvatarTxt: { fontSize: 11, fontWeight: "400", letterSpacing: 0.2, color: "#6B7280" },
   gridOnlineDot: {
     position: "absolute",
     right: 0,
