@@ -51,6 +51,11 @@ export default function SignIn() {
     if (typeof window === 'undefined') return 1280;
     return window.innerWidth || 1280;
   });
+  const [webHasFinePointer, setWebHasFinePointer] = useState<boolean>(() => {
+    if (Platform.OS !== 'web') return false;
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
+    return window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+  });
 
   const [screen, setScreen] = useState<ScreenState>(
     Platform.OS === 'web' && !params.direct ? 'LANDING' : 'SIGNIN'
@@ -70,13 +75,29 @@ export default function SignIn() {
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-    const handleResize = () => setWebViewportWidth(window.innerWidth || 1280);
+    const updatePointerMode = () => {
+      if (typeof window.matchMedia !== 'function') {
+        setWebHasFinePointer(true);
+        return;
+      }
+      setWebHasFinePointer(window.matchMedia('(hover: hover) and (pointer: fine)').matches);
+    };
+    const handleResize = () => {
+      setWebViewportWidth(window.innerWidth || 1280);
+      updatePointerMode();
+    };
     window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
     handleResize();
-    return () => window.removeEventListener('resize', handleResize);
+    updatePointerMode();
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
   }, []);
 
-  const isDesktop = Platform.OS === 'web' ? webViewportWidth >= 1024 : false;
+  // Keep mobile browsers in stacked mode even when they report wider CSS widths.
+  const isDesktop = Platform.OS === 'web' ? webViewportWidth >= 1024 && webHasFinePointer : false;
 
   const currentLanguageLabel =
     localeOptions.find((o) => o.value === locale)?.labelNative ??
