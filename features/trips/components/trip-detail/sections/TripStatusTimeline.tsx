@@ -37,7 +37,7 @@ const STAGES: { key: TripStageKey; short: string; full: string }[] = [
 ];
 
 /** Map raw trip.status to the closest TripStageKey */
-export function statusToStageIndex(status: string): number {
+export function statusToStageIndex(status: string, hasStarted = false): number {
   const s = (status ?? "").toLowerCase();
   if (s === "pod_received" || s === "pod received") return 7;
   if (s === "pod_pending" || s === "pod pending") return 6;
@@ -50,7 +50,8 @@ export function statusToStageIndex(status: string): number {
     s === "at_drop"
   )
     return 4;
-  if (s === "in_progress" || s === "in_transit" || s === "intransit") return 3;
+  if (s === "in_progress") return hasStarted ? 3 : 2;
+  if (s === "in_transit" || s === "intransit" || s === "transit") return 3;
   if (s === "s_out" || s === "source_out" || s === "picked_up" || s === "dispatched")
     return 2;
   if (s === "s_in" || s === "source_in") return 1;
@@ -60,13 +61,75 @@ export function statusToStageIndex(status: string): number {
 
 /** Merge coarse trip timestamps into stage index so the 4-segment bar reflects reality. */
 function effectiveJourneyProgressIndex(trip: TripRow): number {
-  let i = statusToStageIndex(trip.status ?? "");
+  let i = statusToStageIndex(trip.status ?? "", !!trip.started_at);
   if (trip.completed_at) i = Math.max(i, 7);
   if (trip.started_at) i = Math.max(i, 3);
   if (trip.pickup_date && (trip.driver_id || trip.vehicle_display_number?.trim())) {
     i = Math.max(i, 1);
   }
   return Math.min(i, 7);
+}
+
+/** Driver flow stages compressed into four visible journey segments. */
+function getJourneySegmentProgress(trip: TripRow): 0 | 1 | 2 | 3 | 4 {
+  const s = (trip.status ?? "").toLowerCase();
+  const createdMs = new Date(trip.created_at ?? "").getTime();
+  const updatedMs = new Date(trip.updated_at ?? "").getTime();
+  const hasPostCreateUpdate =
+    Number.isFinite(createdMs) &&
+    Number.isFinite(updatedMs) &&
+    updatedMs - createdMs > 1000;
+  const acceptedByDriver =
+    trip.status_updated_role === "driver" ||
+    Number(trip.status_revision ?? 0) > 0 ||
+    hasPostCreateUpdate;
+  if (s === "completed" || s === "delivered" || s === "done" || !!trip.completed_at) {
+    return 4;
+  }
+  if (s === "arrived" || s === "at_destination" || s === "at_drop") return 3;
+  if (s === "in_transit" || s === "intransit" || s === "transit") return 3;
+  if (s === "in_progress" && trip.started_at) return 3;
+  if (
+    s === "in_progress" ||
+    s === "picked_up" ||
+    s === "pickup" ||
+    s === "at_pickup" ||
+    s === "dispatched" ||
+    s === "confirmed_arrival"
+  ) {
+    return 2;
+  }
+  if (s === "assigned") return acceptedByDriver ? 1 : 0;
+  if (s === "draft" || s === "pending_acceptance") return 0;
+  return 0;
+}
+
+function getJourneyStageLabel(trip: TripRow): string {
+  const s = (trip.status ?? "").toLowerCase();
+  if (s === "completed" || s === "delivered" || s === "done" || !!trip.completed_at) {
+    return "Completed";
+  }
+  if (s === "arrived" || s === "at_destination" || s === "at_drop") {
+    return "At Drop-off";
+  }
+  if (s === "in_transit" || s === "intransit" || s === "transit") {
+    return "In Transit";
+  }
+  if (s === "in_progress" && trip.started_at) return "In Transit";
+  if (
+    s === "in_progress" ||
+    s === "picked_up" ||
+    s === "pickup" ||
+    s === "at_pickup" ||
+    s === "dispatched" ||
+    s === "confirmed_arrival"
+  ) {
+    return "At Pickup";
+  }
+  if (s === "assigned" || s === "draft" || s === "pending_acceptance") {
+    return "Head to Pickup";
+  }
+  return "Assigned";
 }
 
 const PROGRESS_BY_INDEX: number[] = [6, 14, 22, 36, 44, 58, 78, 100];
@@ -109,8 +172,10 @@ export function TripStatusTimeline({
   driverSummaryText,
   onOpenMaps,
 }: TripStatusTimelineProps) {
-  const activeIdx = statusToStageIndex(trip.status ?? "");
+  const activeIdx = statusToStageIndex(trip.status ?? "", !!trip.started_at);
   const journeyIdx = effectiveJourneyProgressIndex(trip);
+  const journeySegmentProgress = getJourneySegmentProgress(trip);
+  const journeyStageLabel = getJourneyStageLabel(trip);
   const progress = PROGRESS_BY_INDEX[activeIdx] ?? 0;
   const currentStage = STAGES[activeIdx];
 
@@ -119,11 +184,11 @@ export function TripStatusTimeline({
 
   /** Four macro segments: pickup (0–1), linehaul (2–3), destination (4–5), POD (6–7). */
   const segmentFilled = (segmentIndex: number) => {
-    const idx = variant === "journey" ? journeyIdx : activeIdx;
+    if (variant === "journey") return journeySegmentProgress > segmentIndex;
+    const idx = activeIdx;
     if (segmentIndex === 3) return idx >= 7;
     return idx >= segmentIndex * 2 + 2;
   };
-  const firstMacroComplete = segmentFilled(0);
 
   const tsMap: Partial<Record<TripStageKey, TripStageTimestamp>> = {};
   for (const ts of stageTimestamps) tsMap[ts.stageKey] = ts;
@@ -179,7 +244,7 @@ export function TripStatusTimeline({
           </View>
           <View style={styles.journeyFooterRow}>
             <Text style={styles.journeyFooterLeft}>
-              {firstMacroComplete ? "✓ completed" : ""}
+              {journeyStageLabel}
             </Text>
             <Text style={styles.journeyFooterRight} numberOfLines={1}>
               {driverSummaryText?.trim() || ""}

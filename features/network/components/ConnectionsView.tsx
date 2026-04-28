@@ -4,15 +4,15 @@
  */
 import Theme from '@/constants/Theme';
 import {
-  averageScore,
-  getRatingsForDrivers,
-  getRatingsForSuppliers,
-} from '@/features/ratings';
-import {
   HubConnectionListCard,
   type HubConnectionItem,
 } from "@/features/network/components/NetworkConnectionHubCards";
 import { runConnectionInvite } from "@/features/network/utils/connectionInvite.util";
+import {
+  averageScore,
+  getRatingsForDrivers,
+  getRatingsForSuppliers,
+} from '@/features/ratings';
 import { useClientsQuery, useDriversQuery, useSuppliersQuery } from '@/lib/queries';
 import { getInitials } from '@/lib/stringUtils';
 import {
@@ -61,6 +61,21 @@ function seedColor(id: string): string {
   return COVER_TOKENS[h];
 }
 
+function subtleAvatarTone(_seed: string): { bg: string; border: string; text: string; dot: string } {
+  return {
+    bg: "#F8FAFC",
+    border: "#EEF2F7",
+    text: "#64748B",
+    dot: "#94A3B8",
+  };
+}
+
+function roleTone(role: ConnectedOrg["role"]) {
+  if (role === "CLIENT") return { bg: Theme.networkClientTintBg, text: Theme.primary };
+  if (role === "DRIVER") return { bg: Theme.networkDriverTintBg, text: Theme.warning };
+  return { bg: Theme.networkSupplierTintBg, text: Theme.positive };
+}
+
 export interface ConnectedOrg {
   id: string;
   name: string;
@@ -79,9 +94,9 @@ export interface ConnectedOrg {
 function GridCard({ item }: { item: ConnectedOrg }) {
   const scale = React.useRef(new Animated.Value(1)).current;
   const color = seedColor(item.id);
-  const isClient = item.role === 'CLIENT';
-  const isDriver = item.role === 'DRIVER';
-  const roleSub = isClient ? 'Client' : isDriver ? 'Driver' : 'Supplier';
+  const avatarTone = subtleAvatarTone(item.id);
+  const tone = roleTone(item.role);
+  const roleSub = item.role === "CLIENT" ? "Client" : item.role === "DRIVER" ? "Driver" : "Supplier";
 
   const onIn = () => Animated.spring(scale, { toValue: 0.98, useNativeDriver: true }).start();
   const onOut = () => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
@@ -97,8 +112,8 @@ function GridCard({ item }: { item: ConnectedOrg }) {
           ]}
         />
         <View style={styles.gridAvatarOverlap}>
-          <View style={[styles.gridAvatar, { backgroundColor: color + '18', borderColor: Theme.screenBackground }]}>
-            <Text style={[styles.gridAvatarText, { color }]}>{getInitials(item.name)}</Text>
+          <View style={[styles.gridAvatar, { backgroundColor: avatarTone.bg, borderColor: avatarTone.border }]}>
+            <Text style={[styles.gridAvatarText, { color: avatarTone.text }]}>{getInitials(item.name)}</Text>
             {item.is_integrated && (
               <View style={styles.gridZapDot}>
                 <Zap size={7} color="#fff" fill="#fff" />
@@ -112,10 +127,10 @@ function GridCard({ item }: { item: ConnectedOrg }) {
           </Text>
           <Text style={styles.gridHeadline} numberOfLines={2}>
             {roleSub}
-            {item.is_integrated ? ' · On Q' : ' · Not on app'}
+            {item.is_integrated ? ' · on Pulse' : ' · Not on app'}
           </Text>
           <View style={styles.gridMutualRow}>
-            <View style={[styles.gridMiniDot, { backgroundColor: color }]} />
+            <View style={[styles.gridMiniDot, { backgroundColor: avatarTone.dot }]} />
             <Text style={styles.gridMutualText} numberOfLines={1}>
               In your Q network
             </Text>
@@ -124,11 +139,7 @@ function GridCard({ item }: { item: ConnectedOrg }) {
             style={[
               styles.gridRoleBadge,
               {
-                backgroundColor: isClient
-                  ? 'rgba(26, 35, 126, 0.1)'
-                  : isDriver
-                    ? 'rgba(180, 83, 9, 0.12)'
-                    : 'rgba(21, 128, 61, 0.1)',
+                backgroundColor: tone.bg,
                 alignSelf: 'center',
               },
             ]}
@@ -137,7 +148,7 @@ function GridCard({ item }: { item: ConnectedOrg }) {
               style={[
                 styles.gridRoleText,
                 {
-                  color: isClient ? Theme.primary : isDriver ? Theme.warning : Theme.positive,
+                  color: tone.text,
                 },
               ]}
             >
@@ -146,7 +157,7 @@ function GridCard({ item }: { item: ConnectedOrg }) {
           </View>
         </View>
         <Pressable style={styles.gridConnectOutline} hitSlop={8}>
-          <MessageCircle size={15} color={Theme.teslaRed} strokeWidth={2.2} />
+          <MessageCircle size={15} color={Theme.primary} strokeWidth={2.2} />
           <Text style={styles.gridConnectOutlineText}>Message</Text>
         </Pressable>
       </Animated.View>
@@ -158,15 +169,8 @@ function GridCard({ item }: { item: ConnectedOrg }) {
 
 function ListCard({ item }: { item: ConnectedOrg }) {
   const scale = React.useRef(new Animated.Value(1)).current;
-  const color = seedColor(item.id);
-  const isClient = item.role === 'CLIENT';
-  const isDriver = item.role === 'DRIVER';
-  const roleBg = isClient
-    ? 'rgba(26, 35, 126, 0.1)'
-    : isDriver
-      ? 'rgba(180, 83, 9, 0.12)'
-      : 'rgba(21, 128, 61, 0.1)';
-  const roleColor = isClient ? Theme.primary : isDriver ? Theme.warning : Theme.positive;
+  const avatarTone = subtleAvatarTone(item.id);
+  const tone = roleTone(item.role);
 
   const onIn = () => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start();
   const onOut = () => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
@@ -174,8 +178,8 @@ function ListCard({ item }: { item: ConnectedOrg }) {
   return (
     <Pressable onPressIn={onIn} onPressOut={onOut}>
       <Animated.View style={[styles.listCard, { transform: [{ scale }] }]}>
-        <View style={[styles.listAvatar, { backgroundColor: color + '18', borderColor: color + '30' }]}>
-          <Text style={[styles.listAvatarText, { color }]}>{getInitials(item.name)}</Text>
+        <View style={[styles.listAvatar, { backgroundColor: avatarTone.bg, borderColor: avatarTone.border }]}>
+          <Text style={[styles.listAvatarText, { color: avatarTone.text }]}>{getInitials(item.name)}</Text>
           {item.is_integrated && (
             <View style={styles.listZapDot}>
               <Zap size={7} color="#fff" fill="#fff" />
@@ -189,10 +193,10 @@ function ListCard({ item }: { item: ConnectedOrg }) {
             <View
               style={[
                 styles.roleBadge,
-                { backgroundColor: roleBg },
+                { backgroundColor: tone.bg },
               ]}
             >
-              <Text style={[styles.roleText, { color: roleColor }]}>{item.role}</Text>
+              <Text style={[styles.roleText, { color: tone.text }]}>{item.role}</Text>
             </View>
             {item.is_integrated && (
               <View style={styles.appBadge}>
@@ -204,7 +208,7 @@ function ListCard({ item }: { item: ConnectedOrg }) {
         </View>
 
         <Pressable style={styles.listMsgBtn} hitSlop={10}>
-          <MessageCircle size={17} color={Theme.teslaRed} strokeWidth={2} />
+          <MessageCircle size={17} color={Theme.primary} strokeWidth={2} />
         </Pressable>
       </Animated.View>
     </Pressable>
@@ -380,9 +384,9 @@ export function ConnectionsView({
 
     setInvitingId(item.id);
     try {
-      await runConnectionInvite(orgId, item, () =>
-        Promise.all([clientsQ.refetch(), suppliersQ.refetch()]),
-      );
+      await runConnectionInvite(orgId, item, async () => {
+        await Promise.all([clientsQ.refetch(), suppliersQ.refetch()]);
+      });
     } finally {
       setInvitingId(null);
     }
@@ -608,7 +612,7 @@ function EmptyState() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Theme.surface },
+  container: { flex: 1, backgroundColor: Theme.networkPageBackground },
   containerEmbedded: { flex: 0, flexGrow: 0 },
   embeddedLoading: {
     minHeight: 120,
@@ -644,11 +648,11 @@ const styles = StyleSheet.create({
 
   statsBar: {
     flexDirection: 'row',
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.networkCardBackground,
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.surfaceBorder,
+    borderBottomColor: Theme.networkCardBorder,
   },
   statItem: { flex: 1, alignItems: 'center', gap: 2 },
   statValue: { fontSize: 22, fontWeight: '900', color: Theme.textPrimary, letterSpacing: -0.5 },
@@ -666,10 +670,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.networkCardBackground,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderMedium,
+    borderColor: Theme.networkCardBorder,
     paddingHorizontal: 14,
     paddingVertical: 11,
   },
@@ -684,18 +688,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  viewToggleActive: { backgroundColor: Theme.darkBackground, borderColor: Theme.darkBackground },
+  viewToggleActive: { backgroundColor: Theme.primary, borderColor: Theme.primary },
 
   filterRow: { flexDirection: 'row', paddingHorizontal: 14, paddingBottom: 12, gap: 8 },
   filterTab: {
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 8,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.networkCardBackground,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderMedium,
+    borderColor: Theme.networkCardBorder,
   },
-  filterTabActive: { backgroundColor: Theme.teslaRed, borderColor: Theme.teslaRed },
+  filterTabActive: { backgroundColor: Theme.primary, borderColor: Theme.primary },
   filterTabText: { fontSize: 11, fontWeight: '800', color: Theme.textSecondary, letterSpacing: 0.5 },
   filterTabTextActive: { color: Theme.textOnPrimary },
 
@@ -704,11 +708,11 @@ const styles = StyleSheet.create({
   gridRow: { flexDirection: "row", gap: 0, alignItems: "flex-start" },
   gridCardWrap: { flex: 1, padding: 4, minWidth: 0 },
   gridCard: {
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.networkCardBackground,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.surfaceBorder,
-    shadowColor: '#000',
+    borderColor: Theme.networkCardBorder,
+    shadowColor: Theme.shadow,
     shadowOpacity: 0.04,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 1 },
@@ -728,7 +732,7 @@ const styles = StyleSheet.create({
   gridBody: { paddingHorizontal: 12, paddingTop: 4, alignItems: 'center' },
   gridHeadline: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '500',
     color: Theme.textSecondary,
     textAlign: 'center',
     lineHeight: 14,
@@ -742,7 +746,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   gridMiniDot: { width: 6, height: 6, borderRadius: 3 },
-  gridMutualText: { fontSize: 9, fontWeight: '600', color: Theme.textSecondary, flex: 1 },
+  gridMutualText: { fontSize: 9, fontWeight: '500', color: Theme.textSecondary, flex: 1 },
   gridConnectOutline: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -753,9 +757,9 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 20,
     borderWidth: 1.5,
-    borderColor: Theme.teslaRed,
+    borderColor: Theme.primary,
   },
-  gridConnectOutlineText: { fontSize: 11, fontWeight: '800', color: Theme.teslaRed, letterSpacing: 0.2 },
+  gridConnectOutlineText: { fontSize: 11, fontWeight: '600', color: Theme.primary, letterSpacing: 0.1 },
   onlineIndicator: {
     position: 'absolute',
     top: 10,
@@ -771,7 +775,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     marginTop: 8,
   },
-  gridRoleText: { fontSize: 8, fontWeight: '900', letterSpacing: 0.5 },
+  gridRoleText: { fontSize: 8, fontWeight: '600', letterSpacing: 0.25 },
   gridAvatar: {
     width: 64,
     height: 64,
@@ -781,7 +785,7 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     position: 'relative',
   },
-  gridAvatarText: { fontSize: 16, fontWeight: '900', letterSpacing: -0.5 },
+  gridAvatarText: { fontSize: 16, fontWeight: '500', letterSpacing: 0, color: '#6B7280' },
   gridZapDot: {
     position: 'absolute',
     bottom: 2,
@@ -797,11 +801,12 @@ const styles = StyleSheet.create({
   },
   gridName: {
     fontSize: 12,
-    fontWeight: '800',
-    color: Theme.textPrimary,
+    fontWeight: '500',
+    color: '#475569',
     textAlign: 'center',
     marginTop: 2,
     lineHeight: 16,
+    letterSpacing: 0.1,
   },
 
   // List layout
@@ -810,12 +815,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.networkCardBackground,
     borderRadius: 16,
     padding: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.surfaceBorder,
-    shadowColor: '#000',
+    borderColor: Theme.networkCardBorder,
+    shadowColor: Theme.shadow,
     shadowOpacity: 0.03,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 1 },
@@ -829,7 +834,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     position: 'relative',
   },
-  listAvatarText: { fontSize: 14, fontWeight: '900', letterSpacing: -0.5 },
+  listAvatarText: { fontSize: 14, fontWeight: '500', letterSpacing: 0, color: '#6B7280' },
   listZapDot: {
     position: 'absolute',
     bottom: -2,
@@ -844,10 +849,10 @@ const styles = StyleSheet.create({
     borderColor: Theme.screenBackground,
   },
   listInfo: { flex: 1, gap: 5 },
-  listName: { fontSize: 12, fontWeight: '900', color: Theme.textPrimary, letterSpacing: 0.3 },
+  listName: { fontSize: 12, fontWeight: '500', color: '#475569', letterSpacing: 0.08 },
   listBadges: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   roleBadge: { borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 },
-  roleText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
+  roleText: { fontSize: 9, fontWeight: '500', letterSpacing: 0.2 },
   appBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -857,14 +862,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 3,
   },
-  appBadgeText: { fontSize: 8, fontWeight: '900', color: Theme.positive, letterSpacing: 0.5 },
+  appBadgeText: { fontSize: 8, fontWeight: '600', color: Theme.positive, letterSpacing: 0.25 },
   listMsgBtn: {
     width: 40,
     height: 40,
     borderRadius: 11,
-    backgroundColor: 'rgba(232, 33, 39, 0.08)',
+    backgroundColor: Theme.networkMessageTintBg,
     borderWidth: 1,
-    borderColor: 'rgba(232, 33, 39, 0.2)',
+    borderColor: Theme.networkMessageTintBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },

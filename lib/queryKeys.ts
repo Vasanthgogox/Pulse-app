@@ -79,6 +79,9 @@ export const queryKeys = {
   salaryRequests: (orgId: string, status?: string) =>
     status ? (['q', 'salary-requests', orgId, status] as const) : (['q', 'salary-requests', orgId] as const),
 
+  /** Trip finance adjustments (revenue/cost registry) — invalidate org-wide after add/remove on a trip. */
+  tripFinanceAdjustmentsRoot: ['q', 'trip-finance-adjustments'] as const,
+
   driverOffers: (orgId: string) => ['q', 'driver-offers', orgId] as const,
 
   logPods: {
@@ -103,7 +106,20 @@ export const queryKeys = {
     myBid: (postId: string, orgId: string) => ['q', 'bids', 'mine', postId, orgId] as const,
   },
 
+  storyViews: {
+    forPost: (postId: string) => ['q', 'story-views', postId] as const,
+  },
+
   discover: {
     search: (orgId: string, search: string) => ['q', 'discover', orgId, search] as const,
+  },
+
+  orgMembers: {
+    all: (orgId: string) => ['q', 'org-members', orgId] as const,
+    list: (orgId: string) => ['q', 'org-members', orgId, 'list'] as const,
+  },
+
+  teamInvites: {
+    mine: () => ['q', 'team-invites', 'mine'] as const,
   },
 } as const;

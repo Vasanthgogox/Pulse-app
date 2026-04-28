@@ -8,8 +8,8 @@ import Theme from "@/constants/Theme";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import type { EntityListFilter } from "@/features/finance/components/TreasurySummaryCard";
 import { aggregateSuppliers, type FinancialRowData, type TripPartyMap } from "@/features/finance/aggregation";
-import type { DirectQuoteForAggregation, IndentForAggregation } from "@/features/finance/aggregation/types";
 import { getTripsByOrganization, type TripRow } from "@/features/trips";
+import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import { usePaginatedScroll } from "@/lib/usePaginatedScroll";
 import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
@@ -53,16 +53,6 @@ export interface SuppliersTabProps {
   transactions?: LedgerRowForSupplier[] | null;
   /** Trips where current org is the client (e.g. from getTripsWhereOrgIsClient); counted toward integrated supplier by trip owner. */
   tripsWhereOrgIsClient?: TripRow[];
-  /**
-   * Pre-trip indents for finance aggregation (pending/quoted/awarded status).
-   * Enables supplier due amounts before a trip row is created (Pass 5 in aggregateSuppliers).
-   */
-  indents?: IndentForAggregation[];
-  /**
-   * Accepted direct quotes on this org's indents (awarded, pre-deploy).
-   * Combined with indents to show supplier due amounts before trip creation.
-   */
-  directQuotes?: DirectQuoteForAggregation[];
   /** When true, parent is still loading entity data; show loading until ready. */
   parentLoading?: boolean;
   onTotals?: (totals: { totalIn: number; totalOut: number }) => void;
@@ -81,6 +71,8 @@ export interface SuppliersTabProps {
   refreshing?: boolean;
   onRefresh?: () => void;
   bottomInset?: number;
+  /** When set, payables match trip Adjustment Registry (cost adjustments). */
+  tripFinanceAdjustmentsByTripId?: Record<string, TripAdjustment[]>;
   /** Desktop finance parity: hide summary strip under hero/cards. */
   hideSummaryRow?: boolean;
 }
@@ -91,8 +83,6 @@ export function SuppliersTab({
   trips: tripsProp,
   transactions: transactionsProp,
   tripsWhereOrgIsClient: tripsWhereOrgIsClientProp,
-  indents: indentsProp,
-  directQuotes: directQuotesProp,
   parentLoading = false,
   onTotals,
   onRowSelect,
@@ -104,6 +94,7 @@ export function SuppliersTab({
   refreshing = false,
   onRefresh,
   bottomInset = 100,
+  tripFinanceAdjustmentsByTripId,
   hideSummaryRow = false,
 }: SuppliersTabProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
@@ -155,10 +146,16 @@ export function SuppliersTab({
       transactions,
       tripsWhereOrgIsClient,
       tripPartyMap,
-      indentsProp,
-      directQuotesProp,
+      tripFinanceAdjustmentsByTripId,
     );
-  }, [suppliers, trips, transactions, tripsWhereOrgIsClient, tripPartyMap, indentsProp, directQuotesProp]);
+  }, [
+    suppliers,
+    trips,
+    transactions,
+    tripsWhereOrgIsClient,
+    tripPartyMap,
+    tripFinanceAdjustmentsByTripId,
+  ]);
 
   const q = searchQuery.trim().toLowerCase();
   const filteredRows = useMemo(() => {

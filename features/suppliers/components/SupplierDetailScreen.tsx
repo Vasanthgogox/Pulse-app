@@ -1,24 +1,31 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { CounterpartyProfileSystemCard } from "@/components/CounterpartyProfileSystemCard";
 import { DatePresetPillBar } from "@/components/DatePresetPillBar";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
-import { PartyAvatar } from "@/components/PartyAvatar";
-import { CounterpartyProfileSystemCard } from "@/components/CounterpartyProfileSystemCard";
 import { FinanceFAB } from "@/components/FinanceFAB";
+import { PartyAvatar } from "@/components/PartyAvatar";
+import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
-  LedgerReportModal,
-  SharedLedgerContent,
-  getTransactionsByOrganization,
-  type LedgerEntry,
-  type LedgerRow,
-} from "@/features/finance";
-import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPeriod";
-import type { FinancePeriodFilter } from "@/features/finance/types";
+    getClientsByOrganization,
+    type ClientRow,
+} from "@/features/clients/services/clients.service";
 import { getDriversByOrganization, type DriverRow } from "@/features/drivers";
+import {
+    getTransactionsByOrganization,
+    LedgerReportModal,
+    SharedLedgerContent,
+    type LedgerEntry,
+    type LedgerRow,
+} from "@/features/finance";
 import { LedgerTransactionListView } from "@/features/finance/components/LedgerTransactionListView";
+import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPeriod";
+import { getTripSubcontracts } from "@/features/finance/services/tripSubcontracts.service";
+import type { FinancePeriodFilter } from "@/features/finance/types";
 import { allocateAmountsToLargestDueTrips } from "@/features/finance/utils/allocateToLargestDue";
 import { EditSupplierModal } from "@/features/suppliers/components/EditSupplierModal";
 import {
@@ -28,24 +35,20 @@ import {
     getTripsWhereOrgIsSupplier,
     type TripRow,
 } from "@/features/trips";
-import { getTripSubcontracts } from "@/features/finance/services/tripSubcontracts.service";
-import {
-  getClientsByOrganization,
-  type ClientRow,
-} from "@/features/clients/services/clients.service";
+import { adjustedCost } from "@/features/trips/services/tripAdjustments";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
+import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
     canAccessFinance,
     getCapabilitiesFromProfile,
 } from "@/lib/capabilities";
-import { formatINR, formatLedgerDate } from "@/lib/format";
 import { tripDayIso } from "@/lib/dateRangePresets";
+import { formatINR, formatLedgerDate } from "@/lib/format";
+import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
-import { getSignedAvatarUrl } from "@/lib/avatarUpload";
-import { getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import Layout from "@/constants/Layout";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -64,11 +67,10 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
 import {
     getLinkedOrgProfileForSupplier,
-    getSuppliersByOrganization,
     getSupplierDetails,
+    getSuppliersByOrganization,
     updateSupplier,
     type SupplierRow,
     type UpdateSupplierData,
@@ -129,6 +131,14 @@ export default function SupplierDetailScreen({
   const canAddTransaction = canAccessFinance(capabilities);
   const [supplier, setSupplier] = useState<SupplierRow | null>(null);
   const [trips, setTrips] = useState<TripRow[]>([]);
+  const tripIdsForFinanceAdj = useMemo(
+    () => trips.map((t) => String(t.id)).filter(Boolean),
+    [trips],
+  );
+  const { record: tripFinanceAdjRecord } = useTripFinanceAdjustmentsMap(
+    currentOrganization?.id ?? null,
+    tripIdsForFinanceAdj,
+  );
   const [transactions, setTransactions] = useState<LedgerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -372,7 +382,6 @@ export default function SupplierDetailScreen({
           [];
         const normId = (id: string | null | undefined) =>
           id == null ? "" : String(id).trim().toLowerCase();
-        const supplierNameKey = supplierDisplayName;
         const forSupplierTx = allTx.filter((tx) => {
           return (
             tx.contact_type === "supplier" &&
@@ -432,31 +441,10 @@ export default function SupplierDetailScreen({
     };
   }, [supplier?.linked_organization_id]);
 
-  const ledgerEntries: LedgerEntry[] = useMemo(() => {
-    const rows: LedgerEntry[] = transactions.map((tx) => {
-      const amountIn = Number(tx.amount_in ?? 0);
-      const amountOut = Number(tx.amount_out ?? 0);
-      const isIn = amountIn > 0;
-      const amount = isIn ? amountIn : amountOut;
-      const desc =
-        (tx.party_name || "—").trim() +
-        (tx.trip_number ? ` · ${tx.trip_number}` : "");
-      return {
-        id: tx.id,
-        desc: desc || "ENTRY",
-        date: formatLedgerDate(tx.transaction_date ?? tx.created_at ?? ""),
-        amount,
-        isCredit: false,
-      };
-    });
-    rows.sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0));
-    return rows;
-  }, [transactions]);
-
   const linkedOrgId = supplier?.linked_organization_id ?? null;
 
   const {
-    rows: ledgerProtocolRows,
+    rows: _ledgerProtocolRows,
     totalBilledConsolidated,
     totalPendingConsolidated,
     tripIdToDue,
@@ -497,9 +485,13 @@ export default function SupplierDetailScreen({
     const allocatedOutByTripId = allocateAmountsToLargestDueTrips(
       trips.map((t) => {
         const key = norm(t.id);
+        const base =
+          Number(t.supplier_rate ?? 0) || Number(t.client_price ?? 0);
+        const adj = tripFinanceAdjRecord[key] ?? [];
+        const sales = adjustedCost(base, adj);
         return {
           tripId: key,
-          sales: Number(t.supplier_rate ?? t.client_price ?? 0),
+          sales,
           paid: outByTripId[key] ?? 0,
         };
       }),
@@ -523,7 +515,10 @@ export default function SupplierDetailScreen({
     > = {};
     for (const t of trips) {
       const key = norm(t.id);
-      const sales = Number(t.supplier_rate ?? t.client_price ?? 0);
+      const base =
+        Number(t.supplier_rate ?? 0) || Number(t.client_price ?? 0);
+      const adj = tripFinanceAdjRecord[key] ?? [];
+      const sales = adjustedCost(base, adj);
       const paid = allocatedOutByTripId[key] ?? 0;
       const due = Math.max(0, sales - paid);
       const rawId = getTripDisplayNumber(t) || "—";
@@ -583,7 +578,10 @@ export default function SupplierDetailScreen({
     const tripIdToDue: Record<string, number> = {};
     for (const t of trips) {
       const key = norm(t.id);
-      const sales = Number(t.supplier_rate ?? t.client_price ?? 0);
+      const base =
+        Number(t.supplier_rate ?? 0) || Number(t.client_price ?? 0);
+      const adj = tripFinanceAdjRecord[key] ?? [];
+      const sales = adjustedCost(base, adj);
       const paid = allocatedOutByTripId[key] ?? 0;
       tripIdToDue[t.id] = Math.max(0, sales - paid);
     }
@@ -600,7 +598,7 @@ export default function SupplierDetailScreen({
       tripIdToDue,
       paidByTripId: allocatedOutByTripId,
     };
-  }, [trips, transactions, supplierId, linkedOrgId]);
+  }, [trips, transactions, supplierId, linkedOrgId, tripFinanceAdjRecord]);
 
   const tripDateOpts = useMemo(
     () => ({ customFrom: tripCustomFrom, customTo: tripCustomTo }),
@@ -619,7 +617,10 @@ export default function SupplierDetailScreen({
       id == null ? "" : String(id).trim().toLowerCase();
     return tripsForMissionTable.map((t) => {
       const key = norm(t.id);
-      const sales = Number(t.supplier_rate ?? t.client_price ?? 0);
+      const base =
+        Number(t.supplier_rate ?? 0) || Number(t.client_price ?? 0);
+      const adj = tripFinanceAdjRecord[key] ?? [];
+      const sales = adjustedCost(base, adj);
       const paid = paidByTripId[key] ?? 0;
       const due = tripIdToDue[t.id] ?? 0;
       return {
@@ -631,7 +632,7 @@ export default function SupplierDetailScreen({
         due,
       };
     });
-  }, [tripsForMissionTable, paidByTripId, tripIdToDue]);
+  }, [tripsForMissionTable, paidByTripId, tripIdToDue, tripFinanceAdjRecord]);
   const tripTransactionMetaById = useMemo(() => {
     const byTrip: Record<string, { count: number; lastTxnDate: string | null }> = {};
     for (const tx of transactions) {
@@ -692,10 +693,6 @@ export default function SupplierDetailScreen({
       })),
     [trips, supplierId],
   );
-
-  const handleExportLedger = () => {
-    Alert.alert(t("exportLedger"), t("exportComingSoon"));
-  };
 
   const triggerSuccess = useCallback((title = "NODE_SYNCED") => {
     setSuccessTitle(title);
@@ -874,8 +871,6 @@ export default function SupplierDetailScreen({
   const contractValue = totalBilledConsolidated;
   const paid = contractValue - totalPendingConsolidated;
   const due = totalPendingConsolidated;
-  const lockedPartyName = supplierName.trim() || t("supplier");
-
   const tabConfig = [
     { id: "trips" as const, label: "Trips" },
     { id: "cash" as const, label: "Cash Flow" },
@@ -1320,7 +1315,7 @@ export default function SupplierDetailScreen({
                 triggerSuccess("CONNECTION_REQUESTED");
               }}
               onInviteToApp={() => {
-                const message = `Join me on Q to sync our ledger and compare books with ${supplierName}. Download the Q app to get started.`;
+                const message = `Join me on Pulse to sync our ledger and compare books with ${supplierName}. Download the Q app to get started.`;
                 Share.share({ message, title: "Invite to Q" })
                   .then(() => {
                     // After sharing, show a friendlier message
@@ -1466,7 +1461,7 @@ export default function SupplierDetailScreen({
               <TouchableOpacity
                 style={styles.profileSecondaryBtn}
                 onPress={() => {
-                  const message = `Join me on Q to sync our ledger and compare books with ${supplierName}. Download the Q app to get started.`;
+                  const message = `Join me on Pulse to sync our ledger and compare books with ${supplierName}. Download the Q app to get started.`;
                   Share.share({ message, title: "Invite to Q" });
                 }}
                 activeOpacity={0.8}

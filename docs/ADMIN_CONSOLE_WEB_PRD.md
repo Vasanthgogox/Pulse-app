@@ -36,7 +36,7 @@ A **SaaS-style platform admin console** for Q: one web application with two laye
    - Finance ledger and reporting; network and shared-ledger disputes
    - AI/Ops governance and audit
 
-The console is a multi-tenant web app on Q’s shared Supabase backend. Platform-layer features are scoped to platform admins; tenant-layer features are scoped per organization and use the existing capability model.
+The console is a multi-tenant web app on Pulse’s shared Supabase backend. Platform-layer features are scoped to platform admins; tenant-layer features are scoped per organization and use the existing capability model.
 
 ### Who uses it
 

@@ -1,9 +1,9 @@
 /**
- * Recently added — avatars, role, status, and connect / On Q (matches network hub semantics).
+ * Recently added — avatars, role, status, and connect / on Pulse (matches network hub semantics).
  */
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { PartyAvatar } from "@/components/PartyAvatar";
 import type { ConnectedOrg } from "@/features/network/components/ConnectionsView";
 import { runConnectionInvite } from "@/features/network/utils/connectionInvite.util";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
@@ -34,7 +34,7 @@ function entityTypeForRole(role: ConnectedOrg["role"]): PartyEntityType {
 
 function statusSubline(item: ConnectedOrg): string {
   if (item.is_integrated) {
-    return "On Q · operational access";
+    return "on Pulse · operational access";
   }
   if (!item.phone?.trim()) {
     return "Phone required to invite";
@@ -170,9 +170,9 @@ export function RecentAddedStrip({ orgId, items, onAfterInAppSuccess, layout = "
                   </View>
                   <View style={styles.itemAction}>
                     {item.is_integrated ? (
-                      <View style={styles.onQPill} accessibilityLabel={`${item.name} on Q`}>
+                      <View style={styles.onQPill} accessibilityLabel={`${item.name} on Pulse`}>
                         <Zap size={12} color={Theme.positive} fill={Theme.positive} />
-                        <Text style={styles.onQPillText}>On Q</Text>
+                        <Text style={styles.onQPillText}>on Pulse</Text>
                       </View>
                     ) : !item.phone?.trim() ? (
                       <View style={styles.mutedPill}>
@@ -182,7 +182,7 @@ export function RecentAddedStrip({ orgId, items, onAfterInAppSuccess, layout = "
                       <Pressable
                         onPress={() => void onInvite(item)}
                         disabled={!canPress}
-                        accessibilityLabel={`Connect or invite ${item.name}`}
+                        accessibilityLabel={`Send app invite to ${item.name}`}
                         style={({ pressed }) => [
                           styles.connectBtn,
                           !canPress && styles.connectBtnDisabled,
@@ -193,7 +193,7 @@ export function RecentAddedStrip({ orgId, items, onAfterInAppSuccess, layout = "
                         {busy ? (
                           <ActivityIndicator size="small" color={Theme.textOnDark} />
                         ) : (
-                          <Text style={styles.connectBtnText}>Connect</Text>
+                          <Text style={styles.connectBtnText}>Send invite</Text>
                         )}
                       </Pressable>
                     )}
@@ -210,11 +210,11 @@ export function RecentAddedStrip({ orgId, items, onAfterInAppSuccess, layout = "
 
 const styles = StyleSheet.create({
   hubBar: {
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.networkPageBackground,
     paddingTop: 8,
     paddingBottom: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
+    borderBottomColor: Theme.networkCardBorder,
   },
   hubBarSplit: {
     width: "100%",
@@ -233,8 +233,8 @@ const styles = StyleSheet.create({
     width: "100%",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: Theme.cinematicCardBorder,
-    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.networkCardBorder,
+    backgroundColor: Theme.networkCardBackground,
     paddingTop: 12,
     paddingBottom: 4,
     paddingHorizontal: 12,
@@ -260,13 +260,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.networkCardBorder,
   },
   kicker: {
     fontSize: 9,
     fontWeight: "900",
     letterSpacing: 1.4,
-    color: Theme.textSection,
+    color: Theme.networkSectionLabel,
     textTransform: "uppercase",
   },
   itemList: {
@@ -281,10 +281,10 @@ const styles = StyleSheet.create({
   },
   itemRowDivider: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
+    borderBottomColor: Theme.networkCardBorder,
   },
   avatarBorder: {
-    borderColor: Theme.borderLight,
+    borderColor: Theme.networkCardBorder,
   },
   itemBody: {
     flex: 1,
@@ -309,9 +309,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: Theme.networkPageBackground,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.networkCardBorder,
   },
   rolePillText: {
     fontSize: 8,
@@ -322,12 +322,12 @@ const styles = StyleSheet.create({
   ratingText: {
     fontSize: 9,
     fontWeight: "700",
-    color: Theme.textSecondary,
+    color: Theme.networkSectionLabel,
   },
   subline: {
     fontSize: 10,
     fontWeight: "600",
-    color: Theme.textSection,
+    color: Theme.textSecondary,
     lineHeight: 14,
   },
   itemAction: {
@@ -343,9 +343,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: Theme.positiveMuted,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.positive,
   },
   onQPillText: {
     fontSize: 10,
@@ -358,21 +358,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: Theme.surfaceForm,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.networkCardBorder,
   },
   mutedPillText: {
     fontSize: 9,
     fontWeight: "800",
-    color: Theme.textSection,
+    color: Theme.networkSectionLabel,
   },
   connectBtn: {
     minWidth: 86,
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
-    backgroundColor: Theme.textPrimaryDark,
+    backgroundColor: Theme.primary,
     borderWidth: 1,
-    borderColor: Theme.textPrimaryDark,
+    borderColor: Theme.primary,
     alignItems: "center",
     justifyContent: "center",
   },

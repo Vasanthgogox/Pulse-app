@@ -290,6 +290,12 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
         Alert.alert('Could not submit quote', quoteError.message);
         return;
       }
+      queryClient.invalidateQueries({
+        queryKey: ['indents', indent.id, 'direct-quotes'],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['indents', 'quote-counts'],
+      });
       setQuoteModalVisible(false);
       await Promise.allSettled([refetchMyQuotes(), refetchQuotes(), load()]);
       Alert.alert('Quote submitted', 'Your quote was sent for this load.');
@@ -299,7 +305,7 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
     } finally {
       setSubmittingQuote(false);
     }
-  }, [indent, orgId, quoteAmount, refetchMyQuotes, refetchQuotes, load]);
+  }, [indent, orgId, quoteAmount, queryClient, refetchMyQuotes, refetchQuotes, load]);
 
   useEffect(() => {
     load();
@@ -910,7 +916,7 @@ export function IndentDetailScreen({ indentId, onBack, onEditPress }: IndentDeta
               <Text style={styles.quoteInputPrefix}>INR</Text>
               <TextInput
                 value={quoteAmount}
-                onChangeText={setQuoteAmount}
+                onChangeText={(raw) => setQuoteAmount(raw.replace(/[^\d]/g, ''))}
                 placeholder="Enter amount"
                 placeholderTextColor={Theme.textMuted}
                 keyboardType={Platform.OS === 'web' ? 'numeric' : 'number-pad'}

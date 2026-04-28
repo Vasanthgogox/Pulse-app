@@ -12,6 +12,24 @@ import { supabase } from "@/lib/supabase";
 
 const BUCKET = "trip-documents";
 
+/**
+ * Postgres/PostgREST: table missing from DB or not in API schema cache (`supabase db push`).
+ * When true after a successful storage upload, callers can treat POD as stored and use storage-only metadata.
+ */
+export function isTripDocumentsMetaTableUnavailable(
+  err: { message?: string; code?: string } | null | undefined,
+): boolean {
+  if (!err?.message && !err?.code) return false;
+  const m = String(err.message ?? "").toLowerCase();
+  const code = String(err.code ?? "").toUpperCase();
+  if (code === "42P01") return true;
+  if (m.includes("schema cache")) return true;
+  if (m.includes("could not find the table") && m.includes("trip_documents")) return true;
+  if (m.includes("relation") && m.includes("trip_documents") && m.includes("does not exist"))
+    return true;
+  return false;
+}
+
 /** Generate a UUID v4-style string (React Native has no global crypto). */
 function randomUUID(): string {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -159,6 +177,23 @@ export async function uploadTripDocument(
     .single();
 
   if (insertError) {
+    if (isTripDocumentsMetaTableUnavailable(insertError)) {
+      const now = new Date().toISOString();
+      const syntheticId = `storage-meta-${randomUUID()}`;
+      return {
+        doc: {
+          id: syntheticId,
+          trip_id: tripId,
+          file_name: file.fileName,
+          storage_path: path,
+          mime_type: file.mimeType || null,
+          size_bytes: file.arrayBuffer.byteLength,
+          uploaded_at: now,
+          uploaded_by: uploadedBy,
+        },
+        error: null,
+      };
+    }
     return {
       doc: null,
       error: new Error(insertError.message),

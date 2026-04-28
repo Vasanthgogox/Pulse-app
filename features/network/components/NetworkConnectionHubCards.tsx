@@ -30,22 +30,17 @@ const ROLE_STYLES: Record<
   HubConnectionRole,
   { bg: string; color: string; label: string }
 > = {
-  CLIENT: { bg: Theme.surface, color: Theme.textPrimaryDark, label: "CLIENT" },
-  SUPPLIER: { bg: Theme.surface, color: Theme.textPrimaryDark, label: "SUPPLIER" },
-  DRIVER: { bg: Theme.surface, color: Theme.textPrimaryDark, label: "DRIVER" },
+  CLIENT: { bg: Theme.networkClientTintBg, color: Theme.primary, label: "CLIENT" },
+  SUPPLIER: { bg: Theme.networkSupplierTintBg, color: Theme.positive, label: "SUPPLIER" },
+  DRIVER: { bg: Theme.networkDriverTintBg, color: Theme.warning, label: "DRIVER" },
 };
 
-function seedColor(id: string): string {
-  const palette = [
-    Theme.ledgerNetBarBg,
-    Theme.textPrimaryDark,
-    Theme.primary,
-    Theme.positive,
-    Theme.teslaRed,
-  ];
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h + id.charCodeAt(i)) % palette.length;
-  return palette[h];
+function seedColor(_id: string): string {
+  return "#64748B";
+}
+
+function subtleAvatarBg(_id: string): string {
+  return "#F8FAFC";
 }
 
 /** Min height for horizontal hub connection row (carousel / side-scroll). Kept exported for callers & stable bundles. */
@@ -100,8 +95,8 @@ export function HubConnectionListCard({
               {item.is_integrated ? "LIVE" : "INVITE"}
             </Text>
           </View>
-          <View style={styles.coverRoleChip}>
-            <Text style={styles.coverRoleText}>{rs.label}</Text>
+          <View style={[styles.coverRoleChip, { backgroundColor: rs.bg }]}>
+            <Text style={[styles.coverRoleText, { color: rs.color }]}>{rs.label}</Text>
           </View>
           <View style={[styles.coverRatingNode, !rating && styles.coverRatingNodeEmpty]}>
             {rating ? (
@@ -145,11 +140,11 @@ export function HubConnectionListCard({
                 </Text>
               </View>
             ) : null}
-            <View style={styles.metaChip}>
+            <View style={[styles.metaChip, item.is_integrated && styles.metaChipIntegrated]}>
               {item.is_integrated ? (
-                <Check size={10} color={Theme.textPrimaryDark} strokeWidth={2.8} />
+                <Check size={10} color={Theme.positive} strokeWidth={2.8} />
               ) : null}
-              <Text style={styles.statusMetaChipText} numberOfLines={1}>
+              <Text style={[styles.statusMetaChipText, item.is_integrated && styles.statusMetaChipTextIntegrated]} numberOfLines={1}>
                 {item.is_integrated ? "Operational access" : "Not in app"}
               </Text>
             </View>
@@ -159,7 +154,7 @@ export function HubConnectionListCard({
         <View style={styles.cardFooter}>
           {item.is_integrated ? (
             <View style={styles.joinedBtn}>
-              <CheckCircle2 size={13} color={Theme.textPrimaryDark} strokeWidth={2.4} />
+              <CheckCircle2 size={13} color={Theme.positive} strokeWidth={2.4} />
               <Text style={styles.joinedBtnText}>Connected</Text>
             </View>
           ) : (
@@ -169,9 +164,9 @@ export function HubConnectionListCard({
               disabled={!canPressAction}
             >
               {item.actionLoading ? (
-                <ActivityIndicator size={12} color={Theme.textPrimaryDark} />
+                <ActivityIndicator size={12} color={Theme.textOnPrimary} />
               ) : (
-                <Send size={12} color={Theme.textPrimaryDark} strokeWidth={2.4} />
+                <Send size={12} color={Theme.textOnPrimary} strokeWidth={2.4} />
               )}
               <Text style={styles.inviteBtnText}>{item.actionLabel ?? "Send invite"}</Text>
             </Pressable>
@@ -184,6 +179,7 @@ export function HubConnectionListCard({
 
 export function HubConnectionGridCard({ item }: { item: HubConnectionItem }) {
   const color = seedColor(item.id);
+  const avatarBg = subtleAvatarBg(item.id);
   const rs = ROLE_STYLES[item.role];
   return (
     <View style={styles.gridOuter}>
@@ -199,7 +195,7 @@ export function HubConnectionGridCard({ item }: { item: HubConnectionItem }) {
       </View>
       <View style={[styles.gridInner, { borderColor: Theme.borderLight }]}>
         <View style={styles.gridAvatarWrap}>
-          <View style={[styles.gridAvatar, { backgroundColor: color + "20" }]}>
+          <View style={[styles.gridAvatar, { backgroundColor: avatarBg }]}>
             <Text style={[styles.gridAvatarTxt, { color }]}>{getInitials(item.name)}</Text>
           </View>
           <View style={styles.gridOnlineDot} />
@@ -226,11 +222,11 @@ const styles = StyleSheet.create({
   },
   cardOuter: {
     flex: 1,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.networkCardBackground,
     borderRadius: 18,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.networkCardBorder,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.055,
     shadowRadius: 16,
@@ -247,8 +243,8 @@ const styles = StyleSheet.create({
     height: 82,
     overflow: "hidden",
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
-    backgroundColor: Theme.surfaceGray,
+    borderBottomColor: Theme.networkCardBorder,
+    backgroundColor: Theme.networkPageBackground,
   },
   coverOrbLarge: {
     position: "absolute",
@@ -257,7 +253,7 @@ const styles = StyleSheet.create({
     borderRadius: 66,
     top: -20,
     left: -28,
-    backgroundColor: Theme.borderLight,
+    backgroundColor: "rgba(148,163,184,0.18)",
     transform: [{ rotate: "-10deg" }],
   },
   coverOrbSmall: {
@@ -267,7 +263,7 @@ const styles = StyleSheet.create({
     borderRadius: 46,
     right: -22,
     bottom: -16,
-    backgroundColor: Theme.surface,
+    backgroundColor: "rgba(255,255,255,0.72)",
     transform: [{ rotate: "14deg" }],
   },
   coverPlane: {
@@ -277,7 +273,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     right: 28,
     top: 10,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: "rgba(255,255,255,0.68)",
     opacity: 0.55,
     transform: [{ rotate: "-8deg" }],
   },
@@ -291,9 +287,9 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 6,
     borderRadius: 10,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.networkCardBackground,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.networkCardBorder,
   },
   coverWidgetText: {
     fontSize: 7,
@@ -311,7 +307,7 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     backgroundColor: Theme.screenBackground,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.networkCardBorder,
   },
   coverRoleText: {
     fontSize: 7,
@@ -333,7 +329,7 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     backgroundColor: "rgba(255,255,255,0.86)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.networkCardBorder,
   },
   coverRatingNodeEmpty: {
     minHeight: 18,
@@ -365,7 +361,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 6,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.networkCardBorder,
   },
   rolePillText: { fontSize: 8, fontWeight: "600", fontStyle: "italic", letterSpacing: 0.2 },
   onAppPill: {
@@ -415,9 +411,8 @@ const styles = StyleSheet.create({
   },
   entityName: {
     fontSize: 12,
-    fontWeight: "700",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
+    fontWeight: "500",
+    color: "#475569",
     letterSpacing: -0.2,
     lineHeight: 15,
     textAlign: "center",
@@ -438,7 +433,7 @@ const styles = StyleSheet.create({
     height: 62,
     borderRadius: 31,
     overflow: "hidden",
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.networkCardBackground,
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "center",
@@ -451,7 +446,7 @@ const styles = StyleSheet.create({
   },
   heroAvatarImage: {
     borderWidth: 2,
-    borderColor: Theme.screenBackground,
+    borderColor: Theme.networkCardBackground,
   },
   cardMetaStack: {
     width: "100%",
@@ -471,21 +466,26 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 8,
     borderRadius: 11,
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.networkPageBackground,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.networkCardBorder,
+  },
+  metaChipIntegrated: {
+    backgroundColor: Theme.positiveMuted,
+    borderColor: Theme.positive,
   },
   metaChipText: {
     fontSize: 8,
-    fontWeight: "700",
-    fontStyle: "italic",
+    fontWeight: "500",
     color: Theme.textSecondary,
   },
   statusMetaChipText: {
     fontSize: 8,
-    fontWeight: "700",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
+    fontWeight: "500",
+    color: "#64748B",
+  },
+  statusMetaChipTextIntegrated: {
+    color: Theme.positive,
   },
   metricStack: {
     marginTop: 12,
@@ -497,7 +497,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
+    borderTopColor: Theme.networkCardBorder,
   },
   metricLabel: {
     fontSize: 8,
@@ -556,7 +556,7 @@ const styles = StyleSheet.create({
     borderTopColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.networkCardBackground,
   },
   joinedBtn: {
     minHeight: 34,
@@ -564,11 +564,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     borderWidth: 1,
-    borderColor: Theme.borderMedium,
+    borderColor: Theme.positive,
     borderRadius: 17,
     paddingHorizontal: 14,
     paddingVertical: 7,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.positiveMuted,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.035,
     shadowRadius: 6,
@@ -577,9 +577,9 @@ const styles = StyleSheet.create({
   },
   joinedBtnText: {
     fontSize: 10,
-    fontWeight: "700",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
+    fontWeight: "500",
+    color: Theme.positive,
+    letterSpacing: 0.1,
   },
   inviteBtn: {
     minHeight: 34,
@@ -590,9 +590,9 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     paddingHorizontal: 14,
     paddingVertical: 7,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.primary,
     borderWidth: 1,
-    borderColor: Theme.borderMedium,
+    borderColor: Theme.primary,
     minWidth: 118,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.04,
@@ -605,10 +605,9 @@ const styles = StyleSheet.create({
   },
   inviteBtnText: {
     fontSize: 10,
-    fontWeight: "700",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
-    letterSpacing: 0.15,
+    fontWeight: "500",
+    color: Theme.textOnPrimary,
+    letterSpacing: 0.1,
   },
   handshakeBtn: {
     width: 40,
@@ -631,14 +630,14 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   rolePillSm: { paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6 },
-  rolePillSmText: { fontSize: 7, fontWeight: "900", letterSpacing: 0.4 },
+  rolePillSmText: { fontSize: 7, fontWeight: "600", letterSpacing: 0.25 },
   onAppPillSm: {
     backgroundColor: `${Theme.positive}14`,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
   },
-  onAppPillSmText: { fontSize: 7, fontWeight: "900", color: Theme.positive },
+  onAppPillSmText: { fontSize: 7, fontWeight: "600", color: Theme.positive, letterSpacing: 0.2 },
   gridInner: {
     backgroundColor: Theme.screenBackground,
     borderRadius: 16,
@@ -653,8 +652,10 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#EEF2F7",
   },
-  gridAvatarTxt: { fontSize: 14, fontWeight: "900" },
+  gridAvatarTxt: { fontSize: 14, fontWeight: "500", letterSpacing: 0.04, color: "#6B7280" },
   gridOnlineDot: {
     position: "absolute",
     right: 0,
@@ -668,9 +669,10 @@ const styles = StyleSheet.create({
   },
   gridName: {
     fontSize: 11,
-    fontWeight: "800",
-    color: Theme.textPrimary,
+    fontWeight: "500",
+    color: "#475569",
     textAlign: "center",
     lineHeight: 15,
+    letterSpacing: 0.1,
   },
 });

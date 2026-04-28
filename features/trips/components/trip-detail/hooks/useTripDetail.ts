@@ -35,6 +35,7 @@ import {
   useTransactionsQuery,
   useTripSubcontractsQuery,
 } from "@/lib/queries";
+import { queryKeys } from "@/lib/queryKeys";
 import * as driverLocationService from "@/services/driverLocationService";
 import * as tripDocumentsService from "@/services/tripDocumentsService";
 import {
@@ -50,6 +51,7 @@ import type { DisputeRow } from "@/services/sharedLedgerService";
 import type * as ExpoLocationTypes from "expo-location";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Alert } from "react-native";
 import { useRealtimeTrip } from "../../../hooks/useRealtimeTrips";
 import {
@@ -160,6 +162,7 @@ export function useTripDetail({
   const { t } = useLanguage();
   const { profile, user } = useAuth();
   const { currentOrganization } = useOrganization();
+  const queryClient = useQueryClient();
 
   // ── Trip data ─────────────────────────────────────────────────────────────
   const [trip, setTrip] = useState<TripRow | null>(null);
@@ -531,7 +534,8 @@ export function useTripDetail({
     refetchTransactionsRef.current();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useRealtimeTrip(trip?.id ?? null, handleRealtimeTripUpdate);
+  // Subscribe immediately using route tripId so realtime starts even before trip row is loaded.
+  useRealtimeTrip(tripId ?? null, handleRealtimeTripUpdate);
 
   // ── Data loaders ──────────────────────────────────────────────────────────
   const load = useCallback(() => {
@@ -663,6 +667,27 @@ export function useTripDetail({
     setFinanceRefreshKey((k) => k + 1);
     refetchTransactionsRef.current();
   }, [load, loadAdjustments, loadAssignmentAudit, loadTripDocuments]);
+
+  // Fallback polling for active journeys (covers cases where browser realtime channel is delayed).
+  useEffect(() => {
+    if (!tripId || !trip) return;
+    const status = String(trip.status ?? "").toLowerCase();
+    const isActiveJourney =
+      status === "assigned" ||
+      status === "in_progress" ||
+      status === "in_transit" ||
+      status === "pickup" ||
+      status === "picked_up" ||
+      status === "at_drop";
+    if (!isActiveJourney || trip.completed_at) return;
+
+    const intervalMs = 3000;
+    const timer = setInterval(() => {
+      isRefreshingRef.current = true;
+      load();
+    }, intervalMs);
+    return () => clearInterval(timer);
+  }, [tripId, trip?.id, trip?.status, trip?.completed_at, load]);
 
   /** Immediate refresh after assignment/reassignment actions. */
   const handleAssignmentUpdated = useCallback(() => {
@@ -1023,8 +1048,11 @@ export function useTripDetail({
           : undefined,
       );
       await loadAdjustments();
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.tripFinanceAdjustmentsRoot],
+      });
     },
-    [trip, currentOrganization?.id, loadAdjustments],
+    [trip, currentOrganization?.id, loadAdjustments, queryClient],
   );
 
   const handleRemoveAdjustment = useCallback(
@@ -1032,8 +1060,11 @@ export function useTripDetail({
       if (!trip?.id) return;
       await removeTripAdjustment(trip.id, adjustmentId);
       await loadAdjustments();
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.tripFinanceAdjustmentsRoot],
+      });
     },
-    [trip?.id, loadAdjustments],
+    [trip?.id, loadAdjustments, queryClient],
   );
 
   // ── Timeline expand ───────────────────────────────────────────────────────

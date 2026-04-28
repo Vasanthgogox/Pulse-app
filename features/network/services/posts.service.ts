@@ -87,16 +87,15 @@ export function isPostVisibleForOrg(
     normalize(post.viewer_role),
   ].filter(Boolean);
 
-  if (
-    post.type === 'LOAD' &&
-    audienceSignals.some((s) => s.includes('supplier') || s.includes('carrier'))
-  ) {
+  // Supplier-targeted circulation (including integrated_supplier) should be visible
+  // only to supplier-side viewers. We currently infer that via allowLoadPosts.
+  if (audienceSignals.some((s) => s.includes('supplier') || s.includes('carrier'))) {
     return opts.allowLoadPosts;
   }
-  if (post.type === 'LOAD' && audienceSignals.some((s) => s.includes('client'))) {
+  if (audienceSignals.some((s) => s.includes('client'))) {
     return false;
   }
-  if (post.type === 'LOAD' && Array.isArray(post.visible_to)) {
+  if (Array.isArray(post.visible_to)) {
     const normalized = post.visible_to.map((v) => normalize(v));
     if (normalized.some((v) => v.includes('supplier') || v.includes('carrier'))) {
       return opts.allowLoadPosts;

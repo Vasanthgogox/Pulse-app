@@ -94,6 +94,10 @@ export interface JobRequestCardProps {
    * changes, not when distance/eta/earnings strings refresh (e.g. after route load).
    */
   assignmentId?: string;
+  /**
+   * Dispatcher / org display, e.g. "Alex Kumar · ACME Logistics" (same logic as Notifications).
+   */
+  assignedByLine?: string | null;
 }
 
 export function JobRequestCard({
@@ -124,6 +128,7 @@ export function JobRequestCard({
   edgeToEdge = false,
   variant = "card",
   assignmentId,
+  assignedByLine = null,
 }: JobRequestCardProps) {
   const [isAccepted, setIsAccepted] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
@@ -224,6 +229,21 @@ export function JobRequestCard({
             Enter the 6-digit OTP shared by your dispatcher to claim this
             trip.
           </Text>
+          {assignedByLine?.trim() ? (
+            <View style={styles.assignerCompact}>
+              <Text
+                style={[styles.assignerLabelCompact, { color: mutedTextColor }]}
+              >
+                ASSIGNED BY
+              </Text>
+              <Text
+                style={[styles.assignerValueCompact, { color: primaryTextColor }]}
+                numberOfLines={2}
+              >
+                {assignedByLine.trim()}
+              </Text>
+            </View>
+          ) : null}
           <Text
             style={[styles.otpPageRoute, { color: primaryTextColor }]}
             numberOfLines={2}
@@ -346,6 +366,19 @@ export function JobRequestCard({
               </View>
             </View>
           </View>
+          {!collapsed && assignedByLine?.trim() ? (
+            <View style={styles.assignerSection}>
+              <Text style={[styles.assignerLabel, { color: mutedTextColor }]}>
+                ASSIGNED BY
+              </Text>
+              <Text
+                style={[styles.assignerValue, { color: primaryTextColor }]}
+                numberOfLines={3}
+              >
+                {assignedByLine.trim()}
+              </Text>
+            </View>
+          ) : null}
 
           {!collapsed ? (
             <>
@@ -615,6 +648,42 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: "uppercase",
     marginTop: 4,
+  },
+  assignerSection: {
+    marginBottom: 12,
+    marginTop: -2,
+    paddingBottom: 2,
+  },
+  assignerLabel: {
+    fontSize: ADDRESS_LABEL_FONT,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    marginBottom: 6,
+  },
+  assignerValue: {
+    fontSize: 15,
+    fontWeight: "600",
+    lineHeight: 20,
+    flexShrink: 1,
+  },
+  assignerCompact: {
+    width: "100%",
+    alignItems: "center",
+    marginBottom: 12,
+    paddingHorizontal: 8,
+    gap: 4,
+  },
+  assignerLabelCompact: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  assignerValueCompact: {
+    fontSize: 15,
+    fontWeight: "700",
+    textAlign: "center",
   },
   routeWrap: {
     paddingTop: 6,

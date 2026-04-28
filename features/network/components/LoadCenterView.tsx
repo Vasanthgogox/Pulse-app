@@ -1866,6 +1866,24 @@ export function LoadCenterView({
                     // "awarded" until supplier deploys.
                     const isAwaitingSupplierDeploy =
                       isAwardedPendingTrip || hasDirectSupplier;
+                    const parseAmount = (value: unknown): number | null => {
+                      if (value == null) return null;
+                      if (typeof value === "number") {
+                        return Number.isFinite(value) ? value : null;
+                      }
+                      if (typeof value === "string") {
+                        const normalized = value.replace(/[^0-9.-]/g, "");
+                        const parsed = Number(normalized);
+                        return Number.isFinite(parsed) ? parsed : null;
+                      }
+                      return null;
+                    };
+                    const awardedAmount =
+                      parseAmount(load["assigned_supplier_rate"]) ??
+                      parseAmount(load["awarded_amount"]) ??
+                      parseAmount(load["supplier_rate"]) ??
+                      parseAmount(load.supplier_target) ??
+                      parseAmount(load.client_price);
                     const statusPill = giveLoadStatusPillStyles(status);
                     const bidCount = quoteCounts[load.id] ?? 0;
                     const showPulseToNetwork =
@@ -1927,6 +1945,14 @@ export function LoadCenterView({
                               weightDetail,
                               loadTypeDetail,
                             )}
+                            {(isAwaitingSupplierDeploy || status === "awarded") &&
+                            awardedAmount != null ? (
+                              <View style={styles.loadCardQuoteHint}>
+                                <Text style={styles.loadCardQuoteHintText}>
+                                  Awarded amount {formatINR(awardedAmount)}
+                                </Text>
+                              </View>
+                            ) : null}
                           </View>
                           <View
                             style={[
@@ -1975,6 +2001,9 @@ export function LoadCenterView({
                                   </View>
                                   <Text style={styles.loadCardMetaText}>
                                     Supplier claimed
+                                    {awardedAmount != null
+                                      ? ` · ${formatINR(awardedAmount)}`
+                                      : ""}
                                   </Text>
                                 </View>
                               ) : (
@@ -2843,7 +2872,9 @@ export function LoadCenterView({
                   }
                   placeholderTextColor={Theme.textMuted}
                   value={quoteAmount}
-                  onChangeText={setQuoteAmount}
+                  onChangeText={(raw) =>
+                    setQuoteAmount(raw.replace(/[^\d]/g, ""))
+                  }
                 />
                 {activeBidQuote ? (
                   <View style={styles.previousBidWrap}>
@@ -2928,12 +2959,22 @@ export function LoadCenterView({
                       return;
                     }
                     invalidateIndents(orgId);
-                    queryClient.invalidateQueries({
-                      queryKey: [
-                        ...queryKeys.indents.all(orgId),
-                        "my-direct-quotes",
-                      ],
-                    });
+                    await Promise.allSettled([
+                      queryClient.invalidateQueries({
+                        queryKey: [
+                          ...queryKeys.indents.all(orgId),
+                          "my-direct-quotes",
+                        ],
+                      }),
+                      queryClient.invalidateQueries({
+                        queryKey: ["indents", load.id, "direct-quotes"],
+                      }),
+                      queryClient.invalidateQueries({
+                        queryKey: ["indents", "quote-counts"],
+                      }),
+                      refetchMyQuotes(),
+                      refetchMarketIndents(),
+                    ]);
                     triggerSuccess(
                       hadExistingQuote ? "Quote updated" : "Offer Published",
                     );

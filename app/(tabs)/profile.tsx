@@ -720,6 +720,18 @@ export default function ProfileScreen() {
               <View style={styles.premiumCard}>
                 <View style={styles.premiumCardInner}>
                   <ProfileItemRow
+                    icon="users"
+                    label="Team Members"
+                    value="Invite and manage your team"
+                    onPress={() => router.push(ROUTES.MODALS.TEAM as Parameters<typeof router.push>[0])}
+                    showChevron
+                  />
+                </View>
+              </View>
+
+              <View style={styles.premiumCard}>
+                <View style={styles.premiumCardInner}>
+                  <ProfileItemRow
                     icon="file-text-o"
                     label="POD"
                     value="Manage proof of delivery"

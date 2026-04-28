@@ -9,7 +9,6 @@ import type {
     DriverOffer,
     DriverRow,
 } from "@/features/drivers/services/drivers.service";
-import type { DirectQuoteRow } from "@/features/indents/services/direct-quotes.service";
 import type { IndentRow } from "@/features/indents/services/indents.service";
 import { SuppliersTab } from "@/features/suppliers/components/SuppliersTab";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
@@ -23,6 +22,7 @@ import type { ReactNode } from "react";
 import { Platform, Text, View, useWindowDimensions } from "react-native";
 import type { LedgerRow } from "../services/finance.service";
 import type { FinanceSubTab } from "../types";
+import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import { styles } from "./FinanceScreen.styles";
 import { FinanceKanbanTab } from "./FinanceKanbanTab";
 import type { FinancialRowData } from "./FinancialRow";
@@ -64,8 +64,6 @@ export interface FinanceTabBodyProps {
   tripsWhereOrgIsSupplier?: TripRow[];
   /** Pre-trip indents for finance aggregation (pending/quoted/awarded). */
   indentsForFinance?: IndentRow[];
-  /** Accepted direct quotes on this org's indents (awarded, pre-deploy). */
-  acceptedDirectQuotes?: DirectQuoteRow[];
   vehicleRows: VehicleRow[];
   driverRows: DriverRow[];
   driverOffers: Record<string, DriverOffer>;
@@ -101,6 +99,8 @@ export interface FinanceTabBodyProps {
   bottomInset?: number;
   profileImages: Record<string, string>;
   linkedOrgDisplayMap: Record<string, LinkedOrgDisplay>;
+  /** Loaded trip finance adjustments (undefined while loading — aggregation uses raw rates). */
+  tripFinanceAdjustmentsByTripId?: Record<string, TripAdjustment[]>;
 }
 
 export function FinanceTabBody({
@@ -121,7 +121,6 @@ export function FinanceTabBody({
   tripsWhereOrgIsClient,
   tripsWhereOrgIsSupplier,
   indentsForFinance,
-  acceptedDirectQuotes,
   vehicleRows,
   driverRows,
   driverOffers,
@@ -144,6 +143,7 @@ export function FinanceTabBody({
   bottomInset = 120,
   profileImages,
   linkedOrgDisplayMap,
+  tripFinanceAdjustmentsByTripId,
 }: FinanceTabBodyProps) {
   const { width: windowWidth } = useWindowDimensions();
   // Kanban only for Web desktop (large screens); mobile/native/tablet uses standard list
@@ -234,6 +234,7 @@ export function FinanceTabBody({
         refreshing={refreshing}
         onRefresh={onRefresh}
         bottomInset={bottomInset}
+        tripFinanceAdjustmentsByTripId={tripFinanceAdjustmentsByTripId}
         hideSummaryRow={isWebLargeScreen}
       />
     );
@@ -246,8 +247,6 @@ export function FinanceTabBody({
         suppliers={supplierRows}
         trips={tripRows}
         tripsWhereOrgIsClient={tripsWhereOrgIsClient}
-        indents={indentsForFinance}
-        directQuotes={acceptedDirectQuotes}
         transactions={ledgerTransactions ?? undefined}
         parentLoading={entitiesLoading}
         onTotals={onTabTotals}
@@ -262,6 +261,7 @@ export function FinanceTabBody({
         refreshing={refreshing}
         onRefresh={onRefresh}
         bottomInset={bottomInset}
+        tripFinanceAdjustmentsByTripId={tripFinanceAdjustmentsByTripId}
         hideSummaryRow={isWebLargeScreen}
       />
     );

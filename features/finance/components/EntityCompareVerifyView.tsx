@@ -8,11 +8,18 @@ import Theme from "@/constants/Theme";
 import { getClientById } from "@/features/clients/services/clients.service";
 import { getSupplierById } from "@/features/suppliers/services/suppliers.service";
 import { getTripDisplayNumber, type TripRow } from "@/features/trips";
-import { supabase } from "@/lib/supabase";
 import {
-  isCrossOrgIntegrationTrip,
-  isLoadBasedTrip,
+    adjustedCost,
+    adjustedRevenue,
+    type TripAdjustment,
+} from "@/features/trips/services/tripAdjustments";
+import {
+    isCrossOrgIntegrationTrip,
+    isLoadBasedTrip,
 } from "@/features/trips/visibility/tripVisibility";
+import { formatINR } from "@/lib/format";
+import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
+import { supabase } from "@/lib/supabase";
 import {
     createConnectionRequest,
     getConnectionInviteeByPhone,
@@ -47,9 +54,8 @@ import {
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { SHARED_LEDGER_PARTNER_PENDING_LABEL } from "./sharedLedgerTypes";
-import { formatINR } from "@/lib/format";
 import type { LedgerRow } from "../services/finance.service";
+import { SHARED_LEDGER_PARTNER_PENDING_LABEL } from "./sharedLedgerTypes";
 import { TreasurySummaryCard } from "./TreasurySummaryCard";
 
 export interface SharedTripData {
@@ -132,6 +138,7 @@ function buildInternalTrips(
   transactions: LedgerRow[],
   entityId: string,
   entityType: "CLIENT" | "SUPPLIER",
+  adjustmentByTripKey?: Map<string, TripAdjustment[]>,
 ): Map<string, InternalTrip> {
   const norm = (id: string | null | undefined) =>
     id == null ? "" : String(id).trim().toLowerCase();
@@ -167,14 +174,21 @@ function buildInternalTrips(
   const map = new Map<string, InternalTrip>();
   for (const t of trips) {
     const key = norm(t.id);
+    const adj = adjustmentByTripKey?.get(key) ?? [];
     const outAmt = outByTripId[key] ?? 0;
     // CLIENT = what we charged them (client_price).
     // SUPPLIER = what we owe them (supplier_rate). client_price only as last-resort fallback.
-    const tripSales = Number(
+    const rawSales = Number(
       entityType === "CLIENT"
         ? (t.client_price ?? 0)
         : (t.supplier_rate ?? t.client_price ?? 0),
     );
+    const tripSales =
+      adjustmentByTripKey != null
+        ? entityType === "SUPPLIER"
+          ? adjustedCost(rawSales, adj)
+          : adjustedRevenue(rawSales, adj)
+        : rawSales;
     // For supplier: if trip has no rate, use amount we paid so Total Billing reflects it.
     const sales =
       entityType === "SUPPLIER" && tripSales === 0 && outAmt > 0
@@ -389,12 +403,33 @@ export function EntityCompareVerifyView({
     [trips, organizationId],
   );
 
+  const compareTripIdsForAdj = useMemo(
+    () => sharedLedgerTrips.map((t) => String(t.id)).filter(Boolean),
+    [sharedLedgerTrips],
+  );
+  const { map: compareTripAdjMap } = useTripFinanceAdjustmentsMap(
+    organizationId ?? null,
+    compareTripIdsForAdj,
+  );
+
   const internalMap = useMemo(
     () =>
       sharedLedgerTrips.length && txs.length >= 0
-        ? buildInternalTrips(sharedLedgerTrips, txs, entity.id, entityType)
+        ? buildInternalTrips(
+            sharedLedgerTrips,
+            txs,
+            entity.id,
+            entityType,
+            compareTripAdjMap ?? undefined,
+          )
         : new Map(),
-    [sharedLedgerTrips, txs, entity.id, entityType],
+    [
+      sharedLedgerTrips,
+      txs,
+      entity.id,
+      entityType,
+      compareTripAdjMap,
+    ],
   );
 
   // When partner is non-integrated: fetch contact phone, then check if they're in app (by phone lookup).
@@ -1000,7 +1035,7 @@ export function EntityCompareVerifyView({
   ]);
 
   const handleInviteToApp = useCallback(() => {
-    const message = `Join me on Q to sync our ledger and compare books with ${entity.name}. Download the Q app to get started.`;
+    const message = `Join me on Pulse to sync our ledger and compare books with ${entity.name}. Download the Q app to get started.`;
     Share.share({ message, title: "Invite to Q" }).catch(() => {});
   }, [entity.name]);
 
@@ -1183,7 +1218,7 @@ export function EntityCompareVerifyView({
           <View style={styles.notIntegratedLoading}>
             <ActivityIndicator size="small" color={Theme.primary} />
             <Text style={styles.notIntegratedLoadingText}>
-              Checking if {entity.name} is on Q…
+              Checking if {entity.name} is on Pulse…
             </Text>
           </View>
         )}
@@ -1224,7 +1259,7 @@ export function EntityCompareVerifyView({
         {inviteeStatus === "in_app" && (
           <>
             <Text style={styles.notIntegratedHint}>
-              {invitee?.full_name ?? entity.name} is on Q. Send a connection
+              {invitee?.full_name ?? entity.name} is on Pulse. Send a connection
               request to enable Compare & Verify.
             </Text>
             {pendingRequestSent ? (
@@ -1254,7 +1289,7 @@ export function EntityCompareVerifyView({
         {inviteeStatus === "not_in_app" && (
           <>
             <Text style={styles.notIntegratedHint}>
-              This contact isn’t on Q yet. Invite them to the app so you can
+              This contact isn’t on Pulse yet. Invite them to the app so you can
               connect later.
             </Text>
             <TouchableOpacity

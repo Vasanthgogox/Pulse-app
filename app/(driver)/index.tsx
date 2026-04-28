@@ -31,6 +31,14 @@ import {
   DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY,
   DRIVER_POST_MISSION_PENDING_SNAPSHOT_KEY,
 } from "@/lib/driverDashboardFlags";
+import {
+  buildDriverTripNumberMap,
+  getDriverTripDisplayNumber,
+} from "@/lib/driverTripSequence";
+import {
+  buildAssignerDisplayForTrip,
+  resolveAssignerUserId,
+} from "@/lib/driverAssignerDisplay";
 import { formatINR } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { darkMapStyle } from "@/lib/mapStyles";
@@ -117,52 +125,6 @@ function getTripStatusLabel(t: tripsService.TripRow): string {
   if (s === "at_drop") return "At drop-off location";
   if (isCompletedStatus(t.status)) return "Completed";
   return "Awaiting acceptance";
-}
-
-const UUID_V4_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function looksLikeUuidFragment(s: string): boolean {
-  const t = String(s ?? "").trim();
-  if (!t) return false;
-  if (UUID_V4_RE.test(t)) return true;
-  // Short prefix shown as "User abcdef12…"
-  if (/^[0-9a-f]{6,12}$/i.test(t)) return true;
-  return false;
-}
-
-/** Prefer assignment audit actor (who assigned driver), then explicit assigner ids, then creator. */
-function resolveAssignerUserId(
-  trip: tripsService.TripRow,
-  auditActorByTripId: Record<string, string>,
-): string {
-  const meta = trip as tripsService.TripRow &
-    Record<string, string | number | boolean | null | undefined>;
-  const audit = (auditActorByTripId[String(trip.id)] ?? "").trim();
-  const assignedByUserId = String(meta.assigned_by_user_id ?? "").trim();
-  const createdByUserId = String(trip.created_by_user_id ?? "").trim();
-  const assignedBy = String(meta.assigned_by ?? "").trim();
-  const createdBy = String(trip.created_by ?? "").trim();
-
-  if (audit) return audit;
-  if (assignedByUserId) return assignedByUserId;
-  if (createdByUserId) return createdByUserId;
-  if (assignedBy && UUID_V4_RE.test(assignedBy)) return assignedBy;
-  if (createdBy && UUID_V4_RE.test(createdBy)) return createdBy;
-  return "";
-}
-
-function humanizeAssignerDisplayName(raw: string | null | undefined): string {
-  const t = String(raw ?? "").trim();
-  if (!t) return "";
-  if (looksLikeUuidFragment(t)) return "";
-  const lower = t.toLowerCase();
-  if (lower === "partner") return "";
-  if (/^user\s+/i.test(t)) {
-    const rest = t.replace(/^user\s+/i, "").trim();
-    if (looksLikeUuidFragment(rest) || /^[0-9a-f-]{6,}$/i.test(rest)) return "";
-  }
-  return t;
 }
 
 type DriverGuidanceStep =
@@ -689,8 +651,9 @@ export default function DriverRadarScreen() {
             });
             if (disappearedLabels.length > 0)
               setReassignedTripLabels(disappearedLabels);
+            const seqByTrip = buildDriverTripNumberMap(trips);
             previousTripsRef.current = new Map(
-              trips.map((t) => [t.id, tripsService.getTripDisplayNumber(t)]),
+              trips.map((t) => [t.id, getDriverTripDisplayNumber(t, seqByTrip)]),
             );
             setAllTrips(trips);
             const normalizedDriverStatus = String(
@@ -1056,6 +1019,15 @@ export default function DriverRadarScreen() {
 
     setAcceptError(null);
     setAcceptLoading(true);
+    const { error: acceptSyncError } = await tripsService.updateTripStatus(trip.id, {
+      // Persist driver acceptance without changing lifecycle stage.
+      status: "assigned",
+    });
+    if (acceptSyncError) {
+      setAcceptError(acceptSyncError.message);
+      setAcceptLoading(false);
+      return;
+    }
     triggerSuccess("Trip accepted. Proceed to pickup.");
     setSelectedIncomingTripId(trip.id);
     setAcceptedTripId(trip.id);
@@ -1218,6 +1190,10 @@ export default function DriverRadarScreen() {
       mergedIncomingTrips.filter((trip) => !notificationHistoryTripIds.has(trip.id)),
     [mergedIncomingTrips, notificationHistoryTripIds],
   );
+  const driverTripNumberById = useMemo(
+    () => buildDriverTripNumberMap([...allTrips, ...pendingOtpTrips]),
+    [allTrips, pendingOtpTrips],
+  );
   /** Trips still needing accept/OTP — excludes the trip we've already accepted (trip progress owns it). */
   const visibleAssignableIncomingTrips = useMemo(
     () =>
@@ -1377,61 +1353,22 @@ export default function DriverRadarScreen() {
   const incomingNotificationsWithMeta = useMemo(
     () =>
       visibleIncomingTrips.map((trip) => {
-        const tripMeta = trip as tripsService.TripRow &
-          Record<string, string | number | boolean | null | undefined>;
-        const inviteForTrip =
-          invites.find(
-            (i) =>
-              (i.from_organization_id ?? "").trim() ===
-              (trip.organization_id ?? "").trim(),
-          ) ?? null;
-        const assignerUserId = resolveAssignerUserId(
+        const {
+          assignedByUserName,
+          assignedByOrgName,
+          assignerPersonDisplay,
+          assignedByName,
+        } = buildAssignerDisplayForTrip(
           trip,
-          assignmentActorByTripId,
-        ).trim();
-
-        const tripAssignedByUserNameCandidates = [
-          tripMeta.assigned_by_name,
-          tripMeta.assigned_by_user_name,
-          tripMeta.created_by_name,
-          tripMeta.dispatcher_name,
-        ];
-        /** Fleet / assigning org — never use client/supplier names (those are cargo parties). */
-        const tripAssignedByOrgNameCandidates = [
-          organizationNamesById[(trip.organization_id ?? "").trim()] ?? null,
-          inviteForTrip?.from_org_name ?? null,
-          (tripMeta.organization_name as string | null | undefined) ?? null,
-          (tripMeta.org_name as string | null | undefined) ?? null,
-          (tripMeta.from_org_name as string | null | undefined) ?? null,
-        ];
-        const resolvedFromTripFields = tripAssignedByUserNameCandidates
-          .map((value) => humanizeAssignerDisplayName(String(value ?? "")))
-          .find((value) => value.length > 0);
-        const resolvedFromProfiles = humanizeAssignerDisplayName(
-          assignerNamesByUserId[assignerUserId] ?? "",
+          invites,
+          driver?.organization_id,
+          {
+            assignmentActorByTripId,
+            assignerNamesByUserId,
+            assignerDisplayByTripId,
+            organizationNamesById,
+          },
         );
-        const fromRpc = humanizeAssignerDisplayName(
-          assignerDisplayByTripId[String(trip.id)] ?? "",
-        );
-        const assignedByUserName =
-          (fromRpc.length > 0 ? fromRpc : null) ??
-          resolvedFromTripFields ??
-          (resolvedFromProfiles.length > 0 ? resolvedFromProfiles : null);
-
-        const assignedByOrgName =
-          tripAssignedByOrgNameCandidates
-            .map((value) => String(value ?? "").trim())
-            .find((value) => value.length > 0) ??
-          ((trip.organization_id ?? "").trim() ===
-          (driver?.organization_id ?? "").trim()
-            ? "Your fleet"
-            : "Assigning fleet");
-
-        /** Dispatcher / fleet user who assigned — not cargo party names. */
-        const assignerPersonDisplay =
-          (assignedByUserName ?? "").trim() || "Fleet dispatcher";
-
-        const assignedByName = `${assignerPersonDisplay} · ${assignedByOrgName}`;
         const requiresOtp =
           !isRosterTrip(trip) &&
           (pendingOtpTripsRequiringOtp.some((t) => t.id === trip.id) ||
@@ -1541,7 +1478,7 @@ export default function DriverRadarScreen() {
             >
               <View style={styles.notificationSelectHeader}>
                 <Text style={[styles.notificationSelectTripId, { color: colors.text }]}>
-                  {tripsService.getTripDisplayNumber(item.trip)}
+                  {getDriverTripDisplayNumber(item.trip, driverTripNumberById)}
                 </Text>
                 {item.requiresOtp ? (
                   <View
@@ -1619,6 +1556,34 @@ export default function DriverRadarScreen() {
     incomingNotificationsWithMeta.find(
       (item) => item.trip.id === effectiveFirstIncoming?.id,
     ) ?? null;
+  const assignerLineForJobCard = useMemo(() => {
+    if (!effectiveFirstIncoming) return null;
+    const fromList = incomingNotificationsWithMeta.find(
+      (item) => item.trip.id === effectiveFirstIncoming.id,
+    );
+    if (fromList?.assignerPersonDisplay?.trim())
+      return fromList.assignerPersonDisplay.trim();
+    return buildAssignerDisplayForTrip(
+      effectiveFirstIncoming,
+      invites,
+      driver?.organization_id,
+      {
+        assignmentActorByTripId,
+        assignerNamesByUserId,
+        assignerDisplayByTripId,
+        organizationNamesById,
+      },
+    ).assignerPersonDisplay;
+  }, [
+    effectiveFirstIncoming,
+    incomingNotificationsWithMeta,
+    invites,
+    driver?.organization_id,
+    assignmentActorByTripId,
+    assignerNamesByUserId,
+    assignerDisplayByTripId,
+    organizationNamesById,
+  ]);
   const notificationHistoryTrips = useMemo(
     () =>
       notificationHistory
@@ -3509,7 +3474,7 @@ export default function DriverRadarScreen() {
                 ]}
               >
                 <Text style={[styles.offlineCardTitle, { color: colors.text }]}>
-                  {tripsService.getTripDisplayNumber(trip)}
+                  {getDriverTripDisplayNumber(trip, driverTripNumberById)}
                 </Text>
                 {otpClaimTripId != null &&
                 String(otpClaimTripId).toLowerCase() ===
@@ -3875,7 +3840,7 @@ export default function DriverRadarScreen() {
                   >
                     <View style={styles.notificationSelectHeader}>
                       <Text style={[styles.notificationSelectTripId, { color: colors.text }]}>
-                        {tripsService.getTripDisplayNumber(item.trip)}
+                        {getDriverTripDisplayNumber(item.trip, driverTripNumberById)}
                       </Text>
                       {item.requiresOtp ? (
                         <View
@@ -3982,7 +3947,7 @@ export default function DriverRadarScreen() {
                       { color: colors.textMuted },
                     ]}
                   >
-                    {tripsService.getTripDisplayNumber(item.trip)} -{" "}
+                    {getDriverTripDisplayNumber(item.trip, driverTripNumberById)} -{" "}
                     {item.reason === "declined"
                       ? "declined"
                       : "moved after another trip was accepted"}
@@ -4058,6 +4023,7 @@ export default function DriverRadarScreen() {
             onOtpCancel={closeOtpClaim}
             edgeToEdge={mapSheet}
             variant={mapSheet ? "page" : "card"}
+            assignedByLine={assignerLineForJobCard}
           />
         ) : showSearchingOverlay ? (
           <View style={styles.driverSearchingEmptyWrap}>

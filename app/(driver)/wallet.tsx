@@ -20,6 +20,10 @@ import {
 import {
     phonePeMetaDate
 } from '@/lib/driverGpayTransactions';
+import {
+  buildDriverTripNumberMap,
+  getDriverTripDisplayNumber,
+} from '@/lib/driverTripSequence';
 import { isAggregateTrip, tripEarningsForDriver } from '@/lib/driverUtils';
 import { getFleetAvatarUriForOrg } from '@/lib/fleetAvatar';
 import { usePreventScreenCapture } from '@/lib/usePreventScreenCapture';
@@ -248,6 +252,10 @@ export default function DriverWalletScreen() {
       return db - da;
     });
   }, [trips]);
+  const driverTripNumberById = useMemo(
+    () => buildDriverTripNumberMap(trips),
+    [trips],
+  );
 
   /** O(n): one pass over ledgerEntries → settlement totals per trip_id + non-trip entries. */
   const { receivedByTripId, nonTripLedgerEntries } = useMemo(() => {
@@ -329,6 +337,33 @@ export default function DriverWalletScreen() {
     }
     return byTrip;
   }, [ledgerEntries, hasFleetPaidPendingToken, isLegacyFleetPendingEvidence]);
+
+  // Cash balance:
+  // - trip-related cash includes verified settlements.
+  // - if a trip is fleet-marked paid but not yet verified, show that pending-paid amount immediately.
+  // - once settlement exists for a trip, skip pending-paid for that trip to avoid double counting.
+  // - non-trip ledger entries (salary/reimbursement/etc) still affect cash as before.
+  const totalReceived = useMemo(() => {
+    const verifiedTripReceived = Object.values(receivedByTripId).reduce(
+      (sum, amount) => sum + (Number(amount) || 0),
+      0,
+    );
+    const pendingTripReceived = Object.entries(
+      latestFleetPaidPendingLedgerByTripId,
+    ).reduce((sum, [tripId, entry]) => {
+      if ((receivedByTripId[tripId] ?? 0) > 0) return sum;
+      return sum + (Number(entry.amount) || 0);
+    }, 0);
+    const nonTripReceived = nonTripLedgerEntries.reduce(
+      (sum, e) => sum + (Number(e.amount) || 0),
+      0,
+    );
+    return Math.round(verifiedTripReceived + pendingTripReceived + nonTripReceived);
+  }, [
+    receivedByTripId,
+    latestFleetPaidPendingLedgerByTripId,
+    nonTripLedgerEntries,
+  ]);
 
   const extractUtr = useCallback((raw?: string | null) => {
     const s = (raw ?? '').trim();
@@ -972,20 +1007,6 @@ export default function DriverWalletScreen() {
     return bySection;
   }, [receivedTrips]);
 
-  // Cash balance:
-  // - trip-related cash is only counted once the driver verifies (verified entries are type === 'settlement').
-  // - non-trip ledger entries (salary/reimbursement/etc) still affect cash as before.
-  const totalReceived = Math.round(
-    ledgerEntries.reduce((sum, e) => {
-      const tid = e.trip_id?.trim() || null;
-      const amt = Number(e.amount) || 0;
-      if (tid) {
-        return e.type === 'settlement' ? sum + amt : sum;
-      }
-      return sum + amt;
-    }, 0),
-  );
-
   /** Cash card: pulse + watermark motion (reference wallet hero). */
   const cashCardSparklePulse = useSharedValue(0);
   const cashCardWatermarkDrift = useSharedValue(0);
@@ -1126,7 +1147,7 @@ export default function DriverWalletScreen() {
 
       return {
         trip,
-        id: tripsService.getTripDisplayNumber(trip),
+        id: getDriverTripDisplayNumber(trip, driverTripNumberById),
         rawDate: trip.completed_at ?? trip.updated_at ?? trip.created_at ?? '',
         date: formatTransactionDateSection(trip.completed_at ?? trip.updated_at ?? trip.created_at ?? ''),
         amount: Math.round(
@@ -1145,7 +1166,7 @@ export default function DriverWalletScreen() {
         fleetPendingLedger: fleetPendingLedger ?? null,
       };
     });
-  }, [completedTrips, receivedByTripId, salaryRequestOrgOptions, latestCreditLedgerByTripId, derivePaymentMode, latestFleetPaidPendingLedgerByTripId]);
+  }, [completedTrips, receivedByTripId, salaryRequestOrgOptions, latestCreditLedgerByTripId, derivePaymentMode, latestFleetPaidPendingLedgerByTripId, driverTripNumberById]);
 
   const filteredTripJourneyItems = useMemo(() => {
     const search = journeySearch.trim().toLowerCase();
@@ -1286,7 +1307,7 @@ export default function DriverWalletScreen() {
       const orgName =
         salaryRequestOrgOptions.find((o) => String(o.orgId ?? '') === String(trip.organization_id ?? ''))?.orgName ?? 'Fleet';
       const haystack = [
-        tripsService.getTripDisplayNumber(trip),
+        getDriverTripDisplayNumber(trip, driverTripNumberById),
         trip.pickup_area ?? '',
         trip.drop_location ?? '',
         orgName,
@@ -1380,7 +1401,7 @@ export default function DriverWalletScreen() {
         return;
       }
 
-      const rawDescription = sourceLedger?.description ?? `Trip ${tripsService.getTripDisplayNumber(trip)}`;
+      const rawDescription = sourceLedger?.description ?? `Trip ${getDriverTripDisplayNumber(trip, driverTripNumberById)}`;
       // Remove the "pending verification" token so the settled receipt looks clean.
       const settledDescription = rawDescription.replace(/\s*\|\s*Sync\s*:\s*FLEET_PAID_PENDING\s*/i, '').trim();
 
@@ -1424,7 +1445,7 @@ export default function DriverWalletScreen() {
         load();
       }
     },
-    [linkedDrivers, profile?.uid, load]
+    [linkedDrivers, profile?.uid, load, driverTripNumberById]
   );
 
   /** Confirm then mark trip as paid. */
@@ -2435,7 +2456,7 @@ export default function DriverWalletScreen() {
                       const routeSummary = [trip.pickup_area?.trim(), trip.drop_location?.trim()]
                         .filter(Boolean)
                         .join(' → ');
-                      const tripRef = tripsService.getTripDisplayNumber(trip);
+                      const tripRef = getDriverTripDisplayNumber(trip, driverTripNumberById);
                       const receivedAmt = receivedByTripId[trip.id] ?? 0;
                       const listDivider = isDark ? colors.borderSubtle : Theme.borderMedium;
                       const isLastTrip = idx === trips.length - 1;
@@ -2674,7 +2695,7 @@ export default function DriverWalletScreen() {
       message={
         markPaidConfirmState
           ? (() => {
-              const tripDisplay = tripsService.getTripDisplayNumber(markPaidConfirmState.trip);
+              const tripDisplay = getDriverTripDisplayNumber(markPaidConfirmState.trip, driverTripNumberById);
               const amountStr = `₹${Math.round(markPaidConfirmState.amount).toLocaleString('en-IN')}`;
               const sourceDesc = markPaidConfirmState.sourceLedger?.description ?? null;
               if (!sourceDesc) {

@@ -84,6 +84,7 @@ interface AuthContextType {
   /** Refetch session from server so profile (e.g. avatar_url) is up to date. Call after updating profile. */
   refreshSession: () => Promise<void>;
   signIn: (email: string, password: string, keepSignedIn?: boolean) => Promise<{ error: Error | null }>;
+  signInWithGoogle: (keepSignedIn?: boolean) => Promise<{ error: Error | null }>;
   signUp: (
     email: string,
     password: string,
@@ -92,6 +93,13 @@ interface AuthContextType {
     operatingModel?: authService.OperatingModel,
     phone?: string,
     companyName?: string,
+    addressLine?: string,
+    city?: string,
+    state?: string,
+    zone?: string,
+    businessType?: string,
+    employeeCount?: string,
+    skipOrgCreation?: boolean,
   ) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
@@ -131,6 +139,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logAuthRouteDecision = (event: string, details: Record<string, unknown>) => {
     if (!__DEV__) return;
     console.info("[AuthGuard]", event, details);
+  };
+
+  const clearAuthState = (expired: boolean) => {
+    setUser(null);
+    setProfile(null);
+    setRoleVerified(false);
+    setSessionExpired(expired);
+  };
+
+  const forceSignOutOnAuthFailure = async (reason: string) => {
+    signOutRequestedRef.current = true;
+    try {
+      await authService.signOut();
+    } catch {
+      // best-effort cleanup; state is still cleared locally below
+    }
+    clearAuthState(true);
+    logAuthRouteDecision("forced_sign_out_auth_failure", { reason });
+  };
+
+  const getVerifiedDbProfile = async (uid: string): Promise<authService.AuthProfile | null> => {
+    let dbProfile = await authService.getProfile(uid);
+    if (dbProfile) return dbProfile;
+    const provision = await authService.ensureCurrentUserProfile();
+    if (provision.error) return null;
+    dbProfile = await authService.getProfile(uid);
+    return dbProfile;
   };
 
   useEffect(() => {
@@ -180,45 +215,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // users to the driver app until refresh completes.
             let nextUser = session.user;
             let nextProfile = session.profile;
+            let verifiedDbProfile: authService.AuthProfile | null = null;
             try {
               const refreshed = await authService.refreshSession();
               if (mounted && isCurrentAuthAttempt(initAttemptId) && refreshed) {
                 nextUser = refreshed.user;
                 nextProfile = refreshed.profile;
-                const dbProfile = await authService.getProfile(refreshed.user.uid);
-                if (dbProfile) {
-                  nextProfile = mergeAuthProfiles(refreshed.profile, dbProfile);
+                verifiedDbProfile = await getVerifiedDbProfile(refreshed.user.uid);
+                if (verifiedDbProfile) {
+                  nextProfile = mergeAuthProfiles(refreshed.profile, verifiedDbProfile);
                   setRoleVerified(true);
                 } else {
                   setRoleVerified(false);
                 }
               } else if (mounted && isCurrentAuthAttempt(initAttemptId)) {
-                const dbProfile = await authService.getProfile(session.user.uid);
-                if (dbProfile) {
-                  nextProfile = mergeAuthProfiles(session.profile, dbProfile);
+                verifiedDbProfile = await getVerifiedDbProfile(session.user.uid);
+                if (verifiedDbProfile) {
+                  nextProfile = mergeAuthProfiles(session.profile, verifiedDbProfile);
                   setRoleVerified(true);
                 } else {
                   setRoleVerified(false);
                 }
               }
             } catch {
-              // Keep JWT-derived profile if network fails
+              // Treat restore/profile verification failures as auth failures.
               setRoleVerified(false);
             }
             if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
+            if (!verifiedDbProfile) {
+              await forceSignOutOnAuthFailure("restore_profile_verification_failed");
+              if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
+              setLoading(false);
+              return;
+            }
             setUser(nextUser);
             setProfile(authProfileToUserProfile(nextProfile));
             logAuthRouteDecision("restore_completed", {
               uid: nextUser.uid,
               role: nextProfile.role,
-              roleVerified: Boolean(await authService.getProfile(nextUser.uid)),
+              roleVerified: true,
             });
           }
         } else {
-          setUser(null);
-          setProfile(null);
-          setRoleVerified(false);
-          setSessionExpired(true);
+          clearAuthState(true);
           logAuthRouteDecision("restore_no_session", {});
         }
         if (!isCurrentAuthAttempt(initAttemptId)) return;
@@ -229,30 +268,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (!mounted || !isCurrentAuthAttempt(stateChangeAttemptId)) return;
             if (auth) {
               // Prefer DB role over JWT metadata (same source of truth as cold start).
-              let dbProfile = await authService.getProfile(auth.user.uid);
+              let dbProfile = await getVerifiedDbProfile(auth.user.uid);
               let merged = mergeAuthProfiles(auth.profile, dbProfile);
               if (!dbProfile) {
                 const refreshed = await authService.refreshSession();
                 if (refreshed) merged = refreshed.profile;
-                dbProfile = await authService.getProfile(auth.user.uid);
+                dbProfile = await getVerifiedDbProfile(auth.user.uid);
               }
               if (!mounted || !isCurrentAuthAttempt(stateChangeAttemptId)) return;
+              if (!dbProfile) {
+                await forceSignOutOnAuthFailure("auth_state_profile_verification_failed");
+                return;
+              }
 
               setUser(auth.user);
               setProfile(authProfileToUserProfile(merged));
-              setRoleVerified(Boolean(dbProfile));
+              setRoleVerified(true);
               setSessionExpired(false);
               logAuthRouteDecision("auth_state_signed_in", {
                 uid: auth.user.uid,
                 role: merged.role,
-                roleVerified: Boolean(dbProfile),
+                roleVerified: true,
               });
             } else {
-              if (!signOutRequestedRef.current) setSessionExpired(true);
+              const wasRequested = signOutRequestedRef.current;
               signOutRequestedRef.current = false;
-              setUser(null);
-              setProfile(null);
-              setRoleVerified(false);
+              clearAuthState(!wasRequested);
               logAuthRouteDecision("auth_state_signed_out", {});
             }
           });
@@ -263,10 +304,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(() => {
         // Defensive: if getSession ever rejects (e.g. unhandled throw), show sign-in
         if (mounted && isCurrentAuthAttempt(initAttemptId)) {
-          setUser(null);
-          setProfile(null);
-          setRoleVerified(false);
-          setSessionExpired(true);
+          clearAuthState(true);
           setLoading(false);
           logAuthRouteDecision("restore_error", {});
         }
@@ -275,29 +313,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const stateChangeAttemptId = beginAuthAttempt();
             if (!mounted || !isCurrentAuthAttempt(stateChangeAttemptId)) return;
             if (auth) {
-              let dbProfile = await authService.getProfile(auth.user.uid);
+              let dbProfile = await getVerifiedDbProfile(auth.user.uid);
               let merged = mergeAuthProfiles(auth.profile, dbProfile);
               if (!dbProfile) {
                 const refreshed = await authService.refreshSession();
                 if (refreshed) merged = refreshed.profile;
-                dbProfile = await authService.getProfile(auth.user.uid);
+                dbProfile = await getVerifiedDbProfile(auth.user.uid);
               }
               if (!mounted || !isCurrentAuthAttempt(stateChangeAttemptId)) return;
+              if (!dbProfile) {
+                await forceSignOutOnAuthFailure("auth_state_after_restore_error_profile_verification_failed");
+                return;
+              }
               setUser(auth.user);
               setProfile(authProfileToUserProfile(merged));
-              setRoleVerified(Boolean(dbProfile));
+              setRoleVerified(true);
               setSessionExpired(false);
               logAuthRouteDecision("auth_state_signed_in_after_restore_error", {
                 uid: auth.user.uid,
                 role: merged.role,
-                roleVerified: Boolean(dbProfile),
+                roleVerified: true,
               });
             } else {
-              if (!signOutRequestedRef.current) setSessionExpired(true);
+              const wasRequested = signOutRequestedRef.current;
               signOutRequestedRef.current = false;
-              setUser(null);
-              setProfile(null);
-              setRoleVerified(false);
+              clearAuthState(!wasRequested);
               logAuthRouteDecision("auth_state_signed_out_after_restore_error", {});
             }
           });
@@ -321,10 +361,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (keep) return;
         signOutRequestedRef.current = true;
         authService.signOut().finally(() => {
-          setUser(null);
-          setProfile(null);
-          setRoleVerified(false);
-          setSessionExpired(false);
+          clearAuthState(false);
         });
       });
     });
@@ -345,6 +382,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return result;
   };
 
+  const signInWithGoogle = async (keepSignedIn: boolean = true) => {
+    const signInAttemptId = beginAuthAttempt();
+    const result = await authService.signInWithGoogle();
+    if (!result.error) {
+      setSessionExpired(false);
+      await setKeepSignedIn(keepSignedIn);
+      if (!isCurrentAuthAttempt(signInAttemptId)) return { error: null };
+      await refreshSession();
+    }
+    return result;
+  };
+
   const signUp = async (
     email: string,
     password: string,
@@ -353,6 +402,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     operatingModel?: authService.OperatingModel,
     phone?: string,
     companyName?: string,
+    addressLine?: string,
+    city?: string,
+    state?: string,
+    zone?: string,
+    businessType?: string,
+    employeeCount?: string,
+    skipOrgCreation?: boolean,
   ) => {
     const result = await authService.signUp({
       email,
@@ -362,6 +418,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       companyName,
       role,
       operatingModel,
+      addressLine,
+      city,
+      state,
+      zone,
+      businessType,
+      employeeCount,
+      skipOrgCreation,
     });
     if (!result.error) {
       await refreshSession();
@@ -374,20 +437,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const session = await authService.refreshSession();
     if (!isCurrentAuthAttempt(refreshAttemptId)) return;
     if (session) {
-      const dbProfile = await authService.getProfile(session.user.uid);
+      const dbProfile = await getVerifiedDbProfile(session.user.uid);
       if (!isCurrentAuthAttempt(refreshAttemptId)) return;
+      if (!dbProfile) {
+        await forceSignOutOnAuthFailure("manual_refresh_profile_verification_failed");
+        return;
+      }
       const merged = dbProfile
         ? mergeAuthProfiles(session.profile, dbProfile)
         : session.profile;
       setUser(session.user);
       setProfile(authProfileToUserProfile(merged));
-      setRoleVerified(Boolean(dbProfile));
+      setRoleVerified(true);
       setSessionExpired(false);
       logAuthRouteDecision("refresh_completed", {
         uid: session.user.uid,
         role: merged.role,
-        roleVerified: Boolean(dbProfile),
+        roleVerified: true,
       });
+    } else {
+      clearAuthState(true);
     }
   };
 
@@ -398,10 +467,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error("Error during signOut in AuthContext:", error);
     }
-    setSessionExpired(false);
-    setUser(null);
-    setProfile(null);
-    setRoleVerified(false);
+    clearAuthState(false);
   };
 
   return (
@@ -414,6 +480,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionExpired,
         refreshSession,
         signIn,
+        signInWithGoogle,
         signUp,
         signOut,
       }}

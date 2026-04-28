@@ -5,11 +5,15 @@
  * When trip has no supplier_id but has supplier_name, match supplier by name (e.g. integrated/synced trips).
  * When tripsWhereOrgIsClient is passed, trips where current org is the client are attributed to the
  * integrated supplier whose linked_organization_id equals the trip's organization_id (trip owner).
- * Pass 5 (new): for awarded indents not yet converted to a trip, attribute accepted quote.amount to supplier
- * via bidder_organization_id → supplier.linked_organization_id. Prevents double-count via indentIdsCoveredByTrips Set.
+ * Supplier payables are from trips only — not from awarded indents before conversion (no pre-trip quote roll-up).
  */
 import type { FinancialRowData, AggregationTotals } from './types';
-import type { LedgerTx, TripForSupplier, SupplierLike, TripPartyMap, IndentForAggregation, DirectQuoteForAggregation } from './types';
+import type { LedgerTx, TripForSupplier, SupplierLike, TripPartyMap } from './types';
+import {
+  adjustedCost,
+  adjustedRevenue,
+  type TripAdjustment,
+} from '@/features/trips/services/tripAdjustments';
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from '@/features/trips/visibility/tripVisibility';
 
 /** Trip with organization_id (trip owner); used for "trips where we are the client". client_price = amount we were billed (use for due). */
@@ -31,14 +35,23 @@ function normId(id: string | null | undefined): string {
   return id == null ? '' : String(id).trim();
 }
 
+function adjustmentsForTrip(
+  adjustmentsByTripId: Record<string, TripAdjustment[]> | undefined,
+  tripId: string | undefined,
+): TripAdjustment[] {
+  if (!adjustmentsByTripId || !tripId) return [];
+  const k = String(tripId).trim().toLowerCase();
+  return adjustmentsByTripId[k] ?? [];
+}
+
 export function aggregateSuppliers(
   suppliers: SupplierLike[],
   trips: TripForSupplier[],
   transactions: LedgerTx[],
   tripsWhereOrgIsClient?: TripWhereOrgIsClient[],
   tripPartyMap?: TripPartyMap | null,
-  indents?: IndentForAggregation[],
-  directQuotes?: DirectQuoteForAggregation[]
+  /** When provided, trip payables match Adjustment Registry (cost vs revenue where applicable). */
+  adjustmentsByTripId?: Record<string, TripAdjustment[]>,
 ): { rows: FinancialRowData[]; totals: AggregationTotals } {
   const dueFromTrips: Record<string, number> = {};
   const sourced: Record<string, number> = {};
@@ -66,7 +79,11 @@ export function aggregateSuppliers(
   // O(trips): attribute each trip to supplier by supplier_id (normalized) or by supplier_name (aggregated trip = partner rate as due).
   for (let i = 0; i < trips.length; i++) {
     const t = trips[i];
-    const rate = Number(t.supplier_rate ?? 0);
+    const tid = (t as { id?: string }).id;
+    const adj = adjustmentsForTrip(adjustmentsByTripId, tid);
+    const rawRate = Number(t.supplier_rate ?? 0);
+    const rate =
+      adjustmentsByTripId !== undefined ? adjustedCost(rawRate, adj) : rawRate;
     const tripSupplierIdNorm = normId(t.supplier_id);
     let sid: string | null =
       (tripSupplierIdNorm && normalizedIdToRawId[tripSupplierIdNorm]) ?? null;
@@ -89,51 +106,15 @@ export function aggregateSuppliers(
     if (!ownerOrgId) continue;
     const sid = supplierIdByLinkedOrgId.get(ownerOrgId) ?? null;
     if (!sid) continue;
-    const amount = Number(t.client_price ?? 0) || Number(t.supplier_rate ?? 0);
+    const tid = (t as { id?: string }).id;
+    const adj = adjustmentsForTrip(adjustmentsByTripId, tid);
+    const baseAmt = Number(t.client_price ?? 0) || Number(t.supplier_rate ?? 0);
+    const amount =
+      adjustmentsByTripId !== undefined
+        ? adjustedRevenue(baseAmt, adj)
+        : baseAmt;
     dueFromTrips[sid] = (dueFromTrips[sid] ?? 0) + amount;
     sourced[sid] = (sourced[sid] ?? 0) + 1;
-  }
-
-  // Pass 5 (O(indents + quotes)): pre-trip supplier due from awarded indents.
-  // For each non-cancelled/completed indent NOT yet covered by a trip, find its accepted quote and
-  // attribute quote.amount to the matching supplier via bidder_organization_id → linked_organization_id.
-  if (indents && indents.length > 0 && directQuotes && directQuotes.length > 0) {
-    // O(trips + tripsWhereOrgIsClient): build set of indent_ids already covered by a trip row.
-    const indentIdsCoveredByTrips = new Set<string>();
-    for (let i = 0; i < trips.length; i++) {
-      const id = trips[i].indent_id;
-      if (id) indentIdsCoveredByTrips.add(id);
-    }
-    const asClientArr = tripsWhereOrgIsClient ?? [];
-    for (let i = 0; i < asClientArr.length; i++) {
-      const id = asClientArr[i].indent_id;
-      if (id) indentIdsCoveredByTrips.add(id);
-    }
-
-    // O(directQuotes): build accepted quote lookup map (one accepted quote per indent).
-    const acceptedQuoteByIndentId: Record<string, DirectQuoteForAggregation> = {};
-    for (let i = 0; i < directQuotes.length; i++) {
-      const q = directQuotes[i];
-      if (q.status === 'accepted') {
-        acceptedQuoteByIndentId[q.indent_id] = q;
-      }
-    }
-
-    // O(indents): attribute accepted quote amount to supplier.
-    for (let i = 0; i < indents.length; i++) {
-      const indent = indents[i];
-      const s = (indent.status || '').toLowerCase();
-      if (s === 'cancelled' || s === 'completed') continue;
-      if (indentIdsCoveredByTrips.has(indent.id)) continue;
-      const quote = acceptedQuoteByIndentId[indent.id];
-      if (!quote) continue; // indent not yet awarded; skip
-      const amount = Number(quote.amount ?? 0);
-      if (!amount) continue;
-      const sid = supplierIdByLinkedOrgId.get(quote.bidder_organization_id) ?? null;
-      if (!sid) continue;
-      dueFromTrips[sid] = (dueFromTrips[sid] ?? 0) + amount;
-      sourced[sid] = (sourced[sid] ?? 0) + 1;
-    }
   }
 
   // O(transactions): paid from ledger (contact_type=supplier + contact_id, or tripPartyMap fallback).

@@ -48,10 +48,15 @@ export {
   useBidsForPostQuery,
   useMyBidQuery,
   useSubmitBidMutation,
+  useUpdateBidMutation,
   useAcceptBidMutation,
   useRejectBidMutation,
   useWithdrawBidMutation,
 } from './useBidsQuery';
+export {
+  useStoryViewsQuery,
+  useRecordStoryViewMutation,
+} from './useStoryViewsQuery';
 export {
   useTripsWhereOrgIsClientQuery,
   useTripsWhereOrgIsSupplierQuery,
@@ -61,3 +66,15 @@ export {
   useSalaryRequestsQuery,
   useTripSubcontractsQuery,
 } from './useFinanceEntityQueries';
+export {
+  useTripFinanceAdjustmentsMap,
+  useInvalidateTripFinanceAdjustments,
+  adjustmentsForTripId,
+  tripFinanceAdjustmentsQueryOptions,
+} from './useTripFinanceAdjustmentsQuery';
+export {
+  useOrgMembersQuery,
+  useMyTeamInvitesQuery,
+  useInvalidateOrgMembers,
+  useInvalidateTeamInvites,
+} from './useOrgMembersQuery';

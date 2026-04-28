@@ -8,11 +8,19 @@ import Theme from "@/constants/Theme";
 import { getClientById } from "@/features/clients/services/clients.service";
 import { getSupplierById } from "@/features/suppliers/services/suppliers.service";
 import {
-  createTrip,
-  getTripDisplayNumber,
-  type CreateTripData,
-  type TripRow,
+    createTrip,
+    getTripDisplayNumber,
+    type CreateTripData,
+    type TripRow,
 } from "@/features/trips";
+import {
+    adjustedCost,
+    adjustedRevenue,
+    type TripAdjustment,
+} from "@/features/trips/services/tripAdjustments";
+import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
+import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
+import { supabase } from "@/lib/supabase";
 import {
     createConnectionRequest,
     getConnectionInviteeByPhone,
@@ -49,21 +57,18 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { createLedgerEntry, type LedgerRow } from "../services/finance.service";
-import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
-import { supabase } from "@/lib/supabase";
-import {
-  SHARED_LEDGER_AWAITING_PARTNER_UPDATE,
-  SHARED_LEDGER_PARTNER_PENDING_LABEL,
-  inferSharedTxnLineKind,
-  type InternalTrip,
-  type ReconciledRow,
-  type ReconStatus,
-} from "./sharedLedgerTypes";
-import {
-  SharedLedgerCommandCenter,
-  type CommandTxnRow,
-} from "./SharedLedgerCommandCenter";
 import { LedgerReportModal } from "./LedgerReportModal";
+import {
+    SharedLedgerCommandCenter,
+    type CommandTxnRow,
+} from "./SharedLedgerCommandCenter";
+import {
+    inferSharedTxnLineKind,
+    SHARED_LEDGER_AWAITING_PARTNER_UPDATE,
+    SHARED_LEDGER_PARTNER_PENDING_LABEL,
+    type InternalTrip,
+    type ReconciledRow
+} from "./sharedLedgerTypes";
 
 export interface SharedTripData {
   tripId: string;
@@ -174,6 +179,7 @@ function buildInternalTrips(
   entityId: string,
   entityType: "CLIENT" | "SUPPLIER",
   viewerOrgId?: string | null,
+  adjustmentByTripKey?: Map<string, TripAdjustment[]>,
 ): Map<string, InternalTrip> {
   const norm = (id: string | null | undefined) =>
     id == null ? "" : String(id).trim().toLowerCase();
@@ -209,6 +215,7 @@ function buildInternalTrips(
   const map = new Map<string, InternalTrip>();
   for (const t of trips) {
     const key = norm(t.id);
+    const adj = adjustmentByTripKey?.get(key) ?? [];
     const outAmt = outByTripId[key] ?? 0;
     // Determine whether this trip is a cross-org supplier-view trip (we are the supplier, not the owner).
     // When viewerOrgId is provided and the trip belongs to another org, use supplier_rate (our earning/payable),
@@ -217,13 +224,20 @@ function buildInternalTrips(
       viewerOrgId != null &&
       t.organization_id != null &&
       t.organization_id !== viewerOrgId;
-    const tripSales = isCrossOrgSupplierTrip
-      ? Number(t.supplier_rate ?? 0)
-      : Number(
-          entityType === "CLIENT"
-            ? (t.client_price ?? 0)
-            : (t.supplier_rate ?? 0),  // SUPPLIER: always use supplier_rate (what we owe them, not what they charge the end client)
-        );
+    let rawSales: number;
+    if (isCrossOrgSupplierTrip) {
+      rawSales = Number(t.supplier_rate ?? 0);
+    } else if (entityType === "CLIENT") {
+      rawSales = Number(t.client_price ?? 0);
+    } else {
+      rawSales = Number(t.supplier_rate ?? 0);
+    }
+    const tripSales =
+      adjustmentByTripKey != null
+        ? entityType === "SUPPLIER" && !isCrossOrgSupplierTrip
+          ? adjustedCost(rawSales, adj)
+          : adjustedRevenue(rawSales, adj)
+        : rawSales;
     // For supplier: if trip has no rate, use amount we paid so Total Billing reflects it.
     const sales =
       entityType === "SUPPLIER" && tripSales === 0 && outAmt > 0
@@ -592,6 +606,15 @@ export function SharedLedgerContent({
     [sharedScopeTrips],
   );
 
+  const sharedScopeTripIdsForAdj = useMemo(
+    () => sharedScopeTrips.map((t) => String(t.id)).filter(Boolean),
+    [sharedScopeTrips],
+  );
+  const { map: tripFinanceAdjMap } = useTripFinanceAdjustmentsMap(
+    organizationId ?? null,
+    sharedScopeTripIdsForAdj,
+  );
+
   const tripByNormRef = useMemo(() => {
     const m = new Map<string, TripRow>();
     for (const t of sharedScopeTrips) {
@@ -640,9 +663,17 @@ export function SharedLedgerContent({
             entity.id,
             entityType,
             organizationId,
+            tripFinanceAdjMap ?? undefined,
           )
         : new Map(),
-    [sharedScopeTrips, txs, entity.id, entityType, organizationId],
+    [
+      sharedScopeTrips,
+      txs,
+      entity.id,
+      entityType,
+      organizationId,
+      tripFinanceAdjMap,
+    ],
   );
 
   // When partner is not integrated: fetch contact phone, then check if they're in app (by phone lookup).
@@ -1998,7 +2029,7 @@ export function SharedLedgerContent({
   ]);
 
   const handleInviteToApp = useCallback(() => {
-    const message = `Join me on Q to sync our ledger and compare books with ${entity.name}. Download the Q app to get started.`;
+    const message = `Join me on Pulse to sync our ledger and compare books with ${entity.name}. Download the Q app to get started.`;
     Share.share({ message, title: "Invite to Q" }).catch(() => {});
   }, [entity.name]);
 
@@ -2022,7 +2053,7 @@ export function SharedLedgerContent({
           <View style={styles.notIntegratedLoading}>
             <ActivityIndicator size="small" color={Theme.primary} />
             <Text style={styles.notIntegratedLoadingText}>
-              Checking if {entity.name} is on Q…
+              Checking if {entity.name} is on Pulse…
             </Text>
           </View>
         )}
@@ -2063,7 +2094,7 @@ export function SharedLedgerContent({
         {inviteeStatus === "in_app" && (
           <>
             <Text style={styles.notIntegratedHint}>
-              {invitee?.full_name ?? entity.name} is on Q. Send a connection
+              {invitee?.full_name ?? entity.name} is on Pulse. Send a connection
               request to enable Compare & Verify.
             </Text>
             {pendingRequestSent ? (
@@ -2093,7 +2124,7 @@ export function SharedLedgerContent({
         {inviteeStatus === "not_in_app" && (
           <>
             <Text style={styles.notIntegratedHint}>
-              This contact isn’t on Q yet. Invite them to the app so you can
+              This contact isn’t on Pulse yet. Invite them to the app so you can
               connect later.
             </Text>
             <TouchableOpacity

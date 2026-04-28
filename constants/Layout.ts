@@ -52,6 +52,11 @@ export const Layout = {
   /** Height of custom tab bar (FISCAL | OPS | TRIPS) for consistent layout */
   tabBarHeight: 56,
   /**
+   * Desktop web top navigation reserve height.
+   * Keep scene content below the fixed Pulse header shell.
+   */
+  desktopTopNavOffset: 84,
+  /**
    * Vertical space to reserve for the floating demo tab bar (dock + margin) when it is
    * docked at the bottom — use for scroll content paddingBottom and FAB offset.
    */

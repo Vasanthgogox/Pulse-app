@@ -27,6 +27,7 @@ import {
   getSuppliersByOrganization,
   type SupplierRow,
 } from "@/features/suppliers/services/suppliers.service";
+import { adjustedRevenue } from "@/features/trips/services/tripAdjustments";
 import {
   getTripDisplayNumber,
   getTripsByOrganization,
@@ -44,6 +45,7 @@ import {
 } from "@/lib/capabilities";
 import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatINR, formatLedgerDate } from "@/lib/format";
+import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
@@ -63,16 +65,16 @@ import {
   Text,
   TouchableOpacity,
   useWindowDimensions,
-  View
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  getClientDetails,
-  getClientsByOrganization,
-  getLinkedOrgProfile,
-  updateClient,
-  type ClientRow,
-  type UpdateClientData,
+    getClientDetails,
+    getClientsByOrganization,
+    getLinkedOrgProfile,
+    updateClient,
+    type ClientRow,
+    type UpdateClientData,
 } from "../services/clients.service";
 
 /** UUID-shaped strings are not valid human supplier names (avoid showing raw ids). */
@@ -230,6 +232,14 @@ export default function ClientDetailScreen({
   const canAddTransaction = canAccessFinance(capabilities);
   const [client, setClient] = useState<ClientRow | null>(null);
   const [trips, setTrips] = useState<TripRow[]>([]);
+  const tripIdsForFinanceAdj = useMemo(
+    () => trips.map((t) => String(t.id)).filter(Boolean),
+    [trips],
+  );
+  const { record: tripFinanceAdjRecord } = useTripFinanceAdjustmentsMap(
+    currentOrganization?.id ?? null,
+    tripIdsForFinanceAdj,
+  );
   /** Supplier rows for resolving aggregate `supplier_id` → display name in trip table. */
   const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
   const [drivers, setDrivers] = useState<DriverRow[]>([]);
@@ -243,7 +253,7 @@ export default function ClientDetailScreen({
   >({});
   const fetchedPartnerOrgIdsRef = useRef<Set<string>>(new Set());
   const [transactions, setTransactions] = useState<LedgerRow[]>([]);
-  const [orgTrips, setOrgTrips] = useState<TripRow[]>([]);
+  const [, setOrgTrips] = useState<TripRow[]>([]);
   const [showReportModal, setShowReportModal] = useState(false);
   /** Bumps SharedLedgerContent to open PDF/Excel (Shared tab) from header download. */
   const [sharedLedgerDownloadSignal, setSharedLedgerDownloadSignal] =
@@ -276,7 +286,6 @@ export default function ClientDetailScreen({
           ? 12
           : 16
       : Layout.screenPaddingHorizontal;
-  const [profileEditMode, setProfileEditMode] = useState(false);
   const [editOrgName, setEditOrgName] = useState("");
   const [editContactPerson, setEditContactPerson] = useState("");
   const [editPhone, setEditPhone] = useState("");
@@ -649,27 +658,6 @@ export default function ClientDetailScreen({
     };
   }, [client?.linked_organization_id]);
 
-  const ledgerEntries: LedgerEntry[] = useMemo(() => {
-    const rows: LedgerEntry[] = transactions.map((tx) => {
-      const amountIn = Number(tx.amount_in ?? 0);
-      const amountOut = Number(tx.amount_out ?? 0);
-      const isIn = amountIn > 0;
-      const amount = isIn ? amountIn : amountOut;
-      const desc =
-        (tx.party_name || "—").trim() +
-        (tx.trip_number ? ` · ${tx.trip_number}` : "");
-      return {
-        id: tx.id,
-        desc: desc || "ENTRY",
-        date: formatLedgerDate(tx.transaction_date || tx.created_at),
-        amount,
-        isCredit: isIn,
-      };
-    });
-    rows.sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0));
-    return rows;
-  }, [transactions]);
-
   const tripOptions = useMemo(
     () =>
       trips.map((t) => ({
@@ -712,10 +700,6 @@ export default function ClientDetailScreen({
     return m;
   }, [trips]);
 
-  const handleExportLedger = () => {
-    Alert.alert(t("exportLedger"), t("exportComingSoon"));
-  };
-
   const handleEditSave = async (patch: UpdateClientData) => {
     if (!currentOrganization?.id || !client) return;
     const { error: err, client: updated } = await updateClient(
@@ -727,58 +711,6 @@ export default function ClientDetailScreen({
       setClient(updated);
       load();
     }
-  };
-
-  const handleInlineSaveProfile = async () => {
-    if (!client) return;
-    await handleEditSave({
-      organization_name: editOrgName,
-      contact_person: editContactPerson,
-      phone: editPhone,
-      email: editEmail,
-      address: editAddress,
-      gstin: editGstin,
-      pan_number: editPan,
-    });
-    setProfileEditMode(false);
-    triggerSuccess();
-  };
-
-  const handleSyncLatestFromPlatform = async () => {
-    if (!currentOrganization?.id || !client) return;
-    const linkedId = client.linked_organization_id ?? undefined;
-    if (linkedId) {
-      const { error: profileErr, profile } =
-        await getLinkedOrgProfile(linkedId);
-      if (!profileErr && profile) {
-        const { organizationName, contactPerson, phone } = profile;
-        const { error: updateErr, client: updated } = await updateClient(
-          currentOrganization.id,
-          client.id,
-          {
-            organization_name: organizationName,
-            contact_person: contactPerson || undefined,
-            phone: phone || undefined,
-          },
-        );
-        if (!updateErr && updated) {
-          setClient(updated);
-          return {
-            organizationName: updated.name,
-            contactPerson: updated.contact_person ?? "",
-            phone: updated.phone ?? "",
-          };
-        }
-      }
-    }
-    const { error: err, client: latest } = await getClientDetails(client.id);
-    if (err || !latest) return;
-    setClient(latest);
-    return {
-      organizationName: latest.name,
-      contactPerson: latest.contact_person ?? "",
-      phone: latest.phone ?? "",
-    };
   };
 
   const triggerSuccess = useCallback((title = "NODE_SYNCED") => {
@@ -834,7 +766,7 @@ export default function ClientDetailScreen({
 
   // TRANSACTION LEDGER — Aggressive consolidation & tally, O(n). Must run before any early return (Rules of Hooks).
   const {
-    rows: ledgerProtocolRows,
+    rows: _ledgerProtocolRows,
     totalBilledConsolidated,
     totalPendingConsolidated,
     tripIdToDue,
@@ -877,12 +809,24 @@ export default function ClientDetailScreen({
     }
     // Pass 1b: Attribute unlinked client payments to the trip with the largest due (so payment applies to the trip that needs it most).
     // For client receivables, only amount_in (receipts) counts as paid; we do not add amount_out here.
+    const linkedOrgIdForAdj = client?.linked_organization_id ?? null;
     const allocatedPaidByTripId = allocateAmountsToLargestDueTrips(
       trips.map((t) => {
         const key = norm(t.id);
+        const isIntegratedShipperClient =
+          client?.is_integrated === true &&
+          linkedOrgIdForAdj != null &&
+          isLoadBasedTrip(t) &&
+          t.organization_id != null &&
+          t.organization_id === linkedOrgIdForAdj;
+        const base = isIntegratedShipperClient
+          ? Number(t.supplier_rate ?? 0)
+          : Number(t.client_price ?? 0);
+        const adj = tripFinanceAdjRecord[key] ?? [];
+        const sales = adjustedRevenue(base, adj);
         return {
           tripId: key,
-          sales: Number(t.client_price ?? 0),
+          sales,
           paid: paidByTripId[key] ?? 0,
         };
       }),
@@ -917,11 +861,11 @@ export default function ClientDetailScreen({
         isLoadBasedTrip(t) &&
         t.organization_id != null &&
         t.organization_id === linkedOrgId;
-      const sales = Number(
-        isIntegratedShipperClient
-          ? (t.supplier_rate ?? 0)
-          : (t.client_price ?? 0),
-      );
+      const base = isIntegratedShipperClient
+        ? Number(t.supplier_rate ?? 0)
+        : Number(t.client_price ?? 0);
+      const adj = tripFinanceAdjRecord[key] ?? [];
+      const sales = adjustedRevenue(base, adj);
       const paid = allocatedPaidByTripId[key] ?? 0;
       const due = Math.max(0, sales - paid);
       tripIdToDue[t.id] = due;
@@ -962,7 +906,6 @@ export default function ClientDetailScreen({
     const unlinkedTx = transactions.filter((tx) => !linkedTxIds.has(tx.id));
     for (const tx of unlinkedTx) {
       const amountIn = Number(tx.amount_in ?? 0);
-      const amountOut = Number(tx.amount_out ?? 0);
       if (amountIn > 0) {
         finalRows.push({
           id: `adj-${tx.id}`,
@@ -983,7 +926,6 @@ export default function ClientDetailScreen({
       (s, r) => s + (r.missionId !== "ADJ" ? r.sales : 0),
       0,
     );
-    const totalPaid = finalRows.reduce((s, r) => s + r.paid, 0);
     const totalPending = finalRows.reduce((s, r) => s + r.due, 0);
 
     if (finalRows.length === 0) {
@@ -1004,7 +946,7 @@ export default function ClientDetailScreen({
       tripIdToDue,
       paidByTripId: allocatedPaidByTripId,
     };
-  }, [trips, transactions, clientId]);
+  }, [trips, transactions, clientId, client, tripFinanceAdjRecord]);
 
   const tripDateOpts = useMemo(
     () => ({ customFrom: tripCustomFrom, customTo: tripCustomTo }),
@@ -1023,21 +965,25 @@ export default function ClientDetailScreen({
       id == null ? "" : String(id).trim().toLowerCase();
     const linkedOrgId = client?.linked_organization_id ?? null;
     return tripsForMissionTable.map((t) => {
+      const key = norm(t.id);
       const isIntegratedShipperClient =
         client?.is_integrated === true &&
         linkedOrgId != null &&
         isLoadBasedTrip(t) &&
         t.organization_id != null &&
         t.organization_id === linkedOrgId;
+      const base = isIntegratedShipperClient
+        ? Number(t.supplier_rate ?? 0)
+        : Number(t.client_price ?? 0);
+      const adj = tripFinanceAdjRecord[key] ?? [];
+      const sales = adjustedRevenue(base, adj);
       return {
         trip: t,
         missionId: getTripDisplayNumber(t),
         route:
           `${t.pickup_area ?? ""} → ${t.drop_location ?? ""}`.trim() || "—",
-        sales: isIntegratedShipperClient
-          ? Number(t.supplier_rate ?? 0)
-          : Number(t.client_price ?? 0),
-        paid: paidByTripId[norm(t.id)] ?? 0,
+        sales,
+        paid: paidByTripId[key] ?? 0,
         due: tripIdToDue[t.id] ?? 0,
       };
     });
@@ -1047,6 +993,7 @@ export default function ClientDetailScreen({
     tripIdToDue,
     client?.linked_organization_id,
     client?.is_integrated,
+    tripFinanceAdjRecord,
   ]);
   const tripTransactionMetaById = useMemo(() => {
     const byTrip: Record<
@@ -2102,7 +2049,7 @@ export default function ClientDetailScreen({
                 triggerSuccess("CONNECTION_REQUESTED");
               }}
               onInviteToApp={() => {
-                const message = `Join me on Q to sync our ledger and compare books with ${clientName}. Download the Q app to get started.`;
+                const message = `Join me on Pulse to sync our ledger and compare books with ${clientName}. Download the Q app to get started.`;
                 Share.share({ message, title: "Invite to Q" })
                   .then(() => {
                     triggerSuccess("INVITE_SENT");
@@ -2257,7 +2204,7 @@ export default function ClientDetailScreen({
                   },
                 ]}
                 onPress={() => {
-                  const message = `Join me on Q to sync our ledger and compare books with ${clientName}. Download the Q app to get started.`;
+                  const message = `Join me on Pulse to sync our ledger and compare books with ${clientName}. Download the Q app to get started.`;
                   Share.share({ message, title: "Invite to Q" });
                 }}
                 activeOpacity={0.8}
