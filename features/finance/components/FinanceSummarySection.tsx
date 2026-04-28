@@ -191,6 +191,7 @@ function AnimatedFinanceCategoryCard({
   onPress,
   style,
   desktop,
+  active = false,
 }: {
   label: string;
   value: string;
@@ -202,6 +203,7 @@ function AnimatedFinanceCategoryCard({
   onPress: () => void;
   style?: any;
   desktop?: boolean;
+  active?: boolean;
 }) {
   const hover = useSharedValue(0);
   const press = useSharedValue(0);
@@ -257,7 +259,7 @@ function AnimatedFinanceCategoryCard({
       onPressOut={() => {
         press.value = withSpring(0, { damping: 16, stiffness: 250 });
       }}
-      style={style}
+      style={[style, active && styles.financeCategoryCardActive]}
     >
       <Animated.View
         style={[styles.financeCategoryAnimatedWrap, cardAnimatedStyle]}
@@ -313,6 +315,11 @@ function AnimatedFinanceCategoryCard({
                   : "0"}
               </Text>
             </View>
+            {active && (
+              <View style={styles.financeCategoryActivePill}>
+                <Text style={styles.financeCategoryActivePillText}>Active</Text>
+              </View>
+            )}
           </View>
           <Text
             style={[
@@ -339,11 +346,11 @@ function AnimatedFinanceCategoryCard({
                 desktop && styles.financeCategoryCtaTextDesktop,
               ]}
             >
-              Grid Profile
+              {active ? "Current Tab" : "Grid Profile"}
             </Text>
             <Animated.View style={ctaArrowAnimatedStyle}>
               <FontAwesome
-                name="arrow-right"
+                name={active ? "check-circle" : "arrow-right"}
                 size={desktop ? 12 : 11}
                 color={Theme.textOnDark}
               />
@@ -762,6 +769,7 @@ export function FinanceSummarySection({
               secondaryValue={card.secondaryValue}
               onPress={() => onTabPress(card.id)}
               desktop={desktopParity}
+              active={activeTab === card.id}
               style={[
                 styles.financeCategoryCard,
                 desktopFourCardParity && styles.financeCategoryCardDesktop,

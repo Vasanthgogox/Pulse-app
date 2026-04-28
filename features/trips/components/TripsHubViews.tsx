@@ -153,18 +153,31 @@ export function tripHubRevenue(
   return adjustedRevenue(raw, adjustments);
 }
 
-function deployPercentForTrip(trip: TripRow, stageUpper: string): number {
+function trackingStepForTrip(trip: TripRow, stageUpper: string): number {
   const completedLike =
     stageUpper === "COMPLETED" ||
     stageUpper === "DELIVERED" ||
     stageUpper === "DONE";
-  if (completedLike) return 100;
+  if (completedLike) return 4;
   const s = (trip.status ?? "").toLowerCase();
-  if (s === "completed" || s === "delivered") return 100;
-  if (s === "in_progress" || s === "in transit") return 85;
-  if (trip.started_at) return 60;
-  if (trip.driver_id || s === "assigned") return 50;
-  return 25;
+  if (s === "completed" || s === "delivered" || s === "done") return 4;
+  if (s === "in_progress" || s === "in transit" || s === "in_transit") return 3;
+  if (trip.started_at) return 2;
+  if (trip.driver_id || s === "assigned") return 1;
+  return 0;
+}
+
+function missionStatusForTrip(trip: TripRow): string {
+  const s = (trip.status ?? "").trim().toLowerCase();
+  if (!s) return "Pending";
+  if (s === "in_progress") return "Loading";
+  if (s === "in_transit" || s === "in transit") return "In Transit";
+  if (s === "at_destination" || s === "at_drop") return "At Destination";
+  if (s === "completed" || s === "delivered" || s === "done") return "Completed";
+  return s
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
 export function tripHubCost(
@@ -507,7 +520,8 @@ export function TripsHubTripCard({
   const due = tripHubDue(trip, currentOrganizationId, adj);
   const marginPct = marginPercentLabel(trip, currentOrganizationId, adj);
   const stageUpper = (stageLabel || "").toUpperCase();
-  const deployPct = deployPercentForTrip(trip, stageUpper);
+  const trackingStep = trackingStepForTrip(trip, stageUpper);
+  const missionStatus = missionStatusForTrip(trip);
   const origin = trip.pickup_area ?? "—";
   const dest = trip.drop_location ?? "—";
   const tripNo = getTripDisplayNumber(trip);
@@ -625,11 +639,21 @@ export function TripsHubTripCard({
               {tr("tripsHubMissionStatus")}
             </Text>
             <Text style={styles.fleetProgHeadIndigo}>
-              {deployPct}% {tr("tripsHubDeployed")}
+              {missionStatus}
             </Text>
           </View>
-          <View style={styles.fleetProgTrack}>
-            <View style={[styles.fleetProgFill, { width: `${deployPct}%` }]} />
+          <View style={styles.fleetProgSegmentRow}>
+            {[0, 1, 2, 3].map((i) => (
+              <View
+                key={i}
+                style={[
+                  styles.fleetProgSegment,
+                  trackingStep >= i + 1
+                    ? styles.fleetProgSegmentFilled
+                    : styles.fleetProgSegmentEmpty,
+                ]}
+              />
+            ))}
           </View>
         </View>
 
@@ -2237,16 +2261,21 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     textTransform: "uppercase",
   },
-  fleetProgTrack: {
-    height: 4,
-    borderRadius: 999,
-    backgroundColor: Theme.borderLight,
-    overflow: "hidden",
+  fleetProgSegmentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
-  fleetProgFill: {
-    height: "100%",
-    borderRadius: 999,
+  fleetProgSegment: {
+    flex: 1,
+    height: 8,
+    borderRadius: 6,
+  },
+  fleetProgSegmentFilled: {
     backgroundColor: Theme.darkGreen,
+  },
+  fleetProgSegmentEmpty: {
+    backgroundColor: Theme.borderLight,
   },
   fleetFooter: {
     flexDirection: "row",

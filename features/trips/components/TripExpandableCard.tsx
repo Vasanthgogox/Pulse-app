@@ -328,7 +328,19 @@ export function TripExpandableCard({
     if (trip.driver_id || s === "assigned") return 1;
     return 0;
   })();
-  const deployPercent = Math.min(100, trackingStep * 25);
+  const missionStatus = (() => {
+    const s = (trip.status ?? "").trim().toLowerCase();
+    if (!s) return "Pending";
+    if (s === "in_progress") return "Loading";
+    if (s === "in_transit" || s === "in transit") return "In Transit";
+    if (s === "at_destination" || s === "at_drop") return "At Destination";
+    if (s === "completed" || s === "delivered" || s === "done") return "Completed";
+    return s
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+  })();
+  const segmentFilled = (segmentIndex: number) => trackingStep >= segmentIndex + 1;
 
   return (
     <View style={styles.wrap}>
@@ -434,12 +446,20 @@ export function TripExpandableCard({
           <View style={styles.cardProgressWrap}>
             <View style={styles.cardProgressLabels}>
               <Text style={styles.cardProgressLabel}>MISSION STATUS</Text>
-              <Text style={styles.cardProgressPercent}>{deployPercent}% DEPLOYED</Text>
+              <Text style={styles.cardProgressStatus}>{missionStatus}</Text>
             </View>
-            <View style={styles.cardProgressTrack}>
-              <View style={styles.cardProgressFillWrap}>
-                <View style={[styles.cardProgressFill, { width: `${deployPercent}%` }]} />
-              </View>
+            <View style={styles.cardProgressSegmentRow}>
+              {[0, 1, 2, 3].map((i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.cardProgressSegment,
+                    segmentFilled(i)
+                      ? styles.cardProgressSegmentFilled
+                      : styles.cardProgressSegmentEmpty,
+                  ]}
+                />
+              ))}
             </View>
           </View>
         </View>
@@ -715,27 +735,28 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1,
   },
-  cardProgressPercent: {
+  cardProgressStatus: {
     fontSize: 7,
-    fontWeight: "600",
+    fontWeight: "700",
     color: Theme.primary,
     letterSpacing: 0.3,
+    textTransform: "uppercase",
   },
-  cardProgressTrack: {
-    height: 5,
-    backgroundColor: Theme.surfaceBorder,
-    borderRadius: 999,
-    overflow: "hidden",
+  cardProgressSegmentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
-  cardProgressFillWrap: {
-    height: "100%",
-    borderRadius: 999,
-    overflow: "hidden",
+  cardProgressSegment: {
+    flex: 1,
+    height: 8,
+    borderRadius: 6,
   },
-  cardProgressFill: {
-    height: "100%",
-    borderRadius: 999,
+  cardProgressSegmentFilled: {
     backgroundColor: Theme.primary,
+  },
+  cardProgressSegmentEmpty: {
+    backgroundColor: Theme.surfaceBorder,
   },
   expandedContent: {
     marginTop: -4,
