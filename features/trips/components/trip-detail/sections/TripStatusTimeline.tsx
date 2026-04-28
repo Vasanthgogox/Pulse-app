@@ -73,6 +73,16 @@ function effectiveJourneyProgressIndex(trip: TripRow): number {
 /** Driver flow stages compressed into four visible journey segments. */
 function getJourneySegmentProgress(trip: TripRow): 0 | 1 | 2 | 3 | 4 {
   const s = (trip.status ?? "").toLowerCase();
+  const createdMs = new Date(trip.created_at ?? "").getTime();
+  const updatedMs = new Date(trip.updated_at ?? "").getTime();
+  const hasPostCreateUpdate =
+    Number.isFinite(createdMs) &&
+    Number.isFinite(updatedMs) &&
+    updatedMs - createdMs > 1000;
+  const acceptedByDriver =
+    trip.status_updated_role === "driver" ||
+    Number(trip.status_revision ?? 0) > 0 ||
+    hasPostCreateUpdate;
   if (s === "completed" || s === "delivered" || s === "done" || !!trip.completed_at) {
     return 4;
   }
@@ -89,7 +99,8 @@ function getJourneySegmentProgress(trip: TripRow): 0 | 1 | 2 | 3 | 4 {
   ) {
     return 2;
   }
-  if (s === "assigned" || s === "draft" || s === "pending_acceptance") return 1;
+  if (s === "assigned") return acceptedByDriver ? 1 : 0;
+  if (s === "draft" || s === "pending_acceptance") return 0;
   return 0;
 }
 

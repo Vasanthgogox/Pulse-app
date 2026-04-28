@@ -1019,6 +1019,15 @@ export default function DriverRadarScreen() {
 
     setAcceptError(null);
     setAcceptLoading(true);
+    const { error: acceptSyncError } = await tripsService.updateTripStatus(trip.id, {
+      // Persist driver acceptance without changing lifecycle stage.
+      status: "assigned",
+    });
+    if (acceptSyncError) {
+      setAcceptError(acceptSyncError.message);
+      setAcceptLoading(false);
+      return;
+    }
     triggerSuccess("Trip accepted. Proceed to pickup.");
     setSelectedIncomingTripId(trip.id);
     setAcceptedTripId(trip.id);
