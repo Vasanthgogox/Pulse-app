@@ -69,6 +69,22 @@ type TripDueMeta = {
   isCrossOrgSupplier: boolean;
 };
 
+function getSupplierDisplayName(
+  supplier: Pick<
+    SupplierRow,
+    "name" | "company_name" | "contact_person" | "owner_full_name"
+  > | null | undefined,
+  fallback = "Supplier",
+): string {
+  const value =
+    supplier?.name?.trim() ||
+    supplier?.company_name?.trim() ||
+    supplier?.contact_person?.trim() ||
+    supplier?.owner_full_name?.trim() ||
+    "";
+  return value || fallback;
+}
+
 export default function LedgerSyncScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -375,7 +391,7 @@ export default function LedgerSyncScreen() {
   }));
   const supplierPartyOptions: PartyOption[] = suppliers.map((s) => ({
     id: s.id,
-    name: s.name ?? t("supplier"),
+    name: getSupplierDisplayName(s, t("supplier")),
     avatar_url: s.avatar_url ?? null,
     avatar_seed: s.avatar_seed ?? null,
     linked_organization_id: s.linked_organization_id ?? null,
@@ -556,7 +572,10 @@ export default function LedgerSyncScreen() {
 
         if (!resolvedPartyName || resolvedPartyName === "—") {
           const fromSupplierName = resolvedContactId && resolvedContactType === "supplier"
-            ? suppliers.find((s) => s.id === resolvedContactId)?.name ?? null
+            ? getSupplierDisplayName(
+                suppliers.find((s) => s.id === resolvedContactId),
+                "",
+              ) || null
             : null;
           if (fromSupplierName) {
             resolvedPartyName = fromSupplierName;
@@ -730,6 +749,106 @@ export default function LedgerSyncScreen() {
         ? "suppliers"
         : "all";
 
+  const resolvedEntityPartyName = useMemo(() => {
+    const rawName = (params.partyName ?? "").trim();
+    const normalized = rawName.toLowerCase();
+    const isGeneric =
+      normalized === "" ||
+      normalized === "supplier" ||
+      normalized === "client" ||
+      normalized === "driver" ||
+      normalized === "entry";
+    if (!isGeneric) return rawName;
+
+    const candidateId = params.partyId ?? params.entityId ?? null;
+    if (!candidateId) return rawName || null;
+    if (params.entityType === "SUPPLIER") {
+      const supplier = suppliers.find((s) => s.id === candidateId);
+      return (
+        getSupplierDisplayName(supplier, "") ||
+        rawName ||
+        null
+      );
+    }
+    if (params.entityType === "CLIENT") {
+      const row = clients.find((c) => c.id === candidateId);
+      return row?.name?.trim() || row?.contact_person?.trim() || rawName || null;
+    }
+    if (params.entityType === "DRIVER") {
+      return (
+        drivers.find((d) => d.id === candidateId)?.name?.trim() ||
+        rawName ||
+        null
+      );
+    }
+    return rawName || null;
+  }, [
+    params.partyName,
+    params.partyId,
+    params.entityId,
+    params.entityType,
+    suppliers,
+    clients,
+    drivers,
+  ]);
+
+  const tripById = useMemo(() => {
+    const m = new Map<string, TripOptionWithOrg>();
+    for (const t of trips) m.set(t.id, t);
+    return m;
+  }, [trips]);
+
+  const inferredSupplierFromTrip = useMemo(() => {
+    const tripId = params.tripId ?? null;
+    if (!tripId) return { id: null as string | null, name: null as string | null };
+    const trip = tripById.get(tripId);
+    if (!trip) return { id: null as string | null, name: null as string | null };
+
+    const tripSupplierId = (trip.supplier_id ?? "").trim() || null;
+    const byTripId = tripSupplierId
+      ? suppliers.find((s) => s.id === tripSupplierId)
+      : null;
+    if (byTripId) {
+      return { id: byTripId.id, name: getSupplierDisplayName(byTripId, "") || null };
+    }
+
+    // Cross-org integrated fallback: trip owner org -> unique linked local supplier.
+    const linkedLocalSupplierId =
+      trip.organization_id != null
+        ? uniqueLinkedSupplierIdByOrgId.get(trip.organization_id) ?? null
+        : null;
+    const byLinkedOrg = linkedLocalSupplierId
+      ? suppliers.find((s) => s.id === linkedLocalSupplierId)
+      : null;
+    if (byLinkedOrg) {
+      return {
+        id: byLinkedOrg.id,
+        name: getSupplierDisplayName(byLinkedOrg, "") || null,
+      };
+    }
+
+    const tripSupplierName = (trip.supplier_name ?? "").trim() || null;
+    return { id: tripSupplierId, name: tripSupplierName };
+  }, [params.tripId, tripById, suppliers, uniqueLinkedSupplierIdByOrgId]);
+
+  const genericPartyName = useMemo(() => {
+    const raw = (params.partyName ?? "").trim().toLowerCase();
+    return raw === "" || raw === "supplier" || raw === "client" || raw === "driver";
+  }, [params.partyName]);
+
+  const resolvedModalPartyName = useMemo(() => {
+    const base = (resolvedEntityPartyName ?? "").trim();
+    if (base && base.toLowerCase() !== "supplier") return base;
+    if (inferredSupplierFromTrip.name?.trim()) return inferredSupplierFromTrip.name.trim();
+    if (!genericPartyName && (params.partyName ?? "").trim()) return (params.partyName ?? "").trim();
+    return base || (params.partyName ?? "").trim() || null;
+  }, [
+    resolvedEntityPartyName,
+    inferredSupplierFromTrip.name,
+    genericPartyName,
+    params.partyName,
+  ]);
+
   if (loading || !orgId) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -748,7 +867,7 @@ export default function LedgerSyncScreen() {
 
   /** When opened from entity detail, party is fixed (customer/supplier/driver) or context is vehicle; show in header. */
   const isFromDetail = Boolean(params.entityType && params.entityId);
-  const entryContextLabel = isFromDetail ? (params.partyName || t("entry")) : null;
+  const entryContextLabel = isFromDetail ? (resolvedEntityPartyName || t("entry")) : null;
 
   /** Vehicle add-entry: use AddVehicleEntryModal (no vehicle logic in AddTransactionModal). */
   if (params.entityType === "VEHICLE" && params.entityId) {
@@ -808,16 +927,16 @@ export default function LedgerSyncScreen() {
         linkedSupplierIdByOrgId={uniqueLinkedSupplierIdByOrgId}
         viewerOrgId={orgId}
         partyContext={partyContext}
-        defaultPartyId={params.partyId ?? undefined}
-        defaultPartyName={params.partyName ?? undefined}
+        defaultPartyId={params.partyId ?? inferredSupplierFromTrip.id ?? undefined}
+        defaultPartyName={resolvedModalPartyName ?? undefined}
         lockedPartyId={
           params.entityType === "CLIENT" || params.entityType === "SUPPLIER" || params.entityType === "DRIVER"
-            ? (params.entityId ?? undefined)
+            ? (params.entityId ?? params.partyId ?? inferredSupplierFromTrip.id ?? undefined)
             : undefined
         }
         lockedPartyName={
           params.entityType === "CLIENT" || params.entityType === "SUPPLIER" || params.entityType === "DRIVER"
-            ? (params.partyName ?? undefined)
+            ? (resolvedModalPartyName ?? undefined)
             : undefined
         }
         initialEntry={editingEntry}

@@ -20,6 +20,10 @@
     "test": "jest",
     "test:e2e": "detox test -c ios.sim.debug",
     "test:e2e:build": "detox build -c ios.sim.debug",
+    "test:web": "playwright test",
+    "test:web:ui": "playwright test --ui",
+    "test:web:headed": "playwright test --headed",
+    "test:web:report": "playwright show-report",
     "seed": "ts-node --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"node\"}' scripts/seed-test-data.ts",
     "db:push": "supabase db push",
     "db:push-both": "bash scripts/push-both-dbs.sh",
@@ -109,7 +113,9 @@
     "react-test-renderer": "19.1.0",
     "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "@playwright/test": "^1.48.0",
+    "@types/node": "^22.0.0"
   },
   "private": true
 }

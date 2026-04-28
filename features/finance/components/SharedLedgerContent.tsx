@@ -14,6 +14,11 @@ import {
   type TripRow,
 } from "@/features/trips";
 import {
+  adjustedCost,
+  adjustedRevenue,
+  type TripAdjustment,
+} from "@/features/trips/services/tripAdjustments";
+import {
     createConnectionRequest,
     getConnectionInviteeByPhone,
     getConnectionRequestsSent,
@@ -33,6 +38,7 @@ import {
     type SharedLedgerEntry,
 } from "@/services/sharedLedgerService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -174,6 +180,7 @@ function buildInternalTrips(
   entityId: string,
   entityType: "CLIENT" | "SUPPLIER",
   viewerOrgId?: string | null,
+  adjustmentByTripKey?: Map<string, TripAdjustment[]>,
 ): Map<string, InternalTrip> {
   const norm = (id: string | null | undefined) =>
     id == null ? "" : String(id).trim().toLowerCase();
@@ -209,6 +216,7 @@ function buildInternalTrips(
   const map = new Map<string, InternalTrip>();
   for (const t of trips) {
     const key = norm(t.id);
+    const adj = adjustmentByTripKey?.get(key) ?? [];
     const outAmt = outByTripId[key] ?? 0;
     // Determine whether this trip is a cross-org supplier-view trip (we are the supplier, not the owner).
     // When viewerOrgId is provided and the trip belongs to another org, use supplier_rate (our earning/payable),
@@ -217,13 +225,20 @@ function buildInternalTrips(
       viewerOrgId != null &&
       t.organization_id != null &&
       t.organization_id !== viewerOrgId;
-    const tripSales = isCrossOrgSupplierTrip
-      ? Number(t.supplier_rate ?? 0)
-      : Number(
-          entityType === "CLIENT"
-            ? (t.client_price ?? 0)
-            : (t.supplier_rate ?? 0),  // SUPPLIER: always use supplier_rate (what we owe them, not what they charge the end client)
-        );
+    let rawSales: number;
+    if (isCrossOrgSupplierTrip) {
+      rawSales = Number(t.supplier_rate ?? 0);
+    } else if (entityType === "CLIENT") {
+      rawSales = Number(t.client_price ?? 0);
+    } else {
+      rawSales = Number(t.supplier_rate ?? 0);
+    }
+    const tripSales =
+      adjustmentByTripKey != null
+        ? entityType === "SUPPLIER" && !isCrossOrgSupplierTrip
+          ? adjustedCost(rawSales, adj)
+          : adjustedRevenue(rawSales, adj)
+        : rawSales;
     // For supplier: if trip has no rate, use amount we paid so Total Billing reflects it.
     const sales =
       entityType === "SUPPLIER" && tripSales === 0 && outAmt > 0
@@ -592,6 +607,15 @@ export function SharedLedgerContent({
     [sharedScopeTrips],
   );
 
+  const sharedScopeTripIdsForAdj = useMemo(
+    () => sharedScopeTrips.map((t) => String(t.id)).filter(Boolean),
+    [sharedScopeTrips],
+  );
+  const { map: tripFinanceAdjMap } = useTripFinanceAdjustmentsMap(
+    organizationId ?? null,
+    sharedScopeTripIdsForAdj,
+  );
+
   const tripByNormRef = useMemo(() => {
     const m = new Map<string, TripRow>();
     for (const t of sharedScopeTrips) {
@@ -640,9 +664,17 @@ export function SharedLedgerContent({
             entity.id,
             entityType,
             organizationId,
+            tripFinanceAdjMap ?? undefined,
           )
         : new Map(),
-    [sharedScopeTrips, txs, entity.id, entityType, organizationId],
+    [
+      sharedScopeTrips,
+      txs,
+      entity.id,
+      entityType,
+      organizationId,
+      tripFinanceAdjMap,
+    ],
   );
 
   // When partner is not integrated: fetch contact phone, then check if they're in app (by phone lookup).

@@ -1176,7 +1176,7 @@ export function TripDetailFinanceView({
     () => tripLedgerEntries.reduce((s, tx) => s + Number(tx.amount_in ?? 0), 0),
     [tripLedgerEntries],
   );
-  const dueFromCustomer = Math.max(0, sales - receivedFromCustomer);
+  const dueFromCustomer = Math.max(0, adjSales - receivedFromCustomer);
 
   /** Paid to supplier: outflows linked to this trip (supplier payments). Due vs adjusted cost. */
   const paidToSupplier = useMemo(

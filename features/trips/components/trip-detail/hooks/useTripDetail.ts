@@ -35,6 +35,7 @@ import {
   useTransactionsQuery,
   useTripSubcontractsQuery,
 } from "@/lib/queries";
+import { queryKeys } from "@/lib/queryKeys";
 import * as driverLocationService from "@/services/driverLocationService";
 import * as tripDocumentsService from "@/services/tripDocumentsService";
 import {
@@ -50,6 +51,7 @@ import type { DisputeRow } from "@/services/sharedLedgerService";
 import type * as ExpoLocationTypes from "expo-location";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Alert } from "react-native";
 import { useRealtimeTrip } from "../../../hooks/useRealtimeTrips";
 import {
@@ -160,6 +162,7 @@ export function useTripDetail({
   const { t } = useLanguage();
   const { profile, user } = useAuth();
   const { currentOrganization } = useOrganization();
+  const queryClient = useQueryClient();
 
   // ── Trip data ─────────────────────────────────────────────────────────────
   const [trip, setTrip] = useState<TripRow | null>(null);
@@ -1023,8 +1026,11 @@ export function useTripDetail({
           : undefined,
       );
       await loadAdjustments();
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.tripFinanceAdjustmentsRoot],
+      });
     },
-    [trip, currentOrganization?.id, loadAdjustments],
+    [trip, currentOrganization?.id, loadAdjustments, queryClient],
   );
 
   const handleRemoveAdjustment = useCallback(
@@ -1032,8 +1038,11 @@ export function useTripDetail({
       if (!trip?.id) return;
       await removeTripAdjustment(trip.id, adjustmentId);
       await loadAdjustments();
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.tripFinanceAdjustmentsRoot],
+      });
     },
-    [trip?.id, loadAdjustments],
+    [trip?.id, loadAdjustments, queryClient],
   );
 
   // ── Timeline expand ───────────────────────────────────────────────────────

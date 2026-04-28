@@ -479,20 +479,15 @@ export function DriverTripFlowCard({
       ) : null}
 
       {step === 'transit' ? (
-        <View>
-          <TouchableOpacity
-            style={[styles.primaryBtn, { backgroundColor: Theme.textPrimaryDark }, stepLoading && styles.btnDisabled]}
-            onPress={confirmReached}
-            disabled={stepLoading}
-            activeOpacity={0.9}
-          >
-            <FontAwesome name="map-marker" size={18} color={Theme.textOnPrimary} />
-            <Text style={styles.primaryBtnText}>{stepLoading ? 'Updating…' : 'Arrived at drop-off'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryDangerLink} activeOpacity={0.8}>
-            <Text style={[styles.secondaryDangerText, { color: Theme.negative }]}>SOS</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={[styles.primaryBtn, { backgroundColor: Theme.textPrimaryDark }, stepLoading && styles.btnDisabled]}
+          onPress={confirmReached}
+          disabled={stepLoading}
+          activeOpacity={0.9}
+        >
+          <FontAwesome name="map-marker" size={18} color={Theme.textOnPrimary} />
+          <Text style={styles.primaryBtnText}>{stepLoading ? 'Updating…' : 'Arrived at drop-off'}</Text>
+        </TouchableOpacity>
       ) : null}
 
       {step === 'reached' ? (
@@ -749,8 +744,6 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: { fontSize: 16, fontWeight: '900', letterSpacing: 0.2, color: Theme.textOnPrimary },
   btnDisabled: { opacity: 0.7 },
-  secondaryDangerLink: { alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 16, marginTop: 0 },
-  secondaryDangerText: { fontSize: 14, fontWeight: '800' },
 
   reachedBlock: { paddingTop: 2 },
   podCard: { borderWidth: 1, borderRadius: 18, padding: 12 },
