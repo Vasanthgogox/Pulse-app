@@ -4,7 +4,12 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, type ReactNode } from "react";
-import { Platform, Pressable, Text, TouchableOpacity, View } from "react-native";
+import {
+    Platform,
+    Pressable,
+    Text,
+    View
+} from "react-native";
 import Animated, {
     Easing,
     interpolate,
@@ -19,8 +24,8 @@ import type {
     FinanceSubTab,
     LedgerCategory,
 } from "../types";
-import { FinanceTabRow } from "./FinanceTabRow";
 import { styles } from "./FinanceScreen.styles";
+import { FinanceTabRow } from "./FinanceTabRow";
 import type { EntityListFilter } from "./TreasurySummaryCard";
 import { TreasurySummaryCard } from "./TreasurySummaryCard";
 
@@ -166,7 +171,9 @@ function AnimatedFinanceHeroCard({
       style={styles.financeBalanceCardPressable}
     >
       <Animated.View style={[styles.financeBalanceCardGlow, glowStyle]} />
-      <Animated.View style={[styles.financeBalanceCardInnerWrap, animatedStyle]}>
+      <Animated.View
+        style={[styles.financeBalanceCardInnerWrap, animatedStyle]}
+      >
         {children}
       </Animated.View>
     </Pressable>
@@ -252,7 +259,9 @@ function AnimatedFinanceCategoryCard({
       }}
       style={style}
     >
-      <Animated.View style={[styles.financeCategoryAnimatedWrap, cardAnimatedStyle]}>
+      <Animated.View
+        style={[styles.financeCategoryAnimatedWrap, cardAnimatedStyle]}
+      >
         <LinearGradient
           colors={gradient}
           start={{ x: 0, y: 0 }}
@@ -299,7 +308,9 @@ function AnimatedFinanceCategoryCard({
             </Text>
             <View style={styles.financeCategoryCountPill}>
               <Text style={styles.financeCategoryCountText}>
-                {typeof count === "number" ? count.toLocaleString("en-IN") : "0"}
+                {typeof count === "number"
+                  ? count.toLocaleString("en-IN")
+                  : "0"}
               </Text>
             </View>
           </View>
@@ -492,132 +503,164 @@ export function FinanceSummarySection({
     <>
       <View style={styles.financeCardsBlock}>
         <View style={styles.financeCardsGrid}>
-          <AnimatedFinanceHeroCard desktop={desktopParity} onPress={() => onTabPress("cash")}>
+          <AnimatedFinanceHeroCard
+            desktop={desktopParity}
+            onPress={() => onTabPress("cash")}
+          >
             <View
               style={[
                 styles.financeBalanceCard,
                 desktopParity && styles.financeBalanceCardDesktop,
               ]}
             >
-            <Animated.View
-              style={[styles.financeBalanceDecorIconWrap, heroDecorAnimatedStyle]}
-            >
-              <FontAwesome
-                name="book"
-                size={desktopParity ? 132 : 92}
-                color={Theme.textOnDark}
-                style={styles.financeBalanceDecorIcon}
-              />
-            </Animated.View>
-            <View style={styles.financeBalanceTopRow}>
-              <Text style={styles.financeBalanceEyebrow}>
-                Audited Operating Balance
-              </Text>
-              {datePreset != null && (
-                <View style={styles.financeRangeDesktopWrap}>
-                  <Text style={styles.financeRangeLabel}>Range</Text>
-                  <View style={styles.financeRangeDesktopPillRow}>
-                    {rangePills.map((pill) => {
-                      const active = datePreset.period === pill.id;
-                      return (
-                        <Pressable
-                          key={pill.id}
-                          onPress={() => datePreset.onPeriodChange(pill.id)}
-                          style={[
-                            styles.financeRangePill,
-                            styles.financeRangePillDesktop,
-                            active && styles.financeRangePillActive,
-                          ]}
-                        >
-                          <Text
+              <Animated.View
+                style={[
+                  styles.financeBalanceDecorIconWrap,
+                  heroDecorAnimatedStyle,
+                ]}
+              >
+                <FontAwesome
+                  name="book"
+                  size={desktopParity ? 132 : 92}
+                  color={Theme.textOnDark}
+                  style={styles.financeBalanceDecorIcon}
+                />
+              </Animated.View>
+              <View style={styles.financeBalanceTopRow}>
+                <Text style={styles.financeBalanceEyebrow}>
+                  Audited Operating Balance
+                </Text>
+                {datePreset != null && (
+                  <View style={styles.financeRangeDesktopWrap}>
+                    <Text style={styles.financeRangeLabel}>Range</Text>
+                    <View style={styles.financeRangeDesktopPillRow}>
+                      {rangePills.map((pill) => {
+                        const active = datePreset.period === pill.id;
+                        return (
+                          <Pressable
+                            key={pill.id}
+                            onPress={() => datePreset.onPeriodChange(pill.id)}
                             style={[
-                              styles.financeRangePillText,
-                              active && styles.financeRangePillTextActive,
+                              styles.financeRangePill,
+                              styles.financeRangePillDesktop,
+                              active && styles.financeRangePillActive,
                             ]}
                           >
-                            {pill.label}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                    <Pressable
-                      onPress={() => {
-                        if (onQuickCustomRange) {
-                          const now = new Date();
-                          const from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-                          const to = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
-                          onQuickCustomRange(from.toISOString(), to.toISOString());
-                        }
-                      }}
-                      style={[
-                        styles.financeRangePill,
-                        styles.financeRangePillDesktop,
-                        datePreset.period === "CUSTOM" && styles.financeRangePillActive,
-                      ]}
-                    >
-                      <Text
+                            <Text
+                              style={[
+                                styles.financeRangePillText,
+                                active && styles.financeRangePillTextActive,
+                              ]}
+                            >
+                              {pill.label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                      <Pressable
+                        onPress={() => {
+                          if (onQuickCustomRange) {
+                            const now = new Date();
+                            const from = new Date(
+                              now.getFullYear(),
+                              now.getMonth() - 1,
+                              1,
+                            );
+                            const to = new Date(
+                              now.getFullYear(),
+                              now.getMonth(),
+                              0,
+                              23,
+                              59,
+                              59,
+                            );
+                            onQuickCustomRange(
+                              from.toISOString(),
+                              to.toISOString(),
+                            );
+                          }
+                        }}
                         style={[
-                          styles.financeRangePillText,
-                          datePreset.period === "CUSTOM" && styles.financeRangePillTextActive,
+                          styles.financeRangePill,
+                          styles.financeRangePillDesktop,
+                          datePreset.period === "CUSTOM" &&
+                            styles.financeRangePillActive,
                         ]}
                       >
-                        Last Month
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => datePreset.onCustomRangePress()}
-                      style={[
-                        styles.financeRangePill,
-                        styles.financeRangePillDesktop,
-                        styles.financeRangePillCustom,
-                      ]}
-                    >
-                      <FontAwesome name="calendar" size={11} color={Theme.textOnDarkMuted} />
-                      <Text style={styles.financeRangePillText}>Custom</Text>
-                    </Pressable>
+                        <Text
+                          style={[
+                            styles.financeRangePillText,
+                            datePreset.period === "CUSTOM" &&
+                              styles.financeRangePillTextActive,
+                          ]}
+                        >
+                          Last Month
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => datePreset.onCustomRangePress()}
+                        style={[
+                          styles.financeRangePill,
+                          styles.financeRangePillDesktop,
+                          styles.financeRangePillCustom,
+                        ]}
+                      >
+                        <FontAwesome
+                          name="calendar"
+                          size={11}
+                          color={Theme.textOnDarkMuted}
+                        />
+                        <Text style={styles.financeRangePillText}>Custom</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.financeBalanceValue}>
+                {formatAmount(auditedNet)}
+              </Text>
+              <View style={styles.financeBalanceStatsRow}>
+                <View style={styles.financeBalanceStat}>
+                  <Animated.View
+                    style={[
+                      styles.financeBalanceStatIconIn,
+                      heroStatPulseStyle,
+                    ]}
+                  >
+                    <FontAwesome
+                      name="arrow-circle-down"
+                      size={desktopParity ? 15 : 13}
+                      color={Theme.textOnDark}
+                    />
+                  </Animated.View>
+                  <View>
+                    <Text style={styles.financeBalanceStatLabel}>Incoming</Text>
+                    <Text style={styles.financeBalanceStatValue}>
+                      {formatAmount(auditedIn)}
+                    </Text>
                   </View>
                 </View>
-              )}
-            </View>
-            <Text style={styles.financeBalanceValue}>
-              {formatAmount(auditedNet)}
-            </Text>
-            <View style={styles.financeBalanceStatsRow}>
-              <View style={styles.financeBalanceStat}>
-                <Animated.View
-                  style={[styles.financeBalanceStatIconIn, heroStatPulseStyle]}
-                >
-                  <FontAwesome
-                    name="arrow-circle-down"
-                    size={desktopParity ? 15 : 13}
-                    color={Theme.textOnDark}
-                  />
-                </Animated.View>
-                <View>
-                  <Text style={styles.financeBalanceStatLabel}>Incoming</Text>
-                  <Text style={styles.financeBalanceStatValue}>
-                    {formatAmount(auditedIn)}
-                  </Text>
+                <View style={styles.financeBalanceStat}>
+                  <Animated.View
+                    style={[
+                      styles.financeBalanceStatIconOut,
+                      heroStatPulseStyle,
+                    ]}
+                  >
+                    <FontAwesome
+                      name="arrow-circle-up"
+                      size={desktopParity ? 15 : 13}
+                      color={Theme.textOnDark}
+                    />
+                  </Animated.View>
+                  <View>
+                    <Text style={styles.financeBalanceStatLabel}>Outgoing</Text>
+                    <Text style={styles.financeBalanceStatValue}>
+                      {formatAmount(auditedOut)}
+                    </Text>
+                  </View>
                 </View>
               </View>
-              <View style={styles.financeBalanceStat}>
-                <Animated.View
-                  style={[styles.financeBalanceStatIconOut, heroStatPulseStyle]}
-                >
-                  <FontAwesome
-                    name="arrow-circle-up"
-                    size={desktopParity ? 15 : 13}
-                    color={Theme.textOnDark}
-                  />
-                </Animated.View>
-                <View>
-                  <Text style={styles.financeBalanceStatLabel}>Outgoing</Text>
-                  <Text style={styles.financeBalanceStatValue}>
-                    {formatAmount(auditedOut)}
-                  </Text>
-                </View>
-              </View>
-            </View>
             </View>
           </AnimatedFinanceHeroCard>
         </View>
@@ -632,13 +675,16 @@ export function FinanceSummarySection({
             {
               id: "cash" as FinanceSubTab,
               label: "Cash",
-              value: desktopCardMetrics?.cash?.value ?? formatCompactAmount(auditedNet),
+              value:
+                desktopCardMetrics?.cash?.value ??
+                formatCompactAmount(auditedNet),
               icon: "money",
               count: desktopCardMetrics?.cash?.count ?? 0,
               secondaryLabel:
                 desktopCardMetrics?.cash?.secondaryLabel ?? "Total Outstanding",
               secondaryValue:
-                desktopCardMetrics?.cash?.secondaryValue ?? formatAmount(auditedOut),
+                desktopCardMetrics?.cash?.secondaryValue ??
+                formatAmount(auditedOut),
               gradient: [
                 Theme.financeCardCashFrom,
                 Theme.financeCardCashTo,
@@ -724,7 +770,6 @@ export function FinanceSummarySection({
           ))}
         </View>
       </View>
-
     </>
   );
 }

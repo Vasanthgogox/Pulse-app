@@ -234,6 +234,7 @@ export function FinanceTabBody({
         refreshing={refreshing}
         onRefresh={onRefresh}
         bottomInset={bottomInset}
+        hideSummaryRow={isWebLargeScreen}
       />
     );
   }
@@ -261,6 +262,7 @@ export function FinanceTabBody({
         refreshing={refreshing}
         onRefresh={onRefresh}
         bottomInset={bottomInset}
+        hideSummaryRow={isWebLargeScreen}
       />
     );
   }
@@ -287,6 +289,7 @@ export function FinanceTabBody({
         refreshing={refreshing}
         onRefresh={onRefresh}
         bottomInset={bottomInset}
+        hideSummaryRow={isWebLargeScreen}
       />
     );
   }
@@ -311,6 +314,7 @@ export function FinanceTabBody({
       refreshing={refreshing}
       onRefresh={onRefresh}
       bottomInset={bottomInset}
+      hideSummaryRow={isWebLargeScreen}
     />
   );
 }

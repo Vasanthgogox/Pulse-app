@@ -1798,6 +1798,8 @@ export interface CustomersTabProps {
   refreshing?: boolean;
   onRefresh?: () => void;
   bottomInset?: number;
+  /** Desktop finance parity: hide summary strip under hero/cards. */
+  hideSummaryRow?: boolean;
 }
 
 export function CustomersTab({
@@ -1819,6 +1821,7 @@ export function CustomersTab({
   refreshing = false,
   onRefresh,
   bottomInset = 100,
+  hideSummaryRow = false,
 }: CustomersTabProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const insets = useSafeAreaInsets();
@@ -1954,7 +1957,13 @@ export function CustomersTab({
   const totalReceived = Math.max(0, totalBilling - pendingBalance);
   const collectionPercent =
     totalBilling > 0 ? Math.round((totalReceived / totalBilling) * 100) : 0;
-  const stickyHeaderIndex = topContent ? 2 : 1;
+  const stickyHeaderIndex = topContent
+    ? hideSummaryRow
+      ? 1
+      : 2
+    : hideSummaryRow
+      ? 0
+      : 1;
 
   return (
     <View style={styles.wrap}>
@@ -1980,19 +1989,21 @@ export function CustomersTab({
         }
       >
         {topContent}
-        <View style={styles.receivablesSummaryRow}>
-          <View style={styles.receivablesSummaryCard}>
-            <Text style={styles.receivablesSummaryLabel}>Total Outstanding</Text>
-            <Text style={styles.receivablesSummaryOutstanding}>
-              ₹{pendingBalance.toLocaleString("en-IN")}
-            </Text>
+        {!hideSummaryRow && (
+          <View style={styles.receivablesSummaryRow}>
+            <View style={styles.receivablesSummaryCard}>
+              <Text style={styles.receivablesSummaryLabel}>Total Outstanding</Text>
+              <Text style={styles.receivablesSummaryOutstanding}>
+                ₹{pendingBalance.toLocaleString("en-IN")}
+              </Text>
+            </View>
+            <LiquidFillPill
+              percentage={collectionPercent}
+              label="Collection"
+              valueSuffix="%"
+            />
           </View>
-          <LiquidFillPill
-            percentage={collectionPercent}
-            label="Collection"
-            valueSuffix="%"
-          />
-        </View>
+        )}
         <View style={styles.customerTableHeader}>
           <View style={styles.customerTableHeaderEntityCol}>
             <Text
