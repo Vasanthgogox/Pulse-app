@@ -1,14 +1,14 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import FontAwesomeIcon from "@expo/vector-icons/FontAwesome";
+import {
+    LeafletMap,
+    type LeafletLatLng,
+    type LeafletMapRef,
+    type LeafletMarker,
+} from "@/components/driver/LeafletMap.web";
 import Theme from "@/constants/Theme";
 import { getOptimalRoute, type RouteResult } from "@/services/routingService";
-import {
-  LeafletMap,
-  type LeafletLatLng,
-  type LeafletMapRef,
-  type LeafletMarker,
-} from "@/components/driver/LeafletMap.web";
+import FontAwesomeIcon from "@expo/vector-icons/FontAwesome";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { StyleSheet, Text, View } from "react-native";
 
 export type TrackingMapLocationLabels = [string, string, string, string, string];
 

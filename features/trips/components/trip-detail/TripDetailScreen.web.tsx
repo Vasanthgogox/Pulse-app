@@ -6,30 +6,30 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { LeafletMap } from "@/components/driver/LeafletMap.web";
+import { Theme } from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
 import { isAggregateTrip } from "@/lib/driverUtils";
-import { Theme } from "@/constants/Theme";
 import { formatINR, formatIndianVehicleNumber } from "@/lib/format";
 import { getDocumentViewUrl } from "@/services/tripDocumentsService";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Feather from "@expo/vector-icons/Feather";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  ActivityIndicator,
-  Image,
-  Linking,
-  Modal,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  useWindowDimensions,
+    ActivityIndicator,
+    Image,
+    Linking,
+    Modal,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+    useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { TripAdjustment } from "../../services/tripAdjustments";
@@ -42,8 +42,8 @@ import { useTripDetail } from "./hooks/useTripDetail";
 import { type ExpenseRow } from "./sections/ExpensesTable";
 import { LRDocumentsSection } from "./sections/LRDocumentsSection";
 import {
-  TripStatusTimeline,
-  type TripStageTimestamp,
+    TripStatusTimeline,
+    type TripStageTimestamp,
 } from "./sections/TripStatusTimeline";
 
 type Tab = "tracking" | "finance";

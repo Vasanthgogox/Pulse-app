@@ -196,7 +196,7 @@ export default function DriverControlScreen() {
   }, [linkedDriversLoaded, trip?.id, trip?.driver_id, linkedDriverIds, router]);
 
   useEffect(() => {
-    if (step !== "reached") {
+    if (step !== "reached" && step !== "completed") {
       setPodSkipped(false);
       return;
     }
@@ -1211,6 +1211,115 @@ export default function DriverControlScreen() {
                   ) : null}
                 </View>
               </View>
+
+              <View
+                style={[
+                  styles.podListWrap,
+                  {
+                    borderColor: colors.border,
+                    backgroundColor: colors.whiteMuted,
+                    marginTop: 6,
+                    padding: 16,
+                    borderRadius: 16,
+                  },
+                ]}
+              >
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 10,
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.podListTitle,
+                      { color: colors.text, fontSize: 15, fontWeight: "700" },
+                    ]}
+                  >
+                    Proof of delivery (POD)
+                  </Text>
+                  {podLoading ? (
+                    <ActivityIndicator size="small" color={colors.emerald} />
+                  ) : (
+                    <Text
+                      style={[styles.podListTitle, { color: colors.textMuted }]}
+                    >
+                      {podDocuments.length} file
+                      {podDocuments.length === 1 ? "" : "s"}
+                    </Text>
+                  )}
+                </View>
+                {podDocuments.length >= 1 ? (
+                  <View
+                    style={[
+                      styles.podListWrap,
+                      { borderColor: colors.border, borderWidth: 1, padding: 0 },
+                    ]}
+                  >
+                    {podDocuments.map((doc, index) => (
+                      <View
+                        key={doc.id}
+                        style={[
+                          styles.podListItem,
+                          { borderColor: colors.border },
+                          index === 0 && { borderTopWidth: 0 },
+                        ]}
+                      >
+                        <Text
+                          style={[styles.podListFileName, { color: colors.text }]}
+                          numberOfLines={1}
+                        >
+                          {doc.file_name ||
+                            doc.storage_path.split("/").pop() ||
+                            "POD"}
+                        </Text>
+                        <TouchableOpacity
+                          style={[
+                            styles.podListViewBtn,
+                            { backgroundColor: colors.emerald },
+                          ]}
+                          onPress={async () => {
+                            setViewingPodError(false);
+                            const cached = podViewUrls[doc.id];
+                            if (cached) {
+                              setViewingPodUrl(cached);
+                              return;
+                            }
+                            setViewingPodLoading(true);
+                            setViewingPodUrl(null);
+                            const url =
+                              await tripDocumentsService.getDocumentViewUrl(
+                                doc.storage_path,
+                              );
+                            setPodViewUrls((prev) => ({
+                              ...prev,
+                              [doc.id]: url,
+                            }));
+                            setViewingPodLoading(false);
+                            setViewingPodUrl(url);
+                          }}
+                          activeOpacity={0.8}
+                          disabled={viewingPodLoading}
+                        >
+                          <FontAwesome
+                            name="eye"
+                            size={14}
+                            color={Theme.textOnPrimary}
+                          />
+                          <Text style={styles.podListViewBtnText}>View</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                ) : !podLoading ? (
+                  <Text style={[styles.podRequired, { color: colors.textMuted }]}>
+                    No POD files on record for this trip.
+                  </Text>
+                ) : null}
+              </View>
+
               <TouchableOpacity
                 style={[
                   styles.primaryBtn,
