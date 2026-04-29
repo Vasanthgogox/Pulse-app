@@ -7,6 +7,10 @@ export interface DiscoverOrg {
   id: string;
   name: string;
   avatar_seed: string | null;
+  /** From organizations — RPC discover_organizations returns these for card location. */
+  address_line?: string | null;
+  city?: string | null;
+  state?: string | null;
   mutual_count?: number | null;
   mutual_connections_count?: number | null;
   rating?: number | null;

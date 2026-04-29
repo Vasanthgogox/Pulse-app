@@ -72,12 +72,14 @@ function getBusinessLocation(org: DiscoverOrg): string | null {
       city?: string | null;
       state?: string | null;
       headquarters?: string | null;
+      address_line?: string | null;
     }
   );
   const direct =
     candidate.business_location ??
     candidate.location ??
     candidate.headquarters ??
+    (candidate.address_line?.trim() ? candidate.address_line.trim() : null) ??
     null;
   if (direct && direct.trim()) return direct.trim();
   const cityState = [candidate.city, candidate.state].filter(Boolean).join(", ").trim();
