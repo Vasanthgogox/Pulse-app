@@ -11,6 +11,9 @@ export interface DiscoverOrg {
   address_line?: string | null;
   city?: string | null;
   state?: string | null;
+  location?: string | null;
+  business_location?: string | null;
+  headquarters?: string | null;
   mutual_count?: number | null;
   mutual_connections_count?: number | null;
   rating?: number | null;

@@ -1053,8 +1053,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     borderRadius: 14,
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderWidth: 0,
   },
   inlineSearchInput: {
     flex: 1,
@@ -1063,6 +1062,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Theme.textPrimaryDark,
     paddingVertical: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   inlineSearchClose: {
     fontSize: 15,
@@ -1153,8 +1157,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 11,
     borderRadius: 17,
     backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderWidth: 0,
   },
   discoverSearchInput: {
     flex: 1,
@@ -1163,6 +1166,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Theme.textPrimaryDark,
     paddingVertical: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   discoverSearchClose: {
     fontSize: 16,
@@ -1279,8 +1287,7 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: Theme.surfaceGray,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderWidth: 0,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
@@ -1289,6 +1296,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Theme.textPrimaryDark,
     fontWeight: "700",
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+      } as any,
+    }),
   },
   filterPillScroll: { flexDirection: "row", gap: 8, paddingRight: 8 },
   filterPill: {

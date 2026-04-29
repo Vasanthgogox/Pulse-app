@@ -4,6 +4,10 @@
  */
 import Theme from '@/constants/Theme';
 import {
+  getOrganizationLocationsByIds,
+  getOrganizationLocationsByNames,
+} from '@/features/organization/services/organization.service';
+import {
   HubConnectionListCard,
   type HubConnectionItem,
 } from "@/features/network/components/NetworkConnectionHubCards";
@@ -23,6 +27,7 @@ import {
   Users,
   Zap,
 } from 'lucide-react-native';
+import { useQuery } from '@tanstack/react-query';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -87,6 +92,35 @@ export interface ConnectedOrg {
   rating?: number | null;
   phone?: string | null;
   linked_organization_id?: string | null;
+  city?: string | null;
+  state?: string | null;
+  location?: string | null;
+  business_location?: string | null;
+  headquarters?: string | null;
+}
+
+function getConnectionLocation(item: ConnectedOrg): string | null {
+  const cityState = [item.city, item.state]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value))
+    .join(", ")
+    .trim();
+  if (cityState) return cityState;
+
+  const direct = item.business_location ?? item.location ?? item.headquarters ?? null;
+  if (direct && direct.trim()) {
+    const parts = direct
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (parts.length >= 2) return `${parts[0]}, ${parts[1]}`;
+    return direct.trim();
+  }
+  return null;
+}
+
+function normalizeName(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 // ─── Grid Card (LinkedIn-style: cover + overlapping avatar) ───────────────────
@@ -247,6 +281,80 @@ export function ConnectionsView({
   const clientsQ = useClientsQuery(orgId);
   const suppliersQ = useSuppliersQuery(orgId);
   const driversQ = useDriversQuery(orgId);
+  const locationLookupOrganizationIds = useMemo(
+    () => [
+      ...new Set([
+        ...((clientsQ.data ?? []) as { linked_organization_id?: string | null }[])
+          .map((row) => row.id)
+          .filter((id): id is string => Boolean(id)),
+        ...((suppliersQ.data ?? []) as { linked_organization_id?: string | null }[])
+          .map((row) => row.id)
+          .filter((id): id is string => Boolean(id)),
+        ...((clientsQ.data ?? []) as { linked_organization_id?: string | null }[])
+          .map((row) => row.linked_organization_id)
+          .filter((id): id is string => Boolean(id)),
+        ...((suppliersQ.data ?? []) as { linked_organization_id?: string | null }[])
+          .map((row) => row.linked_organization_id)
+          .filter((id): id is string => Boolean(id)),
+      ]),
+    ].sort(),
+    [clientsQ.data, suppliersQ.data],
+  );
+  const organizationLocationsQ = useQuery({
+    queryKey: ['network', 'connections', 'organization-locations', locationLookupOrganizationIds],
+    queryFn: async () => {
+      const { error: orgErr, locations } = await getOrganizationLocationsByIds(locationLookupOrganizationIds);
+      if (orgErr) throw orgErr;
+      return locations;
+    },
+    enabled: locationLookupOrganizationIds.length > 0,
+  });
+  const locationLookupNames = useMemo(
+    () => [
+      ...new Set([
+        ...((clientsQ.data ?? []) as { name?: string | null }[])
+          .map((row) => normalizeName(row.name))
+          .filter(Boolean),
+        ...((suppliersQ.data ?? []) as { name?: string | null }[])
+          .map((row) => normalizeName(row.name))
+          .filter(Boolean),
+      ]),
+    ].sort(),
+    [clientsQ.data, suppliersQ.data],
+  );
+  const organizationLocationsByNameQ = useQuery({
+    queryKey: ['network', 'connections', 'organization-locations-by-name', locationLookupNames],
+    queryFn: async () => {
+      const { error: orgErr, locations } = await getOrganizationLocationsByNames(locationLookupNames);
+      if (orgErr) throw orgErr;
+      return locations;
+    },
+    enabled: locationLookupNames.length > 0,
+  });
+  const organizationLocationById = useMemo(() => {
+    const map: Record<string, { city: string | null; state: string | null; address_line: string | null }> = {};
+    for (const location of organizationLocationsQ.data ?? []) {
+      map[location.id] = {
+        city: location.city ?? null,
+        state: location.state ?? null,
+        address_line: location.address_line ?? null,
+      };
+    }
+    return map;
+  }, [organizationLocationsQ.data]);
+  const organizationLocationByName = useMemo(() => {
+    const map: Record<string, { city: string | null; state: string | null; address_line: string | null }> = {};
+    for (const location of organizationLocationsByNameQ.data ?? []) {
+      const key = normalizeName((location as { name?: string | null }).name);
+      if (!key) continue;
+      map[key] = {
+        city: location.city ?? null,
+        state: location.state ?? null,
+        address_line: location.address_line ?? null,
+      };
+    }
+    return map;
+  }, [organizationLocationsByNameQ.data]);
 
   useEffect(() => {
     let cancelled = false;
@@ -302,7 +410,7 @@ export function ConnectionsView({
 
   const connections = useMemo<ConnectedOrg[]>(() => {
     const clients: ConnectedOrg[] = ((clientsQ.data ?? []) as {
-      id: string; name: string; phone?: string | null; linked_organization_id?: string | null; is_integrated?: boolean; avatar_url?: string | null; avatar_seed?: string | null; mutual_count?: number | null; mutual_connections_count?: number | null; rating?: number | null; average_rating?: number | null;
+      id: string; name: string; phone?: string | null; linked_organization_id?: string | null; is_integrated?: boolean; avatar_url?: string | null; avatar_seed?: string | null; mutual_count?: number | null; mutual_connections_count?: number | null; rating?: number | null; average_rating?: number | null; city?: string | null; state?: string | null; location?: string | null; business_location?: string | null; headquarters?: string | null;
     }[]).map((c) => ({
       id: c.id,
       name: c.name,
@@ -314,10 +422,25 @@ export function ConnectionsView({
       rating: c.rating ?? c.average_rating ?? null,
       phone: c.phone ?? null,
       linked_organization_id: c.linked_organization_id ?? null,
+      city:
+        c.city ??
+        organizationLocationById[c.linked_organization_id ?? '']?.city ??
+        organizationLocationById[c.id]?.city ??
+        organizationLocationByName[normalizeName(c.name)]?.city ??
+        null,
+      state:
+        c.state ??
+        organizationLocationById[c.linked_organization_id ?? '']?.state ??
+        organizationLocationById[c.id]?.state ??
+        organizationLocationByName[normalizeName(c.name)]?.state ??
+        null,
+      location: c.location ?? null,
+      business_location: c.business_location ?? null,
+      headquarters: c.headquarters ?? null,
     }));
 
     const suppliers: ConnectedOrg[] = ((suppliersQ.data ?? []) as {
-      id: string; name: string | null; phone?: string | null; linked_organization_id?: string | null; supplier_type?: string | null; is_integrated?: boolean; avatar_url?: string | null; avatar_seed?: string | null; mutual_count?: number | null; mutual_connections_count?: number | null; rating?: number | null; average_rating?: number | null;
+      id: string; name: string | null; phone?: string | null; linked_organization_id?: string | null; supplier_type?: string | null; is_integrated?: boolean; avatar_url?: string | null; avatar_seed?: string | null; mutual_count?: number | null; mutual_connections_count?: number | null; rating?: number | null; average_rating?: number | null; city?: string | null; state?: string | null; location?: string | null; business_location?: string | null; headquarters?: string | null;
     }[]).map((s) => ({
       id: s.id,
       name: s.name ?? "Supplier",
@@ -329,6 +452,21 @@ export function ConnectionsView({
       rating: s.rating ?? s.average_rating ?? supplierRatingsById[s.id] ?? null,
       phone: s.phone ?? null,
       linked_organization_id: s.linked_organization_id ?? null,
+      city:
+        s.city ??
+        organizationLocationById[s.linked_organization_id ?? '']?.city ??
+        organizationLocationById[s.id]?.city ??
+        organizationLocationByName[normalizeName(s.name)]?.city ??
+        null,
+      state:
+        s.state ??
+        organizationLocationById[s.linked_organization_id ?? '']?.state ??
+        organizationLocationById[s.id]?.state ??
+        organizationLocationByName[normalizeName(s.name)]?.state ??
+        null,
+      location: s.location ?? null,
+      business_location: s.business_location ?? null,
+      headquarters: s.headquarters ?? null,
     }));
 
     const driverRows = driversQ.data ?? [];
@@ -349,6 +487,11 @@ export function ConnectionsView({
           driverRatingsById[d.id] ??
           null,
         phone: (d as { phone?: string | null }).phone ?? null,
+        city: (d as { city?: string | null }).city ?? null,
+        state: (d as { state?: string | null }).state ?? null,
+        location: (d as { location?: string | null }).location ?? null,
+        business_location: (d as { business_location?: string | null }).business_location ?? null,
+        headquarters: (d as { headquarters?: string | null }).headquarters ?? null,
       }));
 
     let all = [...clients, ...suppliers, ...drivers].sort((a, b) => a.name.localeCompare(b.name));
@@ -358,7 +501,17 @@ export function ConnectionsView({
       all = all.filter((c) => c.name.toLowerCase().includes(q));
     }
     return all;
-  }, [clientsQ.data, suppliersQ.data, driversQ.data, effectiveSearch, effectiveFilter, supplierRatingsById, driverRatingsById]);
+  }, [
+    clientsQ.data,
+    suppliersQ.data,
+    driversQ.data,
+    effectiveSearch,
+    effectiveFilter,
+    supplierRatingsById,
+    driverRatingsById,
+    organizationLocationById,
+    organizationLocationByName,
+  ]);
 
   const toHubItem = (c: ConnectedOrg): HubConnectionItem => ({
     id: c.id,
@@ -370,6 +523,7 @@ export function ConnectionsView({
     entityType: c.role === 'DRIVER' ? 'driver' : c.role === 'SUPPLIER' ? 'supplier' : 'client',
     mutualCount: c.mutual_count,
     rating: c.rating,
+    locationLabel: getConnectionLocation(c),
     actionLabel: c.is_integrated ? "Connected" : "Send invite",
     actionLoading: invitingId === c.id,
     actionDisabled: c.role === "DRIVER" && !c.phone,
@@ -672,8 +826,7 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: Theme.networkCardBackground,
     borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.networkCardBorder,
+    borderWidth: 0,
     paddingHorizontal: 14,
     paddingVertical: 11,
   },
