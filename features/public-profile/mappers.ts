@@ -97,6 +97,7 @@ export function clientToPublicEntity(c: ClientRow): PublicProfileEntity {
     name: c.name ?? "—",
     initials: buildInitials(c.name),
     avatarUrl: null,
+    avatarSeed: c.avatar_seed ?? null,
     isIntegrated,
     isVerified: isIntegrated,
     subtitle: c.contact_person ?? null,
@@ -170,6 +171,7 @@ export function supplierToPublicEntity(s: SupplierRow): PublicProfileEntity {
     name: display,
     initials: buildInitials(display),
     avatarUrl: null,
+    avatarSeed: s.avatar_seed ?? null,
     isIntegrated,
     isVerified: s.is_verified || isIntegrated,
     subtitle: s.contact_person ?? null,
@@ -252,6 +254,7 @@ export function driverToPublicEntity(d: DriverRow): PublicProfileEntity {
     name: d.name ?? "—",
     initials: buildInitials(d.name),
     avatarUrl: null,
+    avatarSeed: d.avatar_seed ?? null,
     /** Drivers are always "internal" — we treat them as integrated so the
      *  verified badge is visible; there's no external org to link. */
     isIntegrated: true,

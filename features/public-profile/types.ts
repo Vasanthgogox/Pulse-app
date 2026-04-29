@@ -34,6 +34,8 @@ export interface PublicProfileEntity {
   initials: string;
   /** Resolved avatar URL (may be a DiceBear / signed-storage URL). */
   avatarUrl: string | null;
+  /** Avatar seed fallback when URL is not available. */
+  avatarSeed?: string | null;
   /** True when this party has a linked org on the platform. */
   isIntegrated: boolean;
   /** True when explicitly verified (supplier.is_verified) OR integrated. */

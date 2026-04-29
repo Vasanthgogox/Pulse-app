@@ -5,7 +5,6 @@ import { MoreVertical, Share2 } from "lucide-react-native";
 import React, { useCallback, useMemo } from "react";
 import {
     Alert,
-    Image,
     ScrollView,
     Share,
     StyleSheet,
@@ -16,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 
 import type {
@@ -34,6 +34,11 @@ interface PublicProfileScreenProps {
 /** Hero block height (excludes status bar; identity overlaps scroll content). */
 const HERO_HEIGHT = 256;
 const METRICS_OVERLAP = 56;
+
+function asDisplay(value: string | null | undefined): string {
+  const normalized = (value ?? "").trim();
+  return normalized.length > 0 ? normalized : "No data";
+}
 
 /**
  * Premium, modern "public preview" profile for clients, suppliers, and drivers.
@@ -104,25 +109,28 @@ export default function PublicProfileScreen({
             <View style={styles.bioCard}>
               <Text style={styles.bioQuoteMark}>"</Text>
               <Text style={styles.bioText}>
-                {entity.bio ??
-                  "This entity has not provided a public mission statement yet."}
+                {asDisplay(entity.bio)}
               </Text>
             </View>
           </Section>
 
-          {entity.facts.length > 0 && (
-            <Section title="Core Intel">
-              <View style={styles.factList}>
-                {entity.facts.map((fact, idx) => (
+          <Section title="Core Intel">
+            <View style={styles.factList}>
+              {entity.facts.length > 0 ? (
+                entity.facts.map((fact, idx) => (
                   <FactRow
                     key={`${fact.icon}-${idx}`}
                     fact={fact}
                     isLast={idx === entity.facts.length - 1}
                   />
-                ))}
-              </View>
-            </Section>
-          )}
+                ))
+              ) : (
+                <View style={styles.noDataRow}>
+                  <Text style={styles.noDataText}>No data</Text>
+                </View>
+              )}
+            </View>
+          </Section>
 
           {entity.entityType !== "driver" && entity.synergyHeadline && (
             <SynergyCard
@@ -234,11 +242,14 @@ function Hero({
       <View style={styles.heroIdentityBlock}>
         <View style={styles.heroIdentityRow}>
           <View style={styles.avatarFrame}>
-            {entity.avatarUrl ? (
-              <Image source={{ uri: entity.avatarUrl }} style={styles.avatarImage} />
-            ) : (
-              <Text style={styles.avatarInitials}>{entity.initials}</Text>
-            )}
+            <PartyAvatar
+              name={entity.name}
+              avatarUrl={entity.avatarUrl}
+              avatarSeed={entity.avatarSeed ?? null}
+              entityType={entity.entityType}
+              size={82}
+              borderStyle={styles.avatarImage}
+            />
             {entity.isVerified && (
               <View style={styles.verifiedBadge}>
                 <FontAwesome name="check" size={10} color={Theme.textOnPrimary} />
@@ -266,11 +277,9 @@ function Hero({
         >
           {entity.name}
         </Text>
-        {entity.subtitle ? (
-          <Text style={styles.heroSubtitle} numberOfLines={1}>
-            {entity.subtitle}
-          </Text>
-        ) : null}
+        <Text style={styles.heroSubtitle} numberOfLines={1}>
+          {asDisplay(entity.subtitle)}
+        </Text>
       </View>
     </View>
   );
@@ -309,7 +318,7 @@ function MetricIsland({
                   style={[styles.islandValue, { color: tintColor }]}
                   numberOfLines={1}
                 >
-                  {m.value}
+                  {asDisplay(m.value)}
                 </Text>
                 {m.suffix ? (
                   <Text style={[styles.islandSuffix, { color: tintColor }]}>
@@ -366,7 +375,7 @@ function FactRow({ fact, isLast }: { fact: PublicProfileFact; isLast: boolean })
       <View style={{ flex: 1 }}>
         <Text style={styles.factLabel}>{fact.label.toUpperCase()}</Text>
         <Text style={styles.factValue} numberOfLines={2}>
-          {fact.value}
+          {asDisplay(fact.value)}
         </Text>
       </View>
     </View>
@@ -544,6 +553,7 @@ const styles = StyleSheet.create({
     width: 82,
     height: 82,
     borderRadius: 16,
+    borderWidth: 0,
   },
   avatarInitials: {
     fontSize: 36,
@@ -749,6 +759,19 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.2,
+  },
+  noDataRow: {
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  noDataText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
   },
 
   /* Synergy */

@@ -54,16 +54,18 @@ function pickParam(raw: string | string[] | undefined): string {
 async function resolveLinkedOrgAvatar(
   avatarUrl: string | null | undefined,
   avatarSeed: string | null | undefined,
-): Promise<string | null> {
+): Promise<{ avatarUrl: string | null; avatarSeed: string | null }> {
   const url = (avatarUrl ?? "").trim();
   const seed = (avatarSeed ?? "").trim();
-  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return { avatarUrl: url, avatarSeed: seed || null };
+  }
   if (url) {
     const signed = await getSignedAvatarUrl(url);
-    if (signed) return signed;
+    if (signed) return { avatarUrl: signed, avatarSeed: seed || null };
   }
-  if (seed) return getUser2DAvatarUriForSeed(seed);
-  return null;
+  if (seed) return { avatarUrl: getUser2DAvatarUriForSeed(seed), avatarSeed: seed };
+  return { avatarUrl: null, avatarSeed: null };
 }
 
 export default function PublicProfileRoute() {
@@ -104,10 +106,12 @@ export default function PublicProfileRoute() {
             const { profile } = await getLinkedOrgProfile(
               client.linked_organization_id,
             );
-            mapped.avatarUrl = await resolveLinkedOrgAvatar(
+            const resolved = await resolveLinkedOrgAvatar(
               profile?.avatarUrl,
               profile?.avatarSeed,
             );
+            mapped.avatarUrl = resolved.avatarUrl;
+            mapped.avatarSeed = resolved.avatarSeed;
           }
           if (mounted) setEntity(mapped);
           return;
@@ -122,10 +126,12 @@ export default function PublicProfileRoute() {
             const { profile } = await getLinkedOrgProfileForSupplier(
               supplier.linked_organization_id,
             );
-            mapped.avatarUrl = await resolveLinkedOrgAvatar(
+            const resolved = await resolveLinkedOrgAvatar(
               profile?.avatarUrl,
               profile?.avatarSeed,
             );
+            mapped.avatarUrl = resolved.avatarUrl;
+            mapped.avatarSeed = resolved.avatarSeed;
           }
           if (mounted) setEntity(mapped);
           return;
@@ -148,12 +154,17 @@ export default function PublicProfileRoute() {
         }
         if (avatarUrl.startsWith("http://") || avatarUrl.startsWith("https://")) {
           mapped.avatarUrl = avatarUrl;
+          mapped.avatarSeed = avatarSeed || null;
         } else if (avatarUrl) {
           mapped.avatarUrl = (await getSignedAvatarUrl(avatarUrl)) ?? null;
+          mapped.avatarSeed = avatarSeed || null;
         } else if (avatarSeed) {
           mapped.avatarUrl = getAvatarUriForSeed(avatarSeed);
+          mapped.avatarSeed = avatarSeed;
         } else {
-          mapped.avatarUrl = getAvatarUriForSeed(getDriverFallbackSeed(driver.id));
+          const fallbackSeed = getDriverFallbackSeed(driver.id);
+          mapped.avatarUrl = getAvatarUriForSeed(fallbackSeed);
+          mapped.avatarSeed = fallbackSeed;
         }
 
         if (mounted) setEntity(mapped);

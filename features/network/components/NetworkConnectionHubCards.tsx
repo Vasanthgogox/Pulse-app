@@ -5,7 +5,7 @@ import Theme from "@/constants/Theme";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { getInitials } from "@/lib/stringUtils";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
-import { Check, CheckCircle2, Send, ShieldCheck, Star, Users, Zap } from "lucide-react-native";
+import { Check, Send, ShieldCheck, Star, Users, Zap } from "lucide-react-native";
 import React from "react";
 import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -35,12 +35,15 @@ const ROLE_STYLES: Record<
   DRIVER: { bg: Theme.networkDriverTintBg, color: Theme.warning, label: "DRIVER" },
 };
 
-function seedColor(_id: string): string {
-  return "#64748B";
+function seedColor(id: string): string {
+  const tones = [Theme.textRouteCard, Theme.textPrimaryDark, Theme.primary];
+  let idx = 0;
+  for (let i = 0; i < id.length; i += 1) idx = (idx + id.charCodeAt(i)) % tones.length;
+  return tones[idx];
 }
 
-function subtleAvatarBg(_id: string): string {
-  return "#F8FAFC";
+function subtleAvatarBg(id: string): string {
+  return id.length % 2 === 0 ? Theme.surface : Theme.surfaceGray;
 }
 
 /** Min height for horizontal hub connection row (carousel / side-scroll). Kept exported for callers & stable bundles. */
@@ -49,10 +52,12 @@ export const HUB_CAROUSEL_MIN_HEIGHT = 400;
 export function HubConnectionListCard({
   item,
   onActionPress,
+  onCardPress,
   layout = "grid",
 }: {
   item: HubConnectionItem;
   onActionPress?: () => void;
+  onCardPress?: () => void;
   /** `carousel` = fixed width for horizontal row / side-scroll. */
   layout?: "grid" | "carousel";
 }) {
@@ -70,6 +75,7 @@ export function HubConnectionListCard({
 
   return (
     <Pressable
+      onPress={onCardPress}
       onPressIn={onIn}
       onPressOut={onOut}
       style={[styles.cardPress, isCarousel && styles.cardPressCarousel]}
@@ -130,6 +136,10 @@ export function HubConnectionListCard({
                 ? "Capacity supply partner"
                 : "Fleet operations member"}
           </Text>
+          <View style={styles.liveNowRow}>
+            <View style={styles.liveNowDot} />
+            <Text style={styles.liveNowText}>ACTIVENOW</Text>
+          </View>
 
           <View style={[styles.cardMetaStack, mutuals === 0 && styles.cardMetaStackCompact]}>
             {mutuals > 0 ? (
@@ -152,10 +162,17 @@ export function HubConnectionListCard({
         </View>
 
         <View style={styles.cardFooter}>
+          <View style={styles.operationsLockRow}>
+            <View style={styles.operationsLockLeft}>
+              <ShieldCheck size={14} color={Theme.primary} strokeWidth={2.4} />
+              <Text style={styles.operationsLockLabel}>Operations lock</Text>
+            </View>
+            <Text style={styles.operationsLockValue}>Secured</Text>
+          </View>
           {item.is_integrated ? (
             <View style={styles.joinedBtn}>
-              <CheckCircle2 size={13} color={Theme.positive} strokeWidth={2.4} />
-              <Text style={styles.joinedBtnText}>Connected</Text>
+              <Zap size={13} color={Theme.textOnPrimary} fill={Theme.textOnPrimary} strokeWidth={2.4} />
+              <Text style={styles.joinedBtnText}>Live session</Text>
             </View>
           ) : (
             <Pressable
@@ -164,9 +181,9 @@ export function HubConnectionListCard({
               disabled={!canPressAction}
             >
               {item.actionLoading ? (
-                <ActivityIndicator size={12} color={Theme.textOnPrimary} />
+                <ActivityIndicator size={12} color={Theme.textPrimaryDark} />
               ) : (
-                <Send size={12} color={Theme.textOnPrimary} strokeWidth={2.4} />
+                <Send size={12} color={Theme.textPrimaryDark} strokeWidth={2.4} />
               )}
               <Text style={styles.inviteBtnText}>{item.actionLabel ?? "Send invite"}</Text>
             </Pressable>
@@ -223,14 +240,14 @@ const styles = StyleSheet.create({
   cardOuter: {
     flex: 1,
     backgroundColor: Theme.networkCardBackground,
-    borderRadius: 18,
+    borderRadius: 32,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: Theme.networkCardBorder,
     shadowColor: Theme.shadow,
-    shadowOpacity: 0.055,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 7 },
+    shadowOpacity: 0.065,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 9 },
     elevation: 2,
     overflow: "hidden",
   },
@@ -240,7 +257,7 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   coverBg: {
-    height: 82,
+    height: 96,
     overflow: "hidden",
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.networkCardBorder,
@@ -304,7 +321,7 @@ const styles = StyleSheet.create({
     top: 8,
     paddingHorizontal: 7,
     paddingVertical: 3,
-    borderRadius: 7,
+    borderRadius: 10,
     backgroundColor: Theme.screenBackground,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.networkCardBorder,
@@ -326,7 +343,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 4,
     paddingHorizontal: 8,
-    borderRadius: 11,
+    borderRadius: 12,
     backgroundColor: "rgba(255,255,255,0.86)",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.networkCardBorder,
@@ -406,27 +423,45 @@ const styles = StyleSheet.create({
   },
   profileBlock: {
     alignItems: "center",
-    paddingHorizontal: 8,
-    paddingBottom: 10,
+    paddingHorizontal: 12,
+    paddingBottom: 14,
   },
   entityName: {
-    fontSize: 12,
-    fontWeight: "500",
+    fontSize: 15,
+    fontWeight: "900",
     color: "#475569",
     letterSpacing: -0.2,
     lineHeight: 15,
     textAlign: "center",
-    marginTop: 8,
+    marginTop: 10,
   },
   entitySubtitle: {
-    fontSize: 9,
-    fontWeight: "400",
+    fontSize: 10.5,
+    fontWeight: "700",
     fontStyle: "italic",
     color: Theme.textMutedDemo,
     lineHeight: 12,
     textAlign: "center",
-    marginTop: 2,
+    marginTop: 3,
     minHeight: 24,
+  },
+  liveNowRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  liveNowDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Theme.primary,
+  },
+  liveNowText: {
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    color: Theme.textSecondary,
   },
   heroAvatar: {
     width: 62,
@@ -451,7 +486,7 @@ const styles = StyleSheet.create({
   cardMetaStack: {
     width: "100%",
     gap: 6,
-    marginTop: 10,
+    marginTop: 12,
     alignItems: "center",
   },
   cardMetaStackCompact: {
@@ -549,26 +584,60 @@ const styles = StyleSheet.create({
     color: Theme.textOnPrimary,
   },
   cardFooter: {
-    minHeight: 52,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+    minHeight: 92,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.networkCardBackground,
   },
-  joinedBtn: {
+  operationsLockRow: {
+    width: "100%",
     minHeight: 34,
+    borderRadius: 13,
+    backgroundColor: Theme.textPrimaryDark,
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 10,
+    marginBottom: 8,
+  },
+  operationsLockLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minWidth: 0,
+    flex: 1,
+  },
+  operationsLockLabel: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: Theme.textOnPrimary,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  operationsLockValue: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: Theme.onPrimaryMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  joinedBtn: {
+    minHeight: 38,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     borderWidth: 1,
-    borderColor: Theme.positive,
-    borderRadius: 17,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    backgroundColor: Theme.positiveMuted,
+    borderColor: Theme.primary,
+    borderRadius: 19,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: Theme.primary,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.035,
     shadowRadius: 6,
@@ -577,22 +646,23 @@ const styles = StyleSheet.create({
   },
   joinedBtnText: {
     fontSize: 10,
-    fontWeight: "500",
-    color: Theme.positive,
-    letterSpacing: 0.1,
+    fontWeight: "900",
+    color: Theme.textOnPrimary,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
   },
   inviteBtn: {
-    minHeight: 34,
+    minHeight: 40,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    borderRadius: 17,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    backgroundColor: Theme.primary,
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    backgroundColor: Theme.screenBackground,
     borderWidth: 1,
-    borderColor: Theme.primary,
+    borderColor: Theme.textPrimaryDark,
     minWidth: 118,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.04,
@@ -605,9 +675,10 @@ const styles = StyleSheet.create({
   },
   inviteBtnText: {
     fontSize: 10,
-    fontWeight: "500",
-    color: Theme.textOnPrimary,
-    letterSpacing: 0.1,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
   },
   handshakeBtn: {
     width: 40,

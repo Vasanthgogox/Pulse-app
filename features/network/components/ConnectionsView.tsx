@@ -43,6 +43,8 @@ export type ConnectionFilterTab = 'ALL' | 'CLIENT' | 'SUPPLIER' | 'DRIVER';
 interface ConnectionsViewProps {
   orgId: string;
   onRefresh?: () => void;
+  onOpenProfile?: (item: ConnectedOrg) => void;
+  onConnectionsComputed?: (items: ConnectedOrg[]) => void;
   /** Render list without internal scroll (nested in parent ScrollView). */
   embedded?: boolean;
   /**
@@ -61,11 +63,12 @@ function seedColor(id: string): string {
   return COVER_TOKENS[h];
 }
 
-function subtleAvatarTone(_seed: string): { bg: string; border: string; text: string; dot: string } {
+function subtleAvatarTone(seed: string): { bg: string; border: string; text: string; dot: string } {
+  const shift = seed.length % 2;
   return {
-    bg: "#F8FAFC",
+    bg: shift === 0 ? "#F8FAFC" : "#F1F5F9",
     border: "#EEF2F7",
-    text: "#64748B",
+    text: shift === 0 ? "#64748B" : "#475569",
     dot: "#94A3B8",
   };
 }
@@ -228,6 +231,8 @@ function chunkForGrid<T>(items: T[], columns: number): T[][] {
 export function ConnectionsView({
   orgId,
   onRefresh,
+  onOpenProfile,
+  onConnectionsComputed,
   embedded,
   hubMode = false,
   hubSearch,
@@ -409,6 +414,10 @@ export function ConnectionsView({
   );
   const showChrome = !hubMode;
 
+  useEffect(() => {
+    onConnectionsComputed?.(connections);
+  }, [connections, onConnectionsComputed]);
+
   const embeddedBody = useHubLayout ? (
     isLoading ? (
       <View style={styles.embeddedLoading}>
@@ -428,6 +437,7 @@ export function ConnectionsView({
                 key={`hub-${item.role}-${item.id}`}
                 item={toHubItem(item)}
                 onActionPress={() => void inviteOffAppParty(item)}
+                onCardPress={() => onOpenProfile?.(item)}
               />
             ))}
             {row.length < hubNumColumns
