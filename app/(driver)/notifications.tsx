@@ -2,33 +2,33 @@
  * Lists trips awaiting accept / OTP (same sources as dashboard incoming list).
  * Tapping a row returns to the dashboard with that trip selected.
  */
+import {
+    DRIVER_DETAIL_HORIZONTAL_PAD,
+    DriverSubScreenHeader,
+    driverDetailPageBackground,
+} from '@/components/driver/DriverSubScreenHeader';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
-import {
-  DRIVER_DETAIL_HORIZONTAL_PAD,
-  DriverSubScreenHeader,
-  driverDetailPageBackground,
-} from '@/components/driver/DriverSubScreenHeader';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import { computeDriverCommissionForTrip } from '@/features/finance/aggregation/aggregateDrivers';
 import { getPendingOtpTrips } from '@/features/trips';
 import { getLatestAssignmentAuditByTripIds } from '@/features/trips/services/trip-assignment-audit.service';
-import { computeDriverCommissionForTrip } from '@/features/finance/aggregation/aggregateDrivers';
 import {
-  DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY,
-  DRIVER_POST_MISSION_PENDING_SNAPSHOT_KEY,
+    DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY,
+    DRIVER_POST_MISSION_PENDING_SNAPSHOT_KEY,
 } from '@/lib/driverDashboardFlags';
 import {
-  buildDriverTripNumberMap,
-  getDriverTripDisplayNumber,
+    buildDriverTripNumberMap,
+    getDriverTripDisplayNumber,
 } from '@/lib/driverTripSequence';
-import { formatINR } from '@/lib/format';
 import {
-  isActiveMission,
-  isAggregateTrip,
-  isAssignedNotStarted,
-  isCompletedStatus,
-  isRosterTrip,
+    isActiveMission,
+    isAggregateTrip,
+    isAssignedNotStarted,
+    isCompletedStatus,
+    isRosterTrip,
 } from '@/lib/driverUtils';
+import { formatINR } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import * as driversService from '@/services/driversService';
 import * as tripsService from '@/services/tripsService';
@@ -38,13 +38,13 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 

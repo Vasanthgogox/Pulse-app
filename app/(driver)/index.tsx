@@ -1051,21 +1051,13 @@ export default function DriverRadarScreen() {
         { backgroundColor: colors.surface, borderColor: colors.border },
       ]}
     >
-      <View
-        style={[
-          styles.offlineIconWrap,
-          { backgroundColor: colors.emeraldMuted },
-        ]}
-      >
-        <FontAwesome name="key" size={28} color={colors.emerald} />
-      </View>
-      <Text style={[styles.offlineCardTitle, { color: colors.text }]}>
+      <Text style={[styles.otpClaimTitle, { color: colors.text }]}>
         Enter trip OTP
       </Text>
       <Text
         style={[
-          styles.offlineCardSubtitle,
-          { color: colors.textMuted, marginTop: 4 },
+          styles.otpClaimSubtitle,
+          { color: colors.textMuted },
         ]}
       >
         Enter the 6-digit OTP shared by your dispatcher to claim this trip.
@@ -5447,12 +5439,25 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: "center",
   },
+  otpClaimTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  otpClaimSubtitle: {
+    marginTop: 6,
+    marginBottom: 14,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
+  },
   otpTripRoute: {
-    marginTop: 12,
+    marginTop: 0,
     marginBottom: 16,
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: "700",
     textAlign: "center",
+    width: "100%",
   },
   otpBoxRow: {
     flexDirection: "row",
