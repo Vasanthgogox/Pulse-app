@@ -1,4 +1,5 @@
 import { FloatingOpsAgentButton } from '@/components/FloatingOpsAgentButton';
+import { FloatingChatButton } from '@/components/FloatingChatButton';
 import { DemoTabBar, type DemoTabId } from '@/components/demo';
 import Theme from '@/constants/Theme';
 import { ROUTES } from '@/lib/routes';
@@ -30,6 +31,8 @@ import { LanguageProvider, tGlobal } from '@/contexts/LanguageContext';
 import { NetworkProvider } from '@/contexts/NetworkContext';
 import { OrganizationProvider } from '@/contexts/OrganizationContext';
 import { WalletProvider } from '@/contexts/WalletContext';
+import { TripChatProvider } from '@/features/chat/contexts/TripChatContext';
+import { IntegratedChatProvider } from '@/features/chat/contexts/IntegratedChatContext';
 
 function isNetworkError(error: Error): boolean {
   const msg = error.message;
@@ -230,7 +233,11 @@ export default function RootLayout() {
               <AuthProvider>
                 <OrganizationProvider>
                   <WalletProvider>
-                    <RootLayoutNav />
+                    <TripChatProvider>
+                      <IntegratedChatProvider>
+                        <RootLayoutNav />
+                      </IntegratedChatProvider>
+                    </TripChatProvider>
                   </WalletProvider>
                 </OrganizationProvider>
               </AuthProvider>
@@ -283,6 +290,7 @@ function RootLayoutNav() {
           </Stack>
           <RootOverlayTabBar />
           <FloatingOpsAgentButton />
+          <FloatingChatButton />
         </View>
       </DemoTabBarScrollProvider>
     </ThemeProvider>

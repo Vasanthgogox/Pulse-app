@@ -29,6 +29,7 @@ export const ROUTES = {
   MODALS: {
     TEAM:           '/(modals)/team'           as const,
     INVITE_MEMBER:  '/(modals)/invite-member'  as const,
+    CHAT:           '/(modals)/chat'           as const,
   },
 
   // Full-screen flows (root-level stack)
