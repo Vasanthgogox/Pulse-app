@@ -169,7 +169,7 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
       const key = storySeenKey(post);
       setSeenKeys((prev) => {
         if (prev[key]) return prev;
-        const next = { ...prev, [key]: true };
+        const next = { ...prev, [key]: true as const };
         AsyncStorage.setItem(seenStorageKey, JSON.stringify(next)).catch(() => {});
         return next;
       });
