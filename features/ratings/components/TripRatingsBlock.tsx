@@ -37,6 +37,7 @@ import {
   type TextStyle,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
   type ViewStyle,
 } from 'react-native';
@@ -289,6 +290,7 @@ export function TripRatingsBlock({
   paymentCaptured = false,
   layoutVariant = 'default',
 }: TripRatingsBlockProps) {
+  const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { currentOrganization } = useOrganization();
   const [ratings, setRatings] = useState<RatingRow[]>([]);
@@ -327,16 +329,17 @@ export function TripRatingsBlock({
   const isCompleted =
     (trip.status || '').toLowerCase() === 'completed' ||
     !!(trip as { completed_at?: string }).completed_at;
+  const effectiveOrganizationId =
+    organizationId || currentOrganization?.id || trip.organization_id || null;
   const isClientViewer =
-    !!trip.organization_id && !!organizationId && trip.organization_id === organizationId;
+    !!trip.organization_id && !!effectiveOrganizationId && trip.organization_id === effectiveOrganizationId;
   /**
    * Client→Supplier when a clients row exists (rater_id = clients.id), or
    * fleet (trip owner) rates supplier when there is no client_id on the trip.
    */
   const canRateSupplier =
-    isCompleted &&
     !!trip.supplier_id &&
-    !!organizationId &&
+    !!effectiveOrganizationId &&
     (!!trip.client_id || (isClientViewer && !!trip.organization_id));
 
   const hasRatedSupplier = ratings.some(
@@ -366,32 +369,28 @@ export function TripRatingsBlock({
 
   /** Client→Driver: indent or aggregate with client_id (trip owner). */
   const canRateDriverAsClient =
-    isCompleted &&
     hasClient &&
     hasSupplier &&
     !!trip.driver_id &&
-    !!organizationId &&
+    !!effectiveOrganizationId &&
     isClientViewer;
   /** Supplier→Driver: aggregate/indent when viewing as supplier org. */
   const canRateDriverAsSupplier =
-    isCompleted &&
     hasSupplier &&
     !!trip.driver_id &&
-    !!organizationId &&
+    !!effectiveOrganizationId &&
     !isClientViewer;
   /** Organization→Driver: own trip (asset) or aggregate without client_id (buyer org rates driver). */
   const canRateDriverAsOrg =
-    isCompleted &&
     !!trip.driver_id &&
-    !!organizationId &&
+    !!effectiveOrganizationId &&
     isClientViewer &&
     (!hasSupplier || !hasClient);
 
   const canRateDriver = canRateDriverAsClient || canRateDriverAsSupplier || canRateDriverAsOrg;
   const canRateClient =
-    isCompleted &&
-    paymentCaptured &&
     !!clientName &&
+    !!effectiveOrganizationId &&
     clientFeedback == null &&
     !hasRatedClient;
 
@@ -488,8 +487,21 @@ export function TripRatingsBlock({
   useEffect(() => {
     let cancelled = false;
     const ownerOrg = trip.organization_id;
-    setClientAvatarUri(null);
-    setSupplierAvatarUri(null);
+    const tripAny = trip as Record<string, unknown>;
+    const tripClientAvatar =
+      typeof tripAny.client_avatar_url === 'string'
+        ? tripAny.client_avatar_url
+        : typeof tripAny.client_avatar === 'string'
+          ? tripAny.client_avatar
+          : null;
+    const tripSupplierAvatar =
+      typeof tripAny.supplier_avatar_url === 'string'
+        ? tripAny.supplier_avatar_url
+        : typeof tripAny.supplier_avatar === 'string'
+          ? tripAny.supplier_avatar
+          : null;
+    setClientAvatarUri(tripClientAvatar?.trim() ? tripClientAvatar : null);
+    setSupplierAvatarUri(tripSupplierAvatar?.trim() ? tripSupplierAvatar : null);
     if (!ownerOrg) return;
 
     void (async () => {
@@ -546,7 +558,14 @@ export function TripRatingsBlock({
 
   useEffect(() => {
     let cancelled = false;
-    setResolvedDriverAvatarUri(driverAvatarUri ?? null);
+    const tripAny = trip as Record<string, unknown>;
+    const tripDriverAvatar =
+      typeof tripAny.driver_avatar_url === 'string'
+        ? tripAny.driver_avatar_url
+        : typeof tripAny.driver_avatar === 'string'
+          ? tripAny.driver_avatar
+          : null;
+    setResolvedDriverAvatarUri(driverAvatarUri ?? tripDriverAvatar ?? null);
     if (driverAvatarUri || !trip.driver_id) return;
 
     void (async () => {
@@ -727,7 +746,11 @@ export function TripRatingsBlock({
   };
 
   const handleSubmit = () => {
-    if (!organizationId || !flow) return;
+    if (!flow) return;
+    if (!effectiveOrganizationId) {
+      Alert.alert('Rating failed', 'Organization context is missing. Please refresh and try again.');
+      return;
+    }
     if (score < 1 || score > 5) {
       Alert.alert('Select rating', 'Choose a star rating before submitting.');
       return;
@@ -762,7 +785,7 @@ export function TripRatingsBlock({
         rater_id = trip.supplier_id!;
       } else {
         rater_type = 'organization';
-        rater_id = organizationId;
+        rater_id = effectiveOrganizationId;
       }
     }
 
@@ -771,7 +794,7 @@ export function TripRatingsBlock({
       selectedTags,
       trimmedComment.slice(0, VALIDATION.NOTES_MAX_LENGTH)
     );
-    createRating(organizationId, {
+    createRating(effectiveOrganizationId, {
       trip_id: trip.id,
       rater_type,
       rater_id,
@@ -820,6 +843,7 @@ export function TripRatingsBlock({
     'Driver'
   ).trim();
   const isWorkspace = layoutVariant === 'workspace';
+  const isCompactWorkspace = isWorkspace && width < 1100;
   const activeSubjectName = flow?.type === 'client_supplier'
     ? (partnerName || 'Supplier')
     : (driverName || trip.driver_display_name || 'Driver');
@@ -833,25 +857,28 @@ export function TripRatingsBlock({
     tripScore: number | null,
     globalScore: number | null,
   ) => (
-    <View style={styles.wsPartyMetricsRow}>
+    <View style={[styles.wsPartyMetricsRow, isCompactWorkspace && styles.wsPartyMetricsRowCompact]}>
       <View style={styles.wsPartyScoreBlock}>
         <View style={styles.wsPartyScoreRow}>
-          <Text style={styles.wsPartyScore}>{tripScore != null ? tripScore.toFixed(1) : '—'}</Text>
-          <FontAwesome name="star" size={12} color={Theme.feedbackModalStarActive} />
+          <Text style={[styles.wsPartyScore, isCompactWorkspace && styles.wsPartyScoreCompact]}>
+            {tripScore != null ? tripScore.toFixed(1) : '—'}
+          </Text>
+          <FontAwesome name="star" size={isCompactWorkspace ? 9 : 12} color={Theme.feedbackModalStarActive} />
         </View>
-        <Text style={styles.wsPartyAvgCaption}>This trip</Text>
+        <Text style={[styles.wsPartyAvgCaption, isCompactWorkspace && styles.wsPartyAvgCaptionCompact]}>This trip</Text>
       </View>
       <View style={[styles.wsPartyScoreBlock, styles.wsPartyScoreBlockRight]}>
         <View style={styles.wsPartyScoreRow}>
-          <Text style={styles.wsPartyScore}>{globalScore != null ? globalScore.toFixed(1) : '—'}</Text>
-          <FontAwesome name="star" size={12} color={Theme.feedbackModalStarActive} />
+          <Text style={[styles.wsPartyScore, isCompactWorkspace && styles.wsPartyScoreCompact]}>
+            {globalScore != null ? globalScore.toFixed(1) : '—'}
+          </Text>
+          <FontAwesome name="star" size={isCompactWorkspace ? 9 : 12} color={Theme.feedbackModalStarActive} />
         </View>
-        <Text style={styles.wsPartyAvgCaption}>Global avg</Text>
+        <Text style={[styles.wsPartyAvgCaption, isCompactWorkspace && styles.wsPartyAvgCaptionCompact]}>Global avg</Text>
       </View>
     </View>
   );
 
-  if (!isCompleted) return null;
   if (!canRateSupplier && !canRateDriver && !canRateClient && ratings.length === 0 && !clientFeedback) {
     return null;
   }
@@ -1027,7 +1054,7 @@ export function TripRatingsBlock({
         ) : (
           <>
             {isWorkspace ? (
-              <View style={styles.wsHeaderRow}>
+              <View style={[styles.wsHeaderRow, isCompactWorkspace && styles.wsHeaderRowCompact]}>
                 <View style={styles.wsTitleCluster}>
                   <View style={styles.wsAwardCircle}>
                     <Feather name="award" size={28} color={Theme.primary} />
@@ -1040,7 +1067,9 @@ export function TripRatingsBlock({
                 {(displaySupplierAvg != null ||
                   displayDriverAvg != null ||
                   displayClientAvg != null) && (
-                  <View style={styles.wsPillRow}>{summaryPillsEl}</View>
+                  <View style={[styles.wsPillRow, isCompactWorkspace && styles.wsPillRowCompact]}>
+                    {summaryPillsEl}
+                  </View>
                 )}
               </View>
             ) : null}
@@ -1050,97 +1079,97 @@ export function TripRatingsBlock({
             )}
 
             {isWorkspace ? (
-              <View style={styles.wsPartyGrid}>
+              <View style={[styles.wsPartyGrid, isCompactWorkspace && styles.wsPartyGridCompact]}>
                 <TouchableOpacity
-                  style={styles.wsPartyCard}
+                  style={[styles.wsPartyCard, isCompactWorkspace && styles.wsPartyCardCompact]}
                   onPress={() => {
                     if (canRateClient) setShowClientFeedbackModal(true);
                   }}
                   activeOpacity={canRateClient ? 0.85 : 1}
                   disabled={!canRateClient}
                 >
-                  <View style={[styles.wsPartyIcon, styles.wsPartyIconDark]}>
+                  <View style={[styles.wsPartyIcon, styles.wsPartyIconDark, isCompactWorkspace && styles.wsPartyIconCompact]}>
                     <PartyAvatar
                       uri={clientAvatarUri}
                       name={clientDisplayName}
-                      size={72}
+                      size={isCompactWorkspace ? 40 : 72}
                       initialTextStyle={{ color: Theme.textOnPrimary }}
                       containerStyle={{ borderWidth: 0, backgroundColor: 'rgba(255,255,255,0.12)' }}
                     />
                   </View>
-                  <Text style={styles.wsPartyRole}>Client</Text>
-                  <Text style={styles.wsPartyName} numberOfLines={2}>
+                  <Text style={[styles.wsPartyRole, isCompactWorkspace && styles.wsPartyRoleCompact]}>Client</Text>
+                  <Text style={[styles.wsPartyName, isCompactWorkspace && styles.wsPartyNameCompact]} numberOfLines={2}>
                     {clientDisplayName}
                   </Text>
-                  <View style={styles.wsPartyDivider} />
+                  <View style={[styles.wsPartyDivider, isCompactWorkspace && styles.wsPartyDividerCompact]} />
                   {renderPartyScores(clientTripAvg, displayClientAvg)}
                   <View style={styles.wsPartyFooter}>
                     {canRateClient ? (
-                      <Text style={styles.wsRateCta}>Rate party</Text>
+                      <Text style={[styles.wsRateCta, isCompactWorkspace && styles.wsRateCtaCompact]}>Rate party</Text>
                     ) : (
-                      <Text style={styles.wsRateCtaMuted}>—</Text>
+                      <Text style={[styles.wsRateCtaMuted, isCompactWorkspace && styles.wsRateCtaMutedCompact]}>—</Text>
                     )}
                   </View>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.wsPartyCard}
+                  style={[styles.wsPartyCard, isCompactWorkspace && styles.wsPartyCardCompact]}
                   onPress={() => {
                     if (canRateSupplier && !hasRatedSupplier) openRateSupplier();
                   }}
                   activeOpacity={canRateSupplier && !hasRatedSupplier ? 0.85 : 1}
                   disabled={!canRateSupplier || hasRatedSupplier}
                 >
-                  <View style={[styles.wsPartyIcon, styles.wsPartyIconMuted]}>
-                    <PartyAvatar uri={supplierAvatarUri} name={supplierDisplayName} size={72} />
+                  <View style={[styles.wsPartyIcon, styles.wsPartyIconMuted, isCompactWorkspace && styles.wsPartyIconCompact]}>
+                    <PartyAvatar uri={supplierAvatarUri} name={supplierDisplayName} size={isCompactWorkspace ? 40 : 72} />
                   </View>
-                  <Text style={styles.wsPartyRole}>Supplier</Text>
-                  <Text style={styles.wsPartyName} numberOfLines={2}>
+                  <Text style={[styles.wsPartyRole, isCompactWorkspace && styles.wsPartyRoleCompact]}>Supplier</Text>
+                  <Text style={[styles.wsPartyName, isCompactWorkspace && styles.wsPartyNameCompact]} numberOfLines={2}>
                     {supplierDisplayName}
                   </Text>
-                  <View style={styles.wsPartyDivider} />
+                  <View style={[styles.wsPartyDivider, isCompactWorkspace && styles.wsPartyDividerCompact]} />
                   {renderPartyScores(supplierTripAvg, displaySupplierAvg)}
                   <View style={styles.wsPartyFooter}>
                     {canRateSupplier && !hasRatedSupplier ? (
-                      <Text style={styles.wsRateCta}>Rate party</Text>
+                      <Text style={[styles.wsRateCta, isCompactWorkspace && styles.wsRateCtaCompact]}>Rate party</Text>
                     ) : hasRatedSupplier ? (
-                      <Text style={styles.wsRateCtaMuted}>Recorded</Text>
+                      <Text style={[styles.wsRateCtaMuted, isCompactWorkspace && styles.wsRateCtaMutedCompact]}>Recorded</Text>
                     ) : (
-                      <Text style={styles.wsRateCtaMuted}>—</Text>
+                      <Text style={[styles.wsRateCtaMuted, isCompactWorkspace && styles.wsRateCtaMutedCompact]}>—</Text>
                     )}
                   </View>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.wsPartyCard}
+                  style={[styles.wsPartyCard, isCompactWorkspace && styles.wsPartyCardCompact]}
                   onPress={() => {
                     if (canRateDriver && !hasRatedDriver) openRateDriver();
                   }}
                   activeOpacity={canRateDriver && !hasRatedDriver ? 0.85 : 1}
                   disabled={!canRateDriver || hasRatedDriver}
                 >
-                  <View style={[styles.wsPartyIcon, styles.wsPartyIconDriver]}>
+                  <View style={[styles.wsPartyIcon, styles.wsPartyIconDriver, isCompactWorkspace && styles.wsPartyIconCompact]}>
                     <PartyAvatar
                       uri={resolvedDriverAvatarUri}
                       name={driverDisplayName}
-                      size={72}
+                      size={isCompactWorkspace ? 40 : 72}
                       initialTextStyle={{ color: Theme.primary }}
                       containerStyle={{ borderWidth: 0, backgroundColor: 'transparent' }}
                     />
                   </View>
-                  <Text style={styles.wsPartyRole}>Driver</Text>
-                  <Text style={styles.wsPartyName} numberOfLines={2}>
+                  <Text style={[styles.wsPartyRole, isCompactWorkspace && styles.wsPartyRoleCompact]}>Driver</Text>
+                  <Text style={[styles.wsPartyName, isCompactWorkspace && styles.wsPartyNameCompact]} numberOfLines={2}>
                     {driverDisplayName}
                   </Text>
-                  <View style={styles.wsPartyDivider} />
+                  <View style={[styles.wsPartyDivider, isCompactWorkspace && styles.wsPartyDividerCompact]} />
                   {renderPartyScores(driverTripAvg, displayDriverAvg)}
                   <View style={styles.wsPartyFooter}>
                     {canRateDriver && !hasRatedDriver ? (
-                      <Text style={styles.wsRateCta}>Rate party</Text>
+                      <Text style={[styles.wsRateCta, isCompactWorkspace && styles.wsRateCtaCompact]}>Rate party</Text>
                     ) : hasRatedDriver ? (
-                      <Text style={styles.wsRateCtaMuted}>Recorded</Text>
+                      <Text style={[styles.wsRateCtaMuted, isCompactWorkspace && styles.wsRateCtaMutedCompact]}>Recorded</Text>
                     ) : (
-                      <Text style={styles.wsRateCtaMuted}>—</Text>
+                      <Text style={[styles.wsRateCtaMuted, isCompactWorkspace && styles.wsRateCtaMutedCompact]}>—</Text>
                     )}
                   </View>
                 </TouchableOpacity>
@@ -1493,7 +1522,7 @@ export function TripRatingsBlock({
                 disabled={clientScore < 1 || clientSubmitting}
                 onPress={async () => {
                   if (clientScore < 1) return;
-                  if (!organizationId || !trip.client_id) {
+                  if (!effectiveOrganizationId || !trip.client_id) {
                     Alert.alert('Rating failed', 'Client profile is missing for this trip.');
                     return;
                   }
@@ -1508,10 +1537,10 @@ export function TripRatingsBlock({
                     clientTags,
                     clientComment.trim().slice(0, VALIDATION.NOTES_MAX_LENGTH),
                   );
-                  const { error } = await createRating(organizationId, {
+                  const { error } = await createRating(effectiveOrganizationId, {
                     trip_id: trip.id,
                     rater_type: trip.supplier_id ? 'supplier' : 'organization',
-                    rater_id: trip.supplier_id ?? organizationId,
+                    rater_id: trip.supplier_id ?? effectiveOrganizationId,
                     rated_type: 'client',
                     rated_id: trip.client_id,
                     score: clientScore,
@@ -1703,6 +1732,9 @@ const styles = StyleSheet.create({
     gap: 16,
     marginBottom: 20,
   },
+  wsHeaderRowCompact: {
+    gap: 10,
+  },
   wsTitleCluster: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1748,6 +1780,11 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     flexShrink: 0,
   },
+  wsPillRowCompact: {
+    width: '100%',
+    justifyContent: 'flex-start',
+    alignSelf: 'stretch',
+  },
   wsSummaryPill: {
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -1768,6 +1805,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'stretch',
   },
+  wsPartyGridCompact: {
+    gap: 6,
+    marginBottom: 10,
+  },
   wsPartyCard: {
     flex: 1,
     flexBasis: 0,
@@ -1781,6 +1822,13 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surface,
     alignItems: 'center',
   },
+  wsPartyCardCompact: {
+    minWidth: 0,
+    borderRadius: 14,
+    paddingVertical: 9,
+    paddingHorizontal: 8,
+    borderWidth: 1.4,
+  },
   wsPartyIcon: {
     width: 72,
     height: 72,
@@ -1789,6 +1837,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 12,
     overflow: 'hidden',
+  },
+  wsPartyIconCompact: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginBottom: 6,
   },
   wsPartyIconDark: {
     backgroundColor: Theme.textPrimaryDark,
@@ -1811,6 +1865,11 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 6,
   },
+  wsPartyRoleCompact: {
+    fontSize: 7,
+    marginBottom: 3,
+    letterSpacing: 0.55,
+  },
   wsPartyName: {
     fontSize: 13,
     fontWeight: '900',
@@ -1819,6 +1878,31 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     textAlign: 'center',
     marginBottom: 8,
+  },
+  wsPartyNameCompact: {
+    fontSize: 9,
+    marginBottom: 4,
+    lineHeight: 11,
+  },
+  wsPartyDividerCompact: {
+    marginVertical: 5,
+  },
+  wsPartyMetricsRowCompact: {
+    gap: 6,
+    paddingTop: 0,
+  },
+  wsPartyScoreCompact: {
+    fontSize: 11,
+  },
+  wsPartyAvgCaptionCompact: {
+    fontSize: 7,
+    letterSpacing: 0.45,
+  },
+  wsRateCtaCompact: {
+    fontSize: 8,
+  },
+  wsRateCtaMutedCompact: {
+    fontSize: 11,
   },
   wsPartyDivider: {
     width: '100%',

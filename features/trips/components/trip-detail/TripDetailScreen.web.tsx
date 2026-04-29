@@ -27,6 +27,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
   useWindowDimensions,
@@ -46,7 +47,7 @@ import {
   type TripStageTimestamp,
 } from "./sections/TripStatusTimeline";
 
-type Tab = "tracking" | "finance";
+type Tab = "trip" | "finance" | "tracking" | "docs";
 
 function formatLedgerDate(s: string | null | undefined) {
   if (!s) return "—";
@@ -85,6 +86,19 @@ function adjustmentsCountingAsDeductions(adjustments: TripAdjustment[]) {
   );
 }
 
+function splitLocationPrimarySecondary(location: string | null | undefined): {
+  primary: string;
+  secondary: string | null;
+} {
+  const raw = (location ?? "").trim();
+  if (!raw) return { primary: "—", secondary: null };
+  const commaIndex = raw.indexOf(",");
+  if (commaIndex === -1) return { primary: raw, secondary: null };
+  const primary = raw.slice(0, commaIndex).trim() || raw;
+  const secondary = raw.slice(commaIndex + 1).trim() || null;
+  return { primary, secondary };
+}
+
 export default function TripDetailScreen({
   tripId,
   entryContext,
@@ -97,12 +111,19 @@ export default function TripDetailScreen({
   const { currentOrganization } = useOrganization();
   const { t } = useLanguage();
   const { width: screenWidth } = useWindowDimensions();
-  const [activeTab, setActiveTab] = useState<Tab>("tracking");
+  const [activeTab, setActiveTab] = useState<Tab>("trip");
+  const [financeSubTab, setFinanceSubTab] = useState<"summary" | "transactions">(
+    "summary",
+  );
+  const [searchTerm, setSearchTerm] = useState("");
+  const [expandedLog, setExpandedLog] = useState<number | null>(null);
+  const [showAssignmentManager, setShowAssignmentManager] = useState(false);
   const [otpResending, setOtpResending] = useState(false);
 
   const isMobile = screenWidth < 640;
   const isTablet = screenWidth >= 640 && screenWidth < 1024;
   const isDesktop = screenWidth >= 1024;
+  const desktopTab: "tracking" | "finance" = activeTab === "finance" ? "finance" : "tracking";
   const hPad = isMobile ? 12 : isTablet ? 16 : 24;
   const mapHeight = isMobile ? 220 : isTablet ? 380 : 600;
 
@@ -265,6 +286,9 @@ export default function TripDetailScreen({
     });
     return rows;
   })();
+  const paymentCaptured = detail.tripLedgerEntries.some(
+    (row) => row.contact_type === "client" && Number(row.amount_in ?? 0) > 0,
+  );
 
   // ── Map ───────────────────────────────────────────────────────────────────────
   const hasOrigin = !!detail.trackingMapOriginCoordinate;
@@ -275,6 +299,100 @@ export default function TripDetailScreen({
         longitude: detail.trackingMapOriginCoordinate!.longitude,
       }
     : { latitude: 20.5937, longitude: 78.9629 };
+
+  const originSplit = splitLocationPrimarySecondary(trip.pickup_area);
+  const destinationSplit = splitLocationPrimarySecondary(trip.drop_location);
+  const pickupAny = trip as any;
+  const originStateLabel =
+    originSplit.secondary || String(pickupAny.pickup_state ?? "").trim() || "Origin Node";
+  const destinationStateLabel =
+    destinationSplit.secondary || String(pickupAny.drop_state ?? "").trim() || "Destination Node";
+  const allocatedDriverName =
+    detail.driverName?.trim() ||
+    String((trip as any).driver_name ?? "").trim() ||
+    "Unassigned";
+  const allocatedVehicleLabel =
+    (detail.displayVehicleFromInput?.trim() ||
+      detail.vehicleLabel?.trim() ||
+      String(trip.vehicle_display_number ?? "").trim() ||
+      String((trip as any).vehicle_number ?? "").trim() ||
+      "Pending");
+  const supplierName =
+    detail.partnerName?.trim() || String((trip as any).supplier_name ?? "").trim() || "Supplier N/A";
+  const clientNameCard =
+    detail.displayClientName?.trim() || String(trip.client_name ?? "").trim() || "Client N/A";
+  const isIntegratedTrip = Boolean(trip.indent_id);
+
+  const journeyLogs = [
+    {
+      status: "Assigned",
+      location: trip.pickup_area?.trim() || "Origin hub",
+      time: trip.pickup_date ? new Date(trip.pickup_date).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—",
+      details: "Trip assigned and prepared for dispatch.",
+    },
+    {
+      status: "Pickup",
+      location: trip.pickup_area?.trim() || "Pickup point",
+      time: trip.started_at ? new Date(trip.started_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—",
+      details: "Pickup verification completed and movement initiated.",
+    },
+    {
+      status: "In-Transit",
+      location: "Route in progress",
+      time: trip.started_at ? new Date(trip.started_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—",
+      details: "Vehicle moving towards destination through planned route.",
+    },
+    {
+      status: "Delivered",
+      location: trip.drop_location?.trim() || "Destination",
+      time: trip.completed_at ? new Date(trip.completed_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—",
+      details: "Delivery completed and settlement flow closed.",
+    },
+  ];
+  const isTripCompleted =
+    String(trip.status ?? "").toLowerCase() === "completed" || !!trip.completed_at;
+  const currentStatusLabel = String(trip.status ?? "assigned")
+    .replace(/_/g, " ")
+    .toUpperCase();
+  const durationLabel = trip.duration_minutes
+    ? `${Math.floor(trip.duration_minutes / 60)}h ${trip.duration_minutes % 60}m`
+    : "—";
+  const driverRatingLabel =
+    detail.driverRatingAvg != null && Number.isFinite(Number(detail.driverRatingAvg))
+      ? Number(detail.driverRatingAvg).toFixed(1)
+      : "—";
+  const vehicleTypeLabel =
+    String((trip as any).vehicle_type ?? "").trim() ||
+    String((trip as any).truck_type ?? "").trim() ||
+    "MXL";
+  const vehicleCapacityLabel =
+    String((trip as any).capacity ?? "").trim() ||
+    String((trip as any).vehicle_capacity ?? "").trim() ||
+    "—";
+  const netManifestYield = Math.max(0, sales + additionalIncome - deductions - totalExpenses);
+  const revenueAdjustmentsDelta = detail.adjustments
+    .filter((adj) => adj.type === "revenue")
+    .reduce((sum, adj) => sum + (adj.impact === "plus" ? adj.amount : -adj.amount), 0);
+  const costAdjustmentsDelta = detail.adjustments
+    .filter((adj) => adj.type === "cost")
+    .reduce((sum, adj) => sum + (adj.impact === "plus" ? adj.amount : -adj.amount), 0);
+  const adjustedRevenue = Math.max(0, sales + revenueAdjustmentsDelta);
+  const adjustedCost = Math.max(0, cost + costAdjustmentsDelta);
+  const filteredFinanceRows = financeHistoryRows.filter((row) => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return true;
+    const text = [
+      ledgerHistoryTitle(row.tx, row.isIn),
+      row.tx.description ?? "",
+      row.tx.payment_method ?? "",
+      row.tx.reference_no ?? "",
+      formatLedgerDate(row.tx.transaction_date),
+    ]
+      .join(" ")
+      .toLowerCase();
+    return text.includes(q);
+  });
+  const vaultDocs = detail.computedTripDocs.slice(0, 4);
 
   const openDriverDetails = () => {
     if (!trip.driver_id) return;
@@ -342,70 +460,94 @@ export default function TripDetailScreen({
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      {/* ── Dark navigation bar ─────────────────────────────────────────────── */}
-      <View style={[styles.navBar, { paddingHorizontal: hPad }]}>
-        <View style={styles.navLeft}>
-          <TouchableOpacity
-            onPress={onBack}
-            style={styles.navBackBtn}
-            activeOpacity={0.8}
-          >
-            <FontAwesome name="chevron-left" size={11} color="#94a3b8" />
-            {!isMobile && <Text style={styles.navBackText}>Back</Text>}
-          </TouchableOpacity>
-          <View style={styles.navTitleWrap}>
-            <Text style={[styles.navTitle, isMobile && { fontSize: 13 }]} numberOfLines={1}>
-              {getTripDisplayNumber(trip)}
-            </Text>
-            {!isMobile && (
-              <View
-                style={[
-                  styles.navPill,
-                  isAggregate ? styles.navPillAggregate : styles.navPillAsset,
-                ]}
+      {/* ── Top navigation ─────────────────────────────────────────────── */}
+      <View style={[styles.navBar, { paddingHorizontal: hPad }, !isDesktop && styles.navBarMobile]}>
+        {isDesktop ? (
+          <>
+            <View style={styles.navLeft}>
+              <TouchableOpacity
+                onPress={onBack}
+                style={styles.navBackBtn}
+                activeOpacity={0.8}
               >
-                <Text style={styles.navPillText}>
-                  {isAggregate ? "AGGREGATE" : "ASSET"}
+                <FontAwesome name="chevron-left" size={11} color="#94a3b8" />
+                {!isMobile && <Text style={styles.navBackText}>Back</Text>}
+              </TouchableOpacity>
+              <View style={styles.navTitleWrap}>
+                <Text style={[styles.navTitle, isMobile && { fontSize: 13 }]} numberOfLines={1}>
+                  {getTripDisplayNumber(trip)}
                 </Text>
+                {!isMobile && (
+                  <View
+                    style={[
+                      styles.navPill,
+                      isAggregate ? styles.navPillAggregate : styles.navPillAsset,
+                    ]}
+                  >
+                    <Text style={styles.navPillText}>
+                      {isAggregate ? "AGGREGATE" : "ASSET"}
+                    </Text>
+                  </View>
+                )}
               </View>
-            )}
-          </View>
-        </View>
-        <View style={styles.navActions}>
-          <NavAction
-            icon="plus"
-            label={isMobile ? "" : "Add Expense"}
-            onPress={detail.openAddExpense}
-          />
-          <NavAction
-            icon="file-text-o"
-            label={isMobile ? "" : "Generate Memo"}
-            onPress={() => {}}
-            primary
-          />
-        </View>
+            </View>
+            <View style={styles.navActions}>
+              <NavAction
+                icon="plus"
+                label={isMobile ? "" : "Add Expense"}
+                onPress={detail.openAddExpense}
+              />
+              <NavAction
+                icon="file-text-o"
+                label={isMobile ? "" : "Generate Memo"}
+                onPress={() => {}}
+                primary
+              />
+            </View>
+          </>
+        ) : (
+          <>
+            <TouchableOpacity onPress={onBack} style={styles.navCircleBtn} activeOpacity={0.85}>
+              <FontAwesome name="chevron-left" size={18} color="#0f172a" />
+            </TouchableOpacity>
+            <View style={styles.navMobileCenter}>
+              <Text style={styles.navMobileKicker}>Trip History</Text>
+              <View style={styles.navMobileTripRow}>
+                <Text style={styles.navMobileTripId}>{getTripDisplayNumber(trip)}</Text>
+                <View style={styles.navMobileDot} />
+              </View>
+            </View>
+            <TouchableOpacity style={styles.navCircleBtn} activeOpacity={0.85}>
+              <FontAwesome name="share-alt" size={16} color="#0f172a" />
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       {/* ── Tab bar ───────────────────────────────────────────────────────────── */}
-      <View style={[styles.tabBar, { paddingHorizontal: hPad }]}>
-        <TabButton
-          label="Tracking"
-          icon="map-marker"
-          active={activeTab === "tracking"}
-          onPress={() => setActiveTab("tracking")}
-        />
-        <TabButton
-          label="Finance"
-          icon="bar-chart"
-          active={activeTab === "finance"}
-          onPress={() => setActiveTab("finance")}
-        />
-      </View>
+      {isDesktop ? (
+        <View style={[styles.tabBar, { paddingHorizontal: hPad }]}>
+          <TabButton
+            label="Tracking"
+            icon="map-marker"
+            active={desktopTab === "tracking"}
+            onPress={() => setActiveTab("tracking")}
+            compact={false}
+          />
+          <TabButton
+            label="Finance"
+            icon="bar-chart"
+            active={desktopTab === "finance"}
+            onPress={() => setActiveTab("finance")}
+            compact={false}
+          />
+        </View>
+      ) : null}
 
       {/* ── Scrollable content ────────────────────────────────────────────────── */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { padding: isMobile ? 12 : 20 }]}
+        contentContainerStyle={[styles.scrollContent, { padding: isMobile ? 16 : 22 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -414,8 +556,400 @@ export default function TripDetailScreen({
           />
         }
       >
+        {!isDesktop ? (
+          <>
+            <View style={styles.refHeroCard}>
+              <View style={styles.refHeroBgGlow} />
+              <View style={styles.refHeroBridgeRow}>
+                <View style={styles.refHeroBridgeCol}>
+                  <View style={styles.refHeroBridgeIconWrap}>
+                    <Feather name="briefcase" size={12} color="#818cf8" />
+                  </View>
+                  <View>
+                    <Text style={styles.refHeroBridgeLabel}>Client Hub</Text>
+                    <Text style={styles.refHeroBridgeValue} numberOfLines={1}>{clientNameCard}</Text>
+                  </View>
+                </View>
+                <FontAwesome name="exchange" size={12} color="#64748b" />
+                <View style={[styles.refHeroBridgeCol, styles.refHeroBridgeColRight]}>
+                  <View>
+                    <Text style={[styles.refHeroBridgeLabel, styles.refHeroBridgeLabelRight]}>Supplier Node</Text>
+                    <Text style={styles.refHeroBridgeValue} numberOfLines={1}>{supplierName}</Text>
+                  </View>
+                  <View style={[styles.refHeroBridgeIconWrap, styles.refHeroBridgeIconWrapRose]}>
+                    <Feather name="truck" size={12} color="#fb7185" />
+                  </View>
+                </View>
+              </View>
+              <View style={styles.refHeroRouteRow}>
+                <View style={styles.refHeroRouteCol}>
+                  <Text style={[styles.refHeroCity, isMobile && styles.refHeroCityMobile]}>
+                    {originSplit.primary.toUpperCase()}
+                  </Text>
+                  <Text style={styles.refHeroState}>{originStateLabel.toUpperCase()}</Text>
+                </View>
+                <View style={styles.refHeroToRow}>
+                  <View style={styles.refHeroToDot} />
+                  <View style={styles.refHeroToLine} />
+                </View>
+                <View style={[styles.refHeroRouteCol, styles.refHeroRouteColRight]}>
+                  <Text style={[styles.refHeroCity, isMobile && styles.refHeroCityMobile]} numberOfLines={2}>
+                    {destinationSplit.primary.toUpperCase()}
+                  </Text>
+                  <Text style={styles.refHeroState}>{destinationStateLabel.toUpperCase()}</Text>
+                </View>
+              </View>
+              <View style={styles.refHeroMetaShell}>
+                <View style={styles.refHeroMetaItem}>
+                  <View style={styles.refHeroMetaIconWrap}>
+                    <Feather name="navigation" size={12} color="#fff" />
+                  </View>
+                  <View>
+                    <Text style={styles.refHeroMetaLabel}>Manifest range</Text>
+                    <Text style={styles.refHeroMetaValue}>{trip.distance ? `${trip.distance} KM` : "—"}</Text>
+                  </View>
+                </View>
+                <View style={styles.refHeroMetaDivider} />
+                <View style={[styles.refHeroMetaItem, styles.refHeroMetaItemRight]}>
+                  <View>
+                    <Text style={styles.refHeroMetaLabel}>ETE manifest</Text>
+                    <Text style={styles.refHeroMetaValue}>{durationLabel}</Text>
+                  </View>
+                  <View style={styles.refHeroMetaIconGhost}>
+                    <Feather name="clock" size={12} color="#a5b4fc" />
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.refAssetRow}>
+              <View style={styles.refAssetCard}>
+                <View style={styles.refAssetHead}>
+                  <View style={styles.refAssetIconWrap}>
+                    <Feather name="user" size={14} color="#4f46e5" />
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setShowAssignmentManager(true)}
+                    style={styles.refAssetChangeBtn}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.refAssetChangeBtnText}>Change</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.refAssetLabel}>Authorized Pilot</Text>
+                <Text style={styles.refAssetValue} numberOfLines={1}>{allocatedDriverName}</Text>
+                <Text style={styles.refAssetSubtle}>{driverRatingLabel} rank</Text>
+              </View>
+
+              <View style={styles.refAssetCard}>
+                <View style={styles.refAssetHead}>
+                  <View style={[styles.refAssetIconWrap, styles.refAssetIconWrapDark]}>
+                    <Feather name="truck" size={14} color="#fff" />
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setShowAssignmentManager(true)}
+                    style={styles.refAssetChangeBtn}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.refAssetChangeBtnText}>Change</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.refAssetLabel}>Vehicle Asset</Text>
+                <Text style={styles.refAssetValue} numberOfLines={1}>{allocatedVehicleLabel}</Text>
+                <Text style={styles.refAssetSubtle}>{vehicleTypeLabel} · {vehicleCapacityLabel}</Text>
+              </View>
+            </View>
+
+            <View style={styles.refTabShell}>
+              <TouchableOpacity
+                style={[styles.refTabBtn, activeTab === "trip" && styles.refTabBtnActive]}
+                onPress={() => setActiveTab("trip")}
+                activeOpacity={0.85}
+              >
+                <Feather name="activity" size={12} color={activeTab === "trip" ? "#818cf8" : "#94a3b8"} />
+                <Text style={[styles.refTabBtnText, activeTab === "trip" && styles.refTabBtnTextActive]}>Journey</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.refTabBtn, activeTab === "finance" && styles.refTabBtnActive]}
+                onPress={() => setActiveTab("finance")}
+                activeOpacity={0.85}
+              >
+                <Feather name="credit-card" size={12} color={activeTab === "finance" ? "#818cf8" : "#94a3b8"} />
+                <Text style={[styles.refTabBtnText, activeTab === "finance" && styles.refTabBtnTextActive]}>Finance</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.refTabBtn, activeTab === "docs" && styles.refTabBtnActive]}
+                onPress={() => setActiveTab("docs")}
+                activeOpacity={0.85}
+              >
+                <Feather name="shield" size={12} color={activeTab === "docs" ? "#818cf8" : "#94a3b8"} />
+                <Text style={[styles.refTabBtnText, activeTab === "docs" && styles.refTabBtnTextActive]}>Vault</Text>
+              </TouchableOpacity>
+            </View>
+
+            {activeTab === "trip" ? (
+              <View style={styles.refTrackWrap}>
+                <View style={styles.refTimelineCard}>
+                  {journeyLogs.map((log, index) => {
+                    const expanded = expandedLog === index;
+                    const isLast = index === journeyLogs.length - 1;
+                    return (
+                      <View key={`${log.status}-${index}`} style={styles.refTimelineItemWrap}>
+                        {!isLast ? <View style={styles.refTimelineConnector} /> : null}
+                        <TouchableOpacity
+                          style={[styles.refTimelineItem, expanded && styles.refTimelineItemExpanded]}
+                          onPress={() => setExpandedLog(expanded ? null : index)}
+                          activeOpacity={0.9}
+                        >
+                          <View style={styles.refTimelineDotIcon}>
+                            <FontAwesome name="check" size={11} color="#fff" />
+                          </View>
+                          <View style={styles.refTimelineBody}>
+                            <View style={styles.refTimelineTop}>
+                              <Text style={styles.refTimelineStatus}>{log.status}</Text>
+                              <View style={styles.refTimelineTopRight}>
+                                <Text style={styles.refTimelineTime}>{log.time}</Text>
+                                <FontAwesome name={expanded ? "chevron-up" : "chevron-down"} size={11} color="#94a3b8" />
+                              </View>
+                            </View>
+                            <Text style={styles.refTimelineLocation}>{log.location}</Text>
+                            {expanded ? <Text style={styles.refTimelineDetails}>{log.details}</Text> : null}
+                          </View>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.refDeliveredCard}>
+                  <View>
+                    <Text style={styles.refDeliveredLabel}>
+                      {isTripCompleted ? "Final Audit Status" : "Current Status"}
+                    </Text>
+                    <Text style={styles.refDeliveredValue}>
+                      {isTripCompleted ? "DELIVERED SUCCESSFULLY" : currentStatusLabel}
+                    </Text>
+                  </View>
+                  <View style={styles.refDeliveredIconWrap}>
+                    <FontAwesome
+                      name={isTripCompleted ? "check-circle" : "clock-o"}
+                      size={20}
+                      color="#fff"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.refFeedbackWrap}>
+                  <TripRatingsBlock
+                    trip={trip}
+                    organizationId={currentOrganization?.id ?? null}
+                    partnerName={detail.partnerName}
+                    driverName={detail.driverName}
+                    driverAvatarUri={detail.driverAvatarUri}
+                    clientName={detail.displayClientName ?? trip.client_name ?? null}
+                    paymentCaptured={paymentCaptured}
+                    layoutVariant="workspace"
+                  />
+                </View>
+              </View>
+            ) : activeTab === "finance" ? (
+              <View style={styles.refFinanceWrap}>
+                <View style={styles.refFinanceSubTabs}>
+                  <TouchableOpacity
+                    style={styles.refFinanceSubBtn}
+                    onPress={() => setFinanceSubTab("summary")}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.refFinanceSubBtnText,
+                        financeSubTab === "summary" && styles.refFinanceSubBtnTextActive,
+                      ]}
+                    >
+                      Summary
+                    </Text>
+                    {financeSubTab === "summary" ? <View style={styles.refFinanceSubLine} /> : null}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.refFinanceSubBtn}
+                    onPress={() => setFinanceSubTab("transactions")}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.refFinanceSubBtnText,
+                        financeSubTab === "transactions" && styles.refFinanceSubBtnTextActive,
+                      ]}
+                    >
+                      Transactions
+                    </Text>
+                    {financeSubTab === "transactions" ? <View style={styles.refFinanceSubLine} /> : null}
+                  </TouchableOpacity>
+                </View>
+
+                {financeSubTab === "summary" ? (
+                  <>
+                    <View style={styles.refSettleCard}>
+                      <Text style={styles.refSettleLabel}>Net Manifest Yield</Text>
+                      <Text style={styles.refSettleValue}>{formatINR(netManifestYield)}</Text>
+                      <View style={styles.refFinanceAdjustmentsActions}>
+                        <TouchableOpacity
+                          onPress={detail.openClientRevenueAdjustment}
+                          style={styles.financeAdjustmentsBtn}
+                          activeOpacity={0.85}
+                        >
+                          <FontAwesome name="plus" size={11} color="#ffffff" />
+                          <Text style={styles.financeAdjustmentsBtnText}>Add Revenue</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={detail.openClientDeductionAdjustment}
+                          style={[styles.financeAdjustmentsBtn, styles.financeAdjustmentsBtnAlt]}
+                          activeOpacity={0.85}
+                        >
+                          <FontAwesome name="minus" size={11} color="#334155" />
+                          <Text style={[styles.financeAdjustmentsBtnText, styles.financeAdjustmentsBtnTextAlt]}>
+                            Add Cost
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                      <View style={styles.refSettleMetaRow}>
+                        <View>
+                          <Text style={styles.refSettleMetaLabel}>Adjusted Revenue</Text>
+                          <Text style={styles.refSettleMetaValuePositive}>{formatINR(adjustedRevenue)}</Text>
+                        </View>
+                        <View style={styles.refSettleMetaSep} />
+                        <View style={styles.refSettleMetaRight}>
+                          <Text style={styles.refSettleMetaLabel}>Adjusted Cost</Text>
+                          <Text style={styles.refSettleMetaValueNegative}>{formatINR(adjustedCost)}</Text>
+                        </View>
+                      </View>
+                    </View>
+                    <View style={styles.refFinanceBreakCard}>
+                      {detail.adjustments.map((adj) => (
+                        <View key={adj.id} style={styles.refFinanceRow}>
+                          <View style={styles.refFinanceRowLeft}>
+                            <View style={styles.refFinanceRowIcon}>
+                              <Feather
+                                name={
+                                  adj.impact === "plus"
+                                    ? "arrow-down-left"
+                                    : "arrow-up-right"
+                                }
+                                size={14}
+                                color={adj.impact === "plus" ? "#10b981" : "#f43f5e"}
+                              />
+                            </View>
+                            <Text style={styles.refFinanceRowLabel}>{adj.label}</Text>
+                          </View>
+                          <Text
+                            style={[
+                              styles.refFinanceRowValue,
+                              adj.impact === "plus"
+                                ? styles.refFinanceRowValuePositive
+                                : styles.refFinanceRowValueNegative,
+                            ]}
+                          >
+                            {adj.impact === "plus" ? "+" : "-"}{formatINR(adj.amount)}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <View style={styles.refFinanceSearchWrap}>
+                      <Feather name="search" size={14} color="#94a3b8" />
+                      <TextInput
+                        value={searchTerm}
+                        onChangeText={setSearchTerm}
+                        placeholder="Audit transaction registry..."
+                        placeholderTextColor="#94a3b8"
+                        style={styles.refFinanceSearchInput}
+                      />
+                    </View>
+                    {filteredFinanceRows.map((row) => (
+                      <View key={row.key} style={styles.refTxnRow}>
+                        <View style={styles.refTxnLeft}>
+                          <View
+                            style={[
+                              styles.refTxnIconWrap,
+                              row.isIn ? styles.refTxnIconIn : styles.refTxnIconOut,
+                            ]}
+                          >
+                            <Feather
+                              name={row.isIn ? "arrow-down-left" : "arrow-up-right"}
+                              size={16}
+                              color={row.isIn ? "#10b981" : "#f43f5e"}
+                            />
+                          </View>
+                          <View style={styles.refTxnTextWrap}>
+                            <Text style={styles.refTxnLabel}>{ledgerHistoryTitle(row.tx, row.isIn)}</Text>
+                            <Text style={styles.refTxnMeta}>
+                              {formatLedgerDate(row.tx.transaction_date)} ·{" "}
+                              {row.tx.payment_method || "Wallet"}
+                            </Text>
+                          </View>
+                        </View>
+                        <Text
+                          style={[
+                            styles.refTxnAmount,
+                            row.isIn ? styles.refTxnAmountIn : styles.refTxnAmountOut,
+                          ]}
+                        >
+                          {formatINR(row.amount)}
+                        </Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+              </View>
+            ) : activeTab === "docs" ? (
+              <View style={styles.refVaultWrap}>
+                <View style={styles.refVaultHeader}>
+                  <View style={styles.refVaultHeaderIcon}>
+                    <Feather name="shield" size={20} color="#4f46e5" />
+                  </View>
+                  <View>
+                    <Text style={styles.refVaultTitle}>Asset Vault</Text>
+                    <Text style={styles.refVaultSub}>Operational Compliance Registry</Text>
+                  </View>
+                </View>
+                <View style={styles.refVaultGrid}>
+                  {vaultDocs.map((doc) => {
+                    const tone =
+                      doc.status === "Missing"
+                        ? "critical"
+                        : doc.status === "Pending"
+                          ? "pending"
+                          : "ok";
+                    return (
+                      <View key={doc.id} style={styles.refVaultCard}>
+                        <Feather
+                          name={tone === "critical" ? "alert-triangle" : "file-text"}
+                          size={18}
+                          color={tone === "critical" ? "#fb7185" : "#94a3b8"}
+                        />
+                        <Text style={styles.refVaultCardTitle} numberOfLines={2}>{doc.label}</Text>
+                        <Text style={styles.refVaultCardStatus}>{doc.status}</Text>
+                        <TouchableOpacity
+                          style={styles.refVaultViewBtn}
+                          onPress={() => void handleDocOpen(doc)}
+                          activeOpacity={0.85}
+                        >
+                          <Feather name="external-link" size={12} color="#64748b" />
+                          <Text style={styles.refVaultViewText}>View</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
+          </>
+        ) : null}
+
         {/* ════════════════════ TRACKING TAB ════════════════════ */}
-        {activeTab === "tracking" && (
+        {isDesktop && desktopTab === "tracking" && (
           <>
             <View style={styles.workspaceRow}>
               <View style={styles.workspaceLeftCol}>
@@ -692,7 +1226,7 @@ export default function TripDetailScreen({
         )}
 
         {/* ════════════════════ FINANCE TAB ════════════════════ */}
-        {activeTab === "finance" && (
+        {isDesktop && desktopTab === "finance" && (
           <View style={styles.financeColsRow}>
             <View style={styles.financeLeftCol}>
               <View style={styles.yieldCard}>
@@ -786,8 +1320,17 @@ export default function TripDetailScreen({
           </View>
         )}
 
-        <View style={{ height: 48 }} />
+        <View style={{ height: !isDesktop ? 120 : 48 }} />
       </ScrollView>
+
+      {!isDesktop ? (
+        <View style={styles.refFloatingWrap} pointerEvents="box-none">
+          <TouchableOpacity style={styles.refFloatingBtn} activeOpacity={0.9}>
+            <Feather name="zap" size={14} color="#818cf8" />
+            <Text style={styles.refFloatingBtnText}>Authorized Pulse</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {/* ── Modals ────────────────────────────────────────────────────────────── */}
       <TripAdjustmentModal
@@ -803,6 +1346,65 @@ export default function TripDetailScreen({
         onOk={() => detail.setShowDriverRejectedModal(false)}
         variant="warning"
       />
+
+      <Modal
+        visible={showAssignmentManager}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowAssignmentManager(false)}
+      >
+        <View style={styles.assignModalBackdrop}>
+          <View style={styles.assignModalCard}>
+            <View style={styles.assignModalHeader}>
+              <Text style={styles.assignModalTitle}>Current Assignment</Text>
+              <TouchableOpacity
+                onPress={() => setShowAssignmentManager(false)}
+                style={styles.assignModalClose}
+                activeOpacity={0.85}
+              >
+                <FontAwesome name="times" size={16} color="#0f172a" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {trip.organization_id ? (
+                <TripAssignmentBlock
+                  trip={trip}
+                  organizationId={currentOrganization?.id ?? ""}
+                  canAssign={detail.canAssign}
+                  onUpdated={async () => {
+                    await detail.handleAssignmentUpdated();
+                    setShowAssignmentManager(false);
+                  }}
+                  partnerName={detail.partnerName}
+                  driverName={detail.driverName}
+                  vehicleLabel={
+                    isAggregate
+                      ? detail.displayVehicleFromInput.trim() ||
+                        detail.vehicleLabel ||
+                        null
+                      : detail.vehicleLabel
+                  }
+                  driverAvatarUri={detail.driverAvatarUri}
+                  showAssignByPhone={detail.showAssignByPhone}
+                  assignmentSource={detail.assignmentSource}
+                  currentUserId={detail.currentUserId}
+                  previousDriverName={detail.previousDriverName}
+                  latestReassignmentSummary={detail.latestReassignmentSummary}
+                  driverAssignOrgId={
+                    detail.showAssignByPhone && currentOrganization?.id
+                      ? currentOrganization.id
+                      : null
+                  }
+                  onVehicleDisplayChange={(value) => {
+                    const normalized = formatIndianVehicleNumber(value ?? "");
+                    detail.setDisplayVehicleFromInput(normalized);
+                  }}
+                />
+              ) : null}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={!!detail.selectedDoc}
@@ -1296,26 +1898,31 @@ function TabButton({
   icon,
   active,
   onPress,
+  compact = false,
 }: {
   label: string;
   icon: React.ComponentProps<typeof FontAwesome>["name"];
   active: boolean;
   onPress: () => void;
+  compact?: boolean;
 }) {
   return (
     <TouchableOpacity
-      style={[styles.tabBtn, active && styles.tabBtnActive]}
+      style={[styles.tabBtn, compact && styles.tabBtnCompact, active && styles.tabBtnActive, compact && active && styles.tabBtnActiveCompact]}
       onPress={onPress}
       activeOpacity={0.8}
     >
-      <FontAwesome
-        name={icon}
-        size={13}
-        color={active ? "#2563eb" : "#6b7280"}
-      />
-      <Text style={[styles.tabBtnText, active && styles.tabBtnTextActive]}>
+      {!compact ? (
+        <FontAwesome
+          name={icon}
+          size={13}
+          color={active ? "#2563eb" : "#6b7280"}
+        />
+      ) : null}
+      <Text style={[styles.tabBtnText, compact && styles.tabBtnTextCompact, active && styles.tabBtnTextActive, compact && active && styles.tabBtnTextActiveCompact]}>
         {label}
       </Text>
+      {compact && active ? <View style={styles.tabUnderlineCompact} /> : null}
     </TouchableOpacity>
   );
 }
@@ -1366,10 +1973,1031 @@ function NavAction({
 // ── Styles ─────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
+  refTrackWrap: { gap: 14 },
+  refHeroBridgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 14,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.08)",
+  },
+  refHeroBridgeCol: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  refHeroBridgeColRight: {
+    justifyContent: "flex-end",
+  },
+  refHeroBridgeIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(99,102,241,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(129,140,248,0.35)",
+  },
+  refHeroBridgeIconWrapRose: {
+    backgroundColor: "rgba(244,63,94,0.14)",
+    borderColor: "rgba(251,113,133,0.35)",
+  },
+  refHeroBridgeLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+  },
+  refHeroBridgeLabelRight: {
+    textAlign: "right",
+  },
+  refHeroBridgeValue: {
+    marginTop: 1,
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#fff",
+    textTransform: "uppercase",
+  },
+  refHeroRouteRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  refHeroRouteCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  refHeroRouteColRight: {
+    alignItems: "flex-end",
+  },
+  refHeroMetaShell: {
+    marginTop: 12,
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  refHeroMetaIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    backgroundColor: "#4f46e5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  refHeroMetaIconGhost: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  refHeroMetaDivider: {
+    width: 1,
+    alignSelf: "stretch",
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  refHeroMetaItemRight: {
+    justifyContent: "space-between",
+  },
+  refAssetRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 2,
+    marginBottom: 14,
+  },
+  refAssetCard: {
+    flex: 1,
+    borderRadius: 28,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+  },
+  refAssetHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  refAssetIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#eef2ff",
+  },
+  refAssetIconWrapDark: {
+    backgroundColor: "#0f172a",
+  },
+  refAssetChangeBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: "#f8fafc",
+  },
+  refAssetChangeBtnText: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: "#0f172a",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  refAssetLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+  },
+  refAssetValue: {
+    marginTop: 3,
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+  refAssetSubtle: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+  },
+  refTabShell: {
+    marginBottom: 16,
+    padding: 6,
+    borderRadius: 24,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    flexDirection: "row",
+    gap: 4,
+  },
+  refTabBtn: {
+    flex: 1,
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  refTabBtnActive: {
+    backgroundColor: "#0f172a",
+  },
+  refTabBtnText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
+  refTabBtnTextActive: {
+    color: "#fff",
+  },
+  refFinanceSubTabs: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 20,
+    paddingHorizontal: 8,
+    marginBottom: 8,
+  },
+  refFinanceSubBtn: {
+    paddingBottom: 8,
+  },
+  refFinanceSubBtnText: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+    color: "#94a3b8",
+  },
+  refFinanceSubBtnTextActive: {
+    color: "#0f172a",
+  },
+  refFinanceSubLine: {
+    marginTop: 4,
+    height: 3,
+    borderRadius: 999,
+    backgroundColor: "#6366f1",
+  },
+  refSettleMetaRow: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#eef2f7",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  refSettleMetaLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
+  refSettleMetaValuePositive: {
+    marginTop: 2,
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#10b981",
+  },
+  refSettleMetaSep: {
+    width: 1,
+    alignSelf: "stretch",
+    backgroundColor: "#eef2f7",
+  },
+  refSettleMetaRight: {
+    flex: 1,
+    alignItems: "flex-end",
+  },
+  refSettleMetaValueNegative: {
+    marginTop: 2,
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#f43f5e",
+  },
+  refFinanceAdjustmentsActions: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  refFinanceRowLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+  },
+  refFinanceRowIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: "#f8fafc",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  refFinanceRowValuePositive: {
+    color: "#10b981",
+  },
+  refFinanceRowValueNegative: {
+    color: "#f43f5e",
+  },
+  refFinanceSearchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 24,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    marginBottom: 8,
+  },
+  refFinanceSearchInput: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0f172a",
+    paddingVertical: 8,
+  },
+  refTxnRow: {
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+    backgroundColor: "#fff",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+    gap: 8,
+  },
+  refTxnLeft: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  refTxnIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  refTxnIconIn: {
+    backgroundColor: "#ecfdf5",
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+  },
+  refTxnIconOut: {
+    backgroundColor: "#fff1f2",
+    borderWidth: 1,
+    borderColor: "#fecdd3",
+  },
+  refTxnTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  refTxnLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  refTxnMeta: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  refTxnAmount: {
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  refTxnAmountIn: {
+    color: "#10b981",
+  },
+  refTxnAmountOut: {
+    color: "#f43f5e",
+  },
+  refVaultWrap: {
+    borderRadius: 34,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+    padding: 18,
+    gap: 12,
+  },
+  refVaultHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  refVaultHeaderIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+  },
+  refVaultTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+  refVaultSub: {
+    marginTop: 1,
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
+  },
+  refVaultGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  refVaultCard: {
+    width: "48.3%",
+    borderRadius: 24,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    gap: 5,
+  },
+  refVaultCardTitle: {
+    textAlign: "center",
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#0f172a",
+    textTransform: "uppercase",
+  },
+  refVaultCardStatus: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  refVaultViewBtn: {
+    marginTop: 6,
+    borderRadius: 10,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  refVaultViewText: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: "#64748b",
+    textTransform: "uppercase",
+  },
+  refHeroCard: {
+    marginBottom: 16,
+    backgroundColor: "#030b1f",
+    borderRadius: 42,
+    paddingHorizontal: 24,
+    paddingVertical: 22,
+    overflow: "hidden",
+    borderBottomWidth: 3,
+    borderBottomColor: Theme.driverEmerald,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    elevation: 6,
+  },
+  refModePillTopRight: {
+    position: "absolute",
+    top: 14,
+    right: 14,
+    zIndex: 2,
+  },
+  refHeroBgGlow: {
+    position: "absolute",
+    left: -58,
+    bottom: -58,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: "rgba(16,185,129,0.14)",
+  },
+  refHeroKickerRow: { marginBottom: 14 },
+  refHeroKicker: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 3.8,
+    color: "#94a3b8",
+  },
+  refHeroCity: {
+    fontSize: 36,
+    fontWeight: "900",
+    color: "#ffffff",
+    letterSpacing: -1.1,
+    lineHeight: 38,
+  },
+  refHeroCityMobile: {
+    fontSize: 30,
+    letterSpacing: -0.6,
+    lineHeight: 32,
+  },
+  refHeroState: {
+    marginTop: 2,
+    marginBottom: 10,
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 2.2,
+  },
+  refHeroToRow: { flexDirection: "row", alignItems: "center", gap: 8, marginVertical: 4 },
+  refHeroToDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Theme.positive },
+  refHeroToLine: { width: 1, height: 14, backgroundColor: "rgba(16,185,129,0.5)" },
+  refHeroToText: { fontSize: 10, fontWeight: "900", letterSpacing: 1.2, color: Theme.positive },
+  refHeroDivider: { marginTop: 4, marginBottom: 12, height: 1, backgroundColor: "rgba(255,255,255,0.12)" },
+  refHeroMetaRow: { flexDirection: "row", gap: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.12)" },
+  refHeroMetaItem: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
+  refHeroMetaLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 2.2,
+    color: "#94a3b8",
+  },
+  refHeroMetaValue: { fontSize: 11, fontWeight: "800", color: "#ffffff", marginTop: 1, letterSpacing: 0.4 },
+  refHeroAssignedRow: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.12)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "nowrap",
+  },
+  refHeroPartyInfoRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    gap: 12,
+  },
+  refHeroPartyInfoCell: {
+    flex: 1,
+    minWidth: 0,
+  },
+  refHeroPartyInfoTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 2,
+  },
+  refHeroAssignedLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 2.1,
+  },
+  refHeroAssignedValue: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#ffffff",
+    letterSpacing: -0.2,
+  },
+  refModePill: {
+    marginLeft: "auto",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+  },
+  refModePillIntegrated: {
+    backgroundColor: "rgba(16,185,129,0.12)",
+    borderColor: "rgba(16,185,129,0.45)",
+  },
+  refModePillManual: {
+    backgroundColor: "rgba(148,163,184,0.12)",
+    borderColor: "rgba(148,163,184,0.35)",
+  },
+  refModePillText: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  refModePillTextIntegrated: {
+    color: Theme.positive,
+  },
+  refModePillTextManual: {
+    color: "#cbd5e1",
+  },
+  refHeroPartyRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    gap: 10,
+  },
+  refHeroPartyCell: {
+    flex: 1,
+    minWidth: 0,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  refHeroPartyTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  refHeroPartyLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 2.1,
+    color: "#94a3b8",
+  },
+  refHeroPartyBtn: {
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  refHeroPartyBtnText: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    color: "#ffffff",
+  },
+  refHeroPartyValue: {
+    marginTop: 2,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#ffffff",
+    letterSpacing: -0.1,
+  },
+  refFeedbackWrap: {
+    marginTop: 10,
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  assignModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15,23,42,0.45)",
+    justifyContent: "flex-end",
+  },
+  assignModalCard: {
+    maxHeight: "86%",
+    backgroundColor: "#f8fafc",
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingTop: 10,
+    paddingHorizontal: 10,
+    paddingBottom: 14,
+  },
+  assignModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  assignModalTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  assignModalClose: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  refTimelineHeaderRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 4, marginBottom: 4 },
+  refTimelineHeaderIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#0f172a",
+  },
+  refManifestCard: {
+    backgroundColor: "#fff",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    padding: 16,
+  },
+  refKickerRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
+  refKickerBar: { width: 4, height: 16, borderRadius: 2, backgroundColor: "#2563eb" },
+  refKickerText: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1.8,
+    color: "#64748b",
+  },
+  refRouteRow: { flexDirection: "row", gap: 10, marginBottom: 12 },
+  refRouteDots: { width: 10, alignItems: "center", marginTop: 5 },
+  refDot: { width: 7, height: 7, borderRadius: 4 },
+  refDotStart: { backgroundColor: "#10b981" },
+  refDotEnd: { backgroundColor: "#ef4444" },
+  refDotLine: { width: 1.5, flex: 1, minHeight: 16, marginVertical: 4, backgroundColor: "#e2e8f0" },
+  refRouteTextCol: { flex: 1, gap: 8 },
+  refRoutePlace: { fontSize: 15, fontWeight: "700", color: "#0f172a" },
+  refMetaGrid: {
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+    paddingTop: 10,
+    flexDirection: "row",
+    gap: 8,
+  },
+  refMetaCell: { flex: 1, minWidth: 0 },
+  refMetaLabel: { fontSize: 10, fontWeight: "700", color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.8 },
+  refMetaValue: { marginTop: 2, fontSize: 13, fontWeight: "700", color: "#1e293b" },
+  refOperatorCard: {
+    backgroundColor: "#fff",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    padding: 14,
+  },
+  refOperatorBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  refOperatorLabel: { fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, color: "#94a3b8" },
+  refOperatorValue: { fontSize: 14, fontWeight: "700", color: "#0f172a" },
+  refOperatorSub: { marginTop: 9, fontSize: 12, fontWeight: "500", color: "#64748b" },
+  refAssignCard: {
+    backgroundColor: "#fff",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    padding: 14,
+    gap: 8,
+  },
+  refAssignTitle: { fontSize: 14, fontWeight: "700", color: "#0f172a", marginBottom: 2 },
+  refAssignRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#e2e8f0",
+    paddingTop: 10,
+  },
+  refAssignTxtWrap: { flex: 1, minWidth: 0 },
+  refAssignLabel: { fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, color: "#94a3b8" },
+  refAssignValue: { marginTop: 1, fontSize: 14, fontWeight: "700", color: "#0f172a" },
+  refAssignFoot: {
+    marginTop: 8,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#e2e8f0",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  refAssignFootText: { flex: 1, minWidth: 0, fontSize: 11, color: "#6b7280" },
+  refOtpBtn: { backgroundColor: "#0f172a", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  refOtpBtnText: { color: "#fff", fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
+  refDocCard: {
+    backgroundColor: "#fff",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    padding: 14,
+  },
+  refDocHeader: { marginBottom: 8 },
+  refTimelineWrap: {
+    backgroundColor: "#fff",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    padding: 14,
+    gap: 8,
+  },
+  refTimelineTitle: { fontSize: 11, fontWeight: "900", textTransform: "uppercase", letterSpacing: 2, color: "#0f172a" },
+  refTimelineCard: {
+    backgroundColor: "#fff",
+    borderRadius: 38,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+  },
+  refTimelineItemWrap: {
+    position: "relative",
+    paddingLeft: 0,
+  },
+  refTimelineConnector: {
+    position: "absolute",
+    left: 17,
+    top: 34,
+    bottom: -8,
+    width: 2,
+    backgroundColor: "#e5e7eb",
+  },
+  refTimelineItem: { flexDirection: "row", gap: 14, paddingVertical: 12 },
+  refTimelineItemExpanded: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 14,
+    paddingHorizontal: 6,
+  },
+  refTimelineDotIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#10b981",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 3,
+  },
+  refTimelineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#10b981", marginTop: 5 },
+  refTimelineBody: { flex: 1, minWidth: 0 },
+  refTimelineTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  refTimelineTopRight: { flexDirection: "row", alignItems: "center", gap: 6 },
+  refTimelineStatus: { fontSize: 12, fontWeight: "900", color: "#0f172a", textTransform: "uppercase", letterSpacing: 1.1 },
+  refTimelineTime: { fontSize: 10, fontWeight: "700", color: "#94a3b8" },
+  refTimelineLocation: { marginTop: 3, fontSize: 11, color: "#64748b", fontWeight: "700" },
+  refTimelineDetails: { marginTop: 8, fontSize: 10, color: "#475569", lineHeight: 15, fontStyle: "italic" },
+  refAssignInlineRow: {
+    marginTop: 2,
+    borderRadius: 18,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    padding: 12,
+    gap: 10,
+    flexDirection: "row",
+  },
+  refAssignInlineCell: {
+    flex: 1,
+    minWidth: 0,
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+    borderRadius: 12,
+    padding: 10,
+    backgroundColor: "#f8fafc",
+  },
+  refAssignInlineLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
+    color: "#94a3b8",
+  },
+  refAssignInlineValue: {
+    marginTop: 3,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  refAssignInlineBtn: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    backgroundColor: "#0f172a",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  refAssignInlineBtnText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  refDeliveredCard: {
+    marginTop: 4,
+    borderRadius: 30,
+    backgroundColor: "#059669",
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  refDeliveredLabel: {
+    fontSize: 10,
+    color: "#d1fae5",
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
+  refDeliveredValue: {
+    marginTop: 2,
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#fff",
+    fontStyle: "italic",
+  },
+  refDeliveredIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.25)",
+  },
+  refFinanceWrap: { gap: 14 },
+  refSettleCard: {
+    backgroundColor: "#fff",
+    borderRadius: 34,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    padding: 22,
+    alignItems: "center",
+  },
+  refSettleLabel: { fontSize: 10, fontWeight: "800", letterSpacing: 1.6, textTransform: "uppercase", color: "#94a3b8" },
+  refSettleValue: { marginTop: 6, fontSize: 40, fontWeight: "900", color: "#0f172a", letterSpacing: -0.8 },
+  refSettleBadge: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#ecfdf5",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  refSettleBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+    color: "#059669",
+  },
+  refFinanceBreakCard: {
+    backgroundColor: "#fff",
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    padding: 16,
+    gap: 10,
+  },
+  refFinanceRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  refFinanceRowLabel: { fontSize: 12, color: "#64748b", fontWeight: "600" },
+  refFinanceRowValue: { fontSize: 13, color: "#0f172a", fontWeight: "700" },
+  refFinanceRowValueStrong: { fontSize: 15 },
+  refBottomInfo: {
+    borderRadius: 22,
+    backgroundColor: "#0f172a",
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  refBottomInfoLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+    color: "#94a3b8",
+  },
+  refBottomInfoValue: {
+    marginTop: 2,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  refBottomInfoBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.14)",
+  },
   root: {
     flex: 1,
-    backgroundColor: "#f1f5f9",
+    backgroundColor: "#fdfdfd",
     overflow: "hidden",
+  },
+  refFloatingWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 14,
+    alignItems: "center",
+  },
+  refFloatingBtn: {
+    borderRadius: 999,
+    backgroundColor: "#0f172a",
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  refFloatingBtnText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#fff",
+    textTransform: "uppercase",
+    letterSpacing: 1.6,
   },
 
   // ── Dark nav ──
@@ -1381,6 +3009,55 @@ const styles = StyleSheet.create({
     backgroundColor: "#0f141a",
     flexWrap: "wrap",
     gap: 12,
+  },
+  navBarMobile: {
+    backgroundColor: "#ffffff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#eef2f7",
+    paddingTop: 10,
+    paddingBottom: 10,
+    flexWrap: "nowrap",
+  },
+  navCircleBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+  },
+  navMobileCenter: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  navMobileKicker: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 2.2,
+    textTransform: "uppercase",
+    color: "#94a3b8",
+  },
+  navMobileTripRow: {
+    marginTop: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  navMobileTripId: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#0f172a",
+    letterSpacing: -0.25,
+    fontStyle: "italic",
+  },
+  navMobileDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Theme.positive,
   },
   navLeft: {
     flexDirection: "row",
@@ -1465,6 +3142,25 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#e5e7eb",
   },
+  tabBarMobile: {
+    marginHorizontal: 12,
+    marginTop: 10,
+    borderBottomWidth: 0,
+    borderRadius: 14,
+    backgroundColor: "rgba(226,232,240,0.55)",
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    gap: 4,
+  },
+  tabBarMobileInline: {
+    marginBottom: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(226,232,240,0.55)",
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    gap: 4,
+    flexDirection: "row",
+  },
   tabBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -1475,13 +3171,33 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   tabBtnActive: {},
+  tabBtnCompact: {
+    flex: 1,
+    marginRight: 0,
+    justifyContent: "center",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+  },
+  tabBtnActiveCompact: {
+    backgroundColor: "#0f172a",
+  },
   tabBtnText: {
     fontSize: 14,
     fontWeight: "600",
     color: "#6b7280",
   },
+  tabBtnTextCompact: {
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
   tabBtnTextActive: {
     color: "#2563eb",
+  },
+  tabBtnTextActiveCompact: {
+    color: "#ffffff",
   },
   tabUnderline: {
     position: "absolute",
@@ -1491,6 +3207,15 @@ const styles = StyleSheet.create({
     height: 2,
     backgroundColor: "#2563eb",
     borderRadius: 1,
+  },
+  tabUnderlineCompact: {
+    position: "absolute",
+    bottom: 2,
+    left: "32%",
+    right: "32%",
+    height: 2,
+    borderRadius: 4,
+    backgroundColor: "#ef4444",
   },
 
   // ── Scroll ──
