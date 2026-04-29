@@ -91,6 +91,7 @@ import {
 } from "../../services/trips.service";
 import { TripAssignmentBlock, type AssignmentSource } from "../TripAssignmentBlock";
 import { TrackingMapBlock, VehicleTrackingCard } from "./TrackingMapBlock";
+import type { TripDetailScreenProps } from "./TripDetailScreen.types";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import {
     TripDetailFinanceView,
@@ -98,6 +99,8 @@ import {
     type TripDetailTab,
     type TripDocItem,
 } from "./TripDetailFinanceView";
+
+export type { TripDetailScreenProps } from "./TripDetailScreen.types";
 
 let ExpoLocationModule: typeof ExpoLocationTypes | null = null;
 
@@ -225,20 +228,6 @@ type DriverActivityTimelineRow =
       status_context: "started" | "in_transit" | "completed";
       detail_line: string;
     };
-
-export interface TripDetailScreenProps {
-  tripId: string;
-  /**
-   * When "supplier", add-entry opens with defaultType "out" and supplier pre-filled.
-   * When "vehicle", add-entry opens with defaultType "out" and trip pre-selected (vehicle expense flow).
-   * When "client", add-entry opens with defaultType "in" and client pre-filled (customer payment flow).
-   */
-  entryContext?: "supplier" | "vehicle" | "client";
-  /** When entryContext="client", the local client id/name for integrated flows. */
-  clientIdFromContext?: string;
-  clientNameFromContext?: string;
-  onBack: () => void;
-}
 
 export default function TripDetailScreen({
   tripId,
@@ -3839,7 +3828,6 @@ export default function TripDetailScreen({
                     )}
                   </View>
                 </View>
-                {liveTrackingMapAndLog}
               </ScrollView>
             </>
           )}

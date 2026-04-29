@@ -879,9 +879,8 @@ const styles = StyleSheet.create({
   info: { flex: 1, gap: 5 },
   orgName: {
     fontSize: 12,
-    fontWeight: '700',
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
+    fontWeight: "500",
+    color: "#475569",
     letterSpacing: -0.2,
     textAlign: "center",
     marginTop: 8,

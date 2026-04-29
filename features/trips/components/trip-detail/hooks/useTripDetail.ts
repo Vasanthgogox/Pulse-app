@@ -139,7 +139,7 @@ export type DriverActivityTimelineRow =
       id: string;
       status_label: string;
       changed_at: string;
-      status_context: "started" | "in_transit" | "completed";
+      status_context: "started" | "in_transit" | "completed" | "created" | "accepted" | "assigned";
       detail_line: string;
     };
 
@@ -385,6 +385,97 @@ export function useTripDetail({
       : "New driver";
     return `Reassigned: ${from} → ${to}`;
   }, [assignmentAuditRows, assignmentDriverNames]);
+
+  const driverActivityTimelineRows = useMemo<DriverActivityTimelineRow[]>(() => {
+    if (!trip) return [];
+
+    const rows: DriverActivityTimelineRow[] = [];
+    if (trip.created_at) {
+      rows.push({
+        kind: "status",
+        id: "status-created",
+        status_label: "Trip Created",
+        changed_at: trip.created_at,
+        status_context: "created",
+        detail_line: `System generated trip ${getTripDisplayNumber(trip)}`,
+      });
+    }
+
+    if (assignmentAuditRows.length > 0) {
+      const orderedAudit = [...assignmentAuditRows].sort(
+        (a, b) => new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime(),
+      );
+      orderedAudit.forEach((row, idx) => {
+        const dName = row.driver_id_new
+          ? (assignmentDriverNames[row.driver_id_new] ?? trip.driver_display_name ?? null)
+          : null;
+        const vLabel = row.vehicle_id_new
+          ? (assignmentVehicleLabels[row.vehicle_id_new] ?? trip.vehicle_display_number ?? null)
+          : null;
+        rows.push({
+          kind: "status",
+          id: `status-assigned-${row.id}-${idx}`,
+          status_label: "Assigned",
+          changed_at: row.changed_at,
+          status_context: "assigned",
+          detail_line:
+            [dName, vLabel].filter(Boolean).join(" · ") ||
+            trip.pickup_area ||
+            "Driver assigned",
+        });
+      });
+    } else if (trip.driver_id || trip.driver_display_name || trip.vehicle_id || trip.vehicle_display_number) {
+      rows.push({
+        kind: "status",
+        id: "status-assigned-fallback",
+        status_label: "Assigned",
+        changed_at: trip.updated_at ?? trip.created_at ?? new Date().toISOString(),
+        status_context: "assigned",
+        detail_line:
+          [trip.driver_display_name, trip.vehicle_display_number].filter(Boolean).join(" · ") ||
+          trip.pickup_area ||
+          "Driver assigned",
+      });
+    }
+
+    if (
+      (trip.status_updated_role === "driver" || Number(trip.status_revision ?? 0) > 0) &&
+      (trip.updated_at || trip.started_at)
+    ) {
+      rows.push({
+        kind: "status",
+        id: "status-accepted",
+        status_label: "Driver Accepted",
+        changed_at: trip.updated_at ?? trip.started_at ?? new Date().toISOString(),
+        status_context: "accepted",
+        detail_line: trip.pickup_area || "Accepted assignment",
+      });
+    }
+
+    if (trip.started_at) {
+      rows.push({
+        kind: "status",
+        id: "status-in-transit",
+        status_label: "In transit",
+        changed_at: trip.started_at,
+        status_context: "in_transit",
+        detail_line: trip.pickup_area || "Origin",
+      });
+    }
+
+    if (trip.completed_at) {
+      rows.push({
+        kind: "status",
+        id: "status-completed",
+        status_label: "Delivered",
+        changed_at: trip.completed_at,
+        status_context: "completed",
+        detail_line: trip.drop_location || "Destination",
+      });
+    }
+
+    return rows;
+  }, [trip, assignmentAuditRows, assignmentDriverNames, assignmentVehicleLabels]);
 
   // ── Transactions (React Query) ────────────────────────────────────────────
   const orgIdForTransactions = currentOrganization?.id ?? null;
@@ -1480,6 +1571,7 @@ export function useTripDetail({
     assignmentSource,
     previousDriverName,
     latestReassignmentSummary,
+    driverActivityTimelineRows,
 
     // Tracking
     driverLocation,

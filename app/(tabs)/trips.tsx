@@ -136,7 +136,8 @@ function historyTripDueState(
 
 export default function TripsScreen() {
   const { width } = useWindowDimensions();
-  const isLargeScreen = Platform.OS === "web" && width >= 1024;
+  const isLargeScreen = Platform.OS === "web" && width >= 1280;
+  const isCompactWeb = Platform.OS === "web" && width < 1180;
   const isMobile = width < 560;
   const insets = useSafeAreaInsets();
   const tabBarScrollProps = useTabBarAwareScrollProps();
@@ -1600,8 +1601,18 @@ export default function TripsScreen() {
                 </>
               ) : (
                 <View style={styles.tripsInlineFilterPanelWeb}>
-                  <View style={styles.tripsBottomHeaderRowWeb}>
-                    <View style={styles.tripsTabClusterWeb}>
+                  <View
+                    style={[
+                      styles.tripsBottomHeaderRowWeb,
+                      isCompactWeb && styles.tripsBottomHeaderRowWebCompact,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.tripsTabClusterWeb,
+                        isCompactWeb && styles.tripsTabClusterWebCompact,
+                      ]}
+                    >
                       {subTabs.map((tab) => (
                         <TouchableOpacity
                           key={tab.id}
@@ -1628,12 +1639,18 @@ export default function TripsScreen() {
                         </TouchableOpacity>
                       ))}
                     </View>
-                    <View style={styles.tripsToolbarWeb}>
+                    <View
+                      style={[
+                        styles.tripsToolbarWeb,
+                        isCompactWeb && styles.tripsToolbarWebCompact,
+                      ]}
+                    >
                       <View
                         style={[
                           styles.tripsSearchWrap,
                           styles.tripsSearchWrapWeb,
                           styles.tripsSearchWrapWebCompact,
+                          isCompactWeb && styles.tripsSearchWrapWebFluid,
                         ]}
                       >
                         <FontAwesome
@@ -1699,7 +1716,12 @@ export default function TripsScreen() {
                           />
                         </TouchableOpacity>
                       </View>
-                      <View style={styles.tripsMainTabsRowWeb}>
+                      <View
+                        style={[
+                          styles.tripsMainTabsRowWeb,
+                          isCompactWeb && styles.tripsMainTabsRowWebCompact,
+                        ]}
+                      >
                         <View style={styles.tripsMainTabsPillWrap}>
                           {mainTabs.map((tab) => (
                             <TouchableOpacity
@@ -3064,6 +3086,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
+  tripsMainTabsRowWebCompact: {
+    width: "100%",
+    justifyContent: "flex-start",
+  },
   tripsTopHeaderSpacer: {
     flex: 1,
   },
@@ -3120,6 +3146,11 @@ const styles = StyleSheet.create({
     gap: 12,
     flexWrap: "wrap",
   },
+  tripsBottomHeaderRowWebCompact: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 10,
+  },
   tripsTabClusterWeb: {
     flexDirection: "row",
     alignItems: "center",
@@ -3136,6 +3167,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 9,
     elevation: 1,
+  },
+  tripsTabClusterWebCompact: {
+    alignSelf: "flex-start",
+    maxWidth: "100%",
+    flexWrap: "wrap",
   },
   tripsScopePillWeb: {
     minWidth: 94,
@@ -3197,6 +3233,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     paddingVertical: 0,
     backgroundColor: "transparent",
+  },
+  tripsToolbarWebCompact: {
+    width: "100%",
+    justifyContent: "flex-start",
+    rowGap: 8,
+  },
+  tripsSearchWrapWebFluid: {
+    flex: 1,
+    width: "auto" as const,
+    minWidth: 190,
+    maxWidth: "100%" as const,
   },
   tripsDateInlineRowWeb: {
     flexDirection: "row",

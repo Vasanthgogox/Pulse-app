@@ -5,7 +5,7 @@
  */
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
-import { LeafletMap } from "@/components/driver/LeafletMap.web";
+import { TripMap } from "./TripMap.web";
 import { Theme } from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -37,7 +37,7 @@ import { regenerateTripOtp } from "../../services/tripOtp.service";
 import { getTripDisplayNumber } from "../../services/trips.service";
 import { TripAssignmentBlock } from "../TripAssignmentBlock";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
-import type { TripDetailScreenProps } from "./TripDetailScreen";
+import type { TripDetailScreenProps } from "./TripDetailScreen.types";
 import { useTripDetail } from "./hooks/useTripDetail";
 import { type ExpenseRow } from "./sections/ExpensesTable";
 import { LRDocumentsSection } from "./sections/LRDocumentsSection";
@@ -267,15 +267,6 @@ export default function TripDetailScreen({
   })();
 
   // ── Map ───────────────────────────────────────────────────────────────────────
-  const hasOrigin = !!detail.trackingMapOriginCoordinate;
-  const hasDest = !!detail.trackingMapDestinationCoordinate;
-  const mapCenter = hasOrigin
-    ? {
-        latitude: detail.trackingMapOriginCoordinate!.latitude,
-        longitude: detail.trackingMapOriginCoordinate!.longitude,
-      }
-    : { latitude: 20.5937, longitude: 78.9629 };
-
   const openDriverDetails = () => {
     if (!trip.driver_id) return;
     router.push(`/driver/${trip.driver_id}` as any);
@@ -363,29 +354,26 @@ export default function TripDetailScreen({
       return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     } catch { return iso.slice(0, 16).replace('T', ' '); }
   };
-
-  type AuditItem = { id: string; icon: React.ComponentProps<typeof FontAwesome>['name']; iconColor: string; iconBg: string; title: string; detail: string | null; date: string };
-  const auditRows: AuditItem[] = [];
-  if (trip.completed_at) {
-    auditRows.push({ id: 'completed', icon: 'check-circle', iconColor: '#22c55e', iconBg: 'rgba(34,197,94,0.12)', title: 'Trip Completed', detail: 'Delivered at destination', date: fmtAuditDate(trip.completed_at) });
-  }
-  if (trip.started_at) {
-    auditRows.push({ id: 'started', icon: 'play-circle', iconColor: '#60a5fa', iconBg: 'rgba(96,165,250,0.12)', title: 'Trip Started', detail: `Departed from ${trip.pickup_area || 'origin'}`, date: fmtAuditDate(trip.started_at) });
-  }
-  for (const row of detail.assignmentAuditRows) {
-    const dName = row.driver_id_new ? (detail.assignmentDriverNames[row.driver_id_new] ?? null) : null;
-    const vLabel = row.vehicle_id_new ? (detail.assignmentVehicleLabels[row.vehicle_id_new] ?? null) : null;
-    auditRows.push({
-      id: row.id,
-      icon: row.event_type === 'reassignment' ? 'refresh' : 'user-plus',
-      iconColor: 'rgba(255,255,255,0.5)',
-      iconBg: 'rgba(255,255,255,0.05)',
-      title: row.event_type === 'reassignment' ? 'Reassigned' : 'Assigned',
-      detail: [dName, vLabel].filter(Boolean).join(' · ') || null,
-      date: fmtAuditDate(row.changed_at),
-    });
-  }
-  auditRows.push({ id: 'created', icon: 'file-text-o', iconColor: 'rgba(255,255,255,0.35)', iconBg: 'rgba(255,255,255,0.04)', title: 'Dispatch Created', detail: `System generated trip ${getTripDisplayNumber(trip)}`, date: fmtAuditDate(trip.created_at) });
+  const fmtTimelineTime = (iso: string | null | undefined) => {
+    if (!iso) return '—';
+    try {
+      return new Date(iso)
+        .toLocaleTimeString('en-IN', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        })
+        .toLowerCase();
+    } catch {
+      return '—';
+    }
+  };
+  const driverActivityRows = detail.driverActivityTimelineRows ?? [];
+  const timelineRows = [...driverActivityRows].sort((a, b) => {
+    const aDate = new Date(a.kind === 'status' ? a.changed_at : a.row.changed_at).getTime();
+    const bDate = new Date(b.kind === 'status' ? b.changed_at : b.row.changed_at).getTime();
+    return aDate - bDate;
+  });
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -519,24 +507,13 @@ export default function TripDetailScreen({
                   )}
                 </View>
                 <View style={dStyles.telemetryWrap}>
-                  <LeafletMap
-                    style={{ width: "100%", height: mapHeight, minHeight: 260 }}
-                    center={mapCenter}
-                    zoom={4}
-                    polyline={
-                      hasOrigin && hasDest
-                        ? [
-                            { latitude: detail.trackingMapOriginCoordinate!.latitude, longitude: detail.trackingMapOriginCoordinate!.longitude },
-                            { latitude: detail.trackingMapDestinationCoordinate!.latitude, longitude: detail.trackingMapDestinationCoordinate!.longitude },
-                          ]
-                        : []
-                    }
-                    markers={
-                      [
-                        hasOrigin ? { id: "origin", coordinate: { latitude: detail.trackingMapOriginCoordinate!.latitude, longitude: detail.trackingMapOriginCoordinate!.longitude }, label: trip.pickup_area ?? "Origin", color: "#22c55e" } : null,
-                        hasDest ? { id: "dest", coordinate: { latitude: detail.trackingMapDestinationCoordinate!.latitude, longitude: detail.trackingMapDestinationCoordinate!.longitude }, label: trip.drop_location ?? "Destination", color: "#ef4444" } : null,
-                      ].filter(Boolean) as any
-                    }
+                  <TripMap
+                    source={trip.pickup_area ?? undefined}
+                    destination={trip.drop_location ?? undefined}
+                    sourceCoords={detail.trackingMapOriginCoordinate ?? undefined}
+                    destCoords={detail.trackingMapDestinationCoordinate ?? undefined}
+                    truckLocation={detail.driverLocation ?? undefined}
+                    height={mapHeight}
                   />
                   <View style={dStyles.telemetryBar}>
                     <FontAwesome name="compass" size={14} color="#60a5fa" style={{ marginRight: 8 }} />
@@ -550,27 +527,81 @@ export default function TripDetailScreen({
 
               <View style={[dStyles.card, dStyles.auditCol]}>
                 <View style={dStyles.cardHeader}>
-                  <FontAwesome name="history" size={14} color="#60a5fa" style={{ marginRight: 8 }} />
-                  <Text style={dStyles.cardTitle}>Audit Trail</Text>
+                  <View style={dStyles.timelineHeaderIcon}>
+                    <FontAwesome name="calendar-o" size={10} color="#0f172a" />
+                  </View>
+                  <Text style={dStyles.timelineHeaderTitle}>TRIP TIMELINE</Text>
                 </View>
                 <ScrollView style={dStyles.auditScroll} showsVerticalScrollIndicator={false} nestedScrollEnabled>
-                  {auditRows.length === 0 ? (
+                  {timelineRows.length === 0 ? (
                     <Text style={dStyles.emptyText}>No activity yet</Text>
-                  ) : auditRows.map((item, idx) => {
-                    const isLast = idx === auditRows.length - 1;
-                    return (
-                      <View key={item.id} style={[dStyles.auditItem, isLast && dStyles.auditItemLast]}>
-                        <View style={[dStyles.auditIconWrap, { backgroundColor: item.iconBg }]}>
-                          <FontAwesome name={item.icon} size={14} color={item.iconColor} />
+                  ) : timelineRows.map((item, idx) => {
+                      const isLast = idx === timelineRows.length - 1;
+                      if (item.kind === 'status') {
+                        const iconTone =
+                          item.status_context === 'completed' || item.status_context === 'in_transit'
+                            ? '#059669'
+                            : 'rgba(15,23,42,0.35)';
+                        return (
+                          <View key={item.id} style={[dStyles.auditItem, isLast && dStyles.auditItemLast]}>
+                            <View style={dStyles.auditTrackCol}>
+                              <View
+                                style={[
+                                  dStyles.auditTimelineDot,
+                                  { borderColor: iconTone, backgroundColor: item.status_context === 'completed' || item.status_context === 'in_transit' ? '#ecfdf5' : '#f8fafc' },
+                                ]}
+                              >
+                                <View style={[dStyles.auditTimelineDotInner, { backgroundColor: iconTone }]} />
+                              </View>
+                              {!isLast ? <View style={dStyles.auditTimelineLine} /> : null}
+                            </View>
+                            <View style={dStyles.auditContentRow}>
+                              <View style={dStyles.auditBody}>
+                                <Text style={dStyles.auditTitle}>{item.status_label}</Text>
+                                <Text style={dStyles.auditDetail}>{item.detail_line}</Text>
+                              </View>
+                              <View style={dStyles.auditMeta}>
+                                <Text style={dStyles.auditTime}>{fmtTimelineTime(item.changed_at)}</Text>
+                                <FontAwesome name="angle-down" size={12} color="rgba(15,23,42,0.35)" />
+                              </View>
+                            </View>
+                          </View>
+                        );
+                      }
+
+                      const row = item.row;
+                      const dName = row.driver_id_new
+                        ? (detail.assignmentDriverNames[row.driver_id_new] ?? null)
+                        : null;
+                      const vLabel = row.vehicle_id_new
+                        ? (detail.assignmentVehicleLabels[row.vehicle_id_new] ?? null)
+                        : null;
+
+                      return (
+                        <View key={row.id} style={[dStyles.auditItem, isLast && dStyles.auditItemLast]}>
+                          <View style={dStyles.auditTrackCol}>
+                            <View style={dStyles.auditTimelineDot}>
+                              <View style={dStyles.auditTimelineDotInner} />
+                            </View>
+                            {!isLast ? <View style={dStyles.auditTimelineLine} /> : null}
+                          </View>
+                          <View style={dStyles.auditContentRow}>
+                            <View style={dStyles.auditBody}>
+                                <Text style={dStyles.auditTitle}>Assigned</Text>
+                              <Text style={dStyles.auditDetail}>
+                                {(dName || vLabel)
+                                  ? [dName, vLabel].filter(Boolean).join(' · ')
+                                    : (trip.pickup_area || 'Driver assigned')}
+                              </Text>
+                            </View>
+                            <View style={dStyles.auditMeta}>
+                              <Text style={dStyles.auditTime}>{fmtTimelineTime(row.changed_at)}</Text>
+                              <FontAwesome name="angle-down" size={12} color="rgba(15,23,42,0.35)" />
+                            </View>
+                          </View>
                         </View>
-                        <View style={dStyles.auditBody}>
-                          <Text style={dStyles.auditTitle}>{item.title}</Text>
-                          {item.detail ? <Text style={dStyles.auditDetail}>{item.detail}</Text> : null}
-                          <Text style={dStyles.auditDate}>{item.date}</Text>
-                        </View>
-                      </View>
-                    );
-                  })}
+                      );
+                    })}
                 </ScrollView>
               </View>
             </View>
@@ -828,60 +859,13 @@ export default function TripDetailScreen({
                   }
                   mapPreview={
                     <View style={styles.telemetryWrap}>
-                      <LeafletMap
-                        style={{ width: "100%", height: 520, minHeight: 520 }}
-                        center={mapCenter}
-                        zoom={hasOrigin && hasDest ? 6 : 5}
-                        polyline={
-                          hasOrigin && hasDest
-                            ? [
-                                {
-                                  latitude:
-                                    detail.trackingMapOriginCoordinate!.latitude,
-                                  longitude:
-                                    detail.trackingMapOriginCoordinate!.longitude,
-                                },
-                                {
-                                  latitude:
-                                    detail.trackingMapDestinationCoordinate!.latitude,
-                                  longitude:
-                                    detail.trackingMapDestinationCoordinate!.longitude,
-                                },
-                              ]
-                            : []
-                        }
-                        markers={
-                          [
-                            hasOrigin
-                              ? {
-                                  id: "origin",
-                                  coordinate: {
-                                    latitude:
-                                      detail.trackingMapOriginCoordinate!
-                                        .latitude,
-                                    longitude:
-                                      detail.trackingMapOriginCoordinate!
-                                        .longitude,
-                                  },
-                                  label: trip.pickup_area ?? "Origin",
-                                }
-                              : null,
-                            hasDest
-                              ? {
-                                  id: "dest",
-                                  coordinate: {
-                                    latitude:
-                                      detail.trackingMapDestinationCoordinate!
-                                        .latitude,
-                                    longitude:
-                                      detail.trackingMapDestinationCoordinate!
-                                        .longitude,
-                                  },
-                                  label: trip.drop_location ?? "Destination",
-                                }
-                              : null,
-                          ].filter(Boolean) as any
-                        }
+                      <TripMap
+                        source={trip.pickup_area ?? undefined}
+                        destination={trip.drop_location ?? undefined}
+                        sourceCoords={detail.trackingMapOriginCoordinate ?? undefined}
+                        destCoords={detail.trackingMapDestinationCoordinate ?? undefined}
+                        truckLocation={detail.driverLocation ?? undefined}
+                        height={520}
                       />
                       <View style={styles.telemetryOverlay}>
                         <FontAwesome name="compass" size={20} color="#60a5fa" />
@@ -1656,14 +1640,56 @@ const dStyles = StyleSheet.create({
   telemetryBar: { flexDirection: 'row', alignItems: 'center', padding: 14, backgroundColor: '#0f141a', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
   telemetryTitle: { fontSize: 12, fontWeight: '700', color: DS_TEXT },
   telemetrySub: { fontSize: 10, color: DS_MUTED, marginTop: 1 },
+  timelineHeaderIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  timelineHeaderTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: 'rgba(15,23,42,0.8)',
+    letterSpacing: 0.9,
+  },
   auditScroll: { maxHeight: 360 },
-  auditItem: { flexDirection: 'row', gap: 12, paddingBottom: 16, marginBottom: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
-  auditItemLast: { borderBottomWidth: 0, marginBottom: 0, paddingBottom: 0 },
-  auditIconWrap: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  auditBody: { flex: 1 },
-  auditTitle: { fontSize: 13, fontWeight: '700', color: DS_TEXT, marginBottom: 2 },
-  auditDetail: { fontSize: 12, color: DS_MUTED, marginBottom: 4 },
-  auditDate: { fontSize: 10, color: 'rgba(15,23,42,0.38)', letterSpacing: 0.3 },
+  auditItem: { flexDirection: 'row', gap: 12, paddingBottom: 10, marginBottom: 6 },
+  auditItemLast: { marginBottom: 0, paddingBottom: 0 },
+  auditTrackCol: { width: 18, alignItems: 'center', flexShrink: 0 },
+  auditTimelineDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: '#059669',
+    backgroundColor: '#ecfdf5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  auditTimelineDotInner: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#059669',
+  },
+  auditTimelineLine: {
+    width: 2,
+    flex: 1,
+    backgroundColor: 'rgba(5,150,105,0.28)',
+    marginTop: 4,
+    minHeight: 18,
+  },
+  auditContentRow: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  auditBody: { flex: 1, minWidth: 0 },
+  auditTitle: { fontSize: 14, fontWeight: '700', color: DS_TEXT, marginBottom: 1 },
+  auditDetail: { fontSize: 11, color: DS_MUTED },
+  auditMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 1 },
+  auditTime: { fontSize: 10, color: 'rgba(15,23,42,0.42)', fontWeight: '600', minWidth: 56, textAlign: 'right' },
   emptyText: { fontSize: 13, color: DS_MUTED, textAlign: 'center', paddingVertical: 32 },
   bottomLeft: { flex: 2, minWidth: 220, gap: 12 },
   docsCol: { flex: 3, minWidth: 280 },
