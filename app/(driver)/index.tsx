@@ -20,6 +20,18 @@ import { claimTripByOtp, getPendingOtpTrips } from "@/features/trips";
 import { getLatestAssignmentAuditByTripIds } from "@/features/trips/services/trip-assignment-audit.service";
 import { useDriverAvatarUri } from "@/lib/avatarUpload";
 import {
+    buildAssignerDisplayForTrip,
+    resolveAssignerUserId,
+} from "@/lib/driverAssignerDisplay";
+import {
+    DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY,
+    DRIVER_POST_MISSION_PENDING_SNAPSHOT_KEY,
+} from "@/lib/driverDashboardFlags";
+import {
+    buildDriverTripNumberMap,
+    getDriverTripDisplayNumber,
+} from "@/lib/driverTripSequence";
+import {
     buildOfferText,
     isActiveMission,
     isAggregateTrip,
@@ -27,18 +39,6 @@ import {
     isCompletedStatus,
     isRosterTrip,
 } from "@/lib/driverUtils";
-import {
-  DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY,
-  DRIVER_POST_MISSION_PENDING_SNAPSHOT_KEY,
-} from "@/lib/driverDashboardFlags";
-import {
-  buildDriverTripNumberMap,
-  getDriverTripDisplayNumber,
-} from "@/lib/driverTripSequence";
-import {
-  buildAssignerDisplayForTrip,
-  resolveAssignerUserId,
-} from "@/lib/driverAssignerDisplay";
 import { formatINR } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { darkMapStyle } from "@/lib/mapStyles";
@@ -3800,7 +3800,12 @@ export default function DriverRadarScreen() {
         ) : !effectiveFirstIncoming &&
           hasAssignableIncomingTrip &&
           !assignableTripsNotifyOnlyAfterMission ? (
-          <View style={styles.centerCardConstraint}>
+          <View
+            style={[
+              styles.centerCardConstraint,
+              styles.notificationListSection,
+            ]}
+          >
             <View style={[styles.centerCardWrap, styles.notificationListIntro]}>
               <Text style={[styles.notificationListTitle, { color: colors.text }]}>
                 New trips ({assignableIncomingNotificationsWithMeta.length})
@@ -3883,12 +3888,7 @@ export default function DriverRadarScreen() {
                     activeOpacity={0.85}
                     disabled={acceptLoading || declineLoading}
                   >
-                    <FontAwesome
-                      name={item.requiresOtp ? "key" : "check"}
-                      size={14}
-                      color={Theme.textOnPrimary}
-                      style={styles.goOnlineBtnIcon}
-                    />
+                    <View style={styles.notificationAcceptButtonSideSpacer} />
                     <Text style={styles.goOnlineBtnText}>
                       {item.requiresOtp ? "Accept and verify OTP" : "Accept trip"}
                     </Text>
@@ -3901,23 +3901,17 @@ export default function DriverRadarScreen() {
                 </View>
               ))}
             </View>
-            <TouchableOpacity
-              style={[
-                styles.searchOfflineBtn,
-                {
-                  marginTop: 8,
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                },
-              ]}
-              onPress={() => router.push("/(driver)/notifications")}
-              activeOpacity={0.85}
-            >
-              <FontAwesome name="bell" size={14} color={colors.text} />
-              <Text style={[styles.searchOfflineBtnText, { color: colors.text }]}>
-                Open notifications list
-              </Text>
-            </TouchableOpacity>
+            {assignableIncomingNotificationsWithMeta.length > 2 ? (
+              <TouchableOpacity
+                style={styles.notificationViewAllLinkWrap}
+                onPress={() => router.push("/(driver)/notifications")}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.notificationViewAllLinkText, { color: colors.text }]}>
+                  View All
+                </Text>
+              </TouchableOpacity>
+            ) : null}
             {notificationHistory.length > 0 ? (
               <View style={styles.notificationHistoryWrap}>
                 <Text
@@ -4527,7 +4521,9 @@ export default function DriverRadarScreen() {
               styles.content,
               {
                 paddingHorizontal: 20,
-                paddingTop: 20,
+                // Header is absolutely positioned; reserve vertical space so
+                // dashboard cards start below the location badge.
+                paddingTop: driver?.organization_id ? 108 : 84,
                 backgroundColor: shouldShowMap
                   ? "transparent"
                   : colors.background,
@@ -4550,6 +4546,7 @@ export default function DriverRadarScreen() {
                   !driver && styles.tripsScrollContentCentered,
                   driver &&
                     (!isOnline || showSearchingOverlay) &&
+                    !hasAssignableIncomingTrip &&
                     styles.tripsScrollContentCentered,
                 ]}
                 showsVerticalScrollIndicator={false}
@@ -4769,6 +4766,21 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "center",
   },
+  notificationListSection: {
+    marginTop: 6,
+  },
+  notificationViewAllLinkWrap: {
+    alignSelf: "center",
+    marginTop: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+  },
+  notificationViewAllLinkText: {
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+    textDecorationLine: "underline",
+  },
   titleRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -4812,7 +4824,7 @@ const styles = StyleSheet.create({
     alignSelf: "center", // Add this for proper centering
   },
   invitesScroll: { width: "100%" },
-  invitesScrollContent: { paddingVertical: 16, gap: 16 },
+  invitesScrollContent: { paddingTop: 8, paddingBottom: 12, gap: 14 },
   invitesTitle: {
     fontSize: 10,
     fontWeight: "800",
@@ -4827,7 +4839,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   notificationListIntro: {
-    marginBottom: 4,
+    marginBottom: 2,
   },
   notificationListTitle: {
     fontSize: 17,
@@ -4842,10 +4854,11 @@ const styles = StyleSheet.create({
   },
   notificationSelectCard: {
     width: "100%",
+    alignSelf: "center",
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 10,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
@@ -5401,7 +5414,7 @@ const styles = StyleSheet.create({
   },
   goOnlineBtn: {
     width: "100%",
-    maxWidth: 320, // Add max width for better proportions
+    maxWidth: Platform.OS === "web" ? undefined : 320,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -5414,6 +5427,10 @@ const styles = StyleSheet.create({
   },
   goOnlineBtnIcon: {
     opacity: 1,
+  },
+  notificationAcceptButtonSideSpacer: {
+    width: 14,
+    height: 14,
   },
   goOnlineBtnText: {
     fontSize: 14, // Increased from 13 for better readability
