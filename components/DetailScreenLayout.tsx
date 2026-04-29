@@ -253,8 +253,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
     borderRadius: 8,
     paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: Theme.border,
+    borderWidth: 0,
   },
   searchIcon: {
     marginRight: 8,

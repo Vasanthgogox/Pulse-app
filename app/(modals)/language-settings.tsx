@@ -154,8 +154,7 @@ const styles = StyleSheet.create({
     color: Theme.text,
     backgroundColor: Theme.backgroundInput,
     borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
+    borderWidth: 0,
   },
   section: {
     marginTop: 20,

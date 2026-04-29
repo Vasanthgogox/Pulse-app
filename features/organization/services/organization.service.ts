@@ -121,3 +121,54 @@ export async function getOrganizationsForUser(): Promise<{
     return { error: err, organizations: [] };
   }
 }
+
+export type OrganizationLocation = {
+  id: string;
+  name?: string | null;
+  city: string | null;
+  state: string | null;
+  address_line: string | null;
+};
+
+export async function getOrganizationLocationsByIds(orgIds: string[]): Promise<{
+  error: Error | null;
+  locations: OrganizationLocation[];
+}> {
+  const uniqueIds = [...new Set(orgIds.map((id) => id.trim()).filter(Boolean))];
+  if (uniqueIds.length === 0) return { error: null, locations: [] };
+
+  const { data, error } = await supabase()
+    .from("organizations")
+    .select("id, city, state, address_line")
+    .in("id", uniqueIds);
+
+  if (error) return { error: new Error(error.message), locations: [] };
+  return { error: null, locations: (data ?? []) as OrganizationLocation[] };
+}
+
+export async function getOrganizationLocationsByNames(orgNames: string[]): Promise<{
+  error: Error | null;
+  locations: OrganizationLocation[];
+}> {
+  const uniqueNames = [...new Set(orgNames.map((name) => name.trim()).filter(Boolean))];
+  if (uniqueNames.length === 0) return { error: null, locations: [] };
+
+  const queries = uniqueNames.map((name) =>
+    supabase()
+      .from("organizations")
+      .select("id, name, city, state, address_line")
+      .ilike("name", name)
+      .limit(1),
+  );
+
+  const responses = await Promise.all(queries);
+  const errors = responses.filter((response) => response.error);
+  if (errors.length > 0) {
+    return { error: new Error(errors[0].error?.message ?? "Failed to fetch organization locations"), locations: [] };
+  }
+
+  const locations = responses
+    .flatMap((response) => response.data ?? [])
+    .filter(Boolean) as OrganizationLocation[];
+  return { error: null, locations };
+}

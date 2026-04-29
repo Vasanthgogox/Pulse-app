@@ -1386,6 +1386,45 @@ export interface UpdateTripPaymentData {
   amount_paid: number;
 }
 
+export interface UpdateTripRouteMetricsData {
+  /** Route distance in km (stored in trips.distance). */
+  distance?: number | null;
+  /** ETA as interval-compatible string, e.g. "02:15:00". */
+  estimated_duration?: string | null;
+}
+
+/**
+ * Persist route metrics when they were missing at assignment time.
+ * Keeps ETA/distance available across active flow and trip history.
+ */
+export async function updateTripRouteMetrics(
+  tripId: string,
+  data: UpdateTripRouteMetricsData,
+): Promise<{ error: Error | null; trip: TripRow | null }> {
+  const updates: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+  if (data.distance !== undefined) {
+    const n = Number(data.distance);
+    updates.distance = Number.isFinite(n) && n >= 0 ? n : null;
+  }
+  if (data.estimated_duration !== undefined) {
+    const eta = String(data.estimated_duration ?? "").trim();
+    updates.estimated_duration = eta || null;
+  }
+  const hasRouteField =
+    data.distance !== undefined || data.estimated_duration !== undefined;
+  if (!hasRouteField) return { error: null, trip: null };
+  const { data: row, error } = await supabase()
+    .from("trips")
+    .update(updates)
+    .eq("id", tripId)
+    .select()
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), trip: null };
+  return { error: null, trip: (row ?? null) as TripRow | null };
+}
+
 export async function updateTripPayment(
   tripId: string,
   data: UpdateTripPaymentData,

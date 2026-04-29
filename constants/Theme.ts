@@ -278,8 +278,8 @@ export const Theme = {
   financeCardSlateTo: "#0f172a",
   financeCardGreenFrom: "#059669",
   financeCardGreenTo: "#115e59",
-  financeCardCashFrom: "#4f46e5",
-  financeCardCashTo: "#1e1b4b",
+  financeCardCashFrom: "#0e7490",
+  financeCardCashTo: "#164e63",
 } as const;
 
 export type ThemeColors = typeof Theme;

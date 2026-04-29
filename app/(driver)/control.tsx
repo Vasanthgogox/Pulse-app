@@ -24,6 +24,7 @@ import { formatINR } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { useSafeBack } from "@/lib/useSafeBack";
 import * as driversService from "@/services/driversService";
+import { getOptimalRoute } from "@/services/routingService";
 import * as tripDocumentsService from "@/services/tripDocumentsService";
 import * as tripsService from "@/services/tripsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -68,6 +69,22 @@ function formatTripDistanceForControl(
       : parseFloat(String(distance).replace(/,/g, '').replace(/[^0-9.]/g, ''));
   if (!Number.isFinite(km) || km < 0) return "—";
   return `${Math.round(km).toLocaleString("en-IN")} KM`;
+}
+
+function toEtaInterval(durationSeconds: number): string {
+  const totalSeconds = Math.max(0, Math.round(durationSeconds));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}
+
+function parseTripCoordinate(value: unknown): number | null {
+  if (value == null) return null;
+  if (typeof value === "string" && value.trim() === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 const HOLD_PRESS_RETENTION = 100;
@@ -138,6 +155,10 @@ export default function DriverControlScreen() {
   const [driverTripNumberById, setDriverTripNumberById] = useState<
     Record<string, string>
   >({});
+  const [routeMetricsFallback, setRouteMetricsFallback] = useState<{
+    distance: number;
+    estimated_duration: string;
+  } | null>(null);
   const [linkedDriverIds, setLinkedDriverIds] = useState<string[]>([]);
   const [linkedDriversLoaded, setLinkedDriversLoaded] = useState(false);
 
@@ -193,6 +214,59 @@ export default function DriverControlScreen() {
     setPodDocuments,
     setPodSkipped,
   ]);
+
+  useEffect(() => {
+    if (!trip) {
+      setRouteMetricsFallback(null);
+      return;
+    }
+    const hasDistance = trip.distance != null && String(trip.distance).trim() !== "";
+    const hasEta =
+      trip.estimated_duration != null && trip.estimated_duration.trim() !== "";
+    if (hasDistance && hasEta) {
+      setRouteMetricsFallback(null);
+      return;
+    }
+
+    const pickupLat = parseTripCoordinate(trip.pickup_lat);
+    const pickupLon = parseTripCoordinate(trip.pickup_lon);
+    const dropLat = parseTripCoordinate(trip.drop_lat);
+    const dropLon = parseTripCoordinate(trip.drop_lon);
+    const hasCoords =
+      pickupLat != null &&
+      pickupLon != null &&
+      dropLat != null &&
+      dropLon != null;
+    if (!hasCoords) return;
+
+    let cancelled = false;
+    const hydrateRouteMetrics = async () => {
+      const route = await getOptimalRoute(
+        { latitude: pickupLat, longitude: pickupLon },
+        { latitude: dropLat, longitude: dropLon },
+      );
+      if (cancelled || !route) return;
+
+      const distanceKm = Math.max(1, Math.round(route.distance / 1000));
+      const etaInterval = toEtaInterval(route.duration);
+      setRouteMetricsFallback({
+        distance: distanceKm,
+        estimated_duration: etaInterval,
+      });
+
+      const { trip: updated } = await tripsService.updateTripRouteMetrics(trip.id, {
+        distance: hasDistance ? undefined : distanceKm,
+        estimated_duration: hasEta ? undefined : etaInterval,
+      });
+      if (cancelled || !updated) return;
+      setTrip(updated);
+      setRouteMetricsFallback(null);
+    };
+    void hydrateRouteMetrics();
+    return () => {
+      cancelled = true;
+    };
+  }, [trip, setTrip]);
 
   const safeBack = useSafeBack("/(driver)");
   const goToRadar = safeBack;
@@ -300,6 +374,9 @@ export default function DriverControlScreen() {
             }
           : null,
       );
+  const effectiveEta =
+    trip.estimated_duration?.trim() || routeMetricsFallback?.estimated_duration || null;
+  const effectiveDistance = trip.distance ?? routeMetricsFallback?.distance ?? null;
 
   const progressPct =
     step === "completed"
@@ -368,9 +445,7 @@ export default function DriverControlScreen() {
             Est. time
           </Text>
           <Text style={[styles.etaValue, { color: colors.gold }]}>
-            {trip.estimated_duration?.trim()
-              ? formatEstimatedDuration(trip.estimated_duration)
-              : "14H 22M"}
+            {effectiveEta ? formatEstimatedDuration(effectiveEta) : "—"}
           </Text>
         </View>
       </View>
@@ -486,9 +561,7 @@ export default function DriverControlScreen() {
                   Est. time
                 </Text>
                 <Text style={[styles.aeroEtaValue, { color: colors.gold }]}>
-                  {trip.estimated_duration?.trim()
-                    ? formatEstimatedDuration(trip.estimated_duration)
-                    : "—"}
+                  {effectiveEta ? formatEstimatedDuration(effectiveEta) : "—"}
                 </Text>
               </View>
             </View>
@@ -572,7 +645,7 @@ export default function DriverControlScreen() {
                 </Text>
               </View>
             </View>
-            {formatTripDistanceForControl(trip.distance) !== "—" || trip.pickup_date ? (
+            {formatTripDistanceForControl(effectiveDistance) !== "—" || trip.pickup_date ? (
               <View style={[styles.cardRow, { borderTopColor: colors.border }]}>
                 <View style={styles.cardFlexMinWidth}>
                   <Text
@@ -584,7 +657,7 @@ export default function DriverControlScreen() {
                     style={[styles.cardMeta, { color: colors.text }]}
                     numberOfLines={1}
                   >
-                    {formatTripDistanceForControl(trip.distance)}
+                    {formatTripDistanceForControl(effectiveDistance)}
                   </Text>
                 </View>
                 <View style={[styles.cardMetaRight, styles.cardFlexMinWidth]}>

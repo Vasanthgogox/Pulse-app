@@ -254,6 +254,14 @@ export const styles = StyleSheet.create({
     borderColor: Theme.financeHeroBorder,
     overflow: "hidden",
   },
+  financeCategoryCardActive: {
+    borderColor: "rgba(255,255,255,0.9)",
+    borderWidth: 2,
+    shadowColor: Theme.shadow,
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+  },
   financeCategoryCardDesktop: {
     ...Platform.select({
       web: {
@@ -379,6 +387,22 @@ export const styles = StyleSheet.create({
     fontWeight: "900",
     color: Theme.textOnDark,
     letterSpacing: 0.3,
+  },
+  financeCategoryActivePill: {
+    marginLeft: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.45)",
+  },
+  financeCategoryActivePillText: {
+    fontSize: 7,
+    fontWeight: "900",
+    color: Theme.textOnDark,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
   },
   financeCategorySecondaryRow: {
     flexDirection: "row",

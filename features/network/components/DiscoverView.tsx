@@ -6,6 +6,7 @@
 import Theme from '@/constants/Theme';
 import { PartyAvatar } from '@/components/PartyAvatar';
 import { discoverOrganizations, type DiscoverOrg } from '@/features/network/services/discover.service';
+import { getOrganizationLocationsByIds } from '@/features/organization/services/organization.service';
 import {
   cancelPendingConnectionRequestByOrgPair,
   CONNECTION_REQUEST_DAILY_LIMIT_MESSAGE,
@@ -15,7 +16,7 @@ import {
 } from '@/services/connectionRequestsService';
 import { useIndentsQuery, useInvalidateNetwork, useNetworkFeedQuery } from '@/lib/queries';
 import { queryKeys } from '@/lib/queryKeys';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Check,
   Clock3,
@@ -64,7 +65,10 @@ interface ScoredOrg extends DiscoverOrg {
   signals: RecommendationSignal[];
 }
 
-function getBusinessLocation(org: DiscoverOrg): string | null {
+function getBusinessLocation(
+  org: DiscoverOrg,
+  fallback?: { city?: string | null; state?: string | null; address_line?: string | null } | null,
+): string | null {
   const candidate = (
     org as DiscoverOrg & {
       business_location?: string | null;
@@ -74,14 +78,30 @@ function getBusinessLocation(org: DiscoverOrg): string | null {
       headquarters?: string | null;
     }
   );
-  const direct =
-    candidate.business_location ??
-    candidate.location ??
-    candidate.headquarters ??
-    null;
-  if (direct && direct.trim()) return direct.trim();
-  const cityState = [candidate.city, candidate.state].filter(Boolean).join(", ").trim();
-  return cityState || null;
+  const cityState = [candidate.city, candidate.state]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value))
+    .join(", ")
+    .trim();
+  if (cityState) return cityState;
+
+  const fallbackCityState = [fallback?.city, fallback?.state]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value))
+    .join(", ")
+    .trim();
+  if (fallbackCityState) return fallbackCityState;
+
+  const direct = candidate.business_location ?? candidate.location ?? candidate.headquarters ?? null;
+  if (direct && direct.trim()) {
+    const parts = direct
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (parts.length >= 2) return `${parts[0]}, ${parts[1]}`;
+    return direct.trim();
+  }
+  return null;
 }
 
 function extractCity(location: string | null | undefined): string {
@@ -130,8 +150,9 @@ function scoreOrgs(
 
 // --- Org card ---
 
-function OrgCard({ org, onConnect, onCancel, loading }: {
+function OrgCard({ org, locationFallback, onConnect, onCancel, loading }: {
   org: ScoredOrg;
+  locationFallback?: { city?: string | null; state?: string | null; address_line?: string | null } | null;
   onConnect: () => void;
   onCancel: () => void;
   loading: boolean;
@@ -147,7 +168,7 @@ function OrgCard({ org, onConnect, onCancel, loading }: {
   const rating = typeof ratingValue === "number" && Number.isFinite(ratingValue)
     ? ratingValue.toFixed(1)
     : null;
-  const businessLocation = getBusinessLocation(org);
+  const businessLocation = getBusinessLocation(org, locationFallback);
 
   const onIn = () => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start();
   const onOut = () => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
@@ -338,6 +359,30 @@ export function DiscoverView({
   const recommended = scoredOrgs.filter((o) => o.score > 0 && o.connection_status === 'none');
   const rest = scoredOrgs.filter((o) => o.score <= 0 || o.connection_status !== 'none');
   const radarCardWidth = windowWidth >= 1280 ? "13.15%" : windowWidth >= 1180 ? "18.5%" : "48%";
+  const discoverOrgIds = useMemo(
+    () => [...new Set(orgs.map((org) => org.id).filter(Boolean))].sort(),
+    [orgs],
+  );
+  const organizationLocationsQ = useQuery({
+    queryKey: ['network', 'discover', 'organization-locations', discoverOrgIds],
+    queryFn: async () => {
+      const { error: orgErr, locations } = await getOrganizationLocationsByIds(discoverOrgIds);
+      if (orgErr) throw orgErr;
+      return locations;
+    },
+    enabled: discoverOrgIds.length > 0,
+  });
+  const organizationLocationById = useMemo(() => {
+    const map: Record<string, { city: string | null; state: string | null; address_line: string | null }> = {};
+    for (const location of organizationLocationsQ.data ?? []) {
+      map[location.id] = {
+        city: location.city ?? null,
+        state: location.state ?? null,
+        address_line: location.address_line ?? null,
+      };
+    }
+    return map;
+  }, [organizationLocationsQ.data]);
 
   const fetchOrgs = useCallback(async (q: string) => {
     setLoading(true);
@@ -501,6 +546,7 @@ export function DiscoverView({
                   <View key={item.org.id} style={[styles.radarCardCell, { width: radarCardWidth }]}>
                     <OrgCard
                       org={item.org}
+                      locationFallback={organizationLocationById[item.org.id]}
                       onConnect={() => setRequestRoleModalOrg(item.org)}
                       onCancel={() => void handleCancelRequest(item.org)}
                       loading={connecting === item.org.id}
@@ -522,6 +568,7 @@ export function DiscoverView({
             return (
               <OrgCard
                 org={item.org}
+                locationFallback={organizationLocationById[item.org.id]}
                 onConnect={() => setRequestRoleModalOrg(item.org)}
                 onCancel={() => void handleCancelRequest(item.org)}
                 loading={connecting === item.org.id}
@@ -635,8 +682,7 @@ const styles = StyleSheet.create({
     margin: 14,
     backgroundColor: Theme.screenBackground,
     borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: Theme.borderMedium,
+    borderWidth: 0,
     paddingHorizontal: 14,
     paddingVertical: 12,
   },

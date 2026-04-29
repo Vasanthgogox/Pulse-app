@@ -111,8 +111,7 @@ const styles = StyleSheet.create({
     paddingRight: 10,
     paddingVertical: 8,
     borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: Theme.borderMedium,
+    borderWidth: 0,
     backgroundColor: Theme.surface,
     gap: 10,
     shadowColor: Theme.shadow,
@@ -122,7 +121,6 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   shellFocused: {
-    borderColor: Theme.primary,
     shadowOpacity: 0.12,
     shadowRadius: 10,
   },
