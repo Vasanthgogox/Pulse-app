@@ -37,6 +37,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   adjustedCost,
   adjustedRevenue,
+  COST_REASON_OPTIONS,
+  REVENUE_REASON_OPTIONS,
+  type TripAdjustmentImpact,
+  type TripAdjustmentType,
   type TripAdjustment,
 } from "../../services/tripAdjustments";
 import { regenerateTripOtp } from "../../services/tripOtp.service";
@@ -91,62 +95,21 @@ function adjustmentsCountingAsDeductions(adjustments: TripAdjustment[]) {
   );
 }
 
-/** Quick protocol tabs → preset for {@link TripAdjustmentModal} reasons. */
-function protocolFinanceChipAdjustment(
-  side: "client" | "supplier",
-  chip: string,
-): {
-  type: "revenue" | "cost";
-  impact: "plus" | "minus";
-  reasonSeed: string;
-} {
-  if (side === "client") {
-    if (chip === "Loading") {
-      return { type: "revenue", impact: "plus", reasonSeed: "Loading Charges" };
-    }
-    if (chip === "Unloading") {
-      return { type: "revenue", impact: "plus", reasonSeed: "Unloading Charges" };
-    }
-    if (chip === "Detention") {
-      return { type: "revenue", impact: "minus", reasonSeed: "Late Delivery" };
-    }
-    if (chip === "Damage") {
-      return { type: "revenue", impact: "minus", reasonSeed: "Damages / Missing" };
-    }
-    if (chip === "Toll" || chip === "RTO") {
-      return { type: "revenue", impact: "plus", reasonSeed: "Other" };
-    }
-  } else {
-    if (chip === "Loading") {
-      return { type: "cost", impact: "plus", reasonSeed: "Loading Charges" };
-    }
-    if (chip === "Unloading") {
-      return { type: "cost", impact: "plus", reasonSeed: "Unloading Charges" };
-    }
-    if (chip === "Detention") {
-      return { type: "cost", impact: "plus", reasonSeed: "Detention" };
-    }
-    if (chip === "Damage") {
-      return { type: "cost", impact: "plus", reasonSeed: "Damages / Missing" };
-    }
-    if (chip === "Toll") {
-      return { type: "cost", impact: "plus", reasonSeed: "Pass Debit" };
-    }
-    if (chip === "RTO") {
-      return { type: "cost", impact: "plus", reasonSeed: "Other" };
-    }
+function getInlineReasonOptions(
+  type: TripAdjustmentType,
+  impact: TripAdjustmentImpact,
+): readonly string[] {
+  if (type === "revenue" && impact === "plus") {
+    return ["Loading Charges", "Unloading Charges", "Other"];
   }
-  return { type: "revenue", impact: "plus", reasonSeed: "Other" };
+  if (type === "revenue" && impact === "minus") {
+    return ["Late Delivery", "Damages / Missing", "Other"];
+  }
+  if (type === "cost" && impact === "plus") {
+    return COST_REASON_OPTIONS;
+  }
+  return ["Damages / Missing", "Other"];
 }
-
-const FINANCE_PROTOCOL_CHIPS = [
-  "Loading",
-  "Unloading",
-  "Detention",
-  "Damage",
-  "Toll",
-  "RTO",
-] as const;
 
 function splitLocationPrimarySecondary(location: string | null | undefined): {
   primary: string;
@@ -182,6 +145,12 @@ export default function TripDetailScreen({
   const [showFinanceProvisionPanel, setShowFinanceProvisionPanel] = useState<
     "client" | "supplier" | null
   >(null);
+  const [showInlineAdjustmentForm, setShowInlineAdjustmentForm] = useState(false);
+  const [inlineAdjType, setInlineAdjType] = useState<TripAdjustmentType>("revenue");
+  const [inlineAdjImpact, setInlineAdjImpact] = useState<TripAdjustmentImpact>("plus");
+  const [inlineAdjAmount, setInlineAdjAmount] = useState("");
+  const [inlineAdjReason, setInlineAdjReason] = useState("");
+  const [inlineAdjOtherReason, setInlineAdjOtherReason] = useState("");
   const [showAssignmentManager, setShowAssignmentManager] = useState(false);
   const [otpResending, setOtpResending] = useState(false);
 
@@ -243,6 +212,57 @@ export default function TripDetailScreen({
     if (!o || !d) return;
     const url = `https://www.google.com/maps/dir/${o.latitude},${o.longitude}/${d.latitude},${d.longitude}`;
     void Linking.openURL(url);
+  };
+  const inlineReasonOptions = getInlineReasonOptions(inlineAdjType, inlineAdjImpact);
+  const inlineFinalReason =
+    inlineAdjReason === "Other"
+      ? inlineAdjOtherReason.trim() || "Other"
+      : inlineAdjReason.trim();
+  const inlineAmountNum = Math.round(parseFloat(inlineAdjAmount.replace(/,/g, "")) || 0);
+  const canSaveInlineAdjustment = inlineAmountNum > 0 && inlineFinalReason.length > 0;
+
+  const openInlineAdjustmentForm = (preset?: {
+    type: TripAdjustmentType;
+    impact: TripAdjustmentImpact;
+    reasonSeed?: string;
+  }) => {
+    if (preset) {
+      setInlineAdjType(preset.type);
+      setInlineAdjImpact(preset.impact);
+      const seed = (preset.reasonSeed ?? "").trim();
+      const opts = preset.type === "revenue" ? REVENUE_REASON_OPTIONS : COST_REASON_OPTIONS;
+      if (seed && (opts as readonly string[]).includes(seed)) {
+        setInlineAdjReason(seed);
+        setInlineAdjOtherReason("");
+      } else if (seed) {
+        setInlineAdjReason("Other");
+        setInlineAdjOtherReason(seed);
+      } else {
+        setInlineAdjReason("");
+        setInlineAdjOtherReason("");
+      }
+    } else {
+      setInlineAdjType("revenue");
+      setInlineAdjImpact("plus");
+      setInlineAdjReason("");
+      setInlineAdjOtherReason("");
+    }
+    setInlineAdjAmount("");
+    setShowInlineAdjustmentForm(true);
+  };
+
+  const saveInlineAdjustment = async () => {
+    if (!canSaveInlineAdjustment) return;
+    await detail.handleSaveAdjustment({
+      type: inlineAdjType,
+      impact: inlineAdjImpact,
+      amount: inlineAmountNum,
+      reason: inlineFinalReason,
+    });
+    setInlineAdjAmount("");
+    setInlineAdjReason("");
+    setInlineAdjOtherReason("");
+    setShowInlineAdjustmentForm(false);
   };
 
   // ── Stage timestamps ──────────────────────────────────────────────────────────
@@ -989,12 +1009,12 @@ export default function TripDetailScreen({
                           <TouchableOpacity
                             style={[styles.refProvisionDnBtn, styles.refProvisionCnBtn]}
                             onPress={() => {
-                              if (showFinanceProvisionPanel === "client") {
-                                detail.openClientIncomeAdjustment();
-                              } else {
-                                detail.openSupplierCostReductionAdjustment();
-                              }
-                              setShowFinanceProvisionPanel(null);
+                              if (!showFinanceProvisionPanel) return;
+                              openInlineAdjustmentForm({
+                                type: showFinanceProvisionPanel === "client" ? "revenue" : "cost",
+                                impact: "minus",
+                                reasonSeed: "Other",
+                              });
                             }}
                             activeOpacity={0.88}
                           >
@@ -1004,12 +1024,12 @@ export default function TripDetailScreen({
                           <TouchableOpacity
                             style={[styles.refProvisionDnBtn, styles.refProvisionDnBtnDebit]}
                             onPress={() => {
-                              if (showFinanceProvisionPanel === "client") {
-                                detail.openClientDeductionAdjustment();
-                              } else {
-                                detail.openSupplierCostAdditionAdjustment();
-                              }
-                              setShowFinanceProvisionPanel(null);
+                              if (!showFinanceProvisionPanel) return;
+                              openInlineAdjustmentForm({
+                                type: showFinanceProvisionPanel === "client" ? "revenue" : "cost",
+                                impact: "plus",
+                                reasonSeed: "Other",
+                              });
                             }}
                             activeOpacity={0.88}
                           >
@@ -1018,45 +1038,107 @@ export default function TripDetailScreen({
                           </TouchableOpacity>
                         </View>
 
-                        <Text style={styles.refProvisionChipsLbl}>Quick protocol tabs</Text>
-                        <View style={styles.refProvisionChipWrap}>
-                          {FINANCE_PROTOCOL_CHIPS.map((chip) => (
-                            <TouchableOpacity
-                              key={chip}
-                              style={styles.refProvisionChip}
-                              onPress={() => {
-                                if (!showFinanceProvisionPanel) return;
-                                const p = protocolFinanceChipAdjustment(
-                                  showFinanceProvisionPanel,
-                                  chip,
-                                );
-                                detail.openTripAdjustmentModal({
-                                  type: p.type,
-                                  impact: p.impact,
-                                  reasonSeed: p.reasonSeed,
-                                });
-                                setShowFinanceProvisionPanel(null);
-                              }}
-                              activeOpacity={0.82}
-                            >
-                              <Text style={styles.refProvisionChipTxt}>{chip}</Text>
-                            </TouchableOpacity>
-                          ))}
-                        </View>
+                        {showInlineAdjustmentForm ? (
+                          <View style={styles.refInlineAdjustWrap}>
+                            <View style={styles.refInlineAdjustHead}>
+                              <View>
+                                <Text style={styles.refInlineAdjustTitle}>Add Adjustment</Text>
+                                <Text style={styles.refInlineAdjustSub}>modify trip amounts</Text>
+                                <View
+                                  style={[
+                                    styles.refInlineModeBadge,
+                                    inlineAdjImpact === "plus"
+                                      ? styles.refInlineModeBadgeDebit
+                                      : styles.refInlineModeBadgeCredit,
+                                  ]}
+                                >
+                                  <Text style={styles.refInlineModeBadgeTxt}>
+                                    {`${inlineAdjImpact === "plus" ? "Debit (DN)" : "Credit (CN)"} · ${
+                                      inlineAdjType === "revenue"
+                                        ? "Revenue (Sale)"
+                                        : "Cost (Supplier)"
+                                    }`}
+                                  </Text>
+                                </View>
+                              </View>
+                              <TouchableOpacity
+                                style={styles.refInlineAdjustClose}
+                                onPress={() => setShowInlineAdjustmentForm(false)}
+                                activeOpacity={0.85}
+                              >
+                                <Feather name="x" size={16} color="#475569" />
+                              </TouchableOpacity>
+                            </View>
 
-                        <View style={styles.refProvisionFoot}>
-                          <View>
-                            <Text style={styles.refProvisionHint}>Authorization preview</Text>
-                            <Text style={styles.refProvisionPulse}>Provision sync</Text>
+                            <Text style={styles.refInlineAdjustLabel}>Adjustment Type</Text>
+                            <Text style={styles.refInlineAdjustLockedMeta}>
+                              {`${inlineAdjType === "revenue" ? "Revenue (Sale)" : "Cost (Supplier)"} · ${
+                                inlineAdjImpact === "plus" ? "Debit (DN)" : "Credit (CN)"
+                              }`}
+                            </Text>
+
+                            <Text style={styles.refInlineAdjustLabel}>Amount</Text>
+                            <View style={styles.refInlineAmountRow}>
+                              <Text style={styles.refInlineCurrency}>₹</Text>
+                              <TextInput
+                                value={inlineAdjAmount}
+                                onChangeText={setInlineAdjAmount}
+                                style={styles.refInlineAmountInput}
+                                keyboardType="numeric"
+                                placeholder="0"
+                                placeholderTextColor="#64748b"
+                                maxLength={14}
+                              />
+                            </View>
+
+                            <Text style={styles.refInlineAdjustLabel}>Reason</Text>
+                            <View style={styles.refInlineReasonWrap}>
+                              {inlineReasonOptions.map((r) => (
+                                <TouchableOpacity
+                                  key={r}
+                                  style={[
+                                    styles.refInlineReasonChip,
+                                    inlineAdjReason === r && styles.refInlineReasonChipActive,
+                                  ]}
+                                  onPress={() => setInlineAdjReason(r)}
+                                  activeOpacity={0.82}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.refInlineReasonChipTxt,
+                                      inlineAdjReason === r && styles.refInlineReasonChipTxtActive,
+                                    ]}
+                                  >
+                                    {r}
+                                  </Text>
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+
+                            {inlineAdjReason === "Other" ? (
+                              <TextInput
+                                value={inlineAdjOtherReason}
+                                onChangeText={setInlineAdjOtherReason}
+                                style={styles.refInlineOtherInput}
+                                placeholder="Describe reason..."
+                                placeholderTextColor="#64748b"
+                                maxLength={80}
+                              />
+                            ) : null}
+
+                            <TouchableOpacity
+                              style={[
+                                styles.refInlineSaveBtn,
+                                !canSaveInlineAdjustment && styles.refInlineSaveBtnDisabled,
+                              ]}
+                              onPress={() => void saveInlineAdjustment()}
+                              disabled={!canSaveInlineAdjustment}
+                              activeOpacity={0.86}
+                            >
+                              <Text style={styles.refInlineSaveBtnTxt}>Save Adjustment</Text>
+                            </TouchableOpacity>
                           </View>
-                          <TouchableOpacity
-                            style={styles.refProvisionConfirm}
-                            onPress={() => detail.handleAddAdjustment()}
-                            activeOpacity={0.85}
-                          >
-                            <Text style={styles.refProvisionConfirmTxt}>Full adjustment…</Text>
-                          </TouchableOpacity>
-                        </View>
+                        ) : null}
                       </View>
                     ) : null}
 
@@ -1828,15 +1910,6 @@ export default function TripDetailScreen({
 
         <View style={{ height: !isDesktop ? 120 : 48 }} />
       </ScrollView>
-
-      {!isDesktop ? (
-        <View style={styles.refFloatingWrap} pointerEvents="box-none">
-          <TouchableOpacity style={styles.refFloatingBtn} activeOpacity={0.9}>
-            <Feather name="zap" size={14} color="#818cf8" />
-            <Text style={styles.refFloatingBtnText}>Authorized Pulse</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
 
       {/* ── Modals ────────────────────────────────────────────────────────────── */}
       <TripAdjustmentModal
@@ -3625,14 +3698,14 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   refProvisionWrap: {
-    backgroundColor: "#0f172a",
+    backgroundColor: "#ffffff",
     borderRadius: 26,
     padding: 20,
     gap: 16,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: "#e2e8f0",
     ...Platform.select({
-      web: { boxShadow: "0 30px 80px rgba(15,23,42,0.35)" },
+      web: { boxShadow: "0 24px 50px rgba(15,23,42,0.1)" },
       default: {},
     }),
   },
@@ -3647,7 +3720,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "900",
     fontStyle: "italic",
-    color: "#f8fafc",
+    color: "#0f172a",
     letterSpacing: -0.3,
     textTransform: "uppercase",
     minWidth: 0,
@@ -3655,7 +3728,7 @@ const styles = StyleSheet.create({
   refProvisionClose: {
     padding: 8,
     borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "#f1f5f9",
     alignSelf: "flex-start",
   },
   refProvisionDnRow: { flexDirection: "row", gap: 12 },
@@ -3678,76 +3751,211 @@ const styles = StyleSheet.create({
   refProvisionDnLabel: {
     fontSize: 9,
     fontWeight: "900",
-    color: "#e2e8f0",
+    color: "#0f172a",
     letterSpacing: 1.2,
     textTransform: "uppercase",
   },
-  refProvisionChipsLbl: {
-    fontSize: 8,
-    fontWeight: "900",
-    color: "#64748b",
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    marginTop: 4,
-  },
-  refProvisionChipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  refProvisionChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.06)",
+  refInlineAdjustWrap: {
+    marginTop: 10,
+    backgroundColor: "#f8fafc",
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-  },
-  refProvisionChipTxt: {
-    fontSize: 9,
-    fontWeight: "900",
-    color: "#cbd5f5",
-    letterSpacing: 1,
-    textTransform: "uppercase",
-  },
-  refProvisionFoot: {
-    marginTop: 8,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.08)",
-    flexDirection: "row",
-    justifyContent: "space-between",
+    borderColor: "#e2e8f0",
+    padding: 16,
     gap: 12,
-    alignItems: "flex-end",
-  },
-  refProvisionHint: {
-    fontSize: 7,
-    fontWeight: "800",
-    color: "#64748b",
-    letterSpacing: 1,
-    textTransform: "uppercase",
-  },
-  refProvisionPulse: {
-    marginTop: 4,
-    fontSize: 16,
-    fontWeight: "900",
-    fontStyle: "italic",
-    color: "#fff",
-    letterSpacing: -0.2,
-    textTransform: "uppercase",
-  },
-  refProvisionConfirm: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    backgroundColor: "#4f46e5",
     ...Platform.select({
-      web: { boxShadow: "0 10px 35px rgba(79,70,229,0.45)" },
+      web: { boxShadow: "0 12px 28px rgba(15,23,42,0.08)" },
       default: {},
     }),
   },
-  refProvisionConfirmTxt: {
+  refInlineAdjustHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  refInlineAdjustTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: "#0f172a",
+    textTransform: "uppercase",
+  },
+  refInlineAdjustSub: {
+    marginTop: 2,
+    fontSize: 8,
+    fontWeight: "800",
+    color: "#64748b",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+  },
+  refInlineModeBadge: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  refInlineModeBadgeCredit: {
+    backgroundColor: "rgba(34,197,94,0.12)",
+    borderColor: "rgba(22,163,74,0.35)",
+  },
+  refInlineModeBadgeDebit: {
+    backgroundColor: "rgba(244,63,94,0.1)",
+    borderColor: "rgba(225,29,72,0.28)",
+  },
+  refInlineModeBadgeTxt: {
     fontSize: 9,
     fontWeight: "900",
+    color: "#1e293b",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  refInlineAdjustClose: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e2e8f0",
+  },
+  refInlineAdjustLabel: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: "#64748b",
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+  },
+  refInlineAdjustLockedMeta: {
+    marginTop: -2,
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#334155",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  refInlineAdjustRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  refInlineAdjustBtn: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    borderRadius: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 10,
+    backgroundColor: "rgba(255,255,255,0.04)",
+  },
+  refInlineAdjustBtnActive: {
+    borderColor: "#4f46e5",
+    backgroundColor: "rgba(79,70,229,0.2)",
+  },
+  refInlineAdjustImpactPlus: {
+    borderColor: "rgba(34,197,94,0.45)",
+    backgroundColor: "rgba(34,197,94,0.18)",
+  },
+  refInlineAdjustImpactMinus: {
+    borderColor: "rgba(244,63,94,0.45)",
+    backgroundColor: "rgba(244,63,94,0.18)",
+  },
+  refInlineAdjustBtnText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#cbd5e1",
     letterSpacing: 1,
     textTransform: "uppercase",
+  },
+  refInlineAdjustBtnTextActive: {
     color: "#fff",
+  },
+  refInlineAmountRow: {
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  refInlineCurrency: {
+    fontSize: 28,
+    fontWeight: "300",
+    color: "#334155",
+    marginRight: 10,
+  },
+  refInlineAmountInput: {
+    flex: 1,
+    fontSize: 30,
+    fontWeight: "300",
+    color: "#0f172a",
+    ...Platform.select({
+      web: { outlineStyle: "none" } as any,
+      default: {},
+    }),
+  },
+  refInlineReasonWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  refInlineReasonChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#ffffff",
+  },
+  refInlineReasonChipActive: {
+    borderColor: "#4f46e5",
+    backgroundColor: "rgba(79,70,229,0.12)",
+  },
+  refInlineReasonChipTxt: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#475569",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  refInlineReasonChipTxtActive: {
+    color: "#3730a3",
+  },
+  refInlineOtherInput: {
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: "#0f172a",
+    backgroundColor: "#ffffff",
+    ...Platform.select({
+      web: { outlineStyle: "none" } as any,
+      default: {},
+    }),
+  },
+  refInlineSaveBtn: {
+    marginTop: 2,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    backgroundColor: "#4f46e5",
+  },
+  refInlineSaveBtnDisabled: {
+    opacity: 0.45,
+  },
+  refInlineSaveBtnTxt: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#fff",
+    letterSpacing: 1,
+    textTransform: "uppercase",
   },
   refManifestSplitSection: { gap: 10 },
   refManifestSplitHead: {
@@ -4069,32 +4277,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.14)",
-  },
-  refFloatingWrap: {
-    position: "absolute",
-    bottom: 24,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-    pointerEvents: "box-none" as const,
-  },
-  refFloatingBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#0f172a",
-    borderRadius: 24,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  refFloatingBtnText: {
-    color: "#818cf8",
-    fontSize: 13,
-    fontWeight: "600",
   },
   root: {
     flex: 1,

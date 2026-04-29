@@ -74,7 +74,11 @@ import {
 } from "../../initialTripForDetail";
 import type { TripAssignmentAuditRow } from "../../services/trip-assignment-audit.service";
 import { getTripAssignmentAuditHistory } from "../../services/trip-assignment-audit.service";
-import type { TripAdjustment } from "../../services/tripAdjustments";
+import type {
+    TripAdjustment,
+    TripAdjustmentImpact,
+    TripAdjustmentType,
+} from "../../services/tripAdjustments";
 import {
     addTripAdjustment,
     getTripAdjustments,
@@ -302,6 +306,11 @@ export default function TripDetailScreen({
     expires_at: string | null;
   } | null>(null);
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
+  const [adjustmentModalPreset, setAdjustmentModalPreset] = useState<{
+    type: TripAdjustmentType;
+    impact: TripAdjustmentImpact;
+    reasonSeed?: string | null;
+  } | null>(null);
   const [showTrackingModal, setShowTrackingModal] = useState(false);
   const [tripDetailTab, setTripDetailTab] = useState<TripDetailTab>("finance");
   const [expandedTimelineEntryIds, setExpandedTimelineEntryIds] = useState<Record<string, boolean>>({});
@@ -2182,7 +2191,35 @@ export default function TripDetailScreen({
     ],
   );
 
-  const handleAddAdjustment = () => setShowAdjustmentModal(true);
+  const closeTripAdjustmentModal = useCallback(() => {
+    setShowAdjustmentModal(false);
+    setAdjustmentModalPreset(null);
+  }, []);
+  const openTripAdjustmentModal = useCallback(
+    (
+      preset: {
+        type: TripAdjustmentType;
+        impact: TripAdjustmentImpact;
+        reasonSeed?: string | null;
+      } | null = null,
+    ) => {
+      setAdjustmentModalPreset(preset);
+      setShowAdjustmentModal(true);
+    },
+    [],
+  );
+  const handleAddAdjustment = useCallback(
+    (
+      preset: {
+        type: TripAdjustmentType;
+        impact: TripAdjustmentImpact;
+        reasonSeed?: string | null;
+      } | null = null,
+    ) => {
+      openTripAdjustmentModal(preset);
+    },
+    [openTripAdjustmentModal],
+  );
   const openCompareVerifyFromTrip = useCallback((
     /** Which party tab the user tapped Compare & Verify on. Defaults to supplier-first. */
     partyType?: "client" | "supplier",
@@ -3106,8 +3143,9 @@ export default function TripDetailScreen({
 
         <TripAdjustmentModal
           visible={showAdjustmentModal}
-          onClose={() => setShowAdjustmentModal(false)}
+          onClose={closeTripAdjustmentModal}
           onSave={handleSaveAdjustment}
+          preset={adjustmentModalPreset}
         />
         <ThemedAlertModal
           visible={showDriverRejectedModal}
@@ -3267,7 +3305,7 @@ export default function TripDetailScreen({
                 ? ((displayVehicleFromInput.trim() || vehicleLabel) ?? null)
                 : vehicleLabel
             }
-            onAddAdjustment={handleAddAdjustment}
+            onSaveAdjustment={handleSaveAdjustment}
             onRemoveAdjustment={handleRemoveAdjustment}
             currentUserId={currentUserId}
             isDriverOffline={isDriverOffline}
@@ -3329,8 +3367,9 @@ export default function TripDetailScreen({
 
       <TripAdjustmentModal
         visible={showAdjustmentModal}
-        onClose={() => setShowAdjustmentModal(false)}
+        onClose={closeTripAdjustmentModal}
         onSave={handleSaveAdjustment}
+        preset={adjustmentModalPreset}
       />
       <ThemedAlertModal
         visible={showDriverRejectedModal}

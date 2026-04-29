@@ -11,8 +11,17 @@ import type { TripLedgerQuickTag } from "@/features/finance/ledger/tripLedgerEnt
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { computeTripEntryFinancialSnapshot } from "@/features/finance/utils/computeTripEntryFinancials.util";
 import type { TripAssignmentAuditRow } from "@/features/trips/services/trip-assignment-audit.service";
-import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
-import { adjustedCost, adjustedRevenue } from "@/features/trips/services/tripAdjustments";
+import type {
+  TripAdjustment,
+  TripAdjustmentImpact,
+  TripAdjustmentType,
+} from "@/features/trips/services/tripAdjustments";
+import {
+  adjustedCost,
+  adjustedRevenue,
+  COST_REASON_OPTIONS,
+  REVENUE_REASON_OPTIONS,
+} from "@/features/trips/services/tripAdjustments";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import type { ReactNode } from "react";
@@ -24,6 +33,7 @@ import {
   Platform,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   UIManager,
   View,
@@ -58,6 +68,28 @@ function toTitleCase(value: string | null | undefined): string {
     .split(/\s+/)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+}
+
+const FINANCE_PROTOCOL_CHIPS = [
+  "Loading",
+  "Unloading",
+  "Detention",
+  "Damage",
+  "Toll",
+  "RTO",
+] as const;
+
+function protocolSupplierChipAdjustment(chip: (typeof FINANCE_PROTOCOL_CHIPS)[number]): {
+  type: TripAdjustmentType;
+  impact: TripAdjustmentImpact;
+  reasonSeed: string;
+} {
+  if (chip === "Loading") return { type: "cost", impact: "plus", reasonSeed: "Loading Charges" };
+  if (chip === "Unloading") return { type: "cost", impact: "plus", reasonSeed: "Unloading Charges" };
+  if (chip === "Detention") return { type: "cost", impact: "plus", reasonSeed: "Detention" };
+  if (chip === "Damage") return { type: "cost", impact: "plus", reasonSeed: "Damages / Missing" };
+  if (chip === "Toll") return { type: "cost", impact: "plus", reasonSeed: "Pass Debit" };
+  return { type: "cost", impact: "plus", reasonSeed: "Other" };
 }
 
 /**
@@ -134,8 +166,13 @@ export interface TripDetailFinanceViewProps {
   /** Driver rating (1–5) when trip is completed; shown in tracking card. */
   driverRating?: number | null;
   vehicleLabel?: string | null;
-  /** When set, + in Adjustment Registry opens add-adjustment flow. */
-  onAddAdjustment?: () => void;
+  /** Saves trip adjustment (same behavior as Add Adjustment modal). */
+  onSaveAdjustment?: (params: {
+    type: TripAdjustmentType;
+    impact: TripAdjustmentImpact;
+    amount: number;
+    reason: string;
+  }) => void | Promise<void>;
   /** When set, user can remove an adjustment (e.g. long-press or delete icon). */
   onRemoveAdjustment?: (adjustmentId: string) => void;
   /** Assignment / reassignment history for this trip (newest first). */
@@ -1070,7 +1107,7 @@ export function TripDetailFinanceView({
   assignmentVehicleLabels = {},
   tripOtp: _tripOtp = null,
   partnerName = null,
-  onAddAdjustment,
+  onSaveAdjustment,
   onRemoveAdjustment,
   assignmentBlock,
   currentUserId = null,
@@ -1097,11 +1134,83 @@ export function TripDetailFinanceView({
   const { t } = useLanguage();
   const tabsEnabled =
     typeof onTripDetailTabChange === "function" && tripDetailTab != null;
+  const [showFinanceProvisionPanel, setShowFinanceProvisionPanel] = useState(false);
+  const [draftType, setDraftType] = useState<TripAdjustmentType>("revenue");
+  const [draftImpact, setDraftImpact] = useState<TripAdjustmentImpact>("plus");
+  const [draftAmount, setDraftAmount] = useState("");
+  const [draftReason, setDraftReason] = useState("");
+  const [draftOtherReason, setDraftOtherReason] = useState("");
   const activeTab: TripDetailTab = tripDetailTab ?? "finance";
   const showTrackingSection = !tabsEnabled || activeTab === "tracking";
   const showFinanceSection = !tabsEnabled || activeTab === "finance";
   const showAssignmentsSection = !tabsEnabled || activeTab === "tracking";
   const routeStr = `${trip.pickup_area ?? "—"} → ${trip.drop_location ?? "—"}`.trim() || "—";
+  const reasonOptions =
+    draftType === "revenue" ? REVENUE_REASON_OPTIONS : COST_REASON_OPTIONS;
+  const selectedInlineReason =
+    draftReason === "Other"
+      ? draftOtherReason.trim() || "Other"
+      : draftReason.trim();
+  const inlineAmountNum = Math.round(parseFloat(draftAmount.replace(/,/g, "")) || 0);
+  const canSaveInlineAdjustment =
+    inlineAmountNum > 0 && (!!selectedInlineReason || reasonOptions.length > 0);
+
+  const openInlineAdjustment = useCallback(
+    (
+      preset: {
+        type: TripAdjustmentType;
+        impact: TripAdjustmentImpact;
+        reasonSeed?: string | null;
+      } | null = null,
+    ) => {
+      if (preset) {
+        setDraftType(preset.type);
+        setDraftImpact(preset.impact);
+        const seed = (preset.reasonSeed ?? "").trim();
+        const options =
+          preset.type === "revenue" ? REVENUE_REASON_OPTIONS : COST_REASON_OPTIONS;
+        if (seed && options.includes(seed as (typeof options)[number])) {
+          setDraftReason(seed);
+          setDraftOtherReason("");
+        } else if (seed) {
+          setDraftReason("Other");
+          setDraftOtherReason(seed);
+        } else {
+          setDraftReason("");
+          setDraftOtherReason("");
+        }
+      } else {
+        setDraftType("revenue");
+        setDraftImpact("plus");
+        setDraftReason("");
+        setDraftOtherReason("");
+      }
+      setDraftAmount("");
+    },
+    [],
+  );
+
+  const handleInlineSaveAdjustment = useCallback(async () => {
+    if (!onSaveAdjustment || !canSaveInlineAdjustment) return;
+    const fallbackReason =
+      draftType === "revenue" ? "Revenue adjustment" : "Cost adjustment";
+    await onSaveAdjustment({
+      type: draftType,
+      impact: draftImpact,
+      amount: inlineAmountNum,
+      reason: selectedInlineReason || fallbackReason,
+    });
+    setDraftAmount("");
+    setDraftReason("");
+    setDraftOtherReason("");
+  }, [
+    onSaveAdjustment,
+    canSaveInlineAdjustment,
+    draftType,
+    draftImpact,
+    inlineAmountNum,
+    selectedInlineReason,
+  ]);
   const customerSales = Number(trip.client_price ?? 0) || 0;
   const supplierCost = Number(trip.supplier_rate ?? 0) || 0;
   // Indent: owner = client (shipper), revenue = client_price. Non-owner = supplier, revenue = supplier_rate.
@@ -2099,12 +2208,224 @@ export function TripDetailFinanceView({
               </Text>
             </View>
           </View>
+
+          <View style={styles.provisionWrap}>
+            <TouchableOpacity
+              onPress={() => setShowFinanceProvisionPanel((prev) => !prev)}
+              style={styles.provisionToggleBtn}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.provisionToggleText}>Provision CN/DN (Supplier)</Text>
+              <FontAwesome
+                name={showFinanceProvisionPanel ? "chevron-up" : "chevron-down"}
+                size={12}
+                color={Theme.textPrimaryDark}
+              />
+            </TouchableOpacity>
+
+            {showFinanceProvisionPanel ? (
+              <View style={styles.provisionPanel}>
+                <View style={styles.provisionDnRow}>
+                  <TouchableOpacity
+                    style={[styles.provisionDnBtn, styles.provisionCnBtn]}
+                    onPress={() => {
+                      openInlineAdjustment({
+                        type: "cost",
+                        impact: "minus",
+                        reasonSeed: "Other",
+                      });
+                      setShowFinanceProvisionPanel(false);
+                    }}
+                    activeOpacity={0.88}
+                  >
+                    <Text style={styles.provisionDnLabel}>Credit (CN)</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.provisionDnBtn, styles.provisionDnBtnDebit]}
+                    onPress={() => {
+                      openInlineAdjustment({
+                        type: "cost",
+                        impact: "plus",
+                        reasonSeed: "Other",
+                      });
+                      setShowFinanceProvisionPanel(false);
+                    }}
+                    activeOpacity={0.88}
+                  >
+                    <Text style={styles.provisionDnLabel}>Debit (DN)</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.provisionChipsLbl}>Quick protocol tabs</Text>
+                <View style={styles.provisionChipWrap}>
+                  {FINANCE_PROTOCOL_CHIPS.map((chip) => (
+                    <TouchableOpacity
+                      key={chip}
+                      style={styles.provisionChip}
+                      onPress={() => {
+                        const preset = protocolSupplierChipAdjustment(chip);
+                        openInlineAdjustment(preset);
+                        setShowFinanceProvisionPanel(false);
+                      }}
+                      activeOpacity={0.82}
+                    >
+                      <Text style={styles.provisionChipTxt}>{chip}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <View style={styles.provisionFoot}>
+                  <View>
+                    <Text style={styles.provisionHint}>Authorization preview</Text>
+                    <Text style={styles.provisionPulse}>Provision sync</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.provisionConfirm}
+                    onPress={() => {
+                      openInlineAdjustment({
+                        type: "cost",
+                        impact: "plus",
+                      });
+                      setShowFinanceProvisionPanel(false);
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.provisionConfirmTxt}>Full adjustment...</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
+          </View>
+
+          <View style={styles.inlineAdjustmentWrap}>
+              <View style={styles.inlineAdjustmentHeader}>
+                <View>
+                  <Text style={styles.inlineAdjustmentTitle}>Add Adjustment</Text>
+                  <Text style={styles.inlineAdjustmentSubtitle}>modify trip amounts</Text>
+                </View>
+                <View style={styles.inlineAdjustmentClosePlaceholder} />
+              </View>
+
+              <Text style={styles.inlineLabel}>Adjustment Type</Text>
+              <View style={styles.inlineTypeRow}>
+                <TouchableOpacity
+                  style={[styles.inlineTypeBtn, draftType === "revenue" && styles.inlineTypeBtnActive]}
+                  onPress={() => {
+                    setDraftType("revenue");
+                    setDraftReason("");
+                    setDraftOtherReason("");
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.inlineTypeBtnText, draftType === "revenue" && styles.inlineTypeBtnTextActive]}>
+                    Revenue (Sale)
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.inlineTypeBtn, draftType === "cost" && styles.inlineTypeBtnActive]}
+                  onPress={() => {
+                    setDraftType("cost");
+                    setDraftReason("");
+                    setDraftOtherReason("");
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.inlineTypeBtnText, draftType === "cost" && styles.inlineTypeBtnTextActive]}>
+                    Cost (Supplier)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.inlineLabel}>Impact</Text>
+              <View style={styles.inlineTypeRow}>
+                <TouchableOpacity
+                  style={[styles.inlineTypeBtn, styles.inlineImpactPlus, draftImpact === "plus" && styles.inlineImpactPlusActive]}
+                  onPress={() => setDraftImpact("plus")}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.inlineTypeBtnText, draftImpact === "plus" && styles.inlineTypeBtnTextActive]}>
+                    Addition
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.inlineTypeBtn, styles.inlineImpactMinus, draftImpact === "minus" && styles.inlineImpactMinusActive]}
+                  onPress={() => setDraftImpact("minus")}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.inlineTypeBtnText, draftImpact === "minus" && styles.inlineTypeBtnTextActive]}>
+                    Deduction
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.inlineLabel}>Amount</Text>
+              <View style={styles.inlineAmountRow}>
+                <Text style={styles.inlineCurrency}>₹</Text>
+                <TextInput
+                  style={styles.inlineAmountInput}
+                  value={draftAmount}
+                  onChangeText={setDraftAmount}
+                  placeholder="0"
+                  placeholderTextColor={Theme.textMuted}
+                  keyboardType="numeric"
+                  maxLength={14}
+                />
+              </View>
+
+              <Text style={styles.inlineLabel}>Reason</Text>
+              <View style={styles.inlineReasonWrap}>
+                {reasonOptions.map((reason) => (
+                  <TouchableOpacity
+                    key={reason}
+                    style={[styles.inlineReasonChip, draftReason === reason && styles.inlineReasonChipActive]}
+                    onPress={() => setDraftReason(reason)}
+                    activeOpacity={0.82}
+                  >
+                    <Text
+                      style={[
+                        styles.inlineReasonChipText,
+                        draftReason === reason && styles.inlineReasonChipTextActive,
+                      ]}
+                    >
+                      {reason}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {draftReason === "Other" ? (
+                <TextInput
+                  style={styles.inlineOtherInput}
+                  value={draftOtherReason}
+                  onChangeText={setDraftOtherReason}
+                  placeholder="Describe reason..."
+                  placeholderTextColor={Theme.textMuted}
+                  maxLength={80}
+                />
+              ) : null}
+
+              <TouchableOpacity
+                style={[
+                  styles.inlineSaveBtn,
+                  !canSaveInlineAdjustment && styles.inlineSaveBtnDisabled,
+                ]}
+                onPress={() => void handleInlineSaveAdjustment()}
+                disabled={!canSaveInlineAdjustment || !onSaveAdjustment}
+                activeOpacity={0.88}
+              >
+                <Text style={styles.inlineSaveBtnText}>Save Adjustment</Text>
+              </TouchableOpacity>
+            </View>
         </View>
 
         {/* Actions & Commissions */}
         <View style={styles.financeFooter}>
-          {onAddAdjustment && (
-            <TouchableOpacity onPress={onAddAdjustment} style={styles.financeAddBtn} activeOpacity={0.8}>
+          {onSaveAdjustment && (
+            <TouchableOpacity
+              onPress={() => openInlineAdjustment()}
+              style={styles.financeAddBtn}
+              activeOpacity={0.8}
+            >
               <FontAwesome name="plus" size={12} color={Theme.primary} style={{ marginRight: 6 }} />
               <Text style={styles.financeAddBtnText}>Add Adjustment</Text>
             </TouchableOpacity>
@@ -3688,6 +4009,292 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: Theme.borderLight,
     marginVertical: 16,
+  },
+  provisionWrap: {
+    marginTop: 14,
+    gap: 10,
+  },
+  provisionToggleBtn: {
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 12,
+    backgroundColor: Theme.surfaceGray,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  provisionToggleText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+  },
+  provisionPanel: {
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 14,
+    backgroundColor: Theme.surface,
+    padding: 12,
+    gap: 10,
+  },
+  provisionDnRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  provisionDnBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  provisionCnBtn: {
+    borderColor: Theme.darkGreen,
+    backgroundColor: Theme.positiveMuted,
+  },
+  provisionDnBtnDebit: {
+    borderColor: Theme.teslaRed,
+    backgroundColor: Theme.negativeMuted,
+  },
+  provisionDnLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+  },
+  provisionChipsLbl: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+  },
+  provisionChipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  provisionChip: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  provisionChipTxt: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+  },
+  provisionFoot: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+    paddingTop: 10,
+  },
+  provisionHint: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+  },
+  provisionPulse: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.primary,
+    textTransform: "uppercase",
+  },
+  provisionConfirm: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.primary,
+    backgroundColor: Theme.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  provisionConfirmTxt: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textOnPrimary,
+    textTransform: "uppercase",
+  },
+  inlineAdjustmentWrap: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 14,
+    backgroundColor: Theme.screenBackground,
+    padding: 12,
+    gap: 10,
+  },
+  inlineAdjustmentHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  inlineAdjustmentTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+  },
+  inlineAdjustmentSubtitle: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  inlineAdjustmentClose: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.surfaceGray,
+  },
+  inlineAdjustmentClosePlaceholder: {
+    width: 30,
+    height: 30,
+  },
+  inlineLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+  },
+  inlineTypeRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  inlineTypeBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 10,
+    backgroundColor: Theme.surface,
+    paddingVertical: 11,
+    paddingHorizontal: 10,
+    alignItems: "center",
+  },
+  inlineTypeBtnActive: {
+    borderColor: Theme.primary,
+    backgroundColor: Theme.primary,
+  },
+  inlineTypeBtnText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+  },
+  inlineTypeBtnTextActive: {
+    color: Theme.textOnPrimary,
+  },
+  inlineImpactPlus: {
+    borderColor: Theme.borderLight,
+  },
+  inlineImpactPlusActive: {
+    borderColor: Theme.darkGreen,
+    backgroundColor: Theme.darkGreen,
+  },
+  inlineImpactMinus: {
+    borderColor: Theme.borderLight,
+  },
+  inlineImpactMinusActive: {
+    borderColor: Theme.teslaRed,
+    backgroundColor: Theme.teslaRed,
+  },
+  inlineAmountRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 12,
+    backgroundColor: Theme.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  inlineCurrency: {
+    fontSize: 26,
+    fontWeight: "300",
+    color: Theme.textPrimaryDark,
+    marginRight: 8,
+  },
+  inlineAmountInput: {
+    flex: 1,
+    fontSize: 28,
+    fontWeight: "300",
+    color: Theme.textPrimaryDark,
+    paddingVertical: 4,
+    ...Platform.select({
+      web: { outlineStyle: "none" } as any,
+    }),
+  },
+  inlineReasonWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  inlineReasonChip: {
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 10,
+    backgroundColor: Theme.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  inlineReasonChipActive: {
+    borderColor: Theme.textPrimaryDark,
+    backgroundColor: Theme.textPrimaryDark,
+  },
+  inlineReasonChipText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
+  },
+  inlineReasonChipTextActive: {
+    color: Theme.textOnPrimary,
+  },
+  inlineOtherInput: {
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 10,
+    backgroundColor: Theme.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: Theme.textPrimaryDark,
+    ...Platform.select({
+      web: { outlineStyle: "none" } as any,
+    }),
+  },
+  inlineSaveBtn: {
+    marginTop: 4,
+    borderRadius: 12,
+    backgroundColor: Theme.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+  },
+  inlineSaveBtnDisabled: {
+    opacity: 0.45,
+  },
+  inlineSaveBtnText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textOnPrimary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   financeFooter: {
     marginTop: 12,
