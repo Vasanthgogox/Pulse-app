@@ -2,49 +2,49 @@ import { LEVELS_CONFIG } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
-import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import {
-  DEFAULT_USER_2D_AVATAR_SEED,
-  getUser2DAvatarUriForSeed,
+    DEFAULT_USER_2D_AVATAR_SEED,
+    getUser2DAvatarUriForSeed,
 } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { averageScore, getRatingsForDrivers } from "@/features/ratings/services/ratings.service";
 import { EditProfileModal } from "@/features/auth";
+import { averageScore, getRatingsForDrivers } from "@/features/ratings/services/ratings.service";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { getCapabilitiesFromProfile } from "@/lib/capabilities";
-import { queryKeys } from "@/lib/queryKeys";
 import { useDriversQuery, useTripsQuery } from "@/lib/queries";
+import { queryKeys } from "@/lib/queryKeys";
 import { ROUTES } from "@/lib/routes";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Constants from "expo-constants";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
-  BarChart3,
-  ChevronLeft,
-  Crown,
-  MapPin,
-  MousePointer2,
-  Star,
-  Truck,
-  Trophy,
-  Users,
+    BarChart3,
+    ChevronLeft,
+    Crown,
+    MapPin,
+    MousePointer2,
+    Star,
+    Trophy,
+    Truck,
+    Users,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Linking,
-  Modal,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Linking,
+    Modal,
+    Pressable,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 

@@ -7,12 +7,13 @@
  */
 import { resolveTripLedgerTripType } from "@/features/finance/utils/tripLedgerPayoutMode.util";
 import { Alert } from "react-native";
+import type { Router } from "expo-router";
 import {
   getTripDisplayNumber,
   type TripRow,
 } from "@/features/trips/services/trips.service";
 
-type ExpoRouterLike = { push: (href: string) => void };
+type ExpoRouterLike = Pick<Router, "push">;
 
 export interface TripLedgerChooserLabels {
   addTransaction: string;

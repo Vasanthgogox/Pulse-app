@@ -16,6 +16,11 @@ export type LeafletMapProps = {
   markers?: LeafletMarker[];
   polyline?: LeafletLatLng[];
   polylineColor?: string;
+  /** Optional hard viewport constraint (used for India-focused tracking). */
+  maxBounds?: {
+    southWest: LeafletLatLng;
+    northEast: LeafletLatLng;
+  };
   /** Prefer compact tiles and lower motion for low-end devices. */
   lowPower?: boolean;
 };

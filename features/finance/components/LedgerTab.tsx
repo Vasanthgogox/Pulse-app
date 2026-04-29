@@ -637,13 +637,11 @@ export function LedgerTab({
     <LedgerTransactionListView
       transactions={transactionListRows}
       onRowPress={(id) => {
-        const row = transactionListRows.find((r) => r.id === id);
-        if (!row) return;
-        openLedgerDetail(row);
+        setExpandedLedgerRowId((prev) => (prev === id ? null : id));
       }}
-      expandedRowId={null}
-      expandedRowData={null}
-      highlightId={null}
+      expandedRowId={expandedLedgerRowId}
+      expandedRowData={expandedRowData}
+      highlightId={expandedLedgerRowId}
       showTitle={false}
       showHistoryHeader={true}
       showGridFooter={true}
@@ -898,7 +896,7 @@ export function LedgerTab({
         );
       })
       )}
-      {selectedDetailData ? (
+      {selectedDetailData && viewMode !== "transaction" ? (
         <View style={styles.inlineReceiptWrap}>
           <FinanceEntryDetailScreen
             data={selectedDetailData}
@@ -978,9 +976,7 @@ const styles = StyleSheet.create({
     color: Theme.textOnPrimary ?? "#fff",
   },
   inlineReceiptWrap: {
-    marginTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: Theme.surfaceBorder,
+    marginTop: 0,
     backgroundColor: Theme.screenBackground,
   },
 });

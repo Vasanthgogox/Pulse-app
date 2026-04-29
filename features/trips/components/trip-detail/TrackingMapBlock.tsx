@@ -1,12 +1,11 @@
 /**
- * Live tracking map rendered with react-native-maps using recorded trip points
- * and the latest live driver location.
+ * Live tracking map rendered via shared LeafletMap wrapper:
+ * MapLibre on web/native (with Expo Go fallback).
  */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Platform,
   StyleSheet,
   Text,
   View,
@@ -15,22 +14,17 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Theme from "@/constants/Theme";
 import type { DriverLocationRow } from "@/services/driverLocationService";
 import { getOptimalRoute, type RouteResult } from "@/services/routingService";
-import { LeafletMap } from "@/components/driver/LeafletMap";
-import MapView, { Callout, Marker, Polyline } from "@/lib/reactNativeMapsCompat";
+import { LeafletMap, type LeafletMapRef } from "@/components/driver/LeafletMap";
 
 type MapCoordinate = {
   latitude: number;
   longitude: number;
 };
 
-type MarkerKind = "origin" | "past" | "current" | "destination";
-
 type TrackingMarker = {
   id: string;
   coordinate: MapCoordinate;
-  kind: MarkerKind;
   title: string;
-  subtitle?: string;
 };
 
 const DEFAULT_MAP_REGION = {
@@ -39,6 +33,11 @@ const DEFAULT_MAP_REGION = {
   latitudeDelta: 8,
   longitudeDelta: 8,
 };
+
+const INDIA_MAP_BOUNDS = {
+  southWest: { latitude: 6.5, longitude: 68.0 },
+  northEast: { latitude: 37.6, longitude: 97.5 },
+} as const;
 
 const CARD_BG = Theme.cardWhite;
 
@@ -72,6 +71,26 @@ function selectHistoryWaypoint(points: MapCoordinate[], ratio: number) {
   const maxIndex = points.length - 1;
   const index = Math.min(Math.max(Math.round(maxIndex * ratio), 1), maxIndex - 1);
   return points[index] ?? null;
+}
+
+function isInsideIndiaBounds(point: MapCoordinate) {
+  return (
+    point.latitude >= INDIA_MAP_BOUNDS.southWest.latitude &&
+    point.latitude <= INDIA_MAP_BOUNDS.northEast.latitude &&
+    point.longitude >= INDIA_MAP_BOUNDS.southWest.longitude &&
+    point.longitude <= INDIA_MAP_BOUNDS.northEast.longitude
+  );
+}
+
+/**
+ * Fix common lat/lng swap from upstream payloads:
+ * if point is outside India but swapped point is inside India, use swapped.
+ */
+function normalizeCoordinateForIndia(point: MapCoordinate): MapCoordinate {
+  if (isInsideIndiaBounds(point)) return point;
+  const swapped = { latitude: point.longitude, longitude: point.latitude };
+  if (isInsideIndiaBounds(swapped)) return swapped;
+  return point;
 }
 
 const styles = StyleSheet.create({
@@ -136,55 +155,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Theme.textMuted,
     textAlign: "center",
-  },
-  mapMarkerOuter: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: Theme.textOnPrimary,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    elevation: 5,
-  },
-  mapMarkerOrigin: {
-    backgroundColor: Theme.negative,
-  },
-  mapMarkerPast: {
-    backgroundColor: Theme.primaryLight,
-  },
-  mapMarkerCurrent: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: Theme.primary,
-  },
-  mapMarkerDestination: {
-    backgroundColor: Theme.positive,
-  },
-  mapCallout: {
-    minWidth: 140,
-    maxWidth: 220,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 14,
-    backgroundColor: Theme.cardWhite,
-    borderWidth: 1,
-    borderColor: Theme.border,
-  },
-  mapCalloutTitle: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-  },
-  mapCalloutSubtitle: {
-    marginTop: 4,
-    fontSize: 11,
-    color: Theme.textMuted,
   },
   // Vehicle card (inline variant — used below map in TripDetailScreen)
   vehicleCardInline: {
@@ -292,20 +262,6 @@ const styles = StyleSheet.create({
 /** [origin, pastLocation1, pastLocation2, currentLive, destination] */
 export type TrackingMapLocationLabels = [string, string, string, string, string];
 
-/** Format "Updated X min ago" from ISO recorded_at. */
-function formatLocationUpdatedAt(recordedAt: string): string {
-  const then = new Date(recordedAt).getTime();
-  const now = Date.now();
-  const diffMs = now - then;
-  const diffM = Math.floor(diffMs / 60000);
-  if (diffM < 1) return "Updated just now";
-  if (diffM === 1) return "Updated 1 min ago";
-  if (diffM < 60) return `Updated ${diffM} min ago`;
-  const diffH = Math.floor(diffM / 60);
-  if (diffH === 1) return "Updated 1 hr ago";
-  return `Updated ${diffH} hr ago`;
-}
-
 export interface TrackingMapBlockProps {
   mapHeight: number;
   vehicleLabel: string | null;
@@ -341,8 +297,8 @@ export function TrackingMapBlock({
   tripLocationPoints = [],
   locationAddress,
 }: TrackingMapBlockProps) {
-  const [origin, past1, past2, current, destination] = locationLabels;
-  const mapRef = useRef<MapView | null>(null);
+  const [origin, past1, past2, , destination] = locationLabels;
+  const mapRef = useRef<LeafletMapRef | null>(null);
   const [fallbackRoute, setFallbackRoute] = useState<RouteResult | null>(null);
 
   const historyCoordinates = useMemo(
@@ -350,6 +306,7 @@ export function TrackingMapBlock({
       dedupeCoordinates(
         tripLocationPoints
           .map((point) => ({ latitude: point.latitude, longitude: point.longitude }))
+          .map(normalizeCoordinateForIndia)
           .filter(isValidCoordinate)
       ),
     [tripLocationPoints]
@@ -361,16 +318,23 @@ export function TrackingMapBlock({
       latitude: latestLocation.latitude,
       longitude: latestLocation.longitude,
     };
-    return isValidCoordinate(point) ? point : null;
+    if (!isValidCoordinate(point)) return null;
+    return normalizeCoordinateForIndia(point);
   }, [latestLocation]);
 
   const normalizedOriginCoordinate = useMemo(
-    () => (isValidCoordinate(originCoordinate) ? originCoordinate : null),
+    () =>
+      isValidCoordinate(originCoordinate)
+        ? normalizeCoordinateForIndia(originCoordinate)
+        : null,
     [originCoordinate]
   );
 
   const normalizedDestinationCoordinate = useMemo(
-    () => (isValidCoordinate(destinationCoordinate) ? destinationCoordinate : null),
+    () =>
+      isValidCoordinate(destinationCoordinate)
+        ? normalizeCoordinateForIndia(destinationCoordinate)
+        : null,
     [destinationCoordinate]
   );
 
@@ -410,7 +374,12 @@ export function TrackingMapBlock({
   const displayedRouteCoordinates = useMemo(() => {
     if (routeCoordinates.length > 1) return routeCoordinates;
     if (fallbackRoute?.coordinates?.length) {
-      return dedupeCoordinates(fallbackRoute.coordinates.filter(isValidCoordinate));
+      return dedupeCoordinates(
+        fallbackRoute.coordinates
+          .filter(isValidCoordinate)
+          .map(normalizeCoordinateForIndia)
+          .filter(isInsideIndiaBounds),
+      );
     }
     if (normalizedOriginCoordinate && normalizedDestinationCoordinate) {
       return dedupeCoordinates([normalizedOriginCoordinate, normalizedDestinationCoordinate]);
@@ -452,9 +421,7 @@ export function TrackingMapBlock({
         ? {
             id: "origin",
             coordinate: originPoint,
-            kind: "origin",
             title: origin,
-            subtitle: "Trip origin",
           }
         : null
     );
@@ -463,9 +430,7 @@ export function TrackingMapBlock({
         ? {
             id: "past-1",
             coordinate: pastOnePoint,
-            kind: "past",
             title: past1,
-            subtitle: "Recorded route point",
           }
         : null
     );
@@ -474,9 +439,7 @@ export function TrackingMapBlock({
         ? {
             id: "past-2",
             coordinate: pastTwoPoint,
-            kind: "past",
             title: past2,
-            subtitle: "Recorded route point",
           }
         : null
     );
@@ -485,9 +448,7 @@ export function TrackingMapBlock({
         ? {
             id: "destination",
             coordinate: destinationPoint,
-            kind: "destination",
             title: destination,
-            subtitle: "Latest recorded trip point",
           }
         : null
     );
@@ -507,28 +468,13 @@ export function TrackingMapBlock({
   ]);
 
   useEffect(() => {
-    if (!mapRef.current) return;
-    if (displayedRouteCoordinates.length > 1) {
-      mapRef.current?.fitToCoordinates(displayedRouteCoordinates, {
-        edgePadding: { top: 72, right: 48, bottom: 48, left: 48 },
-        animated: false,
-      });
-      return;
-    }
     const focusPoint =
       displayedRouteCoordinates[0] ??
       latestCoordinate ??
       normalizedOriginCoordinate ??
       normalizedDestinationCoordinate;
     if (!focusPoint) return;
-    mapRef.current?.animateToRegion(
-      {
-        ...focusPoint,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02,
-      },
-      0
-    );
+    mapRef.current?.focusCurrentLocation(focusPoint, displayedRouteCoordinates.length > 1 ? 10 : 13);
   }, [
     displayedRouteCoordinates,
     latestCoordinate,
@@ -546,127 +492,36 @@ export function TrackingMapBlock({
           ? "Showing recorded route"
           : "Waiting for driver location";
 
-  if (Platform.OS === "web") {
-    const leafletMarkers = markers.map((m) => ({
-      id: m.id,
-      coordinate: m.coordinate,
-      label: m.title,
-      color:
-        m.kind === "origin"
-          ? Theme.negative
-          : m.kind === "destination"
-            ? Theme.positive
-            : m.kind === "current"
-              ? Theme.primary
-              : Theme.primaryLight,
-    }));
+  const leafletMarkers = markers.map((m) => ({
+    id: m.id,
+    coordinate: normalizeCoordinateForIndia(m.coordinate),
+    label: m.title,
+    color:
+      m.id === "origin"
+        ? Theme.negative
+        : m.id === "destination"
+          ? Theme.positive
+          : Theme.primaryLight,
+  }));
 
-    const mapCenter =
-      latestCoordinate ??
-      normalizedOriginCoordinate ??
-      normalizedDestinationCoordinate ??
-      DEFAULT_MAP_REGION;
-
-    return (
-      <View style={[styles.trackingPageMapArea, { height: mapHeight }]}>
-        <LeafletMap
-          center={mapCenter}
-          zoom={13}
-          markers={leafletMarkers}
-          polyline={displayedRouteCoordinates}
-          polylineColor={Theme.primary}
-          style={styles.map}
-        />
-        <View style={styles.trackingRouteHalo} pointerEvents="none">
-          <Text style={styles.trackingRouteHaloLabel}>{statusLabel}</Text>
-          <Text style={styles.trackingRouteHaloText} numberOfLines={2}>
-            {locationAddress?.trim() ||
-              vehicleLabel?.trim() ||
-              "Trip route and live driver movement appear here."}
-          </Text>
-        </View>
-        {driverLocationLoading ? (
-          <View style={styles.mapLoadingOverlay} pointerEvents="none">
-            <ActivityIndicator size="small" color={Theme.primary} />
-          </View>
-        ) : null}
-      </View>
-    );
-  }
+  const mapCenter =
+    latestCoordinate ??
+    normalizedOriginCoordinate ??
+    normalizedDestinationCoordinate ??
+    DEFAULT_MAP_REGION;
 
   return (
     <View style={[styles.trackingPageMapArea, { height: mapHeight }]}>
-      <MapView
-        ref={(instance) => {
-          mapRef.current = instance;
-        }}
+      <LeafletMap
+        ref={mapRef}
         style={styles.map}
-        initialRegion={DEFAULT_MAP_REGION}
-        mapType={Platform.OS === "ios" ? ("mutedStandard" as const) : "standard"}
-        showsCompass
-        showsTraffic={false}
-        rotateEnabled
-        pitchEnabled
-        toolbarEnabled={false}
-        moveOnMarkerPress={false}
-      >
-        {displayedRouteCoordinates.length > 1 ? (
-          <>
-            <Polyline
-              coordinates={displayedRouteCoordinates}
-              strokeColor={`${Theme.primary}33`}
-              strokeWidth={8}
-              lineCap="round"
-              lineJoin="round"
-            />
-            <Polyline
-              coordinates={displayedRouteCoordinates}
-              strokeColor={Theme.primary}
-              strokeWidth={4}
-              lineCap="round"
-              lineJoin="round"
-            />
-          </>
-        ) : null}
-
-        {markers.map((marker) => {
-          const markerStyle =
-            marker.kind === "origin"
-              ? styles.mapMarkerOrigin
-              : marker.kind === "destination"
-                ? styles.mapMarkerDestination
-                : marker.kind === "current"
-                  ? styles.mapMarkerCurrent
-                  : styles.mapMarkerPast;
-
-          const iconName =
-            marker.kind === "origin"
-              ? "map-marker"
-              : marker.kind === "destination"
-                ? "flag"
-                : marker.kind === "current"
-                  ? "location-arrow"
-                  : "circle";
-
-          const iconSize = marker.kind === "current" ? 15 : 12;
-
-          return (
-            <Marker key={marker.id} coordinate={marker.coordinate} anchor={{ x: 0.5, y: 0.5 }}>
-              <View style={[styles.mapMarkerOuter, markerStyle]}>
-                <FontAwesome name={iconName} size={iconSize} color={Theme.textOnPrimary} />
-              </View>
-              <Callout tooltip>
-                <View style={styles.mapCallout}>
-                  <Text style={styles.mapCalloutTitle}>{marker.title}</Text>
-                  {marker.subtitle ? (
-                    <Text style={styles.mapCalloutSubtitle}>{marker.subtitle}</Text>
-                  ) : null}
-                </View>
-              </Callout>
-            </Marker>
-          );
-        })}
-      </MapView>
+        center={mapCenter}
+        zoom={11}
+        maxBounds={INDIA_MAP_BOUNDS}
+        markers={leafletMarkers}
+        polyline={displayedRouteCoordinates}
+        polylineColor={Theme.primary}
+      />
 
       <View style={styles.trackingRouteHalo} pointerEvents="none">
         <Text style={styles.trackingRouteHaloLabel}>{statusLabel}</Text>

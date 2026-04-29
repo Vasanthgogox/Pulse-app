@@ -264,7 +264,7 @@ export default function TripDetailScreen({
   const [displayVehicleFromInput, setDisplayVehicleFromInput] = useState("");
   const [partnerName, setPartnerName] = useState<string | null>(null);
   const [counterpartyIntegrated, setCounterpartyIntegrated] = useState<boolean | null>(null);
-  const [partnerOrgId, setPartnerOrgId] = useState<string | null>(null);
+  const [, setPartnerOrgId] = useState<string | null>(null);
   /**
    * Per-party resolution for multi-party Trip Ledger (client + supplier).
    * Unlike the legacy single-partner state above (which prefers supplier), these
@@ -501,9 +501,12 @@ export default function TripDetailScreen({
   }, [trip?.pickup_area, trip?.drop_location, pastLocationAddresses, driverLocationAddress]);
 
   const trackingMapOriginCoordinate = useMemo(() => {
-    const rawLat = (trip as any)?.pickup_lat;
-    const rawLon = (trip as any)?.pickup_lon;
-    if (rawLat == null || rawLon == null || rawLat === "" || rawLon === "") return null;
+    const tripGeo = trip as (TripRow & { pickup_lat?: unknown; pickup_lon?: unknown }) | null;
+    const rawLat = tripGeo?.pickup_lat;
+    const rawLon = tripGeo?.pickup_lon;
+    if (rawLat == null || rawLon == null) {
+      return null;
+    }
     const latitude = Number(rawLat);
     const longitude = Number(rawLon);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
@@ -511,9 +514,12 @@ export default function TripDetailScreen({
   }, [trip]);
 
   const trackingMapDestinationCoordinate = useMemo(() => {
-    const rawLat = (trip as any)?.drop_lat;
-    const rawLon = (trip as any)?.drop_lon;
-    if (rawLat == null || rawLon == null || rawLat === "" || rawLon === "") return null;
+    const tripGeo = trip as (TripRow & { drop_lat?: unknown; drop_lon?: unknown }) | null;
+    const rawLat = tripGeo?.drop_lat;
+    const rawLon = tripGeo?.drop_lon;
+    if (rawLat == null || rawLon == null) {
+      return null;
+    }
     const latitude = Number(rawLat);
     const longitude = Number(rawLon);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
@@ -742,12 +748,6 @@ export default function TripDetailScreen({
       cancelled = true;
     };
   }, [currentOrganization?.id, trip?.id, trip?.supplier_id, trip?.client_id, counterpartyIntegrated]);
-
-  /** Current contact id (supplier or client) used when Accept-partner writes to our ledger for this trip. */
-  const tripContactId = useMemo<string | null>(() => {
-    if (!trip) return null;
-    return trip.supplier_id ?? trip.client_id ?? null;
-  }, [trip]);
 
   /** Fetch any open dispute between us and partner for this specific trip.
    * Resolves disputes for BOTH client and supplier parties when both are
@@ -1531,8 +1531,6 @@ export default function TripDetailScreen({
     trip?.driver_id != null &&
     trip?.vehicle_id != null;
   const showAssignByPhone = isAggregate && !isRosterFromLoadHub;
-  /** For UI pill/label: show "Asset" when roster-from-LoadHub (asset-based assignment) or when no supplier. */
-  const displayAsAsset = !isAggregate || isRosterFromLoadHub;
   /** Client-side indent trip is read-only for assignment/reassignment controls. */
   const isClientIndentView = useMemo(() => {
     if (!trip?.indent_id) return false;
@@ -1558,13 +1556,6 @@ export default function TripDetailScreen({
   );
   const canAssign = canAssignTrip(capabilities);
   const currentUserId = user?.uid ?? null;
-
-  /** Load creator (shipper who created the load and awarded the quote). Previously this view was read-only for assignments/OTP, but trip-based flow now allows full control, so this flag is informational only. */
-  const isLoadCreatorViewOnly =
-    !!currentOrganization?.id &&
-    !!trip?.organization_id &&
-    isAggregate &&
-    currentOrganization.id === trip.organization_id;
 
   /** Assignment source (Private Book / Shared / Unassigned) from latest audit row. O(1). */
   const assignmentSource = useMemo((): AssignmentSource => {
@@ -2693,6 +2684,8 @@ export default function TripDetailScreen({
     [trip?.id, loadAdjustments, queryClient],
   );
 
+  // Kept for staged tracking UI extraction work; not mounted yet in this screen tree.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const trackingTabContent = !trip ? null : (
     <>
       {isDriverOffline ? (
@@ -2876,6 +2869,264 @@ export default function TripDetailScreen({
             <Text style={styles.retryBtnText}>{t("tryAgain")}</Text>
           </TouchableOpacity>
         </View>
+      </View>
+    );
+  }
+
+  if (Platform.OS === 'web') {
+    const { label: webStepLabel } = trackingStepAndLabel(trip.status, trip.started_at);
+    const webStatusColor =
+      ['in_transit', 'in_progress', 'transit'].some(s => (trip.status ?? '').toLowerCase().includes(s))
+        ? '#22c55e'
+        : ['complet', 'deliver', 'done'].some(s => (trip.status ?? '').toLowerCase().includes(s))
+          ? '#60a5fa'
+          : '#f59e0b';
+    const distVal = trip.distance != null ? `${trip.distance} km` : '—';
+    const pickupDateStr = trip.pickup_date
+      ? new Date(trip.pickup_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+      : '—';
+
+    return (
+      <View style={[ws.page, { paddingTop: insets.top }]}>
+        <View style={ws.topBar}>
+          <TeslaHeader
+            title={t('trip')}
+            showBack
+            onBack={onBack}
+            onLoadClick={() => { onBack(); router.push('/load-board'); }}
+            onNetworkClick={() => { onBack(); router.push('/(tabs)/network'); }}
+            onNotificationClick={() => { onBack(); router.push('/milestone'); }}
+            onProfileClick={() => { onBack(); router.push('/(tabs)/profile'); }}
+          />
+        </View>
+
+        <ScrollView
+          style={ws.scroll}
+          contentContainerStyle={ws.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#60a5fa" />}
+        >
+          {/* ── Hero Card ── */}
+          <View style={ws.heroCard}>
+            <View style={ws.heroLeft}>
+              <View style={ws.heroTitleRow}>
+                <Text style={ws.heroTripId}>{getTripDisplayNumber(trip)}</Text>
+                <View style={[ws.statusBadge, { borderColor: webStatusColor }]}>
+                  <View style={[ws.statusDot, { backgroundColor: webStatusColor }]} />
+                  <Text style={[ws.statusText, { color: webStatusColor }]}>
+                    {webStepLabel.toUpperCase()}
+                  </Text>
+                </View>
+              </View>
+              <View style={ws.routeRow}>
+                <View style={ws.routeStop}>
+                  <Text style={ws.routeLabel}>ORIGIN</Text>
+                  <Text style={ws.routeCity} numberOfLines={1}>{trip.pickup_area || '—'}</Text>
+                  <Text style={ws.routeDate}>{pickupDateStr}</Text>
+                </View>
+                <View style={ws.routeDivider}>
+                  <View style={ws.routeLine} />
+                  <FontAwesome name="truck" size={16} color="rgba(15,23,42,0.35)" />
+                  <View style={ws.routeLine} />
+                </View>
+                <View style={ws.routeStop}>
+                  <Text style={ws.routeLabel}>DESTINATION</Text>
+                  <Text style={ws.routeCity} numberOfLines={1}>{trip.drop_location || '—'}</Text>
+                  {trip.estimated_duration ? (
+                    <Text style={ws.routeDate}>EST: {trip.estimated_duration}</Text>
+                  ) : null}
+                </View>
+              </View>
+            </View>
+            <View style={ws.heroStats}>
+              <View style={ws.statBox}>
+                <Text style={ws.statLabel}>DISTANCE</Text>
+                <Text style={ws.statValue}>{distVal}</Text>
+              </View>
+              <View style={ws.statDivider} />
+              <View style={ws.statBox}>
+                <Text style={ws.statLabel}>PROGRESS</Text>
+                <Text style={[ws.statValue, { fontSize: 16 }]}>{webStepLabel}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* ── Middle Row: Map + Audit Trail ── */}
+          <View style={ws.row}>
+            <View style={[ws.card, ws.mapCol]}>
+              <View style={ws.cardHeader}>
+                <FontAwesome name="map" size={14} color="#60a5fa" style={{ marginRight: 8 }} />
+                <Text style={ws.cardTitle}>Live Tracking</Text>
+                {!isDriverOffline && driverLocation && (
+                  <View style={ws.liveBadge}>
+                    <Text style={ws.liveBadgeText}>LIVE</Text>
+                  </View>
+                )}
+              </View>
+              {isDriverOffline ? (
+                <View style={ws.offlineWrap}>
+                  <FontAwesome name="exclamation-circle" size={28} color="#f59e0b" />
+                  <Text style={ws.offlineText}>Driver offline or not linked</Text>
+                  <Text style={ws.offlineSub}>Live tracking will appear once driver connects</Text>
+                </View>
+              ) : (
+                <TrackingMapBlock
+                  mapHeight={320}
+                  vehicleLabel={vehicleLabel}
+                  locationLabels={trackingMapLocationLabels}
+                  originCoordinate={trackingMapOriginCoordinate}
+                  destinationCoordinate={trackingMapDestinationCoordinate}
+                  latestLocation={driverLocation}
+                  driverLocationLoading={driverLocationLoading}
+                  tripLocationPoints={tripLocationPoints}
+                  locationAddress={driverLocationAddress}
+                />
+              )}
+            </View>
+
+            <View style={[ws.card, ws.auditCol]}>
+              <View style={ws.cardHeader}>
+                <FontAwesome name="history" size={14} color="#60a5fa" style={{ marginRight: 8 }} />
+                <Text style={ws.cardTitle}>Audit Trail</Text>
+              </View>
+              <ScrollView style={ws.auditScroll} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+                {driverActivityTimelineRows.length === 0 ? (
+                  <Text style={ws.emptyText}>No activity yet</Text>
+                ) : driverActivityTimelineRows.map((item, idx) => {
+                  const isLast = idx === driverActivityTimelineRows.length - 1;
+                  if (item.kind === 'status') {
+                    const iconName = item.status_context === 'completed'
+                      ? 'check-circle' : item.status_context === 'in_transit'
+                      ? 'play-circle' : 'circle-o';
+                    const iconColor = item.status_context === 'completed' ? '#22c55e' : '#60a5fa';
+                    return (
+                      <View key={item.id} style={[ws.auditItem, isLast && ws.auditItemLast]}>
+                        <View style={ws.auditIconWrap}>
+                          <FontAwesome name={iconName} size={16} color={iconColor} />
+                        </View>
+                        <View style={ws.auditBody}>
+                          <Text style={ws.auditTitle}>{item.status_label}</Text>
+                          <Text style={ws.auditDetail}>{item.detail_line}</Text>
+                          <Text style={ws.auditDate}>{formatAssignmentDate(item.changed_at)}</Text>
+                        </View>
+                      </View>
+                    );
+                  }
+                  const row = item.row;
+                  const dName = row.driver_id_new ? (assignmentDriverNames[row.driver_id_new] ?? null) : null;
+                  const vLabel = row.vehicle_id_new ? (assignmentVehicleLabels[row.vehicle_id_new] ?? null) : null;
+                  return (
+                    <View key={row.id} style={[ws.auditItem, isLast && ws.auditItemLast]}>
+                      <View style={ws.auditIconWrap}>
+                        <FontAwesome
+                          name={row.event_type === 'reassignment' ? 'refresh' : 'user-plus'}
+                          size={14}
+                          color="rgba(15,23,42,0.45)"
+                        />
+                      </View>
+                      <View style={ws.auditBody}>
+                        <Text style={ws.auditTitle}>
+                          {row.event_type === 'reassignment' ? 'Reassigned' : 'Assigned'}
+                        </Text>
+                        {(dName || vLabel) ? (
+                          <Text style={ws.auditDetail}>
+                            {[dName, vLabel].filter(Boolean).join(' · ')}
+                          </Text>
+                        ) : null}
+                        <Text style={ws.auditDate}>{formatAssignmentDate(row.changed_at)}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          </View>
+
+          {/* ── Bottom Row: Driver/Vehicle + Documents ── */}
+          <View style={ws.row}>
+            <View style={ws.bottomLeft}>
+              <View style={ws.card}>
+                <Text style={ws.cardMicroLabel}>PRIMARY DRIVER</Text>
+                <View style={ws.driverRow}>
+                  {driverAvatarUri ? (
+                    <Image source={{ uri: driverAvatarUri }} style={ws.driverAvatar} />
+                  ) : (
+                    <View style={ws.driverAvatarFallback}>
+                      <FontAwesome name="user" size={20} color="rgba(15,23,42,0.5)" />
+                    </View>
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={ws.driverName}>{driverName ?? '—'}</Text>
+                    {driverRatingAvg != null && (
+                      <Text style={ws.driverRating}>★ {driverRatingAvg.toFixed(1)}</Text>
+                    )}
+                  </View>
+                  {trip.started_at ? (
+                    <View style={ws.statBoxSm}>
+                      <Text style={ws.statLabelSm}>STARTED</Text>
+                      <Text style={ws.statValueSm}>
+                        {new Date(trip.started_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+
+              <View style={ws.card}>
+                <Text style={ws.cardMicroLabel}>ASSIGNED VEHICLE</Text>
+                <View style={ws.vehicleRow}>
+                  <View style={ws.vehicleIconWrap}>
+                    <FontAwesome name="truck" size={20} color="rgba(15,23,42,0.5)" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={ws.vehicleName}>{vehicleLabel ?? '—'}</Text>
+                    {trip.load_type ? (
+                      <Text style={ws.vehicleSub}>{trip.load_type}</Text>
+                    ) : null}
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            <View style={[ws.card, ws.docsCol]}>
+              <View style={ws.cardHeader}>
+                <FontAwesome name="file-text-o" size={14} color="#60a5fa" style={{ marginRight: 8 }} />
+                <Text style={ws.cardTitle}>Required Documents</Text>
+                <View style={ws.docsBadge}>
+                  <Text style={ws.docsBadgeText}>
+                    {computedTripDocs.filter(d => d.status === 'Uploaded').length}/{computedTripDocs.length} VERIFIED
+                  </Text>
+                </View>
+              </View>
+              {computedTripDocs.map((doc) => (
+                <View key={doc.id} style={ws.docRow}>
+                  <View style={ws.docIconWrap}>
+                    <FontAwesome name="file-o" size={14} color="rgba(15,23,42,0.4)" />
+                  </View>
+                  <Text style={ws.docLabel} numberOfLines={1}>{doc.label}</Text>
+                  <View style={[ws.docStatusPill, doc.status === 'Uploaded' ? ws.docStatusVerified : ws.docStatusPending]}>
+                    <Text style={[ws.docStatusText, doc.status === 'Uploaded' ? ws.docStatusTextVerified : ws.docStatusTextPending]}>
+                      {doc.status === 'Uploaded' ? 'VERIFIED' : 'PENDING'}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        </ScrollView>
+
+        <TripAdjustmentModal
+          visible={showAdjustmentModal}
+          onClose={() => setShowAdjustmentModal(false)}
+          onSave={handleSaveAdjustment}
+        />
+        <ThemedAlertModal
+          visible={showDriverRejectedModal}
+          title={t('driverRejected')}
+          message={t('driverRejectedNotify')}
+          onOk={() => setShowDriverRejectedModal(false)}
+          variant="warning"
+        />
       </View>
     );
   }
@@ -3895,6 +4146,175 @@ function formatAssignmentDate(iso: string | null | undefined): string {
     return (iso as string).slice(0, 16).replace("T", " ") || "—";
   }
 }
+
+const WS_BG = '#F8FAFC';
+const WS_CARD = '#FFFFFF';
+const WS_BORDER = 'rgba(15,23,42,0.08)';
+const WS_TEXT = '#0F172A';
+const WS_MUTED = 'rgba(15,23,42,0.55)';
+
+const ws = StyleSheet.create({
+  page: { flex: 1, backgroundColor: WS_BG },
+  topBar: { backgroundColor: WS_CARD, zIndex: 10 },
+  scroll: { flex: 1 },
+  content: { padding: 20, paddingBottom: 40 },
+  heroCard: {
+    flexDirection: 'row',
+    backgroundColor: WS_CARD,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: WS_BORDER,
+    padding: 24,
+    marginBottom: 16,
+    flexWrap: 'wrap',
+    gap: 20,
+  },
+  heroLeft: { flex: 1, minWidth: 260 },
+  heroTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap' },
+  heroTripId: { fontSize: 26, fontWeight: '800', color: WS_TEXT, letterSpacing: -0.5 },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  statusDot: { width: 7, height: 7, borderRadius: 4 },
+  statusText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  routeRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12 },
+  routeStop: { flex: 1, minWidth: 100 },
+  routeLabel: { fontSize: 9, fontWeight: '700', color: WS_MUTED, letterSpacing: 1.2, marginBottom: 4 },
+  routeCity: { fontSize: 17, fontWeight: '700', color: WS_TEXT },
+  routeDate: { fontSize: 12, color: WS_MUTED, marginTop: 4 },
+  routeDivider: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  routeLine: { height: 1, width: 32, backgroundColor: 'rgba(15,23,42,0.15)' },
+  heroStats: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(15,23,42,0.03)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: WS_BORDER,
+    padding: 20,
+    alignItems: 'center',
+    alignSelf: 'center',
+    minWidth: 200,
+  },
+  statBox: { flex: 1, alignItems: 'center' },
+  statLabel: { fontSize: 9, fontWeight: '700', color: WS_MUTED, letterSpacing: 1, marginBottom: 6 },
+  statValue: { fontSize: 22, fontWeight: '800', color: WS_TEXT },
+  statDivider: { width: 1, height: 36, backgroundColor: 'rgba(15,23,42,0.09)', marginHorizontal: 8 },
+  statBoxSm: { alignItems: 'flex-end' },
+  statLabelSm: { fontSize: 9, fontWeight: '700', color: WS_MUTED, letterSpacing: 1, marginBottom: 4 },
+  statValueSm: { fontSize: 14, fontWeight: '700', color: WS_TEXT },
+  row: { flexDirection: 'row', gap: 16, marginBottom: 16, flexWrap: 'wrap' },
+  card: {
+    backgroundColor: WS_CARD,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: WS_BORDER,
+    padding: 20,
+  },
+  mapCol: { flex: 3, minWidth: 300 },
+  auditCol: { flex: 2, minWidth: 260 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  cardTitle: { fontSize: 14, fontWeight: '700', color: WS_TEXT, flex: 1 },
+  liveBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: 'rgba(34,197,94,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(34,197,94,0.3)',
+  },
+  liveBadgeText: { fontSize: 9, fontWeight: '800', color: '#22c55e', letterSpacing: 0.5 },
+  offlineWrap: { alignItems: 'center', paddingVertical: 56, gap: 10 },
+  offlineText: { fontSize: 14, fontWeight: '700', color: WS_TEXT, marginTop: 4 },
+  offlineSub: { fontSize: 12, color: WS_MUTED, textAlign: 'center' },
+  auditScroll: { maxHeight: 340 },
+  auditItem: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingBottom: 16,
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(15,23,42,0.06)',
+  },
+  auditItemLast: { borderBottomWidth: 0, marginBottom: 0, paddingBottom: 0 },
+  auditIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(15,23,42,0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  auditBody: { flex: 1 },
+  auditTitle: { fontSize: 13, fontWeight: '700', color: WS_TEXT, marginBottom: 2 },
+  auditDetail: { fontSize: 12, color: WS_MUTED, marginBottom: 4 },
+  auditDate: { fontSize: 10, color: 'rgba(15,23,42,0.38)', letterSpacing: 0.3 },
+  emptyText: { fontSize: 13, color: WS_MUTED, textAlign: 'center', paddingVertical: 32 },
+  bottomLeft: { flex: 2, minWidth: 220, gap: 12 },
+  docsCol: { flex: 3, minWidth: 280 },
+  cardMicroLabel: { fontSize: 9, fontWeight: '700', color: WS_MUTED, letterSpacing: 1.2, marginBottom: 14 },
+  driverRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  driverAvatar: { width: 44, height: 44, borderRadius: 22 },
+  driverAvatarFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(15,23,42,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  driverName: { fontSize: 15, fontWeight: '700', color: WS_TEXT },
+  driverRating: { fontSize: 12, color: '#f59e0b', marginTop: 3 },
+  vehicleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  vehicleIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: 'rgba(15,23,42,0.05)',
+    borderWidth: 1,
+    borderColor: WS_BORDER,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  vehicleName: { fontSize: 15, fontWeight: '700', color: WS_TEXT },
+  vehicleSub: { fontSize: 12, color: WS_MUTED, marginTop: 3 },
+  docRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(15,23,42,0.06)',
+  },
+  docIconWrap: { width: 22, alignItems: 'center' },
+  docLabel: { flex: 1, fontSize: 13, color: WS_TEXT, fontWeight: '500' },
+  docStatusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  docStatusVerified: { backgroundColor: 'rgba(34,197,94,0.1)', borderColor: 'rgba(34,197,94,0.28)' },
+  docStatusPending: { backgroundColor: 'rgba(245,158,11,0.1)', borderColor: 'rgba(245,158,11,0.28)' },
+  docStatusText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  docStatusTextVerified: { color: '#22c55e' },
+  docStatusTextPending: { color: '#f59e0b' },
+  docsBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(15,23,42,0.04)',
+    borderWidth: 1,
+    borderColor: WS_BORDER,
+  },
+  docsBadgeText: { fontSize: 10, fontWeight: '700', color: WS_MUTED, letterSpacing: 0.4 },
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Theme.screenBackground },

@@ -340,9 +340,56 @@ export default function TripDetailScreen({
     }
   };
 
+  // ── Dashboard: computed values ─────────────────────────────────────────────
+  const statusLower = (trip.status ?? '').toLowerCase();
+  const statusLabel =
+    statusLower.includes('in_transit') || statusLower.includes('transit') ? 'In Transit'
+    : statusLower.includes('in_progress') ? 'In Progress'
+    : statusLower.includes('complet') || statusLower.includes('deliver') || statusLower === 'done' ? 'Completed'
+    : statusLower === 'assigned' ? 'Assigned'
+    : statusLower === 'pending' ? 'Pending'
+    : trip.status ?? 'Pending';
+  const statusColor =
+    statusLabel === 'In Transit' || statusLabel === 'In Progress' ? '#22c55e'
+    : statusLabel === 'Completed' ? '#60a5fa'
+    : '#f59e0b';
+  const pickupStr = trip.pickup_date
+    ? new Date(trip.pickup_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    : '—';
+
+  const fmtAuditDate = (iso: string | null | undefined) => {
+    if (!iso) return '—';
+    try {
+      return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch { return iso.slice(0, 16).replace('T', ' '); }
+  };
+
+  type AuditItem = { id: string; icon: React.ComponentProps<typeof FontAwesome>['name']; iconColor: string; iconBg: string; title: string; detail: string | null; date: string };
+  const auditRows: AuditItem[] = [];
+  if (trip.completed_at) {
+    auditRows.push({ id: 'completed', icon: 'check-circle', iconColor: '#22c55e', iconBg: 'rgba(34,197,94,0.12)', title: 'Trip Completed', detail: 'Delivered at destination', date: fmtAuditDate(trip.completed_at) });
+  }
+  if (trip.started_at) {
+    auditRows.push({ id: 'started', icon: 'play-circle', iconColor: '#60a5fa', iconBg: 'rgba(96,165,250,0.12)', title: 'Trip Started', detail: `Departed from ${trip.pickup_area || 'origin'}`, date: fmtAuditDate(trip.started_at) });
+  }
+  for (const row of detail.assignmentAuditRows) {
+    const dName = row.driver_id_new ? (detail.assignmentDriverNames[row.driver_id_new] ?? null) : null;
+    const vLabel = row.vehicle_id_new ? (detail.assignmentVehicleLabels[row.vehicle_id_new] ?? null) : null;
+    auditRows.push({
+      id: row.id,
+      icon: row.event_type === 'reassignment' ? 'refresh' : 'user-plus',
+      iconColor: 'rgba(255,255,255,0.5)',
+      iconBg: 'rgba(255,255,255,0.05)',
+      title: row.event_type === 'reassignment' ? 'Reassigned' : 'Assigned',
+      detail: [dName, vLabel].filter(Boolean).join(' · ') || null,
+      date: fmtAuditDate(row.changed_at),
+    });
+  }
+  auditRows.push({ id: 'created', icon: 'file-text-o', iconColor: 'rgba(255,255,255,0.35)', iconBg: 'rgba(255,255,255,0.04)', title: 'Dispatch Created', detail: `System generated trip ${getTripDisplayNumber(trip)}`, date: fmtAuditDate(trip.created_at) });
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      {/* ── Dark navigation bar ─────────────────────────────────────────────── */}
+      {/* ── Navigation bar ──────────────────────────────────────────────────── */}
       <View style={[styles.navBar, { paddingHorizontal: hPad }]}>
         <View style={styles.navLeft}>
           <TouchableOpacity
@@ -417,7 +464,191 @@ export default function TripDetailScreen({
         {/* ════════════════════ TRACKING TAB ════════════════════ */}
         {activeTab === "tracking" && (
           <>
-            <View style={styles.workspaceRow}>
+            {/* ── Hero Card ── */}
+            <View style={dStyles.heroCard}>
+              <View style={dStyles.heroLeft}>
+                <View style={dStyles.heroTitleRow}>
+                  <Text style={dStyles.heroTripId}>{getTripDisplayNumber(trip)}</Text>
+                  <View style={[dStyles.statusBadge, { borderColor: statusColor }]}>
+                    <View style={[dStyles.statusDot, { backgroundColor: statusColor }]} />
+                    <Text style={[dStyles.statusText, { color: statusColor }]}>{statusLabel.toUpperCase()}</Text>
+                  </View>
+                </View>
+                <View style={dStyles.routeRow}>
+                  <View style={dStyles.routeStop}>
+                    <Text style={dStyles.routeLabel}>ORIGIN</Text>
+                    <Text style={dStyles.routeCity} numberOfLines={1}>{trip.pickup_area || '—'}</Text>
+                    <Text style={dStyles.routeDate}>{pickupStr}</Text>
+                  </View>
+                  <View style={dStyles.routeDivider}>
+                    <View style={dStyles.routeLine} />
+                    <FontAwesome name="truck" size={16} color="rgba(255,255,255,0.3)" />
+                    <View style={dStyles.routeLine} />
+                  </View>
+                  <View style={dStyles.routeStop}>
+                    <Text style={dStyles.routeLabel}>DESTINATION</Text>
+                    <Text style={dStyles.routeCity} numberOfLines={1}>{trip.drop_location || '—'}</Text>
+                    {trip.estimated_duration ? <Text style={dStyles.routeDate}>EST: {trip.estimated_duration}</Text> : null}
+                  </View>
+                </View>
+              </View>
+              <View style={dStyles.heroStats}>
+                <View style={dStyles.statBox}>
+                  <Text style={dStyles.statLabel}>DISTANCE</Text>
+                  <Text style={dStyles.statValue}>{trip.distance != null ? `${trip.distance} km` : '—'}</Text>
+                </View>
+                <View style={dStyles.statDivider} />
+                <View style={dStyles.statBox}>
+                  <Text style={dStyles.statLabel}>STATUS</Text>
+                  <Text style={[dStyles.statValue, { fontSize: 14 }]}>{statusLabel}</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* ── Map + Audit Trail ── */}
+            <View style={dStyles.row}>
+              <View style={[dStyles.card, dStyles.mapCol]}>
+                <View style={dStyles.cardHeader}>
+                  <FontAwesome name="map" size={14} color="#60a5fa" style={{ marginRight: 8 }} />
+                  <Text style={dStyles.cardTitle}>Live Tracking</Text>
+                  {detail.trackingMapOriginCoordinate && detail.trackingMapDestinationCoordinate && (
+                    <TouchableOpacity style={dStyles.openMapsBtn} onPress={openTripDirectionsInMaps} activeOpacity={0.8}>
+                      <Feather name="navigation" size={12} color="#60a5fa" />
+                      <Text style={dStyles.openMapsBtnText}>Open Maps</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <View style={dStyles.telemetryWrap}>
+                  <LeafletMap
+                    style={{ width: "100%", height: mapHeight, minHeight: 260 }}
+                    center={mapCenter}
+                    zoom={4}
+                    polyline={
+                      hasOrigin && hasDest
+                        ? [
+                            { latitude: detail.trackingMapOriginCoordinate!.latitude, longitude: detail.trackingMapOriginCoordinate!.longitude },
+                            { latitude: detail.trackingMapDestinationCoordinate!.latitude, longitude: detail.trackingMapDestinationCoordinate!.longitude },
+                          ]
+                        : []
+                    }
+                    markers={
+                      [
+                        hasOrigin ? { id: "origin", coordinate: { latitude: detail.trackingMapOriginCoordinate!.latitude, longitude: detail.trackingMapOriginCoordinate!.longitude }, label: trip.pickup_area ?? "Origin", color: "#22c55e" } : null,
+                        hasDest ? { id: "dest", coordinate: { latitude: detail.trackingMapDestinationCoordinate!.latitude, longitude: detail.trackingMapDestinationCoordinate!.longitude }, label: trip.drop_location ?? "Destination", color: "#ef4444" } : null,
+                      ].filter(Boolean) as any
+                    }
+                  />
+                  <View style={dStyles.telemetryBar}>
+                    <FontAwesome name="compass" size={14} color="#60a5fa" style={{ marginRight: 8 }} />
+                    <View>
+                      <Text style={dStyles.telemetryTitle}>Telemetry Link Secured</Text>
+                      <Text style={dStyles.telemetrySub}>Protocol v4.2 synchronized live</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+
+              <View style={[dStyles.card, dStyles.auditCol]}>
+                <View style={dStyles.cardHeader}>
+                  <FontAwesome name="history" size={14} color="#60a5fa" style={{ marginRight: 8 }} />
+                  <Text style={dStyles.cardTitle}>Audit Trail</Text>
+                </View>
+                <ScrollView style={dStyles.auditScroll} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+                  {auditRows.length === 0 ? (
+                    <Text style={dStyles.emptyText}>No activity yet</Text>
+                  ) : auditRows.map((item, idx) => {
+                    const isLast = idx === auditRows.length - 1;
+                    return (
+                      <View key={item.id} style={[dStyles.auditItem, isLast && dStyles.auditItemLast]}>
+                        <View style={[dStyles.auditIconWrap, { backgroundColor: item.iconBg }]}>
+                          <FontAwesome name={item.icon} size={14} color={item.iconColor} />
+                        </View>
+                        <View style={dStyles.auditBody}>
+                          <Text style={dStyles.auditTitle}>{item.title}</Text>
+                          {item.detail ? <Text style={dStyles.auditDetail}>{item.detail}</Text> : null}
+                          <Text style={dStyles.auditDate}>{item.date}</Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            </View>
+
+            {/* ── Driver / Vehicle + Documents ── */}
+            <View style={dStyles.row}>
+              <View style={dStyles.bottomLeft}>
+                <View style={dStyles.card}>
+                  <Text style={dStyles.cardMicroLabel}>PRIMARY DRIVER</Text>
+                  <View style={dStyles.driverRow}>
+                    {detail.driverAvatarUri ? (
+                      <Image source={{ uri: detail.driverAvatarUri }} style={dStyles.driverAvatar} />
+                    ) : (
+                      <View style={dStyles.driverAvatarFallback}>
+                        <FontAwesome name="user" size={20} color="rgba(255,255,255,0.5)" />
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={dStyles.driverName}>{detail.driverName || '—'}</Text>
+                      {detail.driverRatingAvg != null && (
+                        <Text style={dStyles.driverRating}>★ {Number(detail.driverRatingAvg).toFixed(1)}</Text>
+                      )}
+                    </View>
+                    {trip.started_at ? (
+                      <View style={dStyles.statBoxSm}>
+                        <Text style={dStyles.statLabelSm}>STARTED</Text>
+                        <Text style={dStyles.statValueSm}>
+                          {new Date(trip.started_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+
+                <View style={dStyles.card}>
+                  <Text style={dStyles.cardMicroLabel}>ASSIGNED VEHICLE</Text>
+                  <View style={dStyles.vehicleRow}>
+                    <View style={dStyles.vehicleIconWrap}>
+                      <FontAwesome name="truck" size={20} color="rgba(255,255,255,0.5)" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={dStyles.vehicleName}>
+                        {detail.vehicleLabel || detail.displayVehicleFromInput || '—'}
+                      </Text>
+                      {trip.load_type ? <Text style={dStyles.vehicleSub}>{trip.load_type}</Text> : null}
+                    </View>
+                  </View>
+                </View>
+              </View>
+
+              <View style={[dStyles.card, dStyles.docsCol]}>
+                <View style={dStyles.cardHeader}>
+                  <FontAwesome name="file-text-o" size={14} color="#60a5fa" style={{ marginRight: 8 }} />
+                  <Text style={dStyles.cardTitle}>Required Documents</Text>
+                  <View style={dStyles.docsBadge}>
+                    <Text style={dStyles.docsBadgeText}>
+                      {detail.computedTripDocs.filter(d => d.status === 'Uploaded').length}/{detail.computedTripDocs.length} VERIFIED
+                    </Text>
+                  </View>
+                </View>
+                {detail.computedTripDocs.map((doc) => (
+                  <TouchableOpacity key={doc.id} style={dStyles.docRow} onPress={() => handleDocOpen(doc)} activeOpacity={0.75}>
+                    <View style={dStyles.docIconWrap}>
+                      <FontAwesome name="file-o" size={14} color="rgba(255,255,255,0.4)" />
+                    </View>
+                    <Text style={dStyles.docLabel} numberOfLines={1}>{doc.label}</Text>
+                    <View style={[dStyles.docStatusPill, doc.status === 'Uploaded' ? dStyles.docStatusVerified : dStyles.docStatusPending]}>
+                      <Text style={[dStyles.docStatusText, doc.status === 'Uploaded' ? dStyles.docStatusTextVerified : dStyles.docStatusTextPending]}>
+                        {doc.status === 'Uploaded' ? 'VERIFIED' : 'PENDING'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Placeholder for dead code path below — preserve existing view refs */}
+            {false && <View style={styles.workspaceRow}>
               <View style={styles.workspaceLeftCol}>
                 <View style={styles.voyageCard}>
                   <View style={styles.sectionKickerRow}>
@@ -661,7 +892,7 @@ export default function TripDetailScreen({
                   }
                 />
               </View>
-            </View>
+            </View>}
 
             {/* Feedback / Ratings section */}
             {currentOrganization?.id && (
@@ -1363,22 +1594,118 @@ function NavAction({
   );
 }
 
+// ── Dashboard styles ────────────────────────────────────────────────────────────
+const DS_BG = '#F8FAFC';
+const DS_CARD = '#FFFFFF';
+const DS_BORDER = 'rgba(15,23,42,0.08)';
+const DS_TEXT = '#0F172A';
+const DS_MUTED = 'rgba(15,23,42,0.55)';
+
+const dStyles = StyleSheet.create({
+  heroCard: {
+    flexDirection: 'row',
+    backgroundColor: DS_CARD,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: DS_BORDER,
+    padding: 24,
+    marginBottom: 16,
+    flexWrap: 'wrap',
+    gap: 20,
+  },
+  heroLeft: { flex: 1, minWidth: 260 },
+  heroTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap' },
+  heroTripId: { fontSize: 26, fontWeight: '800', color: DS_TEXT, letterSpacing: -0.5 },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999, borderWidth: 1 },
+  statusDot: { width: 7, height: 7, borderRadius: 4 },
+  statusText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  routeRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12 },
+  routeStop: { flex: 1, minWidth: 100 },
+  routeLabel: { fontSize: 9, fontWeight: '700', color: DS_MUTED, letterSpacing: 1.2, marginBottom: 4 },
+  routeCity: { fontSize: 17, fontWeight: '700', color: DS_TEXT },
+  routeDate: { fontSize: 12, color: DS_MUTED, marginTop: 4 },
+  routeDivider: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  routeLine: { height: 1, width: 32, backgroundColor: 'rgba(15,23,42,0.15)' },
+  heroStats: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(15,23,42,0.03)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: DS_BORDER,
+    padding: 20,
+    alignItems: 'center',
+    alignSelf: 'center',
+    minWidth: 200,
+  },
+  statBox: { flex: 1, alignItems: 'center' },
+  statLabel: { fontSize: 9, fontWeight: '700', color: DS_MUTED, letterSpacing: 1, marginBottom: 6 },
+  statValue: { fontSize: 22, fontWeight: '800', color: DS_TEXT },
+  statDivider: { width: 1, height: 36, backgroundColor: 'rgba(15,23,42,0.09)', marginHorizontal: 8 },
+  statBoxSm: { alignItems: 'flex-end' },
+  statLabelSm: { fontSize: 9, fontWeight: '700', color: DS_MUTED, letterSpacing: 1, marginBottom: 4 },
+  statValueSm: { fontSize: 14, fontWeight: '700', color: DS_TEXT },
+  row: { flexDirection: 'row', gap: 16, marginBottom: 16, flexWrap: 'wrap' },
+  card: { backgroundColor: DS_CARD, borderRadius: 16, borderWidth: 1, borderColor: DS_BORDER, padding: 20 },
+  mapCol: { flex: 3, minWidth: 300 },
+  auditCol: { flex: 2, minWidth: 260 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  cardTitle: { fontSize: 14, fontWeight: '700', color: DS_TEXT, flex: 1 },
+  openMapsBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(96,165,250,0.3)', backgroundColor: 'rgba(96,165,250,0.08)' },
+  openMapsBtnText: { fontSize: 11, fontWeight: '600', color: '#60a5fa' },
+  telemetryWrap: { borderRadius: 10 },
+  telemetryBar: { flexDirection: 'row', alignItems: 'center', padding: 14, backgroundColor: '#0f141a', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
+  telemetryTitle: { fontSize: 12, fontWeight: '700', color: DS_TEXT },
+  telemetrySub: { fontSize: 10, color: DS_MUTED, marginTop: 1 },
+  auditScroll: { maxHeight: 360 },
+  auditItem: { flexDirection: 'row', gap: 12, paddingBottom: 16, marginBottom: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
+  auditItemLast: { borderBottomWidth: 0, marginBottom: 0, paddingBottom: 0 },
+  auditIconWrap: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  auditBody: { flex: 1 },
+  auditTitle: { fontSize: 13, fontWeight: '700', color: DS_TEXT, marginBottom: 2 },
+  auditDetail: { fontSize: 12, color: DS_MUTED, marginBottom: 4 },
+  auditDate: { fontSize: 10, color: 'rgba(15,23,42,0.38)', letterSpacing: 0.3 },
+  emptyText: { fontSize: 13, color: DS_MUTED, textAlign: 'center', paddingVertical: 32 },
+  bottomLeft: { flex: 2, minWidth: 220, gap: 12 },
+  docsCol: { flex: 3, minWidth: 280 },
+  cardMicroLabel: { fontSize: 9, fontWeight: '700', color: DS_MUTED, letterSpacing: 1.2, marginBottom: 14 },
+  driverRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  driverAvatar: { width: 44, height: 44, borderRadius: 22 },
+  driverAvatarFallback: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(15,23,42,0.06)', alignItems: 'center', justifyContent: 'center' },
+  driverName: { fontSize: 15, fontWeight: '700', color: DS_TEXT },
+  driverRating: { fontSize: 12, color: '#f59e0b', marginTop: 3 },
+  vehicleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  vehicleIconWrap: { width: 44, height: 44, borderRadius: 10, backgroundColor: 'rgba(15,23,42,0.05)', borderWidth: 1, borderColor: DS_BORDER, alignItems: 'center', justifyContent: 'center' },
+  vehicleName: { fontSize: 15, fontWeight: '700', color: DS_TEXT },
+  vehicleSub: { fontSize: 12, color: DS_MUTED, marginTop: 3 },
+  docRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: 'rgba(15,23,42,0.06)' },
+  docIconWrap: { width: 22, alignItems: 'center' },
+  docLabel: { flex: 1, fontSize: 13, color: DS_TEXT, fontWeight: '500' },
+  docStatusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, borderWidth: 1 },
+  docStatusVerified: { backgroundColor: 'rgba(34,197,94,0.1)', borderColor: 'rgba(34,197,94,0.28)' },
+  docStatusPending: { backgroundColor: 'rgba(245,158,11,0.1)', borderColor: 'rgba(245,158,11,0.28)' },
+  docStatusText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  docStatusTextVerified: { color: '#22c55e' },
+  docStatusTextPending: { color: '#f59e0b' },
+  docsBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: 'rgba(15,23,42,0.04)', borderWidth: 1, borderColor: DS_BORDER },
+  docsBadgeText: { fontSize: 10, fontWeight: '700', color: DS_MUTED, letterSpacing: 0.4 },
+});
+
 // ── Styles ─────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#f1f5f9",
+    backgroundColor: DS_BG,
     overflow: "hidden",
   },
 
-  // ── Dark nav ──
+  // ── Top nav ──
   navBar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingVertical: 14,
-    backgroundColor: "#0f141a",
+    backgroundColor: "#FFFFFF",
     flexWrap: "wrap",
     gap: 12,
   },
@@ -1395,12 +1722,12 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#334155",
+    borderColor: "#CBD5E1",
   },
   navBackText: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#94a3b8",
+    color: "#475569",
   },
   navTitleWrap: {
     flexDirection: "row",
@@ -1410,19 +1737,19 @@ const styles = StyleSheet.create({
   navTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#f8fafc",
+    color: "#0F172A",
   },
   navPill: {
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 4,
   },
-  navPillAsset: { backgroundColor: "#1e3a5f" },
-  navPillAggregate: { backgroundColor: "#3b2e00" },
+  navPillAsset: { backgroundColor: "#DBEAFE" },
+  navPillAggregate: { backgroundColor: "#FEF3C7" },
   navPillText: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#94a3b8",
+    color: "#475569",
     letterSpacing: 0.5,
   },
   navActions: {
@@ -1439,21 +1766,21 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#334155",
-    backgroundColor: "#1e293b",
+    borderColor: "#CBD5E1",
+    backgroundColor: "#FFFFFF",
   },
   navActionBtnPrimary: {
     backgroundColor: "#2563eb",
     borderColor: "#2563eb",
   },
   navActionBtnDanger: {
-    borderColor: "#7f1d1d",
-    backgroundColor: "#1e293b",
+    borderColor: "#FECACA",
+    backgroundColor: "#FFFFFF",
   },
   navActionText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#94a3b8",
+    color: "#475569",
   },
   navActionTextPrimary: { color: "#fff" },
   navActionTextDanger: { color: "#ef4444" },
@@ -1461,9 +1788,9 @@ const styles = StyleSheet.create({
   // ── Tab bar ──
   tabBar: {
     flexDirection: "row",
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: "#E2E8F0",
   },
   tabBtn: {
     flexDirection: "row",
@@ -1478,10 +1805,10 @@ const styles = StyleSheet.create({
   tabBtnText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#6b7280",
+    color: "#64748B",
   },
   tabBtnTextActive: {
-    color: "#2563eb",
+    color: "#60a5fa",
   },
   tabUnderline: {
     position: "absolute",
@@ -1489,7 +1816,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 2,
-    backgroundColor: "#2563eb",
+    backgroundColor: "#60a5fa",
     borderRadius: 1,
   },
 
@@ -1652,7 +1979,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: "#CBD5E1",
     position: "relative",
   },
   telemetryOverlay: {
@@ -1661,9 +1988,9 @@ const styles = StyleSheet.create({
     right: 16,
     left: 16,
     borderRadius: 16,
-    backgroundColor: "rgba(15, 23, 42, 0.88)",
+    backgroundColor: "rgba(255, 255, 255, 0.92)",
     borderWidth: 1,
-    borderColor: "rgba(148, 163, 184, 0.3)",
+    borderColor: "rgba(148, 163, 184, 0.4)",
     paddingHorizontal: 14,
     paddingVertical: 12,
     alignItems: "center",
@@ -1672,14 +1999,14 @@ const styles = StyleSheet.create({
   telemetryTitle: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#f8fafc",
+    color: "#0F172A",
     textTransform: "uppercase",
     letterSpacing: 1,
   },
   telemetrySub: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#94a3b8",
+    color: "#64748B",
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
@@ -1862,11 +2189,11 @@ const styles = StyleSheet.create({
   darkSectionTitle: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#fff",
+    color: "#0F172A",
     letterSpacing: 1,
     paddingVertical: 6,
     paddingHorizontal: 10,
-    backgroundColor: "#0f141a",
+    backgroundColor: "#F1F5F9",
     textTransform: "uppercase",
   },
   detailBody: {
@@ -1905,13 +2232,13 @@ const styles = StyleSheet.create({
   },
   twoColItem: { flex: 1, minWidth: 0 },
   summaryCard: {
-    backgroundColor: "#0f141a",
+    backgroundColor: "#FFFFFF",
     borderRadius: 6,
     marginBottom: 8,
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: "#334155",
+    borderColor: "#E2E8F0",
   },
   summaryCardRow: {
     flexDirection: "row",
@@ -1923,21 +2250,21 @@ const styles = StyleSheet.create({
   summaryCardLabel: {
     fontSize: 8,
     fontWeight: "700",
-    color: "#94a3b8",
+    color: "#64748B",
     textTransform: "uppercase",
     letterSpacing: 0.6,
     marginBottom: 3,
   },
-  summaryCardValue: { fontSize: 11, fontWeight: "700", color: "#f8fafc" },
+  summaryCardValue: { fontSize: 11, fontWeight: "700", color: "#0F172A" },
   summaryCardValueGreen: { color: "#22c55e" },
   summaryCardValueRed: { color: "#ef4444" },
   transactionHistoryCard: {
-    backgroundColor: "#0f141a",
+    backgroundColor: "#FFFFFF",
     borderRadius: 12,
     padding: 16,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: "#334155",
+    borderColor: "#E2E8F0",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
@@ -1947,7 +2274,7 @@ const styles = StyleSheet.create({
   transactionHistoryHeader: {
     fontSize: 10,
     fontWeight: "800",
-    color: "#94a3b8",
+    color: "#64748B",
     letterSpacing: 1,
     textTransform: "uppercase",
     marginBottom: 12,
@@ -1963,11 +2290,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 10,
-    backgroundColor: "#1e293b",
+    backgroundColor: "#F8FAFC",
     borderRadius: 8,
     padding: 12,
     borderWidth: 1,
-    borderColor: "#334155",
+    borderColor: "#E2E8F0",
   },
   transactionIconWrap: {
     width: 24,
@@ -1984,8 +2311,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#dc2626",
   },
   transactionInfo: { flex: 1, minWidth: 0 },
-  transactionText1: { fontSize: 13, fontWeight: "600", color: "#f8fafc" },
-  transactionText2: { fontSize: 11, color: "#94a3b8", marginTop: 2 },
+  transactionText1: { fontSize: 13, fontWeight: "600", color: "#0F172A" },
+  transactionText2: { fontSize: 11, color: "#64748B", marginTop: 2 },
   transactionAmount: { fontSize: 13, fontWeight: "700" },
   transactionAmountIn: { color: "#22c55e" },
   transactionAmountOut: { color: "#ef4444" },

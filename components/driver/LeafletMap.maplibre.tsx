@@ -9,8 +9,8 @@ function toLngLat(c: LeafletLatLng): [number, number] {
   return [c.longitude, c.latitude];
 }
 
-const MAP_STYLE =
-  "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+// Free, reliable OSM-based vector style (works well for India coverage).
+const MAP_STYLE = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
 
 type CameraRefLike = {
   setCamera: (config: {

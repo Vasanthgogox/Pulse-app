@@ -18,6 +18,10 @@ type LeafletMapProps = {
   markers?: LeafletMarker[];
   polyline?: LeafletLatLng[];
   polylineColor?: string;
+  maxBounds?: {
+    southWest: LeafletLatLng;
+    northEast: LeafletLatLng;
+  };
   lowPower?: boolean;
 };
 
@@ -25,9 +29,31 @@ export type LeafletMapRef = {
   focusCurrentLocation: (center: LeafletLatLng, zoom?: number) => void;
 };
 
-// Neutral/light basemap to match production driver UI (avoid over-saturated demo tiles).
-const MAP_STYLE =
-  "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+// Inline OSM raster style avoids external style/sprite/glyph failures on web.
+const MAP_STYLE = {
+  version: 8,
+  sources: {
+    osm: {
+      type: "raster",
+      tiles: [
+        "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      ],
+      tileSize: 256,
+      attribution: "© OpenStreetMap contributors",
+    },
+  },
+  layers: [
+    {
+      id: "osm-base",
+      type: "raster",
+      source: "osm",
+      minzoom: 0,
+      maxzoom: 19,
+    },
+  ],
+} as const;
 
 type GeoJsonLine = {
   type: "Feature";
@@ -73,21 +99,33 @@ type MapLibreMarkerLike = {
 type MapLibreModuleLike = {
   Map: new (options: {
     container: HTMLDivElement;
-    style: string;
+    style: string | Record<string, unknown>;
     center: [number, number];
     zoom: number;
     dragRotate: boolean;
     pitchWithRotate: boolean;
     attributionControl: boolean;
+    maxBounds?: [[number, number], [number, number]];
   }) => MapLibreMapLike;
   Marker: new (options: {
     element: HTMLDivElement;
-    anchor: "center";
+    anchor: string;
   }) => MapLibreMarkerLike;
   Popup: new (options: { closeButton: boolean }) => {
     setText: (text: string) => unknown;
   };
 };
+
+function clampToBounds(
+  point: LeafletLatLng,
+  bounds?: { southWest: LeafletLatLng; northEast: LeafletLatLng },
+): LeafletLatLng {
+  if (!bounds) return point;
+  return {
+    latitude: Math.max(bounds.southWest.latitude, Math.min(bounds.northEast.latitude, point.latitude)),
+    longitude: Math.max(bounds.southWest.longitude, Math.min(bounds.northEast.longitude, point.longitude)),
+  };
+}
 
 export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
   (
@@ -98,6 +136,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
       markers = [],
       polyline = [],
       polylineColor = "#3b82f6",
+      maxBounds,
       lowPower = false,
     },
     ref,
@@ -136,7 +175,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
           if (cancelled || !isMountedRef.current || !mapContainerRef.current || mapRef.current)
             return;
           const maplibregl =
-            (MapLibreModule as { default?: MapLibreModuleLike }).default ??
+            ((MapLibreModule as unknown) as { default?: MapLibreModuleLike }).default ??
             (MapLibreModule as unknown as MapLibreModuleLike);
 
           const map = new maplibregl.Map({
@@ -147,6 +186,12 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
             dragRotate: !lowPower,
             pitchWithRotate: !lowPower,
             attributionControl: false,
+            maxBounds: maxBounds
+              ? [
+                  [maxBounds.southWest.longitude, maxBounds.southWest.latitude],
+                  [maxBounds.northEast.longitude, maxBounds.northEast.latitude],
+                ]
+              : undefined,
           });
 
           mapRef.current = map;
@@ -235,7 +280,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
       import("maplibre-gl").then((MapLibreModule) => {
         if (cancelled || !isMountedRef.current) return;
         const maplibregl =
-          (MapLibreModule as { default?: MapLibreModuleLike }).default ??
+          ((MapLibreModule as unknown) as { default?: MapLibreModuleLike }).default ??
           (MapLibreModule as unknown as MapLibreModuleLike);
         const mapInstance = mapRef.current;
         if (!mapInstance) return;
@@ -251,6 +296,12 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
         }
 
         const source = mapInstance.getSource("route-src");
+        // India bounding box — fallback view when no route or markers
+        const INDIA_BOUNDS: [[number, number], [number, number]] = [
+          [68.1, 6.7],
+          [97.4, 37.1],
+        ];
+
         if (Array.isArray(polyline) && polyline.length >= 2) {
           const pts = polyline.map((p) => [p.longitude, p.latitude]);
           source?.setData?.({
@@ -298,33 +349,53 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
                   [bounds.minLng, bounds.minLat],
                   [bounds.maxLng, bounds.maxLat],
                 ],
-                { padding: 24, duration: lowPower ? 0 : 450 },
+                { padding: 80, duration: lowPower ? 0 : 600 },
               );
             } catch (e) {
               console.warn("[LeafletMap.web] Error fitting bounds:", e);
             }
           }
-        } else if (
-          center &&
-          typeof center.latitude === "number" &&
-          shouldFitBounds
-        ) {
+        } else {
           source?.setData?.({
             type: "Feature",
-            geometry: {
-              type: "LineString",
-              coordinates: [],
-            },
+            geometry: { type: "LineString", coordinates: [] },
             properties: {},
           });
-          try {
-            mapInstance.easeTo({
-              center: [center.longitude, center.latitude],
-              zoom,
-              duration: lowPower ? 0 : 400,
-            });
-          } catch (e) {
-            console.warn("[LeafletMap.web] Error setting view:", e);
+
+          const currentMarkersForBounds = Array.isArray(markers) ? markers.filter(m => m?.coordinate) : [];
+          if (shouldFitBounds) {
+            try {
+              if (currentMarkersForBounds.length >= 2) {
+                // Fit to all marker positions
+                const mBounds = currentMarkersForBounds.reduce(
+                  (acc, m) => {
+                    acc.minLng = Math.min(acc.minLng, m.coordinate.longitude);
+                    acc.maxLng = Math.max(acc.maxLng, m.coordinate.longitude);
+                    acc.minLat = Math.min(acc.minLat, m.coordinate.latitude);
+                    acc.maxLat = Math.max(acc.maxLat, m.coordinate.latitude);
+                    return acc;
+                  },
+                  { minLng: Infinity, maxLng: -Infinity, minLat: Infinity, maxLat: -Infinity },
+                );
+                mapInstance.fitBounds(
+                  [[mBounds.minLng, mBounds.minLat], [mBounds.maxLng, mBounds.maxLat]],
+                  { padding: 100, duration: lowPower ? 0 : 600 },
+                );
+              } else if (currentMarkersForBounds.length === 1) {
+                // Single marker: center on it at city zoom
+                const m = currentMarkersForBounds[0];
+                mapInstance.easeTo({
+                  center: [m.coordinate.longitude, m.coordinate.latitude],
+                  zoom: 8,
+                  duration: lowPower ? 0 : 500,
+                });
+              } else {
+                // No coords: show all of India
+                mapInstance.fitBounds(INDIA_BOUNDS, { padding: 40, duration: lowPower ? 0 : 600 });
+              }
+            } catch (e) {
+              console.warn("[LeafletMap.web] Error setting view:", e);
+            }
           }
         }
 
@@ -334,26 +405,45 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
           const lat = m.coordinate.latitude;
           const lng = m.coordinate.longitude;
           const color = m.color || Theme.driverEmerald;
+
+          // Pin-style marker: circle body + label chip
           const el = document.createElement("div");
-          el.style.width = "12px";
-          el.style.height = "12px";
-          el.style.borderRadius = "12px";
-          el.style.background = color;
-          el.style.border = "2px solid #ffffff";
-          el.style.boxShadow = "0 4px 12px rgba(0,0,0,0.35)";
+          el.style.display = "flex";
+          el.style.flexDirection = "column";
+          el.style.alignItems = "center";
+          el.style.gap = "3px";
+          el.style.cursor = "pointer";
+
+          const dot = document.createElement("div");
+          dot.style.width = "16px";
+          dot.style.height = "16px";
+          dot.style.borderRadius = "50%";
+          dot.style.background = color;
+          dot.style.border = "3px solid #ffffff";
+          dot.style.boxShadow = "0 2px 8px rgba(0,0,0,0.45)";
+          el.appendChild(dot);
+
+          if (m.label) {
+            const chip = document.createElement("div");
+            chip.textContent = m.label;
+            chip.style.background = "#0f141a";
+            chip.style.color = "#f1f5f9";
+            chip.style.fontSize = "10px";
+            chip.style.fontWeight = "700";
+            chip.style.padding = "2px 7px";
+            chip.style.borderRadius = "4px";
+            chip.style.whiteSpace = "nowrap";
+            chip.style.boxShadow = "0 1px 4px rgba(0,0,0,0.5)";
+            chip.style.letterSpacing = "0.3px";
+            el.appendChild(chip);
+          }
+
           const marker = new maplibregl.Marker({
             element: el,
-            anchor: "center",
+            anchor: "top",
           })
             .setLngLat([lng, lat])
             .addTo(mapInstance);
-          if (m.label) {
-            marker.setPopup(
-              new maplibregl.Popup({ closeButton: false }).setText(
-                String(m.label),
-              ),
-            );
-          }
           markersRef.current.push(marker);
         }
 
@@ -362,12 +452,13 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
       return () => {
         cancelled = true;
       };
-    }, [center, zoom, markers, polyline, polylineColor, lowPower]);
+    }, [center, zoom, markers, polyline, polylineColor, maxBounds, lowPower]);
 
     React.useImperativeHandle(ref, () => ({
       focusCurrentLocation: (currentCenter, currentZoom = 15) => {
+        const boundedCenter = clampToBounds(currentCenter, maxBounds);
         mapRef.current?.easeTo({
-          center: [currentCenter.longitude, currentCenter.latitude],
+          center: [boundedCenter.longitude, boundedCenter.latitude],
           zoom: currentZoom,
           duration: lowPower ? 0 : 450,
         });
