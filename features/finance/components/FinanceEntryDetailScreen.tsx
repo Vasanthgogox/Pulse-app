@@ -10,6 +10,8 @@ export interface FinanceEntryDetailScreenProps {
   onBack: () => void;
   onDownloadPress?: () => void;
   onOpenCompareVerify?: () => void;
+  embedded?: boolean;
+  onViewTripDetail?: () => void;
 }
 
 export function FinanceEntryDetailScreen({
@@ -17,8 +19,29 @@ export function FinanceEntryDetailScreen({
   onBack,
   onDownloadPress,
   onOpenCompareVerify,
+  embedded = false,
 }: FinanceEntryDetailScreenProps) {
   const insets = useSafeAreaInsets();
+
+  if (embedded) {
+    return (
+      <View style={[styles.root, styles.rootEmbedded]}>
+        <ScrollView
+          style={styles.embeddedScroll}
+          contentContainerStyle={styles.embeddedScrollContent}
+          showsVerticalScrollIndicator
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
+        >
+          <LedgerExpandedCardFromData
+            data={data}
+            onDownloadPress={onDownloadPress}
+            onOpenCompareVerify={onOpenCompareVerify}
+          />
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -38,7 +61,10 @@ export function FinanceEntryDetailScreen({
 
       <ScrollView
         style={styles.body}
-        contentContainerStyle={[styles.bodyContent, { paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[
+          styles.bodyContent,
+          { paddingBottom: insets.bottom + 24 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <LedgerExpandedCardFromData
@@ -55,6 +81,15 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: Theme.screenBackground,
+  },
+  rootEmbedded: {
+    backgroundColor: Theme.screenBackground,
+  },
+  embeddedScroll: {
+    flex: 1,
+  },
+  embeddedScrollContent: {
+    paddingBottom: 8,
   },
   topRow: {
     paddingHorizontal: 16,

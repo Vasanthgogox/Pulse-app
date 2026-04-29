@@ -5,7 +5,7 @@
  */
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
-import { LeafletMap } from "@/components/driver/LeafletMap.web";
+import { TripMap } from "./TripMap.web";
 import { Theme } from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -23,21 +23,27 @@ import {
     Image,
     Linking,
     Modal,
+    Platform,
     RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
     useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { TripAdjustment } from "../../services/tripAdjustments";
+import {
+  adjustedCost,
+  adjustedRevenue,
+  type TripAdjustment,
+} from "../../services/tripAdjustments";
 import { regenerateTripOtp } from "../../services/tripOtp.service";
 import { getTripDisplayNumber } from "../../services/trips.service";
 import { TripAssignmentBlock } from "../TripAssignmentBlock";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
-import type { TripDetailScreenProps } from "./TripDetailScreen";
+import type { TripDetailScreenProps } from "./TripDetailScreen.types";
 import { useTripDetail } from "./hooks/useTripDetail";
 import { type ExpenseRow } from "./sections/ExpensesTable";
 import { LRDocumentsSection } from "./sections/LRDocumentsSection";
@@ -46,7 +52,7 @@ import {
     type TripStageTimestamp,
 } from "./sections/TripStatusTimeline";
 
-type Tab = "tracking" | "finance";
+type Tab = "trip" | "finance" | "tracking" | "docs";
 
 function formatLedgerDate(s: string | null | undefined) {
   if (!s) return "—";
@@ -85,6 +91,76 @@ function adjustmentsCountingAsDeductions(adjustments: TripAdjustment[]) {
   );
 }
 
+/** Quick protocol tabs → preset for {@link TripAdjustmentModal} reasons. */
+function protocolFinanceChipAdjustment(
+  side: "client" | "supplier",
+  chip: string,
+): {
+  type: "revenue" | "cost";
+  impact: "plus" | "minus";
+  reasonSeed: string;
+} {
+  if (side === "client") {
+    if (chip === "Loading") {
+      return { type: "revenue", impact: "plus", reasonSeed: "Loading Charges" };
+    }
+    if (chip === "Unloading") {
+      return { type: "revenue", impact: "plus", reasonSeed: "Unloading Charges" };
+    }
+    if (chip === "Detention") {
+      return { type: "revenue", impact: "minus", reasonSeed: "Late Delivery" };
+    }
+    if (chip === "Damage") {
+      return { type: "revenue", impact: "minus", reasonSeed: "Damages / Missing" };
+    }
+    if (chip === "Toll" || chip === "RTO") {
+      return { type: "revenue", impact: "plus", reasonSeed: "Other" };
+    }
+  } else {
+    if (chip === "Loading") {
+      return { type: "cost", impact: "plus", reasonSeed: "Loading Charges" };
+    }
+    if (chip === "Unloading") {
+      return { type: "cost", impact: "plus", reasonSeed: "Unloading Charges" };
+    }
+    if (chip === "Detention") {
+      return { type: "cost", impact: "plus", reasonSeed: "Detention" };
+    }
+    if (chip === "Damage") {
+      return { type: "cost", impact: "plus", reasonSeed: "Damages / Missing" };
+    }
+    if (chip === "Toll") {
+      return { type: "cost", impact: "plus", reasonSeed: "Pass Debit" };
+    }
+    if (chip === "RTO") {
+      return { type: "cost", impact: "plus", reasonSeed: "Other" };
+    }
+  }
+  return { type: "revenue", impact: "plus", reasonSeed: "Other" };
+}
+
+const FINANCE_PROTOCOL_CHIPS = [
+  "Loading",
+  "Unloading",
+  "Detention",
+  "Damage",
+  "Toll",
+  "RTO",
+] as const;
+
+function splitLocationPrimarySecondary(location: string | null | undefined): {
+  primary: string;
+  secondary: string | null;
+} {
+  const raw = (location ?? "").trim();
+  if (!raw) return { primary: "—", secondary: null };
+  const commaIndex = raw.indexOf(",");
+  if (commaIndex === -1) return { primary: raw, secondary: null };
+  const primary = raw.slice(0, commaIndex).trim() || raw;
+  const secondary = raw.slice(commaIndex + 1).trim() || null;
+  return { primary, secondary };
+}
+
 export default function TripDetailScreen({
   tripId,
   entryContext,
@@ -97,12 +173,22 @@ export default function TripDetailScreen({
   const { currentOrganization } = useOrganization();
   const { t } = useLanguage();
   const { width: screenWidth } = useWindowDimensions();
-  const [activeTab, setActiveTab] = useState<Tab>("tracking");
+  const [activeTab, setActiveTab] = useState<Tab>("trip");
+  const [financeSubTab, setFinanceSubTab] = useState<"summary" | "transactions">(
+    "summary",
+  );
+  const [searchTerm, setSearchTerm] = useState("");
+  const [expandedLog, setExpandedLog] = useState<number | null>(null);
+  const [showFinanceProvisionPanel, setShowFinanceProvisionPanel] = useState<
+    "client" | "supplier" | null
+  >(null);
+  const [showAssignmentManager, setShowAssignmentManager] = useState(false);
   const [otpResending, setOtpResending] = useState(false);
 
   const isMobile = screenWidth < 640;
   const isTablet = screenWidth >= 640 && screenWidth < 1024;
   const isDesktop = screenWidth >= 1024;
+  const desktopTab: "tracking" | "finance" = activeTab === "finance" ? "finance" : "tracking";
   const hPad = isMobile ? 12 : isTablet ? 16 : 24;
   const mapHeight = isMobile ? 220 : isTablet ? 380 : 600;
 
@@ -265,6 +351,9 @@ export default function TripDetailScreen({
     });
     return rows;
   })();
+  const paymentCaptured = detail.tripLedgerEntries.some(
+    (row) => row.contact_type === "client" && Number(row.amount_in ?? 0) > 0,
+  );
 
   // ── Map ───────────────────────────────────────────────────────────────────────
   const hasOrigin = !!detail.trackingMapOriginCoordinate;
@@ -275,6 +364,97 @@ export default function TripDetailScreen({
         longitude: detail.trackingMapOriginCoordinate!.longitude,
       }
     : { latitude: 20.5937, longitude: 78.9629 };
+
+  const originSplit = splitLocationPrimarySecondary(trip.pickup_area);
+  const destinationSplit = splitLocationPrimarySecondary(trip.drop_location);
+  const pickupAny = trip as any;
+  const originStateLabel =
+    originSplit.secondary || String(pickupAny.pickup_state ?? "").trim() || "Origin Node";
+  const destinationStateLabel =
+    destinationSplit.secondary || String(pickupAny.drop_state ?? "").trim() || "Destination Node";
+  const allocatedDriverName =
+    detail.driverName?.trim() ||
+    String((trip as any).driver_name ?? "").trim() ||
+    "Unassigned";
+  const allocatedVehicleLabel =
+    (detail.displayVehicleFromInput?.trim() ||
+      detail.vehicleLabel?.trim() ||
+      String(trip.vehicle_display_number ?? "").trim() ||
+      String((trip as any).vehicle_number ?? "").trim() ||
+      "Pending");
+  const supplierName =
+    detail.partnerName?.trim() || String((trip as any).supplier_name ?? "").trim() || "Supplier N/A";
+  const clientNameCard =
+    detail.displayClientName?.trim() || String(trip.client_name ?? "").trim() || "Client N/A";
+  const isIntegratedTrip = Boolean(trip.indent_id);
+
+  const journeyLogs = [
+    {
+      status: "Assigned",
+      location: trip.pickup_area?.trim() || "Origin hub",
+      time: trip.pickup_date ? new Date(trip.pickup_date).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—",
+      details: "Trip assigned and prepared for dispatch.",
+    },
+    {
+      status: "Pickup",
+      location: trip.pickup_area?.trim() || "Pickup point",
+      time: trip.started_at ? new Date(trip.started_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—",
+      details: "Pickup verification completed and movement initiated.",
+    },
+    {
+      status: "In-Transit",
+      location: "Route in progress",
+      time: trip.started_at ? new Date(trip.started_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—",
+      details: "Vehicle moving towards destination through planned route.",
+    },
+    {
+      status: "Delivered",
+      location: trip.drop_location?.trim() || "Destination",
+      time: trip.completed_at ? new Date(trip.completed_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—",
+      details: "Delivery completed and settlement flow closed.",
+    },
+  ];
+  const isTripCompleted =
+    String(trip.status ?? "").toLowerCase() === "completed" || !!trip.completed_at;
+  const currentStatusLabel = String(trip.status ?? "assigned")
+    .replace(/_/g, " ")
+    .toUpperCase();
+  const tripAny = trip as any;
+  const durationLabel = tripAny.duration_minutes
+    ? `${Math.floor(tripAny.duration_minutes / 60)}h ${tripAny.duration_minutes % 60}m`
+    : "—";
+  const driverRatingLabel =
+    detail.driverRatingAvg != null && Number.isFinite(Number(detail.driverRatingAvg))
+      ? Number(detail.driverRatingAvg).toFixed(1)
+      : "—";
+  const vehicleTypeLabel =
+    String((trip as any).vehicle_type ?? "").trim() ||
+    String((trip as any).truck_type ?? "").trim() ||
+    "MXL";
+  const vehicleCapacityLabel =
+    String((trip as any).capacity ?? "").trim() ||
+    String((trip as any).vehicle_capacity ?? "").trim() ||
+    "—";
+  const adjSales = adjustedRevenue(sales, detail.adjustments);
+  const adjCost = adjustedCost(cost, detail.adjustments);
+  const netManifestYield = Math.max(0, adjSales - adjCost - totalExpenses);
+  const revenueSideDelta = adjSales - sales;
+  const costSideDelta = adjCost - cost;
+  const filteredFinanceRows = financeHistoryRows.filter((row) => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return true;
+    const text = [
+      ledgerHistoryTitle(row.tx, row.isIn),
+      row.tx.description ?? "",
+      row.tx.payment_mode ?? "",
+      (row.tx as any).reference_no ?? "",
+      formatLedgerDate(row.tx.transaction_date),
+    ]
+      .join(" ")
+      .toLowerCase();
+    return text.includes(q);
+  });
+  const vaultDocs = detail.computedTripDocs.slice(0, 4);
 
   const openDriverDetails = () => {
     if (!trip.driver_id) return;
@@ -340,72 +520,143 @@ export default function TripDetailScreen({
     }
   };
 
+  // ── Dashboard: computed values ─────────────────────────────────────────────
+  const statusLower = (trip.status ?? '').toLowerCase();
+  const statusLabel =
+    statusLower.includes('in_transit') || statusLower.includes('transit') ? 'In Transit'
+    : statusLower.includes('in_progress') ? 'In Progress'
+    : statusLower.includes('complet') || statusLower.includes('deliver') || statusLower === 'done' ? 'Completed'
+    : statusLower === 'assigned' ? 'Assigned'
+    : statusLower === 'pending' ? 'Pending'
+    : trip.status ?? 'Pending';
+  const statusColor =
+    statusLabel === 'In Transit' || statusLabel === 'In Progress' ? '#22c55e'
+    : statusLabel === 'Completed' ? '#60a5fa'
+    : '#f59e0b';
+  const pickupStr = trip.pickup_date
+    ? new Date(trip.pickup_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    : '—';
+
+  const fmtAuditDate = (iso: string | null | undefined) => {
+    if (!iso) return '—';
+    try {
+      return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch { return iso.slice(0, 16).replace('T', ' '); }
+  };
+  const fmtTimelineTime = (iso: string | null | undefined) => {
+    if (!iso) return '—';
+    try {
+      return new Date(iso)
+        .toLocaleTimeString('en-IN', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        })
+        .toLowerCase();
+    } catch {
+      return '—';
+    }
+  };
+  const driverActivityRows = detail.driverActivityTimelineRows ?? [];
+  const timelineRows = [...driverActivityRows].sort((a, b) => {
+    const aDate = new Date(a.kind === 'status' ? a.changed_at : a.row.changed_at).getTime();
+    const bDate = new Date(b.kind === 'status' ? b.changed_at : b.row.changed_at).getTime();
+    return aDate - bDate;
+  });
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      {/* ── Dark navigation bar ─────────────────────────────────────────────── */}
-      <View style={[styles.navBar, { paddingHorizontal: hPad }]}>
-        <View style={styles.navLeft}>
-          <TouchableOpacity
-            onPress={onBack}
-            style={styles.navBackBtn}
-            activeOpacity={0.8}
-          >
-            <FontAwesome name="chevron-left" size={11} color="#94a3b8" />
-            {!isMobile && <Text style={styles.navBackText}>Back</Text>}
-          </TouchableOpacity>
-          <View style={styles.navTitleWrap}>
-            <Text style={[styles.navTitle, isMobile && { fontSize: 13 }]} numberOfLines={1}>
-              {getTripDisplayNumber(trip)}
-            </Text>
-            {!isMobile && (
-              <View
-                style={[
-                  styles.navPill,
-                  isAggregate ? styles.navPillAggregate : styles.navPillAsset,
-                ]}
+      {/* ── Navigation bar ──────────────────────────────────────────────────── */}
+      <View style={[styles.navBar, { paddingHorizontal: hPad }, !isDesktop && styles.navBarMobile]}>
+        {isDesktop ? (
+          <>
+            <View style={styles.navLeft}>
+              <TouchableOpacity
+                onPress={onBack}
+                style={styles.navBackBtn}
+                activeOpacity={0.8}
               >
-                <Text style={styles.navPillText}>
-                  {isAggregate ? "AGGREGATE" : "ASSET"}
+                <FontAwesome name="chevron-left" size={11} color="#94a3b8" />
+                {!isMobile && <Text style={styles.navBackText}>Back</Text>}
+              </TouchableOpacity>
+              <View style={styles.navTitleWrap}>
+                <Text style={[styles.navTitle, isMobile && { fontSize: 13 }]} numberOfLines={1}>
+                  {getTripDisplayNumber(trip)}
                 </Text>
+                {!isMobile && (
+                  <View
+                    style={[
+                      styles.navPill,
+                      isAggregate ? styles.navPillAggregate : styles.navPillAsset,
+                    ]}
+                  >
+                    <Text style={styles.navPillText}>
+                      {isAggregate ? "AGGREGATE" : "ASSET"}
+                    </Text>
+                  </View>
+                )}
               </View>
-            )}
-          </View>
-        </View>
-        <View style={styles.navActions}>
-          <NavAction
-            icon="plus"
-            label={isMobile ? "" : "Add Expense"}
-            onPress={detail.openAddExpense}
-          />
-          <NavAction
-            icon="file-text-o"
-            label={isMobile ? "" : "Generate Memo"}
-            onPress={() => {}}
-            primary
-          />
-        </View>
+            </View>
+            <View style={styles.navActions}>
+              <NavAction
+                icon="plus"
+                label={isMobile ? "" : "Add Expense"}
+                onPress={detail.openAddExpense}
+              />
+              <NavAction
+                icon="file-text-o"
+                label={isMobile ? "" : "Generate Memo"}
+                onPress={() => {}}
+                primary
+              />
+            </View>
+          </>
+        ) : (
+          <>
+            <TouchableOpacity onPress={onBack} style={styles.navCircleBtn} activeOpacity={0.85}>
+              <FontAwesome name="chevron-left" size={18} color="#0f172a" />
+            </TouchableOpacity>
+            <View style={styles.navMobileCenter}>
+              <Text style={styles.navMobileKicker}>Trip history</Text>
+              <View style={styles.navMobileTripRow}>
+                <Text style={styles.navMobileTripId}>{getTripDisplayNumber(trip)}</Text>
+                <View style={styles.navMobilePulseRow}>
+                  <View style={[styles.navMobileDot, styles.navMobileDotEmerald]} />
+                  <View style={[styles.navMobileDot, styles.navMobileDotIndigo]} />
+                </View>
+              </View>
+            </View>
+            <TouchableOpacity style={styles.navCircleBtn} activeOpacity={0.85}>
+              <FontAwesome name="share-alt" size={16} color="#0f172a" />
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       {/* ── Tab bar ───────────────────────────────────────────────────────────── */}
-      <View style={[styles.tabBar, { paddingHorizontal: hPad }]}>
-        <TabButton
-          label="Tracking"
-          icon="map-marker"
-          active={activeTab === "tracking"}
-          onPress={() => setActiveTab("tracking")}
-        />
-        <TabButton
-          label="Finance"
-          icon="bar-chart"
-          active={activeTab === "finance"}
-          onPress={() => setActiveTab("finance")}
-        />
-      </View>
+      {isDesktop ? (
+        <View style={[styles.tabBar, { paddingHorizontal: hPad }]}>
+          <TabButton
+            label="Tracking"
+            icon="map-marker"
+            active={desktopTab === "tracking"}
+            onPress={() => setActiveTab("tracking")}
+            compact={false}
+          />
+          <TabButton
+            label="Finance"
+            icon="bar-chart"
+            active={desktopTab === "finance"}
+            onPress={() => setActiveTab("finance")}
+            compact={false}
+          />
+        </View>
+      ) : null}
 
       {/* ── Scrollable content ────────────────────────────────────────────────── */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { padding: isMobile ? 12 : 20 }]}
+        contentContainerStyle={[styles.scrollContent, { padding: isMobile ? 16 : 22 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -414,10 +665,846 @@ export default function TripDetailScreen({
           />
         }
       >
-        {/* ════════════════════ TRACKING TAB ════════════════════ */}
-        {activeTab === "tracking" && (
+        {!isDesktop ? (
           <>
-            <View style={styles.workspaceRow}>
+            <View style={styles.refHeroCard}>
+              <View style={styles.refHeroBgGlow} />
+              <View style={styles.refHeroBridgeRow}>
+                <View style={styles.refHeroBridgeCol}>
+                  <View style={styles.refHeroBridgeIconWrap}>
+                    <Feather name="briefcase" size={12} color="#818cf8" />
+                  </View>
+                  <View>
+                    <Text style={styles.refHeroBridgeLabel}>Client Hub</Text>
+                    <Text style={styles.refHeroBridgeValue} numberOfLines={1}>{clientNameCard}</Text>
+                  </View>
+                </View>
+                <FontAwesome name="exchange" size={12} color="#64748b" />
+                <View style={[styles.refHeroBridgeCol, styles.refHeroBridgeColRight]}>
+                  <View>
+                    <Text style={[styles.refHeroBridgeLabel, styles.refHeroBridgeLabelRight]}>Supplier Node</Text>
+                    <Text style={styles.refHeroBridgeValue} numberOfLines={1}>{supplierName}</Text>
+                  </View>
+                  <View style={[styles.refHeroBridgeIconWrap, styles.refHeroBridgeIconWrapRose]}>
+                    <Feather name="truck" size={12} color="#fb7185" />
+                  </View>
+                </View>
+              </View>
+              <View style={styles.refHeroRouteRow}>
+                <View style={styles.refHeroRouteCol}>
+                  <Text style={[styles.refHeroCity, isMobile && styles.refHeroCityMobile]}>
+                    {originSplit.primary.toUpperCase()}
+                  </Text>
+                  <Text style={styles.refHeroState}>{originStateLabel.toUpperCase()}</Text>
+                </View>
+                <View style={styles.refHeroToRow}>
+                  <View style={styles.refHeroToDot} />
+                  <View style={styles.refHeroToLine} />
+                </View>
+                <View style={[styles.refHeroRouteCol, styles.refHeroRouteColRight]}>
+                  <Text style={[styles.refHeroCity, isMobile && styles.refHeroCityMobile]} numberOfLines={2}>
+                    {destinationSplit.primary.toUpperCase()}
+                  </Text>
+                  <Text style={styles.refHeroState}>{destinationStateLabel.toUpperCase()}</Text>
+                </View>
+              </View>
+              <View style={styles.refHeroMetaShell}>
+                <View style={styles.refHeroMetaItem}>
+                  <View style={styles.refHeroMetaIconWrap}>
+                    <Feather name="navigation" size={12} color="#fff" />
+                  </View>
+                  <View>
+                    <Text style={styles.refHeroMetaLabel}>Manifest range</Text>
+                    <Text style={styles.refHeroMetaValue}>{trip.distance ? `${trip.distance} KM` : "—"}</Text>
+                  </View>
+                </View>
+                <View style={styles.refHeroMetaDivider} />
+                <View style={[styles.refHeroMetaItem, styles.refHeroMetaItemRight]}>
+                  <View>
+                    <Text style={styles.refHeroMetaLabel}>ETE manifest</Text>
+                    <Text style={styles.refHeroMetaValue}>{durationLabel}</Text>
+                  </View>
+                  <View style={styles.refHeroMetaIconGhost}>
+                    <Feather name="clock" size={12} color="#a5b4fc" />
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.refAssetRow}>
+              <View style={styles.refAssetCard}>
+                <View style={styles.refAssetHead}>
+                  <View style={styles.refAssetIconWrap}>
+                    <Feather name="user" size={14} color="#4f46e5" />
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setShowAssignmentManager(true)}
+                    style={styles.refAssetChangeBtn}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.refAssetChangeBtnText}>Change</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.refAssetLabel}>Authorized Pilot</Text>
+                <Text style={styles.refAssetValue} numberOfLines={1}>{allocatedDriverName}</Text>
+                <Text style={styles.refAssetSubtle}>{driverRatingLabel} rank</Text>
+              </View>
+
+              <View style={styles.refAssetCard}>
+                <View style={styles.refAssetHead}>
+                  <View style={[styles.refAssetIconWrap, styles.refAssetIconWrapDark]}>
+                    <Feather name="truck" size={14} color="#fff" />
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setShowAssignmentManager(true)}
+                    style={styles.refAssetChangeBtn}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.refAssetChangeBtnText}>Change</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.refAssetLabel}>Vehicle Asset</Text>
+                <Text style={styles.refAssetValue} numberOfLines={1}>{allocatedVehicleLabel}</Text>
+                <Text style={styles.refAssetSubtle}>{vehicleTypeLabel} · {vehicleCapacityLabel}</Text>
+              </View>
+            </View>
+
+            <View style={styles.refTabShell}>
+              <TouchableOpacity
+                style={[styles.refTabBtn, activeTab === "trip" && styles.refTabBtnActive]}
+                onPress={() => setActiveTab("trip")}
+                activeOpacity={0.85}
+              >
+                <Feather name="activity" size={12} color={activeTab === "trip" ? "#818cf8" : "#94a3b8"} />
+                <Text style={[styles.refTabBtnText, activeTab === "trip" && styles.refTabBtnTextActive]}>Journey</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.refTabBtn, activeTab === "finance" && styles.refTabBtnActive]}
+                onPress={() => setActiveTab("finance")}
+                activeOpacity={0.85}
+              >
+                <Feather name="credit-card" size={12} color={activeTab === "finance" ? "#818cf8" : "#94a3b8"} />
+                <Text style={[styles.refTabBtnText, activeTab === "finance" && styles.refTabBtnTextActive]}>Finance</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.refTabBtn, activeTab === "docs" && styles.refTabBtnActive]}
+                onPress={() => setActiveTab("docs")}
+                activeOpacity={0.85}
+              >
+                <Feather name="shield" size={12} color={activeTab === "docs" ? "#818cf8" : "#94a3b8"} />
+                <Text style={[styles.refTabBtnText, activeTab === "docs" && styles.refTabBtnTextActive]}>Vault</Text>
+              </TouchableOpacity>
+            </View>
+
+            {activeTab === "trip" ? (
+              <View style={styles.refTrackWrap}>
+                <View style={styles.refTimelineCard}>
+                  {journeyLogs.map((log, index) => {
+                    const expanded = expandedLog === index;
+                    const isLast = index === journeyLogs.length - 1;
+                    return (
+                      <View key={`${log.status}-${index}`} style={styles.refTimelineItemWrap}>
+                        {!isLast ? <View style={styles.refTimelineConnector} /> : null}
+                        <TouchableOpacity
+                          style={[styles.refTimelineItem, expanded && styles.refTimelineItemExpanded]}
+                          onPress={() => setExpandedLog(expanded ? null : index)}
+                          activeOpacity={0.9}
+                        >
+                          <View style={styles.refTimelineDotIcon}>
+                            <FontAwesome name="check" size={11} color="#fff" />
+                          </View>
+                          <View style={styles.refTimelineBody}>
+                            <View style={styles.refTimelineTop}>
+                              <Text style={styles.refTimelineStatus}>{log.status}</Text>
+                              <View style={styles.refTimelineTopRight}>
+                                <Text style={styles.refTimelineTime}>{log.time}</Text>
+                                <FontAwesome name={expanded ? "chevron-up" : "chevron-down"} size={11} color="#94a3b8" />
+                              </View>
+                            </View>
+                            <Text style={styles.refTimelineLocation}>{log.location}</Text>
+                            {expanded ? <Text style={styles.refTimelineDetails}>{log.details}</Text> : null}
+                          </View>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.refDeliveredCard}>
+                  <View>
+                    <Text style={styles.refDeliveredLabel}>
+                      {isTripCompleted ? "Final Audit Status" : "Current Status"}
+                    </Text>
+                    <Text style={styles.refDeliveredValue}>
+                      {isTripCompleted ? "DELIVERED SUCCESSFULLY" : currentStatusLabel}
+                    </Text>
+                  </View>
+                  <View style={styles.refDeliveredIconWrap}>
+                    <FontAwesome
+                      name={isTripCompleted ? "check-circle" : "clock-o"}
+                      size={20}
+                      color="#fff"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.refFeedbackWrap}>
+                  <TripRatingsBlock
+                    trip={trip}
+                    organizationId={currentOrganization?.id ?? null}
+                    partnerName={detail.partnerName}
+                    driverName={detail.driverName}
+                    driverAvatarUri={detail.driverAvatarUri}
+                    clientName={detail.displayClientName ?? trip.client_name ?? null}
+                    paymentCaptured={paymentCaptured}
+                    layoutVariant="registry"
+                  />
+                </View>
+              </View>
+            ) : activeTab === "finance" ? (
+              <View style={styles.refFinanceWrap}>
+                <View style={styles.refFinanceSubTabs}>
+                  <TouchableOpacity
+                    style={styles.refFinanceSubBtn}
+                    onPress={() => setFinanceSubTab("summary")}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.refFinanceSubBtnText,
+                        financeSubTab === "summary" && styles.refFinanceSubBtnTextActive,
+                      ]}
+                    >
+                      Summary
+                    </Text>
+                    {financeSubTab === "summary" ? <View style={styles.refFinanceSubLine} /> : null}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.refFinanceSubBtn}
+                    onPress={() => setFinanceSubTab("transactions")}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.refFinanceSubBtnText,
+                        financeSubTab === "transactions" && styles.refFinanceSubBtnTextActive,
+                      ]}
+                    >
+                      Transactions
+                    </Text>
+                    {financeSubTab === "transactions" ? <View style={styles.refFinanceSubLine} /> : null}
+                  </TouchableOpacity>
+                </View>
+
+                {financeSubTab === "summary" ? (
+                  <>
+                    <View style={[styles.refSettleCard, styles.refFinanceManifestHero]}>
+                      <Text style={styles.refSettleLabel}>Net Manifest Yield</Text>
+                      <Text style={styles.refManifestNetHuge}>{formatINR(netManifestYield)}</Text>
+                      <Text style={styles.refSettleHint}>
+                        After adjusted revenue, adjusted supplier cost, and voyage spend
+                      </Text>
+
+                      <View style={styles.refManifestHeroSplit}>
+                        <View style={styles.refManifestCol}>
+                          <View style={styles.refManifestColHead}>
+                            <View style={styles.refManifestColHeadLeft}>
+                              <View style={[styles.refManifestDot, styles.refManifestDotSales]} />
+                              <Text style={styles.refManifestColTitle}>Adjusted sales</Text>
+                            </View>
+                            <TouchableOpacity
+                              onPress={() => setShowFinanceProvisionPanel("client")}
+                              style={styles.refManifestMiniPlus}
+                              activeOpacity={0.85}
+                            >
+                              <FontAwesome name="plus" size={10} color="#4f46e5" />
+                            </TouchableOpacity>
+                          </View>
+                          <Text style={[styles.refManifestColAmount, styles.refManifestSalesAmt]}>
+                            {formatINR(adjSales)}
+                          </Text>
+                          <View style={styles.refManifestMicroBox}>
+                            <Text style={styles.refManifestMicroLine}>Base · {formatINR(sales)}</Text>
+                            <Text style={styles.refManifestMicroAdjSales}>
+                              Adj · {revenueSideDelta >= 0 ? "+" : "−"}
+                              {formatINR(Math.abs(revenueSideDelta))}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.refManifestHeroSep} />
+
+                        <View style={[styles.refManifestCol, styles.refManifestColRight]}>
+                          <View style={styles.refManifestColHead}>
+                            <TouchableOpacity
+                              onPress={() => setShowFinanceProvisionPanel("supplier")}
+                              style={[styles.refManifestMiniPlus, styles.refManifestMiniPlusMuted]}
+                              activeOpacity={0.85}
+                            >
+                              <FontAwesome name="plus" size={10} color="#e11d48" />
+                            </TouchableOpacity>
+                            <View style={styles.refManifestColHeadRight}>
+                              <Text style={styles.refManifestColTitle}>Adjusted cost</Text>
+                              <View style={[styles.refManifestDot, styles.refManifestDotCost]} />
+                            </View>
+                          </View>
+                          <Text style={[styles.refManifestColAmount, styles.refManifestCostAmt]}>
+                            {formatINR(adjCost)}
+                          </Text>
+                          <View style={styles.refManifestMicroBox}>
+                            <Text style={[styles.refManifestMicroLine, styles.refManifestMicroRight]}>
+                              Base · {formatINR(cost)}
+                            </Text>
+                            <Text style={styles.refManifestMicroAdjCost}>
+                              Adj · {costSideDelta >= 0 ? "+" : "−"}
+                              {formatINR(Math.abs(costSideDelta))}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+
+                      <View style={styles.refSettleExpenseRow}>
+                        <Text style={styles.refSettleExpenseLabel}>Petty / voyage expense</Text>
+                        <Text style={styles.refSettleExpenseVal}>{formatINR(totalExpenses)}</Text>
+                      </View>
+                    </View>
+
+                    {showFinanceProvisionPanel ? (
+                      <View style={styles.refProvisionWrap}>
+                        <View style={styles.refProvisionHeader}>
+                          <Text style={styles.refProvisionTitle}>
+                            Provision CN/DN ({showFinanceProvisionPanel === "client" ? "Client" : "Supplier"})
+                          </Text>
+                          <TouchableOpacity
+                            onPress={() => setShowFinanceProvisionPanel(null)}
+                            hitSlop={10}
+                            style={styles.refProvisionClose}
+                            accessibilityLabel="Close provision panel"
+                          >
+                            <Feather name="x" size={18} color="#cbd5f5" />
+                          </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.refProvisionDnRow}>
+                          <TouchableOpacity
+                            style={[styles.refProvisionDnBtn, styles.refProvisionCnBtn]}
+                            onPress={() => {
+                              if (showFinanceProvisionPanel === "client") {
+                                detail.openClientIncomeAdjustment();
+                              } else {
+                                detail.openSupplierCostReductionAdjustment();
+                              }
+                              setShowFinanceProvisionPanel(null);
+                            }}
+                            activeOpacity={0.88}
+                          >
+                            <Feather name="plus" size={22} color="#a5b4fc" />
+                            <Text style={styles.refProvisionDnLabel}>Credit (CN)</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.refProvisionDnBtn, styles.refProvisionDnBtnDebit]}
+                            onPress={() => {
+                              if (showFinanceProvisionPanel === "client") {
+                                detail.openClientDeductionAdjustment();
+                              } else {
+                                detail.openSupplierCostAdditionAdjustment();
+                              }
+                              setShowFinanceProvisionPanel(null);
+                            }}
+                            activeOpacity={0.88}
+                          >
+                            <Feather name="minus" size={22} color="#fca5a5" />
+                            <Text style={styles.refProvisionDnLabel}>Debit (DN)</Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        <Text style={styles.refProvisionChipsLbl}>Quick protocol tabs</Text>
+                        <View style={styles.refProvisionChipWrap}>
+                          {FINANCE_PROTOCOL_CHIPS.map((chip) => (
+                            <TouchableOpacity
+                              key={chip}
+                              style={styles.refProvisionChip}
+                              onPress={() => {
+                                if (!showFinanceProvisionPanel) return;
+                                const p = protocolFinanceChipAdjustment(
+                                  showFinanceProvisionPanel,
+                                  chip,
+                                );
+                                detail.openTripAdjustmentModal({
+                                  type: p.type,
+                                  impact: p.impact,
+                                  reasonSeed: p.reasonSeed,
+                                });
+                                setShowFinanceProvisionPanel(null);
+                              }}
+                              activeOpacity={0.82}
+                            >
+                              <Text style={styles.refProvisionChipTxt}>{chip}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+
+                        <View style={styles.refProvisionFoot}>
+                          <View>
+                            <Text style={styles.refProvisionHint}>Authorization preview</Text>
+                            <Text style={styles.refProvisionPulse}>Provision sync</Text>
+                          </View>
+                          <TouchableOpacity
+                            style={styles.refProvisionConfirm}
+                            onPress={() => detail.handleAddAdjustment()}
+                            activeOpacity={0.85}
+                          >
+                            <Text style={styles.refProvisionConfirmTxt}>Full adjustment…</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : null}
+
+                    <View style={styles.refManifestSplitSection}>
+                      <View style={styles.refManifestSplitHead}>
+                        <Feather name="activity" size={16} color="#cbd5e1" />
+                        <Text style={styles.refManifestSplitTitle}>Manifest adjustments split</Text>
+                      </View>
+                      <View style={styles.refManifestBands}>
+                        <View style={styles.refManifestBand}>
+                          <View style={styles.refManifestBandLblRow}>
+                            <Text style={[styles.refManifestBandLbl, styles.refManifestBandLblIn]}>
+                              Sales inbound
+                            </Text>
+                            <Feather name="arrow-up-right" size={14} color="#16a34a" />
+                          </View>
+                          {incomeAdjustmentRows.length === 0 ? (
+                            <Text style={styles.refManifestBandEmpty}>No inbound adjustments yet</Text>
+                          ) : (
+                            incomeAdjustmentRows.map((adj) => (
+                              <View key={adj.id} style={[styles.refManifestBandRow, styles.refManifestBandRowIn]}>
+                                <View style={styles.refManifestBandRowInner}>
+                                  <Feather name="plus" size={12} color="#16a34a" />
+                                  <Text style={styles.refManifestBandReason} numberOfLines={2}>
+                                    {(adj.reason || "").trim() || "Adjustment"}
+                                  </Text>
+                                </View>
+                                <Text style={styles.refManifestBandAmtIn}>{formatINR(adj.amount)}</Text>
+                              </View>
+                            ))
+                          )}
+                        </View>
+
+                        <View style={styles.refManifestBandSep} />
+
+                        <View style={styles.refManifestBand}>
+                          <View style={styles.refManifestBandLblRow}>
+                            <Text style={[styles.refManifestBandLbl, styles.refManifestBandLblOut]}>
+                              Cost outbound
+                            </Text>
+                            <Feather name="activity" size={14} color="#f43f5e" />
+                          </View>
+                          {deductionAdjustmentRows.length === 0 ? (
+                            <Text style={styles.refManifestBandEmpty}>No outbound adjustments yet</Text>
+                          ) : (
+                            deductionAdjustmentRows.map((adj) => (
+                              <View key={adj.id} style={[styles.refManifestBandRow, styles.refManifestBandRowOut]}>
+                                <View style={styles.refManifestBandRowInner}>
+                                  <Feather name="zap" size={12} color="#f43f5e" />
+                                  <Text style={styles.refManifestBandReason} numberOfLines={2}>
+                                    {(adj.reason || "").trim() || "Adjustment"}
+                                  </Text>
+                                </View>
+                                <Text style={styles.refManifestBandAmtOut}>{formatINR(adj.amount)}</Text>
+                              </View>
+                            ))
+                          )}
+                        </View>
+                      </View>
+                    </View>
+
+                    <View style={styles.refFinanceBreakCard}>
+                      <View style={styles.refAdjRegHeader}>
+                        <Text style={styles.refAdjRegTitle}>Adjustment registry</Text>
+                      </View>
+                      {detail.adjustments.length === 0 ? (
+                        <Text style={styles.refFinanceEmpty}>No adjustments yet</Text>
+                      ) : (
+                        detail.adjustments.map((adj) => {
+                          const isRev = adj.type === "revenue";
+                          const isPlus = adj.impact === "plus";
+                          const iconName = !isRev
+                            ? isPlus
+                              ? "arrow-up-right"
+                              : "arrow-down-left"
+                            : isPlus
+                              ? "trending-up"
+                              : "trending-down";
+                          const tint = !isRev
+                            ? isPlus
+                              ? "#f43f5e"
+                              : "#10b981"
+                            : isPlus
+                              ? "#10b981"
+                              : "#f43f5e";
+                          return (
+                            <View key={adj.id} style={styles.refFinanceRow}>
+                              <View style={styles.refFinanceRowLeft}>
+                                <View style={styles.refFinanceRowIcon}>
+                                  <Feather name={iconName as never} size={13} color={tint} />
+                                </View>
+                                <View style={styles.refAdjLabelCol}>
+                                  <Text style={styles.refFinanceRowLabel}>{(adj.reason || "").trim() || "Adjustment"}</Text>
+                                  <Text style={styles.refAdjPartyTag}>
+                                    {adj.type === "revenue" ? "Revenue" : "Supplier cost"}
+                                  </Text>
+                                </View>
+                              </View>
+                              <View style={styles.refAdjRight}>
+                                <Text
+                                  style={[
+                                    styles.refFinanceRowValue,
+                                    (isRev ? isPlus : !isPlus)
+                                      ? styles.refFinanceRowValuePositive
+                                      : styles.refFinanceRowValueNegative,
+                                  ]}
+                                >
+                                  {`${isRev ? (isPlus ? "+" : "−") : isPlus ? "+" : "−"}${formatINR(adj.amount)}`}
+                                </Text>
+                                <TouchableOpacity
+                                  onPress={() => void detail.handleRemoveAdjustment(adj.id)}
+                                  hitSlop={10}
+                                  style={styles.refAdjTrash}
+                                  accessibilityLabel="Remove adjustment"
+                                >
+                                  <FontAwesome name="times-circle" size={15} color="#cbd5e1" />
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          );
+                        })
+                      )}
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <View style={styles.refFinanceSearchWrap}>
+                      <Feather name="search" size={14} color="#94a3b8" />
+                      <TextInput
+                        value={searchTerm}
+                        onChangeText={setSearchTerm}
+                        placeholder="Audit transaction registry..."
+                        placeholderTextColor="#94a3b8"
+                        style={styles.refFinanceSearchInput}
+                      />
+                    </View>
+                    {filteredFinanceRows.map((row) => (
+                      <View key={row.key} style={styles.refTxnRow}>
+                        <View style={styles.refTxnLeft}>
+                          <View
+                            style={[
+                              styles.refTxnIconWrap,
+                              row.isIn ? styles.refTxnIconIn : styles.refTxnIconOut,
+                            ]}
+                          >
+                            <Feather
+                              name={row.isIn ? "arrow-down-left" : "arrow-up-right"}
+                              size={16}
+                              color={row.isIn ? "#10b981" : "#f43f5e"}
+                            />
+                          </View>
+                          <View style={styles.refTxnTextWrap}>
+                            <Text style={styles.refTxnLabel}>{ledgerHistoryTitle(row.tx, row.isIn)}</Text>
+                            <Text style={styles.refTxnMeta}>
+                              {formatLedgerDate(row.tx.transaction_date)} ·{" "}
+                              {row.tx.payment_mode || "Wallet"}
+                            </Text>
+                          </View>
+                        </View>
+                        <Text
+                          style={[
+                            styles.refTxnAmount,
+                            row.isIn ? styles.refTxnAmountIn : styles.refTxnAmountOut,
+                          ]}
+                        >
+                          {formatINR(row.amount)}
+                        </Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+              </View>
+            ) : activeTab === "docs" ? (
+              <View style={styles.refVaultWrap}>
+                <View style={styles.refVaultHeader}>
+                  <View style={styles.refVaultHeaderIcon}>
+                    <Feather name="shield" size={20} color="#4f46e5" />
+                  </View>
+                  <View>
+                    <Text style={styles.refVaultTitle}>Asset Vault</Text>
+                    <Text style={styles.refVaultSub}>Operational Compliance Registry</Text>
+                  </View>
+                </View>
+                <View style={styles.refVaultGrid}>
+                  {vaultDocs.map((doc) => {
+                    const tone =
+                      (doc.status as string) === "Missing"
+                        ? "critical"
+                        : doc.status === "Pending"
+                          ? "pending"
+                          : "ok";
+                    return (
+                      <View key={doc.id} style={styles.refVaultCard}>
+                        <Feather
+                          name={tone === "critical" ? "alert-triangle" : "file-text"}
+                          size={18}
+                          color={tone === "critical" ? "#fb7185" : "#94a3b8"}
+                        />
+                        <Text style={styles.refVaultCardTitle} numberOfLines={2}>{doc.label}</Text>
+                        <Text style={styles.refVaultCardStatus}>{doc.status}</Text>
+                        <TouchableOpacity
+                          style={styles.refVaultViewBtn}
+                          onPress={() => void handleDocOpen(doc)}
+                          activeOpacity={0.85}
+                        >
+                          <Feather name="external-link" size={12} color="#64748b" />
+                          <Text style={styles.refVaultViewText}>View</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
+          </>
+        ) : null}
+
+        {/* ════════════════════ TRACKING TAB ════════════════════ */}
+        {isDesktop && desktopTab === "tracking" && (
+          <>
+            {/* ── Hero Card ── */}
+            <View style={dStyles.heroCard}>
+              <View style={dStyles.heroLeft}>
+                <View style={dStyles.heroTitleRow}>
+                  <Text style={dStyles.heroTripId}>{getTripDisplayNumber(trip)}</Text>
+                  <View style={[dStyles.statusBadge, { borderColor: statusColor }]}>
+                    <View style={[dStyles.statusDot, { backgroundColor: statusColor }]} />
+                    <Text style={[dStyles.statusText, { color: statusColor }]}>{statusLabel.toUpperCase()}</Text>
+                  </View>
+                </View>
+                <View style={dStyles.routeRow}>
+                  <View style={dStyles.routeStop}>
+                    <Text style={dStyles.routeLabel}>ORIGIN</Text>
+                    <Text style={dStyles.routeCity} numberOfLines={1}>{trip.pickup_area || '—'}</Text>
+                    <Text style={dStyles.routeDate}>{pickupStr}</Text>
+                  </View>
+                  <View style={dStyles.routeDivider}>
+                    <View style={dStyles.routeLine} />
+                    <FontAwesome name="truck" size={16} color="rgba(255,255,255,0.3)" />
+                    <View style={dStyles.routeLine} />
+                  </View>
+                  <View style={dStyles.routeStop}>
+                    <Text style={dStyles.routeLabel}>DESTINATION</Text>
+                    <Text style={dStyles.routeCity} numberOfLines={1}>{trip.drop_location || '—'}</Text>
+                    {trip.estimated_duration ? <Text style={dStyles.routeDate}>EST: {trip.estimated_duration}</Text> : null}
+                  </View>
+                </View>
+              </View>
+              <View style={dStyles.heroStats}>
+                <View style={dStyles.statBox}>
+                  <Text style={dStyles.statLabel}>DISTANCE</Text>
+                  <Text style={dStyles.statValue}>{trip.distance != null ? `${trip.distance} km` : '—'}</Text>
+                </View>
+                <View style={dStyles.statDivider} />
+                <View style={dStyles.statBox}>
+                  <Text style={dStyles.statLabel}>STATUS</Text>
+                  <Text style={[dStyles.statValue, { fontSize: 14 }]}>{statusLabel}</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* ── Map + Audit Trail ── */}
+            <View style={dStyles.row}>
+              <View style={[dStyles.card, dStyles.mapCol]}>
+                <View style={dStyles.cardHeader}>
+                  <FontAwesome name="map" size={14} color="#60a5fa" style={{ marginRight: 8 }} />
+                  <Text style={dStyles.cardTitle}>Live Tracking</Text>
+                  {detail.trackingMapOriginCoordinate && detail.trackingMapDestinationCoordinate && (
+                    <TouchableOpacity style={dStyles.openMapsBtn} onPress={openTripDirectionsInMaps} activeOpacity={0.8}>
+                      <Feather name="navigation" size={12} color="#60a5fa" />
+                      <Text style={dStyles.openMapsBtnText}>Open Maps</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <View style={dStyles.telemetryWrap}>
+                  <TripMap
+                    source={trip.pickup_area ?? undefined}
+                    destination={trip.drop_location ?? undefined}
+                    sourceCoords={detail.trackingMapOriginCoordinate ?? undefined}
+                    destCoords={detail.trackingMapDestinationCoordinate ?? undefined}
+                    truckLocation={detail.driverLocation ?? undefined}
+                    height={mapHeight}
+                  />
+                  <View style={dStyles.telemetryBar}>
+                    <FontAwesome name="compass" size={14} color="#60a5fa" style={{ marginRight: 8 }} />
+                    <View>
+                      <Text style={dStyles.telemetryTitle}>Telemetry Link Secured</Text>
+                      <Text style={dStyles.telemetrySub}>Protocol v4.2 synchronized live</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+
+              <View style={[dStyles.card, dStyles.auditCol]}>
+                <View style={dStyles.cardHeader}>
+                  <View style={dStyles.timelineHeaderIcon}>
+                    <FontAwesome name="calendar-o" size={10} color="#0f172a" />
+                  </View>
+                  <Text style={dStyles.timelineHeaderTitle}>TRIP TIMELINE</Text>
+                </View>
+                <ScrollView style={dStyles.auditScroll} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+                  {timelineRows.length === 0 ? (
+                    <Text style={dStyles.emptyText}>No activity yet</Text>
+                  ) : timelineRows.map((item, idx) => {
+                      const isLast = idx === timelineRows.length - 1;
+                      if (item.kind === 'status') {
+                        const iconTone =
+                          item.status_context === 'completed' || item.status_context === 'in_transit'
+                            ? '#059669'
+                            : 'rgba(15,23,42,0.35)';
+                        return (
+                          <View key={item.id} style={[dStyles.auditItem, isLast && dStyles.auditItemLast]}>
+                            <View style={dStyles.auditTrackCol}>
+                              <View
+                                style={[
+                                  dStyles.auditTimelineDot,
+                                  { borderColor: iconTone, backgroundColor: item.status_context === 'completed' || item.status_context === 'in_transit' ? '#ecfdf5' : '#f8fafc' },
+                                ]}
+                              >
+                                <View style={[dStyles.auditTimelineDotInner, { backgroundColor: iconTone }]} />
+                              </View>
+                              {!isLast ? <View style={dStyles.auditTimelineLine} /> : null}
+                            </View>
+                            <View style={dStyles.auditContentRow}>
+                              <View style={dStyles.auditBody}>
+                                <Text style={dStyles.auditTitle}>{item.status_label}</Text>
+                                <Text style={dStyles.auditDetail}>{item.detail_line}</Text>
+                              </View>
+                              <View style={dStyles.auditMeta}>
+                                <Text style={dStyles.auditTime}>{fmtTimelineTime(item.changed_at)}</Text>
+                                <FontAwesome name="angle-down" size={12} color="rgba(15,23,42,0.35)" />
+                              </View>
+                            </View>
+                          </View>
+                        );
+                      }
+
+                      const row = item.row;
+                      const dName = row.driver_id_new
+                        ? (detail.assignmentDriverNames[row.driver_id_new] ?? null)
+                        : null;
+                      const vLabel = row.vehicle_id_new
+                        ? (detail.assignmentVehicleLabels[row.vehicle_id_new] ?? null)
+                        : null;
+
+                      return (
+                        <View key={row.id} style={[dStyles.auditItem, isLast && dStyles.auditItemLast]}>
+                          <View style={dStyles.auditTrackCol}>
+                            <View style={dStyles.auditTimelineDot}>
+                              <View style={dStyles.auditTimelineDotInner} />
+                            </View>
+                            {!isLast ? <View style={dStyles.auditTimelineLine} /> : null}
+                          </View>
+                          <View style={dStyles.auditContentRow}>
+                            <View style={dStyles.auditBody}>
+                                <Text style={dStyles.auditTitle}>Assigned</Text>
+                              <Text style={dStyles.auditDetail}>
+                                {(dName || vLabel)
+                                  ? [dName, vLabel].filter(Boolean).join(' · ')
+                                    : (trip.pickup_area || 'Driver assigned')}
+                              </Text>
+                            </View>
+                            <View style={dStyles.auditMeta}>
+                              <Text style={dStyles.auditTime}>{fmtTimelineTime(row.changed_at)}</Text>
+                              <FontAwesome name="angle-down" size={12} color="rgba(15,23,42,0.35)" />
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    })}
+                </ScrollView>
+              </View>
+            </View>
+
+            {/* ── Driver / Vehicle + Documents ── */}
+            <View style={dStyles.row}>
+              <View style={dStyles.bottomLeft}>
+                <View style={dStyles.card}>
+                  <Text style={dStyles.cardMicroLabel}>PRIMARY DRIVER</Text>
+                  <View style={dStyles.driverRow}>
+                    {detail.driverAvatarUri ? (
+                      <Image source={{ uri: detail.driverAvatarUri }} style={dStyles.driverAvatar} />
+                    ) : (
+                      <View style={dStyles.driverAvatarFallback}>
+                        <FontAwesome name="user" size={20} color="rgba(255,255,255,0.5)" />
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={dStyles.driverName}>{detail.driverName || '—'}</Text>
+                      {detail.driverRatingAvg != null && (
+                        <Text style={dStyles.driverRating}>★ {Number(detail.driverRatingAvg).toFixed(1)}</Text>
+                      )}
+                    </View>
+                    {trip.started_at ? (
+                      <View style={dStyles.statBoxSm}>
+                        <Text style={dStyles.statLabelSm}>STARTED</Text>
+                        <Text style={dStyles.statValueSm}>
+                          {new Date(trip.started_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+
+                <View style={dStyles.card}>
+                  <Text style={dStyles.cardMicroLabel}>ASSIGNED VEHICLE</Text>
+                  <View style={dStyles.vehicleRow}>
+                    <View style={dStyles.vehicleIconWrap}>
+                      <FontAwesome name="truck" size={20} color="rgba(255,255,255,0.5)" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={dStyles.vehicleName}>
+                        {detail.vehicleLabel || detail.displayVehicleFromInput || '—'}
+                      </Text>
+                      {trip.load_type ? <Text style={dStyles.vehicleSub}>{trip.load_type}</Text> : null}
+                    </View>
+                  </View>
+                </View>
+              </View>
+
+              <View style={[dStyles.card, dStyles.docsCol]}>
+                <View style={dStyles.cardHeader}>
+                  <FontAwesome name="file-text-o" size={14} color="#60a5fa" style={{ marginRight: 8 }} />
+                  <Text style={dStyles.cardTitle}>Required Documents</Text>
+                  <View style={dStyles.docsBadge}>
+                    <Text style={dStyles.docsBadgeText}>
+                      {detail.computedTripDocs.filter(d => d.status === 'Uploaded').length}/{detail.computedTripDocs.length} VERIFIED
+                    </Text>
+                  </View>
+                </View>
+                {detail.computedTripDocs.map((doc) => (
+                  <TouchableOpacity key={doc.id} style={dStyles.docRow} onPress={() => handleDocOpen(doc)} activeOpacity={0.75}>
+                    <View style={dStyles.docIconWrap}>
+                      <FontAwesome name="file-o" size={14} color="rgba(255,255,255,0.4)" />
+                    </View>
+                    <Text style={dStyles.docLabel} numberOfLines={1}>{doc.label}</Text>
+                    <View style={[dStyles.docStatusPill, doc.status === 'Uploaded' ? dStyles.docStatusVerified : dStyles.docStatusPending]}>
+                      <Text style={[dStyles.docStatusText, doc.status === 'Uploaded' ? dStyles.docStatusTextVerified : dStyles.docStatusTextPending]}>
+                        {doc.status === 'Uploaded' ? 'VERIFIED' : 'PENDING'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Placeholder for dead code path below — preserve existing view refs */}
+            {false && <View style={styles.workspaceRow}>
               <View style={styles.workspaceLeftCol}>
                 <View style={styles.voyageCard}>
                   <View style={styles.sectionKickerRow}>
@@ -483,8 +1570,8 @@ export default function TripDetailScreen({
                     previousDriverName={detail.previousDriverName}
                     latestReassignmentSummary={detail.latestReassignmentSummary}
                     driverAssignOrgId={
-                      detail.showAssignByPhone && currentOrganization?.id
-                        ? currentOrganization.id
+                      detail.showAssignByPhone
+                        ? currentOrganization?.id ?? null
                         : null
                     }
                     onVehicleDisplayChange={(value) => {
@@ -517,14 +1604,14 @@ export default function TripDetailScreen({
                                   ? "Driver has verified assignment from the driver app."
                                   : detail.tripOtp?.expires_at
                                     ? `OTP generated. Expires at ${new Date(
-                                        detail.tripOtp.expires_at,
+                                        detail.tripOtp!.expires_at!,
                                       ).toLocaleString("en-IN")}`
                                     : "OTP will be generated during assignment confirmation flow."}
                               </Text>
                               {aggregateOtpState !== "verified" && detail.tripOtp?.code ? (
                                 <View style={styles.otpCodeRow}>
                                   <Text style={styles.otpCodeLabel}>OTP</Text>
-                                  <Text style={styles.otpCodeValue}>{detail.tripOtp.code}</Text>
+                                  <Text style={styles.otpCodeValue}>{detail.tripOtp?.code}</Text>
                                 </View>
                               ) : null}
                             </View>
@@ -597,60 +1684,13 @@ export default function TripDetailScreen({
                   }
                   mapPreview={
                     <View style={styles.telemetryWrap}>
-                      <LeafletMap
-                        style={{ width: "100%", height: 520, minHeight: 520 }}
-                        center={mapCenter}
-                        zoom={hasOrigin && hasDest ? 6 : 5}
-                        polyline={
-                          hasOrigin && hasDest
-                            ? [
-                                {
-                                  latitude:
-                                    detail.trackingMapOriginCoordinate!.latitude,
-                                  longitude:
-                                    detail.trackingMapOriginCoordinate!.longitude,
-                                },
-                                {
-                                  latitude:
-                                    detail.trackingMapDestinationCoordinate!.latitude,
-                                  longitude:
-                                    detail.trackingMapDestinationCoordinate!.longitude,
-                                },
-                              ]
-                            : []
-                        }
-                        markers={
-                          [
-                            hasOrigin
-                              ? {
-                                  id: "origin",
-                                  coordinate: {
-                                    latitude:
-                                      detail.trackingMapOriginCoordinate!
-                                        .latitude,
-                                    longitude:
-                                      detail.trackingMapOriginCoordinate!
-                                        .longitude,
-                                  },
-                                  label: trip.pickup_area ?? "Origin",
-                                }
-                              : null,
-                            hasDest
-                              ? {
-                                  id: "dest",
-                                  coordinate: {
-                                    latitude:
-                                      detail.trackingMapDestinationCoordinate!
-                                        .latitude,
-                                    longitude:
-                                      detail.trackingMapDestinationCoordinate!
-                                        .longitude,
-                                  },
-                                  label: trip.drop_location ?? "Destination",
-                                }
-                              : null,
-                          ].filter(Boolean) as any
-                        }
+                      <TripMap
+                        source={trip.pickup_area ?? undefined}
+                        destination={trip.drop_location ?? undefined}
+                        sourceCoords={detail.trackingMapOriginCoordinate ?? undefined}
+                        destCoords={detail.trackingMapDestinationCoordinate ?? undefined}
+                        truckLocation={detail.driverLocation ?? undefined}
+                        height={520}
                       />
                       <View style={styles.telemetryOverlay}>
                         <FontAwesome name="compass" size={20} color="#60a5fa" />
@@ -661,7 +1701,7 @@ export default function TripDetailScreen({
                   }
                 />
               </View>
-            </View>
+            </View>}
 
             {/* Feedback / Ratings section */}
             {currentOrganization?.id && (
@@ -681,7 +1721,7 @@ export default function TripDetailScreen({
                         row.contact_type === "client" &&
                         Number(row.amount_in ?? 0) > 0,
                     )}
-                    layoutVariant="workspace"
+                    layoutVariant="registry"
                   />
                 ) : (
                   <FeedbackPlaceholder />
@@ -692,7 +1732,7 @@ export default function TripDetailScreen({
         )}
 
         {/* ════════════════════ FINANCE TAB ════════════════════ */}
-        {activeTab === "finance" && (
+        {isDesktop && desktopTab === "finance" && (
           <View style={styles.financeColsRow}>
             <View style={styles.financeLeftCol}>
               <View style={styles.yieldCard}>
@@ -786,8 +1826,17 @@ export default function TripDetailScreen({
           </View>
         )}
 
-        <View style={{ height: 48 }} />
+        <View style={{ height: !isDesktop ? 120 : 48 }} />
       </ScrollView>
+
+      {!isDesktop ? (
+        <View style={styles.refFloatingWrap} pointerEvents="box-none">
+          <TouchableOpacity style={styles.refFloatingBtn} activeOpacity={0.9}>
+            <Feather name="zap" size={14} color="#818cf8" />
+            <Text style={styles.refFloatingBtnText}>Authorized Pulse</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {/* ── Modals ────────────────────────────────────────────────────────────── */}
       <TripAdjustmentModal
@@ -803,6 +1852,65 @@ export default function TripDetailScreen({
         onOk={() => detail.setShowDriverRejectedModal(false)}
         variant="warning"
       />
+
+      <Modal
+        visible={showAssignmentManager}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowAssignmentManager(false)}
+      >
+        <View style={styles.assignModalBackdrop}>
+          <View style={styles.assignModalCard}>
+            <View style={styles.assignModalHeader}>
+              <Text style={styles.assignModalTitle}>Current Assignment</Text>
+              <TouchableOpacity
+                onPress={() => setShowAssignmentManager(false)}
+                style={styles.assignModalClose}
+                activeOpacity={0.85}
+              >
+                <FontAwesome name="times" size={16} color="#0f172a" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {trip.organization_id ? (
+                <TripAssignmentBlock
+                  trip={trip}
+                  organizationId={currentOrganization?.id ?? ""}
+                  canAssign={detail.canAssign}
+                  onUpdated={async () => {
+                    await detail.handleAssignmentUpdated();
+                    setShowAssignmentManager(false);
+                  }}
+                  partnerName={detail.partnerName}
+                  driverName={detail.driverName}
+                  vehicleLabel={
+                    isAggregate
+                      ? detail.displayVehicleFromInput.trim() ||
+                        detail.vehicleLabel ||
+                        null
+                      : detail.vehicleLabel
+                  }
+                  driverAvatarUri={detail.driverAvatarUri}
+                  showAssignByPhone={detail.showAssignByPhone}
+                  assignmentSource={detail.assignmentSource}
+                  currentUserId={detail.currentUserId}
+                  previousDriverName={detail.previousDriverName}
+                  latestReassignmentSummary={detail.latestReassignmentSummary}
+                  driverAssignOrgId={
+                    detail.showAssignByPhone && currentOrganization?.id
+                      ? currentOrganization.id
+                      : null
+                  }
+                  onVehicleDisplayChange={(value) => {
+                    const normalized = formatIndianVehicleNumber(value ?? "");
+                    detail.setDisplayVehicleFromInput(normalized);
+                  }}
+                />
+              ) : null}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={!!detail.selectedDoc}
@@ -1296,26 +2404,31 @@ function TabButton({
   icon,
   active,
   onPress,
+  compact = false,
 }: {
   label: string;
   icon: React.ComponentProps<typeof FontAwesome>["name"];
   active: boolean;
   onPress: () => void;
+  compact?: boolean;
 }) {
   return (
     <TouchableOpacity
-      style={[styles.tabBtn, active && styles.tabBtnActive]}
+      style={[styles.tabBtn, compact && styles.tabBtnCompact, active && styles.tabBtnActive, compact && active && styles.tabBtnActiveCompact]}
       onPress={onPress}
       activeOpacity={0.8}
     >
-      <FontAwesome
-        name={icon}
-        size={13}
-        color={active ? "#2563eb" : "#6b7280"}
-      />
-      <Text style={[styles.tabBtnText, active && styles.tabBtnTextActive]}>
+      {!compact ? (
+        <FontAwesome
+          name={icon}
+          size={13}
+          color={active ? "#2563eb" : "#6b7280"}
+        />
+      ) : null}
+      <Text style={[styles.tabBtnText, compact && styles.tabBtnTextCompact, active && styles.tabBtnTextActive, compact && active && styles.tabBtnTextActiveCompact]}>
         {label}
       </Text>
+      {compact && active ? <View style={styles.tabUnderlineCompact} /> : null}
     </TouchableOpacity>
   );
 }
@@ -1363,24 +2476,1700 @@ function NavAction({
   );
 }
 
+// ── Dashboard styles ────────────────────────────────────────────────────────────
+const DS_BG = '#F8FAFC';
+const DS_CARD = '#FFFFFF';
+const DS_BORDER = 'rgba(15,23,42,0.08)';
+const DS_TEXT = '#0F172A';
+const DS_MUTED = 'rgba(15,23,42,0.55)';
+
+const dStyles = StyleSheet.create({
+  heroCard: {
+    flexDirection: 'row',
+    backgroundColor: DS_CARD,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: DS_BORDER,
+    padding: 24,
+    marginBottom: 16,
+    flexWrap: 'wrap',
+    gap: 20,
+  },
+  heroLeft: { flex: 1, minWidth: 260 },
+  heroTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap' },
+  heroTripId: { fontSize: 26, fontWeight: '800', color: DS_TEXT, letterSpacing: -0.5 },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999, borderWidth: 1 },
+  statusDot: { width: 7, height: 7, borderRadius: 4 },
+  statusText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  routeRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12 },
+  routeStop: { flex: 1, minWidth: 100 },
+  routeLabel: { fontSize: 9, fontWeight: '700', color: DS_MUTED, letterSpacing: 1.2, marginBottom: 4 },
+  routeCity: { fontSize: 17, fontWeight: '700', color: DS_TEXT },
+  routeDate: { fontSize: 12, color: DS_MUTED, marginTop: 4 },
+  routeDivider: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  routeLine: { height: 1, width: 32, backgroundColor: 'rgba(15,23,42,0.15)' },
+  heroStats: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(15,23,42,0.03)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: DS_BORDER,
+    padding: 20,
+    alignItems: 'center',
+    alignSelf: 'center',
+    minWidth: 200,
+  },
+  statBox: { flex: 1, alignItems: 'center' },
+  statLabel: { fontSize: 9, fontWeight: '700', color: DS_MUTED, letterSpacing: 1, marginBottom: 6 },
+  statValue: { fontSize: 22, fontWeight: '800', color: DS_TEXT },
+  statDivider: { width: 1, height: 36, backgroundColor: 'rgba(15,23,42,0.09)', marginHorizontal: 8 },
+  statBoxSm: { alignItems: 'flex-end' },
+  statLabelSm: { fontSize: 9, fontWeight: '700', color: DS_MUTED, letterSpacing: 1, marginBottom: 4 },
+  statValueSm: { fontSize: 14, fontWeight: '700', color: DS_TEXT },
+  row: { flexDirection: 'row', gap: 16, marginBottom: 16, flexWrap: 'wrap' },
+  card: { backgroundColor: DS_CARD, borderRadius: 16, borderWidth: 1, borderColor: DS_BORDER, padding: 20 },
+  mapCol: { flex: 3, minWidth: 300 },
+  auditCol: { flex: 2, minWidth: 260 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  cardTitle: { fontSize: 14, fontWeight: '700', color: DS_TEXT, flex: 1 },
+  openMapsBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(96,165,250,0.3)', backgroundColor: 'rgba(96,165,250,0.08)' },
+  openMapsBtnText: { fontSize: 11, fontWeight: '600', color: '#60a5fa' },
+  telemetryWrap: { borderRadius: 10 },
+  telemetryBar: { flexDirection: 'row', alignItems: 'center', padding: 14, backgroundColor: '#0f141a', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
+  telemetryTitle: { fontSize: 12, fontWeight: '700', color: DS_TEXT },
+  telemetrySub: { fontSize: 10, color: DS_MUTED, marginTop: 1 },
+  timelineHeaderIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  timelineHeaderTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: 'rgba(15,23,42,0.8)',
+    letterSpacing: 0.9,
+  },
+  auditScroll: { maxHeight: 360 },
+  auditItem: { flexDirection: 'row', gap: 12, paddingBottom: 10, marginBottom: 6 },
+  auditItemLast: { marginBottom: 0, paddingBottom: 0 },
+  auditTrackCol: { width: 18, alignItems: 'center', flexShrink: 0 },
+  auditTimelineDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: '#059669',
+    backgroundColor: '#ecfdf5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  auditTimelineDotInner: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#059669',
+  },
+  auditTimelineLine: {
+    width: 2,
+    flex: 1,
+    backgroundColor: 'rgba(5,150,105,0.28)',
+    marginTop: 4,
+    minHeight: 18,
+  },
+  auditContentRow: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  auditBody: { flex: 1, minWidth: 0 },
+  auditTitle: { fontSize: 14, fontWeight: '700', color: DS_TEXT, marginBottom: 1 },
+  auditDetail: { fontSize: 11, color: DS_MUTED },
+  auditMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 1 },
+  auditTime: { fontSize: 10, color: 'rgba(15,23,42,0.42)', fontWeight: '600', minWidth: 56, textAlign: 'right' },
+  emptyText: { fontSize: 13, color: DS_MUTED, textAlign: 'center', paddingVertical: 32 },
+  bottomLeft: { flex: 2, minWidth: 220, gap: 12 },
+  docsCol: { flex: 3, minWidth: 280 },
+  cardMicroLabel: { fontSize: 9, fontWeight: '700', color: DS_MUTED, letterSpacing: 1.2, marginBottom: 14 },
+  driverRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  driverAvatar: { width: 44, height: 44, borderRadius: 22 },
+  driverAvatarFallback: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(15,23,42,0.06)', alignItems: 'center', justifyContent: 'center' },
+  driverName: { fontSize: 15, fontWeight: '700', color: DS_TEXT },
+  driverRating: { fontSize: 12, color: '#f59e0b', marginTop: 3 },
+  vehicleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  vehicleIconWrap: { width: 44, height: 44, borderRadius: 10, backgroundColor: 'rgba(15,23,42,0.05)', borderWidth: 1, borderColor: DS_BORDER, alignItems: 'center', justifyContent: 'center' },
+  vehicleName: { fontSize: 15, fontWeight: '700', color: DS_TEXT },
+  vehicleSub: { fontSize: 12, color: DS_MUTED, marginTop: 3 },
+  docRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: 'rgba(15,23,42,0.06)' },
+  docIconWrap: { width: 22, alignItems: 'center' },
+  docLabel: { flex: 1, fontSize: 13, color: DS_TEXT, fontWeight: '500' },
+  docStatusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, borderWidth: 1 },
+  docStatusVerified: { backgroundColor: 'rgba(34,197,94,0.1)', borderColor: 'rgba(34,197,94,0.28)' },
+  docStatusPending: { backgroundColor: 'rgba(245,158,11,0.1)', borderColor: 'rgba(245,158,11,0.28)' },
+  docStatusText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  docStatusTextVerified: { color: '#22c55e' },
+  docStatusTextPending: { color: '#f59e0b' },
+  docsBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: 'rgba(15,23,42,0.04)', borderWidth: 1, borderColor: DS_BORDER },
+  docsBadgeText: { fontSize: 10, fontWeight: '700', color: DS_MUTED, letterSpacing: 0.4 },
+});
+
 // ── Styles ─────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
+  refTrackWrap: { gap: 14 },
+  refHeroBridgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 14,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.08)",
+  },
+  refHeroBridgeCol: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  refHeroBridgeColRight: {
+    justifyContent: "flex-end",
+  },
+  refHeroBridgeIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(99,102,241,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(129,140,248,0.35)",
+  },
+  refHeroBridgeIconWrapRose: {
+    backgroundColor: "rgba(244,63,94,0.14)",
+    borderColor: "rgba(251,113,133,0.35)",
+  },
+  refHeroBridgeLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+  },
+  refHeroBridgeLabelRight: {
+    textAlign: "right",
+  },
+  refHeroBridgeValue: {
+    marginTop: 1,
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#fff",
+    textTransform: "uppercase",
+  },
+  refHeroRouteRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  refHeroRouteCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  refHeroRouteColRight: {
+    alignItems: "flex-end",
+  },
+  refHeroMetaShell: {
+    marginTop: 12,
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  refHeroMetaIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    backgroundColor: "#4f46e5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  refHeroMetaIconGhost: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  refHeroMetaDivider: {
+    width: 1,
+    alignSelf: "stretch",
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  refHeroMetaItemRight: {
+    justifyContent: "space-between",
+  },
+  refAssetRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 2,
+    marginBottom: 14,
+  },
+  refAssetCard: {
+    flex: 1,
+    borderRadius: 28,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+  },
+  refAssetHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  refAssetIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#eef2ff",
+  },
+  refAssetIconWrapDark: {
+    backgroundColor: "#0f172a",
+  },
+  refAssetChangeBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: "#f8fafc",
+  },
+  refAssetChangeBtnText: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: "#0f172a",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  refAssetLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+  },
+  refAssetValue: {
+    marginTop: 3,
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+  refAssetSubtle: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+  },
+  refTabShell: {
+    marginBottom: 16,
+    padding: 6,
+    borderRadius: 24,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    flexDirection: "row",
+    gap: 4,
+  },
+  refTabBtn: {
+    flex: 1,
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  refTabBtnActive: {
+    backgroundColor: "#0f172a",
+  },
+  refTabBtnText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
+  refTabBtnTextActive: {
+    color: "#fff",
+  },
+  refFinanceSubTabs: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 20,
+    paddingHorizontal: 8,
+    marginBottom: 8,
+  },
+  refFinanceSubBtn: {
+    paddingBottom: 8,
+  },
+  refFinanceSubBtnText: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+    color: "#94a3b8",
+  },
+  refFinanceSubBtnTextActive: {
+    color: "#0f172a",
+  },
+  refFinanceSubLine: {
+    marginTop: 4,
+    height: 3,
+    borderRadius: 999,
+    backgroundColor: "#6366f1",
+  },
+  refSettleMetaRow: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#eef2f7",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  refSettleMetaLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
+  refSettleMetaValuePositive: {
+    marginTop: 2,
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#10b981",
+  },
+  refSettleMetaSep: {
+    width: 1,
+    alignSelf: "stretch",
+    backgroundColor: "#eef2f7",
+  },
+  refSettleMetaRight: {
+    flex: 1,
+    alignItems: "flex-end",
+  },
+  refSettleMetaValueNegative: {
+    marginTop: 2,
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#f43f5e",
+  },
+  refFinanceRowLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
+  },
+  refFinanceRowIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: "#f8fafc",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  refFinanceRowValuePositive: {
+    color: "#10b981",
+  },
+  refFinanceRowValueNegative: {
+    color: "#f43f5e",
+  },
+  refFinanceSearchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 24,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    marginBottom: 8,
+  },
+  refFinanceSearchInput: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0f172a",
+    paddingVertical: 8,
+  },
+  refTxnRow: {
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+    backgroundColor: "#fff",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+    gap: 8,
+  },
+  refTxnLeft: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  refTxnIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  refTxnIconIn: {
+    backgroundColor: "#ecfdf5",
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+  },
+  refTxnIconOut: {
+    backgroundColor: "#fff1f2",
+    borderWidth: 1,
+    borderColor: "#fecdd3",
+  },
+  refTxnTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  refTxnLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  refTxnMeta: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  refTxnAmount: {
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  refTxnAmountIn: {
+    color: "#10b981",
+  },
+  refTxnAmountOut: {
+    color: "#f43f5e",
+  },
+  refVaultWrap: {
+    borderRadius: 34,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+    padding: 18,
+    gap: 12,
+  },
+  refVaultHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  refVaultHeaderIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+  },
+  refVaultTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+  refVaultSub: {
+    marginTop: 1,
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
+  },
+  refVaultGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  refVaultCard: {
+    width: "48.3%",
+    borderRadius: 24,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    gap: 5,
+  },
+  refVaultCardTitle: {
+    textAlign: "center",
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#0f172a",
+    textTransform: "uppercase",
+  },
+  refVaultCardStatus: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  refVaultViewBtn: {
+    marginTop: 6,
+    borderRadius: 10,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  refVaultViewText: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: "#64748b",
+    textTransform: "uppercase",
+  },
+  refHeroCard: {
+    marginBottom: 16,
+    backgroundColor: "#030b1f",
+    borderRadius: 42,
+    paddingHorizontal: 24,
+    paddingVertical: 22,
+    overflow: "hidden",
+    borderBottomWidth: 3,
+    borderBottomColor: Theme.driverEmerald,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    elevation: 6,
+  },
+  refModePillTopRight: {
+    position: "absolute",
+    top: 14,
+    right: 14,
+    zIndex: 2,
+  },
+  refHeroBgGlow: {
+    position: "absolute",
+    left: -58,
+    bottom: -58,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: "rgba(16,185,129,0.14)",
+  },
+  refHeroKickerRow: { marginBottom: 14 },
+  refHeroKicker: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 3.8,
+    color: "#94a3b8",
+  },
+  refHeroCity: {
+    fontSize: 36,
+    fontWeight: "900",
+    color: "#ffffff",
+    letterSpacing: -1.1,
+    lineHeight: 38,
+  },
+  refHeroCityMobile: {
+    fontSize: 30,
+    letterSpacing: -0.6,
+    lineHeight: 32,
+  },
+  refHeroState: {
+    marginTop: 2,
+    marginBottom: 10,
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 2.2,
+  },
+  refHeroToRow: { flexDirection: "row", alignItems: "center", gap: 8, marginVertical: 4 },
+  refHeroToDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Theme.positive },
+  refHeroToLine: { width: 1, height: 14, backgroundColor: "rgba(16,185,129,0.5)" },
+  refHeroToText: { fontSize: 10, fontWeight: "900", letterSpacing: 1.2, color: Theme.positive },
+  refHeroDivider: { marginTop: 4, marginBottom: 12, height: 1, backgroundColor: "rgba(255,255,255,0.12)" },
+  refHeroMetaRow: { flexDirection: "row", gap: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.12)" },
+  refHeroMetaItem: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
+  refHeroMetaLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 2.2,
+    color: "#94a3b8",
+  },
+  refHeroMetaValue: { fontSize: 11, fontWeight: "800", color: "#ffffff", marginTop: 1, letterSpacing: 0.4 },
+  refHeroAssignedRow: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.12)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "nowrap",
+  },
+  refHeroPartyInfoRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    gap: 12,
+  },
+  refHeroPartyInfoCell: {
+    flex: 1,
+    minWidth: 0,
+  },
+  refHeroPartyInfoTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 2,
+  },
+  refHeroAssignedLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 2.1,
+  },
+  refHeroAssignedValue: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#ffffff",
+    letterSpacing: -0.2,
+  },
+  refModePill: {
+    marginLeft: "auto",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+  },
+  refModePillIntegrated: {
+    backgroundColor: "rgba(16,185,129,0.12)",
+    borderColor: "rgba(16,185,129,0.45)",
+  },
+  refModePillManual: {
+    backgroundColor: "rgba(148,163,184,0.12)",
+    borderColor: "rgba(148,163,184,0.35)",
+  },
+  refModePillText: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  refModePillTextIntegrated: {
+    color: Theme.positive,
+  },
+  refModePillTextManual: {
+    color: "#cbd5e1",
+  },
+  refHeroPartyRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    gap: 10,
+  },
+  refHeroPartyCell: {
+    flex: 1,
+    minWidth: 0,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  refHeroPartyTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  refHeroPartyLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 2.1,
+    color: "#94a3b8",
+  },
+  refHeroPartyBtn: {
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  refHeroPartyBtnText: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    color: "#ffffff",
+  },
+  refHeroPartyValue: {
+    marginTop: 2,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#ffffff",
+    letterSpacing: -0.1,
+  },
+  refFeedbackWrap: {
+    marginTop: 10,
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  assignModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15,23,42,0.45)",
+    justifyContent: "flex-end",
+  },
+  assignModalCard: {
+    maxHeight: "86%",
+    backgroundColor: "#f8fafc",
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingTop: 10,
+    paddingHorizontal: 10,
+    paddingBottom: 14,
+  },
+  assignModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  assignModalTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  assignModalClose: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  refTimelineHeaderRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 4, marginBottom: 4 },
+  refTimelineHeaderIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#0f172a",
+  },
+  refManifestCard: {
+    backgroundColor: "#fff",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    padding: 16,
+  },
+  refKickerRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
+  refKickerBar: { width: 4, height: 16, borderRadius: 2, backgroundColor: "#2563eb" },
+  refKickerText: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1.8,
+    color: "#64748b",
+  },
+  refRouteRow: { flexDirection: "row", gap: 10, marginBottom: 12 },
+  refRouteDots: { width: 10, alignItems: "center", marginTop: 5 },
+  refDot: { width: 7, height: 7, borderRadius: 4 },
+  refDotStart: { backgroundColor: "#10b981" },
+  refDotEnd: { backgroundColor: "#ef4444" },
+  refDotLine: { width: 1.5, flex: 1, minHeight: 16, marginVertical: 4, backgroundColor: "#e2e8f0" },
+  refRouteTextCol: { flex: 1, gap: 8 },
+  refRoutePlace: { fontSize: 15, fontWeight: "700", color: "#0f172a" },
+  refMetaGrid: {
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+    paddingTop: 10,
+    flexDirection: "row",
+    gap: 8,
+  },
+  refMetaCell: { flex: 1, minWidth: 0 },
+  refMetaLabel: { fontSize: 10, fontWeight: "700", color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.8 },
+  refMetaValue: { marginTop: 2, fontSize: 13, fontWeight: "700", color: "#1e293b" },
+  refOperatorCard: {
+    backgroundColor: "#fff",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    padding: 14,
+  },
+  refOperatorBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  refOperatorLabel: { fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, color: "#94a3b8" },
+  refOperatorValue: { fontSize: 14, fontWeight: "700", color: "#0f172a" },
+  refOperatorSub: { marginTop: 9, fontSize: 12, fontWeight: "500", color: "#64748b" },
+  refAssignCard: {
+    backgroundColor: "#fff",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    padding: 14,
+    gap: 8,
+  },
+  refAssignTitle: { fontSize: 14, fontWeight: "700", color: "#0f172a", marginBottom: 2 },
+  refAssignRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#e2e8f0",
+    paddingTop: 10,
+  },
+  refAssignTxtWrap: { flex: 1, minWidth: 0 },
+  refAssignLabel: { fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, color: "#94a3b8" },
+  refAssignValue: { marginTop: 1, fontSize: 14, fontWeight: "700", color: "#0f172a" },
+  refAssignFoot: {
+    marginTop: 8,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#e2e8f0",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  refAssignFootText: { flex: 1, minWidth: 0, fontSize: 11, color: "#6b7280" },
+  refOtpBtn: { backgroundColor: "#0f172a", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  refOtpBtnText: { color: "#fff", fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
+  refDocCard: {
+    backgroundColor: "#fff",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    padding: 14,
+  },
+  refDocHeader: { marginBottom: 8 },
+  refTimelineWrap: {
+    backgroundColor: "#fff",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    padding: 14,
+    gap: 8,
+  },
+  refTimelineTitle: { fontSize: 11, fontWeight: "900", textTransform: "uppercase", letterSpacing: 2, color: "#0f172a" },
+  refTimelineCard: {
+    backgroundColor: "#fff",
+    borderRadius: 38,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+  },
+  refTimelineItemWrap: {
+    position: "relative",
+    paddingLeft: 0,
+  },
+  refTimelineConnector: {
+    position: "absolute",
+    left: 17,
+    top: 34,
+    bottom: -8,
+    width: 2,
+    backgroundColor: "#e5e7eb",
+  },
+  refTimelineItem: { flexDirection: "row", gap: 14, paddingVertical: 12 },
+  refTimelineItemExpanded: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 14,
+    paddingHorizontal: 6,
+  },
+  refTimelineDotIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#10b981",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 3,
+  },
+  refTimelineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#10b981", marginTop: 5 },
+  refTimelineBody: { flex: 1, minWidth: 0 },
+  refTimelineTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  refTimelineTopRight: { flexDirection: "row", alignItems: "center", gap: 6 },
+  refTimelineStatus: { fontSize: 12, fontWeight: "900", color: "#0f172a", textTransform: "uppercase", letterSpacing: 1.1 },
+  refTimelineTime: { fontSize: 10, fontWeight: "700", color: "#94a3b8" },
+  refTimelineLocation: { marginTop: 3, fontSize: 11, color: "#64748b", fontWeight: "700" },
+  refTimelineDetails: { marginTop: 8, fontSize: 10, color: "#475569", lineHeight: 15, fontStyle: "italic" },
+  refAssignInlineRow: {
+    marginTop: 2,
+    borderRadius: 18,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    padding: 12,
+    gap: 10,
+    flexDirection: "row",
+  },
+  refAssignInlineCell: {
+    flex: 1,
+    minWidth: 0,
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+    borderRadius: 12,
+    padding: 10,
+    backgroundColor: "#f8fafc",
+  },
+  refAssignInlineLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
+    color: "#94a3b8",
+  },
+  refAssignInlineValue: {
+    marginTop: 3,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  refAssignInlineBtn: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    backgroundColor: "#0f172a",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  refAssignInlineBtnText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  refDeliveredCard: {
+    marginTop: 4,
+    borderRadius: 30,
+    backgroundColor: "#059669",
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  refDeliveredLabel: {
+    fontSize: 10,
+    color: "#d1fae5",
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
+  refDeliveredValue: {
+    marginTop: 2,
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#fff",
+    fontStyle: "italic",
+  },
+  refDeliveredIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.25)",
+  },
+  refFinanceWrap: { gap: 14 },
+  refFinanceManifestHero: {
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+    overflow: "hidden",
+  },
+  refManifestNetHuge: {
+    marginTop: 8,
+    fontSize: 44,
+    fontWeight: "900",
+    letterSpacing: -1.2,
+    color: "#0f172a",
+  },
+  refManifestHeroSplit: {
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#eef2f7",
+    flexDirection: "row",
+    gap: 8,
+    width: "100%",
+  },
+  refManifestCol: { flex: 1, minWidth: 0 },
+  refManifestColRight: { alignItems: "stretch" },
+  refManifestHeroSep: {
+    width: 1,
+    alignSelf: "stretch",
+    backgroundColor: "#eef2f7",
+    marginHorizontal: 4,
+    minHeight: 120,
+  },
+  refManifestColHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+    gap: 6,
+  },
+  refManifestColHeadLeft: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1, minWidth: 0 },
+  refManifestColHeadRight: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1, minWidth: 0, justifyContent: "flex-end" },
+  refManifestColTitle: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
+  refManifestDot: { width: 6, height: 6, borderRadius: 3 },
+  refManifestDotSales: { backgroundColor: "#22c55e" },
+  refManifestDotCost: { backgroundColor: "#fb7185" },
+  refManifestMiniPlus: {
+    padding: 8,
+    borderRadius: 10,
+    backgroundColor: "#f1f5f9",
+  },
+  refManifestMiniPlusMuted: { marginRight: 4 },
+  refManifestColAmount: {
+    fontSize: 24,
+    fontWeight: "900",
+    letterSpacing: -0.8,
+    fontStyle: "italic",
+  },
+  refManifestSalesAmt: { color: "#16a34a" },
+  refManifestCostAmt: { color: "#e11d48", textAlign: "right", alignSelf: "stretch" },
+  refManifestMicroBox: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+    backgroundColor: "rgba(248,250,252,0.7)",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    gap: 4,
+  },
+  refManifestMicroLine: { fontSize: 8, fontWeight: "700", color: "#94a3b8", textTransform: "uppercase" },
+  refManifestMicroRight: { alignSelf: "flex-end", textAlign: "right", width: "100%" },
+  refManifestMicroAdjSales: {
+    marginTop: 4,
+    fontSize: 8,
+    fontWeight: "900",
+    color: "#16a34a",
+    textTransform: "uppercase",
+  },
+  refManifestMicroAdjCost: {
+    marginTop: 4,
+    fontSize: 8,
+    fontWeight: "900",
+    color: "#e11d48",
+    textTransform: "uppercase",
+    textAlign: "right",
+  },
+  refProvisionWrap: {
+    backgroundColor: "#0f172a",
+    borderRadius: 26,
+    padding: 20,
+    gap: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    ...Platform.select({
+      web: { boxShadow: "0 30px 80px rgba(15,23,42,0.35)" },
+      default: {},
+    }),
+  },
+  refProvisionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
+  refProvisionTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: "#f8fafc",
+    letterSpacing: -0.3,
+    textTransform: "uppercase",
+    minWidth: 0,
+  },
+  refProvisionClose: {
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    alignSelf: "flex-start",
+  },
+  refProvisionDnRow: { flexDirection: "row", gap: 12 },
+  refProvisionDnBtn: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 18,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 8,
+  },
+  refProvisionCnBtn: {
+    borderColor: "rgba(99,102,241,0.35)",
+    backgroundColor: "rgba(99,102,241,0.08)",
+  },
+  refProvisionDnBtnDebit: {
+    borderColor: "rgba(244,63,94,0.35)",
+    backgroundColor: "rgba(244,63,94,0.08)",
+  },
+  refProvisionDnLabel: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#e2e8f0",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+  },
+  refProvisionChipsLbl: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: "#64748b",
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    marginTop: 4,
+  },
+  refProvisionChipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  refProvisionChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  refProvisionChipTxt: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#cbd5f5",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  refProvisionFoot: {
+    marginTop: 8,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.08)",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    alignItems: "flex-end",
+  },
+  refProvisionHint: {
+    fontSize: 7,
+    fontWeight: "800",
+    color: "#64748b",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  refProvisionPulse: {
+    marginTop: 4,
+    fontSize: 16,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: "#fff",
+    letterSpacing: -0.2,
+    textTransform: "uppercase",
+  },
+  refProvisionConfirm: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: "#4f46e5",
+    ...Platform.select({
+      web: { boxShadow: "0 10px 35px rgba(79,70,229,0.45)" },
+      default: {},
+    }),
+  },
+  refProvisionConfirmTxt: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: "#fff",
+  },
+  refManifestSplitSection: { gap: 10 },
+  refManifestSplitHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  refManifestSplitTitle: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#cbd5e1",
+    letterSpacing: 3,
+    textTransform: "uppercase",
+  },
+  refManifestBands: {
+    backgroundColor: "#fff",
+    borderRadius: 28,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+    gap: 14,
+    ...Platform.select({
+      web: { boxShadow: "0 18px 50px rgba(15,23,42,0.05)" },
+      default: {},
+    }),
+  },
+  refManifestBand: { gap: 8 },
+  refManifestBandSep: { height: 1, backgroundColor: "#f1f5f9" },
+  refManifestBandLblRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 2,
+  },
+  refManifestBandLbl: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  refManifestBandLblIn: { color: "#15803d" },
+  refManifestBandLblOut: { color: "#e11d48" },
+  refManifestBandEmpty: {
+    paddingVertical: 8,
+    fontSize: 12,
+    color: "#94a3b8",
+    fontWeight: "600",
+    fontStyle: "italic",
+  },
+  refManifestBandRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    gap: 10,
+    borderWidth: 1,
+  },
+  refManifestBandRowIn: {
+    borderColor: "rgba(34,197,94,0.12)",
+    backgroundColor: "rgba(236,253,245,0.45)",
+  },
+  refManifestBandRowOut: {
+    borderColor: "rgba(244,63,94,0.12)",
+    backgroundColor: "rgba(254,242,242,0.45)",
+  },
+  refManifestBandRowInner: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1, minWidth: 0 },
+  refManifestBandReason: { flex: 1, fontSize: 12, fontWeight: "900", color: "#1e293b" },
+  refManifestBandAmtIn: {
+    fontSize: 13,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: "#15803d",
+  },
+  refManifestBandAmtOut: {
+    fontSize: 13,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: "#e11d48",
+  },
+  refSettleCard: {
+    backgroundColor: "#fff",
+    borderRadius: 34,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    padding: 22,
+    alignItems: "center",
+  },
+  refSettleLabel: { fontSize: 10, fontWeight: "800", letterSpacing: 1.6, textTransform: "uppercase", color: "#94a3b8" },
+  refSettleValue: { marginTop: 6, fontSize: 40, fontWeight: "900", color: "#0f172a", letterSpacing: -0.8 },
+  refSettleHint: {
+    marginTop: 4,
+    paddingHorizontal: 8,
+    fontSize: 9,
+    fontWeight: "600",
+    color: "#94a3b8",
+    textAlign: "center",
+    lineHeight: 14,
+  },
+  refSettleMicro: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: "600",
+    color: "#94a3b8",
+  },
+  refSettleMicroRight: {
+    textAlign: "right",
+    alignSelf: "flex-end",
+  },
+  refSettleMetaLabelRightAligned: {
+    textAlign: "right",
+    alignSelf: "flex-end",
+  },
+  refSettleExpenseRow: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#eef2f7",
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  refSettleExpenseLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
+  },
+  refSettleExpenseVal: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  mobileFinanceAdjCard: {
+    backgroundColor: "#fff",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 14,
+    gap: 10,
+  },
+  mobileFinanceAdjHeader: {
+    gap: 3,
+    marginBottom: 4,
+  },
+  mobileFinanceAdjTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  mobileFinanceAdjSub: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.85,
+  },
+  mobileFinanceAdjRow: {
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    borderRadius: 14,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    backgroundColor: "#f8fafc",
+  },
+  mobileFinanceAdjMetric: {
+    flex: 1,
+    minWidth: 0,
+  },
+  mobileFinanceAdjMetricLbl: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 0.65,
+    marginBottom: 3,
+  },
+  mobileFinanceAdjMetricVal: {
+    fontSize: 15,
+    fontWeight: "800",
+    letterSpacing: -0.2,
+  },
+  mobileFinanceAdjMetPos: { color: "#16a34a" },
+  mobileFinanceAdjMetNeg: { color: "#dc2626" },
+  mobileFinanceAdjBtn: {
+    borderRadius: 10,
+    backgroundColor: "#0f172a",
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderWidth: 1,
+    borderColor: "#0f172a",
+  },
+  mobileFinanceAdjBtnMuted: {
+    backgroundColor: "#e2e8f0",
+    borderColor: "#cbd5e1",
+  },
+  mobileFinanceAdjBtnCost: {
+    backgroundColor: "#1e293b",
+    borderColor: "#1e293b",
+  },
+  mobileFinanceAdjBtnTxt: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#fff",
+    textTransform: "uppercase",
+    letterSpacing: 0.55,
+  },
+  mobileFinanceAdjBtnTxtMuted: {
+    color: "#334155",
+  },
+  mobileFinanceAdjGhost: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 8,
+  },
+  mobileFinanceAdjGhostTxt: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  refSettleBadge: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#ecfdf5",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  refSettleBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+    color: "#059669",
+  },
+  refFinanceBreakCard: {
+    backgroundColor: "#fff",
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    padding: 16,
+    gap: 10,
+  },
+  refAdjRegHeader: {
+    marginBottom: 2,
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  refAdjRegTitle: {
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+    color: "#64748b",
+  },
+  refFinanceEmpty: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#94a3b8",
+    textAlign: "center",
+    paddingVertical: 6,
+  },
+  refFinanceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  refAdjLabelCol: { flex: 1, minWidth: 0 },
+  refAdjPartyTag: {
+    marginTop: 2,
+    fontSize: 8,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.65,
+    color: "#94a3b8",
+  },
+  refAdjRight: { flexDirection: "row", alignItems: "center", gap: 6 },
+  refAdjTrash: { padding: 2 },
+  refFinanceRowLabel: { fontSize: 12, color: "#475569", fontWeight: "700" },
+  refFinanceRowValue: { fontSize: 13, color: "#0f172a", fontWeight: "800" },
+  refFinanceRowValueStrong: { fontSize: 15 },
+  refBottomInfo: {
+    borderRadius: 22,
+    backgroundColor: "#0f172a",
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  refBottomInfoLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+    color: "#94a3b8",
+  },
+  refBottomInfoValue: {
+    marginTop: 2,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  refBottomInfoBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.14)",
+  },
+  refFloatingWrap: {
+    position: "absolute",
+    bottom: 24,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    pointerEvents: "box-none" as const,
+  },
+  refFloatingBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#0f172a",
+    borderRadius: 24,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  refFloatingBtnText: {
+    color: "#818cf8",
+    fontSize: 13,
+    fontWeight: "600",
+  },
   root: {
     flex: 1,
-    backgroundColor: "#f1f5f9",
+    backgroundColor: DS_BG,
     overflow: "hidden",
   },
 
-  // ── Dark nav ──
+  // ── Top nav ──
   navBar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingVertical: 14,
-    backgroundColor: "#0f141a",
+    backgroundColor: "#FFFFFF",
     flexWrap: "wrap",
     gap: 12,
+  },
+  navBarMobile: {
+    backgroundColor: "#ffffff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#eef2f7",
+    paddingTop: 10,
+    paddingBottom: 10,
+    flexWrap: "nowrap",
+  },
+  navCircleBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+  },
+  navMobileCenter: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  navMobileKicker: {
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 3.8,
+    textTransform: "uppercase",
+    color: "#cbd5e1",
+  },
+  navMobileTripRow: {
+    marginTop: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  navMobileTripId: {
+    fontSize: 17,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: "#0f172a",
+    letterSpacing: -0.35,
+  },
+  navMobilePulseRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  navMobileDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  navMobileDotEmerald: {
+    backgroundColor: "#34d399",
+  },
+  navMobileDotIndigo: {
+    backgroundColor: "#6366f1",
   },
   navLeft: {
     flexDirection: "row",
@@ -1395,12 +4184,12 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#334155",
+    borderColor: "#CBD5E1",
   },
   navBackText: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#94a3b8",
+    color: "#475569",
   },
   navTitleWrap: {
     flexDirection: "row",
@@ -1410,19 +4199,19 @@ const styles = StyleSheet.create({
   navTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#f8fafc",
+    color: "#0F172A",
   },
   navPill: {
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 4,
   },
-  navPillAsset: { backgroundColor: "#1e3a5f" },
-  navPillAggregate: { backgroundColor: "#3b2e00" },
+  navPillAsset: { backgroundColor: "#DBEAFE" },
+  navPillAggregate: { backgroundColor: "#FEF3C7" },
   navPillText: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#94a3b8",
+    color: "#475569",
     letterSpacing: 0.5,
   },
   navActions: {
@@ -1439,21 +4228,21 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#334155",
-    backgroundColor: "#1e293b",
+    borderColor: "#CBD5E1",
+    backgroundColor: "#FFFFFF",
   },
   navActionBtnPrimary: {
     backgroundColor: "#2563eb",
     borderColor: "#2563eb",
   },
   navActionBtnDanger: {
-    borderColor: "#7f1d1d",
-    backgroundColor: "#1e293b",
+    borderColor: "#FECACA",
+    backgroundColor: "#FFFFFF",
   },
   navActionText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#94a3b8",
+    color: "#475569",
   },
   navActionTextPrimary: { color: "#fff" },
   navActionTextDanger: { color: "#ef4444" },
@@ -1461,9 +4250,28 @@ const styles = StyleSheet.create({
   // ── Tab bar ──
   tabBar: {
     flexDirection: "row",
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: "#E2E8F0",
+  },
+  tabBarMobile: {
+    marginHorizontal: 12,
+    marginTop: 10,
+    borderBottomWidth: 0,
+    borderRadius: 14,
+    backgroundColor: "rgba(226,232,240,0.55)",
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    gap: 4,
+  },
+  tabBarMobileInline: {
+    marginBottom: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(226,232,240,0.55)",
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    gap: 4,
+    flexDirection: "row",
   },
   tabBtn: {
     flexDirection: "row",
@@ -1475,13 +4283,33 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   tabBtnActive: {},
+  tabBtnCompact: {
+    flex: 1,
+    marginRight: 0,
+    justifyContent: "center",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+  },
+  tabBtnActiveCompact: {
+    backgroundColor: "#0f172a",
+  },
   tabBtnText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#6b7280",
+    color: "#64748B",
+  },
+  tabBtnTextCompact: {
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   tabBtnTextActive: {
-    color: "#2563eb",
+    color: "#60a5fa",
+  },
+  tabBtnTextActiveCompact: {
+    color: "#ffffff",
   },
   tabUnderline: {
     position: "absolute",
@@ -1489,8 +4317,17 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 2,
-    backgroundColor: "#2563eb",
+    backgroundColor: "#60a5fa",
     borderRadius: 1,
+  },
+  tabUnderlineCompact: {
+    position: "absolute",
+    bottom: 2,
+    left: "32%",
+    right: "32%",
+    height: 2,
+    borderRadius: 4,
+    backgroundColor: "#ef4444",
   },
 
   // ── Scroll ──
@@ -1652,7 +4489,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#1e293b",
+    borderColor: "#CBD5E1",
     position: "relative",
   },
   telemetryOverlay: {
@@ -1661,9 +4498,9 @@ const styles = StyleSheet.create({
     right: 16,
     left: 16,
     borderRadius: 16,
-    backgroundColor: "rgba(15, 23, 42, 0.88)",
+    backgroundColor: "rgba(255, 255, 255, 0.92)",
     borderWidth: 1,
-    borderColor: "rgba(148, 163, 184, 0.3)",
+    borderColor: "rgba(148, 163, 184, 0.4)",
     paddingHorizontal: 14,
     paddingVertical: 12,
     alignItems: "center",
@@ -1672,14 +4509,14 @@ const styles = StyleSheet.create({
   telemetryTitle: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#f8fafc",
+    color: "#0F172A",
     textTransform: "uppercase",
     letterSpacing: 1,
   },
   telemetrySub: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#94a3b8",
+    color: "#64748B",
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
@@ -1862,11 +4699,11 @@ const styles = StyleSheet.create({
   darkSectionTitle: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#fff",
+    color: "#0F172A",
     letterSpacing: 1,
     paddingVertical: 6,
     paddingHorizontal: 10,
-    backgroundColor: "#0f141a",
+    backgroundColor: "#F1F5F9",
     textTransform: "uppercase",
   },
   detailBody: {
@@ -1905,13 +4742,13 @@ const styles = StyleSheet.create({
   },
   twoColItem: { flex: 1, minWidth: 0 },
   summaryCard: {
-    backgroundColor: "#0f141a",
+    backgroundColor: "#FFFFFF",
     borderRadius: 6,
     marginBottom: 8,
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: "#334155",
+    borderColor: "#E2E8F0",
   },
   summaryCardRow: {
     flexDirection: "row",
@@ -1923,21 +4760,21 @@ const styles = StyleSheet.create({
   summaryCardLabel: {
     fontSize: 8,
     fontWeight: "700",
-    color: "#94a3b8",
+    color: "#64748B",
     textTransform: "uppercase",
     letterSpacing: 0.6,
     marginBottom: 3,
   },
-  summaryCardValue: { fontSize: 11, fontWeight: "700", color: "#f8fafc" },
+  summaryCardValue: { fontSize: 11, fontWeight: "700", color: "#0F172A" },
   summaryCardValueGreen: { color: "#22c55e" },
   summaryCardValueRed: { color: "#ef4444" },
   transactionHistoryCard: {
-    backgroundColor: "#0f141a",
+    backgroundColor: "#FFFFFF",
     borderRadius: 12,
     padding: 16,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: "#334155",
+    borderColor: "#E2E8F0",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
@@ -1947,7 +4784,7 @@ const styles = StyleSheet.create({
   transactionHistoryHeader: {
     fontSize: 10,
     fontWeight: "800",
-    color: "#94a3b8",
+    color: "#64748B",
     letterSpacing: 1,
     textTransform: "uppercase",
     marginBottom: 12,
@@ -1963,11 +4800,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 10,
-    backgroundColor: "#1e293b",
+    backgroundColor: "#F8FAFC",
     borderRadius: 8,
     padding: 12,
     borderWidth: 1,
-    borderColor: "#334155",
+    borderColor: "#E2E8F0",
   },
   transactionIconWrap: {
     width: 24,
@@ -1984,8 +4821,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#dc2626",
   },
   transactionInfo: { flex: 1, minWidth: 0 },
-  transactionText1: { fontSize: 13, fontWeight: "600", color: "#f8fafc" },
-  transactionText2: { fontSize: 11, color: "#94a3b8", marginTop: 2 },
+  transactionText1: { fontSize: 13, fontWeight: "600", color: "#0F172A" },
+  transactionText2: { fontSize: 11, color: "#64748B", marginTop: 2 },
   transactionAmount: { fontSize: 13, fontWeight: "700" },
   transactionAmountIn: { color: "#22c55e" },
   transactionAmountOut: { color: "#ef4444" },

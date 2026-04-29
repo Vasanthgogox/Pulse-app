@@ -33,7 +33,11 @@ export interface TripAdjustmentModalProps {
     reason: string;
   }) => void;
   /** When set (e.g. Finance Overview shortcuts), seeds type/impact when the modal opens. */
-  preset?: { type: TripAdjustmentType; impact: TripAdjustmentImpact } | null;
+  preset?: {
+    type: TripAdjustmentType;
+    impact: TripAdjustmentImpact;
+    reasonSeed?: string | null;
+  } | null;
 }
 
 const BLUEPRINT_BG = "#111827";
@@ -51,6 +55,8 @@ export function TripAdjustmentModal({
   const [reason, setReason] = useState("");
   const [otherReason, setOtherReason] = useState("");
 
+  const reasonOptions = type === "revenue" ? REVENUE_REASON_OPTIONS : COST_REASON_OPTIONS;
+
   useEffect(() => {
     if (!visible) return;
     if (preset) {
@@ -61,11 +67,16 @@ export function TripAdjustmentModal({
       setImpact("plus");
     }
     setAmountStr("");
-    setReason("");
-    setOtherReason("");
+    const seed = preset?.reasonSeed?.trim() ?? "";
+    const opts = preset ? (preset.type === "revenue" ? REVENUE_REASON_OPTIONS : COST_REASON_OPTIONS) : REVENUE_REASON_OPTIONS;
+    if (seed && (opts as readonly string[]).includes(seed)) {
+      setReason(seed);
+      setOtherReason("");
+    } else {
+      setReason("");
+      setOtherReason("");
+    }
   }, [visible, preset]);
-
-  const reasonOptions = type === "revenue" ? REVENUE_REASON_OPTIONS : COST_REASON_OPTIONS;
   const selectedReason = reason === "Other" ? (otherReason.trim() || "Other") : reason;
 
   const handleCommit = () => {

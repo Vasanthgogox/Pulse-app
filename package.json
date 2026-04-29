@@ -75,6 +75,7 @@
     "jest-expo": "^55.0.16",
     "jspdf": "^4.2.1",
     "leaflet": "^1.9.4",
+    "leaflet-routing-machine": "^3.2.12",
     "lucide-react-native": "^0.577.0",
     "maplibre-gl": "^5.23.0",
     "moti": "^0.30.0",
@@ -96,8 +97,10 @@
   },
   "devDependencies": {
     "@expo/ngrok": "^4.1.0",
+    "@playwright/test": "^1.48.0",
     "@types/jest": "^29.5.12",
     "@types/leaflet": "^1.9.21",
+    "@types/node": "^22.0.0",
     "@types/react": "~19.1.0",
     "@typescript-eslint/eslint-plugin": "^8.56.1",
     "@typescript-eslint/parser": "^8.56.1",
@@ -113,9 +116,7 @@
     "react-test-renderer": "19.1.0",
     "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
-    "typescript": "~5.9.2",
-    "@playwright/test": "^1.48.0",
-    "@types/node": "^22.0.0"
+    "typescript": "~5.9.2"
   },
   "private": true
 }

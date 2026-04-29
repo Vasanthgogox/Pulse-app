@@ -782,10 +782,11 @@ const styles = StyleSheet.create({
   },
   webNavTitle: {
     fontSize: 12,
-    fontWeight: "900",
+    fontWeight: "700",
+    fontStyle: "italic",
     color: "#0f172a",
     textTransform: "uppercase",
-    letterSpacing: 1.8,
+    letterSpacing: 1.2,
   },
   webNavTitleActive: {
     color: "#ffffff",
@@ -793,10 +794,11 @@ const styles = StyleSheet.create({
   webNavSub: {
     marginTop: 2,
     fontSize: 8,
-    fontWeight: "800",
+    fontWeight: "600",
+    fontStyle: "italic",
     color: "#64748b",
     textTransform: "uppercase",
-    letterSpacing: 0.8,
+    letterSpacing: 0.6,
   },
   webNavSubActive: {
     color: Theme.teslaRed,

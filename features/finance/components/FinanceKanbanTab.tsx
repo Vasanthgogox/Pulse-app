@@ -22,10 +22,6 @@ import type { LedgerRow } from '../services/finance.service';
 import { type FinancialRowData } from "./FinancialRow";
 import { FinanceEntryDetailScreen } from "./FinanceEntryDetailScreen";
 import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
-import {
-  getLedgerFlowForRow,
-  LedgerFlowChip,
-} from "@/features/finance/components/LedgerFlowChip";
 
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
@@ -128,6 +124,7 @@ function KanbanCard({
   index,
   cat,
   openDetail,
+  expanded = false,
   hasAmtIn,
   amount,
   dateStr,
@@ -155,6 +152,7 @@ function KanbanCard({
   onRowSelect?: (row: LedgerRow) => void;
   profileImageUrl: string | null;
   partyAvatar?: ReactNode;
+  expanded?: boolean;
 }) {
   const avatarBg = avatarColor(partyName);
   const initialText = initials(partyName);
@@ -166,7 +164,7 @@ function KanbanCard({
       layout={Layout.springify()}
     >
       <TouchableOpacity
-        style={styles.timelineCard}
+        style={[styles.timelineCard, expanded && styles.cardExpanded]}
         activeOpacity={0.7}
         onPress={() => openDetail(row.id, rowData)}
         accessibilityRole="button"
@@ -211,9 +209,6 @@ function KanbanCard({
         </View>
 
         <View style={styles.rightCol}>
-          {getLedgerFlowForRow(row) ? (
-            <LedgerFlowChip row={row} compact />
-          ) : null}
           {tripIdOnly && (
             <TouchableOpacity
               style={styles.tripPillWithCheck}
@@ -550,6 +545,7 @@ export function FinanceKanbanTab({
           index={index}
           cat={cat}
           openDetail={openDetail}
+          expanded={expandedReceiptRowId === row.id}
           hasAmtIn={hasAmtIn}
           amount={amount}
           dateStr={dateStr}
@@ -625,10 +621,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   inlineReceiptWrapInColumn: {
-    marginTop: 6,
+    marginTop: -1,
     borderWidth: 1,
+    borderTopWidth: 0,
     borderColor: Theme.surfaceBorder,
-    borderRadius: 16,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
     overflow: "hidden",
     backgroundColor: Theme.screenBackground,
     shadowColor: Theme.shadow,
@@ -693,7 +693,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardContainer: {
-    marginBottom: 12,
+    marginBottom: 0,
   },
   timelineCard: {
     flexDirection: "row",

@@ -50,6 +50,16 @@ function formatINR(n: number): string {
   return `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 0, minimumFractionDigits: 0 })}`;
 }
 
+function toTitleCase(value: string | null | undefined): string {
+  const text = (value ?? "").trim();
+  if (!text) return "—";
+  return text
+    .toLowerCase()
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 /**
  * Derive tracking step 1–4 from status for progress bar.
  * Aligns with DB + driver app: assigned → 1, in_progress → 2, completed → 4.
@@ -1344,77 +1354,166 @@ export function TripDetailFinanceView({
         </View>
       ) : null}
 
-      {/* Active Grid Sync — tappable to open tracking view */}
       {showTrackingSection ? (
-      <TouchableOpacity
-        style={styles.trackingCard}
-        onPress={handleTrackingCardPress}
-        activeOpacity={0.92}
-        accessible
-        accessibilityLabel={isDriverOffline ? "Driver offline - Open tracking" : "Open tracking"}
-        accessibilityRole="button"
-      >
-        <View style={styles.trackingHeader}>
-          <View style={styles.trackingHeaderLeft}>
-            <View
-              style={[
-                styles.trackingStatusDot,
-                isDriverOffline && styles.trackingStatusDotOffline,
-              ]}
-            />
-            <Text
-              style={[
-                styles.trackingLabel,
-                isDriverOffline && styles.trackingLabelOffline,
-              ]}
-            >
-              {isDriverOffline ? "Driver Offline" : "Journey Progress"}
-            </Text>
-          </View>
-          {onOpenTracking ? (
-            <View style={styles.trackingLiveMapBadge}>
-              <FontAwesome name="location-arrow" size={10} color={Theme.primary} />
-              <Text style={styles.trackingLiveMapText}>OPEN MAPS</Text>
+        <>
+          <View style={styles.manifestCard}>
+            <View style={styles.sectionKickerRow}>
+              <View style={styles.sectionKickerBar} />
+              <Text style={styles.sectionKicker}>Voyage Manifest</Text>
             </View>
-          ) : null}
-        </View>
-        <View style={styles.progressRow}>
-          {[1, 2, 3, 4].map((step) => (
-            <View key={step} style={[styles.progressSegment, step <= trackingStep && styles.progressSegmentActive]} />
-          ))}
-        </View>
-        <View style={styles.trackingFooter}>
-          <View style={styles.trackingFooterLeft}>
-            <FontAwesome
-              name="location-arrow"
-              size={10}
-              color={isDriverOffline ? Theme.negative : Theme.positive}
-              style={styles.clockIcon}
-            />
-            <Text
-              style={[
-                styles.trackingFooterValue,
-                isDriverOffline && styles.trackingFooterValueOffline,
-              ]}
-            >
-              {statusLabel}
+            <View style={styles.manifestRouteRow}>
+              <View style={styles.manifestDotsCol}>
+                <View style={[styles.manifestDot, styles.manifestDotStart]} />
+                <View style={styles.manifestRouteLine} />
+                <View style={[styles.manifestDot, styles.manifestDotEnd]} />
+              </View>
+              <View style={styles.manifestTextCol}>
+                <Text style={styles.manifestPlace}>{toTitleCase(trip.pickup_area)}</Text>
+                <Text style={styles.manifestPlace}>{toTitleCase(trip.drop_location)}</Text>
+              </View>
+            </View>
+            <View style={styles.manifestMetaRow}>
+              <View style={styles.manifestMetaCell}>
+                <Text style={styles.manifestMetaLabel}>Client</Text>
+                <Text style={styles.manifestMetaValue} numberOfLines={1}>
+                  {(clientName ?? partnerName ?? "—").trim() || "—"}
+                </Text>
+              </View>
+              <View style={styles.manifestMetaCell}>
+                <Text style={styles.manifestMetaLabel}>Material</Text>
+                <Text style={styles.manifestMetaValue} numberOfLines={1}>
+                  {toTitleCase(trip.load_type ?? "General Material")}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.operatorCardModern}>
+            <View style={styles.operatorBadgeModern}>
+              <FontAwesome name="user" size={15} color={Theme.textMuted} />
+              <View style={styles.operatorTextBlock}>
+                <Text style={styles.operatorLabelModern}>Operator</Text>
+                <Text style={styles.operatorValueModern}>
+                  {driverName?.trim() ? driverName : "Unassigned"}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.operatorSubModern}>
+              {vehicleLabel?.trim() ? vehicleLabel : "Vehicle pending assignment"}
             </Text>
           </View>
-          <View style={styles.trackingFooterRight}>
-            <Text
-              style={[
-                styles.trackingFooterValueAccent,
-                isDriverOffline && styles.trackingFooterValueAccentOffline,
-              ]}
-              numberOfLines={1}
-            >
-              {driverRating != null && driverRating > 0
-                ? `${driverName ?? "Driver"} · ${driverRating.toFixed(1)} ★`
-                : trackingLocation}
-            </Text>
+
+          <View style={styles.assignmentCardModern}>
+            <Text style={styles.assignmentTitleModern}>Current Assignment</Text>
+            <View style={styles.assignmentRowModern}>
+              <View style={styles.assignmentIconBox}>
+                <FontAwesome name="user" size={14} color={Theme.textMuted} />
+              </View>
+              <View style={styles.assignmentTextWrap}>
+                <Text style={styles.assignmentMetaLabel}>Driver</Text>
+                <Text style={styles.assignmentMetaValue}>
+                  {driverName?.trim() ? driverName : "Unassigned"}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.assignmentRowModern}>
+              <View style={styles.assignmentIconBox}>
+                <FontAwesome name="truck" size={13} color={Theme.textMuted} />
+              </View>
+              <View style={styles.assignmentTextWrap}>
+                <Text style={styles.assignmentMetaLabel}>Vehicle</Text>
+                <Text style={styles.assignmentMetaValue}>
+                  {vehicleLabel?.trim() ? vehicleLabel : "Pending"}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.assignmentFootRow}>
+              <Text style={styles.assignmentFootText}>
+                OTP will be generated during assignment confirmation flow.
+              </Text>
+              {onOpenTracking ? (
+                <TouchableOpacity
+                  onPress={handleTrackingCardPress}
+                  style={styles.assignmentActionBtn}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.assignmentActionBtnText}>Open Tracking</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
-        </View>
-      </TouchableOpacity>
+
+          {/* keep quick progress card for status signal */}
+          <TouchableOpacity
+            style={styles.trackingCard}
+            onPress={handleTrackingCardPress}
+            activeOpacity={0.92}
+            accessible
+            accessibilityLabel={isDriverOffline ? "Driver offline - Open tracking" : "Open tracking"}
+            accessibilityRole="button"
+          >
+            <View style={styles.trackingHeader}>
+              <View style={styles.trackingHeaderLeft}>
+                <View
+                  style={[
+                    styles.trackingStatusDot,
+                    isDriverOffline && styles.trackingStatusDotOffline,
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.trackingLabel,
+                    isDriverOffline && styles.trackingLabelOffline,
+                  ]}
+                >
+                  {isDriverOffline ? "Driver Offline" : "Journey Progress"}
+                </Text>
+              </View>
+              {onOpenTracking ? (
+                <View style={styles.trackingLiveMapBadge}>
+                  <FontAwesome name="location-arrow" size={10} color={Theme.primary} />
+                  <Text style={styles.trackingLiveMapText}>Open Maps</Text>
+                </View>
+              ) : null}
+            </View>
+            <View style={styles.progressRow}>
+              {[1, 2, 3, 4].map((step) => (
+                <View key={step} style={[styles.progressSegment, step <= trackingStep && styles.progressSegmentActive]} />
+              ))}
+            </View>
+            <View style={styles.trackingFooter}>
+              <View style={styles.trackingFooterLeft}>
+                <FontAwesome
+                  name="location-arrow"
+                  size={10}
+                  color={isDriverOffline ? Theme.negative : Theme.positive}
+                  style={styles.clockIcon}
+                />
+                <Text
+                  style={[
+                    styles.trackingFooterValue,
+                    isDriverOffline && styles.trackingFooterValueOffline,
+                  ]}
+                >
+                  {statusLabel}
+                </Text>
+              </View>
+              <View style={styles.trackingFooterRight}>
+                <Text
+                  style={[
+                    styles.trackingFooterValueAccent,
+                    isDriverOffline && styles.trackingFooterValueAccentOffline,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {driverRating != null && driverRating > 0
+                    ? `${driverName ?? "Driver"} · ${driverRating.toFixed(1)} ★`
+                    : trackingLocation}
+                </Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </>
       ) : null}
 
       {/* Documents */}
@@ -2306,6 +2405,215 @@ const styles = StyleSheet.create({
   },
   detailTabBtnTxtOn: {
     color: Theme.primary,
+  },
+  manifestCard: {
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: CARD_PADDING,
+    marginBottom: SECTION_GAP,
+  },
+  sectionKickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 14,
+  },
+  sectionKickerBar: {
+    width: 4,
+    height: 18,
+    borderRadius: 3,
+    backgroundColor: Theme.primary,
+  },
+  sectionKicker: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1.8,
+    color: Theme.textSection,
+    textTransform: "uppercase",
+  },
+  manifestRouteRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 14,
+  },
+  manifestDotsCol: {
+    alignItems: "center",
+    width: 12,
+    marginTop: 5,
+  },
+  manifestDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  manifestDotStart: {
+    backgroundColor: Theme.positive,
+  },
+  manifestDotEnd: {
+    backgroundColor: Theme.teslaRed,
+  },
+  manifestRouteLine: {
+    width: 1.5,
+    flex: 1,
+    minHeight: 18,
+    backgroundColor: Theme.borderLight,
+    marginVertical: 5,
+  },
+  manifestTextCol: {
+    flex: 1,
+    gap: 8,
+  },
+  manifestPlace: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+  },
+  manifestMetaRow: {
+    flexDirection: "row",
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+    paddingTop: 10,
+  },
+  manifestMetaCell: {
+    flex: 1,
+    minWidth: 0,
+  },
+  manifestMetaLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textRouteCard,
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
+    marginBottom: 2,
+  },
+  manifestMetaValue: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  operatorCardModern: {
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: CARD_PADDING,
+    marginBottom: SECTION_GAP,
+  },
+  operatorBadgeModern: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  operatorTextBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  operatorLabelModern: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 1.1,
+    color: Theme.textRouteCard,
+    textTransform: "uppercase",
+  },
+  operatorValueModern: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+  },
+  operatorSubModern: {
+    marginTop: 10,
+    fontSize: 14,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+  },
+  assignmentCardModern: {
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    padding: CARD_PADDING,
+    marginBottom: SECTION_GAP,
+  },
+  assignmentTitleModern: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    marginBottom: 2,
+  },
+  assignmentRowModern: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+  },
+  assignmentIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  assignmentTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  assignmentMetaLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    color: Theme.textRouteCard,
+    letterSpacing: 0.8,
+  },
+  assignmentMetaValue: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+  },
+  assignmentFootRow: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  assignmentFootText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 12,
+    color: Theme.textSecondary,
+  },
+  assignmentActionBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: Theme.darkBackground,
+  },
+  assignmentActionBtnText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textOnDark,
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
   },
   trackingTabExtrasWrap: {
     marginBottom: SECTION_GAP,

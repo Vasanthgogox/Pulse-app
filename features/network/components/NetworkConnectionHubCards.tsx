@@ -142,7 +142,7 @@ export function HubConnectionListCard({
             ) : null}
             <View style={[styles.metaChip, item.is_integrated && styles.metaChipIntegrated]}>
               {item.is_integrated ? (
-                <Check size={10} color={Theme.positive} strokeWidth={2.8} />
+                <Check size={10} color={Theme.textPrimaryDark} strokeWidth={2.8} />
               ) : null}
               <Text style={[styles.statusMetaChipText, item.is_integrated && styles.statusMetaChipTextIntegrated]} numberOfLines={1}>
                 {item.is_integrated ? "Operational access" : "Not in app"}
@@ -154,7 +154,7 @@ export function HubConnectionListCard({
         <View style={styles.cardFooter}>
           {item.is_integrated ? (
             <View style={styles.joinedBtn}>
-              <CheckCircle2 size={13} color={Theme.positive} strokeWidth={2.4} />
+              <CheckCircle2 size={13} color={Theme.textPrimaryDark} strokeWidth={2.4} />
               <Text style={styles.joinedBtnText}>Connected</Text>
             </View>
           ) : (
@@ -479,8 +479,8 @@ const styles = StyleSheet.create({
     borderColor: Theme.networkCardBorder,
   },
   metaChipIntegrated: {
-    backgroundColor: Theme.positiveMuted,
-    borderColor: Theme.positive,
+    backgroundColor: Theme.networkPageBackground,
+    borderColor: Theme.networkCardBorder,
   },
   metaChipText: {
     fontSize: 8,
@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
     color: "#64748B",
   },
   statusMetaChipTextIntegrated: {
-    color: Theme.positive,
+    color: Theme.textSecondary,
   },
   metricStack: {
     marginTop: 12,
@@ -572,11 +572,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     borderWidth: 1,
-    borderColor: Theme.positive,
+    borderColor: Theme.borderMedium,
     borderRadius: 17,
     paddingHorizontal: 14,
     paddingVertical: 7,
-    backgroundColor: Theme.positiveMuted,
+    backgroundColor: Theme.networkCardBackground,
     shadowColor: Theme.shadow,
     shadowOpacity: 0.035,
     shadowRadius: 6,
@@ -585,9 +585,10 @@ const styles = StyleSheet.create({
   },
   joinedBtnText: {
     fontSize: 10,
-    fontWeight: "500",
-    color: Theme.positive,
-    letterSpacing: 0.1,
+    fontWeight: "700",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.2,
   },
   inviteBtn: {
     minHeight: 34,
