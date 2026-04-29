@@ -1,8 +1,14 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import FontAwesomeIcon from "@expo/vector-icons/FontAwesome";
 import Theme from "@/constants/Theme";
-import { LeafletMap, type LeafletLatLng, type LeafletMarker } from "@/components/driver/LeafletMap.web";
+import { getOptimalRoute, type RouteResult } from "@/services/routingService";
+import {
+  LeafletMap,
+  type LeafletLatLng,
+  type LeafletMapRef,
+  type LeafletMarker,
+} from "@/components/driver/LeafletMap.web";
 
 export type TrackingMapLocationLabels = [string, string, string, string, string];
 
@@ -16,6 +22,50 @@ export interface TrackingMapBlockProps {
   driverLocationLoading?: boolean;
   tripLocationPoints?: { latitude: number; longitude: number }[];
   locationAddress?: string | null;
+}
+
+type MapCoordinate = {
+  latitude: number;
+  longitude: number;
+};
+
+function isValidCoordinate(point: Partial<MapCoordinate> | null | undefined): point is MapCoordinate {
+  return (
+    !!point &&
+    Number.isFinite(point.latitude) &&
+    Number.isFinite(point.longitude)
+  );
+}
+
+function areCoordinatesClose(a: MapCoordinate, b: MapCoordinate) {
+  return (
+    Math.abs(a.latitude - b.latitude) < 0.0001 &&
+    Math.abs(a.longitude - b.longitude) < 0.0001
+  );
+}
+
+function dedupeCoordinates(points: MapCoordinate[]) {
+  const unique: MapCoordinate[] = [];
+  for (const point of points) {
+    if (!unique.some((existing) => areCoordinatesClose(existing, point))) {
+      unique.push(point);
+    }
+  }
+  return unique;
+}
+
+function getDistanceMeters(a: MapCoordinate, b: MapCoordinate) {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLon = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+  const sinDLat = Math.sin(dLat / 2);
+  const sinDLon = Math.sin(dLon / 2);
+  const h =
+    sinDLat * sinDLat +
+    Math.cos(lat1) * Math.cos(lat2) * sinDLon * sinDLon;
+  return 6371000 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
 const styles = StyleSheet.create({
@@ -147,64 +197,149 @@ export function TrackingMapBlock({
   latestLocation,
   tripLocationPoints = [],
 }: TrackingMapBlockProps) {
+  const mapRef = useRef<LeafletMapRef | null>(null);
+  const [optimalRoute, setOptimalRoute] = useState<RouteResult | null>(null);
+  const [routeFetchKey, setRouteFetchKey] = useState<string>("");
+  const lastRouteStartRef = useRef<MapCoordinate | null>(null);
+
+  const normalizedOrigin = useMemo(
+    () => (isValidCoordinate(originCoordinate) ? originCoordinate : null),
+    [originCoordinate],
+  );
+  const normalizedDestination = useMemo(
+    () => (isValidCoordinate(destinationCoordinate) ? destinationCoordinate : null),
+    [destinationCoordinate],
+  );
+  const latestCoordinate = useMemo(
+    () => (isValidCoordinate(latestLocation ?? null) ? latestLocation : null),
+    [latestLocation],
+  );
+
   const center = useMemo<LeafletLatLng>(() => {
-    if (latestLocation?.latitude != null && latestLocation?.longitude != null) {
-      return { latitude: latestLocation.latitude, longitude: latestLocation.longitude };
-    }
-    if (originCoordinate?.latitude != null && originCoordinate?.longitude != null) {
-      return { latitude: originCoordinate.latitude, longitude: originCoordinate.longitude };
-    }
+    if (latestCoordinate) return latestCoordinate;
+    if (normalizedOrigin) return normalizedOrigin;
     return { latitude: 20.5937, longitude: 78.9629 };
-  }, [latestLocation, originCoordinate]);
+  }, [latestCoordinate, normalizedOrigin]);
+
+  const historyCoordinates = useMemo(
+    () =>
+      dedupeCoordinates(
+        (tripLocationPoints ?? [])
+          .map((p) => ({ latitude: p.latitude, longitude: p.longitude }))
+          .filter(isValidCoordinate),
+      ),
+    [tripLocationPoints],
+  );
+
+  // Route fetch strategy matches driver behavior: from current (if available) to destination.
+  // Recalculate only when the driver has moved enough or trip start/end changes.
+  useEffect(() => {
+    if (!normalizedDestination) {
+      setOptimalRoute(null);
+      setRouteFetchKey("");
+      return;
+    }
+
+    const routeStart = latestCoordinate ?? normalizedOrigin;
+    if (!routeStart) {
+      setOptimalRoute(null);
+      setRouteFetchKey("");
+      return;
+    }
+
+    const lastStart = lastRouteStartRef.current;
+    const movedEnough = !lastStart || getDistanceMeters(lastStart, routeStart) >= 80;
+    const nextKey = `${routeStart.latitude.toFixed(5)},${routeStart.longitude.toFixed(5)}|${normalizedDestination.latitude.toFixed(5)},${normalizedDestination.longitude.toFixed(5)}`;
+    if (!movedEnough && nextKey === routeFetchKey) return;
+    lastRouteStartRef.current = routeStart;
+    setRouteFetchKey(nextKey);
+
+    let cancelled = false;
+    getOptimalRoute(routeStart, normalizedDestination)
+      .then((res) => {
+        if (!cancelled) setOptimalRoute(res ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setOptimalRoute(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [latestCoordinate, normalizedDestination, normalizedOrigin, routeFetchKey]);
+
+  // Keep camera tracking smooth to follow real-time movement without jumps.
+  useEffect(() => {
+    if (!latestCoordinate) return;
+    mapRef.current?.focusCurrentLocation(latestCoordinate, 13);
+  }, [latestCoordinate?.latitude, latestCoordinate?.longitude]);
 
   const markers = useMemo<LeafletMarker[]>(() => {
     const next: LeafletMarker[] = [];
-    if (originCoordinate?.latitude != null && originCoordinate?.longitude != null) {
+    if (normalizedOrigin) {
       next.push({
         id: "origin",
-        coordinate: originCoordinate,
+        coordinate: normalizedOrigin,
         label: "Origin",
         color: "#ef4444",
       });
     }
-    if (destinationCoordinate?.latitude != null && destinationCoordinate?.longitude != null) {
+    if (normalizedDestination) {
       next.push({
         id: "destination",
-        coordinate: destinationCoordinate,
+        coordinate: normalizedDestination,
         label: "Destination",
         color: "#10b981",
       });
     }
-    if (latestLocation?.latitude != null && latestLocation?.longitude != null) {
+    if (latestCoordinate) {
       next.push({
         id: "live",
-        coordinate: latestLocation,
-        label: "Live",
+        coordinate: latestCoordinate,
+        label: "Driver live",
         color: Theme.primary,
       });
     }
     return next;
-  }, [originCoordinate, destinationCoordinate, latestLocation]);
+  }, [normalizedOrigin, normalizedDestination, latestCoordinate]);
 
   const polyline = useMemo<LeafletLatLng[]>(() => {
-    const points = tripLocationPoints
-      .filter((p) => p?.latitude != null && p?.longitude != null)
-      .map((p) => ({ latitude: p.latitude, longitude: p.longitude }));
-    if (points.length >= 2) return points;
-    if (
-      originCoordinate?.latitude != null &&
-      originCoordinate?.longitude != null &&
-      destinationCoordinate?.latitude != null &&
-      destinationCoordinate?.longitude != null
-    ) {
-      return [originCoordinate, destinationCoordinate];
+    // Priority:
+    // 1) Recorded trip trace (+ latest live point) only when we have rich progress points
+    // 2) Live optimal route from current/source to destination
+    // 3) Direct fallback origin->destination
+    const traced = [...historyCoordinates];
+    if (latestCoordinate) {
+      const last = traced[traced.length - 1];
+      if (!last || !areCoordinatesClose(last, latestCoordinate)) traced.push(latestCoordinate);
     }
-    return [];
-  }, [tripLocationPoints, originCoordinate, destinationCoordinate]);
+
+    const dedupedTrace = dedupeCoordinates(traced);
+    // Two-point traces are usually just source+destination and render as straight lines.
+    // Prefer road routing unless we have a meaningful sequence of path points.
+    const hasRichTrace = dedupedTrace.length >= 4;
+    if (hasRichTrace) return dedupedTrace;
+
+    if (optimalRoute?.coordinates?.length) {
+      const routeCoords = optimalRoute.coordinates.filter(isValidCoordinate);
+      if (routeCoords.length > 1) return dedupeCoordinates(routeCoords);
+    }
+
+    if (normalizedOrigin && normalizedDestination) {
+      return [normalizedOrigin, normalizedDestination];
+    }
+    return dedupedTrace;
+  }, [
+    historyCoordinates,
+    latestCoordinate,
+    optimalRoute?.coordinates,
+    normalizedOrigin,
+    normalizedDestination,
+  ]);
 
   return (
     <View style={[styles.trackingPageMapArea, { height: mapHeight }]}>
       <LeafletMap
+        ref={mapRef}
         style={StyleSheet.absoluteFill}
         center={center}
         zoom={11}
