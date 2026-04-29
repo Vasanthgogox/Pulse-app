@@ -227,14 +227,6 @@ export default function DriverNotificationsScreen() {
     );
   }, [incomingTrips, pendingOtpTrips]);
 
-  const assignableIncomingTrips = useMemo(
-    () =>
-      mergedIncomingTrips.filter((trip) => {
-        if (!acceptedTripId || acceptedTripId.trim() === '') return true;
-        return String(trip.id).toLowerCase() !== acceptedTripId.toLowerCase();
-      }),
-    [mergedIncomingTrips, acceptedTripId],
-  );
   const driverTripNumberById = useMemo(
     () => buildDriverTripNumberMap([...allTrips, ...pendingOtpTrips]),
     [allTrips, pendingOtpTrips],
@@ -374,7 +366,7 @@ export default function DriverNotificationsScreen() {
 
   const rowsWithMeta = useMemo(
     () =>
-      assignableIncomingTrips.map((trip) => {
+      mergedIncomingTrips.map((trip) => {
         const tripMeta = trip as tripsService.TripRow &
           Record<string, string | number | boolean | null | undefined>;
         const inviteForTrip =
@@ -453,7 +445,7 @@ export default function DriverNotificationsScreen() {
         };
       }),
     [
-      assignableIncomingTrips,
+      mergedIncomingTrips,
       invites,
       driver?.organization_id,
       pendingOtpTripsRequiringOtp,

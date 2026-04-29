@@ -1405,16 +1405,10 @@ export default function DriverRadarScreen() {
       assignmentActorByTripId,
     ],
   );
-  /** Notification picker only lists trips still awaiting accept/OTP. */
+  /** Notification picker shows all currently visible incoming trips (including accepted). */
   const assignableIncomingNotificationsWithMeta = useMemo(
-    () =>
-      incomingNotificationsWithMeta.filter(
-        (item) =>
-          !acceptedTripId ||
-          String(item.trip.id).toLowerCase() !==
-            String(acceptedTripId).toLowerCase(),
-      ),
-    [incomingNotificationsWithMeta, acceptedTripId],
+    () => incomingNotificationsWithMeta,
+    [incomingNotificationsWithMeta],
   );
   const persistPostMissionPendingSnapshot = useCallback(() => {
     try {
@@ -1439,7 +1433,7 @@ export default function DriverRadarScreen() {
    * Keep pending assignments in Notifications only.
    * Dashboard should surface only the selected/accepted trip flow.
    */
-  const showPendingInboxOnDashboard = false;
+  const showPendingInboxOnDashboard = true;
   /** In-dashboard inbox for trips still awaiting accept — disabled by flow rules. */
   const renderOtherPendingTripsInbox = useCallback(() => {
     if (!showPendingInboxOnDashboard) return null;
@@ -3817,11 +3811,7 @@ export default function DriverRadarScreen() {
                   : "Accept this trip to start trip progress."}
               </Text>
             </View>
-            <ScrollView
-              style={styles.invitesScroll}
-              contentContainerStyle={styles.invitesScrollContent}
-              showsVerticalScrollIndicator={false}
-            >
+            <View style={styles.invitesScrollContent}>
               {assignableIncomingNotificationsWithMeta.map((item) => (
                 <View
                   key={item.trip.id}
@@ -3910,7 +3900,7 @@ export default function DriverRadarScreen() {
                   </TouchableOpacity>
                 </View>
               ))}
-            </ScrollView>
+            </View>
             <TouchableOpacity
               style={[
                 styles.searchOfflineBtn,
@@ -4777,8 +4767,7 @@ const styles = StyleSheet.create({
   },
   centerCardConstraint: {
     width: "100%",
-    maxWidth: 400, // Add max width for better centering on larger screens
-    alignSelf: "center", // Add this for proper centering
+    alignSelf: "center",
   },
   titleRow: {
     flexDirection: "row",
@@ -4822,7 +4811,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     alignSelf: "center", // Add this for proper centering
   },
-  invitesScroll: { width: "100%", maxHeight: 400 },
+  invitesScroll: { width: "100%" },
   invitesScrollContent: { paddingVertical: 16, gap: 16 },
   invitesTitle: {
     fontSize: 10,
