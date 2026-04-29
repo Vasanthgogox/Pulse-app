@@ -6,7 +6,7 @@ import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
 import Layout from "@/constants/Layout";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { StyleSheet, Text, TouchableOpacity, View, Image } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View, Image, type TextStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWallet } from "@/contexts/WalletContext";
@@ -34,6 +34,12 @@ export interface TeslaHeaderProps {
   hideRightIcons?: boolean;
   /** When set, shows a plus button in the header (e.g. Add transaction). Renders at right end (after bell, profile). */
   onAddClick?: () => void;
+  /** Hide the small square icon badge before the brand/title block. */
+  hideLogoBadge?: boolean;
+  /** Optional per-screen override for title text style. */
+  titleTextStyle?: TextStyle;
+  /** Optional per-screen override for subtitle text style. */
+  subtitleTextStyle?: TextStyle;
 }
 
 const iconColor = (dark: boolean) =>
@@ -53,6 +59,9 @@ export function TeslaHeader({
   skipSafeAreaTop = false,
   hideRightIcons = false,
   onAddClick,
+  hideLogoBadge = false,
+  titleTextStyle,
+  subtitleTextStyle,
 }: TeslaHeaderProps) {
   const router = useRouter();
   const { profile } = useAuth();
@@ -122,15 +131,17 @@ export function TeslaHeader({
             />
           </TouchableOpacity>
         )}
-        <View style={[styles.logoBadge, isDark && styles.logoBadgeDark]}>
-          <FontAwesome name="terminal" size={11} color={isDark ? Theme.textOnDark : Theme.textPrimaryDark} />
-        </View>
+        {!hideLogoBadge && (
+          <View style={[styles.logoBadge, isDark && styles.logoBadgeDark]}>
+            <FontAwesome name="terminal" size={11} color={isDark ? Theme.textOnDark : Theme.textPrimaryDark} />
+          </View>
+        )}
         <View style={styles.titleBlock}>
           <Text style={[styles.brandText, isDark && styles.brandTextDark]} numberOfLines={1}>
             Qu.
           </Text>
           <Text
-            style={[styles.title, isDark && styles.titleDark]}
+            style={[styles.title, isDark && styles.titleDark, titleTextStyle]}
             numberOfLines={1}
             ellipsizeMode="tail"
           >
@@ -138,7 +149,7 @@ export function TeslaHeader({
           </Text>
           {subtitle != null && (
             <Text
-              style={[styles.subtitle, isDark && styles.subtitleDark]}
+              style={[styles.subtitle, isDark && styles.subtitleDark, subtitleTextStyle]}
               numberOfLines={1}
               ellipsizeMode="tail"
             >

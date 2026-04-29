@@ -3,21 +3,21 @@ import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
-  getSalaryRequestsByOrganization,
-  updateSalaryRequestStatus,
-  type SalaryRequestWithDriverRow,
+    getSalaryRequestsByOrganization,
+    updateSalaryRequestStatus,
+    type SalaryRequestWithDriverRow,
 } from "@/services/salaryRequestsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -78,6 +78,9 @@ export default function NotificationsScreen() {
           if (router.canGoBack()) router.back();
           else router.replace("/(tabs)/finance");
         }}
+        hideLogoBadge
+        titleTextStyle={styles.headerTitle}
+        subtitleTextStyle={styles.headerSubtitle}
       />
 
       {loading ? (
@@ -225,6 +228,8 @@ export default function NotificationsScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Theme.screenBackground },
+  headerTitle: { fontSize: 8.5 },
+  headerSubtitle: { fontSize: 8 },
   loadingWrap: { flex: 1, alignItems: "center", justifyContent: "center" },
   scroll: { flex: 1 },
   content: { padding: 16, gap: 12 },
