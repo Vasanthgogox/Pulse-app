@@ -76,26 +76,32 @@ function getBusinessLocation(
       city?: string | null;
       state?: string | null;
       headquarters?: string | null;
+      address_line?: string | null;
     }
   );
   const cityState = [candidate.city, candidate.state]
     .map((value) => value?.trim())
     .filter((value): value is string => Boolean(value))
-    .join(", ")
+    .join(', ')
     .trim();
   if (cityState) return cityState;
 
   const fallbackCityState = [fallback?.city, fallback?.state]
     .map((value) => value?.trim())
     .filter((value): value is string => Boolean(value))
-    .join(", ")
+    .join(', ')
     .trim();
   if (fallbackCityState) return fallbackCityState;
 
-  const direct = candidate.business_location ?? candidate.location ?? candidate.headquarters ?? null;
+  const direct =
+    candidate.business_location ??
+    candidate.location ??
+    candidate.headquarters ??
+    (candidate.address_line?.trim() ? candidate.address_line.trim() : null) ??
+    null;
   if (direct && direct.trim()) {
     const parts = direct
-      .split(",")
+      .split(',')
       .map((part) => part.trim())
       .filter(Boolean);
     if (parts.length >= 2) return `${parts[0]}, ${parts[1]}`;

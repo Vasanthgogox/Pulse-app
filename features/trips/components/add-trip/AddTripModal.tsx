@@ -38,12 +38,13 @@ export function AddTripModal({
     loading: clientsLoading,
     refetch: refetchClients,
   } = useClientsForTrip(organizationId);
+  const validationMessage = form.getValidationError();
+  const canCreateTrip = !validationMessage;
 
   const handleSubmit = async () => {
-    if (!form.canSubmit || submitting) return;
-    const validationErr = form.getValidationError();
-    if (validationErr) {
-      Alert.alert("Invalid input", validationErr);
+    if (submitting) return;
+    if (validationMessage) {
+      Alert.alert("Missing required details", validationMessage);
       return;
     }
     setSubmitting(true);
@@ -144,7 +145,8 @@ export function AddTripModal({
       <AddTripModalLayout
         title="Create Trip"
         submitLabel="Create Trip"
-        canSubmit={form.canSubmit}
+        canSubmit={canCreateTrip}
+        validationMessage={validationMessage}
         submitting={submitting}
         primaryActionMode={showStickyFooter ? "footer" : "content"}
         onClose={onClose}
@@ -158,7 +160,8 @@ export function AddTripModal({
           organizationId={organizationId}
           refetchClients={refetchClients}
           onSubmit={handleSubmit}
-          canSubmit={form.canSubmit}
+          canSubmit={canCreateTrip}
+          validationMessage={validationMessage}
           submitting={submitting}
           showInlineCta={!showStickyFooter}
         />

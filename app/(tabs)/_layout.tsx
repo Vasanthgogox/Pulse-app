@@ -120,7 +120,7 @@ export default function TabLayout() {
       return;
     }
     if (profile.role === 'driver') {
-      router.replace(ROUTES.DRIVER.ROOT as '/');
+      router.replace(ROUTES.DRIVER_ROOT);
     }
   }, [loading, user, profile, roleVerified, router]);
 

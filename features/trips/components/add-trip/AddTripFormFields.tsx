@@ -123,6 +123,7 @@ export interface AddTripFormFieldsProps {
   refetchClients: () => void;
   onSubmit: () => void;
   canSubmit: boolean;
+  validationMessage?: string | null;
   submitting?: boolean;
   showInlineCta?: boolean;
 }
@@ -136,6 +137,7 @@ export function AddTripFormFields({
   refetchClients,
   onSubmit,
   canSubmit,
+  validationMessage = null,
   submitting = false,
   showInlineCta = true,
 }: AddTripFormFieldsProps) {
@@ -1629,7 +1631,7 @@ export function AddTripFormFields({
               </TouchableOpacity>
               {!canSubmit && !submitting ? (
                 <Text style={styles.ctaHint}>
-                  Please fill all mandatory fields to continue
+                  {validationMessage ?? "Please fill all mandatory fields to continue"}
                 </Text>
               ) : null}
             </View>
