@@ -174,7 +174,7 @@ export function DriverTripFlowCard({
   );
 
   useEffect(() => {
-    if (step !== 'reached') {
+    if (step !== 'reached' && step !== 'completed') {
       setPodSkipped(false);
       return;
     }
@@ -606,6 +606,75 @@ export function DriverTripFlowCard({
               <Text style={[styles.earningsValue, { color: colors.emerald }]}>{earnings}</Text>
             </View>
           </View>
+
+          <View
+            style={[
+              styles.podCard,
+              {
+                marginTop: 14,
+                backgroundColor: Theme.screenBackground,
+                borderColor: Theme.border,
+              },
+            ]}
+          >
+            <View style={styles.podHeaderRow}>
+              <Text style={[styles.podTitle, { color: Theme.textPrimaryDark }]}>Proof of delivery (POD)</Text>
+              {podLoading ? (
+                <ActivityIndicator size="small" color={colors.emerald} />
+              ) : (
+                <Text style={[styles.podCount, { color: Theme.textMuted }]}>
+                  {podDocuments.length} file{podDocuments.length === 1 ? '' : 's'}
+                </Text>
+              )}
+            </View>
+            {podDocuments.length >= 1 ? (
+              <View style={[styles.podListWrap, { borderColor: Theme.border }]}>
+                {podDocuments.map((doc, index) => (
+                  <View
+                    key={doc.id}
+                    style={[
+                      styles.podListItem,
+                      { borderColor: Theme.border },
+                      index === 0 && styles.podListItemFirst,
+                    ]}
+                  >
+                    <Text style={[styles.podListFileName, { color: Theme.textPrimaryDark }]} numberOfLines={1}>
+                      {doc.file_name || doc.storage_path.split('/').pop() || 'POD'}
+                    </Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.podViewIconBtn,
+                        { backgroundColor: colors.emeraldMuted ?? Theme.surfaceLight, borderColor: colors.emerald },
+                      ]}
+                      onPress={async () => {
+                        setViewingPodError(false);
+                        const cached = podViewUrls[doc.id];
+                        if (cached) {
+                          setViewingPodUrl(cached);
+                          return;
+                        }
+                        setViewingPodLoading(true);
+                        const url = await tripDocumentsService.getDocumentViewUrl(doc.storage_path);
+                        setPodViewUrls((prev) => ({ ...prev, [doc.id]: url }));
+                        setViewingPodLoading(false);
+                        setViewingPodUrl(url);
+                      }}
+                      activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`View ${doc.file_name || 'POD'}`}
+                    >
+                      <FontAwesome name="eye" size={14} color={colors.emerald} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            ) : !podLoading ? (
+              <Text style={[styles.podRequired, { color: Theme.textMuted, marginTop: 4 }]}>
+                No POD files on record for this trip.
+              </Text>
+            ) : null}
+          </View>
+
           <TouchableOpacity
             style={[styles.primaryBtn, { backgroundColor: Theme.textPrimaryDark }]}
             onPress={onBackToDashboard}

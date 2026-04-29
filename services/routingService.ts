@@ -70,6 +70,7 @@ export function parseRouteFetchKey(
 
 const MAPBOX_DIRECTIONS_BASE = 'https://api.mapbox.com/directions/v5/mapbox/driving';
 const OSRM_DIRECTIONS_BASE = 'https://router.project-osrm.org/route/v1/driving';
+const NETLIFY_ROUTE_PROXY_PATH = '/.netlify/functions/route-proxy';
 const OSRM_NETWORK_ERROR_COOLDOWN_MS = 60_000;
 const OSRM_TEMPORARY_BACKOFF_MS = 5 * 60_000;
 const OSRM_FETCH_TIMEOUT_MS = 8_000;
@@ -119,10 +120,14 @@ async function getOSRMRoute(from: LatLon, to: LatLon): Promise<RouteResult | nul
     const timeoutId = setTimeout(() => controller.abort(), OSRM_FETCH_TIMEOUT_MS);
     let res: Response;
     try {
+      const isWebRuntime = typeof window !== 'undefined';
       res = await fetch(url, {
-        headers: {
-          'User-Agent': 'Q-Mobile-Logistics/1.0',
-        },
+        // Browsers block custom User-Agent header; keep it only for native/server runtimes.
+        headers: isWebRuntime
+          ? undefined
+          : {
+              'User-Agent': 'Q-Mobile-Logistics/1.0',
+            },
         signal: controller.signal,
       });
     } finally {
@@ -264,6 +269,28 @@ async function getGoogleRoute(from: LatLon, to: LatLon): Promise<RouteResult | n
  * Prioritizes OSRM (Truly free, no token) -> Mapbox (Token required) -> Google (Token required).
  */
 export async function getOptimalRoute(from: LatLon, to: LatLon): Promise<RouteResult | null> {
+  // Web-specific: prefer server-side proxy to avoid browser CORS/provider blocking.
+  if (typeof window !== 'undefined') {
+    try {
+      const params = new URLSearchParams({
+        fromLat: String(from.latitude),
+        fromLon: String(from.longitude),
+        toLat: String(to.latitude),
+        toLon: String(to.longitude),
+      });
+      const proxyRes = await fetch(`${NETLIFY_ROUTE_PROXY_PATH}?${params.toString()}`);
+      if (proxyRes.ok) {
+        const payload = (await proxyRes.json()) as {
+          ok?: boolean;
+          route?: RouteResult;
+        };
+        if (payload?.ok === true && payload.route) return payload.route;
+      }
+    } catch {
+      // fall through to direct providers
+    }
+  }
+
   // 1. Try OSRM (Truly free, open-source data)
   const osrmResult = await getOSRMRoute(from, to);
   if (osrmResult) return osrmResult;

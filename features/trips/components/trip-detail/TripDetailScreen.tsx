@@ -501,15 +501,21 @@ export default function TripDetailScreen({
   }, [trip?.pickup_area, trip?.drop_location, pastLocationAddresses, driverLocationAddress]);
 
   const trackingMapOriginCoordinate = useMemo(() => {
-    const latitude = Number((trip as any)?.pickup_lat);
-    const longitude = Number((trip as any)?.pickup_lon);
+    const rawLat = (trip as any)?.pickup_lat;
+    const rawLon = (trip as any)?.pickup_lon;
+    if (rawLat == null || rawLon == null || rawLat === "" || rawLon === "") return null;
+    const latitude = Number(rawLat);
+    const longitude = Number(rawLon);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
     return { latitude, longitude };
   }, [trip]);
 
   const trackingMapDestinationCoordinate = useMemo(() => {
-    const latitude = Number((trip as any)?.drop_lat);
-    const longitude = Number((trip as any)?.drop_lon);
+    const rawLat = (trip as any)?.drop_lat;
+    const rawLon = (trip as any)?.drop_lon;
+    if (rawLat == null || rawLon == null || rawLat === "" || rawLon === "") return null;
+    const latitude = Number(rawLat);
+    const longitude = Number(rawLon);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
     return { latitude, longitude };
   }, [trip]);

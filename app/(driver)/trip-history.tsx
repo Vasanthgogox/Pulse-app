@@ -25,6 +25,7 @@ import { isAggregateTrip, tripEarningsForDriver } from "@/lib/driverUtils";
 import { formatLedgerDateTime, formatTime } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { getOptimalRoute } from "@/services/routingService";
+import * as tripDocumentsService from "@/services/tripDocumentsService";
 import { supabase } from "@/lib/supabase";
 import * as driversService from "@/services/driversService";
 import * as tripsService from "@/services/tripsService";
@@ -41,6 +42,7 @@ import {
     ChevronRight,
     ChevronUp,
     Clock,
+    FileImage,
     Info,
     MapPinned,
     Navigation,
@@ -53,11 +55,14 @@ import {
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+    ActivityIndicator,
     AppState,
     FlatList,
     Image,
+    Linking,
     Modal,
     Platform,
+    Pressable,
     ScrollView,
     Share,
     StyleSheet,
@@ -478,10 +483,61 @@ export default function DriverTripsScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [tripView, setTripView] = useState<"active" | "history">("active");
 
+  /** POD attachments for trip detail modal — same source as dispatcher (trip_documents + storage fallback). */
+  const [detailPodDocuments, setDetailPodDocuments] = useState<
+    tripDocumentsService.TripDocumentRow[]
+  >([]);
+  const [detailPodLoading, setDetailPodLoading] = useState(false);
+  const [detailPodViewUrls, setDetailPodViewUrls] = useState<
+    Record<string, string>
+  >({});
+  const detailPodUrlRequestedRef = useRef<Set<string>>(new Set());
+  const [podPreviewUrl, setPodPreviewUrl] = useState<string | null>(null);
+  const [podPreviewLoading, setPodPreviewLoading] = useState(false);
+  const [podPreviewError, setPodPreviewError] = useState(false);
+
   useEffect(() => {
     setExpandedLogIndex(null);
     setDetailTab("journey");
   }, [selectedTrip?.id]);
+
+  useEffect(() => {
+    if (!selectedTrip?.id) {
+      setDetailPodDocuments([]);
+      setDetailPodViewUrls({});
+      detailPodUrlRequestedRef.current.clear();
+      setPodPreviewUrl(null);
+      setPodPreviewLoading(false);
+      setPodPreviewError(false);
+      return;
+    }
+    const tid = selectedTrip.id;
+    detailPodUrlRequestedRef.current.clear();
+    setDetailPodViewUrls({});
+    setDetailPodLoading(true);
+    let cancelled = false;
+    tripDocumentsService.getDocumentsByTripId(tid).then(({ documents, error }) => {
+      if (cancelled) return;
+      setDetailPodLoading(false);
+      if (!error) setDetailPodDocuments(documents);
+      else setDetailPodDocuments([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTrip?.id]);
+
+  useEffect(() => {
+    detailPodDocuments.forEach((doc) => {
+      if (detailPodUrlRequestedRef.current.has(doc.id)) return;
+      detailPodUrlRequestedRef.current.add(doc.id);
+      tripDocumentsService.getDocumentViewUrl(doc.storage_path).then((url) => {
+        setDetailPodViewUrls((prev) =>
+          prev[doc.id] ? prev : { ...prev, [doc.id]: url },
+        );
+      });
+    });
+  }, [detailPodDocuments]);
 
   useEffect(() => {
     const trip = selectedTrip;
@@ -1625,6 +1681,106 @@ export default function DriverTripsScreen() {
                     </View>
                   )}
 
+                  <View style={styles.tdTimelineHeader}>
+                    <View style={styles.tdTimelineHeaderIcon}>
+                      <FileImage size={16} color="#ffffff" />
+                    </View>
+                    <Text
+                      style={[styles.tdTimelineHeaderTitle, { color: colors.text }]}
+                    >
+                      Proof of delivery
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.tdTimelineCard,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    {detailPodLoading ? (
+                      <ActivityIndicator
+                        style={{ paddingVertical: 22 }}
+                        color={colors.emerald}
+                      />
+                    ) : detailPodDocuments.length >= 1 ? (
+                      detailPodDocuments.map((doc, index) => {
+                        const name =
+                          doc.file_name ||
+                          doc.storage_path.split("/").pop() ||
+                          "POD";
+                        return (
+                          <View
+                            key={doc.id}
+                            style={[
+                              styles.tdPodRow,
+                              index < detailPodDocuments.length - 1
+                                ? { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth }
+                                : null,
+                            ]}
+                          >
+                            <FileImage
+                              size={18}
+                              color={colors.emerald}
+                              style={{ marginRight: 10 }}
+                            />
+                            <Text
+                              style={[styles.tdPodFileName, { color: colors.text }]}
+                              numberOfLines={1}
+                            >
+                              {name}
+                            </Text>
+                            <TouchableOpacity
+                              onPress={async () => {
+                                setPodPreviewError(false);
+                                const cached = detailPodViewUrls[doc.id];
+                                if (cached) {
+                                  setPodPreviewUrl(cached);
+                                  return;
+                                }
+                                setPodPreviewLoading(true);
+                                setPodPreviewUrl(null);
+                                const url =
+                                  await tripDocumentsService.getDocumentViewUrl(
+                                    doc.storage_path,
+                                  );
+                                setDetailPodViewUrls((prev) => ({
+                                  ...prev,
+                                  [doc.id]: url,
+                                }));
+                                setPodPreviewLoading(false);
+                                setPodPreviewUrl(url);
+                              }}
+                              activeOpacity={0.85}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                              <Text
+                                style={{
+                                  color: colors.emerald,
+                                  fontWeight: "800",
+                                  fontSize: 13,
+                                }}
+                              >
+                                View
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      })
+                    ) : (
+                      <Text
+                        style={[
+                          styles.tdEmptyTimeline,
+                          { paddingVertical: 14, fontSize: 13 },
+                        ]}
+                      >
+                        No proof of delivery uploaded for this trip.
+                      </Text>
+                    )}
+                  </View>
+
                   {isCompleted(selectedTrip.status) ? (
                     <LinearGradient
                       colors={[Theme.driverEmeraldDark, Theme.driverEmerald]}
@@ -1866,6 +2022,104 @@ export default function DriverTripsScreen() {
                 </View>
               ) : null}
             </ScrollView>
+
+            <Modal
+              visible={!!podPreviewUrl || podPreviewLoading}
+              transparent
+              animationType="fade"
+              onRequestClose={() => {
+                setPodPreviewUrl(null);
+                setPodPreviewLoading(false);
+                setPodPreviewError(false);
+              }}
+            >
+              <Pressable
+                style={[
+                  styles.podPreviewBackdrop,
+                  { paddingTop: insets.top, paddingBottom: insets.bottom },
+                ]}
+                onPress={() => {
+                  setPodPreviewUrl(null);
+                  setPodPreviewLoading(false);
+                  setPodPreviewError(false);
+                }}
+              >
+                <Pressable style={styles.podPreviewInner} onPress={() => {}}>
+                  <TouchableOpacity
+                    style={[
+                      styles.podPreviewClose,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                    onPress={() => {
+                      setPodPreviewUrl(null);
+                      setPodPreviewLoading(false);
+                      setPodPreviewError(false);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <FontAwesome name="times" size={18} color={colors.text} />
+                    <Text style={{ color: colors.text, fontWeight: "700", marginLeft: 8 }}>
+                      Close
+                    </Text>
+                  </TouchableOpacity>
+                  {podPreviewLoading ? (
+                    <View style={styles.podPreviewImageBox}>
+                      <ActivityIndicator size="large" color={colors.emerald} />
+                      <Text style={{ color: colors.textMuted, marginTop: 12 }}>
+                        Loading…
+                      </Text>
+                    </View>
+                  ) : podPreviewUrl ? (
+                    <>
+                      <Image
+                        source={{ uri: podPreviewUrl }}
+                        style={styles.podPreviewImage}
+                        resizeMode="contain"
+                        onError={() => setPodPreviewError(true)}
+                        onLoad={() => setPodPreviewError(false)}
+                      />
+                      {podPreviewError ? (
+                        <View
+                          style={[
+                            styles.podPreviewFallback,
+                            {
+                              backgroundColor: colors.surface,
+                              borderColor: colors.border,
+                            },
+                          ]}
+                        >
+                          <Text style={{ color: colors.textMuted, textAlign: "center" }}>
+                            Preview not available. Open in browser to view.
+                          </Text>
+                          <TouchableOpacity
+                            style={{
+                              marginTop: 14,
+                              backgroundColor: colors.emerald,
+                              paddingVertical: 12,
+                              paddingHorizontal: 20,
+                              borderRadius: 12,
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 8,
+                            }}
+                            onPress={() => void Linking.openURL(podPreviewUrl)}
+                            activeOpacity={0.85}
+                          >
+                            <FontAwesome name="external-link" size={16} color="#fff" />
+                            <Text style={{ color: "#fff", fontWeight: "700" }}>
+                              Open in browser
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+                    </>
+                  ) : null}
+                </Pressable>
+              </Pressable>
+            </Modal>
           </View>
         )}
       </Modal>
@@ -2560,6 +2814,55 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
     paddingVertical: 20,
+  },
+  tdPodRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+  tdPodFileName: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  podPreviewBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.72)",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+  },
+  podPreviewInner: {
+    borderRadius: 16,
+    overflow: "hidden",
+    maxHeight: "88%",
+  },
+  podPreviewClose: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-end",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  podPreviewImageBox: {
+    minHeight: 220,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 32,
+  },
+  podPreviewImage: {
+    width: "100%",
+    minHeight: 280,
+    maxHeight: 480,
+  },
+  podPreviewFallback: {
+    marginTop: 12,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
   },
   tdLogRowWrap: {
     position: "relative",
