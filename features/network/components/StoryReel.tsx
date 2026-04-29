@@ -211,19 +211,6 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.headerRow}>
-        <View>
-          <Text style={styles.sectionKicker}>Network broadcasts</Text>
-          <Text style={styles.sectionTitle}>Live load and capacity signals</Text>
-        </View>
-        <View style={styles.headerRightRow}>
-          <View style={styles.livePill}>
-            <Radio size={11} color={Theme.textPrimaryDark} strokeWidth={2.4} />
-            <Text style={styles.livePillText}>{stories.length}</Text>
-          </View>
-          {headerActions}
-        </View>
-      </View>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -313,82 +300,32 @@ export function StoryReel({ posts, orgId, onCreatePost, headerActions }: StoryRe
 const styles = StyleSheet.create({
   wrap: {
     backgroundColor: Theme.screenBackground,
-    paddingTop: 12,
+    paddingTop: 8,
     paddingBottom: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
-  },
-  headerRow: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    marginBottom: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  sectionKicker: {
-    ...Typography.subTabLabel,
-    fontSize: 9,
-    color: Theme.textMutedDemo,
-    letterSpacing: 1.8,
-    fontWeight: "900",
-    textTransform: "uppercase",
-    marginBottom: 3,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.2,
-  },
-  livePill: {
-    minHeight: 24,
-    minWidth: 40,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-  },
-  livePillText: {
-    fontSize: 11,
-    fontWeight: "900",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
-  },
-  headerRightRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
   },
   scroll: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    gap: 14,
+    gap: 20,
     alignItems: "center",
-    paddingRight: 24,
+    paddingRight: 28,
   },
   storyItem: {
-    width: 88,
+    width: 106,
     alignItems: "center",
-    paddingVertical: 4,
+    paddingVertical: 6,
   },
   storyRing: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
+    width: 96,
+    height: 96,
+    borderRadius: 34,
     alignItems: "center",
     justifyContent: "center",
-    padding: 2.5,
+    padding: 3,
   },
   storyAvatar: {
-    width: 71,
-    height: 71,
-    borderRadius: 35.5,
+    width: 90,
+    height: 90,
+    borderRadius: 30,
     backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
@@ -401,11 +338,11 @@ const styles = StyleSheet.create({
     borderColor: Theme.networkCardBackground,
   },
   storyAvatarPreview: {
-    width: "80%",
-    fontSize: 7.8,
+    width: "76%",
+    fontSize: 8,
     fontWeight: "700",
     fontStyle: "italic",
-    lineHeight: 10,
+    lineHeight: 10.5,
     color: Theme.textMutedDemo,
     textAlign: "center",
     opacity: 0.86,
@@ -415,27 +352,30 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: -5,
     right: -4,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 26,
+    height: 26,
+    borderRadius: 10,
     borderWidth: 1,
     backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
   },
   launchRing: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
+    width: 96,
+    height: 96,
+    borderRadius: 34,
+    borderWidth: 1.5,
+    borderColor: Theme.borderMedium,
+    borderStyle: "dashed",
     alignItems: "center",
     justifyContent: "center",
     padding: 2.5,
   },
   launchAvatarWrap: {
-    width: 71,
-    height: 71,
-    borderRadius: 35.5,
-    backgroundColor: Theme.screenBackground,
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: Theme.textPrimaryDark,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -444,10 +384,10 @@ const styles = StyleSheet.create({
   },
   mineAddIconWrap: {
     position: "absolute",
-    right: 12,
+    right: 10,
     bottom: 2,
-    width: 22,
-    height: 22,
+    width: 26,
+    height: 26,
     borderRadius: 11,
     backgroundColor: Theme.primary,
     borderWidth: 1.5,
@@ -462,7 +402,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   storyName: {
-    marginTop: 7,
+    marginTop: 10,
     fontSize: 11.5,
     fontWeight: "800",
     fontStyle: "italic",
@@ -473,7 +413,7 @@ const styles = StyleSheet.create({
   },
   storyMeta: {
     marginTop: 2,
-    fontSize: 9,
+    fontSize: 8.5,
     fontWeight: "700",
     color: Theme.textSecondary,
     letterSpacing: 0.25,

@@ -10,10 +10,12 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useConnectionRequestsReceivedQuery } from "@/lib/queries";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { getSalaryRequestsByOrganization } from "@/services/salaryRequestsService";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { Command } from "lucide-react-native";
+import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   Image,
@@ -218,10 +220,14 @@ export function DemoTabBar({
   onProfilePress,
   onNotificationsPress,
 }: DemoTabBarProps) {
+  const router = useRouter();
   const { profile } = useAuth();
   const { currentOrganization } = useOrganization();
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   const [notificationCount, setNotificationCount] = useState(0);
+  const orgId = currentOrganization?.id ?? null;
+  const receivedQ = useConnectionRequestsReceivedQuery(orgId);
+  const pendingInvites = (receivedQ.data ?? []).filter((r) => r.status === "pending").length;
 
   useEffect(() => {
     let mounted = true;
@@ -379,6 +385,21 @@ export function DemoTabBar({
                   </Text>
                 </View>
               ) : null}
+            </AnimatedPress>
+            <AnimatedPress
+              style={styles.webBellBtn}
+              activeOpacity={0.8}
+              onPress={() =>
+                router.push({
+                  pathname: "/network",
+                  params: { view: "requests", ts: String(Date.now()) },
+                } as never)
+              }
+            >
+              <View style={styles.webInviteIconWrap}>
+                <FontAwesome5 name="inbox" size={15} color="#64748b" />
+                {pendingInvites > 0 ? <View style={styles.webInviteDot} /> : null}
+              </View>
             </AnimatedPress>
             <AnimatedPress
               onPress={onProfilePress}
@@ -861,6 +882,23 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  webInviteIconWrap: {
+    width: 16,
+    height: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  webInviteDot: {
+    position: "absolute",
+    top: -2,
+    right: -4,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: Theme.primary,
+    borderWidth: 1.5,
+    borderColor: "#ffffff",
   },
   tabsRow: {
     flex: 1,

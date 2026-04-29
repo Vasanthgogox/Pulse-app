@@ -51,6 +51,7 @@ interface DiscoverViewProps {
   search?: string;
   onSearchChange?: (value: string) => void;
   showSearchChrome?: boolean;
+  onOpenProfile?: (org: DiscoverOrg & { rating_value?: number | null; location_value?: string | null }) => void;
 }
 
 // --- Scoring ---
@@ -156,12 +157,13 @@ function scoreOrgs(
 
 // --- Org card ---
 
-function OrgCard({ org, locationFallback, onConnect, onCancel, loading }: {
+function OrgCard({ org, locationFallback, onConnect, onCancel, loading, onOpenProfile }: {
   org: ScoredOrg;
   locationFallback?: { city?: string | null; state?: string | null; address_line?: string | null } | null;
   onConnect: () => void;
   onCancel: () => void;
   loading: boolean;
+  onOpenProfile?: () => void;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const status = org.connection_status;
@@ -206,6 +208,7 @@ function OrgCard({ org, locationFallback, onConnect, onCancel, loading }: {
       </View>
 
       <View style={styles.discoveryHero}>
+        <Pressable onPress={onOpenProfile} style={styles.discoveryHeroPress}>
         <View style={styles.avatar}>
           <PartyAvatar
             name={org.name}
@@ -222,6 +225,7 @@ function OrgCard({ org, locationFallback, onConnect, onCancel, loading }: {
             {businessLocation ?? "Not available"}
           </Text>
         </View>
+        </Pressable>
       </View>
 
       <View style={styles.discoveryMetaStack}>
@@ -315,6 +319,7 @@ export function DiscoverView({
   search: searchProp,
   onSearchChange,
   showSearchChrome = true,
+  onOpenProfile,
 }: DiscoverViewProps) {
   const { width: windowWidth } = useWindowDimensions();
   const [internalSearch, setInternalSearch] = useState('');
@@ -556,6 +561,13 @@ export function DiscoverView({
                       onConnect={() => setRequestRoleModalOrg(item.org)}
                       onCancel={() => void handleCancelRequest(item.org)}
                       loading={connecting === item.org.id}
+                      onOpenProfile={() =>
+                        onOpenProfile?.({
+                          ...item.org,
+                          rating_value: item.org.rating ?? item.org.average_rating ?? null,
+                          location_value: getBusinessLocation(item.org),
+                        })
+                      }
                     />
                   </View>
                 );
@@ -578,6 +590,13 @@ export function DiscoverView({
                 onConnect={() => setRequestRoleModalOrg(item.org)}
                 onCancel={() => void handleCancelRequest(item.org)}
                 loading={connecting === item.org.id}
+                onOpenProfile={() =>
+                  onOpenProfile?.({
+                    ...item.org,
+                    rating_value: item.org.rating ?? item.org.average_rating ?? null,
+                    location_value: getBusinessLocation(item.org),
+                  })
+                }
               />
             );
           }}
@@ -739,7 +758,7 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 18,
+    borderRadius: 32,
     borderWidth: 1,
     borderColor: Theme.surfaceBorder,
     shadowColor: Theme.shadow,
@@ -856,6 +875,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 10,
     paddingBottom: 8,
+  },
+  discoveryHeroPress: {
+    alignItems: "center",
+    width: "100%",
   },
   avatar: {
     width: 62,
@@ -1026,9 +1049,9 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: Theme.borderMedium,
-    borderRadius: 17,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
     minHeight: 34,
     minWidth: 118,
     justifyContent: 'center',
@@ -1041,8 +1064,8 @@ const styles = StyleSheet.create({
   connectBtnLoading: { opacity: 0.7 },
   connectBtnText: { fontSize: 10, fontWeight: '700', fontStyle: "italic", color: Theme.textPrimaryDark, letterSpacing: 0.2 },
   cardFooter: {
-    minHeight: 44,
-    paddingHorizontal: 8,
+    minHeight: 50,
+    paddingHorizontal: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
     alignItems: "center",

@@ -11,14 +11,20 @@ import {
   type ConnectedOrg,
   type ConnectionFilterTab,
 } from "@/features/network/components/ConnectionsView";
-import { RecentAddedStrip } from "@/features/network/components/RecentAddedStrip";
 import { DiscoverView } from "@/features/network/components/DiscoverView";
 import { InvitationsView } from "@/features/network/components/InvitationsView";
 import { StoryReel } from "@/features/network/components/StoryReel";
 import { isPostVisibleForOrg, type PostRow } from "@/features/network/services/posts.service";
 import {
+  approveConnectionRequest,
+  cancelConnectionRequest,
+  rejectConnectionRequest,
+  type ConnectionRequestRow,
+} from "@/services/connectionRequestsService";
+import {
   useClientsQuery,
   useConnectionRequestsReceivedQuery,
+  useConnectionRequestsSentQuery,
   useDriversQuery,
   useInvalidateNetwork,
   useNetworkFeedQuery,
@@ -28,13 +34,30 @@ import {
 import { useRouter } from "expo-router";
 import {
   Activity,
+  ArrowLeft,
+  ArrowUpRight,
+  Check,
+  Clock,
   Compass,
+  Cpu,
+  Globe,
+  Inbox,
+  Mail,
+  MapPin,
   Search,
+  Slash,
+  Signal,
+  Truck,
+  UserPlus,
   UserPlus2,
   Users,
+  Verified,
+  ShieldCheck,
+  X,
 } from "lucide-react-native";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocalSearchParams } from "expo-router";
 import {
   ActivityIndicator,
   Platform,
@@ -88,10 +111,23 @@ function NetworkStoryStrip({
   );
 }
 
+type NetworkProfileNode = {
+  id: string;
+  name: string;
+  type: "CLIENT" | "SUPPLIER" | "DRIVER";
+  location: string;
+  status: "CONNECTED" | "REQUEST SENT" | "LIVE";
+  rating: number | null;
+  mutuals: number;
+  phone?: string | null;
+};
+
 export default function NetworkScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const searchParams = useLocalSearchParams<{ view?: string }>();
   const isWideNetwork = Platform.OS === "web" && width >= 1180;
+  const isDesktopMatrix = width >= 1100;
   const isMobileLayout = width < 820;
   const isCompactPhone = width < 420;
   const tabBarScrollProps = useTabBarAwareScrollProps();
@@ -107,9 +143,18 @@ export default function NetworkScreen() {
   const [invSearchOpen, setInvSearchOpen] = useState(false);
   const [discoverSearchOpen, setDiscoverSearchOpen] = useState(false);
   const [discoverSearch, setDiscoverSearch] = useState("");
+  const [viewMode, setViewMode] = useState<"dashboard" | "profile" | "requests">("dashboard");
+  const [requestTab, setRequestTab] = useState<"received" | "sent" | "cancelled">("received");
+  const [selectedProfileNode, setSelectedProfileNode] = useState<NetworkProfileNode | null>(null);
+  const [requestActionId, setRequestActionId] = useState<string | null>(null);
+  const [clockUtc, setClockUtc] = useState<string>(() =>
+    new Date().toLocaleTimeString("en-GB", { hour12: false }),
+  );
+  const [connectionsSnapshot, setConnectionsSnapshot] = useState<ConnectedOrg[]>([]);
 
   useRealtimeNetworkInvalidation(orgId);
   const receivedQ = useConnectionRequestsReceivedQuery(orgId);
+  const sentQ = useConnectionRequestsSentQuery(orgId);
   const clientsQ = useClientsQuery(orgId);
   const suppliersQ = useSuppliersQuery(orgId);
   const driversQ = useDriversQuery(orgId);
@@ -125,6 +170,29 @@ export default function NetworkScreen() {
     () => (receivedQ.data ?? []).filter((r) => r.status === "pending").length,
     [receivedQ.data],
   );
+  const receivedRequests = useMemo(
+    () => ((receivedQ.data ?? []) as ConnectionRequestRow[]).filter((r) => r.status === "pending"),
+    [receivedQ.data],
+  );
+  const sentRequests = useMemo(
+    () => ((sentQ.data ?? []) as ConnectionRequestRow[]).filter((r) => r.status === "pending"),
+    [sentQ.data],
+  );
+  const cancelledRequests = useMemo(() => {
+    const fromReceived = ((receivedQ.data ?? []) as ConnectionRequestRow[]).filter(
+      (r) => r.status !== "pending" && r.status !== "approved",
+    );
+    const fromSent = ((sentQ.data ?? []) as ConnectionRequestRow[]).filter(
+      (r) => r.status !== "pending" && r.status !== "approved",
+    );
+    const merged = [...fromReceived, ...fromSent];
+    const seen = new Set<string>();
+    return merged.filter((r) => {
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    });
+  }, [receivedQ.data, sentQ.data]);
   const clientCount = useMemo(
     () => ((clientsQ.data ?? []) as unknown[]).length,
     [clientsQ.data],
@@ -254,6 +322,17 @@ export default function NetworkScreen() {
   }, [clientsQ.data, suppliersQ.data, driversQ.data]);
 
   const onCreatePost = () => router.push("/(modals)/create-post");
+  useEffect(() => {
+    const tick = setInterval(() => {
+      setClockUtc(new Date().toLocaleTimeString("en-GB", { hour12: false }));
+    }, 1000);
+    return () => clearInterval(tick);
+  }, []);
+  useEffect(() => {
+    if (searchParams.view === "requests") {
+      setViewMode("requests");
+    }
+  }, [searchParams.view]);
   const allowLoadPosts = organization?.capabilities?.canBid ?? true;
   const feedPosts = useMemo(
     () => (feedQ.data ?? []).filter((post) => isPostVisibleForOrg(post, { allowLoadPosts })),
@@ -285,8 +364,375 @@ export default function NetworkScreen() {
     );
   }
 
-  const hasRecent = recentAddedConnections.length > 0;
-  const splitSideBySide = width >= 900;
+  const openProfileFromRequest = (row: ConnectionRequestRow, mode: "received" | "sent" | "cancelled") => {
+    const fromReceived = mode === "received";
+    const name = fromReceived ? row.from_org_name : row.to_org_name;
+    const normalized = String(row.status ?? "").toLowerCase();
+    const status: NetworkProfileNode["status"] =
+      normalized === "approved"
+        ? "CONNECTED"
+        : normalized === "pending"
+          ? "REQUEST SENT"
+          : "LIVE";
+    setSelectedProfileNode({
+      id: fromReceived ? row.from_organization_id : row.to_organization_id,
+      name: name?.trim() || "Organization",
+      type: row.request_shipper_client ? "CLIENT" : "SUPPLIER",
+      location: "Not available",
+      status,
+      rating: null,
+      mutuals: 0,
+    });
+    setViewMode("profile");
+  };
+
+  const handleAcceptRequest = async (requestId: string) => {
+    setRequestActionId(requestId);
+    try {
+      const res = await approveConnectionRequest(requestId, orgId);
+      if (res.error) return;
+      await Promise.all([receivedQ.refetch(), sentQ.refetch(), clientsQ.refetch(), suppliersQ.refetch()]);
+      invalidateNetwork();
+    } finally {
+      setRequestActionId(null);
+    }
+  };
+
+  const handleRejectRequest = async (requestId: string) => {
+    setRequestActionId(requestId);
+    try {
+      const res = await rejectConnectionRequest(requestId, orgId);
+      if (res.error) return;
+      await Promise.all([receivedQ.refetch(), sentQ.refetch()]);
+      invalidateNetwork();
+    } finally {
+      setRequestActionId(null);
+    }
+  };
+
+  const handleRecallRequest = async (requestId: string) => {
+    setRequestActionId(requestId);
+    try {
+      const res = await cancelConnectionRequest(requestId);
+      if (res.error) return;
+      await Promise.all([receivedQ.refetch(), sentQ.refetch()]);
+      invalidateNetwork();
+    } finally {
+      setRequestActionId(null);
+    }
+  };
+
+  if (viewMode === "requests") {
+    const list =
+      requestTab === "received"
+        ? receivedRequests
+        : requestTab === "sent"
+          ? sentRequests
+          : cancelledRequests;
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.requestsHero}>
+          <Pressable
+            onPress={() => setViewMode("dashboard")}
+            style={({ pressed }) => [styles.requestsBackBtn, pressed && { opacity: 0.8 }]}
+          >
+            <ArrowLeft size={14} color={Theme.textOnPrimary} />
+            <Text style={styles.requestsBackBtnText}>Dashboard</Text>
+          </Pressable>
+          <Text style={styles.requestsHeroTitle}>Inbound mission protocol</Text>
+          <Text style={styles.requestsHeroSub}>Manage network access requests</Text>
+          <View style={styles.requestsTabRow}>
+            {([
+              { key: "received", label: "RECEIVED", count: receivedRequests.length },
+              { key: "sent", label: "SENT", count: sentRequests.length },
+              { key: "cancelled", label: "CANCELLED", count: cancelledRequests.length },
+            ] as const).map((tab) => {
+              const on = requestTab === tab.key;
+              return (
+                <Pressable
+                  key={tab.key}
+                  onPress={() => setRequestTab(tab.key)}
+                  style={[styles.requestsTabBtn, on && styles.requestsTabBtnOn]}
+                >
+                  <Text style={[styles.requestsTabText, on && styles.requestsTabTextOn]}>{tab.label}</Text>
+                  <View style={[styles.requestsTabBadge, on && styles.requestsTabBadgeOn]}>
+                    <Text style={[styles.requestsTabBadgeText, on && styles.requestsTabBadgeTextOn]}>
+                      {tab.count}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.requestsListContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {list.length === 0 ? (
+            <View style={styles.requestsEmptyCard}>
+              <Slash size={32} color={Theme.textSecondary} />
+              <Text style={styles.requestsEmptyTitle}>No {requestTab} protocol</Text>
+              <Text style={styles.requestsEmptySub}>Your queue is currently clear.</Text>
+            </View>
+          ) : (
+            list.map((req) => {
+              const isBusy = requestActionId === req.id;
+              const title = requestTab === "received" ? req.from_org_name : req.to_org_name;
+              const roleLabel = req.request_shipper_client ? "CLIENT" : "SUPPLIER";
+              return (
+                <Pressable
+                  key={req.id}
+                  onPress={() => openProfileFromRequest(req, requestTab)}
+                  style={({ pressed }) => [styles.requestsCard, pressed && { opacity: 0.93 }]}
+                >
+                  <View style={styles.requestsCardMain}>
+                    <View style={styles.requestsCardAvatar}>
+                      <Text style={styles.requestsCardAvatarText}>{(title ?? "OR").slice(0, 2).toUpperCase()}</Text>
+                    </View>
+                    <View style={styles.requestsCardInfo}>
+                      <Text style={styles.requestsCardName} numberOfLines={1}>
+                        {(title ?? "Organization").toUpperCase()}
+                      </Text>
+                      <View style={styles.requestsCardMeta}>
+                        <Text style={styles.requestsCardRole}>{roleLabel}</Text>
+                        <Text style={styles.requestsCardTime}>
+                          {new Date(req.created_at).toLocaleDateString("en-GB")}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                  <View style={styles.requestsActions}>
+                    {requestTab === "received" ? (
+                      <>
+                        <Pressable
+                          onPress={() => void handleRejectRequest(req.id)}
+                          disabled={isBusy}
+                          style={styles.requestsIgnoreBtn}
+                        >
+                          <X size={12} color={Theme.textSecondary} />
+                          <Text style={styles.requestsIgnoreText}>Ignore</Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => void handleAcceptRequest(req.id)}
+                          disabled={isBusy}
+                          style={styles.requestsAcceptBtn}
+                        >
+                          {isBusy ? (
+                            <ActivityIndicator size={12} color={Theme.textOnPrimary} />
+                          ) : (
+                            <Check size={12} color={Theme.textOnPrimary} />
+                          )}
+                          <Text style={styles.requestsAcceptText}>Accept</Text>
+                        </Pressable>
+                      </>
+                    ) : requestTab === "sent" ? (
+                      <Pressable
+                        onPress={() => void handleRecallRequest(req.id)}
+                        disabled={isBusy}
+                        style={styles.requestsRecallBtn}
+                      >
+                        {isBusy ? (
+                          <ActivityIndicator size={12} color={Theme.textOnPrimary} />
+                        ) : (
+                          <Clock size={12} color={Theme.textOnPrimary} />
+                        )}
+                        <Text style={styles.requestsRecallText}>Recall</Text>
+                      </Pressable>
+                    ) : (
+                      <View style={styles.requestsCancelledPill}>
+                        <Slash size={12} color={Theme.textSecondary} />
+                        <Text style={styles.requestsCancelledText}>
+                          {(req.status ?? "cancelled").toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </Pressable>
+              );
+            })
+          )}
+        </ScrollView>
+      </View>
+    );
+  }
+
+  if (viewMode === "profile" && selectedProfileNode) {
+    return (
+      <View style={[styles.profileShell, { paddingTop: insets.top }]}>
+        <View style={styles.profileCover}>
+          <View style={styles.profileCoverGrain} />
+          <Pressable
+            onPress={() => setViewMode("dashboard")}
+            style={({ pressed }) => [styles.profileBackBtn, pressed && { opacity: 0.82 }]}
+          >
+            <ArrowLeft size={16} color={Theme.textOnPrimary} />
+            <Text style={styles.profileBackBtnText}>Back to matrix</Text>
+          </Pressable>
+        </View>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.profileContent,
+            {
+              paddingBottom:
+                24 +
+                insets.bottom +
+                Layout.demoTabBarScrollBottomInset +
+                Layout.tabBarBottomPaddingMin,
+            },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.profileGrid}>
+            <View style={styles.profileLeftCol}>
+              <View style={styles.profileIdentityCardModern}>
+                <View style={styles.profileAvatarLgModern}>
+                  <Text style={styles.profileAvatarLgText}>
+                    {selectedProfileNode.name
+                      .split(" ")
+                      .map((p) => p[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase()}
+                  </Text>
+                </View>
+                <View style={styles.profileNameRow}>
+                  <Text style={styles.profileName}>{selectedProfileNode.name}</Text>
+                  <Verified size={18} color={Theme.primary} />
+                </View>
+                <View style={styles.profileLocationRow}>
+                  <MapPin size={13} color={Theme.textSecondary} />
+                  <Text style={styles.profileLocation}>{selectedProfileNode.location}</Text>
+                </View>
+
+                <View style={styles.profileStatRow}>
+                  <View style={styles.profileStatCell}>
+                    <Text style={styles.profileStatN}>
+                      {selectedProfileNode.rating != null
+                        ? selectedProfileNode.rating.toFixed(1)
+                        : "N/A"}
+                    </Text>
+                    <Text style={styles.profileStatL}>Rating</Text>
+                  </View>
+                  <View style={styles.profileStatCell}>
+                    <Text style={styles.profileStatN}>{selectedProfileNode.mutuals}</Text>
+                    <Text style={styles.profileStatL}>Mutuals</Text>
+                  </View>
+                </View>
+
+                <View style={styles.profileCtaStack}>
+                  <Pressable style={styles.profilePrimaryBtn}>
+                    <UserPlus size={14} color={Theme.textOnPrimary} />
+                    <Text style={styles.profilePrimaryBtnText}>Send protocol</Text>
+                  </Pressable>
+                  <Pressable style={styles.profileSecondaryBtn}>
+                    <Mail size={14} color={Theme.textOnPrimary} />
+                    <Text style={styles.profileSecondaryBtnText}>Direct message</Text>
+                  </Pressable>
+                </View>
+              </View>
+
+              <View style={styles.profileOpsCard}>
+                <Text style={styles.profileOpsKicker}>Operations status</Text>
+                <View style={styles.profileOpsRow}>
+                  <Text style={styles.profileOpsLabel}>KYC Verified</Text>
+                  <ShieldCheck size={15} color={Theme.primary} />
+                </View>
+                <View style={styles.profileOpsRow}>
+                  <Text style={styles.profileOpsLabel}>Active Fleet</Text>
+                  <Text style={styles.profileOpsValue}>
+                    {Math.max(1, connectionsSnapshot.length * 2)} Units
+                  </Text>
+                </View>
+                <View style={styles.profileOpsRow}>
+                  <Text style={styles.profileOpsLabel}>Response Rate</Text>
+                  <Text style={styles.profileOpsValue}>98%</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.profileRightCol}>
+              <View style={styles.profileOverviewCardModern}>
+                <Text style={styles.profileOverviewTitle}>Ally dossier</Text>
+                <Text style={styles.profileOverviewBody}>
+                  Authorized {selectedProfileNode.type.toLowerCase()} partner with
+                  verified network performance in {selectedProfileNode.location}.
+                  High-reliability execution and synchronized operations on Pulse.
+                </Text>
+                <View style={styles.profileMetricGrid}>
+                  <View style={styles.profileMetricCardModern}>
+                    <View style={styles.profileMetricHead}>
+                      <ArrowUpRight size={16} color={Theme.primary} />
+                      <Text style={styles.profileMetricHeadText}>SLA compliance</Text>
+                    </View>
+                    <Text style={styles.profileMetricValue}>98.2%</Text>
+                  </View>
+                  <View style={styles.profileMetricCardModern}>
+                    <View style={styles.profileMetricHead}>
+                      <Signal size={16} color={Theme.primary} />
+                      <Text style={styles.profileMetricHeadText}>Network presence</Text>
+                    </View>
+                    <Text style={styles.profileMetricValue}>
+                      {selectedProfileNode.status === "CONNECTED" ? "LIVE" : selectedProfileNode.status}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  const trendPct = totalConnections > 0 ? Math.round((pendingCount / totalConnections) * 100) : 0;
+
+  const handleOpenProfileFromConnection = (item: ConnectedOrg) => {
+    setSelectedProfileNode({
+      id: item.id,
+      name: item.name,
+      type: item.role,
+      location: "Not available",
+      status: item.is_integrated ? "CONNECTED" : "LIVE",
+      rating: item.rating ?? null,
+      mutuals: item.mutual_count ?? 0,
+      phone: item.phone ?? null,
+    });
+    setViewMode("profile");
+  };
+
+  const handleOpenProfileFromDiscover = (
+    org: {
+      id: string;
+      name: string;
+      connection_status?: string | null;
+      mutual_count?: number | null;
+      mutual_connections_count?: number | null;
+      rating_value?: number | null;
+      location_value?: string | null;
+    },
+  ) => {
+    const normalized = String(org.connection_status ?? "").toLowerCase();
+    const status: NetworkProfileNode["status"] =
+      normalized === "approved"
+        ? "CONNECTED"
+        : normalized === "pending"
+          ? "REQUEST SENT"
+          : "LIVE";
+    setSelectedProfileNode({
+      id: org.id,
+      name: org.name,
+      type: "SUPPLIER",
+      location: org.location_value?.trim() || "Not available",
+      status,
+      rating: org.rating_value ?? null,
+      mutuals: org.mutual_count ?? org.mutual_connections_count ?? 0,
+    });
+    setViewMode("profile");
+  };
 
   const scrollContent = (
     <ScrollView
@@ -312,87 +758,113 @@ export default function NetworkScreen() {
       }
     >
       <>
-        <NetworkStoryStrip
-          orgId={orgId}
-          orgName={organization?.name ?? ""}
-          feedPosts={feedPosts}
-          feedLoading={feedQ.isLoading}
-          onCreatePost={onCreatePost}
-        />
-        <View
-          style={[
-            styles.splitBelowStory,
-            hasRecent && splitSideBySide && styles.splitBelowStoryRow,
-          ]}
-        >
-          <View
-            style={[
-              styles.splitPaneSnapshot,
-              hasRecent && splitSideBySide && styles.splitPaneSnapshotInRow,
-              (!hasRecent || !splitSideBySide) && styles.splitPaneSnapshotFull,
-            ]}
-          >
-            <View
-              style={[
-                styles.snapshotCard,
-                hasRecent && splitSideBySide && styles.snapshotCardStretch,
-              ]}
-            >
-              <View style={styles.snapshotHeaderRow}>
-                <View style={styles.snapshotIconRing} accessibilityElementsHidden>
-                  <Users size={12} color={Theme.primary} strokeWidth={2.2} />
-                </View>
-                <Text style={styles.snapshotKicker}>Allies snapshot</Text>
-              </View>
-              <Text style={styles.snapshotPrimary} numberOfLines={1}>
-                {totalConnections} live connections
-              </Text>
-              <View style={styles.snapshotSplitRow}>
-                <View style={styles.snapshotStatCell}>
-                  <Text style={styles.snapshotStatN}>{clientCount}</Text>
-                  <Text style={styles.snapshotStatL} numberOfLines={1}>
-                    Clients
-                  </Text>
-                </View>
-                <View style={styles.snapshotStatDividerV} />
-                <View style={styles.snapshotStatCell}>
-                  <Text style={styles.snapshotStatN}>{supplierCount}</Text>
-                  <Text style={styles.snapshotStatL} numberOfLines={1}>
-                    Suppliers
-                  </Text>
-                </View>
-                <View style={styles.snapshotStatDividerV} />
-                <View style={styles.snapshotStatCell}>
-                  <Text style={styles.snapshotStatN}>{driverCount}</Text>
-                  <Text style={styles.snapshotStatL} numberOfLines={1}>
-                    Drivers
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.snapshotSecondary} numberOfLines={1}>
-                {pendingCount} pending syncs
-              </Text>
-            </View>
+        <View style={styles.topTicker}>
+          <View style={styles.topTickerTrack}>
+            <Text style={styles.topTickerText}>
+              BUILD YOUR NETWORK BY ADDING CONTACTS AND CONNECTING WITH VERIFIED APP USERS TO GROW YOUR BUSINESS.
+            </Text>
           </View>
-          {hasRecent ? (
-            <View
-              style={[
-                styles.splitPaneRecent,
-                splitSideBySide && styles.splitPaneRecentInRow,
-                !splitSideBySide && styles.splitPaneRecentStack,
-              ]}
-            >
-              <RecentAddedStrip
+          <View style={styles.topTickerClock}>
+            <Clock size={10} color={Theme.textOnPrimary} />
+            <Text style={styles.topTickerClockText}>{clockUtc} UTC</Text>
+          </View>
+        </View>
+        <View style={[styles.topCluster, isDesktopMatrix && styles.topClusterDesktop]}>
+          <View style={[styles.topClusterMain, isDesktopMatrix && styles.topClusterMainDesktop]}>
+            <View style={styles.commandStatsWrap}>
+              <View style={styles.commandMainCard}>
+                <View style={styles.commandMainBgOrb} />
+                <View style={styles.commandMainContent}>
+                  <View style={styles.commandMainHead}>
+                    <View style={styles.commandMainKickerRow}>
+                      <Cpu size={12} color={Theme.primary} />
+                      <Text style={styles.commandMainKicker}>CORE NODE INTEL</Text>
+                    </View>
+                    <View style={styles.commandGrowthPill}>
+                      <ArrowUpRight size={11} color={Theme.primary} />
+                      <Text style={styles.commandGrowthText}>+{trendPct || 12}%</Text>
+                    </View>
+                  </View>
+                  <View style={styles.commandMainStatsRow}>
+                    <View style={styles.commandTotalWrap}>
+                      <Text style={styles.commandTotalText}>
+                        {String(totalConnections).padStart(2, "0")}
+                      </Text>
+                      <Text style={styles.commandTotalSub}>Network Growth</Text>
+                    </View>
+                    <View style={styles.commandMetricGrid}>
+                      <View style={styles.commandMetricCell}>
+                        <Users size={13} color={Theme.primary} />
+                        <Text style={styles.commandMetricN}>{String(clientCount).padStart(2, "0")}</Text>
+                        <Text style={styles.commandMetricL}>CLIENTS</Text>
+                      </View>
+                      <View style={styles.commandMetricCell}>
+                        <Globe size={13} color={Theme.primary} />
+                        <Text style={styles.commandMetricN}>{String(supplierCount).padStart(2, "0")}</Text>
+                        <Text style={styles.commandMetricL}>SUPPLIERS</Text>
+                      </View>
+                      <View style={styles.commandMetricCell}>
+                        <Truck size={13} color={Theme.primary} />
+                        <Text style={styles.commandMetricN}>{String(driverCount).padStart(2, "0")}</Text>
+                        <Text style={styles.commandMetricL}>FLEET</Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </View>
+            <View style={styles.storyRowShell}>
+              <NetworkStoryStrip
                 orgId={orgId}
-                items={recentAddedConnections}
-                layout="split"
-                onAfterInAppSuccess={async () => {
-                  await Promise.all([clientsQ.refetch(), suppliersQ.refetch()]);
-                  invalidateNetwork();
-                }}
+                orgName={organization?.name ?? ""}
+                feedPosts={feedPosts}
+                feedLoading={feedQ.isLoading}
+                onCreatePost={onCreatePost}
               />
             </View>
-          ) : null}
+          </View>
+
+          <View style={[styles.topClusterLogCol, isDesktopMatrix && styles.topClusterLogColDesktop]}>
+            <View style={[styles.commandSideCard, isDesktopMatrix && styles.commandSideCardDesktop]}>
+              <View style={styles.commandSideHead}>
+                <Text style={styles.commandSideKicker}>Activity log</Text>
+                <Signal size={14} color={Theme.primary} />
+              </View>
+              <ScrollView
+                style={styles.commandLogScroll}
+                contentContainerStyle={styles.commandLogScrollContent}
+                showsVerticalScrollIndicator={false}
+                nestedScrollEnabled
+              >
+                {recentAddedConnections.length === 0 ? (
+                  <View style={styles.commandLogEmpty}>
+                    <Text style={styles.commandLogEmptyText}>No recent additions yet</Text>
+                  </View>
+                ) : (
+                  recentAddedConnections.map((item) => (
+                    <View key={`recent-log-${item.id}`} style={styles.commandLogRow}>
+                      <View style={styles.commandLogLine} />
+                      <View style={styles.commandLogTextWrap}>
+                        <Text style={styles.commandLogTitle} numberOfLines={1}>
+                          {`${item.name.toUpperCase()} added as ${item.role}`}
+                        </Text>
+                        <Text style={styles.commandLogMeta}>
+                          {item.is_integrated ? "Operational access live" : "Pending app join"}
+                        </Text>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </View>
+        <View style={styles.registryHead}>
+          <View style={styles.registryHeadLeft}>
+            <View style={styles.registryLine} />
+            <Text style={styles.registryKicker}>Registry core</Text>
+          </View>
+          <Text style={styles.registryHeading}>Grow network</Text>
         </View>
         <View style={[styles.networkMergedRow, !isWideNetwork && styles.networkMergedRowStack]}>
           <View style={[styles.sectionBlock, isWideNetwork && styles.networkMergedPanePrimary]}>
@@ -485,114 +957,8 @@ export default function NetworkScreen() {
                 hubMode
                 hubSearch={connSearch}
                 hubFilter={connFilter}
-              />
-            </View>
-          </View>
-
-          <View style={[styles.sectionBlock, isWideNetwork && styles.networkMergedPaneSecondary]}>
-            <View style={[styles.invitationsCard, isWideNetwork && styles.networkMergedCard]}>
-              <View
-                style={[
-                  styles.sectionHeadingRowSpread,
-                  styles.invitationsMergedHeader,
-                  isMobileLayout && styles.sectionHeadingRowSpreadMobile,
-                ]}
-              >
-                <View
-                  style={[
-                    styles.sectionHeadingRowCompact,
-                    isMobileLayout && styles.sectionHeadingRowCompactMobile,
-                  ]}
-                >
-                  <UserPlus2 size={15} color={Theme.textPrimaryDark} />
-                  <View style={styles.sectionTitleBlock}>
-                    <Text style={styles.sectionKicker}>Inbound mission protocol</Text>
-                    <Text style={styles.sectionHeading}>{pendingCount} pending syncs</Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.invitationsHeaderControls,
-                      isMobileLayout && styles.invitationsHeaderControlsMobile,
-                    ]}
-                  >
-                    <View style={[styles.invSubRowCompact, styles.invSubRowCompactHeader]}>
-                      {(["received", "sent"] as const).map((k) => {
-                        const on = invSubTab === k;
-                        return (
-                          <Pressable
-                            key={k}
-                            onPress={() => setInvSubTab(k)}
-                            style={[
-                              styles.inlineFilterPill,
-                              styles.invHeaderTabPill,
-                              on && styles.inlineFilterPillOn,
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.inlineFilterPillText,
-                                styles.invHeaderTabText,
-                                on && styles.inlineFilterPillTextOn,
-                              ]}
-                            >
-                              {k === "received" ? "RECEIVED" : "SENT"}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  </View>
-                </View>
-                {invSearchOpen ? (
-                  <View
-                    style={[
-                      styles.inlineSearchBox,
-                      styles.invHeaderSearchBox,
-                      isCompactPhone && styles.invHeaderSearchBoxCompact,
-                    ]}
-                  >
-                    <Search size={13} color={Theme.textSecondary} />
-                    <TextInput
-                      style={styles.inlineSearchInput}
-                      placeholder={invSubTab === "received" ? "Search received…" : "Search sent…"}
-                      placeholderTextColor={Theme.textSecondary}
-                      value={invSearch}
-                      onChangeText={setInvSearch}
-                      returnKeyType="search"
-                      autoFocus
-                    />
-                    <Pressable
-                      onPress={() => {
-                        setInvSearch("");
-                        setInvSearchOpen(false);
-                      }}
-                      hitSlop={8}
-                    >
-                      <Text style={styles.inlineSearchClose}>×</Text>
-                    </Pressable>
-                  </View>
-                ) : (
-                  <Pressable
-                    onPress={() => setInvSearchOpen(true)}
-                    style={({ pressed }) => [
-                      styles.inlineSearchIconBtn,
-                      styles.invHeaderSearchBtn,
-                      pressed && { opacity: 0.72 },
-                    ]}
-                    hitSlop={8}
-                  >
-                    <Search size={13} color={Theme.textPrimaryDark} strokeWidth={2.4} />
-                  </Pressable>
-                )}
-              </View>
-              <InvitationsView
-                orgId={orgId}
-                embedded
-                variant="hub"
-                subTab={invSubTab}
-                onSubTabChange={setInvSubTab}
-                search={invSearch}
-                onSearchChange={setInvSearch}
+                onOpenProfile={handleOpenProfileFromConnection}
+                onConnectionsComputed={setConnectionsSnapshot}
               />
             </View>
           </View>
@@ -658,6 +1024,7 @@ export default function NetworkScreen() {
                 search={discoverSearch}
                 onSearchChange={setDiscoverSearch}
                 showSearchChrome={false}
+                onOpenProfile={handleOpenProfileFromDiscover}
               />
             </View>
           </View>
@@ -685,116 +1052,645 @@ const styles = StyleSheet.create({
     paddingBottom: 18,
     backgroundColor: Theme.screenBackground,
   },
-  splitBelowStory: {
-    width: "100%",
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 8,
-    paddingBottom: 4,
-    gap: 12,
-  },
-  splitBelowStoryRow: {
-    flexDirection: "row",
-    alignItems: "stretch",
-  },
-  splitPaneSnapshot: {
-    minWidth: 0,
-    alignSelf: "stretch",
-  },
-  /** 60% — flexBasis 0 so ratio holds vs wide snapshot copy */
-  splitPaneSnapshotInRow: {
-    flex: 6,
-    flexBasis: 0,
-  },
-  splitPaneSnapshotFull: {
-    width: "100%",
-  },
-  splitPaneRecent: {
-    minWidth: 0,
-    alignSelf: "stretch",
-  },
-  /** 40% */
-  splitPaneRecentInRow: {
-    flex: 4,
-    flexBasis: 0,
-  },
-  splitPaneRecentStack: {
-    width: "100%",
-  },
-  snapshotCard: {
-    width: "100%",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.cinematicCardBorder,
-    backgroundColor: Theme.screenBackground,
-    paddingVertical: 12,
+  topTicker: {
+    marginHorizontal: Layout.screenPaddingHorizontal,
+    marginTop: 10,
+    borderRadius: 14,
+    backgroundColor: Theme.textPrimaryDark,
+    paddingVertical: 8,
     paddingHorizontal: 12,
-    gap: 8,
-  },
-  snapshotCardStretch: {
-    flex: 1,
-  },
-  snapshotSplitRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    width: "100%",
-    paddingTop: 2,
+    gap: 10,
   },
-  snapshotStatCell: {
+  topTickerTrack: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flexWrap: "wrap",
     flex: 1,
     minWidth: 0,
-    alignItems: "center",
-    gap: 2,
   },
-  snapshotStatN: {
-    fontSize: 16,
+  topTickerText: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: Theme.textOnPrimary,
+    letterSpacing: 0.8,
+  },
+  topTickerClock: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  topTickerClockText: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: Theme.textOnPrimary,
+    letterSpacing: 0.8,
+  },
+  commandStatsWrap: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 0,
+  },
+  topCluster: {
+    marginHorizontal: Layout.screenPaddingHorizontal,
+    marginTop: 10,
+    gap: 12,
+  },
+  topClusterDesktop: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 14,
+  },
+  topClusterMain: {
+    flex: 1,
+    minWidth: 0,
+    gap: 12,
+  },
+  topClusterMainDesktop: {
+    flex: 8,
+    flexBasis: 0,
+  },
+  storyRowShell: {
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    overflow: "hidden",
+  },
+  topClusterLogCol: {
+    width: "100%",
+  },
+  topClusterLogColDesktop: {
+    width: 0,
+    minWidth: 220,
+    flex: 2,
+    flexBasis: 0,
+    alignSelf: "stretch",
+  },
+  commandMainCard: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 32,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.screenBackground,
+    overflow: "hidden",
+  },
+  commandMainBgOrb: {
+    position: "absolute",
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: "rgba(26,35,126,0.05)",
+    right: -80,
+    top: -80,
+  },
+  commandMainContent: {
+    paddingHorizontal: 22,
+    paddingVertical: 20,
+    gap: 14,
+  },
+  commandMainHead: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  commandMainKickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  commandMainKicker: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: Theme.primary,
+    letterSpacing: 2.8,
+    textTransform: "uppercase",
+  },
+  commandGrowthPill: {
+    minHeight: 26,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+  },
+  commandGrowthText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: Theme.primary,
+  },
+  commandMainStatsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16,
+  },
+  commandTotalWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  commandTotalText: {
+    fontSize: 72,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -1,
+    lineHeight: 72,
+  },
+  commandTotalSub: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  commandMetricGrid: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 0,
+  },
+  commandMetricCell: {
+    width: 84,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    paddingHorizontal: 9,
+    paddingVertical: 10,
+    alignItems: "center",
+    gap: 5,
+  },
+  commandMetricN: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.4,
+  },
+  commandMetricL: {
+    fontSize: 7,
+    fontWeight: "900",
+    color: Theme.textSecondary,
+    letterSpacing: 0.85,
+  },
+  commandSideCard: {
+    width: "100%",
+    minWidth: 0,
+    minHeight: 196,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
+    backgroundColor: Theme.textPrimaryDark,
+    paddingHorizontal: 14,
+    paddingVertical: 16,
+    gap: 12,
+  },
+  commandSideCardDesktop: {
+    flex: 1,
+    minHeight: 0,
+  },
+  commandSideHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  commandSideKicker: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: Theme.onPrimaryMuted,
+    letterSpacing: 1.3,
+    textTransform: "uppercase",
+  },
+  commandLogScroll: {
+    maxHeight: 200,
+  },
+  commandLogScrollContent: {
+    gap: 8,
+    paddingBottom: 2,
+  },
+  commandLogRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  commandLogLine: {
+    width: 2,
+    height: 18,
+    borderRadius: 2,
+    backgroundColor: Theme.primary,
+    marginTop: 2,
+  },
+  commandLogTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  commandLogTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textOnPrimary,
+  },
+  commandLogMeta: {
+    marginTop: 2,
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.onPrimaryMuted,
+    textTransform: "uppercase",
+  },
+  commandLogEmpty: {
+    minHeight: 64,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
+    backgroundColor: Theme.driverWhiteMutedStrong,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+  commandLogEmptyText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.onPrimaryMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  profileShell: {
+    flex: 1,
+    backgroundColor: Theme.networkPageBackground,
+  },
+  profileCover: {
+    height: 210,
+    backgroundColor: Theme.textPrimaryDark,
+    overflow: "hidden",
+    justifyContent: "flex-start",
+  },
+  profileCoverGrain: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.18,
+    backgroundColor: Theme.primary,
+  },
+  profileBackBtn: {
+    marginTop: 18,
+    marginLeft: Layout.screenPaddingHorizontal,
+    alignSelf: "flex-start",
+    minHeight: 34,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+  },
+  profileBackBtnText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: Theme.textOnPrimary,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  profileContent: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    marginTop: -48,
+  },
+  profileGrid: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 14,
+  },
+  profileLeftCol: {
+    width: 320,
+    gap: 10,
+  },
+  profileIdentityCard: {
+    borderRadius: 32,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.screenBackground,
+    padding: 18,
+    alignItems: "center",
+    gap: 10,
+  },
+  profileIdentityCardModern: {
+    borderRadius: 44,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    padding: 22,
+    alignItems: "center",
+    gap: 12,
+    shadowColor: Theme.shadow,
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 3,
+  },
+  profileAvatarLgModern: {
+    width: 108,
+    height: 108,
+    borderRadius: 30,
+    backgroundColor: Theme.textPrimaryDark,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: Theme.shadow,
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 3,
+  },
+  profileAvatarLg: {
+    width: 92,
+    height: 92,
+    borderRadius: 28,
+    backgroundColor: Theme.textPrimaryDark,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  profileAvatarLgText: {
+    fontSize: 30,
+    fontWeight: "900",
+    color: Theme.textOnPrimary,
+    letterSpacing: -0.6,
+  },
+  profileNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  profileName: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    fontStyle: "italic",
+  },
+  profileLocationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  profileLocation: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  profileStatRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 8,
+    width: "100%",
+  },
+  profileStatCell: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 64,
+  },
+  profileStatN: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.3,
+  },
+  profileStatL: {
+    marginTop: 3,
+    fontSize: 8,
+    fontWeight: "900",
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  profileCtaStack: {
+    width: "100%",
+    gap: 8,
+  },
+  profilePrimaryBtn: {
+    minHeight: 40,
+    borderRadius: 14,
+    backgroundColor: Theme.primary,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  profilePrimaryBtnText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: Theme.textOnPrimary,
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+  profileSecondaryBtn: {
+    minHeight: 40,
+    borderRadius: 14,
+    backgroundColor: Theme.textPrimaryDark,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  profileSecondaryBtnText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: Theme.textOnPrimary,
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+  profileOpsCard: {
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.screenBackground,
+    padding: 14,
+    gap: 10,
+  },
+  profileOpsKicker: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: Theme.textSection,
+    letterSpacing: 1.3,
+    textTransform: "uppercase",
+  },
+  profileOpsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  profileOpsLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+  },
+  profileOpsValue: {
+    fontSize: 12,
     fontWeight: "900",
     color: Theme.textPrimaryDark,
   },
-  snapshotStatL: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: Theme.textSection,
+  profileRightCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 12,
+  },
+  profileOverviewCard: {
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.screenBackground,
+    padding: 20,
+    gap: 12,
+  },
+  profileOverviewCardModern: {
+    borderRadius: 44,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+    gap: 14,
+  },
+  profileOverviewHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  profileOverviewTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    fontStyle: "italic",
     textTransform: "uppercase",
-    letterSpacing: 0.3,
   },
-  snapshotStatDividerV: {
-    width: StyleSheet.hairlineWidth * 2,
-    alignSelf: "stretch",
-    minHeight: 32,
-    backgroundColor: Theme.borderLight,
+  profileLivePill: {
+    minHeight: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 9,
   },
-  snapshotHeaderRow: {
+  profileLivePillText: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: Theme.primary,
+    textTransform: "uppercase",
+  },
+  profileOverviewBody: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: Theme.textSecondary,
+  },
+  profileMetricGrid: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 10,
+  },
+  profileMetricCard: {
+    flex: 1,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    padding: 12,
+    gap: 8,
+  },
+  profileMetricCardModern: {
+    flex: 1,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    gap: 8,
+  },
+  profileMetricValue: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    fontStyle: "italic",
+    letterSpacing: -0.4,
+  },
+  profileMetricHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  profileMetricHeadText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: Theme.primary,
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+  },
+  profileLaneLine: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  profileBarsRow: {
+    minHeight: 70,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 4,
+  },
+  profileBar: {
+    flex: 1,
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+    backgroundColor: Theme.primary,
+    opacity: 0.36,
+  },
+  profileRecentCard: {
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
+    backgroundColor: Theme.textPrimaryDark,
+    padding: 18,
+    gap: 10,
+  },
+  profileRecentKicker: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: Theme.onPrimaryMuted,
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+  },
+  profileRecentRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  snapshotIconRing: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+  profileRecentNode: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: Theme.driverWhiteMutedStrong,
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
-  snapshotKicker: {
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-    color: Theme.textSection,
-    textTransform: "uppercase",
-  },
-  snapshotPrimary: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-  },
-  snapshotSecondary: {
+  profileRecentNodeText: {
     fontSize: 11,
-    fontWeight: "600",
-    color: Theme.textSecondary,
+    fontWeight: "900",
+    color: Theme.textOnPrimary,
   },
   storyLoading: {
     flexDirection: "row",
@@ -915,7 +1811,7 @@ const styles = StyleSheet.create({
   },
   networkMergedRow: {
     marginHorizontal: 0,
-    marginTop: 14,
+    marginTop: 12,
     flexDirection: "column",
     alignItems: "stretch",
     gap: 18,
@@ -942,7 +1838,7 @@ const styles = StyleSheet.create({
   connectionsCard: {
     marginHorizontal: Layout.screenPaddingHorizontal,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 28,
+    borderRadius: 44,
     borderWidth: 1,
     borderColor: Theme.cinematicCardBorder,
     overflow: "hidden",
@@ -954,9 +1850,9 @@ const styles = StyleSheet.create({
   },
   discoverCard: {
     marginHorizontal: Layout.screenPaddingHorizontal,
-    marginBottom: 10,
+    marginBottom: 14,
     backgroundColor: Theme.screenBackground,
-    borderRadius: 28,
+    borderRadius: 44,
     borderWidth: 1,
     borderColor: Theme.cinematicCardBorder,
     overflow: "hidden",
@@ -1089,9 +1985,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
-    paddingHorizontal: 22,
-    paddingTop: 16,
-    paddingBottom: 6,
+    paddingHorizontal: 28,
+    paddingTop: 22,
+    paddingBottom: 10,
   },
   sectionHeadingRowSpreadMobile: {
     alignItems: "flex-start",
@@ -1103,17 +1999,49 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   sectionKicker: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "900",
-    letterSpacing: 2.2,
+    letterSpacing: 2.6,
     color: Theme.textSection,
     textTransform: "uppercase",
   },
   sectionHeading: {
     ...Typography.subTabLabel,
-    fontSize: 13,
+    fontSize: 20,
     color: Theme.textPrimaryDark,
-    letterSpacing: 1.6,
+    letterSpacing: 0.8,
+  },
+  registryHead: {
+    marginHorizontal: Layout.screenPaddingHorizontal,
+    marginTop: 18,
+    marginBottom: 6,
+    gap: 8,
+  },
+  registryHeadLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  registryLine: {
+    width: 28,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: Theme.primary,
+  },
+  registryKicker: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: Theme.primary,
+    letterSpacing: 2.8,
+    textTransform: "uppercase",
+  },
+  registryHeading: {
+    fontSize: 38,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.4,
+    textTransform: "uppercase",
+    fontStyle: "italic",
   },
   expandSignal: {
     flexDirection: "row",
@@ -1507,5 +2435,254 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: Theme.textOnDark,
     letterSpacing: 0.2,
+  },
+  requestsHero: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 12,
+    paddingBottom: 14,
+    backgroundColor: Theme.textPrimaryDark,
+  },
+  requestsBackBtn: {
+    alignSelf: "flex-start",
+    minHeight: 30,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
+    backgroundColor: Theme.driverWhiteMutedStrong,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+  },
+  requestsBackBtnText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: Theme.textOnPrimary,
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+  requestsHeroTitle: {
+    marginTop: 10,
+    fontSize: 20,
+    fontWeight: "900",
+    color: Theme.textOnPrimary,
+    textTransform: "uppercase",
+    letterSpacing: 0.2,
+    fontStyle: "italic",
+  },
+  requestsHeroSub: {
+    marginTop: 3,
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.onPrimaryMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  requestsTabRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  requestsTabBtn: {
+    minHeight: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: Theme.borderOnDark,
+    backgroundColor: Theme.driverWhiteMutedStrong,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+  },
+  requestsTabBtnOn: {
+    backgroundColor: Theme.screenBackground,
+    borderColor: Theme.screenBackground,
+  },
+  requestsTabText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: Theme.onPrimaryMuted,
+    letterSpacing: 0.6,
+  },
+  requestsTabTextOn: {
+    color: Theme.textPrimaryDark,
+  },
+  requestsTabBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    backgroundColor: Theme.textPrimaryDark,
+  },
+  requestsTabBadgeOn: {
+    backgroundColor: Theme.surfaceGray,
+  },
+  requestsTabBadgeText: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: Theme.textOnPrimary,
+  },
+  requestsTabBadgeTextOn: {
+    color: Theme.textPrimaryDark,
+  },
+  requestsListContent: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingVertical: 14,
+    gap: 10,
+    paddingBottom:
+      24 + Layout.demoTabBarScrollBottomInset + Layout.tabBarBottomPaddingMin,
+  },
+  requestsEmptyCard: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    minHeight: 190,
+    gap: 8,
+  },
+  requestsEmptyTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+  },
+  requestsEmptySub: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+  },
+  requestsCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    padding: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  requestsCardMain: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  requestsCardAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  requestsCardAvatarText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+  },
+  requestsCardInfo: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  requestsCardName: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.1,
+  },
+  requestsCardMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  requestsCardRole: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.primary,
+    textTransform: "uppercase",
+  },
+  requestsCardTime: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+  },
+  requestsActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  requestsIgnoreBtn: {
+    minHeight: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 9,
+  },
+  requestsIgnoreText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+  },
+  requestsAcceptBtn: {
+    minHeight: 28,
+    borderRadius: 14,
+    backgroundColor: Theme.primary,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 9,
+  },
+  requestsAcceptText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textOnPrimary,
+    textTransform: "uppercase",
+  },
+  requestsRecallBtn: {
+    minHeight: 28,
+    borderRadius: 14,
+    backgroundColor: Theme.textPrimaryDark,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 9,
+  },
+  requestsRecallText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textOnPrimary,
+    textTransform: "uppercase",
+  },
+  requestsCancelledPill: {
+    minHeight: 26,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surfaceGray,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 9,
+  },
+  requestsCancelledText: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
   },
 });
