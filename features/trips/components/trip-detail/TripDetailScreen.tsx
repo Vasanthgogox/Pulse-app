@@ -2832,7 +2832,7 @@ export default function TripDetailScreen({
             }}
             onNotificationClick={() => {
               onBack();
-              router.push("/milestone");
+              router.push("/notifications");
             }}
             onProfileClick={() => {
               onBack();

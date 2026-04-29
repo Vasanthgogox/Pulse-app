@@ -101,7 +101,7 @@ function getBusinessLocation(
     null;
   if (direct && direct.trim()) {
     const parts = direct
-      .split(',')
+      .split(",")
       .map((part) => part.trim())
       .filter(Boolean);
     if (parts.length >= 2) return `${parts[0]}, ${parts[1]}`;

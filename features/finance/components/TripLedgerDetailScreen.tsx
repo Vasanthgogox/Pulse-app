@@ -589,7 +589,7 @@ export function TripLedgerDetailScreen({
       onBack={onBack}
       onLoadClick={() => router.push("/load-board")}
       onNetworkClick={() => router.push("/(tabs)/network")}
-      onNotificationClick={() => {}}
+      onNotificationClick={() => router.push("/notifications")}
       onProfileClick={() => router.push("/(tabs)/profile")}
       summaryCard={{
         totalIn: summaryTotalIn,

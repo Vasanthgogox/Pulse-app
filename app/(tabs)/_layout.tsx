@@ -85,6 +85,7 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
           activeTab={activeTab}
           onTabChange={onTabChange}
           onProfilePress={onProfilePress}
+          onNotificationsPress={() => router.push("/notifications")}
         />
       </View>
     );
@@ -96,6 +97,7 @@ function DemoCustomTabBar(props: BottomTabBarProps) {
         activeTab={activeTab}
         onTabChange={onTabChange}
         onProfilePress={onProfilePress}
+        onNotificationsPress={() => router.push("/notifications")}
       />
     </DemoTabBarAutoHideShell>
   );

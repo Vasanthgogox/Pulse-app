@@ -40,7 +40,6 @@ import {
     useTripFinanceAdjustmentsMap,
 } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
-import type { SalaryRequestWithDriverRow } from "@/services/salaryRequestsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -329,12 +328,6 @@ export interface EntityDetailOverlayProps {
   vehicle?: VehicleRow | null;
   /** When entityType is DRIVER, full driver row for PROFILE (phone, email, status, created_at). */
   driverProfile?: DriverRow | null;
-  /** When entityType is DRIVER, pending salary requests for this driver (Pay Now / Reject). */
-  driverSalaryRequests?: SalaryRequestWithDriverRow[];
-  /** When entityType is DRIVER, called when user taps Pay Now on a request; caller opens transaction modal with prefill. */
-  onPayDriverRequest?: (req: SalaryRequestWithDriverRow) => void;
-  /** When entityType is DRIVER, called when user rejects a request; caller updates status and refreshes list. */
-  onRejectDriverRequest?: (requestId: string) => void;
   /** When entityType is DRIVER, list of vehicles for assign-vehicle picker. */
   vehicles?: VehicleRow[];
   /** When entityType is DRIVER, called when user assigns or clears vehicle; caller updates driver and refreshes. */
@@ -349,15 +342,6 @@ export interface EntityDetailOverlayProps {
   financeSupplierRows?: SupplierRow[];
   /** Org drivers — driver column on trips. */
   financePartyDrivers?: DriverRow[];
-}
-
-/** Same labels as DriverDetailScreen and finance DRIVERS for consistency. */
-function getSalaryRequestTypeLabel(requestType: string): string {
-  return requestType === "monthly"
-    ? "Monthly salary"
-    : requestType === "advance"
-      ? "Advance"
-      : "Trip-based";
 }
 
 /** Latest payment captured date for a trip from ledger (transaction_date or created_at). Used when trip has no pickup_date. */
@@ -696,9 +680,6 @@ export function EntityDetailOverlay({
   onRefresh,
   vehicle,
   driverProfile,
-  driverSalaryRequests = [],
-  onPayDriverRequest,
-  onRejectDriverRequest,
   vehicles = [],
   onAssignVehicle,
   drivers = [],
@@ -1368,7 +1349,7 @@ export function EntityDetailOverlay({
 
   const handleNotification = useCallback(() => {
     onBack();
-    router.push("/milestone");
+    router.push("/notifications");
   }, [onBack, router]);
 
   const vehicleSubtitle =
@@ -1949,85 +1930,6 @@ export function EntityDetailOverlay({
           ]}
           showsVerticalScrollIndicator={false}
         >
-          {driverSalaryRequests.length > 0 && (
-            <View style={styles.driverRequestCardsWrap}>
-              {driverSalaryRequests.map((req) => {
-                const typeLabel = getSalaryRequestTypeLabel(
-                  req.request_type ?? "",
-                );
-                const dateStr = req.created_at
-                  ? formatLedgerDate(req.created_at)
-                  : "";
-                const metaLine = dateStr
-                  ? `${typeLabel} · ${dateStr}`
-                  : typeLabel;
-                return (
-                  <View key={req.id} style={styles.driverRequestCard}>
-                    <View style={styles.driverRequestCardInner}>
-                      <View style={styles.driverRequestIconWrap}>
-                        <FontAwesome
-                          name="info-circle"
-                          size={20}
-                          color={Theme.primary}
-                        />
-                      </View>
-                      <View style={styles.driverRequestCardBody}>
-                        <Text style={styles.driverRequestCardLabel}>
-                          DRIVER REQUEST
-                        </Text>
-                        <Text style={styles.driverRequestCardAmount}>
-                          Needs {formatINR(Number(req.amount))}
-                        </Text>
-                        <Text
-                          style={styles.driverRequestCardReason}
-                          numberOfLines={1}
-                        >
-                          {metaLine}
-                        </Text>
-                        {req.note?.trim() ? (
-                          <Text
-                            style={[
-                              styles.driverRequestCardReason,
-                              { marginTop: 2 },
-                            ]}
-                            numberOfLines={2}
-                          >
-                            {req.note.trim()}
-                          </Text>
-                        ) : null}
-                      </View>
-                    </View>
-                    <View style={styles.driverRequestCardActions}>
-                      <TouchableOpacity
-                        style={[
-                          styles.driverRequestBtn,
-                          styles.driverRequestBtnPay,
-                        ]}
-                        onPress={() => onPayDriverRequest?.(req)}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.driverRequestBtnPayText}>
-                          Pay Now
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.driverRequestBtn,
-                          styles.driverRequestBtnReject,
-                        ]}
-                        onPress={() => onRejectDriverRequest?.(req.id)}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.driverRequestBtnRejectText}>
-                          Reject
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          )}
           {driverProfile ? (
             <>
               <View style={styles.driverMetricsGrid}>

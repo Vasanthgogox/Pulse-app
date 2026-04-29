@@ -9,7 +9,9 @@ import {
 } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useOrganization } from "@/contexts/OrganizationContext";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
+import { getSalaryRequestsByOrganization } from "@/services/salaryRequestsService";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { Command } from "lucide-react-native";
 import { useEffect, useState } from "react";
@@ -207,15 +209,19 @@ interface DemoTabBarProps {
   activeTab: DemoTabId;
   onTabChange: (tab: DemoTabId) => void;
   onProfilePress?: () => void;
+  onNotificationsPress?: () => void;
 }
 
 export function DemoTabBar({
   activeTab,
   onTabChange,
   onProfilePress,
+  onNotificationsPress,
 }: DemoTabBarProps) {
   const { profile } = useAuth();
+  const { currentOrganization } = useOrganization();
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
+  const [notificationCount, setNotificationCount] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -250,6 +256,25 @@ export function DemoTabBar({
       mounted = false;
     };
   }, [profile?.avatar_url, profile?.avatar_seed]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const orgId = currentOrganization?.id ?? "";
+    if (!orgId) {
+      setNotificationCount(0);
+      return;
+    }
+    const loadNotificationCount = async () => {
+      const { requests } = await getSalaryRequestsByOrganization(orgId, "pending");
+      if (!cancelled) {
+        setNotificationCount(requests.length);
+      }
+    };
+    void loadNotificationCount();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentOrganization?.id, activeTab]);
 
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
@@ -341,8 +366,19 @@ export function DemoTabBar({
           </View>
 
           <View style={styles.webUtilityWrap}>
-            <AnimatedPress style={styles.webBellBtn} activeOpacity={0.8}>
+            <AnimatedPress
+              style={styles.webBellBtn}
+              activeOpacity={0.8}
+              onPress={onNotificationsPress}
+            >
               <FontAwesome5 name="bell" size={16} color="#64748b" />
+              {notificationCount > 0 ? (
+                <View style={styles.webBellBadge}>
+                  <Text style={styles.webBellBadgeText}>
+                    {notificationCount > 9 ? "9+" : String(notificationCount)}
+                  </Text>
+                </View>
+              ) : null}
             </AnimatedPress>
             <AnimatedPress
               onPress={onProfilePress}
@@ -782,6 +818,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e2e8f0",
     backgroundColor: "#ffffff",
+    position: "relative",
+  },
+  webBellBadge: {
+    position: "absolute",
+    top: -7,
+    right: -8,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: "#ef4444",
+    borderWidth: 1.5,
+    borderColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  webBellBadgeText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "900",
+    lineHeight: 11,
   },
   webAvatarBtn: {
     width: 36,
