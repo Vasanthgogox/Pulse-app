@@ -126,6 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sessionExpired, setSessionExpired] = useState(false);
   const signOutRequestedRef = useRef(false);
   const authAttemptRef = useRef(0);
+  const unsubscribeRef = useRef<(() => void) | undefined>(undefined);
 
   const beginAuthAttempt = () => {
     authAttemptRef.current += 1;
@@ -172,7 +173,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Always attempt to restore session from storage so "Keep me signed in" works on reload.
     // On first launch after install, clear any lingering Keychain auth data, then proceed.
     let mounted = true;
-    let unsubscribe: (() => void) | undefined;
 
     (async () => {
       const initAttemptId = beginAuthAttempt();
@@ -263,24 +263,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!isCurrentAuthAttempt(initAttemptId)) return;
         setLoading(false);
         try {
-          unsubscribe = authService.onAuthStateChange(async (auth) => {
+          unsubscribeRef.current = authService.onAuthStateChange(async (auth) => {
             const stateChangeAttemptId = beginAuthAttempt();
             if (!mounted || !isCurrentAuthAttempt(stateChangeAttemptId)) return;
             if (auth) {
-              // Prefer DB role over JWT metadata (same source of truth as cold start).
-              let dbProfile = await getVerifiedDbProfile(auth.user.uid);
-              let merged = mergeAuthProfiles(auth.profile, dbProfile);
-              if (!dbProfile) {
-                const refreshed = await authService.refreshSession();
-                if (refreshed) merged = refreshed.profile;
-                dbProfile = await getVerifiedDbProfile(auth.user.uid);
-              }
+              // getVerifiedDbProfile already provisions missing profiles internally.
+              // Do NOT call refreshSession() here — it fires TOKEN_REFRESHED which
+              // re-triggers this handler, causing an infinite cascade that freezes the app.
+              const dbProfile = await getVerifiedDbProfile(auth.user.uid);
               if (!mounted || !isCurrentAuthAttempt(stateChangeAttemptId)) return;
               if (!dbProfile) {
                 await forceSignOutOnAuthFailure("auth_state_profile_verification_failed");
                 return;
               }
-
+              const merged = mergeAuthProfiles(auth.profile, dbProfile);
               setUser(auth.user);
               setProfile(authProfileToUserProfile(merged));
               setRoleVerified(true);
@@ -309,22 +305,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           logAuthRouteDecision("restore_error", {});
         }
         try {
-          unsubscribe = authService.onAuthStateChange(async (auth) => {
+          unsubscribeRef.current = authService.onAuthStateChange(async (auth) => {
             const stateChangeAttemptId = beginAuthAttempt();
             if (!mounted || !isCurrentAuthAttempt(stateChangeAttemptId)) return;
             if (auth) {
-              let dbProfile = await getVerifiedDbProfile(auth.user.uid);
-              let merged = mergeAuthProfiles(auth.profile, dbProfile);
-              if (!dbProfile) {
-                const refreshed = await authService.refreshSession();
-                if (refreshed) merged = refreshed.profile;
-                dbProfile = await getVerifiedDbProfile(auth.user.uid);
-              }
+              const dbProfile = await getVerifiedDbProfile(auth.user.uid);
               if (!mounted || !isCurrentAuthAttempt(stateChangeAttemptId)) return;
               if (!dbProfile) {
                 await forceSignOutOnAuthFailure("auth_state_after_restore_error_profile_verification_failed");
                 return;
               }
+              const merged = mergeAuthProfiles(auth.profile, dbProfile);
               setUser(auth.user);
               setProfile(authProfileToUserProfile(merged));
               setRoleVerified(true);
@@ -349,7 +340,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       mounted = false;
-      unsubscribe?.();
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = undefined;
     };
   }, []);
 

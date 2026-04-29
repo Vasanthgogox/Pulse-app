@@ -139,6 +139,21 @@ export async function withdrawBid(
   return { error: null };
 }
 
+export async function updateBid(
+  bidId: string,
+  orgId: string,
+  amount: number,
+  note?: string,
+): Promise<{ error: Error | null }> {
+  const { error } = await supabase()
+    .from('bids')
+    .update({ amount, note: note ?? null })
+    .eq('id', bidId)
+    .eq('bidder_organization_id', orgId);
+  if (error) return { error: new Error(error.message) };
+  return { error: null };
+}
+
 export async function getMyBidForPost(
   postId: string,
   orgId: string,
