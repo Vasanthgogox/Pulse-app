@@ -253,10 +253,11 @@ export function useTripDetail({
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
-  /** When opening the modal from Finance Overview (client income / deductions). */
+  /** When opening the modal from Finance Overview (shortcuts / protocol chips may seed reason). */
   const [adjustmentModalPreset, setAdjustmentModalPreset] = useState<{
     type: TripAdjustmentType;
     impact: TripAdjustmentImpact;
+    reasonSeed?: string | null;
   } | null>(null);
   const [showTrackingModal, setShowTrackingModal] = useState(false);
   const [showFullScreenMap, setShowFullScreenMap] = useState(false);
@@ -1005,10 +1006,18 @@ export function useTripDetail({
   }, []);
 
   const openTripAdjustmentModal = useCallback(
-    (preset: { type: TripAdjustmentType; impact: TripAdjustmentImpact } | null = null) => {
-    setAdjustmentModalPreset(preset);
-    setShowAdjustmentModal(true);
-  }, []);
+    (
+      preset: {
+        type: TripAdjustmentType;
+        impact: TripAdjustmentImpact;
+        reasonSeed?: string | null;
+      } | null = null,
+    ) => {
+      setAdjustmentModalPreset(preset);
+      setShowAdjustmentModal(true);
+    },
+    [],
+  );
 
   // ── Adjustment handlers ───────────────────────────────────────────────────
   const handleAddAdjustment = useCallback(() => {
@@ -1023,6 +1032,16 @@ export function useTripDetail({
   /** Maps to Finance Overview “Deductions” (revenue + deduction). */
   const openClientDeductionAdjustment = useCallback(() => {
     openTripAdjustmentModal({ type: "revenue", impact: "minus" });
+  }, [openTripAdjustmentModal]);
+
+  /** Supplier cost increases (cost + addition). */
+  const openSupplierCostAdditionAdjustment = useCallback(() => {
+    openTripAdjustmentModal({ type: "cost", impact: "plus" });
+  }, [openTripAdjustmentModal]);
+
+  /** Supplier cost reductions (credit to cost). */
+  const openSupplierCostReductionAdjustment = useCallback(() => {
+    openTripAdjustmentModal({ type: "cost", impact: "minus" });
   }, [openTripAdjustmentModal]);
 
   const handleSaveAdjustment = useCallback(
@@ -1520,6 +1539,9 @@ export function useTripDetail({
     closeTripAdjustmentModal,
     openClientIncomeAdjustment,
     openClientDeductionAdjustment,
+    openSupplierCostAdditionAdjustment,
+    openSupplierCostReductionAdjustment,
+    openTripAdjustmentModal,
     showTrackingModal,
     setShowTrackingModal,
     showFullScreenMap,

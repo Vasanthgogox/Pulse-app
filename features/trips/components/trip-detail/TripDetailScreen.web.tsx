@@ -23,6 +23,7 @@ import {
   Image,
   Linking,
   Modal,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -33,7 +34,11 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { TripAdjustment } from "../../services/tripAdjustments";
+import {
+  adjustedCost,
+  adjustedRevenue,
+  type TripAdjustment,
+} from "../../services/tripAdjustments";
 import { regenerateTripOtp } from "../../services/tripOtp.service";
 import { getTripDisplayNumber } from "../../services/trips.service";
 import { TripAssignmentBlock } from "../TripAssignmentBlock";
@@ -86,6 +91,63 @@ function adjustmentsCountingAsDeductions(adjustments: TripAdjustment[]) {
   );
 }
 
+/** Quick protocol tabs → preset for {@link TripAdjustmentModal} reasons. */
+function protocolFinanceChipAdjustment(
+  side: "client" | "supplier",
+  chip: string,
+): {
+  type: "revenue" | "cost";
+  impact: "plus" | "minus";
+  reasonSeed: string;
+} {
+  if (side === "client") {
+    if (chip === "Loading") {
+      return { type: "revenue", impact: "plus", reasonSeed: "Loading Charges" };
+    }
+    if (chip === "Unloading") {
+      return { type: "revenue", impact: "plus", reasonSeed: "Unloading Charges" };
+    }
+    if (chip === "Detention") {
+      return { type: "revenue", impact: "minus", reasonSeed: "Late Delivery" };
+    }
+    if (chip === "Damage") {
+      return { type: "revenue", impact: "minus", reasonSeed: "Damages / Missing" };
+    }
+    if (chip === "Toll" || chip === "RTO") {
+      return { type: "revenue", impact: "plus", reasonSeed: "Other" };
+    }
+  } else {
+    if (chip === "Loading") {
+      return { type: "cost", impact: "plus", reasonSeed: "Loading Charges" };
+    }
+    if (chip === "Unloading") {
+      return { type: "cost", impact: "plus", reasonSeed: "Unloading Charges" };
+    }
+    if (chip === "Detention") {
+      return { type: "cost", impact: "plus", reasonSeed: "Detention" };
+    }
+    if (chip === "Damage") {
+      return { type: "cost", impact: "plus", reasonSeed: "Damages / Missing" };
+    }
+    if (chip === "Toll") {
+      return { type: "cost", impact: "plus", reasonSeed: "Pass Debit" };
+    }
+    if (chip === "RTO") {
+      return { type: "cost", impact: "plus", reasonSeed: "Other" };
+    }
+  }
+  return { type: "revenue", impact: "plus", reasonSeed: "Other" };
+}
+
+const FINANCE_PROTOCOL_CHIPS = [
+  "Loading",
+  "Unloading",
+  "Detention",
+  "Damage",
+  "Toll",
+  "RTO",
+] as const;
+
 function splitLocationPrimarySecondary(location: string | null | undefined): {
   primary: string;
   secondary: string | null;
@@ -117,6 +179,9 @@ export default function TripDetailScreen({
   );
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedLog, setExpandedLog] = useState<number | null>(null);
+  const [showFinanceProvisionPanel, setShowFinanceProvisionPanel] = useState<
+    "client" | "supplier" | null
+  >(null);
   const [showAssignmentManager, setShowAssignmentManager] = useState(false);
   const [otpResending, setOtpResending] = useState(false);
 
@@ -369,15 +434,12 @@ export default function TripDetailScreen({
     String((trip as any).capacity ?? "").trim() ||
     String((trip as any).vehicle_capacity ?? "").trim() ||
     "—";
-  const netManifestYield = Math.max(0, sales + additionalIncome - deductions - totalExpenses);
-  const revenueAdjustmentsDelta = detail.adjustments
-    .filter((adj) => adj.type === "revenue")
-    .reduce((sum, adj) => sum + (adj.impact === "plus" ? adj.amount : -adj.amount), 0);
-  const costAdjustmentsDelta = detail.adjustments
-    .filter((adj) => adj.type === "cost")
-    .reduce((sum, adj) => sum + (adj.impact === "plus" ? adj.amount : -adj.amount), 0);
-  const adjustedRevenue = Math.max(0, sales + revenueAdjustmentsDelta);
-  const adjustedCost = Math.max(0, cost + costAdjustmentsDelta);
+  const adjSales = adjustedRevenue(sales, detail.adjustments);
+  const adjCost = adjustedCost(cost, detail.adjustments);
+  /** Same margin basis as TripDetailFinanceView; subtract petty/voyage spends for ops net. */
+  const netManifestYield = Math.max(0, adjSales - adjCost - totalExpenses);
+  const revenueSideDelta = adjSales - sales;
+  const costSideDelta = adjCost - cost;
   const filteredFinanceRows = financeHistoryRows.filter((row) => {
     const q = searchTerm.trim().toLowerCase();
     if (!q) return true;
@@ -511,10 +573,13 @@ export default function TripDetailScreen({
               <FontAwesome name="chevron-left" size={18} color="#0f172a" />
             </TouchableOpacity>
             <View style={styles.navMobileCenter}>
-              <Text style={styles.navMobileKicker}>Trip History</Text>
+              <Text style={styles.navMobileKicker}>Trip history</Text>
               <View style={styles.navMobileTripRow}>
                 <Text style={styles.navMobileTripId}>{getTripDisplayNumber(trip)}</Text>
-                <View style={styles.navMobileDot} />
+                <View style={styles.navMobilePulseRow}>
+                  <View style={[styles.navMobileDot, styles.navMobileDotEmerald]} />
+                  <View style={[styles.navMobileDot, styles.navMobileDotIndigo]} />
+                </View>
               </View>
             </View>
             <TouchableOpacity style={styles.navCircleBtn} activeOpacity={0.85}>
@@ -748,7 +813,7 @@ export default function TripDetailScreen({
                     driverAvatarUri={detail.driverAvatarUri}
                     clientName={detail.displayClientName ?? trip.client_name ?? null}
                     paymentCaptured={paymentCaptured}
-                    layoutVariant="workspace"
+                    layoutVariant="registry"
                   />
                 </View>
               </View>
@@ -789,70 +854,287 @@ export default function TripDetailScreen({
 
                 {financeSubTab === "summary" ? (
                   <>
-                    <View style={styles.refSettleCard}>
+                    <View style={[styles.refSettleCard, styles.refFinanceManifestHero]}>
                       <Text style={styles.refSettleLabel}>Net Manifest Yield</Text>
-                      <Text style={styles.refSettleValue}>{formatINR(netManifestYield)}</Text>
-                      <View style={styles.refFinanceAdjustmentsActions}>
-                        <TouchableOpacity
-                          onPress={detail.openClientRevenueAdjustment}
-                          style={styles.financeAdjustmentsBtn}
-                          activeOpacity={0.85}
-                        >
-                          <FontAwesome name="plus" size={11} color="#ffffff" />
-                          <Text style={styles.financeAdjustmentsBtnText}>Add Revenue</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={detail.openClientDeductionAdjustment}
-                          style={[styles.financeAdjustmentsBtn, styles.financeAdjustmentsBtnAlt]}
-                          activeOpacity={0.85}
-                        >
-                          <FontAwesome name="minus" size={11} color="#334155" />
-                          <Text style={[styles.financeAdjustmentsBtnText, styles.financeAdjustmentsBtnTextAlt]}>
-                            Add Cost
+                      <Text style={styles.refManifestNetHuge}>{formatINR(netManifestYield)}</Text>
+                      <Text style={styles.refSettleHint}>
+                        After adjusted revenue, adjusted supplier cost, and voyage spend
+                      </Text>
+
+                      <View style={styles.refManifestHeroSplit}>
+                        <View style={styles.refManifestCol}>
+                          <View style={styles.refManifestColHead}>
+                            <View style={styles.refManifestColHeadLeft}>
+                              <View style={[styles.refManifestDot, styles.refManifestDotSales]} />
+                              <Text style={styles.refManifestColTitle}>Adjusted sales</Text>
+                            </View>
+                            <TouchableOpacity
+                              onPress={() => setShowFinanceProvisionPanel("client")}
+                              style={styles.refManifestMiniPlus}
+                              activeOpacity={0.85}
+                            >
+                              <FontAwesome name="plus" size={10} color="#4f46e5" />
+                            </TouchableOpacity>
+                          </View>
+                          <Text style={[styles.refManifestColAmount, styles.refManifestSalesAmt]}>
+                            {formatINR(adjSales)}
                           </Text>
-                        </TouchableOpacity>
-                      </View>
-                      <View style={styles.refSettleMetaRow}>
-                        <View>
-                          <Text style={styles.refSettleMetaLabel}>Adjusted Revenue</Text>
-                          <Text style={styles.refSettleMetaValuePositive}>{formatINR(adjustedRevenue)}</Text>
+                          <View style={styles.refManifestMicroBox}>
+                            <Text style={styles.refManifestMicroLine}>Base · {formatINR(sales)}</Text>
+                            <Text style={styles.refManifestMicroAdjSales}>
+                              Adj · {revenueSideDelta >= 0 ? "+" : "−"}
+                              {formatINR(Math.abs(revenueSideDelta))}
+                            </Text>
+                          </View>
                         </View>
-                        <View style={styles.refSettleMetaSep} />
-                        <View style={styles.refSettleMetaRight}>
-                          <Text style={styles.refSettleMetaLabel}>Adjusted Cost</Text>
-                          <Text style={styles.refSettleMetaValueNegative}>{formatINR(adjustedCost)}</Text>
+
+                        <View style={styles.refManifestHeroSep} />
+
+                        <View style={[styles.refManifestCol, styles.refManifestColRight]}>
+                          <View style={styles.refManifestColHead}>
+                            <TouchableOpacity
+                              onPress={() => setShowFinanceProvisionPanel("supplier")}
+                              style={[styles.refManifestMiniPlus, styles.refManifestMiniPlusMuted]}
+                              activeOpacity={0.85}
+                            >
+                              <FontAwesome name="plus" size={10} color="#e11d48" />
+                            </TouchableOpacity>
+                            <View style={styles.refManifestColHeadRight}>
+                              <Text style={styles.refManifestColTitle}>Adjusted cost</Text>
+                              <View style={[styles.refManifestDot, styles.refManifestDotCost]} />
+                            </View>
+                          </View>
+                          <Text style={[styles.refManifestColAmount, styles.refManifestCostAmt]}>
+                            {formatINR(adjCost)}
+                          </Text>
+                          <View style={styles.refManifestMicroBox}>
+                            <Text style={[styles.refManifestMicroLine, styles.refManifestMicroRight]}>
+                              Base · {formatINR(cost)}
+                            </Text>
+                            <Text style={styles.refManifestMicroAdjCost}>
+                              Adj · {costSideDelta >= 0 ? "+" : "−"}
+                              {formatINR(Math.abs(costSideDelta))}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+
+                      <View style={styles.refSettleExpenseRow}>
+                        <Text style={styles.refSettleExpenseLabel}>Petty / voyage expense</Text>
+                        <Text style={styles.refSettleExpenseVal}>{formatINR(totalExpenses)}</Text>
+                      </View>
+                    </View>
+
+                    {showFinanceProvisionPanel ? (
+                      <View style={styles.refProvisionWrap}>
+                        <View style={styles.refProvisionHeader}>
+                          <Text style={styles.refProvisionTitle}>
+                            Provision CN/DN ({showFinanceProvisionPanel === "client" ? "Client" : "Supplier"})
+                          </Text>
+                          <TouchableOpacity
+                            onPress={() => setShowFinanceProvisionPanel(null)}
+                            hitSlop={10}
+                            style={styles.refProvisionClose}
+                            accessibilityLabel="Close provision panel"
+                          >
+                            <Feather name="x" size={18} color="#cbd5f5" />
+                          </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.refProvisionDnRow}>
+                          <TouchableOpacity
+                            style={[styles.refProvisionDnBtn, styles.refProvisionCnBtn]}
+                            onPress={() => {
+                              if (showFinanceProvisionPanel === "client") {
+                                detail.openClientIncomeAdjustment();
+                              } else {
+                                detail.openSupplierCostReductionAdjustment();
+                              }
+                              setShowFinanceProvisionPanel(null);
+                            }}
+                            activeOpacity={0.88}
+                          >
+                            <Feather name="plus" size={22} color="#a5b4fc" />
+                            <Text style={styles.refProvisionDnLabel}>Credit (CN)</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.refProvisionDnBtn, styles.refProvisionDnBtnDebit]}
+                            onPress={() => {
+                              if (showFinanceProvisionPanel === "client") {
+                                detail.openClientDeductionAdjustment();
+                              } else {
+                                detail.openSupplierCostAdditionAdjustment();
+                              }
+                              setShowFinanceProvisionPanel(null);
+                            }}
+                            activeOpacity={0.88}
+                          >
+                            <Feather name="minus" size={22} color="#fca5a5" />
+                            <Text style={styles.refProvisionDnLabel}>Debit (DN)</Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        <Text style={styles.refProvisionChipsLbl}>Quick protocol tabs</Text>
+                        <View style={styles.refProvisionChipWrap}>
+                          {FINANCE_PROTOCOL_CHIPS.map((chip) => (
+                            <TouchableOpacity
+                              key={chip}
+                              style={styles.refProvisionChip}
+                              onPress={() => {
+                                if (!showFinanceProvisionPanel) return;
+                                const p = protocolFinanceChipAdjustment(
+                                  showFinanceProvisionPanel,
+                                  chip,
+                                );
+                                detail.openTripAdjustmentModal({
+                                  type: p.type,
+                                  impact: p.impact,
+                                  reasonSeed: p.reasonSeed,
+                                });
+                                setShowFinanceProvisionPanel(null);
+                              }}
+                              activeOpacity={0.82}
+                            >
+                              <Text style={styles.refProvisionChipTxt}>{chip}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+
+                        <View style={styles.refProvisionFoot}>
+                          <View>
+                            <Text style={styles.refProvisionHint}>Authorization preview</Text>
+                            <Text style={styles.refProvisionPulse}>Provision sync</Text>
+                          </View>
+                          <TouchableOpacity
+                            style={styles.refProvisionConfirm}
+                            onPress={() => detail.handleAddAdjustment()}
+                            activeOpacity={0.85}
+                          >
+                            <Text style={styles.refProvisionConfirmTxt}>Full adjustment…</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : null}
+
+                    <View style={styles.refManifestSplitSection}>
+                      <View style={styles.refManifestSplitHead}>
+                        <Feather name="activity" size={16} color="#cbd5e1" />
+                        <Text style={styles.refManifestSplitTitle}>Manifest adjustments split</Text>
+                      </View>
+                      <View style={styles.refManifestBands}>
+                        <View style={styles.refManifestBand}>
+                          <View style={styles.refManifestBandLblRow}>
+                            <Text style={[styles.refManifestBandLbl, styles.refManifestBandLblIn]}>
+                              Sales inbound
+                            </Text>
+                            <Feather name="arrow-up-right" size={14} color="#16a34a" />
+                          </View>
+                          {incomeAdjustmentRows.length === 0 ? (
+                            <Text style={styles.refManifestBandEmpty}>No inbound adjustments yet</Text>
+                          ) : (
+                            incomeAdjustmentRows.map((adj) => (
+                              <View key={adj.id} style={[styles.refManifestBandRow, styles.refManifestBandRowIn]}>
+                                <View style={styles.refManifestBandRowInner}>
+                                  <Feather name="plus" size={12} color="#16a34a" />
+                                  <Text style={styles.refManifestBandReason} numberOfLines={2}>
+                                    {(adj.reason || "").trim() || "Adjustment"}
+                                  </Text>
+                                </View>
+                                <Text style={styles.refManifestBandAmtIn}>{formatINR(adj.amount)}</Text>
+                              </View>
+                            ))
+                          )}
+                        </View>
+
+                        <View style={styles.refManifestBandSep} />
+
+                        <View style={styles.refManifestBand}>
+                          <View style={styles.refManifestBandLblRow}>
+                            <Text style={[styles.refManifestBandLbl, styles.refManifestBandLblOut]}>
+                              Cost outbound
+                            </Text>
+                            <Feather name="activity" size={14} color="#f43f5e" />
+                          </View>
+                          {deductionAdjustmentRows.length === 0 ? (
+                            <Text style={styles.refManifestBandEmpty}>No outbound adjustments yet</Text>
+                          ) : (
+                            deductionAdjustmentRows.map((adj) => (
+                              <View key={adj.id} style={[styles.refManifestBandRow, styles.refManifestBandRowOut]}>
+                                <View style={styles.refManifestBandRowInner}>
+                                  <Feather name="zap" size={12} color="#f43f5e" />
+                                  <Text style={styles.refManifestBandReason} numberOfLines={2}>
+                                    {(adj.reason || "").trim() || "Adjustment"}
+                                  </Text>
+                                </View>
+                                <Text style={styles.refManifestBandAmtOut}>{formatINR(adj.amount)}</Text>
+                              </View>
+                            ))
+                          )}
                         </View>
                       </View>
                     </View>
+
                     <View style={styles.refFinanceBreakCard}>
-                      {detail.adjustments.map((adj) => (
-                        <View key={adj.id} style={styles.refFinanceRow}>
-                          <View style={styles.refFinanceRowLeft}>
-                            <View style={styles.refFinanceRowIcon}>
-                              <Feather
-                                name={
-                                  adj.impact === "plus"
-                                    ? "arrow-down-left"
-                                    : "arrow-up-right"
-                                }
-                                size={14}
-                                color={adj.impact === "plus" ? "#10b981" : "#f43f5e"}
-                              />
+                      <View style={styles.refAdjRegHeader}>
+                        <Text style={styles.refAdjRegTitle}>Adjustment registry</Text>
+                      </View>
+                      {detail.adjustments.length === 0 ? (
+                        <Text style={styles.refFinanceEmpty}>No adjustments yet</Text>
+                      ) : (
+                        detail.adjustments.map((adj) => {
+                          const isRev = adj.type === "revenue";
+                          const isPlus = adj.impact === "plus";
+                          const iconName = !isRev
+                            ? isPlus
+                              ? "arrow-up-right"
+                              : "arrow-down-left"
+                            : isPlus
+                              ? "trending-up"
+                              : "trending-down";
+                          const tint = !isRev
+                            ? isPlus
+                              ? "#f43f5e"
+                              : "#10b981"
+                            : isPlus
+                              ? "#10b981"
+                              : "#f43f5e";
+                          return (
+                            <View key={adj.id} style={styles.refFinanceRow}>
+                              <View style={styles.refFinanceRowLeft}>
+                                <View style={styles.refFinanceRowIcon}>
+                                  <Feather name={iconName as never} size={13} color={tint} />
+                                </View>
+                                <View style={styles.refAdjLabelCol}>
+                                  <Text style={styles.refFinanceRowLabel}>{(adj.reason || "").trim() || "Adjustment"}</Text>
+                                  <Text style={styles.refAdjPartyTag}>
+                                    {adj.type === "revenue" ? "Revenue" : "Supplier cost"}
+                                  </Text>
+                                </View>
+                              </View>
+                              <View style={styles.refAdjRight}>
+                                <Text
+                                  style={[
+                                    styles.refFinanceRowValue,
+                                    (isRev ? isPlus : !isPlus)
+                                      ? styles.refFinanceRowValuePositive
+                                      : styles.refFinanceRowValueNegative,
+                                  ]}
+                                >
+                                  {`${isRev ? (isPlus ? "+" : "−") : isPlus ? "+" : "−"}${formatINR(adj.amount)}`}
+                                </Text>
+                                <TouchableOpacity
+                                  onPress={() => void detail.handleRemoveAdjustment(adj.id)}
+                                  hitSlop={10}
+                                  style={styles.refAdjTrash}
+                                  accessibilityLabel="Remove adjustment"
+                                >
+                                  <FontAwesome name="times-circle" size={15} color="#cbd5e1" />
+                                </TouchableOpacity>
+                              </View>
                             </View>
-                            <Text style={styles.refFinanceRowLabel}>{adj.label}</Text>
-                          </View>
-                          <Text
-                            style={[
-                              styles.refFinanceRowValue,
-                              adj.impact === "plus"
-                                ? styles.refFinanceRowValuePositive
-                                : styles.refFinanceRowValueNegative,
-                            ]}
-                          >
-                            {adj.impact === "plus" ? "+" : "-"}{formatINR(adj.amount)}
-                          </Text>
-                        </View>
-                      ))}
+                          );
+                        })
+                      )}
                     </View>
                   </>
                 ) : (
@@ -1215,7 +1497,7 @@ export default function TripDetailScreen({
                         row.contact_type === "client" &&
                         Number(row.amount_in ?? 0) > 0,
                     )}
-                    layoutVariant="workspace"
+                    layoutVariant="registry"
                   />
                 ) : (
                   <FeedbackPlaceholder />
@@ -2234,18 +2516,10 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#f43f5e",
   },
-  refFinanceAdjustmentsActions: {
-    marginTop: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    flexWrap: "wrap",
-  },
   refFinanceRowLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
     flex: 1,
     minWidth: 0,
   },
@@ -2898,6 +3172,297 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.25)",
   },
   refFinanceWrap: { gap: 14 },
+  refFinanceManifestHero: {
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+    overflow: "hidden",
+  },
+  refManifestNetHuge: {
+    marginTop: 8,
+    fontSize: 44,
+    fontWeight: "900",
+    letterSpacing: -1.2,
+    color: "#0f172a",
+  },
+  refManifestHeroSplit: {
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#eef2f7",
+    flexDirection: "row",
+    gap: 8,
+    width: "100%",
+  },
+  refManifestCol: { flex: 1, minWidth: 0 },
+  refManifestColRight: { alignItems: "stretch" },
+  refManifestHeroSep: {
+    width: 1,
+    alignSelf: "stretch",
+    backgroundColor: "#eef2f7",
+    marginHorizontal: 4,
+    minHeight: 120,
+  },
+  refManifestColHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+    gap: 6,
+  },
+  refManifestColHeadLeft: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1, minWidth: 0 },
+  refManifestColHeadRight: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1, minWidth: 0, justifyContent: "flex-end" },
+  refManifestColTitle: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
+  refManifestDot: { width: 6, height: 6, borderRadius: 3 },
+  refManifestDotSales: { backgroundColor: "#22c55e" },
+  refManifestDotCost: { backgroundColor: "#fb7185" },
+  refManifestMiniPlus: {
+    padding: 8,
+    borderRadius: 10,
+    backgroundColor: "#f1f5f9",
+  },
+  refManifestMiniPlusMuted: { marginRight: 4 },
+  refManifestColAmount: {
+    fontSize: 24,
+    fontWeight: "900",
+    letterSpacing: -0.8,
+    fontStyle: "italic",
+  },
+  refManifestSalesAmt: { color: "#16a34a" },
+  refManifestCostAmt: { color: "#e11d48", textAlign: "right", alignSelf: "stretch" },
+  refManifestMicroBox: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+    backgroundColor: "rgba(248,250,252,0.7)",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    gap: 4,
+  },
+  refManifestMicroLine: { fontSize: 8, fontWeight: "700", color: "#94a3b8", textTransform: "uppercase" },
+  refManifestMicroRight: { alignSelf: "flex-end", textAlign: "right", width: "100%" },
+  refManifestMicroAdjSales: {
+    marginTop: 4,
+    fontSize: 8,
+    fontWeight: "900",
+    color: "#16a34a",
+    textTransform: "uppercase",
+  },
+  refManifestMicroAdjCost: {
+    marginTop: 4,
+    fontSize: 8,
+    fontWeight: "900",
+    color: "#e11d48",
+    textTransform: "uppercase",
+    textAlign: "right",
+  },
+  refProvisionWrap: {
+    backgroundColor: "#0f172a",
+    borderRadius: 26,
+    padding: 20,
+    gap: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    ...Platform.select({
+      web: { boxShadow: "0 30px 80px rgba(15,23,42,0.35)" },
+      default: {},
+    }),
+  },
+  refProvisionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
+  refProvisionTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: "#f8fafc",
+    letterSpacing: -0.3,
+    textTransform: "uppercase",
+    minWidth: 0,
+  },
+  refProvisionClose: {
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    alignSelf: "flex-start",
+  },
+  refProvisionDnRow: { flexDirection: "row", gap: 12 },
+  refProvisionDnBtn: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 18,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 8,
+  },
+  refProvisionCnBtn: {
+    borderColor: "rgba(99,102,241,0.35)",
+    backgroundColor: "rgba(99,102,241,0.08)",
+  },
+  refProvisionDnBtnDebit: {
+    borderColor: "rgba(244,63,94,0.35)",
+    backgroundColor: "rgba(244,63,94,0.08)",
+  },
+  refProvisionDnLabel: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#e2e8f0",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+  },
+  refProvisionChipsLbl: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: "#64748b",
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    marginTop: 4,
+  },
+  refProvisionChipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  refProvisionChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  refProvisionChipTxt: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#cbd5f5",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  refProvisionFoot: {
+    marginTop: 8,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.08)",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    alignItems: "flex-end",
+  },
+  refProvisionHint: {
+    fontSize: 7,
+    fontWeight: "800",
+    color: "#64748b",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  refProvisionPulse: {
+    marginTop: 4,
+    fontSize: 16,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: "#fff",
+    letterSpacing: -0.2,
+    textTransform: "uppercase",
+  },
+  refProvisionConfirm: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: "#4f46e5",
+    ...Platform.select({
+      web: { boxShadow: "0 10px 35px rgba(79,70,229,0.45)" },
+      default: {},
+    }),
+  },
+  refProvisionConfirmTxt: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: "#fff",
+  },
+  refManifestSplitSection: { gap: 10 },
+  refManifestSplitHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  refManifestSplitTitle: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#cbd5e1",
+    letterSpacing: 3,
+    textTransform: "uppercase",
+  },
+  refManifestBands: {
+    backgroundColor: "#fff",
+    borderRadius: 28,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+    gap: 14,
+    ...Platform.select({
+      web: { boxShadow: "0 18px 50px rgba(15,23,42,0.05)" },
+      default: {},
+    }),
+  },
+  refManifestBand: { gap: 8 },
+  refManifestBandSep: { height: 1, backgroundColor: "#f1f5f9" },
+  refManifestBandLblRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 2,
+  },
+  refManifestBandLbl: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  refManifestBandLblIn: { color: "#15803d" },
+  refManifestBandLblOut: { color: "#e11d48" },
+  refManifestBandEmpty: {
+    paddingVertical: 8,
+    fontSize: 12,
+    color: "#94a3b8",
+    fontWeight: "600",
+    fontStyle: "italic",
+  },
+  refManifestBandRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    gap: 10,
+    borderWidth: 1,
+  },
+  refManifestBandRowIn: {
+    borderColor: "rgba(34,197,94,0.12)",
+    backgroundColor: "rgba(236,253,245,0.45)",
+  },
+  refManifestBandRowOut: {
+    borderColor: "rgba(244,63,94,0.12)",
+    backgroundColor: "rgba(254,242,242,0.45)",
+  },
+  refManifestBandRowInner: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1, minWidth: 0 },
+  refManifestBandReason: { flex: 1, fontSize: 12, fontWeight: "900", color: "#1e293b" },
+  refManifestBandAmtIn: {
+    fontSize: 13,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: "#15803d",
+  },
+  refManifestBandAmtOut: {
+    fontSize: 13,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: "#e11d48",
+  },
   refSettleCard: {
     backgroundColor: "#fff",
     borderRadius: 34,
@@ -2908,6 +3473,147 @@ const styles = StyleSheet.create({
   },
   refSettleLabel: { fontSize: 10, fontWeight: "800", letterSpacing: 1.6, textTransform: "uppercase", color: "#94a3b8" },
   refSettleValue: { marginTop: 6, fontSize: 40, fontWeight: "900", color: "#0f172a", letterSpacing: -0.8 },
+  refSettleHint: {
+    marginTop: 4,
+    paddingHorizontal: 8,
+    fontSize: 9,
+    fontWeight: "600",
+    color: "#94a3b8",
+    textAlign: "center",
+    lineHeight: 14,
+  },
+  refSettleMicro: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: "600",
+    color: "#94a3b8",
+  },
+  refSettleMicroRight: {
+    textAlign: "right",
+    alignSelf: "flex-end",
+  },
+  refSettleMetaLabelRightAligned: {
+    textAlign: "right",
+    alignSelf: "flex-end",
+  },
+  refSettleExpenseRow: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#eef2f7",
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  refSettleExpenseLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
+  },
+  refSettleExpenseVal: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  mobileFinanceAdjCard: {
+    backgroundColor: "#fff",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 14,
+    gap: 10,
+  },
+  mobileFinanceAdjHeader: {
+    gap: 3,
+    marginBottom: 4,
+  },
+  mobileFinanceAdjTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  mobileFinanceAdjSub: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.85,
+  },
+  mobileFinanceAdjRow: {
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+    borderRadius: 14,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    backgroundColor: "#f8fafc",
+  },
+  mobileFinanceAdjMetric: {
+    flex: 1,
+    minWidth: 0,
+  },
+  mobileFinanceAdjMetricLbl: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 0.65,
+    marginBottom: 3,
+  },
+  mobileFinanceAdjMetricVal: {
+    fontSize: 15,
+    fontWeight: "800",
+    letterSpacing: -0.2,
+  },
+  mobileFinanceAdjMetPos: { color: "#16a34a" },
+  mobileFinanceAdjMetNeg: { color: "#dc2626" },
+  mobileFinanceAdjBtn: {
+    borderRadius: 10,
+    backgroundColor: "#0f172a",
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderWidth: 1,
+    borderColor: "#0f172a",
+  },
+  mobileFinanceAdjBtnMuted: {
+    backgroundColor: "#e2e8f0",
+    borderColor: "#cbd5e1",
+  },
+  mobileFinanceAdjBtnCost: {
+    backgroundColor: "#1e293b",
+    borderColor: "#1e293b",
+  },
+  mobileFinanceAdjBtnTxt: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#fff",
+    textTransform: "uppercase",
+    letterSpacing: 0.55,
+  },
+  mobileFinanceAdjBtnTxtMuted: {
+    color: "#334155",
+  },
+  mobileFinanceAdjGhost: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 8,
+  },
+  mobileFinanceAdjGhostTxt: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748b",
+  },
   refSettleBadge: {
     marginTop: 10,
     flexDirection: "row",
@@ -2933,9 +3639,45 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 10,
   },
-  refFinanceRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  refFinanceRowLabel: { fontSize: 12, color: "#64748b", fontWeight: "600" },
-  refFinanceRowValue: { fontSize: 13, color: "#0f172a", fontWeight: "700" },
+  refAdjRegHeader: {
+    marginBottom: 2,
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  refAdjRegTitle: {
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+    color: "#64748b",
+  },
+  refFinanceEmpty: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#94a3b8",
+    textAlign: "center",
+    paddingVertical: 6,
+  },
+  refFinanceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  refAdjLabelCol: { flex: 1, minWidth: 0 },
+  refAdjPartyTag: {
+    marginTop: 2,
+    fontSize: 8,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.65,
+    color: "#94a3b8",
+  },
+  refAdjRight: { flexDirection: "row", alignItems: "center", gap: 6 },
+  refAdjTrash: { padding: 2 },
+  refFinanceRowLabel: { fontSize: 12, color: "#475569", fontWeight: "700" },
+  refFinanceRowValue: { fontSize: 13, color: "#0f172a", fontWeight: "800" },
   refFinanceRowValueStrong: { fontSize: 15 },
   refBottomInfo: {
     borderRadius: 22,
@@ -2970,34 +3712,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fdfdfd",
     overflow: "hidden",
-  },
-  refFloatingWrap: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 14,
-    alignItems: "center",
-  },
-  refFloatingBtn: {
-    borderRadius: 999,
-    backgroundColor: "#0f172a",
-    paddingHorizontal: 22,
-    paddingVertical: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 18,
-    elevation: 8,
-  },
-  refFloatingBtnText: {
-    fontSize: 10,
-    fontWeight: "900",
-    color: "#fff",
-    textTransform: "uppercase",
-    letterSpacing: 1.6,
   },
 
   // ── Dark nav ──
@@ -3034,11 +3748,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   navMobileKicker: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 2.2,
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 3.8,
     textTransform: "uppercase",
-    color: "#94a3b8",
+    color: "#cbd5e1",
   },
   navMobileTripRow: {
     marginTop: 2,
@@ -3047,17 +3761,27 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   navMobileTripId: {
-    fontSize: 24,
+    fontSize: 17,
     fontWeight: "900",
-    color: "#0f172a",
-    letterSpacing: -0.25,
     fontStyle: "italic",
+    color: "#0f172a",
+    letterSpacing: -0.35,
+  },
+  navMobilePulseRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
   },
   navMobileDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: Theme.positive,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  navMobileDotEmerald: {
+    backgroundColor: "#34d399",
+  },
+  navMobileDotIndigo: {
+    backgroundColor: "#6366f1",
   },
   navLeft: {
     flexDirection: "row",
