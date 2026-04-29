@@ -24,6 +24,7 @@ export interface AddTripModalLayoutProps {
   subtitle?: string;
   submitLabel: string;
   canSubmit: boolean;
+  validationMessage?: string | null;
   submitting?: boolean;
   /** When false, the page puts the primary action inside the form (e.g. centered CTA). */
   showFooter?: boolean;
@@ -47,6 +48,7 @@ export function AddTripModalLayout({
   subtitle = "Route · Client & Price · Allocation",
   submitLabel,
   canSubmit,
+  validationMessage = null,
   submitting = false,
   showFooter = true,
   showHeaderActions,
@@ -161,7 +163,7 @@ export function AddTripModalLayout({
             </TouchableOpacity>
             {submitDisabled && !submitting && (
               <Text style={styles.footerHint}>
-                Fill client, route, price and allocation to continue
+                {validationMessage ?? "Fill client, route, price and allocation to continue"}
               </Text>
             )}
           </View>
