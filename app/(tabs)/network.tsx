@@ -147,9 +147,6 @@ export default function NetworkScreen() {
   const [requestTab, setRequestTab] = useState<"received" | "sent" | "cancelled">("received");
   const [selectedProfileNode, setSelectedProfileNode] = useState<NetworkProfileNode | null>(null);
   const [requestActionId, setRequestActionId] = useState<string | null>(null);
-  const [clockUtc, setClockUtc] = useState<string>(() =>
-    new Date().toLocaleTimeString("en-GB", { hour12: false }),
-  );
   const [connectionsSnapshot, setConnectionsSnapshot] = useState<ConnectedOrg[]>([]);
 
   useRealtimeNetworkInvalidation(orgId);
@@ -322,12 +319,6 @@ export default function NetworkScreen() {
   }, [clientsQ.data, suppliersQ.data, driversQ.data]);
 
   const onCreatePost = () => router.push("/(modals)/create-post");
-  useEffect(() => {
-    const tick = setInterval(() => {
-      setClockUtc(new Date().toLocaleTimeString("en-GB", { hour12: false }));
-    }, 1000);
-    return () => clearInterval(tick);
-  }, []);
   useEffect(() => {
     if (searchParams.view === "requests") {
       setViewMode("requests");
@@ -586,8 +577,8 @@ export default function NetworkScreen() {
           ]}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.profileGrid}>
-            <View style={styles.profileLeftCol}>
+          <View style={[styles.profileGrid, isMobileLayout && styles.profileGridStack]}>
+            <View style={[styles.profileLeftCol, isMobileLayout && styles.profileLeftColStack]}>
               <View style={styles.profileIdentityCardModern}>
                 <View style={styles.profileAvatarLgModern}>
                   <Text style={styles.profileAvatarLgText}>
@@ -654,7 +645,7 @@ export default function NetworkScreen() {
               </View>
             </View>
 
-            <View style={styles.profileRightCol}>
+            <View style={[styles.profileRightCol, isMobileLayout && styles.profileRightColStack]}>
               <View style={styles.profileOverviewCardModern}>
                 <Text style={styles.profileOverviewTitle}>Ally dossier</Text>
                 <Text style={styles.profileOverviewBody}>
@@ -764,10 +755,6 @@ export default function NetworkScreen() {
               BUILD YOUR NETWORK BY ADDING CONTACTS AND CONNECTING WITH VERIFIED APP USERS TO GROW YOUR BUSINESS.
             </Text>
           </View>
-          <View style={styles.topTickerClock}>
-            <Clock size={10} color={Theme.textOnPrimary} />
-            <Text style={styles.topTickerClockText}>{clockUtc} UTC</Text>
-          </View>
         </View>
         <View style={[styles.topCluster, isDesktopMatrix && styles.topClusterDesktop]}>
           <View style={[styles.topClusterMain, isDesktopMatrix && styles.topClusterMainDesktop]}>
@@ -860,9 +847,25 @@ export default function NetworkScreen() {
           </View>
         </View>
         <View style={styles.registryHead}>
-          <View style={styles.registryHeadLeft}>
-            <View style={styles.registryLine} />
-            <Text style={styles.registryKicker}>Registry core</Text>
+          <View style={styles.registryHeadTopRow}>
+            <View style={styles.registryHeadLeft}>
+              <View style={styles.registryLine} />
+              <Text style={styles.registryKicker}>Registry core</Text>
+            </View>
+            <Pressable
+              onPress={() => setViewMode("requests")}
+              style={({ pressed }) => [styles.registryInviteBtn, pressed && { opacity: 0.75 }]}
+              hitSlop={8}
+            >
+              <Inbox size={14} color={Theme.textPrimaryDark} />
+              {pendingCount > 0 ? (
+                <View style={styles.registryInviteBadge}>
+                  <Text style={styles.registryInviteBadgeText}>
+                    {pendingCount > 9 ? "9+" : String(pendingCount)}
+                  </Text>
+                </View>
+              ) : null}
+            </Pressable>
           </View>
           <Text style={styles.registryHeading}>Grow network</Text>
         </View>
@@ -1073,17 +1076,6 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   topTickerText: {
-    fontSize: 8,
-    fontWeight: "900",
-    color: Theme.textOnPrimary,
-    letterSpacing: 0.8,
-  },
-  topTickerClock: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  topTickerClockText: {
     fontSize: 8,
     fontWeight: "900",
     color: Theme.textOnPrimary,
@@ -1368,9 +1360,16 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: 14,
   },
+  profileGridStack: {
+    flexDirection: "column",
+    gap: 12,
+  },
   profileLeftCol: {
     width: 320,
     gap: 10,
+  },
+  profileLeftColStack: {
+    width: "100%",
   },
   profileIdentityCard: {
     borderRadius: 32,
@@ -1545,6 +1544,10 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     gap: 12,
+  },
+  profileRightColStack: {
+    width: "100%",
+    flex: 0,
   },
   profileOverviewCard: {
     borderRadius: 30,
@@ -2018,6 +2021,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
+  registryHeadTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
   registryLine: {
     width: 28,
     height: 3,
@@ -2038,6 +2047,37 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
     textTransform: "uppercase",
     fontStyle: "italic",
+  },
+  registryInviteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  registryInviteBadge: {
+    position: "absolute",
+    top: -3,
+    right: -3,
+    minWidth: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: Theme.primary,
+    borderWidth: 1.5,
+    borderColor: Theme.screenBackground,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+  registryInviteBadgeText: {
+    fontSize: 7,
+    fontWeight: "900",
+    color: Theme.textOnPrimary,
+    letterSpacing: 0.1,
   },
   expandSignal: {
     flexDirection: "row",
