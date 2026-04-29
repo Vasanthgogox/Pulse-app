@@ -342,6 +342,7 @@ function RootOverlayTabBar() {
             )
           }
           onProfilePress={() => router.push('/(tabs)/profile')}
+          onNotificationsPress={() => router.push('/notifications')}
         />
       </View>
     );
@@ -365,6 +366,7 @@ function RootOverlayTabBar() {
           )
         }
         onProfilePress={() => router.push('/(tabs)/profile')}
+        onNotificationsPress={() => router.push('/notifications')}
       />
     </DemoTabBarAutoHideShell>
   );

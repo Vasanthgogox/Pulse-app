@@ -207,12 +207,14 @@ interface DemoTabBarProps {
   activeTab: DemoTabId;
   onTabChange: (tab: DemoTabId) => void;
   onProfilePress?: () => void;
+  onNotificationsPress?: () => void;
 }
 
 export function DemoTabBar({
   activeTab,
   onTabChange,
   onProfilePress,
+  onNotificationsPress,
 }: DemoTabBarProps) {
   const { profile } = useAuth();
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
@@ -341,7 +343,11 @@ export function DemoTabBar({
           </View>
 
           <View style={styles.webUtilityWrap}>
-            <AnimatedPress style={styles.webBellBtn} activeOpacity={0.8}>
+            <AnimatedPress
+              style={styles.webBellBtn}
+              activeOpacity={0.8}
+              onPress={onNotificationsPress}
+            >
               <FontAwesome5 name="bell" size={16} color="#64748b" />
             </AnimatedPress>
             <AnimatedPress

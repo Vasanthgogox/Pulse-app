@@ -25,7 +25,6 @@ import { AddVehicleModal } from "@/features/vehicles/components/AddVehicleModal"
 import type { AddVehicleCompletePayload } from "@/features/vehicles/components/AddVehicleModal";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
 import type { LedgerRow } from "../services/finance.service";
-import type { SalaryRequestWithDriverRow } from "@/services/salaryRequestsService";
 import { EntityDetailOverlay } from "./EntityDetailOverlay";
 import type { FinancialRowData } from "./FinancialRow";
 import { LedgerReportModal } from "./LedgerReportModal";
@@ -127,9 +126,6 @@ export interface FinanceModalsProps {
   /** Full org lists for SUPPLIER finance trip grid (web desktop). */
   entityOverlayClientRows: ClientRow[];
   entityOverlaySupplierRows: SupplierRow[];
-  pendingDriverSalaryRequests: SalaryRequestWithDriverRow[];
-  onPayDriverRequestFromOverlay: (req: SalaryRequestWithDriverRow) => void;
-  onRejectDriverRequestFromOverlay: (requestId: string) => void;
   onEntityOverlayBack: () => void;
   onEntityAddTransaction: (context: import("./EntityDetailOverlay").TripEntryContext | null) => void;
   onEntityOverlayRefresh: () => void;
@@ -224,9 +220,6 @@ export function FinanceModals(props: FinanceModalsProps) {
     driverRows,
     entityOverlayClientRows,
     entityOverlaySupplierRows,
-    pendingDriverSalaryRequests,
-    onPayDriverRequestFromOverlay,
-    onRejectDriverRequestFromOverlay,
     onEntityOverlayBack,
     onEntityAddTransaction,
     onEntityOverlayRefresh,
@@ -368,23 +361,6 @@ export function FinanceModals(props: FinanceModalsProps) {
           driverProfile={
             selectedEntity.entityType === "DRIVER"
               ? (driverRows.find((d) => d.id === selectedEntity.data.id) ?? null)
-              : undefined
-          }
-          driverSalaryRequests={
-            selectedEntity.entityType === "DRIVER"
-              ? pendingDriverSalaryRequests.filter(
-                  (r) => r.driver_id === selectedEntity.data.id,
-                )
-              : undefined
-          }
-          onPayDriverRequest={
-            selectedEntity.entityType === "DRIVER"
-              ? onPayDriverRequestFromOverlay
-              : undefined
-          }
-          onRejectDriverRequest={
-            selectedEntity.entityType === "DRIVER"
-              ? onRejectDriverRequestFromOverlay
               : undefined
           }
           onBack={onEntityOverlayBack}

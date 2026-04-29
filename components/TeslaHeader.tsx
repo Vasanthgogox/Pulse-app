@@ -13,6 +13,7 @@ import { useWallet } from "@/contexts/WalletContext";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { DEFAULT_USER_2D_AVATAR_SEED, getUser2DAvatarUriForSeed } from "@/constants/UserAvatars";
 import { useState, useEffect } from "react";
+import { useRouter } from "expo-router";
 
 export interface TeslaHeaderProps {
   title: string;
@@ -53,6 +54,7 @@ export function TeslaHeader({
   hideRightIcons = false,
   onAddClick,
 }: TeslaHeaderProps) {
+  const router = useRouter();
   const { profile } = useAuth();
   const { balance } = useWallet();
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
@@ -96,6 +98,13 @@ export function TeslaHeader({
     .map((part) => part[0]?.toUpperCase())
     .join("") || "U";
   const escrowFormatted = balance > 0 ? `₹${(balance / 1000).toFixed(1)}K` : "₹45.2K";
+  const handleNotificationPress = () => {
+    if (onNotificationClick) {
+      onNotificationClick();
+      return;
+    }
+    router.push("/notifications");
+  };
 
   return (
     <View style={[styles.wrapper, isDark && styles.wrapperDark, { paddingTop: topPadding }]}>
@@ -152,7 +161,7 @@ export function TeslaHeader({
         </TouchableOpacity>
         <View style={styles.iconWithDot}>
           <TouchableOpacity
-            onPress={onNotificationClick}
+            onPress={handleNotificationPress}
             style={styles.iconWrap}
             hitSlop={8}
           >

@@ -55,7 +55,6 @@ import { formatIndianVehicleNumber, formatLedgerDate } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
-import { updateSalaryRequestStatus } from "@/services/salaryRequestsService";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -184,7 +183,6 @@ export function FinanceScreen() {
     driverRows,
     driverOffers,
     connectionRequestsSent,
-    pendingDriverSalaryRequests,
     entitiesLoading,
     garagePeriodOptions,
     indentsForFinance,
@@ -1783,35 +1781,6 @@ export function FinanceScreen() {
         driverRows={driverRows}
         entityOverlayClientRows={clientRows}
         entityOverlaySupplierRows={supplierRows}
-        pendingDriverSalaryRequests={pendingDriverSalaryRequests}
-        onPayDriverRequestFromOverlay={(req) => {
-          const isTripBased =
-            req.request_type === "trip_based" &&
-            Array.isArray(req.trip_ids) &&
-            req.trip_ids.length > 0;
-          const q = new URLSearchParams({
-            entityType: "DRIVER",
-            entityId: req.driver_id,
-            partyName: req.drivers?.name ?? "",
-            partyId: req.driver_id,
-            defaultType: "out",
-            salaryAmount: String(req.amount),
-            defaultDriverPaymentType: isTripBased ? "settlement" : "advance",
-            salaryRequestId: req.id,
-          });
-          if (isTripBased && req.trip_ids[0]) {
-            q.set("tripId", req.trip_ids[0]);
-          }
-          router.push(`/(modals)/ledger-sync?${q.toString()}` as const);
-        }}
-        onRejectDriverRequestFromOverlay={(requestId) => {
-          updateSalaryRequestStatus(requestId, "rejected").then(({ error }) => {
-            if (!error)
-              setPendingDriverSalaryRequests((prev) =>
-                prev.filter((r) => r.id !== requestId),
-              );
-          });
-        }}
         onEntityOverlayBack={() => setSelectedEntity(null)}
         onEntityAddTransaction={(context) => {
           setAddEntryContext(context ?? null);

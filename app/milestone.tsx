@@ -46,6 +46,7 @@ const EMERALD = '#10B981';
 
 export default function MilestoneScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const safeBack = useSafeBack();
   const p = PROFILE;
   const currentTier = getTierData(p.level);
@@ -59,6 +60,7 @@ export default function MilestoneScreen() {
         variant="default"
         showBack
         onBack={safeBack}
+        onNotificationClick={() => router.push("/notifications")}
       />
 
       <ScrollView

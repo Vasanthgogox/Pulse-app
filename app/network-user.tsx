@@ -56,6 +56,7 @@ export default function NetworkUserScreen() {
         variant="default"
         showBack
         onBack={safeBack}
+        onNotificationClick={() => router.push("/notifications")}
       />
 
       <ScrollView

@@ -46,7 +46,6 @@ import {
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
   getSalaryRequestsByDriverIds,
-  updateSalaryRequestStatus,
   type SalaryRequestRow,
 } from "@/services/salaryRequestsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -246,18 +245,6 @@ function getDriverFallbackSeed(driverId: string): string {
     hash = (hash + value.charCodeAt(i)) % 10;
   }
   return `driver-${hash + 1}`;
-}
-
-/** Same labels as finance tab (Treasury DRIVERS) for consistency. */
-function getSalaryRequestTypeLabel(
-  t: (k: string) => string,
-  requestType: string,
-): string {
-  return requestType === "monthly"
-    ? t("monthlySalary")
-    : requestType === "advance"
-      ? t("advance")
-      : "Trip-based";
 }
 
 export interface DriverDetailScreenProps {
@@ -1428,137 +1415,19 @@ export default function DriverDetailScreen({
                 </>
               ) : null}
             </View>
-            {driverRequests.length > 0 && (
-              <>
-                <Text style={styles.profileSectionTitle}>DRIVER REQUESTS</Text>
-                <View style={styles.driverRequestCardsWrap}>
-                {driverRequests.map((req) => {
-                  const typeLabel = getSalaryRequestTypeLabel(
-                    t,
-                    req.request_type ?? "",
-                  );
-                  const dateStr = req.created_at
-                    ? formatLedgerDate(req.created_at)
-                    : "";
-                  const metaLine = dateStr
-                    ? `${typeLabel} · ${dateStr}`
-                    : typeLabel;
-                  return (
-                    <View key={req.id} style={styles.driverRequestCard}>
-                      <View style={styles.driverRequestCardInner}>
-                        <View style={styles.driverRequestIconWrap}>
-                          <FontAwesome
-                            name="info-circle"
-                            size={20}
-                            color={Theme.primary}
-                          />
-                        </View>
-                        <View style={styles.driverRequestCardBody}>
-                          <Text style={styles.driverRequestCardLabel}>
-                            DRIVER REQUEST
-                          </Text>
-                          <Text style={styles.driverRequestCardAmount}>
-                            Needs ₹
-                            {Number(req.amount).toLocaleString("en-IN", {
-                              maximumFractionDigits: 0,
-                            })}
-                          </Text>
-                          <Text
-                            style={styles.driverRequestCardReason}
-                            numberOfLines={1}
-                          >
-                            {metaLine}
-                          </Text>
-                          {req.note?.trim() ? (
-                            <Text
-                              style={[
-                                styles.driverRequestCardReason,
-                                { marginTop: 2 },
-                              ]}
-                              numberOfLines={2}
-                            >
-                              {req.note.trim()}
-                            </Text>
-                          ) : null}
-                        </View>
-                      </View>
-                      <View style={styles.driverRequestCardActions}>
-                        <TouchableOpacity
-                          style={[
-                            styles.driverRequestBtn,
-                            styles.driverRequestBtnPay,
-                          ]}
-                          onPress={() => {
-                            setShowProfileModal(false);
-                            const isTripBased =
-                              req.request_type === "trip_based" &&
-                              Array.isArray(req.trip_ids) &&
-                              req.trip_ids.length > 0;
-                            const q = new URLSearchParams({
-                              entityType: "DRIVER",
-                              entityId: req.driver_id,
-                              partyName: lockedPartyName,
-                              partyId: req.driver_id,
-                              defaultType: "out",
-                              salaryAmount: String(req.amount),
-                              defaultDriverPaymentType: isTripBased ? "settlement" : "advance",
-                              salaryRequestId: req.id,
-                            });
-                            if (isTripBased && req.trip_ids?.[0]) {
-                              q.set("tripId", req.trip_ids[0]);
-                            }
-                            router.push(`/(modals)/ledger-sync?${q.toString()}` as const);
-                          }}
-                          activeOpacity={0.8}
-                        >
-                          <Text style={styles.driverRequestBtnPayText}>
-                            Pay Now
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[
-                            styles.driverRequestBtn,
-                            styles.driverRequestBtnReject,
-                          ]}
-                          onPress={() => {
-                            Alert.alert(
-                              t("rejectRequest"),
-                              `Reject this request for ₹${Number(req.amount).toLocaleString("en-IN")}?`,
-                              [
-                                { text: t("cancel"), style: "cancel" },
-                                {
-                                  text: t("reject"),
-                                  style: "destructive",
-                                  onPress: () => {
-                                    updateSalaryRequestStatus(
-                                      req.id,
-                                      "rejected",
-                                    ).then(({ error: e }) => {
-                                      if (!e)
-                                        setDriverRequests((prev) =>
-                                          prev.filter((r) => r.id !== req.id),
-                                        );
-                                      else
-                                        Alert.alert(t("rejectFailed"), e.message);
-                                    });
-                                  },
-                                },
-                              ],
-                            );
-                          }}
-                          activeOpacity={0.8}
-                        >
-                          <Text style={styles.driverRequestBtnRejectText}>
-                            {t("reject")}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  );
-                })}
-                </View>
-              </>
-            )}
+            {driverRequests.length > 0 ? (
+              <View style={styles.profileInfoCallout}>
+                <FontAwesome
+                  name="bell"
+                  size={14}
+                  color={Theme.textSecondary}
+                  style={styles.profileInfoCalloutIcon}
+                />
+                <Text style={styles.profileInfoCalloutText}>
+                  Pending salary requests are now handled in Notifications.
+                </Text>
+              </View>
+            ) : null}
 
             {canLink && (
               <DetailSection title={t("account")}>
@@ -2500,6 +2369,28 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderLight,
+  },
+  profileInfoCallout: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: Theme.surfaceGray,
+    marginBottom: 14,
+  },
+  profileInfoCalloutIcon: {
+    marginTop: 1,
+  },
+  profileInfoCalloutText: {
+    flex: 1,
+    minWidth: 0,
+    color: Theme.textSecondary,
+    fontSize: 12,
+    fontWeight: "600",
   },
   profileContactRow: {
     flexDirection: "row",
