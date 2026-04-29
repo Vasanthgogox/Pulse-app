@@ -57,21 +57,21 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Modal,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  useWindowDimensions,
-  View,
-  type TextStyle,
-  type ViewStyle,
+    Modal,
+    NativeScrollEvent,
+    NativeSyntheticEvent,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    useWindowDimensions,
+    View,
+    type TextStyle,
+    type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -351,9 +351,9 @@ export default function TripsScreen() {
           completedTrips.filter((t) => !seen.has(t.id)),
         );
       } else {
-        list = list.filter(
-          (t) => classifyTripMetric(t, tripIdsWithDocuments) === activeMetricTab,
-        );
+      list = list.filter(
+        (t) => classifyTripMetric(t, tripIdsWithDocuments) === activeMetricTab,
+      );
       }
     }
     if (supplyFilter !== "all") {
@@ -1007,8 +1007,8 @@ export default function TripsScreen() {
             </>
           ) : isReceivableCleared || isPayableCleared ? (
             <>
-              <View
-                style={[
+    <View
+      style={[
                   styles.historyWmLightBlobA,
                   isPayableCleared
                     ? styles.historyWmClearedPayBlobA
@@ -1025,10 +1025,10 @@ export default function TripsScreen() {
               />
             </>
           ) : null}
-        </View>
+          </View>
         <View style={styles.historyMetricInner}>
           <View style={styles.historyMetricTopRow}>
-            <Text
+                <Text
               style={[
                 styles.metricBentoValue,
                 active
@@ -1037,10 +1037,10 @@ export default function TripsScreen() {
               ]}
             >
               {metric.count}
-            </Text>
+                </Text>
             {showsAmount ? (
-              <Text
-                style={[
+                <Text
+                  style={[
                   styles.historyMetricAmount,
                   styles.historyMetricAmountBento,
                   styles.historyMetricAmountOnDark,
@@ -1049,11 +1049,11 @@ export default function TripsScreen() {
                 numberOfLines={1}
               >
                 {formatCompactINR(metric.amount)}
-              </Text>
+                </Text>
             ) : null}
           </View>
-          <Text
-            style={[
+                <Text
+                  style={[
               styles.metricBentoLabel,
               active
                 ? styles.metricBentoLabelOnDarkActive
@@ -1062,9 +1062,9 @@ export default function TripsScreen() {
             numberOfLines={2}
           >
             {metric.title}
-          </Text>
+                </Text>
           <Text
-            style={[
+              style={[
               styles.metricBentoSubtext,
               styles.metricBentoSubtextOnDark,
               styles.metricCardHintAtBottom,
@@ -1074,7 +1074,7 @@ export default function TripsScreen() {
             {metric.hint}
           </Text>
         </View>
-      </TouchableOpacity>
+            </TouchableOpacity>
     );
   };
 
@@ -1082,7 +1082,7 @@ export default function TripsScreen() {
     return (
       <View style={[styles.centered, { paddingTop: insets.top }]}>
         <Text style={styles.message}>{tr("noAccessTrips")}</Text>
-      </View>
+          </View>
     );
   }
 
@@ -1414,12 +1414,12 @@ export default function TripsScreen() {
                     contentContainerStyle={styles.tripsToolbarScrollContent}
                     style={styles.tripsToolbarScroll}
                   >
-                    <View
+              <View
                       style={styles.tripsLayoutToggle}
                       accessibilityRole="tablist"
                     >
                       <TouchableOpacity
-                        style={[
+                style={[
                           styles.tripsLayoutToggleBtn,
                           listLayout === "cards" &&
                             styles.tripsLayoutToggleBtnActive,
@@ -1835,25 +1835,25 @@ export default function TripsScreen() {
                     ]}
                   >
                     {TRIP_METRIC_ORDER.slice(0, 1).map((metricId) => {
-                      const count = metricCounts[metricId];
-                      const active = activeMetricTab === metricId;
-                      const copy = tripMetricCopy[metricId];
-                      return (
-                        <TouchableOpacity
-                          key={metricId}
-                          style={[
-                            styles.tripMetricTile,
+                  const count = metricCounts[metricId];
+                  const active = activeMetricTab === metricId;
+                  const copy = tripMetricCopy[metricId];
+                  return (
+                    <TouchableOpacity
+                      key={metricId}
+                      style={[
+                        styles.tripMetricTile,
                             styles.tripMetricBento,
                             styles.tripMetricTileShrinkNone,
-                            isLargeScreen && styles.tripMetricTileWeb,
+                        isLargeScreen && styles.tripMetricTileWeb,
                             active && styles.tripMetricBentoActive,
-                          ]}
-                          onPress={() => setActiveMetricTab(metricId)}
-                          activeOpacity={0.85}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected: active }}
-                          accessibilityLabel={`${copy.title}, ${count} trips`}
-                        >
+                      ]}
+                      onPress={() => setActiveMetricTab(metricId)}
+                      activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      accessibilityLabel={`${copy.title}, ${count} trips`}
+                    >
                           <LinearGradient
                             colors={[Theme.darkBackground, "#1e293b"]}
                             start={{ x: 0, y: 0 }}
@@ -1868,27 +1868,27 @@ export default function TripsScreen() {
                             <View style={styles.historyWmHeroBlobB} />
                           </View>
                           <View style={styles.historyMetricInner}>
-                            <Text
-                              style={[
+                      <Text
+                        style={[
                                 styles.metricBentoValue,
                                 active
                                   ? styles.tripMetricCountActive
                                   : styles.metricBentoValueOnDark,
-                              ]}
-                            >
-                              {count}
-                            </Text>
-                            <Text
-                              style={[
+                        ]}
+                      >
+                        {count}
+                      </Text>
+                      <Text
+                        style={[
                                 styles.metricBentoLabel,
                                 active
                                   ? styles.metricBentoLabelOnDarkActive
                                   : styles.metricBentoLabelOnDark,
-                              ]}
-                              numberOfLines={2}
-                            >
-                              {copy.title}
-                            </Text>
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {copy.title}
+                      </Text>
                             <Text
                               style={[
                                 styles.metricBentoSubtext,
@@ -1897,13 +1897,13 @@ export default function TripsScreen() {
                               ]}
                               numberOfLines={3}
                             >
-                              {copy.hint}
-                            </Text>
+                        {copy.hint}
+                      </Text>
                           </View>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
                 </View>
                 <View
                   style={[
@@ -2132,29 +2132,29 @@ export default function TripsScreen() {
                     </TouchableOpacity>
                   </View>
                 ) : null}
-                <TouchableOpacity
-                  style={[
-                    styles.tripsBodyDateRangeIconBtn,
-                    dateRangeFilter === "custom" &&
-                      styles.tripsDateRangeIconBtnActive,
+              <TouchableOpacity
+                style={[
+                  styles.tripsBodyDateRangeIconBtn,
+                  dateRangeFilter === "custom" &&
+                    styles.tripsDateRangeIconBtnActive,
                     styles.tripsSupplyChipWeb,
-                  ]}
-                  onPress={() => setShowDateRangePicker(true)}
-                  activeOpacity={0.8}
-                  accessibilityLabel={tr("dateRangeLabel")}
-                  accessibilityRole="button"
-                >
-                  <FontAwesome
-                    name="calendar"
-                    size={12}
-                    color={
-                      dateRangeFilter === "custom"
-                        ? Theme.textOnDark
-                        : Theme.textPrimaryDark
-                    }
-                  />
-                </TouchableOpacity>
-              </View>
+                ]}
+                onPress={() => setShowDateRangePicker(true)}
+                activeOpacity={0.8}
+                accessibilityLabel={tr("dateRangeLabel")}
+                accessibilityRole="button"
+              >
+                <FontAwesome
+                  name="calendar"
+                  size={12}
+                  color={
+                    dateRangeFilter === "custom"
+                      ? Theme.textOnDark
+                      : Theme.textPrimaryDark
+                  }
+                />
+              </TouchableOpacity>
+            </View>
             ) : null}
           </View>
 
@@ -2227,41 +2227,41 @@ export default function TripsScreen() {
                   </TouchableOpacity>
                 </View>
               </View>
-              <ScrollView
-                horizontal
-                nestedScrollEnabled
-                showsHorizontalScrollIndicator
-                keyboardShouldPersistTaps="handled"
-                contentContainerStyle={styles.tripsTableHScrollContent}
-              >
-                <View
-                  style={[
-                    styles.tripsTableMinWidth,
-                    {
-                      minWidth: Math.max(
-                        width - Layout.screenPaddingHorizontal * 2,
+            <ScrollView
+              horizontal
+              nestedScrollEnabled
+              showsHorizontalScrollIndicator
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.tripsTableHScrollContent}
+            >
+              <View
+                style={[
+                  styles.tripsTableMinWidth,
+                  {
+                    minWidth: Math.max(
+                      width - Layout.screenPaddingHorizontal * 2,
                         isMobile ? 980 : 1140,
-                      ),
-                    },
-                  ]}
-                >
-                  <TripsHubTableView
-                    trips={tripsTableVisible}
-                    currentOrganizationId={currentOrganization?.id ?? null}
-                    getStageLabel={getStageLabelForTrip}
-                    transactionsByTripId={transactionsByTripId}
+                    ),
+                  },
+                ]}
+              >
+                <TripsHubTableView
+                  trips={tripsTableVisible}
+                  currentOrganizationId={currentOrganization?.id ?? null}
+                  getStageLabel={getStageLabelForTrip}
+                  transactionsByTripId={transactionsByTripId}
                     financeAdjustmentsByTripId={tripFinanceAdjForHub}
-                    onOpenTripDetails={(trip) =>
-                      router.push(`/trip/${trip.id}` as const)
-                    }
-                    tr={tr}
+                  onOpenTripDetails={(trip) =>
+                    router.push(`/trip/${trip.id}` as const)
+                  }
+                  tr={tr}
                     onExportLedger={() => setTripLedgerExportOpen(true)}
-                    clientNameByTripId={shipperNameByTripId}
-                    linkedOrgByOrganizationId={linkedOrgByOrganizationId}
-                    partyMetaByTripId={tripHubPartyMetaByTripId}
-                  />
-                </View>
-              </ScrollView>
+                  clientNameByTripId={shipperNameByTripId}
+                  linkedOrgByOrganizationId={linkedOrgByOrganizationId}
+                  partyMetaByTripId={tripHubPartyMetaByTripId}
+                />
+              </View>
+            </ScrollView>
               <View style={styles.tripsTablePaginationRowBottom}>
                 <Text style={styles.tripsTablePaginationMeta}>
                   {`Page ${tripsTablePageSafe + 1}/${tripsTableTotalPages} · ${filtered.length}`}
