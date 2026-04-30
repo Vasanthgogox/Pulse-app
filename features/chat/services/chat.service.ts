@@ -29,16 +29,29 @@ export interface TripForCompose {
 export async function getTripsForCompose(organizationId: string): Promise<TripForCompose[]> {
   const { data, error } = await supabase()
     .from("trips")
-    .select(
-      "id, trip_number, display_trip_id, pickup_area, drop_location, client_id, client_name, supplier_id, supplier_name, driver_id, driver_display_name"
-    )
+    // Match trips hub: * only. Listing non-existent columns (e.g. supplier_name on older
+    // trips tables) makes PostgREST return an error — UI showed "Could not load trips".
+    .select("*")
     .eq("organization_id", organizationId)
     .neq("status", "cancelled")
     .order("created_at", { ascending: false })
     .limit(100);
 
   if (error) throw error;
-  return (data ?? []) as TripForCompose[];
+
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    id: String(row.id ?? ""),
+    trip_number: String(row.trip_number ?? ""),
+    display_trip_id: (row.display_trip_id as string | null | undefined) ?? null,
+    pickup_area: String(row.pickup_area ?? ""),
+    drop_location: String(row.drop_location ?? ""),
+    client_id: (row.client_id as string | null | undefined) ?? null,
+    client_name: (row.client_name as string | null | undefined) ?? null,
+    supplier_id: (row.supplier_id as string | null | undefined) ?? null,
+    supplier_name: (row.supplier_name as string | null | undefined) ?? null,
+    driver_id: (row.driver_id as string | null | undefined) ?? null,
+    driver_display_name: (row.driver_display_name as string | null | undefined) ?? null,
+  }));
 }
 
 export async function getConversationsByOrganization(
