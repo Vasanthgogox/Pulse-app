@@ -122,4 +122,10 @@ export const queryKeys = {
   teamInvites: {
     mine: () => ['q', 'team-invites', 'mine'] as const,
   },
+
+  tripConversations: {
+    all: (orgId: string) => ['q', 'trip-conversations', orgId] as const,
+    detail: (conversationId: string) => ['q', 'trip-conversations', 'detail', conversationId] as const,
+    messages: (conversationId: string) => ['q', 'trip-conversations', 'messages', conversationId] as const,
+  },
 } as const;

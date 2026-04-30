@@ -1,215 +1,300 @@
-import { createContext, useContext, useState, ReactNode, useCallback } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useOptionalOrganization } from "@/contexts/OrganizationContext";
+import { supabase } from "@/lib/supabase";
+import * as chatService from "../services/chat.service";
+import type {
+  ConversationPartyType,
+  MessageType,
+  TripConversation,
+  TripMessageRow,
+} from "../types/chat.types";
 
-export type TripChatRole = "dispatcher" | "owner" | "driver";
-export type MessageType = "text" | "challenge" | "update" | "question";
+export type { ConversationPartyType, MessageType, TripConversation, TripMessageRow };
 
-export interface TripChatParticipant {
-  id: string;
-  name: string;
-  role: TripChatRole;
-}
+// ── Quick message templates by party type ────────────────────────────────────
 
-export interface TripChatMessage {
-  id: string;
-  tripId: string;
-  senderId: string;
-  senderName: string;
-  senderRole: TripChatRole;
-  content: string;
-  timestamp: string;
-  isRead: boolean;
-  messageType: MessageType;
-}
+export const QUICK_MESSAGES: Record<ConversationPartyType, string[]> = {
+  client: [
+    "Your trip has been confirmed. The vehicle is en route.",
+    "Driver has departed for pickup.",
+    "Pickup completed. Delivery is in progress.",
+    "Delivery completed successfully. Please confirm receipt.",
+    "Please share the consignee contact details.",
+    "We need your approval to proceed.",
+  ],
+  supplier: [
+    "Please confirm driver and vehicle assignment.",
+    "Trip has been assigned — driver must report by scheduled time.",
+    "Rate confirmed as discussed. Kindly acknowledge.",
+    "Please ensure all documents are ready before dispatch.",
+    "Driver has been dispatched. Tracking is active.",
+    "Kindly update the driver's current location.",
+  ],
+  driver: [
+    "Please confirm your current location.",
+    "Proceed to the pickup point immediately.",
+    "Loading is authorized. Collect all documents.",
+    "Deliver to the consignee and collect POD.",
+    "OTP verification required — share your code.",
+    "Contact the client at the drop location for directions.",
+  ],
+};
 
-export interface TripChat {
+// ── Context types ─────────────────────────────────────────────────────────────
+
+export interface InitiateConversationParams {
   tripId: string;
   tripNumber: string;
   pickupArea: string;
   dropLocation: string;
-  messages: TripChatMessage[];
-  participants: TripChatParticipant[];
-  lastActivity: string;
+  partyType: ConversationPartyType;
+  partyName: string;
+  partyId: string;
 }
 
-export const TRIP_QUICK_MESSAGES = {
-  challenges: [
-    "Vehicle breakdown - need assistance",
-    "Traffic delay - updated ETA",
-    "Weather issue - route change required",
-    "Loading/unloading delay",
-    "Documentation issue at checkpoint",
-  ],
-  questions: [
-    "What is the exact pickup address?",
-    "Any special handling instructions?",
-    "Who is the receiver contact?",
-    "Is the consignment ready?",
-    "Any access restrictions at location?",
-  ],
-  updates: [
-    "Driver has departed",
-    "Reached pickup location",
-    "Loading completed",
-    "In transit - all good",
-    "Delivered successfully",
-  ],
-};
-
 interface TripChatContextType {
-  chats: TripChat[];
-  getChat: (tripId: string) => TripChat | undefined;
-  sendMessage: (tripId: string, content: string, senderRole: TripChatRole, messageType?: MessageType) => void;
-  getUnreadCount: (tripId: string, viewerRole: TripChatRole) => number;
-  getTotalUnreadCount: (viewerRole: TripChatRole) => number;
-  markAsRead: (tripId: string, viewerRole: TripChatRole) => void;
-  initializeChat: (tripId: string, tripNumber: string, pickupArea: string, dropLocation: string, participants: TripChatParticipant[]) => void;
+  organizationId: string | null;
+  conversations: TripConversation[];
+  isLoading: boolean;
+  sendMessage: (
+    conversationId: string,
+    content: string,
+    messageType?: MessageType
+  ) => Promise<void>;
+  markAsRead: (conversationId: string) => Promise<void>;
+  getTotalUnreadCount: () => number;
+  refreshConversations: () => Promise<void>;
+  /** Creates (or returns existing) conversation. Returns conversation id. */
+  initiateConversation: (params: InitiateConversationParams) => Promise<string | null>;
 }
 
 const TripChatContext = createContext<TripChatContextType | undefined>(undefined);
 
-export const useTripChat = () => {
-  const context = useContext(TripChatContext);
-  if (!context) throw new Error("useTripChat must be used within a TripChatProvider");
-  return context;
-};
+export function useTripChat() {
+  const ctx = useContext(TripChatContext);
+  if (!ctx) throw new Error("useTripChat must be used within a TripChatProvider");
+  return ctx;
+}
 
-const formatTime = (date: Date) =>
-  date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
+// ── Provider ──────────────────────────────────────────────────────────────────
 
-const getSenderInfo = (role: TripChatRole) => {
-  switch (role) {
-    case "dispatcher": return { id: "dispatcher-1", name: "Express Logistics" };
-    case "owner": return { id: "owner-1", name: "Sharma Transport" };
-    case "driver": return { id: "driver-1", name: "Ramesh Kumar" };
-  }
-};
+export function TripChatProvider({ children }: { children: ReactNode }) {
+  const { profile } = useAuth();
+  const orgCtx = useOptionalOrganization();
+  const organizationId = orgCtx?.currentOrganization?.id ?? null;
 
-const initialChats: TripChat[] = [
-  {
-    tripId: "1",
-    tripNumber: "TRP-2026-001",
-    pickupArea: "Mumbai",
-    dropLocation: "Delhi",
-    messages: [
-      { id: "msg1", tripId: "1", senderId: "dispatcher-1", senderName: "Express Logistics", senderRole: "dispatcher", content: "What is the exact pickup address for this consignment?", timestamp: "10:30 AM", isRead: true, messageType: "question" },
-      { id: "msg2", tripId: "1", senderId: "owner-1", senderName: "Sharma Transport", senderRole: "owner", content: "Gate 3, Industrial Area, Andheri East. Ask for Mr. Patil.", timestamp: "10:32 AM", isRead: true, messageType: "text" },
-      { id: "msg3", tripId: "1", senderId: "dispatcher-1", senderName: "Express Logistics", senderRole: "dispatcher", content: "Driver has departed. ETA 3 hours.", timestamp: "10:45 AM", isRead: false, messageType: "update" },
-    ],
-    participants: [
-      { id: "dispatcher-1", name: "Express Logistics", role: "dispatcher" },
-      { id: "owner-1", name: "Sharma Transport", role: "owner" },
-    ],
-    lastActivity: "10:45 AM",
-  },
-  {
-    tripId: "2",
-    tripNumber: "TRP-2026-002",
-    pickupArea: "Pune",
-    dropLocation: "Bangalore",
-    messages: [
-      { id: "msg4", tripId: "2", senderId: "owner-1", senderName: "Patel Logistics", senderRole: "owner", content: "Vehicle is ready for pickup. Driver will reach in 30 mins.", timestamp: "9:00 AM", isRead: true, messageType: "update" },
-    ],
-    participants: [
-      { id: "dispatcher-1", name: "Express Logistics", role: "dispatcher" },
-      { id: "owner-1", name: "Patel Logistics", role: "owner" },
-    ],
-    lastActivity: "9:00 AM",
-  },
-];
+  const [conversations, setConversations] = useState<TripConversation[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
-export const TripChatProvider = ({ children }: { children: ReactNode }) => {
-  const [chats, setChats] = useState<TripChat[]>(initialChats);
+  const loadConversations = useCallback(async () => {
+    if (!organizationId) return;
+    setIsLoading(true);
+    try {
+      const data = await chatService.getConversationsByOrganization(organizationId);
+      setConversations(data);
+    } catch {
+      // Tables may not exist yet; fail silently.
+    } finally {
+      setIsLoading(false);
+    }
+  }, [organizationId]);
 
-  const getChat = useCallback((tripId: string) => chats.find((c) => c.tripId === tripId), [chats]);
+  // Initial load
+  useEffect(() => {
+    loadConversations();
+  }, [loadConversations]);
+
+  // Realtime subscription — react to new messages in this org's conversations
+  useEffect(() => {
+    if (!organizationId) return;
+
+    const channel = supabase()
+      .channel(`trip_messages:org:${organizationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "trip_messages",
+          filter: `organization_id=eq.${organizationId}`,
+        },
+        (payload) => {
+          const newMsg = payload.new as TripMessageRow;
+          setConversations((prev) =>
+            prev.map((conv) => {
+              if (conv.id !== newMsg.conversation_id) return conv;
+              const alreadyExists = conv.messages.some((m) => m.id === newMsg.id);
+              if (alreadyExists) return conv;
+              return {
+                ...conv,
+                messages: [...conv.messages, newMsg],
+                last_message_at: newMsg.created_at,
+                last_message_preview: newMsg.content.slice(0, 120),
+                unread_dispatcher_count:
+                  newMsg.sender_role !== "dispatcher"
+                    ? conv.unread_dispatcher_count + 1
+                    : conv.unread_dispatcher_count,
+              };
+            })
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase().removeChannel(channel);
+    };
+  }, [organizationId]);
 
   const sendMessage = useCallback(
-    (tripId: string, content: string, senderRole: TripChatRole, messageType: MessageType = "text") => {
-      const senderInfo = getSenderInfo(senderRole);
-      const newMessage: TripChatMessage = {
-        id: `msg-${Date.now()}`,
-        tripId,
-        senderId: senderInfo.id,
-        senderName: senderInfo.name,
-        senderRole,
+    async (conversationId: string, content: string, messageType: MessageType = "text") => {
+      if (!organizationId || !profile) return;
+
+      const senderName =
+        (profile as any).full_name ||
+        (profile as any).displayName ||
+        "Dispatcher";
+
+      // Optimistic insert
+      const optimisticMsg: TripMessageRow = {
+        id: `optimistic-${Date.now()}`,
+        conversation_id: conversationId,
+        organization_id: organizationId,
+        sender_user_id: (profile as any).uid ?? null,
+        sender_role: "dispatcher",
+        sender_name: senderName,
         content,
-        timestamp: formatTime(new Date()),
-        isRead: false,
-        messageType,
+        message_type: messageType,
+        is_read: true,
+        read_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
       };
-      setChats((prev) =>
-        prev.map((chat) =>
-          chat.tripId === tripId
-            ? { ...chat, messages: [...chat.messages, newMessage], lastActivity: formatTime(new Date()) }
-            : chat
+
+      setConversations((prev) =>
+        prev.map((conv) =>
+          conv.id === conversationId
+            ? {
+                ...conv,
+                messages: [...conv.messages, optimisticMsg],
+                last_message_at: optimisticMsg.created_at,
+                last_message_preview: content.slice(0, 120),
+              }
+            : conv
         )
       );
-      const AUTO = ["Got it, will update you shortly.", "Understood. Thanks for the update.", "Noted. Driver has been informed.", "Okay, will coordinate accordingly.", "Thanks for letting me know."];
-      setTimeout(() => {
-        const otherRole: TripChatRole = senderRole === "dispatcher" ? "owner" : "dispatcher";
-        const otherInfo = getSenderInfo(otherRole);
-        const auto: TripChatMessage = {
-          id: `msg-auto-${Date.now()}`,
-          tripId,
-          senderId: otherInfo.id,
-          senderName: otherInfo.name,
-          senderRole: otherRole,
-          content: AUTO[Math.floor(Math.random() * AUTO.length)],
-          timestamp: formatTime(new Date()),
-          isRead: false,
-          messageType: "text",
-        };
-        setChats((prev) =>
-          prev.map((chat) =>
-            chat.tripId === tripId
-              ? { ...chat, messages: [...chat.messages, auto], lastActivity: formatTime(new Date()) }
-              : chat
+
+      try {
+        const persisted = await chatService.sendChatMessage({
+          conversationId,
+          organizationId,
+          content,
+          senderRole: "dispatcher",
+          senderName,
+          senderUserId: (profile as any).uid ?? null,
+          messageType,
+        });
+
+        // Replace optimistic message with the persisted one
+        setConversations((prev) =>
+          prev.map((conv) =>
+            conv.id === conversationId
+              ? {
+                  ...conv,
+                  messages: conv.messages.map((m) =>
+                    m.id === optimisticMsg.id ? persisted : m
+                  ),
+                }
+              : conv
           )
         );
-      }, 1500);
+      } catch {
+        // Remove optimistic message on failure
+        setConversations((prev) =>
+          prev.map((conv) =>
+            conv.id === conversationId
+              ? { ...conv, messages: conv.messages.filter((m) => m.id !== optimisticMsg.id) }
+              : conv
+          )
+        );
+      }
     },
-    []
+    [organizationId, profile]
   );
 
-  const getUnreadCount = useCallback(
-    (tripId: string, viewerRole: TripChatRole) => {
-      const chat = chats.find((c) => c.tripId === tripId);
-      return chat ? chat.messages.filter((m) => !m.isRead && m.senderRole !== viewerRole).length : 0;
-    },
-    [chats]
-  );
+  const markAsRead = useCallback(async (conversationId: string) => {
+    setConversations((prev) =>
+      prev.map((conv) =>
+        conv.id === conversationId
+          ? { ...conv, unread_dispatcher_count: 0 }
+          : conv
+      )
+    );
+    try {
+      await chatService.markConversationRead(conversationId);
+    } catch {
+      // Non-critical; local state already updated.
+    }
+  }, []);
 
   const getTotalUnreadCount = useCallback(
-    (viewerRole: TripChatRole) =>
-      chats.reduce((total, chat) => total + chat.messages.filter((m) => !m.isRead && m.senderRole !== viewerRole).length, 0),
-    [chats]
+    () => conversations.reduce((sum, c) => sum + c.unread_dispatcher_count, 0),
+    [conversations]
   );
 
-  const markAsRead = useCallback(
-    (tripId: string, viewerRole: TripChatRole) => {
-      setChats((prev) =>
-        prev.map((chat) =>
-          chat.tripId === tripId
-            ? { ...chat, messages: chat.messages.map((m) => (m.senderRole !== viewerRole ? { ...m, isRead: true } : m)) }
-            : chat
-        )
-      );
-    },
-    []
-  );
+  const initiateConversation = useCallback(
+    async (params: InitiateConversationParams): Promise<string | null> => {
+      if (!organizationId) return null;
+      try {
+        const conv = await chatService.getOrCreateConversation({
+          tripId: params.tripId,
+          partyType: params.partyType,
+          partyName: params.partyName,
+          organizationId,
+          partyId: params.partyId,
+        });
 
-  const initializeChat = useCallback(
-    (tripId: string, tripNumber: string, pickupArea: string, dropLocation: string, participants: TripChatParticipant[]) => {
-      setChats((prev) => {
-        if (prev.find((c) => c.tripId === tripId)) return prev;
-        return [...prev, { tripId, tripNumber, pickupArea, dropLocation, messages: [], participants, lastActivity: formatTime(new Date()) }];
-      });
+        setConversations((prev) => {
+          if (prev.find((c) => c.id === conv.id)) return prev;
+          const newConv: TripConversation = {
+            ...conv,
+            trip_number: params.tripNumber,
+            pickup_area: params.pickupArea,
+            drop_location: params.dropLocation,
+            messages: [],
+          };
+          return [newConv, ...prev];
+        });
+
+        return conv.id;
+      } catch {
+        return null;
+      }
     },
-    []
+    [organizationId]
   );
 
   return (
-    <TripChatContext.Provider value={{ chats, getChat, sendMessage, getUnreadCount, getTotalUnreadCount, markAsRead, initializeChat }}>
+    <TripChatContext.Provider
+      value={{
+        organizationId,
+        conversations,
+        isLoading,
+        sendMessage,
+        markAsRead,
+        getTotalUnreadCount,
+        refreshConversations: loadConversations,
+        initiateConversation,
+      }}
+    >
       {children}
     </TripChatContext.Provider>
   );
-};
+}
